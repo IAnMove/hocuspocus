@@ -234,6 +234,38 @@ Constraints from `uploadVoiceReference` / `parseCharacterVoice`:
   Existing takes stay; new or regenerated 2D/3D dialogue uses the stored
   recording + transcript.
 
+### 4.6 Painted / graphic-novel characters that talk
+
+Character Creator › **Style** › **Graphic novel (painted)** (`graphic-novel`
+in `app/shared/character_styles.json`, MCP `characters.styles`) is the path
+for painted art: bold ink, flat black shadows. Its prompts ask for what the
+flat rig must find: both eyes with clean white sclera, never in the shadow,
+and the closed mouth painted as one short dark line, on a plain screen.
+**Save and make it talk** rigs with the preset's `rig`,
+`{"mouthStyle": "warp"}`: each pose talks with its own drawing (the upper lip
+stays, the lower lip, chin and beard move down, the gap is a flat mouth in its
+ink). The kit records the preset (`provenance`
+`{"method": "character-style-create", "style": "graphic-novel"}`), so a first
+rig with no `style` uses it too, and every later rig (a pose added, a mouth
+line saved, an agent's re-rig) keeps the kit's last look: style keys left out
+are the last rig's. Only an explicit `style.mouthStyle` changes the mouths.
+
+What to check after each rig:
+
+- the review sheet: each pose opens between the lips, not at the nose or a
+  moustache;
+- the rig result's `poses.<pose>.mouthLine` and `warnings`. The creator names
+  the poses with `mouth_line_guessed` (no painted line where the mouth was
+  put) or `mouth_line_unsure` (unsure face points).
+
+Fix a pose in **Prepare 2D speech** › Face Rig › **Mouth line**: drag the dot
+onto the line between the lips and the ends to the corners, then **Save
+mouth**. An agent does the same with `characters.rig.flat.preview` and
+`hints: {"<pose>": {"mouth": [x, y], "mouthWidth": w}}`.
+
+A face in a full figure is small and its moving lips read less: add a bust
+pose (*bust, head and shoulders*) for close dialogue.
+
 ---
 
 ## 5. Cutout dialogue in a scene

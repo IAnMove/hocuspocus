@@ -9,13 +9,15 @@ use only those ids and file names, never invent one.
 
 1. **Read:** `series.guide` (this), then `series.episode.get` for an earlier episode to copy its style.
 2. **Cast and places (only if the story needs new ones):**
-   - character: `characters.styles` (prompt in the series style) → `generation.image` (base, then each pose with the
-     base as `image_refs`) → `studio.key` → `characters.save` (approved assets) → `characters.rig.flat` → design a voice per
+   - character: `characters.styles` (prompt in the series style; painted art: `graphic-novel`, below) →
+     `generation.image` (base, then each pose with the base as `image_refs`) → `studio.key` → `characters.save`
+     (approved assets) → `characters.rig.flat` (with the style's `rig` as `style`) → design a voice per
      language (`generation.speech` with `qwen3_tts_voicedesign`, check with `qa.speech`) → `characters.save` with
      `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`;
    - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
      eyes in a wide head: graphic-novel or tenebrist art, eye bags, spectacles, moustaches) is detected, and its mouth
-     is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "warp"}`:
+     is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "warp"}`
+     (the `graphic-novel` style does it for you, see below):
      each pose talks with its own drawing (the lower lip, chin and beard move down, the gap is inked); check each
      pose's mouth line with `characters.rig.flat.preview` (warnings `mouth_line_guessed`, `mouth_line_unsure`) and
      pass a better one as `hints.<pose>.mouth` (a point on the line between the lips) and `mouthWidth`.
@@ -41,6 +43,30 @@ use only those ids and file names, never invent one.
 
 The lower-level tools (`series.episode.create`/`update`, `series.episode.language_version.set`,
 `series.episode.render_native`, `series.assembly.start`) do the same steps one by one.
+
+## Painted / graphic-novel characters that talk
+
+For painted art (graphic novel: bold ink, flat black shadows) use the `graphic-novel` character style. Its mouths
+are the drawing's own (warp mouths): the upper lip stays, the lower lip, chin and beard move down, the gap is a flat
+dark mouth in the character's ink.
+
+1. **Generate for the rig.** `characters.styles` with `style: "graphic-novel"`, `kind: "character"` (then `"pose"`)
+   and the description. The prompt asks for what the rig must find: both eyes with clean white sclera, never in the
+   shadow, and the closed mouth painted as one short dark line. Key the image in the screen colour it returns.
+2. **Save and rig.** Save the kit with `provenance: [{"method": "character-style-create", "style": "graphic-novel"}]`;
+   `characters.rig.flat` then uses the style's rig, `{"mouthStyle": "warp"}`, with no `style` (passing it does the
+   same). Later rigs of the kit (a pose added, a mouth line placed) keep warp mouths: only `style.mouthStyle`
+   changes them. The result's `style` is the look used.
+3. **Check every pose.** Look at the review image and each pose's `mouthLine` (`mouth`, `mouthWidth`, `found`,
+   `from`: hint, landmarks, painted or guess). Warning `mouth_line_guessed` (no painted line where the mouth was
+   put) or `mouth_line_unsure` (unsure face points, a mouth under a moustache) means: see it with
+   `characters.rig.flat.preview` and rig again with `hints: {"<pose>": {"mouth": [x, y], "mouthWidth": w}}`, a point
+   on the line between the lips and the width corner to corner, in % of the pose image. In the app a user does the
+   same in Characters › Prepare 2D speech › Face Rig › **Mouth line**.
+4. **Make a bust for dialogue.** In a full figure the face is small and the moving lips read less: add a bust pose
+   (`"bust, head and shoulders, ..."`) and use it in `medium` and `close` shots (`"cast": [["ana", "bust", 50]]`).
+5. **Nothing else changes.** `series.episode.from_script` and `series.episode.produce` show each pose its own mouths.
+   After a re-rig, `series.episode.produce` renders again the shots that use that kit.
 
 ## The script
 

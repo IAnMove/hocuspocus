@@ -6,6 +6,21 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Painted characters that talk with their own drawing are now a repeatable path.
+Character Creator has a **Graphic novel (painted)** style (`graphic-novel`,
+also in MCP `characters.styles`): bold ink, flat black shadows, both eyes with
+clean white sclera out of the shadow and the rest mouth painted as one short
+line, on a plain screen, so the rig finds the eyes and the mouth. Its rig look
+is `{"mouthStyle": "warp"}`: saving a character rigs it with warp mouths, and
+the rig review names the poses whose mouth line was guessed or unsure, to place
+by hand in Prepare 2D speech › **Mouth line**. A kit also keeps its look: every
+`style` key a `characters.rig.flat` call leaves out is the kit's (its last
+rig's, else the rig of the preset it was made in), so adding a pose or an
+agent's re-rig no longer turns warp mouths back into paper ones; only
+`style.mouthStyle` changes them, and the result's `style` is the look used.
+The agent guide (`series.guide`) and the Wizard describe the path, what to
+check and that a bust pose reads better in dialogue than a full figure.
+
 Flat-rigged characters can talk with their own drawing. On painted busts
 (graphic-novel art with ink lines and flat black shadows) the ink mouths still
 looked like Flash animation, not like the painting. `characters.rig.flat` with
