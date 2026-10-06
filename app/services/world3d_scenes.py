@@ -288,7 +288,7 @@ def working_scenes(workspace: str, workspace_dir, *, unpublished_only: bool = Tr
     root = Path(workspace_dir(workspace))
     legacy = {name.split("-", 2)[0] + "-" + name.split("-", 2)[1] for name in os.listdir(root)
               if name.startswith("w3d-") and name.endswith(".world3d.scene.json")} if root.is_dir() else set()
-    rows = []
+    rows, titles = [], {}
     for path in (root / _EDITS).glob("w3d-*.json") if (root / _EDITS).is_dir() else []:
         scene_id = path.stem
         try:
@@ -300,9 +300,11 @@ def working_scenes(workspace: str, workspace_dir, *, unpublished_only: bool = Tr
         current = (published or {}).get("revision") == record.get("revision") or (published is None and scene_id in legacy)
         if unpublished_only and current:
             continue
-        document = record["document"]
+        document, template_id = record["document"], str(record.get("templateId") or "")
+        if template_id not in titles:  # one catalog read per template, not per scene
+            titles[template_id] = _template_title(template_id, workspace, workspace_dir)
         rows.append({"sceneId": scene_id, "revision": record.get("revision"), "templateId": record.get("templateId"),
-                     "title": _template_title(str(record.get("templateId") or ""), workspace, workspace_dir),
+                     "title": titles[template_id],
                      "updatedAt": changed, "published": published, "duration": document.get("duration"),
                      "width": document.get("width"), "height": document.get("height"),
                      "slots": len(document.get("slots") or []), "pending": len(_pending(document))})

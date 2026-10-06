@@ -112,6 +112,8 @@ def loopback_actor() -> str | None:
         return None
     if is_external_agent():
         return "agent"
+    if caller.get("actor") in ("agent", "wizard", "server"):
+        return caller["actor"]  # a route reached through a loopback passes its actor on
     if caller.get("surface") == "wizard":
         return "wizard"
     return "server" if caller.get("internal") == "server" else None
