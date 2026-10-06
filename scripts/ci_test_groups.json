@@ -476,7 +476,9 @@
         "tests/test_llm_resilience.py",
         "tests/test_game_pixel.py",
         "tests/test_game_image_ops.py",
-        "tests/test_game_tiles.py"
+        "tests/test_game_tiles.py",
+        "tests/test_game_frames.py",
+        "tests/test_game_sheet.py"
       ]
     }
   ],
@@ -1396,6 +1398,14 @@
     {
       "prefix": "app/services/game_tiles.py",
       "paths": ["tests/test_game_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_frames.py",
+      "paths": ["tests/test_game_frames.py"]
+    },
+    {
+      "prefix": "app/services/game_sheet.py",
+      "paths": ["tests/test_game_sheet.py"]
     }
   ]
 }
