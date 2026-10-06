@@ -88,7 +88,7 @@ test('a shot opens from its tile, its line is edited in place and its voice is r
   await openValidation(page)
   const tile = page.getByTestId('series-approval-shot-1')
   await expect(tile.getByText('#1')).toBeVisible()
-  await expect(page.getByTestId('series-approval-shot-3').getByText('3D')).toBeVisible()
+  await expect(page.getByTestId('series-approval-shot-3').getByText('3D', { exact: true })).toBeVisible()
   await tile.getByRole('button', { name: 'Open', exact: true }).click()
   const inspector = page.getByTestId('series-shot-inspector')
   await expect(inspector.getByRole('heading', { name: /Shot #1/ })).toBeVisible()
