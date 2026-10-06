@@ -13,6 +13,8 @@ export interface CharacterEditorRequest {
   sourceId: string
   draft?: CharacterDefinitionDraft
   saved?: boolean
+  /** Pose to open the mouth / face rig on (a Series shot's pose); the session opens its speech workshop there. */
+  poseId?: string
   onSaved: (kit: CharacterKit) => Promise<void>
   onReturn: () => Promise<void>
 }

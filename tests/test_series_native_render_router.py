@@ -10,8 +10,8 @@ class Fake:
     def __init__(self):
         self.calls = []
 
-    def start(self, workspace, series_id, episode_id, *, shot_ids=None, approve=False, language=None):
-        self.calls.append(("start", workspace, series_id, episode_id, shot_ids, approve))
+    def start(self, workspace, series_id, episode_id, *, shot_ids=None, approve=False, language=None, changed=False):
+        self.calls.append(("start", workspace, series_id, episode_id, shot_ids, approve) + (("changed",) if changed else ()))
         return {"jobId": "native-1", "status": "queued", "items": [{"shotId": "s01", "lines": {"b": {"cues": [1, 2], "filename": "x.wav"}}}]}
 
     def status(self, workspace, job_id):
@@ -30,6 +30,8 @@ def test_routes_bind_the_loop_and_hide_cue_arrays():
     assert started.status_code == 200, started.text
     assert started.json()["items"][0]["lines"]["b"] == {"filename": "x.wav", "cueCount": 2}
     assert service.calls == [("start", "cast", "uv", "ep1", None, True)] and loops
+    client.post("/api/v1/series/uv/episodes/ep1/native-render", json={"workspace": "cast", "changed": True})
+    assert service.calls[-1] == ("start", "cast", "uv", "ep1", None, False, "changed"), "only the shots that need a render"
     missing = client.get("/api/v1/series/native-render/jobs/nope", params={"workspace": "cast"})
     assert missing.status_code == 404 and missing.json()["detail"]["code"] == "not_found"
     assert client.get("/api/v1/series/native-render/recovery", params={"workspace": "cast"}).json() == {"jobs": []}

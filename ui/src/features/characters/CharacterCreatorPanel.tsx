@@ -84,7 +84,7 @@ export function CharacterCreatorPanel() {
   const workspace = useStore(state => state.activeWorkspace)
   const request = useCharacterEditorHandoff(state => state.request)
   if (request?.workspace === workspace) return <div className="h-full overflow-y-auto rounded-xl border border-border bg-bg-primary">
-    <CharacterEditorSession key={`${workspace}/${request.kit.id}`} request={request} />
+    <CharacterEditorSession key={`${workspace}/${request.kit.id}/${request.poseId ?? ''}`} request={request} />
   </div>
   return <CharacterCreatorWorkshop />
 }

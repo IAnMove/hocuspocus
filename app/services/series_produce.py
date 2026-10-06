@@ -12,6 +12,10 @@ that on the server with the same tools (run in process, see ``local_mcp``):
 2. ``series.assembly.start`` for each language (subtitles burned in by
    default) and the chapter files when they are ready.
 
+An episode with a staged review (``series_review``, mode ``plan`` or ``preview``) renders only what its review lets
+through (``series_review_gate``) and, while shots still wait for an approval, stops before the cut as ``waiting`` with
+those shots; resuming after the approvals renders again (previews' finals) and cuts.
+
 Steps are saved as they finish, so a restart or a cancel resumes where it stopped.
 """
 from __future__ import annotations
@@ -48,6 +52,8 @@ class ProduceDeps:
     read_library: Callable[[str], dict]
     # (workspace, series, episode, language) -> shot ids whose approved take is missing or out of date.
     stale_shots: Callable[[str, str, str, str], list[str]] | None = None
+    # (workspace, series, episode, language) -> shots a staged review (series_review) holds the cut for.
+    review_blockers: Callable[[str, str, str, str], list[dict]] | None = None
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 5.0
 
@@ -177,6 +183,8 @@ class SeriesProduce:
             if self._cancelled(job_id):
                 self._save(job, status="cancelled", message="Cancelled; resume to continue")
                 return
+            if step["kind"] == "assemble" and self._waits_for_review(job, step):
+                return
             self._save(job, message=f"{step['kind'].capitalize()} {step['language']}")
             step["status"] = "running"
             try:
@@ -190,6 +198,24 @@ class SeriesProduce:
             self._save(job)
         self._save(job, status="completed", finishedAt=time.time(),
                    message=f"Rendered and cut in {', '.join(job['languages'])}")
+
+    def _waits_for_review(self, job: dict, step: dict) -> bool:
+        """A staged episode is cut once every shot passed its review. Until then the production stops as ``waiting``
+        (not failed) with the shots it waits for; its renders run again on resume, so approved previews get their finals."""
+        blockers = self.deps.review_blockers(job["workspace"], job["seriesId"], job["episodeId"], step["language"]) \
+            if self.deps.review_blockers else []
+        if not blockers:
+            job.pop("waiting", None)
+            return False
+        for item in job["steps"]:
+            if item["kind"] == "render":
+                item.update(status="queued", jobId=None, retries=0, progress=None)
+        plans = sum(1 for item in blockers if item["reason"] == "plan")
+        previews = sum(1 for item in blockers if item["reason"] == "preview")
+        self._save(job, status="waiting", waiting=blockers, finishedAt=time.time(),
+                   message=f"Waiting for the review: {plans} plans and {previews} previews to approve, "
+                           f"{len(blockers) - plans - previews} finals to render; approve them and resume")
+        return True
 
     def _wait(self, job: dict, step: dict, tool: str) -> dict[str, Any]:
         """The step's job when it stops; ``{"status": "unknown"}`` when the server no longer knows it."""

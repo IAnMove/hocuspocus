@@ -60,7 +60,8 @@ def _episode_summary(episode: dict[str, Any]) -> dict[str, Any]:
             "approvedShots": sum(1 for shot in shots if shot.get("approvedAttemptId")),
             "languageVersions": {lang: {"title": version.get("title"), "approvedShots": len(version.get("approvedAttemptIds") or {}),
                                         "cut": bool(version.get("latestAssemblyAssetId"))} for lang, version in versions.items()},
-            "cut": bool(episode.get("latestAssemblyAssetId"))}
+            "cut": bool(episode.get("latestAssemblyAssetId")),
+            **({"reviewMode": episode["review"].get("mode")} if isinstance(episode.get("review"), dict) else {})}
 
 
 def audio_files(names: list[str]) -> dict[str, list[str]]:
@@ -125,4 +126,13 @@ def compact_episode(series: dict[str, Any], episode: dict[str, Any]) -> dict[str
     return {"id": episode["id"], "number": episode.get("number"), "title": episode.get("title"), "premise": episode.get("premise"),
             "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in episode.get("shots") or []],
             "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId"),
-            **({"score": episode["score"]} if episode.get("score") else {})}
+            **({"score": episode["score"]} if episode.get("score") else {}), **_review(episode)}
+
+
+def _review(episode: dict[str, Any]) -> dict[str, Any]:
+    """A staged episode says so: its mode and next step (the notes are in series.episode.review.get)."""
+    from services.series_review import episode_mode, summary
+    if episode_mode(episode) == "direct" and not episode.get("review"):
+        return {}
+    found = summary(episode)
+    return {"review": {"mode": found["mode"], "steps": found["steps"], "nextStep": found["nextStep"]}}

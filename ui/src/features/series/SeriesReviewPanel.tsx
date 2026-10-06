@@ -317,7 +317,13 @@ export function SeriesReviewPanel({
   const joinApproved = async () => {
     setError(null)
     try { setAssemblyJob(await api.startSeriesEpisodeAssembly(workspace, series.id, episode.id)) }
-    catch (reason) { setError((reason as Error).message) }
+    catch (reason) {
+      // A staged production refuses while shots wait for their approval; the user may still cut it on purpose.
+      const pending = reason instanceof api.SeriesRequestError && reason.code === 'review_pending'
+      if (!pending || !window.confirm(t('review.assembleAnyway', { message: (reason as Error).message }))) { setError((reason as Error).message); return }
+      try { setAssemblyJob(await api.startSeriesEpisodeAssembly(workspace, series.id, episode.id, { force: true })) }
+      catch (forced) { setError((forced as Error).message) }
+    }
   }
   const reject = async (shotId: string, attemptId: string) => {
     setError(null)

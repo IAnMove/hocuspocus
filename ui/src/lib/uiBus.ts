@@ -2,7 +2,7 @@ import type { SeriesJobStatus } from '../features/series/types'
 import type { SeriesAssemblyJob } from '../features/series/assemblyContract'
 
 export type AgentStorySection = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions' | 'assembly'
-export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'review'
+export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'approval' | 'review'
 export type AgentSeriesReviewView = 'assembly' | 'history' | 'finish'
 
 const STORY_SECTION_EVENT = 'hocuspocus:story-section'

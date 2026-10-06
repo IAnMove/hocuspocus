@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2686,
+      "weight": 2702,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -237,14 +237,16 @@
         "tests/test_production_shot_regeneration.py",
         "tests/test_series_language_versions.py",
         "tests/test_local_mcp.py",
-        "tests/test_verify_clean_repo.py"
+        "tests/test_verify_clean_repo.py",
+        "tests/test_series_review.py",
+        "tests/test_series_review_router.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2674,
+      "weight": 2687,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -474,7 +476,8 @@
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
-        "tests/test_llm_resilience.py"
+        "tests/test_llm_resilience.py",
+        "tests/test_series_review_gate.py"
       ]
     }
   ],
@@ -1416,6 +1419,18 @@
     {
       "prefix": "app/services/export_receipts.py",
       "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
+    },
+    {
+      "prefix": "app/services/series_review.py",
+      "paths": ["tests/test_series_review.py", "tests/test_series_review_gate.py", "tests/test_series_review_router.py"]
+    },
+    {
+      "prefix": "app/services/series_review_gate.py",
+      "paths": ["tests/test_series_review_gate.py", "tests/test_series_review.py"]
+    },
+    {
+      "prefix": "app/routers/series_review.py",
+      "paths": ["tests/test_series_review_router.py"]
     }
   ]
 }

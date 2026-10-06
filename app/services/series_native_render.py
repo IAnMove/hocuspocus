@@ -42,6 +42,8 @@ from services.production_control import Cancelled
 from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
+from services.series_review import episode_mode
+from services.series_review_gate import actionable_shots, assembly_blockers, render_passes
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
@@ -203,23 +205,34 @@ class SeriesNativeRender:
         return language
 
     def start(self, workspace: str, series_id: str, episode_id: str, *, shot_ids: list[str] | None = None,
-              approve: bool = False, language: str | None = None) -> dict[str, Any]:
-        raw_series, language, shots = self._preflight(workspace, series_id, episode_id, shot_ids, language)
+              approve: bool = False, language: str | None = None, changed: bool = False) -> dict[str, Any]:
+        """``changed`` renders only the shots that need it (``stale_shots``: no up-to-date approved take, and what the
+        episode's review lets through), as ``produce`` does; ``shot_ids`` narrows them."""
+        explicit = bool(shot_ids) and not changed
+        if changed:
+            shot_ids = [shot_id for shot_id in self.stale_shots(workspace, series_id, episode_id, language)
+                        if not shot_ids or shot_id in shot_ids]
+            if not shot_ids:
+                raise NativeRenderError("up_to_date", "Every shot already has an up-to-date approved take", 409)
+        raw_series, language, planned, review = self._preflight(workspace, series_id, episode_id, shot_ids, language, explicit)
         for job in self.jobs(workspace):
             if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ACTIVE:
                 raise NativeRenderError("already_running", "This episode is already rendering on the server")
         job_id = f"native-{uuid.uuid4().hex[:12]}"
         job = {"jobId": job_id, "workspace": workspace, "seriesId": series_id, "episodeId": episode_id, "status": "queued",
                "approve": bool(approve), "language": language, "original": language == language_key(raw_series),
-               "current": 0, "total": len(shots),
-               "items": [{"shotId": shot["id"], "stage": "voices", "status": "queued", "lines": {}} for shot in shots],
-               "createdAt": time.time(), "message": "Queued"}
+               "current": 0, "total": len(planned),
+               "items": [{"shotId": item["shot"]["id"], "stage": "voices", "status": "queued", "lines": {},
+                          **({"pass": item["pass"]} if item["pass"] else {}),
+                          **({"attemptId": item["attemptId"]} if item.get("attemptId") else {})} for item in planned],
+               **review, "createdAt": time.time(), "message": "Queued"}
         self._launch(workspace, job)
         return job
 
     def _preflight(self, workspace: str, series_id: str, episode_id: str, shot_ids: list[str] | None,
-                   language: str | None) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
-        """The series, the language and the 2D shots to render; refuses what would fail later."""
+                   language: str | None, explicit: bool = False) -> tuple[dict[str, Any], str, list[dict[str, Any]], dict[str, Any]]:
+        """The series, the language, the shots to render with their review pass, and the episode's review mode and
+        the shots that wait for an approval (``series_review_gate``); refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
         wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if series_shot3d.wants_render(shot)
                   and (not shot_ids or shot["id"] in shot_ids)}
@@ -227,7 +240,8 @@ class SeriesNativeRender:
             raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
-        shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
+        planned, review = self._review_passes(workspace, series, episode, wanted, explicit, language == language_key(raw_series))
+        shots = [item["shot"] for item in planned if item.get("pass") != "promote"]
         missing = self._missing_kits(workspace, series, shots)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
@@ -235,7 +249,25 @@ class SeriesNativeRender:
         if voiceless:
             raise NativeRenderError("no_voice", f"{', '.join(voiceless)} have no {language} voice (voicesByLanguage); "
                                     f"design one before rendering this version", 400)
-        return raw_series, language, shots
+        return raw_series, language, planned, review
+
+    def _review_passes(self, workspace: str, series: dict, episode: dict, wanted: set[str], explicit: bool,
+                       original: bool) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """What the episode's staged review lets this render do (``series_review_gate``); direct episodes render all."""
+        mode = episode_mode(episode)
+        shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
+        if mode == "direct":
+            return [{"shot": shot, "pass": None} for shot in shots], {}
+        kits = self.deps.read_kits(workspace)
+        planned, waiting = render_passes(series, episode, shots, lambda shot: render_inputs(series, shot, kits),
+                                         explicit=explicit, original=original)
+        if not planned:
+            if waiting:
+                raise NativeRenderError("awaiting_review", f"{len(waiting)} shots wait for an approval in this episode's "
+                                        f"{mode} review ({_reasons(waiting)}); approve them in Series Lab or with "
+                                        "series.shot.review.set", 409)
+            raise NativeRenderError("up_to_date", "Every shot asked for already has its approved final take", 409)
+        return planned, {"mode": mode, "waiting": waiting}
 
     def _missing_voices(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]], language: str, original: str) -> list[str]:
         """Speakers of a language version whose kit has no voice designed for that language (the default would be the wrong accent)."""
@@ -291,10 +323,21 @@ class SeriesNativeRender:
         return job
 
     def stale_shots(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[str]:
-        """Shots to render in ``language``: no approved take yet, or one made from other inputs (see ``render_inputs``)."""
+        """Shots to render in ``language``: no approved take yet, or one made from other inputs (see ``render_inputs``),
+        that the episode's staged review lets through; in preview mode also those that need a preview, a final or a
+        promotion (``series_review_gate.actionable_shots``)."""
         raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
+        original = (language or language_key(raw_series)) == language_key(raw_series)
         series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
-        return stale_shot_ids(series, episode, self.deps.read_kits(workspace))
+        kits = self.deps.read_kits(workspace)
+        shots = sorted((shot for shot in episode.get("shots") or [] if series_shot3d.wants_render(shot)), key=lambda shot: shot.get("order", 0))
+        return actionable_shots(series, episode, shots, lambda shot: render_inputs(series, shot, kits),
+                                stale_shot_ids(series, episode, kits), original=original)
+
+    def review_blockers(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[dict[str, Any]]:
+        """Shots a staged review still holds the cut of ``language`` for (``series_review_gate.assembly_blockers``)."""
+        raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
+        return assembly_blockers(raw_episode, original=(language or language_key(raw_series)) == language_key(raw_series))
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
@@ -384,6 +427,11 @@ class SeriesNativeRender:
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
+        if item.get("pass") == "promote":
+            # The approved preview is already the final take (series_review_gate): approve it, nothing renders.
+            self._approve(workspace, job, item["shotId"], item["attemptId"])
+            item.update(stage="done", approved=True)
+            return
         kits = self.deps.read_kits(workspace)
         item["status"] = "running"
         if item["stage"] in ("voices", "scene"):
@@ -615,8 +663,10 @@ class SeriesNativeRender:
                                           screen_fx=fx_cues(layout, timing, duration))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
+        # A staged review's preview is the cheap faithful look: draft quality, whatever the shot's own.
+        quality = "draft" if item.get("pass") == "preview" else config.get("quality", "draft")
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
-            "workspace": workspace, "document": scene["document"], "quality": config.get("quality", "draft")}}), "export 3D")
+            "workspace": workspace, "document": scene["document"], "quality": quality}}), "export 3D")
         # A Video 3D scene has no dialogue beats: the take carries its lines for the episode's subtitles.
         subtitles = [{"text": str(beat.get("text") or "").strip(), "start": start, "end": end} for beat, (start, end) in zip(beats, timing)]
         item.update(scene=scene.get("file"), duration=round(duration, 3), stage="export", exportIntent=intent,
@@ -746,16 +796,25 @@ class SeriesNativeRender:
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
                     **({"renderInputs": item["inputs"]} if item.get("inputs") else {}),
                     **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {}),
-                    **({"foley": {key: item["foley"][key] for key in ("prompt", "volume", "file")}} if item.get("foley") else {})}
+                    **({"foley": {key: item["foley"][key] for key in ("prompt", "volume", "file")}} if item.get("foley") else {}),
+                    **({"reviewStage": item["pass"]} if item.get("pass") in ("preview", "final") else {})}
         imported = _ok(self.deps.call("series.asset.import", {"version": 1, "input": {
             "workspace": workspace, "series_id": job["seriesId"], "file": item["video"], "owner_type": "shot", "owner_id": item["shotId"],
             "kind": "video", "as_take": True, "metadata": metadata}}), "import take")
         attempt = (imported.get("result") or {}).get("attempt") or {}
         item.update(attemptId=attempt.get("id"), stage="done")
-        if job.get("approve") and attempt.get("id"):
+        # A preview waits for the user's look; a final follows an approved preview, so it is approved.
+        approve = job.get("approve") if item.get("pass") not in ("preview", "final") else item["pass"] == "final"
+        if approve and attempt.get("id"):
             self._approve(workspace, job, item["shotId"], attempt["id"])
             item["approved"] = True
         self._save(workspace, job)
+
+
+def _reasons(waiting: list[dict[str, Any]]) -> str:
+    plans = sum(1 for item in waiting if item["reason"] == "plan")
+    return ", ".join(part for part in (f"{plans} plans" if plans else "",
+                                       f"{len(waiting) - plans} previews" if len(waiting) > plans else "") if part)
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:

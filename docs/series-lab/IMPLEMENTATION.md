@@ -42,6 +42,7 @@ The `/api/v1/series` resource (routes in `tests/fixtures/route_table.json`) incl
 - assembly start/status/cancel/resume/recovery/discard (`/series/assembly/...`): the approved takes of one language cut into a chapter at -16 LUFS with SRT/VTT and an optional burned-in copy;
 - **produce** (`POST .../episodes/{episode_id}/produce`; jobs under `/series/produce/jobs/{job_id}` with status/cancel/resume): render the original and every language version with automatic approval, retry failed shots once, then assemble each language;
 - **3D location plates** (`POST`/`GET .../locations/{location_id}/plate3d`): a Video 3D scene rendered once as the silent looping background of a location; 2D shots in that location use it;
+- **staged review** (`GET`/`POST .../episodes/{episode_id}/review`): the episode's production mode and each shot's plan and preview decision and notes (see below);
 - asset import (`POST .../assets/import`, also `asTake` for finished shot videos), selected CanonDelta commit, and the guides `GET /api/v1/series-agent/guide` (working guide) and `GET .../{series_id}/guide` (guide plus the live series bible).
 
 All mutating requests carry a workspace in their JSON body, or a workspace query parameter for DELETE. Generated video metadata records the exact effective prompt, negative prompt, H3 model, seed, settings/frame count, reference manifest, request hash, job ID, creation/submission/completion timestamps and elapsed milliseconds.
@@ -62,9 +63,46 @@ The same operations are published as `series.*` tools on `/api/v1/mcp` and on th
 | `series.take.approve`, `series.asset.import` | Approve one completed take (optionally for one language version); import a workspace file as a reference image or as a finished take. |
 | `series.assembly.start`, `series.assembly.status` | Cut the approved takes of a language into a chapter with subtitles and read the job. |
 | `series.episode.produce` (+ `.status`, `.cancel`, `.resume`) | Render and cut an episode in one call: every language, automatic approval, one retry per failed shot, burned-in subtitles unless disabled; `chapters` lists the files. |
+| `series.episode.review.get`, `series.episode.review.set`, `series.shot.review.set` | Read an episode's staged review (mode, steps left, every shot's decisions and notes) and set the mode, decide shots or answer a note (`by: agent`); the setters take an envelope `intent_id`. |
 | `series.location.plate3d` (+ `.status`) | Render a Video 3D scene or document as the looping plate of a location; when the export is ready it becomes the location video. |
 
 The same module publishes the character tools the profile also serves (`characters.list`, `characters.get`, `characters.save`, `characters.styles`, `characters.rig.flat`), next to `qa.speech` and `studio.key` from the shared catalog; `tests/test_series_commands.py` and `tests/test_local_mcp.py` keep the HTTP and MCP surfaces aligned.
+
+## Staged review (production modes)
+
+Series Lab → **5 · Validation** lets the user validate every shot from inside HocusPocus, also from a phone over the
+LAN. Each episode has a production mode (`episode.review.mode`, server-validated, default `direct`):
+
+| Mode | Render (`render_native`, `produce`) | Assembly |
+| --- | --- | --- |
+| `direct` | Everything, as before. | Every approved take. |
+| `plan` | Only shots whose plan is approved; the rest are listed as `waiting`, not failed. | Refused (409 `review_pending`) while a plan is not approved, unless `force`. |
+| `preview` | A **preview** pass for an approved plan (2D: the normal render, which has one quality; 3D: exported at `draft`, no supersampling or motion blur; take `reviewStage: "preview"`, never approved); a **final** pass after the preview is approved (3D at its own quality; take `reviewStage: "final"`, approved); or a **promotion** when the approved preview already is the final (2D, draft 3D) and nothing it was made from changed: approved, nothing renders. | Refused while a plan or preview is not approved or a final is missing, unless `force`. |
+
+`produce` in a staged mode stops before the cut with status `waiting` and `job.waiting` while shots wait; resuming it
+after the approvals renders again (previews' finals) and cuts. Language versions follow the original's approvals and
+render their takes as finals.
+
+The state is server-owned (`app/services/series_review.py`, gating in `series_review_gate.py`) and stored on the
+episode:
+
+```json
+"review": {
+  "mode": "preview", "updatedAt": "2026-10-06T10:00:00Z",
+  "shots": {
+    "e1s05": {"plan": "approved", "planAt": "…", "planDigest": "3f1c…",
+              "preview": "changes", "previewAt": "…", "previewDigest": "3f1c…", "previewAttemptId": "attempt_…",
+              "notes": [{"id": "note_…", "at": "…", "stage": "preview", "text": "Inés más a la izquierda", "by": "user"}]}
+  }
+}
+```
+
+A shot without an entry is pending. Each decision keeps the digest of the shot's content (lines with speakers, cast,
+`layout2d`, `scene3d`, location, framing, camera, wardrobe, props); when that content changes by any path
+(`series.episode.update`, a `from_script` rewrite, the editor) the decision goes back to pending and the notes stay.
+A preview decision is about one take: a newer take that is not its final puts it back to pending. A whole-project
+`PUT /series/{id}` keeps the stored review, so an older browser copy cannot undo a decision. Episodes without
+`review` behave exactly as before and nothing renders again because of it.
 
 ## MVP boundaries
 

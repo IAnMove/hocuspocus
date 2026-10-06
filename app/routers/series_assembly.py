@@ -24,6 +24,7 @@ from services.episode_finishing import finish_episode, finishing_note, remove_ep
 from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
+from services.series_review_gate import assembly_blockers, blocker_message
 from services.series_jobs import SeriesJobStore
 from services.series_score import clip_score
 from services.task_manager import get_cancellation_token, get_task_registry
@@ -113,6 +114,8 @@ class SeriesAssemblyStartRequest(BaseModel):
     workspace: str | None = Field(default=None, min_length=1, max_length=200)
     burnSubtitles: bool = False
     language: str | None = Field(default=None, min_length=2, max_length=40)
+    # Assemble an episode with a staged review (series_review) before every shot passed it.
+    force: bool = False
 
 
 class SeriesAssemblyActionRequest(BaseModel):
@@ -160,6 +163,14 @@ class SeriesAssemblyDiscardResponse(BaseModel):
     discarded: bool
     jobId: str
     outputsPreserved: bool
+
+
+def _require_review(episode: dict[str, Any], *, original: bool) -> None:
+    """An episode in plan or preview mode is assembled once every shot passed its review (or with force)."""
+    blockers = assembly_blockers(episode, original=original)
+    if blockers:
+        raise HTTPException(status_code=409, detail={"code": "review_pending", "message": blocker_message(blockers),
+                                                     "blockers": blockers})
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -533,6 +544,8 @@ def create_series_assembly_router(
                 raise HTTPException(status_code=404, detail="Series episode not found")
             try:
                 view_series, view_episode = localized_view(series, episode, payload.language)
+                if not payload.force:
+                    _require_review(view_episode, original=view_series is series)
                 clips = episode_assembly_plan(view_series, view_episode)
                 # Episode-mode ambience and the episode's score are laid at the join: what each clip gets, kept for a resume.
                 ambience = clip_ambience(view_series, view_episode, clips)

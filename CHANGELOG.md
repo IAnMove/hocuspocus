@@ -6,6 +6,32 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab can make an episode in three production modes, and the user
+validates every shot from inside HocusPocus, also from a phone over the LAN.
+`direct` renders everything, as before, and is what every existing episode
+is. `plan` asks for each shot's plan (cast and poses, lines and speakers,
+framing, camera, set, effects) to be approved before it renders. `preview`
+adds a preview render that the user approves or sends back with notes before
+the final: a 2D shot's preview is its normal render and is promoted to the
+final take without rendering again, a 3D shot's preview is exported at draft
+quality and its final at the shot's own. The new **5 · Validation** tab shows
+every shot in order, grouped by scene, as a card with its latest take (played
+in place), number, method, duration, location, framing, camera, cast with
+poses, lines with speakers and a summary of its effects, sounds, set layers or
+3D template, with Approve / Request change, a notes box that saves itself,
+filters, a progress counter and the next step of the episode. A card edits
+its shot in place, opens exactly its take's scene in the Video 2D or Video 3D
+editor and takes the export back as the shot's take, renders it again, and
+opens each character's Face Rig on the pose the shot uses. The review is the
+server's (`episode.review`): a change to a shot's content puts its approvals
+back to pending and keeps the notes, `series.episode.render_native` and
+`series.episode.produce` render only what the review lets through (the rest
+is listed as waiting, not failed; a production stops as `waiting` before the
+cut and resumes after the approvals), and the assembly of a staged episode is
+refused until it is approved unless forced. Agents read the user's requests
+and answer them with `series.episode.review.get`, `series.episode.review.set`
+and `series.shot.review.set`.
+
 Series Lab voice rooms, looping ambience beds and looping score cues work on
 ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
 found`, because the convolution asked `afir` for `irnorm`, an option only

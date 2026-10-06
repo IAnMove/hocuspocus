@@ -30,6 +30,7 @@ from routers.recipes import create_recipes_router
 from routers.scene_commands import create_scene_commands_router
 from routers.scene_packages import create_scene_packages_router
 from routers.series_assembly import create_series_assembly_router
+from routers.series_review import create_series_review_router
 from routers.style_library import create_style_library_router
 from routers.system_capabilities import create_system_capabilities_router, require_capability_http
 from routers.user_diagnostics import create_user_diagnostics_router
@@ -140,6 +141,10 @@ api.include_router(create_series_assembly_router(
     iso_now=labs._iso_now,
 ))
 api.include_router(create_core_series_plan_router())
+api.include_router(create_series_review_router(
+    resolve_workspace=labs._series_workspace, lock=labs._LOCK, read_library=labs._read_series,
+    write_library=labs._write_series, iso_now=labs._iso_now,
+))
 api.include_router(create_core_remote_router())
 _mcp_access = McpAccess(
     os.path.join(os.path.dirname(__file__), "settings", "mcp-access.json"),

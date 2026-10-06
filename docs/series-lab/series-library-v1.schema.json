@@ -571,9 +571,52 @@
         "providerTaskId": { "type": "string" },
         "outputAssetIds": { "$ref": "#/$defs/idArray" },
         "error": { "type": "string" },
-        "retryCount": { "type": "integer", "minimum": 0 }
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "reviewStage": {
+          "description": "How the server render made the take for a staged review: a cheap preview or the final take.",
+          "enum": ["preview", "final"]
+        }
       },
       "additionalProperties": true
+    },
+    "reviewNote": {
+      "type": "object",
+      "required": ["id", "at", "stage", "text", "by"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$" },
+        "at": { "$ref": "#/$defs/timestamp" },
+        "stage": { "enum": ["plan", "preview", "final"] },
+        "text": { "type": "string", "maxLength": 2000 },
+        "by": { "enum": ["user", "agent"] }
+      },
+      "additionalProperties": false
+    },
+    "shotReview": {
+      "description": "A shot's review decisions; each keeps the digest of the shot content it was made on and goes back to pending when that content changes.",
+      "type": "object",
+      "required": ["plan", "preview", "notes"],
+      "properties": {
+        "plan": { "enum": ["pending", "approved", "changes"] },
+        "planAt": { "$ref": "#/$defs/timestamp" },
+        "planDigest": { "type": "string" },
+        "preview": { "enum": ["pending", "approved", "changes"] },
+        "previewAt": { "$ref": "#/$defs/timestamp" },
+        "previewDigest": { "type": "string" },
+        "previewAttemptId": { "$ref": "#/$defs/id" },
+        "notes": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/reviewNote" } }
+      },
+      "additionalProperties": false
+    },
+    "episodeReview": {
+      "description": "Server-owned staged review (series_review.py). Absent means mode direct with every shot pending.",
+      "type": "object",
+      "required": ["mode", "shots"],
+      "properties": {
+        "mode": { "enum": ["direct", "plan", "preview"] },
+        "updatedAt": { "$ref": "#/$defs/timestamp" },
+        "shots": { "type": "object", "additionalProperties": { "$ref": "#/$defs/shotReview" } }
+      },
+      "additionalProperties": false
     },
     "episodeShot": {
       "type": "object",
@@ -685,6 +728,7 @@
         },
         "proposedCanonDelta": { "$ref": "#/$defs/canonDelta" },
         "productionIds": { "$ref": "#/$defs/idArray" },
+        "review": { "$ref": "#/$defs/episodeReview" },
         "createdAt": { "$ref": "#/$defs/timestamp" },
         "updatedAt": { "$ref": "#/$defs/timestamp" }
       },
