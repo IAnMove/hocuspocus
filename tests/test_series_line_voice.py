@@ -81,6 +81,50 @@ def test_a_recorded_line_is_kept_and_a_retake_replaces_it_only_once_it_is_good(t
     assert recording.read_bytes() == b"good take"
 
 
+@pytest.mark.parametrize("method", ["animation_2d", "animation_3d"])
+@pytest.mark.parametrize("changed_cues", [False, True])
+def test_resuming_after_a_same_length_retake_exports_the_new_audio(tmp_path, method, changed_cues):
+    from tests.test_series_shot_extras import World3D
+
+    tools, render, _voices = setup(tmp_path)
+    project = library()
+    series = project["seriesById"]["uv"]
+    shot = series["episodesById"]["ep1"]["shots"][2]
+    shot.update(productionMethod=method, scene3d={"template": "user-set"})
+    render.deps.read_library = lambda _: project
+    world = World3D()
+
+    def call(name, args):
+        result = world(name, args) if name.startswith(("world3d.", "scenes.world3d.")) else tools(name, args)
+        if changed_cues and name == "audio.mouth_cues" and (tmp_path / args["input"]["file"]).read_bytes() == b"first take":
+            result["result"]["mouthCues"][0]["value"] = "A"
+        return result
+
+    render.deps.call = call
+    item = {"shotId": "s03", "stage": "voices", "status": "queued", "lines": {}}
+    job = {"jobId": "same-job", "seriesId": "uv", "episodeId": "ep1", "language": "spanish", "items": [item]}
+    beat, kits = shot["dialogueBeats"][0], render.deps.read_kits("cast")
+    first = render.record_line("cast", job, series, beat, kits)
+    (tmp_path / first["filename"]).write_bytes(b"first take")
+    render._render_item("cast", job, item, 0)
+    old_intent = item["exportIntent"]
+    assert item["lines"][beat["id"]]["cues"][0]["value"] == ("A" if changed_cues else "D")
+    retake = render.record_line("cast", job, series, beat, kits, retake=True)
+    assert retake["filename"] == first["filename"] and retake["duration"] == first["duration"]
+    assert (tmp_path / retake["filename"]).read_bytes() == b"raw speech"
+    item["stage"] = "scene"
+    render._render_item("cast", job, item, 0)
+    new_intent = item["exportIntent"]
+    assert new_intent != old_intent, "the same path, duration and cues can contain a different voice take"
+    assert item["lines"][beat["id"]]["cues"][0]["value"] == "D", "resume refreshes the retaken line's lip sync"
+    item["stage"] = "scene"
+    render._render_item("cast", job, item, 0)
+    assert item["exportIntent"] == new_intent, "unchanged audio still replays its render"
+    if method == "animation_3d":
+        intents = [args["intent_id"] for name, args in world.calls if name == "world3d.scene.instantiate"]
+        assert intents[0] != intents[1] == intents[2]
+
+
 def test_a_recording_newer_than_the_shots_take_says_so(tmp_path):
     _tools, _render, voices = setup(tmp_path, take_at="2020-01-01T00:00:00Z")
     wait(voices, voices.start("cast", "uv", "ep1", "s03", 1)["jobId"])

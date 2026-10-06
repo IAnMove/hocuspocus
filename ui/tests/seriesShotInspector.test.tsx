@@ -191,3 +191,53 @@ test('a video take shows how its sound plays at the cut and saves its clip sound
   await waitFor(() => assert.deepEqual(server.posts('/shots/edit')[0]?.changes, { clipAudio: 'drop' }))
   assert.equal(server.posts('/native-render').length, 0)
 })
+
+test('saving an inspector section keeps a newer draft typed while the reply is pending', { concurrency: false }, async t => {
+  const { view, server } = await mount(t)
+  const { fireEvent, waitFor, within } = await import('@testing-library/react')
+  const { episodeInspector, inspectorKey } = await import('../src/features/series/inspector/inspectorStore')
+  const fetch = globalThis.fetch
+  let release!: () => void
+  let first = true
+  t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init)
+    if (first && String(input).endsWith('/shots/edit')) {
+      first = false
+      return new Promise<Response>(resolve => { release = () => resolve(response) })
+    }
+    return response
+  })
+  await open(view, 1)
+  const lines = within(await waitFor(() => view.getByTestId('series-inspector-s1-lines')))
+  fireEvent.click(lines.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(lines.getByLabelText('Text (Spanish)'), { target: { value: 'First submitted draft' } })
+  fireEvent.click(lines.getByRole('button', { name: 'Save' }))
+  await waitFor(() => assert.ok(release))
+  fireEvent.change(lines.getByLabelText('Text (Spanish)'), { target: { value: 'Newer unsaved draft' } })
+  release()
+  await waitFor(() => assert.equal((lines.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled, false))
+  assert.equal((lines.getByLabelText('Text (Spanish)') as HTMLTextAreaElement).value, 'Newer unsaved draft')
+  const key = inspectorKey('plus-ultra', 'mp-es', 'ep1')
+  assert.match(JSON.stringify(episodeInspector(key).drafts.s1.lines), /Newer unsaved draft/)
+  fireEvent.click(lines.getByRole('button', { name: 'Save' }))
+  await waitFor(() => assert.equal(server.posts('/shots/edit').length, 2))
+  await waitFor(() => assert.equal(episodeInspector(key).drafts.s1?.lines, undefined))
+})
+
+test('the inspector scopes recoverable notes by workspace, series, episode, shot and stage', { concurrency: false }, async t => {
+  const { view, store } = await mount(t)
+  const { fireEvent, waitFor } = await import('@testing-library/react')
+  const { readApprovalNote } = await import('../src/features/series/approvalNoteDraft')
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('offline') })
+  await open(view, 1)
+  const box = await view.findByLabelText('Your note (final)')
+  fireEvent.change(box, { target: { value: 'Recover in this inspector only' } })
+  const key = JSON.stringify(['plus-ultra', 'mp-es', 'ep1', 's1', 'final'])
+  assert.equal(readApprovalNote(key)?.text, 'Recover in this inspector only')
+  store.setState({ workspace: 'other' })
+  fireEvent.click(view.getByRole('button', { name: 'All shots' }))
+  await waitFor(() => assert.equal(view.queryByTestId('series-shot-inspector'), null))
+  await open(view, 1)
+  assert.equal((view.getByLabelText('Your note (final)') as HTMLTextAreaElement).value, 'Recover in this inspector only')
+  assert.equal(readApprovalNote(JSON.stringify(['other', 'mp-es', 'ep1', 's1', 'final'])), undefined)
+})

@@ -4,7 +4,7 @@ import { useUiTranslation } from '../../../i18n'
 import { primaryButton, secondaryButton } from '../styles'
 import type { SeriesShotScript } from '../../../api/seriesShotInspector'
 import { RerenderShot } from './context'
-import { setSectionDraft, type SectionDraft, type SectionKey } from './inspectorStore'
+import { episodeInspector, setSectionDraft, type SectionDraft, type SectionKey } from './inspectorStore'
 import { sectionChanges, sectionSlice } from './model'
 
 /** Save a part's changes; resolves to what the save did, in words. */
@@ -62,8 +62,10 @@ function useSectionDraft({ inspector, shotId, section, script, draft, save, slic
     if (!changes) { cancel(); return }
     setBusy(true); setError(''); setSaved('')
     try {
-      setSaved((await save(changes)) || t('inspector.saved.plain'))
-      setSectionDraft(inspector, shotId, section, undefined); setOpen(false)
+      const notice = (await save(changes)) || t('inspector.saved.plain')
+      if (episodeInspector(inspector).drafts[shotId]?.[section] === draft) {
+        setSaved(notice); setSectionDraft(inspector, shotId, section, undefined); setOpen(false)
+      }
     } catch (reason) { setError((reason as Error).message) } finally { setBusy(false) }
   }
   return {

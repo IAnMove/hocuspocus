@@ -78,16 +78,17 @@ function useShotKeys(order: string[], shotId: string, onNavigate: (shotId: strin
 }
 
 /** The shot's review: its status, the approve / request change buttons and the notes. */
-function ReviewBox({ shot, entry, mode, hasTake, actions }: {
-  shot: SeriesShot; entry: SeriesShotReview; mode: SeriesProductionMode; hasTake: boolean; actions: ApprovalCardActions
+function ReviewBox({ shot, entry, mode, hasTake, actions, scope }: {
+  shot: SeriesShot; entry: SeriesShotReview; mode: SeriesProductionMode; hasTake: boolean; actions: ApprovalCardActions; scope: string[]
 }) {
   const stage = reviewStage(mode, entry, shot)
+  const draftKey = JSON.stringify([...scope, shot.id, noteStage(mode, entry)])
   return <div className="space-y-2 rounded-xl border border-border bg-bg-secondary p-3">
     <div className="flex flex-wrap items-center gap-1.5"><Pill tone="blue">#{shot.order}</Pill>
       <span className="min-w-0 truncate font-mono text-[10px] text-text-muted" title={shot.id}>{shot.id}</span>
       <ReviewPills entry={entry} mode={mode} hasTake={hasTake} /></div>
     <div className="flex flex-wrap gap-2"><StageButtons shot={shot} stage={stage} status={entry[stage]} canApprove={stage === 'plan' || hasTake} actions={actions} /></div>
-    <SeriesApprovalNotes key={`${shot.id}:${noteStage(mode, entry)}`} shotId={shot.id} entry={entry} stage={noteStage(mode, entry)} onSave={actions.saveNote(shot)} />
+    <SeriesApprovalNotes key={draftKey} draftKey={draftKey} shotId={shot.id} entry={entry} stage={noteStage(mode, entry)} onSave={actions.saveNote(shot)} />
   </div>
 }
 
@@ -145,12 +146,12 @@ export function SeriesShotInspector({ workspace, series, episode, shot, entry, m
   const [selected, setSelected] = useState<string>()
   const takes = shotTakes(series, shot)
   const save = useCallback(async (changes: Record<string, unknown>) => {
-    const reply = await editShot(episode.id, { shot: shot.id, changes })
+    const reply = await editShot(episode.id, { shot: shot.id, changes }, { workspace, seriesId: series.id })
     replace(reply.shot)
     markShotEdited(inspector, shot.id, Date.now())
     if ('lines' in changes) voices.refresh()
     return savedNotice(t, reply, i18n.language)
-  }, [editShot, episode.id, shot.id, replace, inspector, voices, t, i18n.language])
+  }, [editShot, workspace, series.id, episode.id, shot.id, replace, inspector, voices, t, i18n.language])
   useShotKeys(order, shot.id, onNavigate, onClose)
   const context: PartContext = useMemo(() => ({
     workspace, series, episode, shot, script: view?.script, inspector, drafts: state.drafts[shot.id] || {}, save, kits,
@@ -166,7 +167,7 @@ export function SeriesShotInspector({ workspace, series, episode, shot, entry, m
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-3 @5xl:sticky @5xl:top-14 @5xl:self-start">
           <InspectorMedia series={series} shot={shot} takes={takes} selected={selected} onSelect={setSelected} kits={kits} />
-          <ReviewBox shot={shot} entry={entry} mode={mode} hasTake={takes.length > 0} actions={actions} />
+          <ReviewBox scope={[workspace, series.id, episode.id]} shot={shot} entry={entry} mode={mode} hasTake={takes.length > 0} actions={actions} />
           <RegenerateBar series={series} shot={shot} plan={plan} job={render.job} busy={render.busy} error={render.error} onRender={() => actions.rerender(shot)} />
           <PartsNav shotId={shot.id} parts={parts} drafts={context.drafts} />
         </div>

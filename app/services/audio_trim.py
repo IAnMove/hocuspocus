@@ -14,8 +14,8 @@ import subprocess
 from typing import Any
 
 from services.production_media_common import (
-    OUTPUT_NAME, SOURCE, WORKSPACE, MediaToolError, media_url, number, operation_schema, output_path,
-    publish_sidecar, read_input, remove_quietly, resolve_source, sha256_file, source_ref, uploads_root,
+    OUTPUT_NAME, SOURCE, WORKSPACE, MediaToolError, media_url, number, operation_schema, output_destination,
+    publish_sidecar, read_input, resolve_source, sha256_file, source_ref, uploads_root,
     workspace_folder,
 )
 
@@ -145,16 +145,12 @@ def run(arguments: Any, *, workspace_dir, uploads_dir) -> dict[str, Any]:
     fades = (number(payload, "fade_in", 0, 10, DEFAULT_FADE), number(payload, "fade_out", 0, 10, DEFAULT_FADE))
     stem = os.path.splitext(os.path.basename(source))[0][:80]
     default = f"{stem}-trim-{start:.2f}-{length:.2f}".replace(".", "_")
-    destination = output_path(folder, payload.get("output_name"), default, _extension(fmt, source))
-    try:
+    with output_destination(folder, payload.get("output_name"), default, _extension(fmt, source)) as destination:
         cut(source, destination, (start, length), fades, info, fmt)
         made = probe_audio_stream(destination)
-    except Exception:
-        remove_quietly(destination)
-        raise
-    params = {"start": round(start, 6), "length": round(length, 6), "fade_in": fades[0], "fade_out": fades[1],
-              "source_name": os.path.basename(source)}
-    sidecar = publish_sidecar(destination, workspace, OPERATION, "audio", params, [source_ref(source, workspace)])
-    return {"file": os.path.basename(destination), "url": media_url(destination, workspace, uploads, folder),
-            "seconds": round(made["duration"], 4), "start": round(start, 6), "sample_rate": made["sample_rate"],
-            "channels": made["channels"], "clipped": clipped, "sha256": sha256_file(destination), "sidecar": sidecar}
+        params = {"start": round(start, 6), "length": round(length, 6), "fade_in": fades[0], "fade_out": fades[1],
+                  "source_name": os.path.basename(source)}
+        sidecar = publish_sidecar(destination, workspace, OPERATION, "audio", params, [source_ref(source, workspace)])
+        return {"file": os.path.basename(destination), "url": media_url(destination, workspace, uploads, folder),
+                "seconds": round(made["duration"], 4), "start": round(start, 6), "sample_rate": made["sample_rate"],
+                "channels": made["channels"], "clipped": clipped, "sha256": sha256_file(destination), "sidecar": sidecar}

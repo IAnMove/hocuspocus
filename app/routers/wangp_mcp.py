@@ -16,7 +16,7 @@ from copy import deepcopy
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
-from services.agent_activity import caller_from_headers, caller_scope
+from services.agent_activity import external_caller, caller_scope
 from services.wangp_submission import JsonRequest
 from services.workspace_commands import catalog as command_catalog
 
@@ -402,7 +402,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         body = await payload(request)
         if body is None:
             return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
-        with caller_scope(caller_from_headers(request.headers)):
+        with caller_scope(external_caller()):
             return await mcp_payload_response(body, dispatch)
 
     @router.post('/api/v1/mcp/{profile_name}')
@@ -420,7 +420,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
 
         async def profile_dispatch(message):
             return await dispatch(message, allowed, chosen.get('instructions') or default_instructions)
-        with caller_scope(caller_from_headers(request.headers, profile_name)):
+        with caller_scope(external_caller(profile_name)):
             return await mcp_payload_response(body, profile_dispatch)
 
     @router.get('/api/v1/mcp/{profile_name}')

@@ -593,14 +593,26 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   renderFrame(world, document, sceneSeconds)
 }
 
+const exportCutoutVisibility = new WeakMap<GpuWorld, Map<Object3D, boolean>>()
+
+function restoreExportCutouts(world: GpuWorld) {
+  exportCutoutVisibility.get(world)?.forEach((visible, root) => { root.visible = visible })
+  exportCutoutVisibility.delete(world)
+}
+
 /** An image cutout with no picture is an editor placeholder. An export draws nothing in its
  * place, so a shot whose figure was left empty still renders as a clean plate. */
 export function hideEmptyCutoutsInExport(world: GpuWorld, slots: readonly Scene3DSlot[]) {
-  if (!world.exporting) return
+  if (!world.exporting) { restoreExportCutouts(world); return }
+  let hidden = exportCutoutVisibility.get(world)
+  if (!hidden) { hidden = new Map(); exportCutoutVisibility.set(world, hidden) }
   for (const slot of slots) {
     const empty = slot.media === 'image' && slot.surface === 'cutout' && !slot.sourceUrl && !slot.screen?.sourceUrl
     const gpu = empty ? world.slots.get(slot.id) : undefined
-    if (gpu) gpu.root.visible = false
+    if (gpu) {
+      if (!hidden.has(gpu.root)) hidden.set(gpu.root, gpu.root.visible)
+      gpu.root.visible = false
+    }
   }
 }
 
@@ -721,6 +733,7 @@ function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
 export function setWorldExportQuality(world: GpuWorld, enabled: boolean, render: ExportRenderQuality = DRAFT_RENDER) {
   world.exportRender = enabled && (render.samples > 0 || render.supersample > 1) ? { ...render } : undefined
   world.exporting = enabled
+  if (!enabled) restoreExportCutouts(world)
   world.cinema?.setRenderQuality(world.exportRender)
   world.renderer.shadowMap.enabled = enabled
   world.renderer.shadowMap.type = PCFSoftShadowMap

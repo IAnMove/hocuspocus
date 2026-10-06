@@ -56,12 +56,17 @@ export function SeriesApprovalPanel({ workspace, series, episode, saveNow, onOpe
   const { t } = useUiTranslation('seriesLab')
   const saveReview = useSeriesStore(state => state.saveReview)
   const [filter, setFilter] = useState<ReviewFilter>('all')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const scope = JSON.stringify([workspace, series.id, episode.id])
+  const [sending, setSending] = useState({ scope, pending: 0, error: '' })
+  const busy = sending.scope === scope && sending.pending > 0
+  const error = sending.scope === scope ? sending.error : ''
   // A finished render brings its takes in without reloading the page (a reload would close the open shot).
   const refresh = useCallback(async () => {
     await saveNow()
-    useSeriesStore.getState().adoptRemoteSeries(await fetchSeriesProject(workspace, series.id))
+    const state = useSeriesStore.getState(), snapshot = state.library.seriesById[series.id]
+    if (state.workspace !== workspace || state.activeSeriesId !== series.id || !snapshot || state.dirty) return
+    const project = await fetchSeriesProject(workspace, series.id)
+    useSeriesStore.getState().adoptRemoteSeries(project, { workspace, seriesId: series.id, snapshot })
   }, [saveNow, workspace, series.id])
   const render = useApprovalRender(workspace, series.id, episode.id, refresh)
   const kits = useKitLibrary(workspace)
@@ -80,9 +85,13 @@ export function SeriesApprovalPanel({ workspace, series, episode, saveNow, onOpe
     useShotEditSession.setState({ focusShotId: '' })
   }, [focusShotId, key, episode.shots])
   const send = useCallback(async (change: Parameters<typeof saveReview>[1]) => {
-    setBusy(true); setError('')
-    try { return await saveReview(episode.id, change) } catch (reason) { setError((reason as Error).message); throw reason } finally { setBusy(false) }
-  }, [episode.id, saveReview])
+    setSending(current => ({ scope, pending: current.scope === scope ? current.pending + 1 : 1, error: '' }))
+    try { return await saveReview(episode.id, change, { workspace, seriesId: series.id }) }
+    catch (reason) {
+      setSending(current => current.scope === scope ? { ...current, error: (reason as Error).message } : current)
+      throw reason
+    } finally { setSending(current => current.scope === scope ? { ...current, pending: current.pending - 1 } : current) }
+  }, [workspace, series.id, episode.id, saveReview, scope])
   const quiet = (task: Promise<unknown>) => { void task.catch(() => { /* shown in the panel */ }) }
   const actions: ApprovalCardActions = {
     review: async (shot, stage, status) => {
@@ -116,7 +125,7 @@ export function SeriesApprovalPanel({ workspace, series, episode, saveNow, onOpe
   if (open) {
     return <div className="space-y-2">
       {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
-      <SeriesShotInspector key={open.id} workspace={workspace} series={series} episode={episode} shot={open} entry={shotReview(episode, open.id)} mode={mode}
+      <SeriesShotInspector key={JSON.stringify([workspace, series.id, episode.id, open.id])} workspace={workspace} series={series} episode={episode} shot={open} entry={shotReview(episode, open.id)} mode={mode}
         inspector={key} order={order} render={render} actions={actions} edits={edits} onClose={close} onNavigate={shotId => openInspectorShot(key, shotId)} />
     </div>
   }

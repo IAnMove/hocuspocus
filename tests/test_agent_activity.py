@@ -1,6 +1,7 @@
 """Whatever an agent makes through MCP shows up in Activity, attributed and openable."""
 import asyncio
 import json
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -134,6 +135,35 @@ def test_local_mcp_runs_handlers_as_the_server():
     assert seen == [("sync", None), ("async", None)]
 
 
+def test_music_shot_command_can_call_async_local_tools_without_nesting_event_loops(tmp_path, monkeypatch):
+    from services.agent_activity import current_actor
+    from services.production_commands import SHOT_UPDATE, extra_handlers
+
+    seen = []
+
+    async def tool(arguments):
+        seen.append(current_actor())
+        return {"file": "edited.mp4"}
+
+    local = LocalMcp(lambda: {"demo": tool})
+
+    def update(production, *args, **kwargs):
+        seen.append(current_actor())
+        return production.mcp("demo", {})
+
+    monkeypatch.setattr("services.production_shot_edit.update_shot", update)
+    (tmp_path / "p.production.json").write_text(json.dumps({"spec": {"title": "test"}}))
+    handlers = extra_handlers(lambda _: str(tmp_path), lambda: str(tmp_path), lambda: "", lambda: "", mcp=local.call)
+
+    async def request():
+        local.bind_loop(asyncio.get_running_loop())
+        with caller_scope(AGENT):
+            return await handlers[SHOT_UPDATE]({"version": 1, "input": {"workspace": "show", "production_id": "p", "shot": "s1"}})
+
+    assert asyncio.run(request())["result"]["file"] == "edited.mp4"
+    assert seen == ["agent", "server"]
+
+
 def _mcp_app(tmp_path, recorded):
     operations = [{"name": name, "description": name, "mutation": mutation, "inputSchema": {
         "type": "object", "properties": {"version": {"const": 1}, "input": {"type": "object"}}, "required": ["version", "input"]}}
@@ -147,26 +177,28 @@ def _mcp_app(tmp_path, recorded):
     app.include_router(create_wangp_mcp_router(
         handlers={"demo.save": save, "demo.read": lambda arguments: {"status": "completed"}},
         journal_path=tmp_path / "requests.sqlite3", token_getter=lambda: "token", command_operations=operations,
+        profiles={"test": {"tools": ["demo.save", "demo.read"]}},
         on_mutation=lambda name, arguments, result: recorded.append((name, is_external_agent(), result["result"]["name"]))))
     return app, seen
 
 
-def _call(client, name, headers=None):
+def _call(client, name, headers=None, path="/api/v1/mcp"):
     body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": {"version": 1, "input": {}}}}
-    response = client.post("/api/v1/mcp", json=body, headers={"Authorization": "Bearer token", **(headers or {})})
+    response = client.post(path, json=body, headers={"Authorization": "Bearer token", **(headers or {})})
     assert response.status_code == 200
     return json.loads(response.json()["result"]["content"][0]["text"])
 
 
-def test_the_mcp_endpoint_reports_mutations_from_outside_clients_only(tmp_path):
+@pytest.mark.parametrize("path", ["/api/v1/mcp", "/api/v1/mcp/test"])
+def test_the_mcp_endpoint_reports_mutations_from_outside_clients_only(tmp_path, path):
     recorded = []
     app, seen = _mcp_app(tmp_path, recorded)
     with TestClient(app) as client:
-        _call(client, "demo.save")
-        _call(client, "demo.read")
-        _call(client, "demo.save", {"X-Hocus-Caller": "production"})
-    assert seen == [True, False]
-    assert recorded == [("demo.save", True, "demo.scene.json"), ("demo.save", False, "demo.scene.json")]
+        _call(client, "demo.save", path=path)
+        _call(client, "demo.read", path=path)
+        _call(client, "demo.save", {"X-Hocus-Caller": "production", "X-Hocus-Actor": "server"}, path=path)
+    assert seen == [True, True]  # an external client cannot declare itself a server job
+    assert recorded == [("demo.save", True, "demo.scene.json"), ("demo.save", True, "demo.scene.json")]
     activity_calls = []
 
     class Spy(AgentActivity):

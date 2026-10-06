@@ -66,6 +66,14 @@ def _video_pass(shot: dict, entry: dict) -> tuple[str, str | None]:
     return "render", None
 
 
+def video_promotion(episode: dict, shot: dict) -> str | None:
+    """The reviewed video take still to approve, including videos with no foley prompt."""
+    if episode_mode(episode) != "preview" or shot.get("productionMethod") not in VIDEO_TAKE_METHODS:
+        return None
+    entry = shot_entry(episode, str(shot.get("id")))
+    return _video_pass(shot, entry)[1] if entry["plan"] == "approved" else None
+
+
 def shot_pass(series: dict, episode: dict, shot: dict, inputs: Callable[[dict], str], *, explicit: bool,
               original: bool = True) -> tuple[str, str | None]:
     """(pass, detail) for one shot: ``render`` (plan mode or direct), ``preview``, ``final``, ``promote`` (detail: the
@@ -109,6 +117,8 @@ def actionable_shots(series: dict, episode: dict, shots: list[dict], inputs: Cal
     if mode == "direct":
         return list(stale)
     if mode == "preview" and original:
+        shots = [shot for shot in shots if shot.get("productionMethod") not in VIDEO_TAKE_METHODS
+                 or shot["id"] in stale or video_promotion(episode, shot)]
         planned, _waiting = render_passes(series, episode, shots, inputs, explicit=False)
         return [item["shot"]["id"] for item in planned]
     planned, _waiting = render_passes(series, episode, [shot for shot in shots if shot["id"] in set(stale)], inputs,

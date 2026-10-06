@@ -95,4 +95,3 @@ export function ListEditor<T>({ items, onChange, render, create, addLabel, max =
       <Plus size={13} />{addLabel}</button>
   </div>
 }
-

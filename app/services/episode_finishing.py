@@ -284,6 +284,19 @@ def lay_ambience(
     return {"applied": True, "join": join, "beds": [bed.report() for bed in beds], **ducking, **report}
 
 
+def _score_factors(beds, cues, dips, silences):
+    """Each cue's ducking and silence envelope on its planned bed."""
+    return [series_score.bed_dips(bed, dips if cue.get("duck", True) else [], silences)
+            for bed, cue in zip(beds, cues)]
+
+
+def _score_cue_reports(beds, cues, factors) -> list[dict[str, Any]]:
+    """Report the score that was laid, including each cue's ducking and silences."""
+    return [{**bed.report(), "duck": bool(cue.get("duck", True)),
+             "dips": sum(1 for item in items if item.depth < 1), "silences": sum(1 for item in items if item.depth >= 1)}
+            for bed, cue, items in zip(beds, cues, factors)]
+
+
 def lay_score(
     output_path: str, clip_paths: Sequence[str], lines: Sequence[Any], score: dict[str, Any], *, workspace_dir: str,
     ffmpeg: str, abort_callback: Callable[[], bool] | None = None, level: Callable[[str], float] = gain_to,
@@ -309,7 +322,7 @@ def lay_score(
     dips = series_score.merge_spans(speech_spans(spans, durations, lines, workspace_dir=workspace_dir))
     music = list(score.get("music") or [])
     silences = series_score.merge_spans([span for span, own in zip(spans, music) if own])
-    factors = [series_score.bed_dips(bed, dips if cue.get("duck", True) else [], silences) for bed, cue in zip(beds, cues)]
+    factors = _score_factors(beds, cues, dips, silences)
     gains = {name: level(sources[name]) for name in {bed.file for bed in beds}}
     laid = series_ambience.mix_beds(
         output_path, beds, [sources[bed.file] for bed in beds], [gains[bed.file] for bed in beds], ffmpeg=ffmpeg,
@@ -317,9 +330,7 @@ def lay_score(
         envelopes=[series_score.envelope(items) for items in factors], label="score")
     if not laid:
         return {"applied": False, "reason": "ffmpeg could not mix the score", **report}
-    laid_cues = [{**bed.report(), "duck": bool(cue.get("duck", True)),
-                  "dips": sum(1 for item in items if item.depth < 1), "silences": sum(1 for item in items if item.depth >= 1)}
-                 for bed, cue, items in zip(beds, cues, factors)]
+    laid_cues = _score_cue_reports(beds, cues, factors)
     return {"applied": True, "join": join, "cues": laid_cues, **report}
 
 

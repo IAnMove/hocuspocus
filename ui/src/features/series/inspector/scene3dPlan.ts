@@ -38,7 +38,12 @@ async function openShotEpisode(session: ShotEditSession) {
   const store = useSeriesStore.getState()
   if (store.workspace !== session.workspace || !store.hydrated) await store.loadWorkspace(session.workspace)
   if (useSeriesStore.getState().activeSeriesId !== session.seriesId) await useSeriesStore.getState().openSeries(session.seriesId)
-  useSeriesStore.getState().openEpisode(session.episodeId)
+  const current = useSeriesStore.getState()
+  if (useStore.getState().activeWorkspace !== session.workspace || current.workspace !== session.workspace || current.activeSeriesId !== session.seriesId
+    || !current.library.seriesById[session.seriesId]?.episodesById[session.episodeId]?.shots.some(shot => shot.id === session.shotId)) {
+    throw new Error(current.error || 'The edited shot is no longer available')
+  }
+  current.openEpisode(session.episodeId)
 }
 
 /** Save what the Video 3D editor shows to the shot it was opened from, then go back to that shot. */
@@ -47,8 +52,8 @@ export async function saveScene3DPlan(session: ShotEditSession, document: unknow
   if (useStore.getState().activeWorkspace !== session.workspace) throw new Error('Return to the workspace of this shot first')
   await openShotEpisode(session)
   const saved = await saveShotScene3D(session.workspace, session.seriesId, session.episodeId, session.shotId, document)
-  await useSeriesStore.getState().editShot(session.episodeId, { shot: session.shotId, changes: { scene3d: saved.scene3d } })
+  await useSeriesStore.getState().editShot(session.episodeId, { shot: session.shotId, changes: { scene3d: saved.scene3d } }, session)
+  await returnToShot(session)
   setShotEditSession(null)
-  returnToShot(session)
   return saved
 }

@@ -6,6 +6,22 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series approvals keep pending note drafts and ignore saves and render polls
+from another episode. Changed dialogue pauses and saved 3D scenes invalidate
+their takes; reviewed imported/generated videos promote correctly and prepare
+their foley. Media tools serialize retries and publication, and Wizard and
+Production use the shared command paths in full and Core runtimes. Failed
+named asset publication restores the previous files. New named scene export
+receipts verify their exact video bytes, including on download; an overwritten
+version is reported unavailable. GPU profile checks respect visible-device
+identity and report uncertain CUDA ordering explicitly. See the
+[audit corrections and regression tests](docs/development/DEVELOPMENT_AUDIT_FIXES_2026-10-07.md).
+Release code-health verification fingerprints the analyzer dependency graph
+and installation hooks, allowing unrelated type-package cleanup while keeping
+the existing budgets and historical checks. Eye detection, frozen canon snapshots
+and frame encoding move to focused helpers; smaller rig and score functions clear
+the release gates without changing their limits.
+
 Series Lab's **5 · Validation** tab is now a grid of every shot of the episode,
 grouped by scene: each tile shows the shot's latest take (or its plan sketched
 from the location and the cast's poses when nothing is rendered), its number,

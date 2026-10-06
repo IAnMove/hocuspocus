@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +14 with the flat rig's small faces, +19 recoverability follow-ups, +12 its last items, 2026-10-06; +140 game-asset tests, 2026-10-07). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2803,
+      "weight": 3061,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -20,6 +20,10 @@
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
         "tests/test_assets_upload.py",
+        "tests/test_core_media_parity.py",
+        "tests/test_production_media_concurrency.py",
+        "tests/test_workspace_publication_lock.py",
+        "tests/test_export_download_identity.py",
         "tests/test_workspace_asset_import.py",
         "tests/test_audio_trim.py",
         "tests/test_media_frame.py",
@@ -263,7 +267,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2804,
+      "weight": 3084,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -405,6 +409,8 @@
         "tests/test_series_assembly_router.py",
         "tests/test_series_commands.py",
         "tests/test_series_native_render.py",
+        "tests/test_series_scene_inputs.py",
+        "tests/test_series_video_produce.py",
         "tests/test_series_shot_plan.py",
         "tests/test_series_layers.py",
         "tests/test_series_cutouts.py",
@@ -554,7 +560,35 @@
     },
     {
       "prefix": "app/services/series_video_foley.py",
-      "paths": ["tests/test_series_shot_foley.py", "tests/test_series_take_sound.py"]
+      "paths": ["tests/test_series_shot_foley.py", "tests/test_series_take_sound.py", "tests/test_series_video_produce.py"]
+    },
+    {
+      "prefix": "app/services/flat_rig_eyes.py",
+      "paths": ["tests/test_flat_rig.py", "tests/test_flat_rig_realistic.py", "tests/test_flat_rig_guided.py", "tests/test_flat_rig_small.py", "tests/test_flat_rig_warp.py"]
+    },
+    {
+      "prefix": "app/services/series_canon_snapshot.py",
+      "paths": ["tests/test_series_library.py", "tests/test_series_production.py"]
+    },
+    {
+      "prefix": "app/services/world3d_frame_encoder.py",
+      "paths": ["tests/test_world3d_export.py", "tests/test_export_output_name.py", "tests/test_scene2d_export.py"]
+    },
+    {
+      "prefix": "app/services/series_scene_inputs.py",
+      "paths": ["tests/test_series_scene_inputs.py", "tests/test_series_native_render.py"]
+    },
+    {
+      "prefix": "app/services/media_publication.py",
+      "paths": ["tests/test_assets_upload.py", "tests/test_export_output_name.py", "tests/test_production_media_concurrency.py"]
+    },
+    {
+      "prefix": "app/services/workspace_store_lock.py",
+      "paths": ["tests/test_workspace_publication_lock.py", "tests/test_production_media_concurrency.py", "tests/test_assets_upload.py"]
+    },
+    {
+      "prefix": "app/services/win_safe_files.py",
+      "paths": ["tests/test_export_download_identity.py", "tests/test_output_move_security.py", "tests/test_director_cancellation.py", "tests/test_output_delete_workspace.py", "tests/test_security_local.py"]
     },
     {
       "prefix": "app/services/series_shot_edit.py",
@@ -590,7 +624,7 @@
     },
     {
       "prefix": "app/services/production_media_common.py",
-      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py", "tests/test_production_media_agent_trail.py"]
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py", "tests/test_production_media_agent_trail.py", "tests/test_production_media_concurrency.py", "tests/test_core_media_parity.py"]
     },
     {
       "prefix": "app/services/production_media_commands.py",
@@ -1589,7 +1623,7 @@
     },
     {
       "prefix": "app/services/export_receipts.py",
-      "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
+      "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py", "tests/test_export_output_name.py", "tests/test_export_download_identity.py"]
     },
     {
       "prefix": "app/services/series_review.py",

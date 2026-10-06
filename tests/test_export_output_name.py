@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import time
 from pathlib import Path
@@ -126,9 +127,11 @@ def test_world3d_named_export_replaces_and_keeps_the_previous(tmp_path):
     service = _service(tmp_path)
     workspace = tmp_path / WORKSPACE
     first = _export(service, world3d_command("crane-1", output_name="set-crane-loop"))
-    assert first["receipt"]["artifacts"] == [{"name": "set-crane-loop.mp4", "url": "/api/v1/file/set-crane-loop.mp4",
-                                              "workspace": WORKSPACE}]
     original = (workspace / "set-crane-loop.mp4").read_bytes()
+    sha256 = hashlib.sha256(original).hexdigest()
+    assert first["receipt"]["artifacts"] == [{"name": "set-crane-loop.mp4",
+                                              "url": f"/api/v1/file/set-crane-loop.mp4?workspace={WORKSPACE}&sha256={sha256}",
+                                              "workspace": WORKSPACE, "sha256": sha256}]
     first_id = json.loads((workspace / "set-crane-loop.meta.json").read_text())["asset"]["id"]
 
     second = _export(service, world3d_command("crane-2", output_name="set-crane-loop.mp4", quality="final"))
@@ -140,6 +143,8 @@ def test_world3d_named_export_replaces_and_keeps_the_previous(tmp_path):
     assert previous["asset"]["filename"] == "set-crane-loop.previous.mp4" and previous["asset"]["id"] == first_id
     current = json.loads((workspace / "set-crane-loop.meta.json").read_text())
     assert current["asset"]["filename"] == "set-crane-loop.mp4" and current["asset"]["id"] != first_id
+    old_artifact = service.receipt(WORKSPACE, "crane-1")["receipt"]["artifacts"][0]
+    assert (workspace / old_artifact["name"]).read_bytes() == original
     assert sorted(path.name for path in workspace.glob("set-crane-loop*")) == [
         "set-crane-loop.meta.json", "set-crane-loop.mp4", "set-crane-loop.previous.meta.json", "set-crane-loop.previous.mp4"]
 
@@ -166,6 +171,29 @@ def test_video2d_named_export_publishes_under_the_name(tmp_path):
     assert "_video2d-Fog_" in unnamed["receipt"]["artifacts"][0]["name"]
     assert "replaced" not in unnamed["receipt"]["artifacts"][0]
     forget_task_registry(str(tmp_path / WORKSPACE))
+
+
+@pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
+def test_failed_named_export_restores_current_previous_and_sidecars(tmp_path, monkeypatch):
+    from services import world3d_export
+    service = _service(tmp_path)
+    _export(service, world3d_command("kept-1", output_name="loop"))
+    _export(service, world3d_command("kept-2", output_name="loop", quality="final"))
+    folder = tmp_path / WORKSPACE
+    before = {path.name: path.read_bytes() for path in folder.glob("loop*")}
+    publish = world3d_export.publish_generation_sidecar
+
+    def fail_after_sidecar(*args, **kwargs):
+        publish(*args, **kwargs)
+        raise OSError("sidecar storage failed")
+
+    monkeypatch.setattr(world3d_export, "publish_generation_sidecar", fail_after_sidecar)
+    admitted = service.submit(world3d_command("failed-3", output_name="loop"))['receipt']
+    task = _wait(service._registry(WORKSPACE), admitted['taskIds'][0], {'failed', 'completed'})
+    assert task['status'] == 'failed'
+    assert {path.name: path.read_bytes() for path in folder.glob("loop*")} == before
+    assert not list(folder.glob('.publication-*'))
+    forget_task_registry(str(folder))
 
 
 def test_publish_keeps_one_previous_level_and_the_prores_sibling(tmp_path):

@@ -85,8 +85,10 @@ export function TakesPart({ context, selected, onSelect, onOpenEditor }: {
   }
   const approve = (take: TakeEntry) => run(`approve-${take.attempt.id}`, async () => {
     await useSeriesStore.getState().saveNow()
+    const state = useSeriesStore.getState(), snapshot = state.library.seriesById[context.series.id]
+    if (state.workspace !== context.workspace || state.activeSeriesId !== context.series.id || !snapshot) throw new Error('The series workspace or project changed')
     const reply = await approveSeriesAttemptsBulk(context.workspace, context.series.id, context.episode.id, [{ shotId: context.shot.id, attemptId: take.attempt.id }])
-    useSeriesStore.getState().acceptEpisode(context.series.id, reply.episode, reply.revision)
+    useSeriesStore.getState().acceptEpisode(context.series.id, reply.episode, reply.revision, { workspace: context.workspace, seriesId: context.series.id, snapshot })
   })
   const id = sectionId(context.shot.id, 'takes')
   return <section id={id} aria-labelledby={`${id}-title`} data-testid={id} className="scroll-mt-20 rounded-xl border border-border bg-bg-secondary p-3">

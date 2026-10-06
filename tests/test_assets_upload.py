@@ -275,6 +275,45 @@ def test_named_copy_rejects_bad_sidecar_before_publishing(tmp_path):
     assert not (workspace / 'song.wav').exists()
 
 
+@pytest.mark.parametrize('failure_point', ['sidecar', 'journal', 'sidecar_after', 'journal_after'])
+@pytest.mark.parametrize('replace_existing', [False, True])
+def test_named_copy_failure_restores_media_metadata_and_intent(tmp_path, monkeypatch, failure_point, replace_existing):
+    import hashlib
+    from services import assets_upload
+
+    handlers, workspace, _ = _layout(tmp_path)
+    source = workspace / 'new.wav'
+    source.write_bytes(b'new song')
+    source.with_suffix('.meta.json').write_text('{"asset":{"filename":"new.wav"},"seed":7}')
+    target = workspace / 'song.wav'
+    target_meta = target.with_suffix('.meta.json')
+    if replace_existing:
+        target.write_bytes(b'old song')
+        target_meta.write_text('{"asset":{"filename":"song.wav"},"seed":1}')
+        (workspace / assets_upload._JOURNAL_NAME).write_text('{}')
+    before = {p.name: p.read_bytes() for p in workspace.iterdir() if p.is_file()}
+    payload = {'workspace': 'clip', 'source': str(source), 'copy_to_workspace': True,
+               'destination_filename': target.name}
+    if replace_existing:
+        payload['expected_destination_sha256'] = hashlib.sha256(target.read_bytes()).hexdigest()
+    function = '_publish_sidecar' if failure_point.startswith('sidecar') else '_remember'
+    original = getattr(assets_upload, function)
+
+    def fail(*args, **kwargs):
+        if failure_point.endswith('_after'):
+            original(*args, **kwargs)
+        raise OSError('publication failed')
+
+    monkeypatch.setattr(assets_upload, function, fail)
+    with pytest.raises(OSError, match='publication failed'):
+        _call(handlers, 'publish-retry', payload)
+    assert {p.name: p.read_bytes() for p in workspace.iterdir() if p.is_file() and not p.name.endswith('.lock')} == before
+    monkeypatch.setattr(assets_upload, function, original)
+    result = _call(handlers, 'publish-retry', payload)
+    assert target.read_bytes() == b'new song'
+    assert _call(handlers, 'publish-retry', payload) == result
+
+
 def test_named_copy_creates_exact_name_and_requires_copy_flag(tmp_path):
     handlers, workspace, _ = _layout(tmp_path)
     source = workspace / 'new.wav'; source.write_bytes(b'new')

@@ -33826,7 +33826,7 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None, size: st
 
 
 @api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None):
+def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
     """Serve an output file from the explicit or active workspace.
 
     Uses share_delete_file_response so that on Windows the file can be
@@ -33838,7 +33838,7 @@ def serve_file(filename: str, workspace: str | None = None):
     from services.win_safe_files import share_delete_file_response
     filepath = _resolve_output_file(filename, workspace)
     if filepath:
-        return share_delete_file_response(filepath)
+        return share_delete_file_response(filepath, expected_sha256=sha256)
     # Uploads folder — the gallery's virtual "Uploads" view lists these
     #    files with the same /api/v1/file/ URLs every other gallery flow
     #    builds (thumbnails, playback, send-to-input). Upload names are
@@ -33846,7 +33846,7 @@ def serve_file(filename: str, workspace: str | None = None):
     #    an output name can never be shadowed by an upload.
     filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
     if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath)
+        return share_delete_file_response(filepath, expected_sha256=sha256)
     raise HTTPException(status_code=404, detail="File not found")
 
 
@@ -37000,11 +37000,19 @@ _mcp_oauth = McpOAuth(os.path.join(os.path.dirname(__file__), 'settings', 'mcp-o
 api.include_router(create_mcp_access_router(_mcp_access, on_change=_mcp_oauth.revoke_all))
 api.include_router(create_mcp_oauth_router(_mcp_oauth))
 from routers.music_productions import create_music_productions_router
+from services.local_mcp import LocalMcp
+_local_mcp = LocalMcp(lambda: _mcp_handlers)
+
+async def _bind_local_mcp() -> None:
+    _local_mcp.bind_loop(asyncio.get_running_loop())
+
+api.add_event_handler("startup", _bind_local_mcp)
 api.include_router(create_music_productions_router(
     workspace_dir=_workspace_dir,
     uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
     app_url=lambda: _scene2d_export.app_url or "",
     token=_mcp_access.token,
+    mcp=_local_mcp.call,
 ))
 
 _image_generation_commands = create_image_generation_commands(globals())
@@ -37147,7 +37155,6 @@ api.include_router(create_model3d_compose_router(_model3d_compose_handlers))
 from routers.model3d_animate import command_catalog as model3d_animate_catalog, command_handlers as model3d_animate_handlers, create_model3d_animate_router
 _model3d_animate_handlers = model3d_animate_handlers(_workspace_dir, os.path.join(os.getcwd(), "settings", "model3d-animate.sqlite3"))
 api.include_router(create_model3d_animate_router(_model3d_animate_handlers, _workspace_dir))
-from services.local_mcp import LocalMcp
 from services.series_native_render import NativeRenderDeps, SeriesNativeRender
 from routers.series_native_render import create_series_native_render_router
 from services.character_kit_library import read_character_kit_library as _read_kit_library
@@ -37224,7 +37231,6 @@ from services.video2d_character_ops import bind_kit_reader as _bind_scene_kit_re
 _bind_scene_kit_reader(_character_kit_for_scene)
 
 # Server jobs call the same tool handlers as MCP clients, in process (no token needed).
-_local_mcp = LocalMcp(lambda: _mcp_handlers)
 _series_native_render = SeriesNativeRender(NativeRenderDeps(
     call=_local_mcp.call, workspace_dir=_workspace_dir,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
@@ -37296,7 +37302,7 @@ api.include_router(create_wangp_mcp_router(
     handlers=(_mcp_handlers := {"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
               **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_production_media_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_export_qa_handlers,
-              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token), **production_review_handlers(_workspace_dir), **series_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers}),
+              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token, mcp=_local_mcp.call), **production_review_handlers(_workspace_dir), **series_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers}),
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     profiles=_MCP_PROFILES, oauth=_mcp_oauth,
     command_operations=[*lips_creator_catalog(), *scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
@@ -37440,7 +37446,10 @@ def run_server():
     # Confirm the polling filter immediately before Uvicorn configures logging.
     install_quiet_access_filter()
     from services.production_resume import resume_on_startup
-    resume_on_startup(_list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token)
+    # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
+    api.add_event_handler("startup", lambda: resume_on_startup(
+        _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
+        lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
 
     try:
         from services.server_lifecycle import run_until_stopped

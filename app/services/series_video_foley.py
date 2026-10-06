@@ -56,6 +56,20 @@ def wants_video_foley(shot: dict[str, Any]) -> bool:
         isinstance(item, dict) and item.get("status") == "completed" for item in shot.get("attempts") or [])
 
 
+def pending_video_foley(series: dict, episode: dict, shot: dict, root: str) -> bool:
+    """A video needs work until the sound for its current take and prompt exists; volume is applied at the cut."""
+    if not wants_video_foley(shot):
+        return False
+    asset = video_take(series, shot)
+    if asset is None:
+        return True
+    try:
+        name = sound_name(os.path.join(root, take_file(asset)), episode["id"], shot["id"], shot_foley(shot))
+        return not os.path.isfile(os.path.join(root, name))
+    except OSError:
+        return True  # let the worker report a missing source instead of treating its sound as current
+
+
 def _digest(path: str) -> str:
     stat = os.stat(path)
     key = (path, stat.st_size, int(stat.st_mtime_ns))
@@ -76,4 +90,4 @@ def sound_name(take_path: str, episode_id: str, shot_id: str, foley: dict[str, A
 
 
 __all__ = ["VIDEO_METHODS", "shot_foley", "sound_name", "sound_stem", "take_file", "video_take",
-           "wants_video_foley"]
+           "wants_video_foley", "pending_video_foley"]

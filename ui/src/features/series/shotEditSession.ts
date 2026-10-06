@@ -78,7 +78,6 @@ async function importTake(session: ShotEditSession, uploadPath: string, name: st
     metadata: { productionMethod: session.productionMethod, sceneFilename, editedInEditor: true },
   })
   useSeriesStore.getState().acceptAssetImport(session.workspace, result)
-  setShotEditSession(null)
 }
 
 /** Save and export the open 2D scene (as the server-side batch does), then make the video the shot's new take. */
@@ -107,8 +106,19 @@ export async function recentExports(session: ShotEditSession, limit = 6): Promis
 }
 
 /** Back to Series Lab, on the review tab with the edited shot in view. */
-export function returnToShot(session: ShotEditSession) {
+export async function returnToShot(session: ShotEditSession) {
+  const current = () => useStore.getState().activeWorkspace === session.workspace && useSeriesStore.getState().workspace === session.workspace
+  if (useStore.getState().activeWorkspace !== session.workspace) throw new Error('Return to the workspace of this shot first')
+  await useSeriesStore.getState().loadWorkspace(session.workspace)
+  if (!current()) throw new Error('The workspace changed while returning to the shot')
+  await useSeriesStore.getState().openSeries(session.seriesId)
+  const state = useSeriesStore.getState()
+  const episode = state.library.seriesById[session.seriesId]?.episodesById[session.episodeId]
+  if (!current() || state.activeSeriesId !== session.seriesId || !episode?.shots.some(shot => shot.id === session.shotId)) {
+    throw new Error(state.error || 'The edited shot is no longer available')
+  }
+  state.openEpisode(session.episodeId)
   useShotEditSession.setState({ focusShotId: session.shotId })
+  openAgentSeriesSection('approval')
   useStore.getState().setMediaFilter('series')
-  setTimeout(() => openAgentSeriesSection('approval'), 150)
 }

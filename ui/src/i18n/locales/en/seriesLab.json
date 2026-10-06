@@ -959,7 +959,9 @@
       "placeholder": "What should change in this shot? Saved as you type.",
       "saving": "Saving…",
       "saved": "Saved",
-      "failed": "Could not save the note"
+      "failed": "Could not save the note",
+      "pending": "Note awaiting save",
+      "retry": "Retry saving"
     },
     "card": {
       "noLines": "No dialogue",

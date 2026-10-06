@@ -292,34 +292,85 @@ def find_msvc() -> dict | None:
     return {"vcvars": str(vcvars), "toolset": toolset}
 
 
-def _nvidia_smi(field: str) -> list[str]:
-    """Numeric values of one ``--query-gpu`` field, one per GPU; empty when unavailable."""
+def _nvidia_query(field: str, device: str | None = None) -> list[str]:
+    command = ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader"]
+    if device is not None:
+        command.append(f"--id={device}")
     try:
         result = subprocess.run(
-            ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5, check=True,
+            command, capture_output=True, text=True, timeout=5, check=True,
         )
     except (OSError, subprocess.SubprocessError):
         return []
-    return [line.strip() for line in result.stdout.splitlines()
-            if re.fullmatch(r"\d+(?:\.\d+)+", line.strip())]
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _nvidia_smi(field: str, device: str | None = None) -> list[str]:
+    """Numeric values for a physical UUID, or all GPUs for a driver-only query."""
+    return [line for line in _nvidia_query(field, device) if re.fullmatch(r"\d+(?:\.\d+)+", line)]
+
+
+def _nvidia_devices() -> list[str]:
+    """UUIDs in CUDA's explicit PCI_BUS_ID order; NVML indices need not have that order."""
+    devices = []
+    for line in _nvidia_query("uuid,pci.bus_id"):
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 2 or not parts[0].startswith("GPU-"):
+            return []
+        if not re.fullmatch(r"[\da-fA-F]{4,8}:[\da-fA-F]{2}:[\da-fA-F]{2}\.[0-7]", parts[1]):
+            return []  # a partial inventory cannot establish ordinal order or a single-GPU machine
+        bus = tuple(int(part, 16) for part in re.split(r"[:.]", parts[1]))
+        devices.append((bus, parts[0]))
+    return [uuid for _bus, uuid in sorted(devices)]
+
+
+def _cuda_device(selector: str) -> tuple[str | None, str | None]:
+    if selector.startswith("GPU-"):
+        return selector, None
+    if not selector.isdecimal():
+        raise ValueError(f"CUDA device {selector!r} is not available.")
+    devices = _nvidia_devices()
+    if not devices:
+        return None, "CUDA device identity could not be verified; the runtime check must confirm CUDA before use."
+    ordinal = int(selector)
+    if ordinal >= len(devices):
+        raise ValueError(f"CUDA device {selector!r} is not available.")
+    # CUDA defaults to FASTEST_FIRST, while nvidia-smi enumerates physical devices independently.
+    if len(devices) > 1 and os.environ.get("CUDA_DEVICE_ORDER") != "PCI_BUS_ID":
+        return None, ("CUDA_DEVICE_ORDER is not PCI_BUS_ID on this multi-GPU machine; the selected compute capability "
+                      "is unverified. The runtime check must confirm CUDA before use.")
+    return devices[ordinal], None
+
+
+def _cuda_probe(gpu: str | None) -> tuple[str, str | None, str | None, str | None, str | None]:
+    """Resolve CUDA lane 0 without mistaking a CUDA ordinal for an NVML index."""
+    selector = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",", 1)[0].strip()
+    if not selector or selector == "-1":
+        return "cpu", None, None, None, None
+    try:
+        device, warning = _cuda_device(selector)
+    except ValueError as error:
+        return "cpu", None, None, None, str(error)
+    versions = _nvidia_smi("driver_version", device)
+    if not versions:
+        if device and _nvidia_devices():
+            return "cpu", None, None, None, f"CUDA device {selector!r} is not available."
+        return gpu or "unknown", None, None, None, warning
+    # Legacy nvidia-smi may not understand compute_cap: keep it unverified.
+    capabilities = _nvidia_smi("compute_cap", device) if device else []
+    warning = warning or (None if capabilities else "The selected GPU's compute capability is unverified; the runtime check must confirm CUDA before use.")
+    return "nvidia", min(versions, key=_version), capabilities[0] if capabilities else None, device, warning
 
 
 def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                     gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
-    driver = None
-    compute_capability = None
-    versions = _nvidia_smi("driver_version")
-    if versions:
-        driver = min(versions, key=_version)
-        gpu = "nvidia"
-        # Older nvidia-smi builds reject this field: unknown stays unverified, not blocked.
-        capabilities = _nvidia_smi("compute_cap")
-        if capabilities:
-            compute_capability = min(capabilities, key=_version)
+    gpu, driver, compute_capability, device, warning = _cuda_probe(gpu)
     result = select_profiles(platform or sys.platform, arch or host_platform.machine(),
                              gpu or "unknown", driver, compute_capability)
+    result["cudaDevice"] = device
     for name, item in result["engines"].items():
+        if warning and item.get("cuda"):
+            item["warning"] = " ".join(filter(None, (item.get("warning"), warning)))
         if inspect_engines is None or name in inspect_engines:
             item["installed"] = installation_current(name, result["platform"]) if item["supported"] else False
     # Only gate installs that have yet to happen: a working install stays usable.

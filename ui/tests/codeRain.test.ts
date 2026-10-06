@@ -170,4 +170,13 @@ test('an export hides a cutout with no picture and keeps every other object', ()
   hideEmptyCutoutsInExport(editing, slots)
   assert.deepEqual(visible(exported), [false, true, true, true])
   assert.deepEqual(visible(editing), [true, true, true, true], 'the editor keeps the placeholder')
+  exported.exporting = false
+  hideEmptyCutoutsInExport(exported, slots)
+  assert.deepEqual(visible(exported), [true, true, true, true], 'the same world restores placeholders after export')
+  exported.slots.get('empty')!.root.visible = false
+  exported.exporting = true
+  hideEmptyCutoutsInExport(exported, slots)
+  exported.exporting = false
+  hideEmptyCutoutsInExport(exported, slots)
+  assert.equal(exported.slots.get('empty')!.root.visible, false, 'an already hidden object stays hidden')
 })

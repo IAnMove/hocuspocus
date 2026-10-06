@@ -34,6 +34,8 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
+from services.series_scene_inputs import audio_content, document_digest, scene_source_digest
+
 QUALITIES = ("draft", "final")
 OBJECT_MEDIA = ("model3d", "image")
 MAX_OBJECTS = 12
@@ -384,12 +386,12 @@ def _ok(result: dict, label: str, error: Callable[..., Exception]) -> dict:
 
 
 def _template(call: Callable, workspace: str, config: dict[str, Any], error: Callable[..., Exception]) -> str:
-    """A saved scene becomes a personal template once (same file, same id), so the shot instantiates a fresh copy."""
+    """Each saved scene revision gets an immutable personal template, safe to replay after another edit."""
     if "template" in config:
         return config["template"]
     document = _ok(call("scenes.document.get", {"version": 1, "input": {"workspace": workspace, "file": config["scene"]}}), "read 3D scene", error)
     stem = config["scene"][: -len(".scene.json")]
-    template_id = f"user-{hashlib.sha1(stem.encode()).hexdigest()[:12]}"
+    template_id = f"user-{hashlib.sha1(stem.encode()).hexdigest()[:12]}-{document_digest(document['document'])}"
     _ok(call("world3d.templates.user.put", {"version": 1, "intent_id": f"tpl-{template_id}", "input": {
         "workspace": workspace, "id": template_id, "title": stem[:80], "document": document["document"]}}), "register 3D scene", error)
     return template_id
@@ -419,13 +421,19 @@ def scene_sound(workspace: str, tracks: list[dict[str, Any]] | None) -> list[dic
 
 def open_shot_scene(call: Callable, workspace: str, stem: str, shot: dict[str, Any], duration: float, error: Callable[..., Exception], *,
                     root: str | None = None, sound: list[dict[str, Any]] | None = None, effects: list[dict[str, Any]] | None = None,
-                    lines: list[dict[str, Any]] | None = None, talking: set[str] | None = None) -> dict[str, Any]:
+                    lines: list[dict[str, Any]] | None = None, talking: set[str] | None = None,
+                    template_id: str | None = None) -> dict[str, Any]:
     """The shot's scene before anyone talks: its template (or saved scene) instantiated, with the shot's length, look,
     sound, screen effects, objects and voice-over. Returns the working scene (``sceneId``, ``revision``, ``document``);
     ``stem`` names the intents, so the same request replays."""
     config = normalize_scene3d(shot.get("scene3d")) or {}
+    if template_id is None:
+        template_id = _template(call, workspace, config, error)
+        source = scene_source_digest(config, root)
+        identity = hashlib.sha1(repr((template_id, source)).encode()).hexdigest()[:10]
+        stem = f"{stem}-{identity}"
     scene = _ok(call("world3d.scene.instantiate", {"version": 1, "intent_id": f"{stem}-new", "input": {
-        "workspace": workspace, "template_id": _template(call, workspace, config, error)}}), "instantiate 3D scene", error)["scene"]
+        "workspace": workspace, "template_id": template_id}}), "instantiate 3D scene", error)["scene"]
     _check_carriers(config, scene.get("document"), talking or set(), error)
     return _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
         "workspace": workspace, "scene_id": scene["sceneId"], "base_revision": scene["revision"], "duration": round(duration, 3),
@@ -448,15 +456,20 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     sound = scene_sound(workspace, tracks)
     # Intents carry a digest of what was asked: a resumed job replays them, a changed take gets new ones.
     effects = _shot_effects(screen_fx)
-    digest = hashlib.sha1(repr((config, round(duration, 3), [(line["filename"], line["start"]) for line in lines], sound, effects)).encode()).hexdigest()[:10]
+    template_id = _template(call, workspace, config, error)
+    source = scene_source_digest(config, root)
+    audio = audio_content(root, (line["filename"] for line in [*lines, *(tracks or [])]))
+    digest = hashlib.sha1(repr((config, template_id, source, round(duration, 3),
+                               lines, audio, sound, effects)).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
-                            talking=_talking(config, lines, series_characters))
+                            talking=_talking(config, lines, series_characters), template_id=template_id)
     scene_id, revision = scene["sceneId"], scene["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]
         kit_id = series_characters.get(entry["characterId"])
         if spoken and kit_id:
             revision = _talk(call, workspace, stem, scene_id, revision, entry, kit_id, spoken, error)
-    return _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
+    published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
+    return {**published, "renderDigest": digest}

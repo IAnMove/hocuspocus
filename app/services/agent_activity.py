@@ -7,9 +7,8 @@ export) gets the agent attribution merged into that task. Any other change
 one completed ``agent`` task per changed artifact, so the Activity panel can
 list what the agent made and open each result in its editor.
 
-Server jobs that call the same tools in process (``LocalMcp``) and the
-production loopback never enter an external caller scope, so they are not
-reported as agent work.
+Server jobs call the same tools in process (``LocalMcp``) without entering
+an external caller scope, so they are not reported as agent work.
 """
 from __future__ import annotations
 
@@ -26,7 +25,6 @@ _LOGGER = logging.getLogger("loreframe.operations.agent_activity")
 
 AGENT_TOOL = "external_agent"
 WIZARD_TOOL = "wizard"
-INTERNAL_CALLER_HEADER = "x-hocus-caller"
 # Who a loopback HTTP call (an MCP tool that runs through the app's own routes) is made for.
 ACTOR_HEADER = "x-hocus-actor"
 ACTORS = ("user", "agent", "wizard", "server")
@@ -147,13 +145,11 @@ class ActorHeaderMiddleware:
             await self.app(scope, receive, send)
 
 
-def caller_from_headers(headers, profile: str | None = None) -> dict:
-    internal = str(headers.get(INTERNAL_CALLER_HEADER) or "").strip().lower()
+def external_caller(profile: str | None = None) -> dict:
+    """HTTP MCP clients are external; only server code can enter SERVER_CALLER."""
     caller = {"surface": "mcp", "tool": AGENT_TOOL}
     if profile:
         caller["profile"] = profile
-    if internal:
-        caller["internal"] = internal[:40]
     return caller
 
 

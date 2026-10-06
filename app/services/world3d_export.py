@@ -16,22 +16,21 @@ import re
 import shutil
 import signal
 import sqlite3
-import struct
 import subprocess
 import threading
 import time
 import uuid
-import zlib
 from urllib.parse import unquote, urlsplit
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from services.agent_activity import agent_attribution, requested_by
-from services.asset_manifest import publish_generation_sidecar
+from services.asset_manifest import publish_generation_sidecar, sidecar_path
 from services.audio_mix import mux_wav_audio  # noqa: F401 — the shared mixer, re-exported
 from services.workspace_cleanup import keep_export_staging, release_export_staging
 from services import resource_scheduler
+from services.world3d_frame_encoder import write_png, write_prores_master  # noqa: F401 — compatible public exports
 from services.world3d_media_cache import prepare_media_snapshot
 from services.world3d_renderer_support import scene_render_device
 from services.media_refs import parse_media_ref
@@ -39,8 +38,9 @@ from services.scene_commands import DocumentInput, command_error as scene_error
 from services.scene_recording import SceneRecordingTranscodeError, validate_scene_recording_output
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import get_cancellation_token, new_task_id
-from services.export_receipts import project_export_receipt
-from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot, publish_export_file
+from services.export_receipts import project_export_receipt, project_export_task
+from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot, previous_path, publish_export_file
+from services.media_publication import file_sha256, publication_lock, publication_transaction
 
 
 OPERATION = "scenes.world3d.export"
@@ -360,84 +360,12 @@ def renderer_available(app_url: str | None) -> bool:
     return available(app_url or os.environ.get("HOCUS_APP_URL", ""), playwright_module())
 
 
-def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) -> None:
-    row = b"\x00" + bytes(rgb) * width
-    raw = row * height
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
-
-
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
                        quality: str = "draft", width: int | None = None, height: int | None = None) -> Path:
-    if not shutil.which("ffmpeg"):
-        raise World3DExportPending("real-render pending: ffmpeg is not available")
-    if not frames:
-        raise RuntimeError("Export produced no frames")
-    temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mp4")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    profile = QUALITY_PROFILES[quality]
-    command = [
-        "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
-        "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]),
-    ]
-    if width and height:
-        level = h264_encode_level(int(width), int(height), int(fps))
-        if level:
-            command.extend(["-level", level])
-    command.extend([
-        "-pix_fmt", "yuv420p", "-threads", profile["threads"],
-        "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
-    ])
-    try:
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=1800, check=False,
-        )
-        if result.returncode != 0 or not temporary.is_file() or temporary.stat().st_size <= 0:
-            detail = (result.stderr or "FFmpeg did not produce an MP4").strip()
-            raise RuntimeError(detail[-1000:])
-        expected = duration if float(duration) >= 0.5 else None
-        validate_scene_recording_output(temporary, expected_duration=expected, expected_fps=fps)
-        os.replace(temporary, destination)
-        return destination
-    except SceneRecordingTranscodeError as error:
-        raise RuntimeError(str(error)) from error
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
-def write_prores_master(frames: list[Path], destination: Path, *, fps: int, duration: float) -> Path:
-    """Optional ProRes 422 HQ master from the same PNG sequence as the H.264 delivery."""
-    if not shutil.which("ffmpeg"):
-        raise RuntimeError("ProRes master needs ffmpeg")
-    if not frames:
-        raise RuntimeError("Export produced no frames")
-    temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mov")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
-        "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "prores_ks", "-profile:v", "3", "-pix_fmt", "yuv422p10le",
-        "-t", f"{float(duration):.3f}", str(temporary),
-    ]
-    try:
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=1800, check=False,
-        )
-        if result.returncode != 0 or not temporary.is_file() or temporary.stat().st_size <= 0:
-            detail = (result.stderr or "FFmpeg did not produce a ProRes master").strip()
-            raise RuntimeError(detail[-1000:])
-        os.replace(temporary, destination)
-        return destination
-    finally:
-        temporary.unlink(missing_ok=True)
+    from services.world3d_frame_encoder import mux_frame_sequence as encode
+    return encode(frames, destination, fps=fps, duration=duration, quality=quality, width=width, height=height,
+                  profiles=QUALITY_PROFILES, level_for=h264_encode_level,
+                  validate_output=validate_scene_recording_output, pending_error=World3DExportPending)
 
 
 def read_geometry_report(staging: Path) -> dict | None:
@@ -909,7 +837,8 @@ class World3DExportService:
             if entry is None:
                 raise http_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
             task = registry.get(entry["task_id"])
-            return {"receipt": project_export_receipt(entry["receipt"], task), "task": task, "capabilities": self.capabilities()}
+            receipt = project_export_receipt(entry["receipt"], task, folder=self.workspace_dir(workspace))
+            return {"receipt": receipt, "task": project_export_task(task, receipt), "capabilities": self.capabilities()}
         except (OSError, sqlite3.Error) as error:
             raise http_error(503, "storage_unavailable", "Command storage is unavailable") from error
 
@@ -1033,11 +962,15 @@ class World3DExportService:
         self._ensure_active(token, registry, task_id)
         name = snapshot.get("outputName") or self.output_name(snapshot)
         output = Path(self.workspace_dir(workspace)) / name
-        replaced = publish_export_file(encoded, output, master)
-        sidecar = {**self.sidecar(snapshot, name), **requested_by((registry.get(task_id) or {}).get("metadata"))}
-        publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool=self.slug,
-                                   capability=self.operation, actor="user")
-        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace, **replaced}
+        identity = {"sha256": file_sha256(encoded)} if snapshot.get("outputName") else {}
+        files = (output, previous_path(output), output.with_suffix(".mov"), previous_path(output.with_suffix(".mov")))
+        paths = [path for media in files for path in (media, sidecar_path(media))]
+        with publication_lock(output.parent), publication_transaction(paths):
+            replaced = publish_export_file(encoded, output, master)
+            sidecar = {**self.sidecar(snapshot, name), **requested_by((registry.get(task_id) or {}).get("metadata"))}
+            publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool=self.slug,
+                                       capability=self.operation, actor="user")
+        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace, **replaced, **identity}
 
     # -- hooks ------------------------------------------------------------------------
     def freeze(self, command) -> dict:

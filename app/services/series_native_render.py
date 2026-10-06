@@ -44,12 +44,13 @@ from services.production_resource_gate import ResourceUnavailable, guard_workspa
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_review import episode_mode
-from services.series_review_gate import actionable_shots, assembly_blockers, render_passes
+from services.series_review_gate import actionable_shots, assembly_blockers, render_passes, video_promotion
+from services.series_scene_inputs import audio_content
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_sound_cuts import materialize_cuts
-from services.series_video_foley import VIDEO_METHODS, shot_foley, sound_name, take_file, video_take, wants_video_foley
+from services.series_video_foley import VIDEO_METHODS, pending_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
@@ -204,9 +205,9 @@ def _output_file(status: dict, suffixes: tuple[str, ...]) -> str | None:
     return os.path.basename(path) if isinstance(path, str) and path.lower().endswith(suffixes) else None
 
 
-def _renders(shot: dict[str, Any]) -> bool:
-    """A shot the server render makes, or a generated or imported take whose foley it makes."""
-    return series_shot3d.wants_render(shot) or wants_video_foley(shot)
+def _renders(shot: dict[str, Any], episode: dict) -> bool:
+    """An animation to render, or a video take to promote or give foley."""
+    return series_shot3d.wants_render(shot) or wants_video_foley(shot) or bool(video_promotion(episode, shot))
 
 
 def _drawn(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -291,7 +292,7 @@ class SeriesNativeRender:
         """The series, the language, the shots to render with their review pass, and the episode's review mode and
         the shots that wait for an approval (``series_review_gate``); refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if _renders(shot) and (not shot_ids or shot["id"] in shot_ids)}
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if _renders(shot, raw_episode) and (not shot_ids or shot["id"] in shot_ids)}
         if not wanted:
             raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
@@ -315,7 +316,8 @@ class SeriesNativeRender:
         if mode == "direct":
             return [{"shot": shot, "pass": None} for shot in shots], {}
         kits = self.deps.read_kits(workspace)
-        planned, waiting = render_passes(series, episode, shots, lambda shot: render_inputs(series, shot, kits),
+        root = self.deps.workspace_dir(workspace)
+        planned, waiting = render_passes(series, episode, shots, lambda shot: render_inputs(series, shot, kits, root),
                                          explicit=explicit, original=original)
         if not planned:
             if waiting:
@@ -388,9 +390,12 @@ class SeriesNativeRender:
         original = (language or language_key(raw_series)) == language_key(raw_series)
         series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
         kits = self.deps.read_kits(workspace)
-        shots = sorted((shot for shot in episode.get("shots") or [] if series_shot3d.wants_render(shot)), key=lambda shot: shot.get("order", 0))
-        return actionable_shots(series, episode, shots, lambda shot: render_inputs(series, shot, kits),
-                                stale_shot_ids(series, episode, kits), original=original)
+        shots = sorted((shot for shot in episode.get("shots") or [] if _renders(shot, episode)), key=lambda shot: shot.get("order", 0))
+        root = self.deps.workspace_dir(workspace)
+        stale = stale_shot_ids(series, episode, kits, root)
+        stale.extend(shot["id"] for shot in shots if video_promotion(episode, shot) or pending_video_foley(series, episode, shot, root))
+        return actionable_shots(series, episode, shots, lambda shot: render_inputs(series, shot, kits, root),
+                                stale, original=original)
 
     def review_blockers(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[dict[str, Any]]:
         """Shots a staged review still holds the cut of ``language`` for (``series_review_gate.assembly_blockers``)."""
@@ -495,7 +500,7 @@ class SeriesNativeRender:
         three_d = shot.get("productionMethod") == "animation_3d"
         for _attempt in range(EXPORT_RETRIES + 1):
             if item["stage"] == "scene":
-                item["inputs"] = render_inputs(series, shot, kits)
+                item["inputs"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace))
                 if three_d:
                     self._scene3d(workspace, job, item, series, episode, shot, kits)
                 else:
@@ -540,7 +545,8 @@ class SeriesNativeRender:
                 continue
             text, voice, key = self.line_voice(series, beat, kits, job["language"])
             done = item["lines"].get(beat["id"])
-            if done and done.get("key") == key and os.path.isfile(os.path.join(self.deps.workspace_dir(workspace), done["filename"])):
+            current = audio_content(self.deps.workspace_dir(workspace), [done["filename"]]) if done else {}
+            if done and done.get("key") == key and done.get("audioDigest") == current.get(done["filename"]) != "unavailable":
                 continue
             item["lines"][beat["id"]] = self._reuse(workspace, job, beat["id"], text, key) or self._record(workspace, job, beat["id"], text, voice, key)
             self._save(workspace, job)
@@ -570,7 +576,8 @@ class SeriesNativeRender:
             return None  # an empty take an older render kept: record it again
         self.deps.level(path)
         cues = self._cues(workspace, filename, duration, text, job["language"])
-        return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0, "reused": True, **cues}
+        return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0,
+                "reused": True, "audioDigest": file_digest(path), **cues}
 
     def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str, stem: str | None = None) -> dict[str, Any]:
         root = self.deps.workspace_dir(workspace)
@@ -606,7 +613,7 @@ class SeriesNativeRender:
                                     "try another reference voice or reword the line", 502)
         self.deps.level(final)
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
-        return {**best, **cues}
+        return {**best, **cues, "audioDigest": file_digest(final)}
 
     def _trim(self, raw: str, final: str) -> float:
         """The trimmed take's length; 0 when nothing was left (ffprobe has no duration for an empty file)."""
@@ -693,7 +700,8 @@ class SeriesNativeRender:
         measure_props(spec, root)
         used = {cast["kitId"]: with_pose_sizes(kits[cast["kitId"]], root) for cast in spec["cast"] if cast["kitId"] in kits}
         document = self.deps.compile_shot({"mode": "shot", "kits": used, "shot": spec})
-        digest = hashlib.sha1(json.dumps(document, sort_keys=True).encode()).hexdigest()[:10]
+        audio = audio_content(root, (line["filename"] for line in [*spec["lines"], *spec.get("audioTracks", [])]))
+        digest = hashlib.sha1(json.dumps([document, audio], sort_keys=True).encode()).hexdigest()[:10]
         saved = _ok(self.deps.call("scenes.document.save", {"version": 1, "intent_id": f"{job['jobId']}-{shot['id']}-{digest}", "input": {
             "workspace": workspace, "name": self._scene_name(job, series, episode, shot), "document": document}}), "save scene")
         item.update(scene=(saved.get("result") or {}).get("name"), duration=document["duration"], digest=digest, stage="export",
@@ -741,7 +749,7 @@ class SeriesNativeRender:
                                           tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace),
                                           screen_fx=fx_cues(layout, timing, duration))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
-        intent = f"{job['jobId']}-{shot['id']}-3d-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
+        intent = f"{job['jobId']}-{shot['id']}-3d-{scene['renderDigest']}-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         # A staged review's preview is the cheap faithful look: draft quality, whatever the shot's own.
         quality = "draft" if item.get("pass") == "preview" else config.get("quality", "draft")
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
@@ -854,17 +862,18 @@ class SeriesNativeRender:
     def _render_shot(self, workspace: str, job: dict, item: dict, index: int) -> None:
         """A generated or imported take only gets its foley (``_video_foley``); every other shot renders."""
         if item.get("pass") == "promote":
-            # The approved preview is already the final take (series_review_gate): approve it, nothing renders.
+            # Approve first, then read back the take whose optional foley the cut needs.
             self._approve(workspace, job, item["shotId"], item["attemptId"])
             item.update(stage="done", approved=True)
-            return
         series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), {})
         if shot.get("productionMethod") not in VIDEO_METHODS:
-            self._render_item(workspace, job, item, index)
+            if item.get("pass") != "promote":
+                self._render_item(workspace, job, item, index)
             return
-        item["status"] = "running"
-        self._video_foley(workspace, job, item, series, episode, shot)
+        if shot_foley(shot):
+            item["status"] = "running"
+            self._video_foley(workspace, job, item, series, episode, shot)
 
     def _video_foley(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict) -> None:
         """A generated or imported take's foley (``series_video_foley``): the sound only, made once per take and prompt;
