@@ -55,6 +55,59 @@ read-only against that production and against copies of its artifacts on a devel
   - A trimmed Series speech line (`ln-*.wav`) keeps the raw take's sidecar: text, voice design,
     model and seed, plus a `trim` transformation. In the sample, 1,041 lines had lost it.
 
+### Second pass (follow-ups)
+
+- **Wizard changes have trail rows.** A Wizard capability with risk `edit` or `compute` reports
+  what its result names (`features/agent/wizardTrail.ts`): a Character Kit, a story, a series
+  episode (with its series), a collection, a working Video 3D scene, a personal template or a
+  published scene file. `POST /api/v1/tasks/wizard-changes` turns that into the same row an MCP
+  change gets (`AgentActivity.record_wizard`): one per artifact, `tool: wizard`, a **Wizard**
+  badge and open buttons. A story opens in Story Lab. Reporting never fails the Wizard.
+- **Who approved.** A Series take records `approvedBy` and `reviewedBy` (`user`, `agent`,
+  `wizard`, or `server` when a render with `approve: true` or `series.episode.produce` approved
+  what it made), with `approvedAt`; a language version's approval also records
+  `approvedLanguage`. MCP tools that run through the app's routes send `X-Hocus-Actor`, and
+  `ActorHeaderMiddleware` puts it in the caller scope, so `current_actor()` names the agent in the
+  route. The Wizard's approvals declare `X-Hocus-UI-Surface: wizard`. Render & Review shows "by an
+  agent", "by the Wizard" or "automatically by the render" on the decision. Music production
+  reviews record `decidedBy` / `decidedAt`, and the artistic verdict's `source` is `human`,
+  `agent` or `mixed` (it was always `human`).
+- **Exports name the scene they rendered.** `scenes.document.save` and the Video 3D save record
+  the digest of the document as the exporter normalizes it (`services/scene_links.py`,
+  `.scene-digests-v1.json`). When a Video 2D or 3D export finishes, that digest finds the saved
+  file: the sidecar names it (`params.scene_file`, also `output.scene_file` on the task), and a
+  file with no preview or only the agent placeholder gets the export's middle frame as its
+  preview. A preview saved from an editor is never replaced. The Series render (it saves each
+  shot's scene, then exports it) and agents that export what they published get both.
+- **Readable names.** A Video 2D export keeps the last part of a composed name, so a Series shot
+  export is `…_video2d-Plus-Ultra-Mas-alla-del-Plan-La-confesion-e1s163_…mp4`; accents fold to
+  ASCII (`services/readable_names.py`). `world3d.scene.publish` names the file after the template
+  title and the scene id (`Anime-Face-off-w3d-0123456789ab-<uuid>.world3d.scene.json`). Scene
+  titles in the Open dialogs drop the revision ids saves append. A 2D save with a `preview` keeps
+  it as the scene's picture.
+- **Working scenes in the Open dialog.** The working copy records what it was published as
+  (`published: {file, revision}`). `GET /api/v1/world3d/templates/working-scenes` lists the ones
+  not published at their current revision (older scenes count as published when a
+  `w3d-<id>-….world3d.scene.json` exists), and the Video 3D Open dialog lists them after the saved
+  scenes; choosing one opens its current revision.
+- **Gallery details.** The details panel shows who made a file (an agent with its tool, or the
+  Wizard), a song's style, a line's voice (design, preset, or the recording it was cloned from)
+  and language, the tool and source files of a tool output, and the saved scene or montage behind
+  an export (`lib/outputProvenance.ts`). Feed cards badge agent and Wizard outputs.
+- **Montage exports.** `montages.export` and the Video Editor's own export name the montage
+  (`params.video_editor.montage: {file, revision}`); an agent's export has `requested_by` (a
+  request body cannot claim it). The video has **Edit montage**, and a montage trail target opens
+  that montage in the Video Editor. The Wizard's export saves the draft as a montage first (the
+  one it came from, or a new one) and sends the montage's overlays and cues, like the editor.
+- **Tool sidecars.** `audio.shorten` (source, kept ranges, time map) and every `characters.rig.flat`
+  image (kit, role such as `mouth.wide.source` or `anchors.base.mouthSources.open`, style, hints,
+  the pose images as parents) write the same sidecar as `studio.key` and the media tools
+  (`production_media_common.publish_sidecar`, `services/tool_sidecars.py`). An agent's rig, which
+  reaches the route through a loopback, is named `external_agent` with `requested_by`.
+- **Productions.** `GET /api/v1/series/produce/jobs?workspace&series_id&episode_id` lists the
+  episode productions, newest first. Render & Review shows each one with its render and cut
+  steps per language, errors, the chapter files (plain and subtitled) and Stop or Resume.
+
 ## Matrix: mutating MCP tools
 
 Legend: ✅ the user can find it, open it in its editor and see who made it · ⚠️ partly · ❌ gap.
@@ -62,38 +115,38 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 
 | Tool | Artifact and storage | Where the user finds it | Open / edit in the matching editor | Provenance shown | Status |
 |---|---|---|---|---|---|
-| `generation.image` (v1/v2, `output_name`) | Workspace root file + `.meta.json` (prompt, model, seed, refs, `origin.tool`) | Gallery, Assets, Activity task | Edit, use as reference, Load settings / Re-generate (`restoreStudioImageSettings`) | Prompt and model in details; Activity badge | ✅ (the gallery details do not badge the agent yet) |
-| `generation.speech` / `music` / `sfx` | Root `.wav` + sidecar (`prompt`, `alt_prompt`, voice reference) | Gallery (audio), Activity | Load settings restores the Studio audio form | Text and prompt shown. Voice design and music style only in "All info" | ⚠️ details hide the style and voice |
+| `generation.image` (v1/v2, `output_name`) | Workspace root file + `.meta.json` (prompt, model, seed, refs, `origin.tool`) | Gallery, Assets, Activity task | Edit, use as reference, Load settings / Re-generate (`restoreStudioImageSettings`) | Prompt and model in details; Activity badge | ✅ (details and feed cards badge the agent) |
+| `generation.speech` / `music` / `sfx` | Root `.wav` + sidecar (`prompt`, `alt_prompt`, voice reference) | Gallery (audio), Activity | Load settings restores the Studio audio form | Text, music style, voice (design, preset or cloned recording) and language in the details; agent badge | ✅ fixed here |
 | `generation.video`, legacy `generate` / `recast` | Root video + sidecar | Gallery, Activity | Retake, Extend, Video Editor, Load settings | Yes. `lineage.parents` stays empty for refs and start frames | ⚠️ lineage |
 | `tools.upscale`, `upscale`, `wizard.image_upscale` | Root file + tool sidecar with parents | Gallery (Edits) | Re-generate does not reopen the Tools form | Source only | ⚠️ |
-| `audio.shorten` | Root file, **no sidecar** (source and mode only in `.mcp-intents`) | Gallery; trail | As media only; cannot be redone | None on the file | ⚠️ trail only |
+| `audio.shorten` | Root WAV + sidecar (source as parent, kept ranges, time map) | Gallery; trail | As media; redo with the same source and ranges | `requested_by` on the file; source and tool in the details | ✅ fixed here (was ⚠️) |
 | `studio.key` | Root PNG/WebM + sidecar (source as parent, mode, adaptive, despill, residual haze share) | Gallery; trail | As media; redo with the same source and mode | `requested_by` and `command_id` on the file | ✅ |
 | `media.frame`, `media.compose`, `audio.trim` | Root PNG/JPG/WAV + sidecar (sources as parents, the tool's parameters) | Gallery; trail | As media; the sidecar names every source and setting | `requested_by` and `command_id` on the file | ✅ |
 | `assets.import_from_workspace` | Copy at the root + the source's sidecar rewritten (`copied_from`, lineage parent) | Gallery; trail | As media (a GLB in the 3D viewer) | `copied_from` and `requested_by` on the file | ✅ |
 | `series.shot.update` | The shot's changed fields in the series library (takes kept) | Series Lab; trail (the episode) | Series Lab shot editor | Trail | ✅ |
 | `assets.upload` | Root file (named copies keep the source sidecar) | Gallery, Assets; trail | As media | Trail | ✅ |
 | `world3d.templates.user.put` | `world3d-user-templates.json` row | **My templates → Saved in this workspace**; trail | Opens as an editable shot | `createdBy` badge, dates | ✅ fixed here (was ❌) |
-| `world3d.scene.instantiate` / `apply_query` / `patch` / `talk` | `world3d-edits/w3d-*.json` (working scene) | Trail (one row per scene) | Trail button opens the current revision in Video 3D | Template, tools and counts | ✅ fixed here. Unpublished scenes are still not in the gallery or the editor's Open dialog |
-| `world3d.scene.publish`, `scenes.document.save` (3D) | `<name>-<uuid>.world3d.scene.json` | Gallery (scene), Open scene dialog, trail | Video 3D | Trail; file names are opaque, previews are placeholders | ⚠️ names and previews |
-| `scenes.world3d.export` | Timestamped MP4 + sidecar with the embedded document | Gallery, Activity task | **Edit scene** reopens the document in Video 3D | Agent badge on the task; `requested_by` in the sidecar | ✅ fixed here. The sidecar does not name the saved scene file |
-| `scenes.document.save` (2D) | `<name>-<hex>.scene.json` | Gallery, Video 2D library, trail | Video 2D | Trail | ✅ (no preview image) |
-| `scenes.video2d.export` | MP4 + sidecar with the scene | Gallery, Activity task | **Edit scene** opens Video 2D | Agent badge | ✅ fixed here. Names are cut to 40 characters and drop the shot id |
+| `world3d.scene.instantiate` / `apply_query` / `patch` / `talk` | `world3d-edits/w3d-*.json` (working scene) | Trail (one row per scene) | Trail button opens the current revision in Video 3D | Template, tools and counts | ✅ fixed here. Unpublished ones are also in the Video 3D Open dialog |
+| `world3d.scene.publish`, `scenes.document.save` (3D) | `<template title>-<scene id>-<uuid>.world3d.scene.json` (publish) | Gallery (scene), Open scene dialog, trail | Video 3D | Trail; the working copy records the published revision | ✅ fixed here. The preview stays the placeholder until the scene is exported (then its middle frame) |
+| `scenes.world3d.export` | Timestamped MP4 + sidecar with the embedded document | Gallery, Activity task | **Edit scene** reopens the document in Video 3D | Agent badge on the task; `requested_by` in the sidecar | ✅ fixed here. The sidecar names the saved scene file (`params.scene_file`) |
+| `scenes.document.save` (2D) | `<name>-<hex>.scene.json` (+ `.scene.preview.png`) | Gallery, Video 2D library, trail | Video 2D | Trail | ✅ The preview is the one sent with the save, or the export's middle frame |
+| `scenes.video2d.export` | MP4 + sidecar with the scene | Gallery, Activity task | **Edit scene** opens Video 2D | Agent badge | ✅ fixed here. Names keep the shot id; the sidecar names the saved scene |
 | `scenes.video2d.edit`, `lyrics.import`, `template.compile`, `effects.apply` | Nothing until a save (read-only operations) | — | Only once saved | — | ⚠️ by design: lost if the agent never saves |
 | `model3d.generate` | `{stamp}_{model}_{job}.glb` + meta + `.preview.png` | Gallery (3D), Activity | Viewer, Rig, Retexture | Recipe; agent label on the task | ✅ |
 | `model3d.rig` | `…_rigged_….glb` + meta + `.humanoid.json` | Gallery with clip selector, Activity | View; no "re-rig with these settings" | Engine, profile and clips; now the agent and command | ✅ fixed here (was `actor unknown`) |
 | `model3d.compose` / `model3d.animate` | `compose-*.glb` / `humanoid-*.glb` + recipe sidecar | Gallery, trail | View or rig only (no compose UI). Animate is shown as static | Recipe; agent tool | ⚠️ |
-| `characters.save` | `.character-kit-library-v1.json` | Character Kit library, trail | Character Kit editor | Trail (`kit.provenance` is not shown) | ✅ via the trail |
-| `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record; warp mouths also `kit-*-<pose>-mouth-*.png` in `anchors.<pose>.mouthSources` | Kit face rig, trail | Anchors editable (face rig panel); a warp pose's mouth line in the Face Rig's Mouth line editor | Kit record (`provenance` keeps style, hints and `mouthLines`) and trail | ⚠️ PNG clutter in the gallery |
+| `characters.save` | `.character-kit-library-v1.json` | Character Kit library, trail (the Wizard's changes too) | Character Kit editor | Trail (`kit.provenance` is not shown) | ✅ via the trail |
+| `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record; warp mouths also `kit-*-<pose>-mouth-*.png` in `anchors.<pose>.mouthSources` | Kit face rig, trail | Anchors editable (face rig panel); a warp pose's mouth line in the Face Rig's Mouth line editor | Every PNG has a sidecar (kit, role, style, hints, pose sources as parents); kit record and trail | ✅ (the PNGs still show in the gallery) |
 | `lips.*` | `.lips-creator-library-v1.json` | Lips Creator, trail | Yes | Trail | ✅ |
-| `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail | Series Lab | Trail. No creator on the record; translations are not marked as machine-made | ✅ via the trail |
-| `series.asset.import` (`as_take`), `series.take.approve` | `assets/<series>/asset_*` copy + take | Series Lab only, trail | Series Lab (see the per-shot review work) | Auto-approvals look like a person's | ⚠️ |
-| `series.episode.render_native` / `produce` | Jobs in `.series-jobs-v1/`, per-shot scene documents, takes and lines | Series Lab, gallery (scenes and videos), trail | Scenes open in their editors; videos have **Edit scene** | Trail for the call. The render's own steps are not agent work | ✅ fixed here (lines keep their sidecar). `produce` jobs have no list view |
+| `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail (the Wizard's changes too) | Series Lab | Trail. No creator on the record; translations are not marked as machine-made | ✅ via the trail |
+| `series.asset.import` (`as_take`), `series.take.approve` | `assets/<series>/asset_*` copy + take | Series Lab only, trail | Series Lab (see the per-shot review work) | The take's `approvedBy` (`user`, `agent`, `wizard` or `server` for a render's own approval), shown in Render & Review | ✅ fixed here |
+| `series.episode.render_native` / `produce` | Jobs in `.series-jobs-v1/`, per-shot scene documents, takes and lines | Series Lab, gallery (scenes and videos), trail | Scenes open in their editors; videos have **Edit scene** | Trail for the call. The render's own steps are not agent work | ✅ fixed here (lines keep their sidecar). Productions are listed in Render & Review with steps, chapters, stop and resume |
 | `series.location.plate3d` | Plate video + `layout2d.plate3d` | Series Lab location | An inline source document is not saved as a scene | Intent only | ⚠️ |
 | `series.assembly.start` | Chapter video + subtitles | Series Lab chapters, gallery, Activity | Plays | Task | ✅ |
-| `montages.save` / `derive` / `shot.*` | `<slug>.montage.json` | Video Editor Open list, trail | Video Editor | Trail. `derivedFrom` is dropped on a UI save | ✅ via the trail |
-| `montages.export` | MP4 + sidecar | Gallery | No link back to the montage | Looks like a UI export | ❌ |
+| `montages.save` / `derive` / `shot.*` | `<slug>.montage.json` | Video Editor Open list, trail | Video Editor (the trail button opens that montage) | Trail. `derivedFrom` is dropped on a UI save | ✅ via the trail |
+| `montages.export` | MP4 + sidecar (`params.video_editor.montage: {file, revision}`) | Gallery | **Edit montage** reopens the montage in the Video Editor | `requested_by` on the file; agent badge | ✅ fixed here (was ❌) |
 | `templates.save` / `import` / `community.install` / `apply` / `export` / `delete` | Template library folder + `origin.json` | 2D and 3D template panels, trail | Yes | An agent's save says `source: user`; delete is permanent | ⚠️ |
-| `production.run` / `shot.*` / `song.use` / `publish` | `<id>.production.json`; publication outside the workspace | Music productions overlay, trail | Its montage in the Video Editor; the spec itself is not editable | `origin` stored, not shown. Agent reviews are recorded as `human` | ⚠️ (`publish` ❌) |
+| `production.run` / `shot.*` / `song.use` / `publish` | `<id>.production.json`; publication outside the workspace | Music productions overlay, trail | Its montage in the Video Editor; the spec itself is not editable | `origin` stored, not shown. Each review decision records `decidedBy`; the verdict says `human`, `agent` or `mixed` | ⚠️ (`publish` ❌) |
 | `collections.create` / `update`, `organize` | `_hocuspocus/workspaces-v1.json` | Collections, trail | Yes | Trail | ✅ |
 | `jobs.resume` / `discard`, `*.cancel`, `audio.analyze`, `audio.phonemes.setup`, `wizard.workflow_answer` | Job state only | Activity tasks | — | — | not an artifact (left out of the trail) |
 
@@ -104,40 +157,36 @@ Generations it submits are tasks with `actor: wizard`, and Activity now badges t
 Its Video 3D template commands now declare `X-Hocus-UI-Surface: wizard`, so templates it saves read
 `createdBy: wizard`.
 
-The Wizard's other server changes (kits, series, stories, collections) are recoverable in their
-own studios, but they have no Activity row yet. The following results live only in the browser
-until the user saves:
+The Wizard's other server changes (kits, series, stories, collections, Video 3D templates and
+scenes) get an Activity row in the Agents view, badged **Wizard**, with buttons that open each
+result. Its take approvals record `approvedBy: wizard`. Its Video Editor export saves the draft as
+a montage first. The following results still live only in the browser until the user saves:
 
 - the Video 3D layer scene (`create_3d_scene` … before `save_3d_scene`)
 - `create_comic`, before a manual save
-- the whole Video Editor draft, which stays in browser storage
+- the Video Editor draft between edits (it becomes a montage when the Wizard exports it)
 - rhythm analyses
 
 ## Remaining work, by priority
 
-1. **Wizard rows in Activity.** After an `edit` or `compute` capability, `capabilityRunner.ts`
-   should upsert a client task with its target, and `/api/v1/tasks/upsert` should keep
-   `result_refs` and `metadata.tool: wizard`.
-2. **Agent origin in the gallery.** Carry `origin.tool`, `capability` and `requested_by` into the
-   gallery listing. Show "Made by an agent (MCP)" in the details, and show the style and voice of
-   audio outputs.
-3. **Drafts and documents.**
-   - Name published Video 3D scenes after their template title.
-   - Render a real preview for agent scene saves, and a preview image for 2D documents.
-   - List unpublished `w3d-*` working scenes in the editor's Open dialog.
-4. **Video 2D export names.** Keep the shot id when shortening, and record the saved scene file
-   in the sidecar.
-5. **Montage exports.** Record `montage: {file, revision}` in the sidecar, add "Edit in Video
-   Editor" from the video, and have the Wizard save a montage before exporting.
-6. **Sidecars for `audio.shorten` and flat-rig PNGs.** Record the source, mode and parents with
-   `publish_generation_sidecar`, as `studio.key` and the media tools now do
-   (`services/production_media_common.publish_sidecar`).
-7. **Who approved.**
-   - Record the actor on Series take approvals and production reviews.
-   - Mark machine translations.
-   - Keep the original script of `from_script`.
-8. **Produce jobs and publications.** Add a list view for `series.episode.produce` jobs. Link the
-   published page from the production card.
+Done in the second pass: Wizard rows, agent origin and audio style/voice in the gallery details,
+readable published names, export previews and the Open dialog's working scenes, Video 2D export
+names and the saved scene in the sidecar, montage links (and the Wizard saving its draft), the
+`audio.shorten` and flat-rig sidecars, take and production-review deciders, and the list of
+productions. Still open:
+
+1. **Previews of scenes that were never exported.** An agent's scene gets a real preview from its
+   first export. Before that it keeps the placeholder: a still from the headless renderer would
+   take the export lane on every save.
+2. **The staged review's decisions.** The plan and preview decisions of the staged Series review
+   (`series.episode.review.set`, PR #879) should record who decided (`planBy`, `previewBy`) with
+   the same vocabulary as `approvedBy`, read from `current_actor()`; its notes' `by` should accept
+   `wizard` and `server`.
+3. **Who made the series records.** Mark machine translations, and keep the original script of
+   `from_script`.
+4. **Publications.** Link a music production's published page from its card.
+5. **Gallery listing.** The gallery badges agent work once a card loads its sidecar; the listing
+   API could carry `origin` so filters and the grid view can use it.
 
 ## Tests
 
@@ -148,3 +197,11 @@ until the user saves:
 - `ui/tests/agentActivityTrail.test.tsx` and `ui/tests/world3dWorkspaceTemplates.test.tsx`: origin
   badge, Agents view, open buttons, workspace templates in My templates, scenes with `user-…`
   template ids, Edit scene.
+- `tests/test_recoverability_followups.py`: Wizard rows and their route, montage targets, the
+  actor header and loopback, take and review deciders, export names, montage links, the
+  `audio.shorten` and flat-rig sidecars, the saved scene and preview of a 2D export (end to end)
+  and of a 3D save, published names, working scenes and their route, the productions list.
+- `ui/tests/recoverabilityFollowups.test.tsx` and `ui/tests/scene3dLibraryControls.test.tsx`:
+  Wizard trail targets and reporting, Wizard badges, gallery provenance and the details panel,
+  scene titles, working scenes in the Open dialog, the productions list with resume, and the
+  Wizard saving its draft as a montage before exporting.

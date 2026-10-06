@@ -172,3 +172,39 @@ test('the production list shows steps and chapters and resumes a stopped product
     fetched.restore()
   }
 })
+
+test('the Wizard saves the draft as a montage before exporting it, and the export names it', async () => {
+  const { exportAgentVideoEditor } = await import('../src/features/video-editor/actions.ts')
+  const { persistEditorDraft, RESOLUTIONS } = await import('../src/features/video-editor/editorDraft.ts')
+  const { loadMontageState, MONTAGE_REF_EVENT } = await import('../src/features/video-editor/montage.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const storage = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+    getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => { storage.set(key, value) },
+    removeItem: (key: string) => { storage.delete(key) },
+  } })
+  useStore.setState({ activeWorkspace: 'corte' })
+  const clip = { id: 'c1', name: 'a.mp4', source: '/api/v1/file/a.mp4?workspace=corte', duration: 4, trimStart: 0, trimEnd: 4, volume: 1,
+    muted: false, fit: 'fill', transition: 'none', transitionDuration: 0.4, transitionText: '', transitionTextSize: 100, width: 1280, height: 720 }
+  persistEditorDraft([clip] as never, 'Corte final', RESOLUTIONS[0], 30, 'corte', null)
+  const announced: unknown[] = []
+  window.addEventListener(MONTAGE_REF_EVENT, event => announced.push((event as CustomEvent).detail))
+  let exported: Record<string, unknown> = {}
+  const fetched = mockFetch((url, init) => {
+    if (url.endsWith('/api/v1/montages')) return { file: 'Corte-final.montage.json', revision: 1, url: '/x' }
+    exported = JSON.parse(String(init?.body))
+    return { job_id: 'video-edit-1', status: 'queued' }
+  })
+  try {
+    const result = await exportAgentVideoEditor({ confirm: true })
+    assert.deepEqual(result.taskIds, ['video-edit-1'])
+    assert.deepEqual(exported.montage, { file: 'Corte-final.montage.json', revision: 1 })
+    const saved = JSON.parse(String(fetched.calls[0].init?.body))
+    assert.equal(saved.workspace, 'corte')
+    assert.equal(saved.montage.name, 'Corte final')
+    assert.equal(loadMontageState('corte').ref?.file, 'Corte-final.montage.json')
+    assert.deepEqual(announced, [{ workspace: 'corte', ref: { origins: {}, file: 'Corte-final.montage.json', revision: 1 } }])
+  } finally {
+    fetched.restore()
+  }
+})

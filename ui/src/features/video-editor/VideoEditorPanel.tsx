@@ -33,7 +33,7 @@ import { ShortenSongPanel } from './ShortenSongPanel'
 import { PublishPresetBar } from './PublishPresetBar'
 import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
-import { exportLayerFields, loadMontageState, persistMontageState, type MontageLayers, type MontageRef } from './montage'
+import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { videoEditorClipFromOutput } from './videoEditorCatalogPick'
@@ -808,6 +808,16 @@ export function VideoEditorPanel() {
     // then replace state. Clips/name/fps are intentionally read from this
     // render rather than listed as deps so a local edit cannot retrigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace])
+
+  useEffect(() => {
+    // The Wizard saved this draft as a montage before exporting it: later saves update that montage.
+    const followRef = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspace?: string; ref?: MontageRef }>).detail
+      if ((detail?.workspace || 'default') === (activeWorkspace || 'default') && detail?.ref) setMontage(current => ({ ...current, ref: detail.ref! }))
+    }
+    window.addEventListener(MONTAGE_REF_EVENT, followRef)
+    return () => window.removeEventListener(MONTAGE_REF_EVENT, followRef)
   }, [activeWorkspace])
 
   useEffect(() => {

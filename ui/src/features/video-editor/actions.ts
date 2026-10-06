@@ -166,10 +166,31 @@ export async function validateAgentVideoEditorTimeline(): Promise<CommandResult>
   return editorResult()
 }
 
+/**
+ * Save the draft as a montage before the Wizard exports it (the one it was opened from, or a new one), so the video
+ * reopens it ("Edit montage") instead of pointing at a browser draft. Best effort: a refused save exports unlinked.
+ */
+async function saveDraftMontage(workspace: string, draft: ReturnType<typeof loadDraft>) {
+  const { announceMontageRef, loadMontageState, montageFromEditor } = await import('./montage')
+  const { saveMontage } = await import('../../api/montages')
+  const { layers, ref } = loadMontageState(workspace)
+  try {
+    const montage = montageFromEditor({ ...draft, layers, origins: ref?.origins, extras: ref?.extras, notes: ref?.notes })
+    const saved = await saveMontage({ workspace, montage, ...(ref ? { file: ref.file, expected_revision: ref.revision } : {}) })
+    if (!saved?.file || !Number.isInteger(saved.revision)) return { layers, link: undefined }
+    announceMontageRef(workspace, layers, { ...ref, origins: ref?.origins ?? {}, file: saved.file, revision: saved.revision })
+    return { layers, link: { file: saved.file, revision: saved.revision } }
+  } catch {
+    return { layers, link: undefined }
+  }
+}
+
 export async function exportAgentVideoEditor(command: ExportVideoEditorCommand): Promise<CommandResult> {
   if (!command.confirm) throw new Error('Exportar requiere confirm=true.')
   const draft = loadDraft()
   if (!draft.clips.length) throw new Error('No hay clips para exportar.')
+  const { layers, link } = await saveDraftMontage(workspaceName(), draft)
+  const { exportLayerFields } = await import('./montage')
   const job = await startVideoEditorExport({
     name: draft.projectName,
     width: draft.resolution.width,
@@ -185,6 +206,9 @@ export async function exportAgentVideoEditor(command: ExportVideoEditorCommand):
       loop: draft.soundtrack.loop,
     } : null,
     clips: draft.clips.map(clip => exportClipBody(clip)),
+    // What the editor's own export sends: the montage's overlays and cues, and the montage it is.
+    ...exportLayerFields(layers),
+    ...(link ? { montage: link } : {}),
   })
   if (!job.job_id) throw new Error('El exportador devolvió éxito sin jobId.')
   try {
