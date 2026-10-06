@@ -11,7 +11,7 @@ SERIES_TOOLS = frozenset({
     # Start here, then the series itself.
     "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",
-    "series.episode.from_script", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
+    "series.episode.from_script", "series.episode.script.get", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
     "series.episode.produce.resume",
     "series.episode.create", "series.episode.update", "series.episode.language_version.set", "series.episode.translate",
     "series.episode.render_native", "series.episode.render_native.status", "series.episode.render_native.cancel",

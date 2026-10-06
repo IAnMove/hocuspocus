@@ -1,4 +1,5 @@
 import { BASE } from './http'
+import type { OutputOrigin } from '../types'
 
 function storedAssetFilename(pathOrFilename: string): string {
   const normalized = String(pathOrFilename || '').replace(/\\/g, '/')
@@ -44,6 +45,8 @@ export interface ApiOutput {
   workspace_id?: string
   /** Server-resolvable path (uploads/... or workspace filename). */
   path?: string
+  /** Set when an MCP agent or the Wizard asked for the file (read from its sidecar by the listing). */
+  origin?: OutputOrigin | null
 }
 
 // --- Move to Workspace ---
@@ -90,7 +93,7 @@ export async function toggleFavorite(name: string): Promise<{ name: string; favo
 /** Server-side order of the gallery listing, applied before paging. */
 export type GalleryOrder = 'newest' | 'oldest' | 'favorites'
 
-export async function fetchOutputs(limit = 0, offset = 0, opts?: { order?: GalleryOrder; favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
+export async function fetchOutputs(limit = 0, offset = 0, opts?: { order?: GalleryOrder; favoritesOnly?: boolean; multiclipOnly?: boolean; editsOnly?: boolean; search?: string; workspace?: string; mediaType?: ApiOutput['type']; resultKind?: ApiOutput['result_kind']; origin?: 'agent'; signal?: AbortSignal }): Promise<{ outputs: ApiOutput[]; total: number }> {
   const params = new URLSearchParams()
   if (limit > 0) params.set('limit', String(limit))
   if (offset > 0) params.set('offset', String(offset))
@@ -98,6 +101,8 @@ export async function fetchOutputs(limit = 0, offset = 0, opts?: { order?: Galle
   if (opts?.multiclipOnly) params.set('multiclip_only', 'true')
   if (opts?.editsOnly) params.set('edits_only', 'true')
   if (opts?.resultKind) params.set('result_kind', opts.resultKind)
+  // Made by agents: work an MCP agent or the Wizard asked for, paged like the full list.
+  if (opts?.origin) params.set('origin', opts.origin)
   if (opts?.search) params.set('search', opts.search)
   // "__uploads__" browses the uploads folder (virtual Uploads view)
   if (opts?.workspace) params.set('workspace', opts.workspace)

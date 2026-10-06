@@ -55,9 +55,10 @@ def _read_json(path: Path) -> dict | None:
     return body if isinstance(body, dict) else None
 
 
-def production_card(workspace: str, production_id: str, state: dict) -> dict[str, Any]:
-    """The list row: status, title, duration and the montage contact sheet."""
+def production_card(workspace: str, production_id: str, state: dict, root: Path | None = None) -> dict[str, Any]:
+    """The list row: status, title, duration, the montage contact sheet and its published page (``publication``)."""
     from services.production_package import editable_summary
+    from services.production_publication import latest_publication
     spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
     return {
@@ -69,6 +70,7 @@ def production_card(workspace: str, production_id: str, state: dict) -> dict[str
         "montage": state.get("montage_file"),
         "video": _file_url(workspace, state.get("final")),
         "editable": editable_summary(state),
+        "publication": latest_publication(root, production_id) if root is not None else None,
     }
 
 
@@ -127,7 +129,7 @@ def create_music_productions_router(
             production_id = _production_id(path.name)
             state = _read_json(path)
             if production_id and state is not None:
-                cards.append(production_card(workspace, production_id, state))
+                cards.append(production_card(workspace, production_id, state, root))
         return {"productions": cards}
 
     @router.get("/api/v1/music-productions/{production_id}")
@@ -135,7 +137,7 @@ def create_music_productions_router(
         from services.music_production import status_summary
         root, state = state_of(workspace, production_id)
         return {
-            "production": production_card(workspace, production_id, state),
+            "production": production_card(workspace, production_id, state, root),
             "status": status_summary(state, workspace, str(root), production_id),
             "shots": shots_of(root, production_id),
         }

@@ -28,6 +28,19 @@ reviews say whether people or agents decided. Render & Review also
 lists the episode's productions with their steps, chapter files, Stop and
 Resume.
 
+The last open items of that work are done. What the language model translates
+in a series language version is marked **Machine translation** per line, card
+and title (with who asked for it) until a person edits it or marks it
+**Checked**; Language versions now also shows and edits the version's title and
+cards. Every script `series.episode.from_script` writes is kept per episode as
+it was sent, with who sent it: the Episode tab lists the revisions, shows and
+downloads each one, and rewrites the episode from it (checked against the
+series first), and agents read them with `series.episode.script.get`. A music
+production card links the page `production.publish` made, says when it is a
+review preview and who published it. The gallery listing carries each file's
+`origin`, so **Media → Made by agents** lists what agents and the Wizard asked
+for and grid tiles badge it.
+
 Series Lab can make an episode in three production modes, and the user
 validates every shot from inside HocusPocus, also from a phone over the LAN.
 `direct` renders everything, as before, and is what every existing episode

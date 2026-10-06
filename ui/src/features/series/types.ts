@@ -396,6 +396,18 @@ export interface SeriesLanguageVersion {
   assemblyAssetIds: string[]
   latestAssemblyAssetId?: string
   thumbnailAssetId?: string
+  /** What the LLM translated (`series.episode.translate`) and no person has checked yet; a person's edit clears it. */
+  machineTranslated?: SeriesMachineTranslation
+}
+
+/** The lines (beat ids), cards (shot ids) and title of a language version that are machine translations. */
+export interface SeriesMachineTranslation {
+  dialogue?: string[]
+  cards?: string[]
+  title?: boolean
+  translatedAt?: string
+  /** Who asked for the translation: user, agent, wizard or server. */
+  requestedBy?: string
 }
 
 /**

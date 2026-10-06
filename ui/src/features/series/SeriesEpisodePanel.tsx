@@ -5,6 +5,7 @@ import { useJobAction } from './useJobAction'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { Pill, SectionCard, SeriesField, seriesStatusLabel } from './components'
 import { SeriesEpisodeProposalReview } from './SeriesEpisodeProposalReview'
+import { SeriesEpisodeScripts } from './SeriesEpisodeScripts'
 import { inputClass, primaryButton, secondaryButton, textareaClass } from './styles'
 import type { SeriesEpisode, SeriesJobStatus, SeriesProject } from './types'
 import { listenForAgentSeriesPlanJob } from '../../lib/uiBus'
@@ -173,6 +174,8 @@ export function SeriesEpisodePanel({
         <div className="mt-3 space-y-2">{scene.dialogue.map((line, lineIndex) => <div key={line.id} className="grid gap-2 rounded-lg border border-border p-2 md:grid-cols-[160px_1fr_140px_140px]"><select className={inputClass} value={line.characterId} onChange={event => updateEpisode(current => ({ ...current, script: current.script.map((item, i) => i === sceneIndex ? { ...item, dialogue: item.dialogue.map((dialogue, j) => j === lineIndex ? { ...dialogue, characterId: event.target.value } : dialogue) } : item) }))}>{series.characters.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input className={inputClass} value={line.text} onChange={event => updateEpisode(current => ({ ...current, script: current.script.map((item, i) => i === sceneIndex ? { ...item, dialogue: item.dialogue.map((dialogue, j) => j === lineIndex ? { ...dialogue, text: event.target.value } : dialogue) } : item) }))} /><input className={inputClass} value={line.emotion} placeholder={t('episode.emotion')} onChange={event => updateEpisode(current => ({ ...current, script: current.script.map((item, i) => i === sceneIndex ? { ...item, dialogue: item.dialogue.map((dialogue, j) => j === lineIndex ? { ...dialogue, emotion: event.target.value } : dialogue) } : item) }))} /><input className={inputClass} value={line.delivery} placeholder={t('episode.delivery')} onChange={event => updateEpisode(current => ({ ...current, script: current.script.map((item, i) => i === sceneIndex ? { ...item, dialogue: item.dialogue.map((dialogue, j) => j === lineIndex ? { ...dialogue, delivery: event.target.value } : dialogue) } : item) }))} /></div>)}</div>
       </div>)}</div>
     </SectionCard>
+
+    <SeriesEpisodeScripts workspace={workspace} series={series} episode={episode} saveNow={saveNow} reload={reload} />
 
     {episode.continuityIssues && <SectionCard title={t('episode.validationTitle')} description={t('episode.validationDescription')}><div className="space-y-2">{episode.continuityIssues.length ? episode.continuityIssues.map(issue => <a key={issue.id} href={issue.shotId ? `#series-shot-${issue.shotId}` : issue.sceneId ? `#series-scene-${issue.sceneId}` : undefined} className="block rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200"><Pill tone={issue.severity === 'error' ? 'red' : 'amber'}>{issue.kind}</Pill><span className="ml-2">{issue.message}</span></a>) : <p className="text-xs text-green-300">{t('episode.noIssues')}</p>}</div></SectionCard>}
   </div>

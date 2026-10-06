@@ -178,7 +178,17 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "hold and appearance as in series.episode.update). It checks every character, pose, location, file, effect and "
         "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id; its review "
-        "mode and notes too, and a shot whose content changed goes back to pending review).",
+        "mode and notes too, and a shot whose content changed goes back to pending review). The script written is kept "
+        "as the episode's next script revision (scriptRevision; read it with series.episode.script.get).",
+    ),
+    "series.episode.script.get": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "revision": {"type": "integer", "minimum": 1}},
+        ["workspace", "series_id", "episode_id"], False,
+        "Read the scripts series.episode.from_script wrote into an episode, exactly as they were sent: revisions lists "
+        "every kept revision newest first (revision, submittedAt, by user | agent | wizard | server, shots, languages, "
+        "restoredFrom, applied), and script is one revision in full (the newest by default, or revision). To write the "
+        "episode again from it, pass that script to series.episode.from_script with episode_id. Empty when the episode "
+        "was not written from a script.",
     ),
     "series.episode.produce": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "languages": {"type": "array", "items": LANGUAGE, "maxItems": 10},
@@ -562,6 +572,16 @@ def _from_script(data: dict[str, Any], request: Callable[..., Any], **_extra: An
     return request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/from-script", body=body)
 
 
+def _script_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/scripts"
+    listed = request("GET", path, query={"workspace": data["workspace"]})
+    revisions = listed.get("revisions") or []
+    if not revisions:
+        return {"revisions": [], "script": None}
+    revision = data.get("revision") or "latest"
+    return {"revisions": revisions, "script": request("GET", f"{path}/{revision}", query={"workspace": data["workspace"]})}
+
+
 def _produce(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "burnSubtitles": data.get("burn_subtitles", True) is not False,
                             "rerender": data.get("rerender") is True}
@@ -805,6 +825,7 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.render_native.cancel": _native_job("cancel"),
     "series.episode.render_native.resume": _native_job("resume"),
     "series.episode.from_script": _from_script,
+    "series.episode.script.get": _script_get,
     "series.episode.produce": _produce,
     "series.episode.produce.status": _produce_job("status"),
     "series.episode.produce.cancel": _produce_job("cancel"),

@@ -810,7 +810,28 @@
       "create": "Creating the version…",
       "save": "Saving…",
       "assemble": "Starting the assembly…",
-      "remove": "Removing…"
+      "remove": "Removing…",
+      "check": "Saving…"
+    },
+    "versionTitle": "Title in this language",
+    "cards": "Cards",
+    "cardTitleLabel": "Card title of {{id}}",
+    "cardBodyLabel": "Card text of {{id}}",
+    "machine": {
+      "badge": "Machine translation",
+      "badgeTitle": "The language model translated this (series.episode.translate) and no one has checked it yet. Your edit, or Checked, clears the mark.",
+      "check": "Checked",
+      "checkLabel": "Mark {{id}} as checked",
+      "checkAll": "Mark all as checked",
+      "checked": "Marked as checked by you.",
+      "summary_one": "{{count}} text in this version is a machine translation, asked for by {{by}}. Read it before you render: your edit, or Checked, clears the mark.",
+      "summary_other": "{{count}} texts in this version are machine translations, asked for by {{by}}. Read them before you render: your edit, or Checked, clears each mark.",
+      "by": {
+        "user": "a person",
+        "agent": "an agent (MCP)",
+        "wizard": "the Wizard",
+        "server": "the server"
+      }
     }
   },
   "plates": {
@@ -1013,5 +1034,30 @@
       "noExports": "No video exported since you opened this shot.",
       "useThis": "Use {{name}}"
     }
+  },
+  "scripts": {
+    "title": "Scripts this episode was written from",
+    "description": "Each script sent to series.episode.from_script (by an agent, the Wizard or a person) is kept exactly as it was sent. View it, download it, or write the episode again from it.",
+    "revision": "Revision {{revision}}",
+    "by": {
+      "user": "by a person",
+      "agent": "by an agent (MCP)",
+      "wizard": "by the Wizard",
+      "server": "by the server"
+    },
+    "shots_one": "{{count}} shot",
+    "shots_other": "{{count}} shots",
+    "created": "created the episode",
+    "restoredFrom": "rewritten from revision {{revision}}",
+    "applied": "written {{count}} times",
+    "view": "View",
+    "hide": "Hide",
+    "download": "Download",
+    "rewrite": "Rewrite from this script",
+    "viewerLabel": "Script of revision {{revision}}",
+    "confirmTitle": "Rewrite the episode from revision {{revision}}?",
+    "confirmMessage": "The episode becomes this script again. Shots whose content changes lose their takes and go back to pending review; the others keep theirs. The script is checked against the series first.",
+    "confirm": "Rewrite",
+    "rewritten": "Episode rewritten from revision {{revision}} (now revision {{current}})."
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Activity, BookOpen, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
+  Activity, BookOpen, Bot, Boxes, CircleHelp, Clapperboard, FolderKanban, Languages,
   Library, MonitorPlay, Music, Search, Settings, Sparkles, Video, WandSparkles, X,
 } from 'lucide-react'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
@@ -301,6 +301,7 @@ export function TabFilter() {
     { value: 'avatars', label: t('tabs.edits'), description: t('descriptions.mediaFilters'), icon: <WandSparkles size={15} />, action: () => openFilter('avatars') },
     { value: 'multiclip', label: t('tabs.multiclip'), description: t('descriptions.mediaFilters'), icon: <Clapperboard size={15} />, action: () => openFilter('multiclip') },
     { value: 'favorites', label: t('tabs.favorites'), description: t('descriptions.mediaFilters'), icon: <Sparkles size={15} />, action: () => openFilter('favorites') },
+    { value: 'agents', label: t('tabs.agents'), description: t('descriptions.agents'), icon: <Bot size={15} />, action: () => openFilter('agents') },
     ...(developerMode ? [{ value: 'auditdev' as const, label: t('tabs.auditDev'), description: t('descriptions.mediaFilters'), icon: <Activity size={15} />, action: () => openFilter('auditdev') }] : []),
   ]
 

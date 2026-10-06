@@ -22,7 +22,7 @@ const PRODUCTION = new Set<MediaFilter>(['videoeditor'])
 const MEDIA = new Set<MediaFilter>([
   'all', 'assets', 'projects', 'images', 'videos', 'videoclips', 'trailers',
   'series_episodes', 'audio', 'model3d', 'scenes', 'styles', 'avatars',
-  'multiclip', 'favorites', 'auditdev',
+  'multiclip', 'favorites', 'agents', 'auditdev',
 ])
 
 export function categoryForMediaFilter(filter: MediaFilter): NavigationCategory | null {

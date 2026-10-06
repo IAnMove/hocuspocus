@@ -15,6 +15,14 @@ assembly a copy of the series and episode in one language, so voices
 (``voicesByLanguage``), lines, cards and approved takes all switch together
 without duplicating shots. ``translation_prompt`` asks the configured LLM for
 a version from the original text.
+
+What the LLM translated (``series.episode.translate``) is marked until a person checks it::
+
+    version.machineTranslated = {"dialogue": [beatId], "cards": [shotId], "title": true,
+                                 "translatedAt": "...", "requestedBy": "agent" | "wizard" | "user" | "server"}
+
+A person's edit of a line, card or title clears its mark (:func:`clear_checked`); an agent's or the Wizard's
+write keeps it, because the text is still not checked by a person.
 """
 from __future__ import annotations
 
@@ -51,7 +59,9 @@ def _version(value: dict[str, Any], beats: set[str], shots: set[str], attempts: 
         "approvedAttemptIds": {shot: attempt for shot, attempt in approved.items() if attempt in attempts.get(shot, set())},
         "assemblyAssetIds": list(dict.fromkeys(assemblies)),
     }
-    return {**version, **_optional_fields(value, version["assemblyAssetIds"], shots)}
+    version.update(_optional_fields(value, version["assemblyAssetIds"], shots))
+    machine = _machine(value.get("machineTranslated"), version)
+    return {**version, **({"machineTranslated": machine} if machine else {})}
 
 
 def _optional_fields(value: dict[str, Any], assemblies: list[str], shots: set[str]) -> dict[str, Any]:
@@ -62,6 +72,40 @@ def _optional_fields(value: dict[str, Any], assemblies: list[str], shots: set[st
         found["thumbnailAssetId"] = value["thumbnailAssetId"][:200]
     durations, music = _durations(value.get("durations"), shots), _music(value.get("music"), shots)
     return {**found, **({"durations": durations} if durations else {}), **({"music": music} if music else {})}
+
+
+def _machine(value: Any, version: dict[str, Any]) -> dict[str, Any]:
+    """The machine-translation marks of the lines, cards and title the version still has; {} when none is left."""
+    if not isinstance(value, dict):
+        return {}
+    dialogue, cards = version.get("dialogue") or {}, version.get("cards") or {}
+    marks: dict[str, Any] = {
+        "dialogue": sorted({item for item in value.get("dialogue") or [] if isinstance(item, str) and item in dialogue}),
+        "cards": sorted({item for item in value.get("cards") or [] if isinstance(item, str) and item in cards}),
+    }
+    if value.get("title") is True and str(version.get("title") or "").strip():
+        marks["title"] = True
+    if not marks["dialogue"] and not marks["cards"] and not marks.get("title"):
+        return {}
+    for key in ("translatedAt", "requestedBy"):
+        if isinstance(value.get(key), str) and value[key]:
+            marks[key] = value[key][:40]
+    return marks
+
+
+def clear_checked(version: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    """Drop the machine-translation mark of every line, card and title a person wrote in ``update``."""
+    marks = version.get("machineTranslated")
+    if not isinstance(marks, dict):
+        return version
+    edited_lines, edited_cards = set(update.get("dialogue") or {}), set(update.get("cards") or {})
+    marks = {**marks, "dialogue": [item for item in marks.get("dialogue") or [] if item not in edited_lines],
+             "cards": [item for item in marks.get("cards") or [] if item not in edited_cards]}
+    if isinstance(update.get("title"), str):
+        marks.pop("title", None)
+    kept = _machine(marks, version)
+    return {**{key: value for key, value in version.items() if key != "machineTranslated"},
+            **({"machineTranslated": kept} if kept else {})}
 
 
 def _durations(value: Any, shots: set[str]) -> dict[str, float]:
@@ -205,25 +249,42 @@ def translation_request(series: dict[str, Any], episode: dict[str, Any], languag
     return prompt, system, schema
 
 
-def _merge_lines(dialogue: dict[str, str], lines: Any, beats: set[str]) -> None:
+def _merge_lines(dialogue: dict[str, str], lines: Any, beats: set[str]) -> list[str]:
+    merged = []
     for line in lines if isinstance(lines, list) else []:
         text = str(line.get("text") or "").strip() if isinstance(line, dict) else ""
         if text and line.get("id") in beats:
             dialogue[line["id"]] = text[:_TEXT]
+            merged.append(line["id"])
+    return merged
 
 
-def _merge_cards(cards: dict[str, dict[str, str]], found: Any, shots: set[str]) -> None:
+def _merge_cards(cards: dict[str, dict[str, str]], found: Any, shots: set[str]) -> list[str]:
+    merged = []
     for card in found if isinstance(found, list) else []:
         if isinstance(card, dict) and card.get("shotId") in shots:
             cards[card["shotId"]] = {"title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}
+            merged.append(card["shotId"])
+    return merged
 
 
-def version_from_translation(result: Any, episode: dict[str, Any], previous: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Merge an LLM translation into a version; ids the episode does not have are ignored."""
+def version_from_translation(result: Any, episode: dict[str, Any], previous: dict[str, Any] | None = None, *,
+                             requested_by: str | None = None, now: str | None = None) -> dict[str, Any]:
+    """Merge an LLM translation into a version; ids the episode does not have are ignored. Every line, card and title
+    it wrote is marked ``machineTranslated`` (with when, and who asked for it) until a person edits it."""
     version = copy.deepcopy(previous or {"title": "", "dialogue": {}, "cards": {}, "approvedAttemptIds": {}, "assemblyAssetIds": []})
     data = result if isinstance(result, dict) else {}
     shots = episode.get("shots") or []
-    version["title"] = str(data.get("title") or version.get("title") or "")[:300]
-    _merge_lines(version["dialogue"], data.get("lines"), {beat["id"] for shot in shots for beat in shot.get("dialogueBeats") or []})
-    _merge_cards(version["cards"], data.get("cards"), {shot["id"] for shot in shots})
+    title = str(data.get("title") or "").strip()[:300]
+    version["title"] = title or str(version.get("title") or "")[:300]
+    lines = _merge_lines(version["dialogue"], data.get("lines"), {beat["id"] for shot in shots for beat in shot.get("dialogueBeats") or []})
+    cards = _merge_cards(version["cards"], data.get("cards"), {shot["id"] for shot in shots})
+    marks = version.get("machineTranslated") if isinstance(version.get("machineTranslated"), dict) else {}
+    from services.series_library import REVIEWERS, _now
+    version["machineTranslated"] = _machine({
+        "dialogue": [*marks.get("dialogue", []), *lines], "cards": [*marks.get("cards", []), *cards],
+        "title": bool(title) or marks.get("title") is True, "translatedAt": now or _now(),
+        "requestedBy": requested_by if requested_by in REVIEWERS else "user"}, version)
+    if not version["machineTranslated"]:
+        version.pop("machineTranslated")
     return version

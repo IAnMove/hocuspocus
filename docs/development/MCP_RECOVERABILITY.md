@@ -110,6 +110,46 @@ read-only against that production and against copies of its artifacts on a devel
   episode productions, newest first. Render & Review shows each one with its render and cut
   steps per language, errors, the chapter files (plain and subtitled) and Stop or Resume.
 
+### Third pass (the last open items)
+
+- **Machine translations are marked.** `series.episode.translate` (and **Translate with AI** in Series Lab) marks
+  every line, card and title it wrote in the version:
+  `languageVersions.<language>.machineTranslated = {dialogue: [beat ids], cards: [shot ids], title, translatedAt,
+  requestedBy}` (`services/series_language_versions.py`).
+  - Series Lab's **Language versions** shows a **Machine translation** badge on each marked line and card and on the
+    title, and a count that says who asked for the translation. The version's title and cards are now shown and
+    editable beside the original's.
+  - A person's edit clears the mark of what it wrote. **Checked** (one text) and **Mark all as checked** save the text
+    as it is, so a person can accept a translation without changing it. The route decides who wrote: only a write
+    with `current_actor() == "user"` clears marks. An agent's (`language_version.set`), the Wizard's or a script
+    rewrite's write keeps them, because the text is still not checked by a person.
+  - The library keeps marks only for texts the version still has, so a removed line or card loses its mark.
+- **The scripts of `series.episode.from_script` are kept.** Every script written into an episode is stored as it was
+  sent, revisioned per episode, in `<workspace>/.series-scripts-v1/<series>/<episode>.json`
+  (`services/series_script_history.py`). A revision has `revision`, `submittedAt`, `by` (`user`, `agent`, `wizard`,
+  `server`), `created`, `shots`, `languages`, `digest`, `applied` and `restoredFrom`.
+  - The same script sent again counts on its revision (`applied`) instead of adding one. The 50 newest revisions are
+    kept. A `check: true` call writes nothing and keeps nothing. The reply of a write has `scriptRevision`.
+  - `GET /api/v1/series/{series}/episodes/{episode}/scripts` lists the revisions, newest first.
+    `…/scripts/{revision | latest}` returns one with its script, and `download=true` saves the script as JSON.
+    `POST …/scripts/{revision}/rewrite` writes the episode again from it (`check: true` only checks it).
+  - MCP `series.episode.script.get` (read-only, in the series profile) returns the revisions and one script in full.
+    An agent re-runs it with `series.episode.from_script` and `episode_id`.
+  - Series Lab's **Episode** tab has **Scripts this episode was written from**: who sent each revision and when, its
+    shots and languages, **View**, **Download** and **Rewrite from this script**. A rewrite asks first, saves pending
+    edits, checks the script against the series as it is now (its problems are listed and nothing is written), then
+    rewrites. Shots whose content changes lose their takes and go back to pending review; the others keep theirs.
+- **Published pages are linked.** `production.publish` records each publication beside the production
+  (`<id>.publications.json`: page, video, mode, `published_at`, `published_by`). `GET /api/v1/music-productions` (and
+  the detail) returns the newest as `publication`. The music production card and its detail view link that page (a
+  new tab), say when it is a review preview, who published it and how many publications it has.
+- **Origin in the gallery listing.** Each row of `GET /api/v1/outputs` carries `origin: {actor: agent | wizard,
+  capability}` (or `null`), read from the sidecar in the same scan as the other listing fields
+  (`services/output_origin.py`, the same rules as `outputMaker`). `origin=agent` keeps MCP and Wizard work, `mcp` or
+  `wizard` one of them, before paging.
+  - The gallery has **Media → Made by agents**. It pages like the full list.
+  - Feed cards badge from the listing before the sidecar loads, and grid and mosaic tiles badge agent and Wizard work.
+
 ## Matrix: mutating MCP tools
 
 Legend: ✅ the user can find it, open it in its editor and see who made it · ⚠️ partly · ❌ gap.
@@ -117,7 +157,7 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 
 | Tool | Artifact and storage | Where the user finds it | Open / edit in the matching editor | Provenance shown | Status |
 |---|---|---|---|---|---|
-| `generation.image` (v1/v2, `output_name`) | Workspace root file + `.meta.json` (prompt, model, seed, refs, `origin.tool`) | Gallery, Assets, Activity task | Edit, use as reference, Load settings / Re-generate (`restoreStudioImageSettings`) | Prompt and model in details; Activity badge | ✅ (details and feed cards badge the agent) |
+| `generation.image` (v1/v2, `output_name`) | Workspace root file + `.meta.json` (prompt, model, seed, refs, `origin.tool`) | Gallery (also **Made by agents**), Assets, Activity task | Edit, use as reference, Load settings / Re-generate (`restoreStudioImageSettings`) | Prompt and model in details; the listing's `origin` badges cards and tiles | ✅ |
 | `generation.speech` / `music` / `sfx` | Root `.wav` + sidecar (`prompt`, `alt_prompt`, voice reference) | Gallery (audio), Activity | Load settings restores the Studio audio form | Text, music style, voice (design, preset or cloned recording) and language in the details; agent badge | ✅ fixed here |
 | `generation.video`, legacy `generate` / `recast` | Root video + sidecar | Gallery, Activity | Retake, Extend, Video Editor, Load settings | Yes. `lineage.parents` stays empty for refs and start frames | ⚠️ lineage |
 | `tools.upscale`, `upscale`, `wizard.image_upscale` | Root file + tool sidecar with parents | Gallery (Edits) | Re-generate does not reopen the Tools form | Source only | ⚠️ |
@@ -140,7 +180,8 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `characters.save` | `.character-kit-library-v1.json` | Character Kit library, trail (the Wizard's changes too) | Character Kit editor | Trail (`kit.provenance` is not shown) | ✅ via the trail |
 | `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record; warp mouths also `kit-*-<pose>-mouth-*.png` in `anchors.<pose>.mouthSources` | Kit face rig, trail | Anchors editable (face rig panel); a warp pose's mouth line in the Face Rig's Mouth line editor | Every PNG has a sidecar (kit, role, style, hints, pose sources as parents); kit record and trail | ✅ (the PNGs still show in the gallery) |
 | `lips.*` | `.lips-creator-library-v1.json` | Lips Creator, trail | Yes | Trail | ✅ |
-| `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail (the Wizard's changes too) | Series Lab | Trail. No creator on the record; translations are not marked as machine-made | ✅ via the trail |
+| `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail (the Wizard's changes too) | Series Lab | Trail. Machine translations are marked per line, card and title until a person checks them. No creator on the series or episode record | ✅ |
+| `series.episode.from_script` | The episode + `.series-scripts-v1/<series>/<episode>.json` (every script written, revisioned, with who sent it) | Series Lab **Episode** tab (scripts), `series.episode.script.get`, trail | View, download, **Rewrite from this script** | `by` on each revision | ✅ fixed here |
 | `series.episode.review.set` / `series.shot.review.set` | `episode.review` in `.series-library-v1.json` | Series Lab **Validation**, trail | Series Lab | `planBy`, `previewBy` and each note's `by` (`user`, `agent`, `wizard`, `server`), shown on the cards | ✅ |
 | `series.asset.import` (`as_take`), `series.take.approve` | `assets/<series>/asset_*` copy + take | Series Lab only, trail | Series Lab (see the per-shot review work) | The take's `approvedBy` (`user`, `agent`, `wizard` or `server` for a render's own approval), shown in Render & Review | ✅ fixed here |
 | `series.episode.render_native` / `produce` | Jobs in `.series-jobs-v1/`, per-shot scene documents, takes and lines | Series Lab, gallery (scenes and videos), trail | Scenes open in their editors; videos have **Edit scene** | Trail for the call. The render's own steps are not agent work | ✅ fixed here (lines keep their sidecar). Productions are listed in Render & Review with steps, chapters, stop and resume |
@@ -149,7 +190,7 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `montages.save` / `derive` / `shot.*` | `<slug>.montage.json` | Video Editor Open list, trail | Video Editor (the trail button opens that montage) | Trail. `derivedFrom` is dropped on a UI save | ✅ via the trail |
 | `montages.export` | MP4 + sidecar (`params.video_editor.montage: {file, revision}`) | Gallery | **Edit montage** reopens the montage in the Video Editor | `requested_by` on the file; agent badge | ✅ fixed here (was ❌) |
 | `templates.save` / `import` / `community.install` / `apply` / `export` / `delete` | Template library folder + `origin.json` | 2D and 3D template panels, trail | Yes | An agent's save says `source: user`; delete is permanent | ⚠️ |
-| `production.run` / `shot.*` / `song.use` / `publish` | `<id>.production.json`; publication outside the workspace | Music productions overlay, trail | Its montage in the Video Editor; the spec itself is not editable | `origin` stored, not shown. Each review decision records `decidedBy`; the verdict says `human`, `agent` or `mixed` | ⚠️ (`publish` ❌) |
+| `production.run` / `shot.*` / `song.use` / `publish` | `<id>.production.json`; publication outside the workspace, recorded in `<id>.publications.json` | Music productions overlay (the card links the published page), trail | Its montage in the Video Editor; the spec itself is not editable | `origin` stored, not shown. Each review decision records `decidedBy`; the verdict says `human`, `agent` or `mixed`; a publication records `published_by` | ⚠️ (`publish` ✅ fixed here) |
 | `collections.create` / `update`, `organize` | `_hocuspocus/workspaces-v1.json` | Collections, trail | Yes | Trail | ✅ |
 | `jobs.resume` / `discard`, `*.cancel`, `audio.analyze`, `audio.phonemes.setup`, `wizard.workflow_answer` | Job state only | Activity tasks | — | — | not an artifact (left out of the trail) |
 
@@ -176,16 +217,19 @@ Done in the second pass: Wizard rows, agent origin and audio style/voice in the 
 readable published names, export previews and the Open dialog's working scenes, Video 2D export
 names and the saved scene in the sidecar, montage links (and the Wizard saving its draft), the
 `audio.shorten` and flat-rig sidecars, take, staged-review and production-review deciders, and the
-list of productions. Still open:
+list of productions. Done in the third pass: machine translations marked, the scripts of
+`from_script` kept (viewer, download, rewrite, MCP read tool), publication links on the music
+production cards, and `origin` in the gallery listing with **Made by agents**. Still open:
 
 1. **Previews of scenes that were never exported.** An agent's scene gets a real preview from its
    first export. Before that it keeps the placeholder: a still from the headless renderer would
    take the export lane on every save.
-2. **Who made the series records.** Mark machine translations, and keep the original script of
-   `from_script`.
-3. **Publications.** Link a music production's published page from its card.
-4. **Gallery listing.** The gallery badges agent work once a card loads its sidecar; the listing
-   API could carry `origin` so filters and the grid view can use it.
+2. **Files without a sidecar.** Scene documents (`.scene.json`, `.world3d.scene.json`) and comics
+   have no `.meta.json`, so the listing gives them no `origin` and **Made by agents** does not list
+   them. The Activity *Agents* view does.
+3. **Who made the series records.** The series and episode records still have no creator field (the
+   trail and the kept scripts say who wrote them). The other-language lines a script brings are
+   the agent's text and are not marked as machine translations.
 
 ## Tests
 
@@ -204,3 +248,10 @@ list of productions. Still open:
   Wizard trail targets and reporting, Wizard badges, gallery provenance and the details panel,
   scene titles, working scenes in the Open dialog, the productions list with resume, and the
   Wizard saving its draft as a montage before exporting.
+- `tests/test_recoverability_last.py`: translation marks (what they cover, the library, who clears them through
+  the route), kept scripts (revisions, the same script again, the cap, odd ids, the routes end to end with
+  download and rewrite, the MCP tool), publications on the card, and `origin` in the listing with its filter
+  before paging.
+- `ui/tests/recoverabilityLast.test.tsx`: the marks and **Checked** / **Mark all as checked** in Language
+  versions, the Episode tab's scripts (view, download, rewrite, a script that no longer fits), the published
+  page link on the music production cards, and **Made by agents** (query, listing origin, tile badge).

@@ -1,4 +1,7 @@
-"""Publish a completed production through the app, with an isolated page."""
+"""Publish a completed production through the app, with an isolated page.
+
+Each publication is remembered beside the production (``<id>.publications.json``: page, video, mode, when and who
+published it), so the production's card links its published page (:func:`latest_publication`)."""
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +13,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -158,8 +162,57 @@ def publish_production(data: dict, workspace_dir) -> dict:
     if os.environ.get("HOCUS_PUBLICATION_SERVE") == "1":
         serve_publication(destination_root, os.environ.get("HOCUS_PUBLICATION_BIND", "127.0.0.1"), url.port or 80)
     prefix = base + "/" + directory + "/"
-    return {"page": prefix + page, "video": prefix + "video.mp4", "files": {name: prefix + quote(name) for name in files}, "publication_id": identity,
-            "mode": "preview" if preview else "release"}
+    result = {"page": prefix + page, "video": prefix + "video.mp4", "files": {name: prefix + quote(name) for name in files},
+              "publication_id": identity, "mode": "preview" if preview else "release"}
+    record_publication(root, data["production_id"], result)
+    return result
+
+
+def publications_path(root, production_id: str) -> Path:
+    return Path(root) / f"{production_id}.publications.json"
+
+
+def _publications(root, production_id: str) -> list[dict]:
+    try:
+        body = json.loads(publications_path(root, production_id).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    rows = body.get("publications") if isinstance(body, dict) else None
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+def record_publication(root, production_id: str, result: dict, *, now: float | None = None) -> dict:
+    """Remember a publication beside its production; publishing the same page again updates its time."""
+    from services.agent_activity import actor_label
+    moment = round(now if now is not None else time.time(), 3)
+    row = {"publication_id": result["publication_id"], "page": result["page"], "video": result["video"],
+           "mode": result["mode"], "published_at": moment, "published_by": actor_label()}
+    with _lock:
+        rows, kept = _publications(root, production_id), []
+        for item in rows:
+            if item.get("publication_id") == row["publication_id"]:
+                row["first_published_at"] = item.get("first_published_at") or item.get("published_at")
+            else:
+                kept.append(item)
+        rows = [*kept, row][-50:]
+        path = publications_path(root, production_id)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps({"version": 1, "production_id": production_id, "publications": rows}, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(path)
+    return row
+
+
+def latest_publication(root, production_id: str) -> dict | None:
+    """The newest publication of a production with its page link, or None when it was never published."""
+    rows = _publications(root, production_id)
+    if not rows:
+        return None
+    latest = max(rows, key=lambda item: float(item.get("published_at") or 0))
+    page = latest.get("page")
+    if not isinstance(page, str) or urlsplit(page).scheme not in {"http", "https"}:
+        return None
+    return {"page": page, "mode": latest.get("mode") or "release", "published_at": latest.get("published_at"),
+            "published_by": latest.get("published_by") or "user", "count": len(rows)}
 
 
 def publication_handlers(workspace_dir) -> dict:

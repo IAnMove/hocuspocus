@@ -179,6 +179,7 @@ const FILTER_PREDICATES: Partial<Record<MediaFilter, (output: OutputFile) => boo
   trailers: output => output.type === 'video' && output.result_kind === 'trailer',
   series_episodes: output => output.type === 'video' && (output.result_kind === 'series_episode' || output.result_kind === 'chapter'),
   favorites: output => Boolean(output.favorite),
+  agents: output => Boolean(output.origin),
 }
 
 function computeFilteredOutputs(outputs: OutputFile[], mediaFilter: MediaFilter): OutputFile[] {
@@ -206,6 +207,7 @@ function toOutputFile(output: api.ApiOutput): OutputFile {
     completed_at: output.completed_at,
     completion_time_source: output.completion_time_source,
     thumbnail_url: output.thumbnail_url || null,
+    ...(output.origin ? { origin: output.origin } : {}),
     ...(output.width && output.height ? { width: output.width, height: output.height } : {}),
     ...(output.color && /^#[0-9a-f]{6}$/i.test(output.color) ? { color: output.color } : {}),
   }
@@ -223,6 +225,8 @@ function outputSnapshotEquals(current: OutputFile, latest: OutputFile): boolean 
     && latest.completion_time_source === current.completion_time_source
     && latest.thumbnail_url === current.thumbnail_url
     && latest.result_kind === current.result_kind
+    && latest.origin?.actor === current.origin?.actor
+    && latest.origin?.capability === current.origin?.capability
     && latest.width === current.width
     && latest.height === current.height
     && latest.color === current.color
@@ -462,6 +466,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
             favoritesOnly: query.favoritesOnly,
             multiclipOnly: query.multiclipOnly,
             editsOnly: query.editsOnly,
+            origin: query.origin,
             resultKind: query.resultKind,
             mediaType: query.mediaType,
             search: query.search,
@@ -506,6 +511,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
         favoritesOnly: query.favoritesOnly,
         multiclipOnly: query.multiclipOnly,
         editsOnly: query.editsOnly,
+        origin: query.origin,
         search: query.search,
         signal: request.controller.signal,
       })
@@ -544,6 +550,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
         favoritesOnly: query.favoritesOnly,
         multiclipOnly: query.multiclipOnly,
         editsOnly: query.editsOnly,
+        origin: query.origin,
         search: query.search,
         signal: request.controller.signal,
       })
