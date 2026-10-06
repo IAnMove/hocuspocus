@@ -480,7 +480,10 @@
         "tests/test_game_image_ops.py",
         "tests/test_game_tiles.py",
         "tests/test_game_gen_still.py",
-        "tests/test_game_gen_tiles.py"
+        "tests/test_game_gen_tiles.py",
+        "tests/test_game_list.py",
+        "tests/test_game_estimate.py",
+        "tests/test_game_produce.py"
       ]
     }
   ],
@@ -1428,6 +1431,26 @@
     {
       "prefix": "app/services/game_generators/__init__.py",
       "paths": ["tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_list.py",
+      "paths": ["tests/test_game_list.py"]
+    },
+    {
+      "prefix": "app/services/game_estimate.py",
+      "paths": ["tests/test_game_estimate.py", "tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_jobs.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_produce.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/routers/game_produce.py",
+      "paths": ["tests/test_game_produce.py"]
     }
   ]
 }

@@ -4432,6 +4432,66 @@
       "ordinal": 442
     },
     {
+      "method": "POST",
+      "path": "/api/v1/games/{game_id}/assets/from-list",
+      "endpoint": "assets_from_list",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/game_produce.py",
+      "ordinal": 443
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/games/{game_id}/produce",
+      "endpoint": "produce_game",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/game_produce.py",
+      "ordinal": 444
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/games/produce/jobs/{job_id}",
+      "endpoint": "produce_status",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/game_produce.py",
+      "ordinal": 445
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/games/produce/jobs/{job_id}/cancel",
+      "endpoint": "cancel_produce",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/game_produce.py",
+      "ordinal": 446
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/games/produce/jobs/{job_id}/resume",
+      "endpoint": "resume_produce",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/game_produce.py",
+      "ordinal": 447
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/games/{game_id}/style/sheet",
+      "endpoint": "style_sheet",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/game_produce.py",
+      "ordinal": 448
+    },
+    {
       "method": "GET",
       "path": "/api/v1/examples",
       "endpoint": "catalog",
@@ -4439,7 +4499,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 443
+      "ordinal": 449
     },
     {
       "method": "POST",
@@ -4449,7 +4509,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 444
+      "ordinal": 450
     },
     {
       "method": "DELETE",
@@ -4459,7 +4519,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 445
+      "ordinal": 451
     },
     {
       "method": "GET",
@@ -4469,7 +4529,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 446
+      "ordinal": 452
     },
     {
       "method": "GET",
@@ -4479,7 +4539,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 447
+      "ordinal": 453
     },
     {
       "method": "POST",
@@ -4489,7 +4549,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 448
+      "ordinal": 454
     },
     {
       "method": "DELETE",
@@ -4499,7 +4559,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 449
+      "ordinal": 455
     },
     {
       "method": "GET",
@@ -4509,7 +4569,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 450
+      "ordinal": 456
     },
     {
       "method": "GET",
@@ -4519,7 +4579,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 451
+      "ordinal": 457
     }
   ]
 }
