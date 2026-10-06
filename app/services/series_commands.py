@@ -21,6 +21,7 @@ WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
 OBJECT = {"type": "object"}
+SHOT = {"anyOf": [{"type": "string", "minLength": 1, "maxLength": 160}, {"type": "integer", "minimum": 1, "maximum": 999}]}
 LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
 # name: (properties, required, mutation, description)
@@ -119,8 +120,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "\"steps\" plays on every footfall; an fx duration is seconds, "
         "0.1-30 and clamped to that, or \"shot\" for the rest of the shot), props (ground true stands one on the floor), "
         "set layers (a video's start, speed and loop hold | pingpong), timing, foley "
-        "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots (scene3d.objects with clips, "
-        "hold and appearance as in series.episode.update). It checks every character, pose, location, file, effect and "
+        "{prompt, volume} (sound generated from the rendered picture), 3D dialogue shots (scene3d.objects with clips, "
+        "hold and appearance as in series.episode.update) and video shots (kind video = an imported take, generated = a "
+        "MiniMax H3 take; their sfx, music, foley and clipAudio keep|drop / clipVolume / clipFit are laid at the cut). "
+        "An sfx's in and length play only that part of its file. It checks every character, pose, location, file, effect and "
         "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
     ),
@@ -233,7 +236,11 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "it (repeat: steps on every footfall). A change renders again only the shots it reaches. score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
-        "changing it renders no take. scene3d.objects[] also take clips (a clip sequence: [{clip name, start, duration?, "
+        "changing it renders no take. An sfx's in (source second) and length play only that part of its file. A "
+        "generated_video or imported_video shot's layout2d.sfx, music and foley are laid on its take at the cut, over "
+        "the clip's own sound (layout2d.clipAudio keep | drop, clipVolume 0-2), and a clip in another size, frame rate "
+        "or pixel aspect is conformed to the episode's (layout2d.clipFit cover | contain); changing them keeps the take. "
+        "To edit one shot use series.shot.update. scene3d.objects[] also take clips (a clip sequence: [{clip name, start, duration?, "
         "fade?, speed?, offset?, loop?}]), hold {carrier (a 3D model object that does not speak in the shot), hand left|right, "
         "offset? [x,y,z] m, rotation? [x,y,z] radians, Euler XYZ in the hand bone's frame} and appearance {start, "
         "duration?, color?}; a model is 1.7 m x scale tall.",
@@ -246,7 +253,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "reference_role": {"type": "string", "maxLength": 100}, "metadata": OBJECT},
         ["workspace", "series_id", "file", "owner_type", "owner_id", "kind"], True,
         "Import a workspace file as a reference image of a character/location, or as_take a finished shot video "
-        "(metadata.sceneFilename lets Series Lab reopen its editable scene). A take is appended unapproved.",
+        "(metadata.sceneFilename lets Series Lab reopen its editable scene). A take is appended unapproved. Import a "
+        "generated or outside clip as it is: its shot's sfx, music and foley are laid at the cut and it is conformed "
+        "to the episode's frame and frame rate there, so do not mux or re-encode it first.",
     ),
     "series.take.approve": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_id": ID, "attempt_id": ID, "language": LANGUAGE},
@@ -260,7 +269,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
         "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
         "approved takes. With soundDesign.ambienceMode \"episode\" it lays each location's ambience as one continuous "
-        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Returns a job.",
+        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Generated and imported "
+        "takes get their shot's sfx, music and foley (keeping or dropping the clip's own sound), and every clip in "
+        "another size, frame rate or pixel aspect is conformed to the episode's (the takes are not changed). Returns a job.",
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,
@@ -281,6 +292,34 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.assembly.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
         "Read an episode assembly job: stage, progress, error and the chapter output when finished.",
+    ),
+    "series.shot.get": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": SHOT}, ["workspace", "series_id", "episode_id", "shot"],
+        False,
+        "Read one shot by id (e1s04) or by its number in the episode (5 = the fifth shot, the #5 Series Lab shows): its "
+        "method, takes (id, status, approved) and its content in the script vocabulary of series.episode.from_script "
+        "(cast, lines in every language, framing, camera, sfx, fx, props, layers, music, card, timing, scene3d, foley...). "
+        "Read it before series.shot.update when a change depends on what is there.",
+    ),
+    "series.shot.update": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": SHOT, "changes": OBJECT, "append": OBJECT,
+         "instruction": {"type": "string", "minLength": 1, "maxLength": 2000}, "check": {"type": "boolean"}, "render": {"type": "boolean"}, "approve": {"type": "boolean"}, "produce": {"type": "boolean"}},
+        ["workspace", "series_id", "episode_id", "shot"], True,
+        "Edit one shot by instruction, by id (e1s04) or number in the episode (5 = the fifth shot): changes replaces "
+        "script keys of series.episode.from_script (scene, location, variant, framing, camera, cast, lines {who, es, en, "
+        "pauseBefore, voiceRoom}, card, music, sfx {file, at, line, anchor, offset, volume, in, length}, fx, props, timing, "
+        "voiceRoom, layers, castDepth, clipAudio keep|drop, clipVolume, clipFit cover|contain, kind 2d|3d|video|generated, "
+        "scene3d, foley, duration; null removes a key) and append adds items to cast, lines, sfx, fx, props or layers "
+        "without resending them. instruction (words, without changes or append: \"put a hat on him\", \"push in on the "
+        "punchline\") has the configured LLM write the edit from the shot, the series' characters, poses, files and effects; "
+        "the reply's instruction says what it wrote. Only render or produce, without changes, renders the shot as it is. "
+        "The shot is checked like a script shot (characters, poses, files, effects, 3D objects) "
+        "and only the changed fields are written; its takes are kept. A shot whose take no longer fits loses its "
+        "approval in every language (a generated or imported take keeps it when only its cut sound changed: sfx, music, "
+        "clipAudio, clipVolume, clipFit, foley). Lines in other languages update those versions (missingLines lists the "
+        "lines a version still lacks). check true only checks and returns the patch. render true renders just that shot "
+        "in the series language (series.episode.render_native, approve default true); produce true runs "
+        "series.episode.produce (renders what changed in every language and recuts). Returns the shot as series.shot.get.",
     ),
 }
 
@@ -595,6 +634,20 @@ def _translate_episode(data: dict[str, Any], request: Callable[..., Any], **_ext
     return request("POST", f"{_version_path(data)}/translate", body={"workspace": data["workspace"]})
 
 
+def _shot_path(data: dict[str, Any]) -> str:
+    return f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/shots"
+
+
+def _shot_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("GET", f"{_shot_path(data)}/{_quote(data['shot'])}", query={"workspace": data["workspace"]})
+
+
+def _shot_update(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    keys = ("workspace", "shot", "changes", "append", "instruction", "check", "render", "approve", "produce")
+    body = {key: data[key] for key in keys if key in data}
+    return request("POST", f"{_shot_path(data)}/edit", body=body)
+
+
 def _assembly_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     job = request("GET", f"/api/v1/series/assembly/jobs/{_quote(data['job_id'])}", query={"workspace": data["workspace"]})
     return {"job": job}
@@ -633,6 +686,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.episode.language_version.set": _set_language_version,
     "series.episode.translate": _translate_episode,
     "series.assembly.status": _assembly_status,
+    "series.shot.get": _shot_get,
+    "series.shot.update": _shot_update,
 }
 
 
