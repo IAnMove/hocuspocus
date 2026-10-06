@@ -18,7 +18,9 @@ export type CastSpec = {
   transform?: Pose; blinks?: number[]
   /** Sits on a prop (a laptop on its desk): the prop's image size, its top surface (fraction from the top) and width vs the character. */
   perch?: { source: string; width: number; height: number; top?: number; widthRatio?: number }
-  enter?: { fromX: number; start: number; end: number }
+  /** Slides in from fromX (series_entrances.py). A `walk` takes a whole number of `step`-second steps: down on every
+   * footfall (its start, each step, its end), up mid-step, leaning `sway` degrees to alternate sides; else it hops. */
+  enter?: { fromX: number; start: number; end: number; gait?: 'hop' | 'walk'; step?: number; sway?: number }
   exit?: { toX: number; start: number; end: number }
 }
 export type LineSpec = {
@@ -177,7 +179,28 @@ function key(id: string, time: number, pose: Pose, curve: SceneKeyframe['curve']
     opacity: pose.opacity ?? 1, rotation: round(pose.rotation ?? 0), curve }
 }
 
-/** Limited animation: a bob and tilt while talking, a slow breath otherwise, a shake in panic, hops on entry. */
+/** How high a walking cutout rises mid-step, in % of the frame height per unit of layer scale. */
+export const WALK_BOB = 1.2
+
+/** A walk in: the slide at an even pace, with the body lowest on each footfall and highest mid-step (|sin| of the
+ * step, sampled every quarter step), leaning to alternate sides. Footfalls are at the start, every step and the end. */
+export function walkKeyframes(id: string, rest: Pose, enter: NonNullable<CastSpec['enter']>): SceneKeyframe[] {
+  const span = enter.end - enter.start
+  const steps = Math.max(1, Math.round(span / (enter.step || span)))
+  const sway = enter.sway ?? 0
+  const frames: SceneKeyframe[] = []
+  for (let quarter = 0; quarter < steps * 4; quarter++) {
+    const progress = quarter / (steps * 4)
+    const lift = Math.sin(Math.PI * (quarter % 4) / 4)
+    const side = Math.floor(quarter / 4) % 2 ? -1 : 1
+    frames.push(key(id, enter.start + span * progress, {
+      x: enter.fromX + (rest.x - enter.fromX) * progress, y: rest.y - lift * WALK_BOB * rest.scale, scale: rest.scale,
+      rotation: lift ? side * sway * lift : 0 }))
+  }
+  return frames
+}
+
+/** Limited animation: a bob and tilt while talking, a slow breath otherwise, a shake in panic, hops (or a walk) on entry. */
 export function bodyKeyframes(id: string, base: Pose, duration: number, talking: Array<[number, number]>, motion: Motion = 'idle',
   enter?: CastSpec['enter'], exit?: CastSpec['exit']): SceneKeyframe[] {
   const frames: SceneKeyframe[] = []
@@ -187,9 +210,10 @@ export function bodyKeyframes(id: string, base: Pose, duration: number, talking:
   if (enter) {
     const from = { ...rest, x: enter.fromX }
     frames.push(key(id, 0, from, 'hold'))
-    if (enter.start > 0) frames.push(key(id, enter.start, from, 'ease'))
+    if (enter.gait === 'walk') frames.push(...walkKeyframes(id, rest, enter))
+    else if (enter.start > 0) frames.push(key(id, enter.start, from, 'ease'))
     // A paper puppet slides with a little hop on every step.
-    const hops = Math.max(1, Math.round((enter.end - enter.start) / 0.22))
+    const hops = enter.gait === 'walk' ? 0 : Math.max(1, Math.round((enter.end - enter.start) / 0.22))
     for (let i = 1; i < hops; i++) {
       const progress = i / hops
       frames.push(key(id, enter.start + (enter.end - enter.start) * progress, {

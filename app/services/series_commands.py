@@ -87,8 +87,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         ["workspace", "series_id", "episode_id"], True,
         "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
-        "scene (framing from shot.framing or shot.layout2d, cast, sound, cards; the lines play with the room of the shot's "
-        "location, soundDesign.roomByLocation, or its layout2d.voiceRoom), a headless export and a take on the shot "
+        "scene (framing from shot.framing or shot.layout2d, cast, sound, cards; the lines of the speakers in the shot play "
+        "with the room of its location, soundDesign.roomByLocation, or its layout2d.voiceRoom, a narrator stays dry, a "
+        "radio reaches every line and a line's own voiceRoom wins), a headless export and a take on the shot "
         "(approve: true approves it). A shot with foley {prompt, volume} gets sound generated from its exported picture "
         "(generation.sfx, MMAudio) mixed under its own before the take; when that fails the take is made without it and "
         "the item has a warning. language renders a language version (its lines, the characters' voices for that "
@@ -111,7 +112,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
-        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx (an fx duration is seconds, "
+        "[[character, pose, x]] (an entrance: enterFrom left/right, enterAt and enterDuration seconds, enterGait walk with "
+        "enterStep seconds), lines {who, es, en, pauseBefore, voiceRoom}, cards, music, timed sfx and fx at a line, a "
+        "second or a cast member's entrance ({\"anchor\": \"enter\", \"cast\": index or id}; an sfx with \"repeat\": "
+        "\"steps\" plays on every footfall; an fx duration is seconds, "
         "0.1-30 and clamped to that, or \"shot\" for the rest of the shot), props, set layers, timing, foley "
         "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots. It checks every character, "
         "pose, location, file and effect against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
@@ -216,7 +220,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         ["workspace", "series_id", "episode_id", "episode", "base_revision"], True,
         "Save editor fields of an episode (title, premise, script, shots with productionMethod, dialogueBeats, "
         "visible/speaking characters, locationId, durationSeconds, layout2d, scene3d, foley {prompt, volume}) at the series "
-        "revision. A shot's layout2d.layers replace its location's set layers ([] turns them off). score: music the assembly "
+        "revision. A shot's layout2d.layers replace its location's set layers ([] turns them off); a dialogue beat's voiceRoom "
+        "is the room of that line alone (on screen or off; none keeps it dry); a layout2d.cast entry's enterAt, "
+        "enterDuration, enterGait walk and enterStep time its entrance, and an sfx or fx {anchor: enter, cast} starts with "
+        "it (repeat: steps on every footfall). A change renders again only the shots it reaches. score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
         "changing it renders no take.",

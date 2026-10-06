@@ -6,7 +6,8 @@ visible characters, the location and its variant, and the dialogue. An
 optional ``layout2d`` block overrides any of it explicitly:
 
     {"framing": "two", "camera": "push",
-     "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left"}],
+     "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left",
+               "enterAt": 0.5, "enterDuration": 2.4, "enterGait": "walk"}],
      "card": {"kind": "title", "title": "...", "body": "..."},
      "music": {"file": "mus-moral.wav", "volume": 0.45, "start": 0}, "voiceRoom": "cathedral"}
 
@@ -28,6 +29,7 @@ import hashlib
 from typing import Any
 from urllib.parse import quote
 
+from services import series_entrances as entrances
 from services import series_shot_extras as extras
 from services.series_ambience import ambience_mode
 from services.series_layers import layer_kind, layout_layers, shot_layers
@@ -80,7 +82,8 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
         return None
     return {"characterId": value["characterId"][:160], **_text_field(value, "poseId", 120),
             **_numbers(value, (("x", -50, 150), ("scale", 0.2, 4))), **_choice(value, "motion", MOTIONS),
-            **_choice(value, "enterFrom", ("left", "right")), **_explicit_transform(value.get("transform"))}
+            **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value),
+            **_explicit_transform(value.get("transform"))}
 
 
 def _prop_entry(value: Any) -> dict[str, Any] | None:
@@ -258,8 +261,9 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
         seat = extras.perch(character, workspace)
         if seat:
             item["perch"] = seat
-    if entry.get("enterFrom") in ("left", "right"):
-        item["enter"] = {"fromX": -15.0 if entry["enterFrom"] == "left" else 115.0, "start": 0.2, "end": min(duration, 1.4)}
+    enter = entrances.entrance(entry, duration)
+    if enter:
+        item["enter"] = enter
     return item
 
 
@@ -458,12 +462,13 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     size = size or frame_size(series)
     portrait = size[1] > size[0]
     cast = [] if framing == "title" else plan_cast(series, shot, framing, duration, workspace, portrait)
+    moves = entrances.shot_entrances(shot, duration, framing)
     title = f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"
     spec = {
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
         "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, beats, timing, recorded, {item["characterId"] for item in cast}),
-        "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration)],
-        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration),
+        "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
+        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
     }
     return _with_set(spec, series, shot, _focus(cast, framing), workspace)

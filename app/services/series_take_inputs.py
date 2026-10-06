@@ -1,8 +1,9 @@
 """What a Series shot's render depends on, kept on its take, so a production renders again only what changed.
 
 ``render_inputs`` fingerprints a shot in one language: its layout and lines, the location, the sound design, the
-kits of the people seen or heard and, for a shot with lines in a room (``series_voice_rooms``), the room. A series
-without rooms keeps the digests it had. ``series_native_render`` stores it in the take's metadata (``renderInputs``)
+kits of the people seen or heard and, for a shot with lines in a room (``series_voice_rooms``), the room each line is
+heard in and the version of the rooms' processing. A series without rooms, or a shot whose lines are all dry, keeps
+the digest it had. ``series_native_render`` stores it in the take's metadata (``renderInputs``)
 and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
 (``soundDesign.ambienceMode: "episode"``, ``ambienceDuckDb``) and the episode's score (``episode.score``) are not
 part of a shot, so changing them renders nothing again. A shot's ``foley`` is, so a new prompt or volume renders
@@ -20,7 +21,7 @@ from services import series_shot3d
 from services.series_ambience import shot_sound_design
 from services.series_layers import digest_location
 from services.series_shot_plan import kit_ref
-from services.series_voice_rooms import shot_room
+from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
 
 # What a shot's picture and sound depend on, besides the render code itself.
 _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId", "visibleCharacterIds", "scene3d")
@@ -47,9 +48,9 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
                  for kid in kit_ids.values() if kid},
         **({"foley": shot["foley"]} if shot.get("foley") else {}),
     }
-    room = shot_room(series, shot) if any(str(beat[2] or "").strip() for beat in beats) else None
-    if room:
-        payload["room"] = room
+    rooms = line_rooms(series, shot)
+    if rooms:
+        payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 

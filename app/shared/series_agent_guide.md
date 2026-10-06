@@ -49,10 +49,11 @@ The lower-level tools (`series.episode.create`/`update`, `series.episode.languag
    "card": {"kind": "title", "es": ["MI SERIE", "Episodio 3"], "en": ["MY SERIES", "Episode 3"]},
    "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9}},
   {"scene": "cold_open", "framing": "two", "camera": "push",
-   "cast": [["ana", "base", 32], {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right"}],
+   "cast": [["ana", "base", 32], {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right", "enterGait": "walk"}],
    "lines": [{"who": "ana", "es": "¿Quién se ha llevado mi grapadora?", "en": "Who took my stapler?"},
              {"who": "leo", "es": "...Nadie.", "en": "...Nobody.", "pauseBefore": 1.0}],
-   "sfx": [{"file": "sfx-door.wav", "at": 0.2}, {"file": "sfx-ping.wav", "line": 1, "anchor": "end", "offset": 0.1}],
+   "sfx": [{"file": "sfx-door.wav", "at": 0.2}, {"file": "sfx-ping.wav", "line": 1, "anchor": "end", "offset": 0.1},
+           {"file": "sfx-step.wav", "anchor": "enter", "cast": 1, "repeat": "steps", "volume": 0.5}],
    "fx": [{"kind": "confetti", "line": 1, "duration": 1.5, "x": 70, "y": 30, "size": 40}],
    "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
    "timing": {"intro": 0.6, "tail": 1.0}},
@@ -80,10 +81,14 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 ```json
 {"id": "e3s05", "order": 6, "sceneId": "e3_cold_open", "locationId": "office", "locationVariantId": "office_day",
  "productionMethod": "animation_2d", "visibleCharacterIds": ["ana", "leo"], "speakingCharacterIds": ["ana", "leo"],
- "dialogueBeats": [{"id": "e3s05_b0", "characterId": "ana", "text": "...", "emotion": "", "delivery": ""}],
+ "dialogueBeats": [{"id": "e3s05_b0", "characterId": "ana", "text": "...", "emotion": "", "delivery": ""},
+                   {"id": "e3s05_b1", "characterId": "narrator", "text": "...", "emotion": "", "delivery": "", "voiceRoom": "radio"}],
  "layout2d": {
    "framing": "two", "camera": "static",
-   "cast": [{"characterId": "ana", "poseId": "base", "x": 32}, {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right"}],
+   "cast": [{"characterId": "ana", "poseId": "base", "x": 32},
+            {"characterId": "leo", "poseId": "wave", "x": 68, "enterFrom": "right", "enterAt": 0.5, "enterDuration": 2.4,
+             "enterGait": "walk", "enterStep": 0.6}],
+   "sfx": [{"file": "sfx-step.wav", "anchor": "enter", "cast": "leo", "repeat": "steps", "volume": 0.5}],
    "props": [{"file": "prop-stapler.png", "x": 12, "y": 74, "scale": 0.2}],
    "layers": [{"file": "fg-plant.png", "depth": 0.95, "front": true, "x": 8, "y": 62, "scale": 0.9}],
    "music": {"file": "mus-bumper.wav", "volume": 0.6, "start": 0},
@@ -95,7 +100,12 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **camera:** `static` or `push` (slow push-in; use it on punchlines and reveals).
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
   as in the bible's `homes`. `motion`: `idle` (default bob), `still`, `shake` (panic). `enterFrom`: `left`/`right`
-  walks in. `poseId` must be one of the kit's poses.
+  walks in, from 0.2 s to 1.4 s unless `enterAt` (s, when it starts) and `enterDuration` (s, how long it takes; a
+  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick paper-puppet
+  hop) or `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
+  degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
+  takes a whole number of steps, so its feet land on the entrance's start, every step after it and its end, and
+  the step is stretched a little to fit. `poseId` must be one of the kit's poses.
 - **perched characters:** a character whose bible entry has `layout2d.perch` (a laptop on a desk) is placed on that
   prop in every framing automatically. Give it no transform.
 - **props:** a workspace image (`file`, keyed with `studio.key`) or a series asset (`assetId`), at `x`/`y` (%) and
@@ -115,7 +125,12 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   turns them off. A bad layer is refused. Changing a location's layers renders again only its 2D shots that draw them.
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
-  0–1. Files from the bible only.
+  0–1. Files from the bible only. `{"anchor": "enter", "cast": 1}` plays it when that cast member's entrance starts
+  (`cast` is an index into the shot's `cast` or a character id; plus `offset`), so footsteps or a door start with
+  the walk instead of after it; a cast member who does not enter plays it at the start of the shot. A cue plays
+  its whole file: to make footsteps last exactly the entrance, give one footstep and `"repeat": "steps"`, which
+  plays it on every footfall of the walk (or of the hops), or cut a loop to `enterDuration`. `fx` take the same
+  `anchor`/`cast`.
 - **foley** (on the shot, not in `layout2d` or `scene3d`; same key in the script)**:** `{"prompt": "wooden airship
   creaking, wind, cannon shots", "volume": 0.5}`. After the shot is exported, MMAudio (`generation.sfx` with the
   export as `video_guide`) makes sound that follows the shot's own picture, and it is mixed under the lines, music
@@ -140,7 +155,11 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
 - **voiceRoom:** the room this shot's voices are heard in, instead of its location's (see Sound design): `none`,
   `small_room`, `room`, `hall`, `cathedral`, `cockpit`, `outdoor` or `radio`. In a script, `"voiceRoom"` on the shot.
-  A transmission or a thought heard over the radio is a shot with `radio`; `none` keeps a shot dry in a roomed location.
+  A place reaches only the speakers who are in the shot (its `cast`, else `visibleCharacterIds`; a 3D shot's
+  `scene3d.cast`): a narrator or anyone else heard over the shot stays dry. `radio` is not a place: a transmission or
+  a thought heard over the radio reaches every line of the shot. `none` keeps a shot dry in a roomed location. A
+  line can carry its own `voiceRoom` (a dialogue beat's, or a script line's: `{"who": "narrator", "es": "...",
+  "voiceRoom": "radio"}`), which wins over the shot and the location for that line, on screen or not.
 - **card:** `title` (opening), `end` (credits), `disclaimer` (white text on dark; also used for news flashes). A card
   shot has no cast and a `durationSeconds` (4–7 s) and usually `locationId` of a dark or title location.
 - **durationSeconds** (`duration`)**:** only for shots without dialogue. With dialogue, the render sets it from the voices.
@@ -201,19 +220,23 @@ copy of each line (the dry recording is kept, and lip-sync and timing stay the d
 
 | preset | what it does |
 | --- | --- |
-| `none` | dry (the default; also overrides a location's room on one shot) |
-| `small_room` | a closet or cabin: 0.3 s of tight reverb, 12 dB under the voice |
-| `room` | an office or kitchen: 0.55 s, 9 dB under |
-| `hall` | a corridor, a lobby, a gym: 1.6 s, 7 dB under |
-| `cathedral` | stone, a cave, a vault: 3.5 s dark tail, 5 dB under (the tail rings on past the line for at most 0.8 s) |
+| `none` | dry (the default; also overrides a location's room on one shot or one line) |
+| `small_room` | a closet or cabin: tight reflections and 0.28 s of tail, 17 dB under the voice |
+| `room` | an office or kitchen: 0.45 s, 16 dB under |
+| `hall` | a corridor, a lobby, a gym: 1.1 s, 15 dB under |
+| `cathedral` | stone, a cave, a vault: early reflections, then a 2.2 s dark tail after 50 ms, 14 dB under (it rings on past the line for at most 0.8 s) |
 | `cockpit` | small, metallic and close: dense reflections within 10 ms, a band-limited voice with a presence peak |
 | `outdoor` | no reverb: a gentle low cut and one very slight, dark slap |
 | `radio` | telepathy, transmissions, a phone: 420 Hz to 3.3 kHz, lightly distorted |
 
-Every copy is levelled to the dry line, so a room never changes how loud a voice is. A shot overrides its location with
-`layout2d.voiceRoom`. Changing a room renders again only the shots with lines that hear it; a series without
-`roomByLocation` renders exactly as before. The tail of the last line is cut where the shot ends (0.45 s after it):
-give a shot in a big room `timing: {"tail": 1.0}` to let it ring out.
+The places are subtle on purpose: the room is felt, mostly as early reflections, and never costs a word. Its
+sound has no low end (cut at 200–350 Hz) and no sibilance (cut at 4–6 kHz), and its tail starts after a predelay.
+Every place keeps the voice's speech transmission index above 0.9 and its clarity (C50, 500 Hz–2 kHz) above 12 dB.
+Every copy is levelled to the dry line, so a room never changes how loud a voice is. A place reaches only the
+speakers in the shot, a `radio` every line, and a line's own `voiceRoom` wins (see `voiceRoom` above). A shot
+overrides its location with `layout2d.voiceRoom`. Changing a room renders again only the shots with lines that hear
+it; a series without `roomByLocation` renders exactly as before. The tail of the last line is cut where the shot
+ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let it ring out.
 
 ## Writing for quality
 
