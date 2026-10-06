@@ -730,6 +730,45 @@ painted characters for this rig: clear white eyes out of the shadow, the rest
 mouth painted as one line, and `rig: {"mouthStyle": "warp"}`. A bust pose reads
 better in dialogue than a full figure with a small face.
 
+#### Small faces: enlarged, placed and put back
+
+On a full figure the head is 70–150 px of an 896×1152 pose and the mouth
+20–45 px. DWPose sees the whole figure squeezed into 288×384 pixels, so it put
+a small mouth's upper lip on the philtrum and its corners past the painted
+ones, and an opening a few pixels deep did not read in a wide shot. A head
+under 160 px (`face_enlarge.SMALL_HEAD`: the larger of the jaw's width and the
+brows-to-chin height; busts and three-quarter shots measure 174 px and up) is
+handled as a small face:
+
+- **Landmarks on the head alone** (`face_landmarks.detect`): the head and
+  shoulders, a square 4.4 heads across, are cut out with white round them and
+  given to the pose model as the person's box (enlarged with Lanczos when that
+  view is narrower than the model's input), and the points are mapped back to
+  the pose image. A small face keeps this pass whenever it is not a guess
+  (score 0.35 and up); its self-scores are lower than the whole pass's, but the
+  lips and eyes land on the painted ones. A larger face is read again only when
+  the whole pass was unsure (under 0.5) and kept when the head pass is surer:
+  this fixed a bust whose beard had been taken for the mouth.
+- **Warp at a bust's size, then put back** (`flat_rig_warp.enlarged_state`,
+  `face_enlarge.put_back`): the face is enlarged to a ~400 px head (2–6×,
+  premultiplied Lanczos), the line is snapped there (sub-pixel in the pose) and
+  every state is warped there. Each patch is brought back to the pose's own
+  pixels: the k×k average where something moved, the drawing's exact pixels
+  where nothing did (`closed` is still the drawing unchanged) and a whole-pixel
+  copy where the jaw moved by whole pose pixels. The patch square and anchor
+  are the same as without enlarging.
+- **Readable openings** (`flat_rig_warp.drop_pixels`): `wide` drops at least
+  9 pose pixels and the other openings in proportion (at least 2), never more
+  than 1.5 times their own drop. A bust's mouth (55 px and up) already drops
+  more, so busts are unchanged.
+
+Per pose the rig result gives `faceSize` (`size` small or normal, `head` px,
+landmark `pass` head or whole, `upscale`), also inside `mouthLine` and the
+provenance's `mouthLines`; the review sheet captions each pose with it, and the
+Face Rig's Mouth line editor says when a face was read on the head alone and
+warped enlarged. A kit rigged before this change keeps its mouths until it is
+rigged again.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.

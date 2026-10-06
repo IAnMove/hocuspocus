@@ -21,6 +21,20 @@ agent's re-rig no longer turns warp mouths back into paper ones; only
 The agent guide (`series.guide`) and the Wizard describe the path, what to
 check and that a bust pose reads better in dialogue than a full figure.
 
+Warp mouths read on small faces too. On a full figure the head is under 160 px
+and the mouth 20–45 px, and the face landmarks, made on the whole figure, put a
+small mouth's lips on the philtrum and its corners past the painted ones. Such
+a face is now read again on the head alone, its mouth line is snapped and its
+nine states are warped on the face enlarged to a bust's size, and each state
+is fitted back to the pose's own pixels: `closed` is still the drawing
+unchanged, the openings have smooth edges, and every opening is a few pixels
+deep at least, so an "a" still reads when the figure is drawn small in a wide
+shot. Busts warp exactly as before, except one whose landmarks were unsure:
+read on its head alone, its mouth is found where a manual hint had to put it.
+Per pose `faceSize` (in the rig result, the review sheet and the Face Rig's
+Mouth line editor) says how big the face was and whether it was enlarged.
+Rig a kit again to get the new mouths.
+
 Flat-rigged characters can talk with their own drawing. On painted busts
 (graphic-novel art with ink lines and flat black shadows) the ink mouths still
 looked like Flash animation, not like the painting. `characters.rig.flat` with

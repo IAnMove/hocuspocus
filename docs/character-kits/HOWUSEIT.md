@@ -444,8 +444,9 @@ The response includes `filename`, public `source`, `original`, `width`,
   shape, and the open shapes are drawn in its own ink. With
   `{"mouthStyle": "warp"}` each pose talks with its own drawing: the lower lip,
   chin and beard move down and the gap is inked, one set of patches per pose
-  (`anchors[pose].mouthSources`). If a pose's mouth or eyes are found in the
-  wrong place, send
+  (`anchors[pose].mouthSources`). A full figure's small face is read and
+  warped enlarged, then fitted back (`faceSize` per pose). If a pose's mouth
+  or eyes are found in the wrong place, send
   `hints: {"<pose id>": {"mouth": [x, y], "eyes": [x, y], "mouthWidth": w}}`,
   in % of that pose's keyed image, or place the mouth line in the Face Rig's
   **Mouth line** editor, which previews the warped states live. The kit
