@@ -52,3 +52,26 @@ export async function getWorld3DWorkingScene(workspace: string, sceneId: string)
   if (!body.result?.scene?.document) throw new Error('The Video 3D scene has no document')
   return body.result.scene.document
 }
+
+/** A working Video 3D scene (``w3d-…``) an agent instantiated or patched and did not publish at its current revision. */
+export interface World3DWorkingScene {
+  sceneId: string
+  revision: number
+  templateId: string
+  title: string
+  /** Seconds since the epoch of its last change. */
+  updatedAt: number
+  published?: { file: string; revision: number } | null
+  duration?: number
+  width?: number
+  height?: number
+  slots?: number
+  pending?: number
+}
+
+export async function listWorld3DWorkingScenes(workspace: string, signal?: AbortSignal): Promise<World3DWorkingScene[]> {
+  const query = new URLSearchParams({ workspace })
+  const response = await fetch(`${BASE}/api/v1/world3d/templates/working-scenes?${query}`, { cache: 'no-store', signal })
+  const body = await readJson<{ scenes?: World3DWorkingScene[] }>(response, 'Could not list the working Video 3D scenes')
+  return Array.isArray(body.scenes) ? body.scenes : []
+}

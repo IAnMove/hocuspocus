@@ -213,6 +213,9 @@ export interface SeriesRenderAttempt {
   outputAssetIds: string[]
   error?: string
   retryCount: number
+  /** Who approved or reviewed the take: a person, an MCP agent, Ask to the Wizard or the server render's own approval. */
+  approvedBy?: 'user' | 'agent' | 'wizard' | 'server'
+  reviewedBy?: 'user' | 'agent' | 'wizard' | 'server'
   reviewDecision?: 'approved' | 'rejected'
   reviewedAt?: string
 }

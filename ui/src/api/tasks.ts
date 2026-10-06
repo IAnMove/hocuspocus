@@ -130,3 +130,26 @@ export async function dismissCanonicalTask(taskId: string, workspace: string): P
   const res = await fetch(`${BASE}/api/v1/tasks/${encodeURIComponent(taskId)}?workspace=${encodeURIComponent(workspace)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to dismiss HocusPocus task')
 }
+
+export interface WizardChangeTarget {
+  kind: string
+  id: string
+  title?: string
+  file?: string
+  editor?: string
+  series?: string
+}
+
+/** Record an Ask to the Wizard change that started no job as a row of Activity's Agents view. */
+export async function recordWizardChange(change: {
+  workspace: string
+  capability: string
+  commandId?: string
+  targets: WizardChangeTarget[]
+}): Promise<boolean> {
+  const res = await fetch(`${BASE}/api/v1/tasks/wizard-changes`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(change),
+  })
+  if (!res.ok) throw new Error('Failed to record the Wizard change in Activity')
+  return Boolean((await res.json() as { recorded?: boolean }).recorded)
+}

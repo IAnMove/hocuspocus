@@ -18,6 +18,7 @@ import {
   type EntityRef,
 } from './commandContract'
 import { replayWizardPresentation } from './wizardPresentation'
+import { reportWizardChange } from './wizardTrail'
 import { buildWizardContextSnapshot } from './wizardContext'
 import {
   revalidateWizardCapability,
@@ -170,6 +171,11 @@ export async function runRegisteredCapability(
       targetId: target?.id,
       params: prepared,
     }),
+  })
+  // A kit, series or story the Wizard changed gets its Activity trail row, like an MCP agent's change.
+  void reportWizardChange({
+    workspace: options.workspace || 'default', capability: prepared.type, commandId: executionCommandId,
+    risk: definition.risk, report: { ...report, target: report.target || target },
   })
   const outputNames = [...new Set([...(report.outputNames || []), ...(report.assetIds || [])].filter(Boolean))]
   const commandResult = normalizeCommandResult(tracked.commandResult ? {

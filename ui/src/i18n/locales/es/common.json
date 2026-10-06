@@ -153,7 +153,16 @@
       "job_id": "ID del trabajo",
       "task_id": "ID de la tarea",
       "root_task_id": "ID de la tarea raíz",
-      "director_pipeline_id": "ID del flujo de Director"
+      "director_pipeline_id": "ID del flujo de Director",
+      "made_by": "Hecho por",
+      "style": "Estilo musical",
+      "voice": "Voz",
+      "voice_reference": "Voz clonada de",
+      "language": "Idioma",
+      "tool": "Herramienta",
+      "made_from": "Hecho a partir de",
+      "scene_file": "Escena guardada",
+      "montage": "Montaje"
     },
     "openVideo": "Abrir vídeo {{name}}",
     "videoTitle": "Información del vídeo",
@@ -176,7 +185,11 @@
     "compare": "Comparar",
     "stopCompare": "Dejar de comparar",
     "swap": "Intercambiar A y B",
-    "compareHint": "Las flechas y el deslizamiento cambian B"
+    "compareHint": "Las flechas y el deslizamiento cambian B",
+    "madeBy": {
+      "agent": "Un agente (MCP) · {{capability}}",
+      "wizard": "Ask to the Wizard · {{capability}}"
+    }
   },
   "runtimeUpdate": {
     "message": "Se ha detectado una actualización o un reinicio del servidor. Conservamos tu formulario. Recarga cuando termines; se borrarán los cambios sin enviar.",

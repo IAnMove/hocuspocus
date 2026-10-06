@@ -19,6 +19,7 @@ import { SeriesEpisodeProgress } from './SeriesEpisodeProgress'
 import { SeriesNativeDrafts } from './SeriesNativeDrafts'
 import { SeriesLanguageVersions } from './SeriesLanguageVersions'
 import { SeriesSavedAssembly } from './SeriesSavedAssembly'
+import { SeriesProduceJobs } from './SeriesProduceJobs'
 import { isRegeneratedSeriesAsset } from './nativeTake'
 import type { OpenSeriesReference } from './shotReferences'
 
@@ -32,7 +33,7 @@ function AttemptPreview({ series, attempt, approved, onApprove, onReject }: {
   const url = filename ? api.getFileUrl(filename, asset?.workspaceId) : ''
   return <div className={`rounded-lg border p-2 ${approved ? 'border-green-500/40 bg-green-500/10' : 'border-border bg-bg-primary'}`}>
     {isRegeneratedSeriesAsset(asset) && <p className="mb-2 text-xs font-medium text-violet-200">{t('native.regeneratedLipsync')}</p>}
-    <div className="flex items-center gap-2"><Pill tone={attempt.status === 'completed' ? 'green' : attempt.status === 'failed' ? 'red' : 'violet'}>{t(`status.${attempt.status}`, { defaultValue: attempt.status })}</Pill>{attempt.reviewDecision && <Pill tone={attempt.reviewDecision === 'approved' ? 'green' : 'red'}>{t(`status.${attempt.reviewDecision}`, { defaultValue: attempt.reviewDecision })}</Pill>}<span className="text-[10px] text-text-muted">{t('review.seedMeta', { seed: attempt.seed ?? t('review.seedRandom'), seconds: (Number(attempt.elapsedMs || 0) / 1000).toFixed(1), model: attempt.model })}</span></div>
+    <div className="flex items-center gap-2"><Pill tone={attempt.status === 'completed' ? 'green' : attempt.status === 'failed' ? 'red' : 'violet'}>{t(`status.${attempt.status}`, { defaultValue: attempt.status })}</Pill>{attempt.reviewDecision && <Pill tone={attempt.reviewDecision === 'approved' ? 'green' : 'red'}>{t(`status.${attempt.reviewDecision}`, { defaultValue: attempt.reviewDecision })}{attempt.reviewedBy && attempt.reviewedBy !== 'user' ? ` · ${t(`review.decidedBy.${attempt.reviewedBy}`)}` : ''}</Pill>}<span className="text-[10px] text-text-muted">{t('review.seedMeta', { seed: attempt.seed ?? t('review.seedRandom'), seconds: (Number(attempt.elapsedMs || 0) / 1000).toFixed(1), model: attempt.model })}</span></div>
     {url && (open ? <video className="mt-2 max-h-64 w-full rounded bg-black" src={url} controls autoPlay preload="metadata" /> : <button className="relative mt-2 flex h-28 w-full items-center justify-center overflow-hidden rounded bg-black/70 text-xs text-white" onClick={() => setOpen(true)}><img src={api.getOutputThumbnailUrl(filename || '', asset?.workspaceId)} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-70" /><span className="relative flex items-center rounded-full bg-black/70 px-3 py-2"><Play size={18} className="mr-2" />{t('review.loadPreview')}</span></button>)}
     {attempt.error && <p className="mt-2 text-[10px] text-red-300">{attempt.error}</p>}
     <details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('review.savedMetadata')}</summary><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify({ prompt: attempt.prompt, negativePrompt: attempt.negativePrompt, model: attempt.model, seed: attempt.seed, settings: attempt.settings, references: attempt.referenceManifest, createdAt: attempt.createdAt, submittedAt: attempt.submittedAt, completedAt: attempt.completedAt, elapsedMs: attempt.elapsedMs }, null, 2)}</pre></details>
@@ -342,6 +343,7 @@ export function SeriesReviewPanel({
     <SeriesSavedAssembly workspace={workspace} series={series} episode={episode} />
     <SeriesNativeDrafts workspace={workspace} series={series} episode={episode} />
     <SeriesLanguageVersions workspace={workspace} series={series} episode={episode} />
+    <SeriesProduceJobs workspace={workspace} series={series} episode={episode} />
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <div className="sticky top-0 z-10 flex flex-wrap gap-2 rounded-xl border border-border bg-bg-secondary/95 p-2 shadow-lg backdrop-blur">
       {([

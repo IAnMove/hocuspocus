@@ -55,6 +55,11 @@
     "edit": "Editar",
     "attemptsInSlot": "Intentos en esta posición",
     "tryN": "intento {{count}}",
+    "decidedBy": {
+      "agent": "por un agente",
+      "wizard": "por el Wizard",
+      "server": "automáticamente por el render"
+    },
     "tryFinal": "intento {{count}} · final",
     "noPlayable": "Esta posición aún no tiene un vídeo reproducible.",
     "editSource": "Editar datos de origen · plano {{order}}",
@@ -731,7 +736,8 @@
       "cancelling": "parando",
       "completed": "terminado",
       "failed": "algunos planos fallaron",
-      "cancelled": "parado", "interrupted": "interrumpido por un reinicio"
+      "cancelled": "parado",
+      "interrupted": "interrumpido por un reinicio"
     },
     "stage": {
       "voices": "voces",
@@ -741,6 +747,34 @@
       "import": "toma",
       "done": "hecho"
     }
+  },
+  "productions": {
+    "title": "Producciones",
+    "hint": "Cada producción renderiza el episodio en todos sus idiomas y monta los capítulos (series.episode.produce, lanzada aquí, por un agente o por el Wizard). Una producción parada sigue donde lo dejó.",
+    "stop": "Parar tras este paso",
+    "resume": "Reanudar",
+    "status": {
+      "queued": "en cola",
+      "running": "produciendo",
+      "cancelling": "parando",
+      "completed": "hecha",
+      "failed": "falló",
+      "cancelled": "parada",
+      "interrupted": "interrumpida por un reinicio",
+      "waiting": "esperando la revisión"
+    },
+    "step": {
+      "render": "Render {{language}}",
+      "assemble": "Montaje {{language}}"
+    },
+    "stepStatus": {
+      "queued": "en espera",
+      "running": "en curso",
+      "done": "hecho",
+      "failed": "falló"
+    },
+    "chapter": "Capítulo {{language}}",
+    "chapterSubtitled": "Capítulo {{language}} con subtítulos"
   },
   "languages": {
     "title": "Versiones de idioma",

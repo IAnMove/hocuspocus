@@ -382,16 +382,22 @@ export async function approveSeriesAttempt(
   ), 'Could not approve Series shot attempt')
 }
 
+/** Headers of a take decision: the Wizard declares itself, so the take records ``approvedBy: wizard``. */
+function reviewHeaders(by?: 'wizard'): Record<string, string> {
+  return { 'Content-Type': 'application/json', ...(by === 'wizard' ? { 'X-Hocus-UI-Surface': 'wizard' } : {}) }
+}
+
 export async function approveSeriesAttemptsBulk(
   workspace: string,
   seriesId: string,
   episodeId: string,
   selections: Array<{ shotId: string; attemptId: string }>,
+  by?: 'wizard',
 ): Promise<{ seriesId: string; episodeId: string; revision: number; episode: import('../features/series/types').SeriesEpisode }> {
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/attempts/approve-bulk`,
     {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: reviewHeaders(by),
       body: JSON.stringify({ workspace, selections }),
     },
   ), 'Could not approve Series shot attempts')
@@ -455,12 +461,12 @@ export async function fetchSeriesAssemblyRecovery(workspace: string): Promise<Se
 }
 
 export async function rejectSeriesAttempt(
-  workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string,
+  workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string, by?: 'wizard',
 ): Promise<import('../features/series/types').SeriesShot> {
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/attempts/${encodeURIComponent(attemptId)}/reject`,
     {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+      method: 'POST', headers: reviewHeaders(by), body: JSON.stringify({ workspace }),
     },
   ), 'Could not reject Series shot attempt')
 }

@@ -138,6 +138,8 @@ export async function startVideoEditorExport(payload: {
   audio_cues?: Array<{ id: string; name: string; source: string; start: number; volume: number; trim_start: number; trim_end: number }>
   /** 0–1 sidechain ducking of the existing mix while a cue plays. */
   duck?: number
+  /** The saved montage open in the editor: the video's sidecar names it, so "Edit montage" opens it again. */
+  montage?: { file: string; revision: number }
 }): Promise<VideoEditorExportJob> {
   const res = await fetch(`${BASE}/api/v1/video-editor/export`, {
     method: 'POST',

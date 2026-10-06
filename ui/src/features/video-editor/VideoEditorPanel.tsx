@@ -1871,6 +1871,7 @@ export function VideoEditorPanel() {
         } : null,
         clips: normalized.clips.map(clip => exportClipBody(clip)),
         ...exportLayerFields(montage.layers),
+        ...(montage.ref ? { montage: { file: montage.ref.file, revision: montage.ref.revision } } : {}),
       })
       writeVideoEditorExportId(activeWorkspace, started.job_id)
       if (mountedRef.current) setExportJob(started)

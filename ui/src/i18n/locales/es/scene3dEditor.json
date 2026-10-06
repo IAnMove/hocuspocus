@@ -3714,12 +3714,14 @@
     "name": "Nombre de la escena",
     "save": "Guardar escena en galería",
     "open": "Abrir escena",
-    "help": "Elige una escena de Vídeo 3D guardada. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
+    "help": "Elige una escena de Vídeo 3D guardada, o una escena de trabajo que un agente hizo y no publicó. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
     "saved": "Escena guardada en esta carpeta. Usa Abrir escena para recuperarla.",
     "changed": "La escena cambió mientras se cargaba. Vuelve a elegirla para reemplazar la actual.",
     "previewUnavailable": "Espera a que cargue la vista 3D antes de guardar.",
     "saveFailed": "No se pudo guardar la escena.",
-    "cancelLoad": "Cancelar carga"
+    "cancelLoad": "Cancelar carga",
+    "workingScene": "{{title}} · escena de trabajo sin publicar (revisión {{revision}})",
+    "workingChanged": "{{title}} · escena de trabajo cambiada desde que se publicó (revisión {{revision}})"
   },
   "cinematic": {
     "title": "Entorno cinematográfico",

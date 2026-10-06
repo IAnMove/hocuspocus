@@ -8,7 +8,7 @@ export type TaskOrigin = 'agent' | 'wizard' | ''
 
 export const AGENT_TARGET_KINDS = [
   'world3d_template', 'world3d_scene', 'scene_file', 'character_kit', 'series_episode', 'series',
-  'montage', 'template', 'workspace_collection', 'file',
+  'story', 'montage', 'template', 'workspace_collection', 'file',
 ] as const
 export type AgentTargetKind = typeof AGENT_TARGET_KINDS[number]
 
@@ -35,8 +35,9 @@ function text(value: unknown): string {
 
 export function taskOrigin(task: ActivityTaskLike): TaskOrigin {
   const metadata = metadataOf(task)
-  if (task.kind === 'agent' || metadata.tool === 'external_agent' || metadata.actor === 'agent') return 'agent'
+  // A Wizard change is an ``agent`` trail row too (services/agent_activity.py record_wizard): its tool says whose.
   if (metadata.tool === 'wizard' || metadata.actor === 'wizard') return 'wizard'
+  if (task.kind === 'agent' || metadata.tool === 'external_agent' || metadata.actor === 'agent') return 'agent'
   return ''
 }
 

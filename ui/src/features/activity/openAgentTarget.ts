@@ -40,6 +40,18 @@ async function openKit(target: AgentTarget, workspace: string): Promise<void> {
   openTab('scene3d')
 }
 
+/** Story Lab with that project open (the Wizard's stories are saved in the workspace's story library). */
+async function openStory(id: string, workspace: string): Promise<void> {
+  openTab('stories')
+  const { useStoryStore } = await import('../stories/store')
+  if (useStoryStore.getState().workspace !== workspace || !useStoryStore.getState().hydrated) {
+    await useStoryStore.getState().loadWorkspace(workspace)
+  }
+  const stories = useStoryStore.getState()
+  if (!stories.projects[id]) throw new Error(`Story “${id}” is not in this workspace.`)
+  stories.openProject(id)
+}
+
 function openTab(filter: Parameters<ReturnType<typeof useStore.getState>['setMediaFilter']>[0]): void {
   const app = useStore.getState()
   app.setDashboardOpen(false)
@@ -70,9 +82,16 @@ export async function openAgentTarget(target: AgentTarget, workspace: string): P
     case 'workspace_collection':
       openTab('runs')
       return
-    case 'montage':
-      openTab('videoeditor')
+    case 'story':
+      await openStory(target.id, workspace)
       return
+    case 'montage': {
+      const file = [target.file, target.id].find(name => name?.endsWith('.montage.json'))
+      if (!file) { openTab('videoeditor'); return }
+      const { requestOpenMontage } = await import('../music-productions/useOpenProductionMontage')
+      requestOpenMontage(workspace, file)
+      return
+    }
     default:
       openActivityArtifact(target.file || target.id)
   }

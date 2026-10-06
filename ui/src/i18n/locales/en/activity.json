@@ -293,7 +293,8 @@
       "character_kit": "Open kit {{name}}",
       "series_episode": "Open episode {{name}} in Series Lab",
       "series": "Open series {{name}} in Series Lab",
-      "montage": "Open the Video Editor ({{name}})",
+      "story": "Open story {{name}} in Story Lab",
+      "montage": "Open montage {{name}} in the Video Editor",
       "workspace_collection": "Open collection {{name}}",
       "file": "Show {{name}}"
     },
@@ -304,6 +305,7 @@
       "character_kit": "Character Kit · {{name}}",
       "series_episode": "Series episode · {{name}}",
       "series": "Series · {{name}}",
+      "story": "Story · {{name}}",
       "montage": "Montage · {{name}}",
       "template": "Template · {{name}}",
       "workspace_collection": "Collection · {{name}}",
@@ -311,5 +313,6 @@
     }
   },
   "editScene3d": "Edit the Video 3D scene this video was rendered from",
-  "editScene2d": "Edit the Video 2D scene this video was rendered from"
+  "editScene2d": "Edit the Video 2D scene this video was rendered from",
+  "editMontage": "Edit the montage this video was exported from ({{name}})"
 }
