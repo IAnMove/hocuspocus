@@ -42,7 +42,7 @@ from services.production_control import Cancelled
 from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
-from services.series_shot_bridge import run_series_shot, with_pose_sizes
+from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
@@ -558,6 +558,7 @@ class SeriesNativeRender:
                                first_of_scene=first)
         root = self.deps.workspace_dir(workspace)
         self._balance(root, spec)
+        measure_props(spec, root)
         used = {cast["kitId"]: with_pose_sizes(kits[cast["kitId"]], root) for cast in spec["cast"] if cast["kitId"] in kits}
         document = self.deps.compile_shot({"mode": "shot", "kits": used, "shot": spec})
         digest = hashlib.sha1(json.dumps(document, sort_keys=True).encode()).hexdigest()[:10]

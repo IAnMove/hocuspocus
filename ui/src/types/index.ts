@@ -456,6 +456,9 @@ export interface SceneAnimationEvent {
   payload?: string
 }
 
+export type SceneVideoLoop = 'loop' | 'hold' | 'pingpong'
+export interface SceneVideoPlayback { start: number; loop: SceneVideoLoop; speed: number }
+
 export interface SceneLayer {
   characterKitRef?: import('../lib/characterVoice').CharacterKitRef
   id: string
@@ -477,6 +480,11 @@ export interface SceneLayer {
   /** Layer-frame point, 0–100, that stays on the anchor while scale changes.
    *  Absent or 50,50 keeps scaling around the center. Camera and effect layers ignore it. */
   focus?: { x: number; y: number }
+  /** Video layers only: the clip plays on its own clock, apart from the layer's motion timing. `start` is the clip
+   *  second shown at the scene's start, `speed` its rate, and `loop` what happens at the clip's end: play it again
+   *  (`loop`), keep its last frame (`hold`) or play it back and forth (`pingpong`). Absent, the clip follows the
+   *  layer's motion time, as older scenes do. */
+  playback?: SceneVideoPlayback
   /** Deterministic full-frame procedural particles, shared by preview,
    * scene JSON and browser capture. Only used by effect layers. */
   atmosphere?: {

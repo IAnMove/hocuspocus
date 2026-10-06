@@ -59,6 +59,8 @@ def test_a_layer_gets_its_defaults_and_drops_unknown_keys():
     ({"file": "a.png", "depth": 1.5}, r"depth must be a number from 0 to 1"), ({"file": "a.png", "depth": True}, "depth"),
     ({"file": "a.png", "opacity": -0.1}, "opacity"), ({"file": "a.png", "scale": 0}, "scale"), ({"file": "a.png", "x": 200}, r"\.x"),
     ({"file": "a.png", "drift": 900}, "drift"), ({"file": "a.png", "front": "yes"}, "front must be true or false"), ("wall.png", "must be an object"),
+    ({"file": "a.mp4", "loop": "bounce"}, "loop must be one of loop, hold, pingpong"), ({"file": "a.mp4", "loop": True}, "loop must be one of"),
+    ({"file": "a.mp4", "speed": 0}, r"speed must be a number from 0.1 to 4"), ({"file": "a.mp4", "start": -1}, r"start must be a number from 0"),
 ])
 def test_a_malformed_layer_is_refused_with_where_it_is(bad, message):
     with pytest.raises(ValueError, match=message):
@@ -100,6 +102,14 @@ def test_the_series_checks_location_layers_and_keeps_the_rest_of_the_layout():
     assert normalize_location(dict(untouched), "l") == untouched
 
 
+def test_a_video_layer_can_play_from_a_second_at_a_speed_and_bounce_or_hold():
+    clock = {"file": "plague.mp4", "depth": 0, "start": 1.5, "loop": "pingpong", "speed": 0.5}
+    assert layer_entry(clock, "l") == {"file": "plague.mp4", "depth": 0.0, "front": False, "opacity": 1.0, "x": 50.0, "y": 50.0,
+                                       "scale": 1.0, "start": 1.5, "speed": 0.5, "loop": "pingpong"}
+    assert not set(layer_entry({"file": "plague.mp4"}, "l")) & {"start", "loop", "speed"}, "left out, a layer is stored as before"
+    assert layer_entry({"file": "plague.mp4", "loop": "hold"}, "l")["loop"] == "hold"
+
+
 # Planning ---------------------------------------------------------------------
 
 def test_a_shot_without_layers_plans_the_spec_it_always_did():
@@ -125,6 +135,15 @@ def test_the_spec_carries_the_set_layers_placed_on_the_framed_background():
     # A tighter framing zooms and pans the background; a layer stays on its spot of it.
     close = spec(value, {**TWO, "visibleCharacterIds": ["kevin"], "layout2d": {"framing": "close"}})
     assert close["layers"][1]["x"] == background_point("close", 50.0, 0.1, 0.6)[0] and close["layers"][0]["scale"] == BACKGROUND_ZOOM["close"]
+
+
+def test_a_video_layer_plans_its_own_clock_and_an_image_layer_none():
+    clock = {"file": "plague.mp4", "depth": 0, "start": 1.5, "loop": "pingpong", "speed": 0.5}
+    planned = spec(series(layers=[clock, {"file": "wall.png", "start": 2, "loop": "hold"}, {"assetId": "asset_smoke", "speed": 2}]))
+    video, image, smoke = planned["layers"]
+    assert {key: video[key] for key in ("start", "loop", "speed")} == {"start": 1.5, "loop": "pingpong", "speed": 0.5}
+    assert not set(image) & {"start", "loop", "speed"}, "an image has no clock"
+    assert smoke["kind"] == "video" and smoke["speed"] == 2.0 and "loop" not in smoke
 
 
 def test_a_shot_list_replaces_the_location_list_and_the_cast_depth_comes_from_the_shot_first():
