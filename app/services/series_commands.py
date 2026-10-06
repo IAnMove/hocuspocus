@@ -48,9 +48,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
          "description": {"type": "string", "maxLength": 2000}},
         [], False,
-        "List character style presets (prompt fragments, kit style, default mouth look for characters.rig.flat). "
+        "List character style presets (prompt fragments, kit style, rig: the default look for characters.rig.flat). "
+        "paper-cutout makes paper mouths; graphic-novel (painted art, bold ink, flat black shadows, clear white eyes, "
+        "the rest mouth painted as one line) rigs with warp mouths: each pose talks with its own drawing. "
         "With style, kind and description, also returns the prompt, negative prompt and screen colour to generate "
-        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode.",
+        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode. "
+        "Save the kit with provenance [{\"method\": \"character-style-create\", \"style\": \"<style id>\"}] and "
+        "characters.rig.flat uses that style's rig with no style given (or pass the rig as its style).",
     ),
     "characters.rig.flat": (
         {"workspace": WORKSPACE, "character_id": ID, "base_revision": REVISION,
@@ -87,7 +91,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "(before cropping; mouthWidth corner to corner in % of its width) search only there; a mouth hint with no mark "
         "there places the mouth at it, nothing wiped (with warp mouths it is a point on the line between the lips). "
         "Hints are "
-        "kept and reused by later rigs; null clears a pose's. Returns the saved kit, a review image URL (each pose, and "
+        "kept and reused by later rigs; null clears a pose's. Style keys left out keep the kit's look (its last rig's, "
+        "else the rig of the style preset it was made in): a re-rig after adding a pose or placing a mouth line stays "
+        "warp unless mouthStyle says otherwise; style in the result is the look used. Returns the saved kit, a review image URL (each pose, and "
         "its face enlarged before and after the wipe; poses with warnings framed in red), unwipedPoses (no painted "
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "

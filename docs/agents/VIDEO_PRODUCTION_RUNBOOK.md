@@ -720,6 +720,16 @@ until **Save mouth**, which re-rigs that pose and the base with the point and
 width as the pose's hint. Shots already rendered with that pose keep the old
 mouth until they are rendered again.
 
+A kit keeps its look. Every `style` key a rig leaves out is the kit's: the
+last rig's look, else the `rig` of the character style preset the kit was
+made in (its `character-style-create` provenance). A pose added later or an
+agent's re-rig without `style` stays warp; only `style.mouthStyle` changes it.
+The rig result's `style` is the look used. The `graphic-novel` preset
+(Character Creator › Graphic novel (painted), `characters.styles`) makes
+painted characters for this rig: clear white eyes out of the shadow, the rest
+mouth painted as one line, and `rig: {"mouthStyle": "warp"}`. A bust pose reads
+better in dialogue than a full figure with a small face.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.

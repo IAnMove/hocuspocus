@@ -23,9 +23,10 @@ from PIL import Image, ImageDraw
 from services import face_landmarks, flat_rig_warp
 from services.character_kit_library import read_character_kit_library
 from services.flat_rig import (
-    FlatRigError, _figure_box, _pose_guides, _saved_hints, _url, _workspace_file, pose_source, rig_hints, rig_pose, rig_style,
+    FlatRigError, _figure_box, _pose_guides, _saved_hints, _url, _workspace_file, pose_source, rig_hints, rig_pose,
 )
 from services.flat_rig_base import INK, STATES
+from services.flat_rig_look import rig_style
 
 # What the editor shows by default: rest, then the vowels i, e, a, o, u.
 PREVIEW_STATES = ("closed", "small", "medium", "wide", "round", "pucker")
