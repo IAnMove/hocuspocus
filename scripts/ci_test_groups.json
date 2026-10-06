@@ -256,6 +256,8 @@
       "weight": 2682,
       "paths": [
         "tests/test_series_agent_fixes.py",
+        "tests/test_game_commands.py",
+        "tests/test_game_profile.py",
         "tests/test_series_templates.py",
         "tests/test_flat_rig_realistic.py",
         "tests/test_acceptance_runner.py",
@@ -1472,6 +1474,22 @@
     {
       "prefix": "app/services/game_export.py",
       "paths": ["tests/test_game_export.py"]
+    },
+    {
+      "prefix": "app/services/game_commands.py",
+      "paths": ["tests/test_game_commands.py", "tests/test_game_profile.py"]
+    },
+    {
+      "prefix": "app/services/game_guide.py",
+      "paths": ["tests/test_game_profile.py"]
+    },
+    {
+      "prefix": "app/shared/game_agent_guide.md",
+      "paths": ["tests/test_game_profile.py"]
+    },
+    {
+      "prefix": "app/services/mcp_profiles.py",
+      "paths": ["tests/test_game_profile.py", "tests/test_series_agent_fixes.py"]
     },
     {
       "prefix": "app/services/game_generators/animation.py",
