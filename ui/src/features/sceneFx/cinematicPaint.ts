@@ -14,7 +14,7 @@ import { GLITCH_KIND, paintGlitch } from './glitchPaint'
 export const CINEMATIC_KINDS = ['candlelight', 'vignette', 'film_grain', 'light_rays', GLITCH_KIND, 'canvas'] as const
 const BLENDED = new Set<string>(['candlelight', 'film_grain', 'light_rays', GLITCH_KIND, 'canvas'])
 
-type Rgb = readonly [number, number, number]
+export type Rgb = readonly [number, number, number]
 type FramePainter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, width: number, height: number) => void
 
 const frac = (value: number) => value - Math.floor(value)
@@ -50,7 +50,8 @@ export function rgb(color: string): Rgb {
   const hex = /^#[\da-f]{6}$/i.test(color) ? color : '#ffffff'
   return [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16)) as unknown as Rgb
 }
-const css = (color: Rgb, alpha = 1) =>
+/** A CSS colour from 0–255 channels and an alpha, both clamped. */
+export const css = (color: Rgb, alpha = 1) =>
   `rgba(${color.map(value => Math.round(Math.max(0, Math.min(255, value)))).join(', ')}, ${Math.round(clamp01(alpha) * 10000) / 10000})`
 const scaled = (color: Rgb, amount: number) => color.map(value => value * amount) as unknown as Rgb
 

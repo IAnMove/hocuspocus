@@ -6,6 +6,42 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The light screen effects read in dark, painted frames. In a tenebrist episode
+a `shockwave` in gold, used as a prayer spreading over a city, came out as a
+thin flat yellow-green ellipse, and a gold `shield` around a praying woman at
+`intensity` 0.4 was barely visible. In 2D overlays both filmed their 3D world
+sprite: a ground ring seen from the sprite camera, whose overdriven colour
+clipped channel by channel, so gold (red already at its peak) kept gaining
+green. They are now painted on the frame with additive light. The
+`shockwave` is a white-hot flash with a thin flare, then a front that eases
+out and dims, made of a long soft trail of lit air, a band of light, a glowing
+line and a thin hot core, uneven along the ring, with brighter patches, two
+softer echoes behind it and sparks it throws off. The `shield` is a
+see-through dome brighter toward its rim (never more than 25 % light), with an
+uneven bright line, a glow stronger above, slow shimmer and ripples, a
+highlight and drifting motes; it swells in, breathes and fades out, and
+`intensity` sets its light on a square-root curve so 0.4 still reads. Every
+layer keeps the hue of `color`: on the episode's background the brightly lit
+pixels of the old shockwave added light with equal red and green (86 % of
+them yellow-green), the new ones add it in the proportions of the gold. The
+parameters are the same. `embers` are glowing sparks that rise on curved paths
+and cool from near white to a darker glow of their colour; `stars` and
+`bubbles` no longer line up on diagonals; `smoke` is a lumpy column lit from
+above; the flames of `anime_aura` no longer end on a straight cut at the
+bottom of their card.
+
+A `laser` or `lightning` cue can start at `from` and run to its `x`/`y`. In a
+Series shot, `"from": {"cast": 0, "point": [95, 46]}` in `layout2d.fx` is a
+point in % of that cast member's pose image (`cast` is an index in the shot's
+cast or a character id), so a rifle's beam leaves its muzzle wherever the
+cutout stands, however big it is drawn and while the camera pushes in;
+`{"point": [70, 40]}` is a point of the frame. A Video 2D cue stores
+`from: {x, y}` (frame %) or `{layerId, x, y}` (% of that layer's picture), and
+the 2D painter, the export and the editor preview place it at every frame.
+`scenes.effects.apply` and the `screenFx` of `world3d.scene.patch` take it too
+(a 3D shot keeps a frame point only); the catalog marks the two beams with
+`"aim": true`.
+
 Series 2D shots no longer show the straight cut of a cutout cut by its image
 border, stand grounded props on the floor, and can give a video layer its own
 clock. The render reads each pose's alpha (`series_cutouts`): a cut is a run of

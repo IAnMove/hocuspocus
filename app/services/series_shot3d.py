@@ -218,8 +218,17 @@ def _voice_over(workspace: str, lines: list[dict[str, Any]], config: dict[str, A
 
 
 def _shot_effects(screen_fx: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """The shot's screen effects under ``shot-`` ids, which the scene patch replaces on every render."""
-    return [{**cue, "id": f"shot-{cue['id']}"} for cue in screen_fx or []]
+    """The shot's screen effects under ``shot-`` ids, which the scene patch replaces on every render. A beam's ``from``
+    in the frame is kept; one on a cast member's pose is dropped (a 3D shot has no cutout to follow), so that beam is
+    drawn across its x/y as one without ``from``."""
+    effects = []
+    for cue in screen_fx or []:
+        origin = cue.get("from") if isinstance(cue.get("from"), dict) else {}
+        effect = {**{key: value for key, value in cue.items() if key != "from"}, "id": f"shot-{cue['id']}"}
+        if "cast" not in origin and isinstance(origin.get("point"), list):
+            effect["from"] = {"x": origin["point"][0], "y": origin["point"][1]}
+        effects.append(effect)
+    return effects
 
 
 def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list[dict[str, Any]],

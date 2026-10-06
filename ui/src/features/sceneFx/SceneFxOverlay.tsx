@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
-import { paintSceneFx } from './paint'
+import { paintSceneFx, type FxLayerPoint } from './paint'
 import { scheduleFx } from './audio'
 import type { SceneFx } from './types'
 
-export function SceneFxOverlay({ cues, soundCues, seconds, width, height, playing = false, speed = 1, duration, getSource }: {
+export function SceneFxOverlay({ cues, soundCues, seconds, width, height, playing = false, speed = 1, duration, getSource, layerPoint }: {
   cues?: SceneFx[]; soundCues?: SceneFx[]; seconds: number; width: number; height: number; playing?: boolean; speed?: number; duration: number
   getSource?: () => CanvasImageSource | null
+  /** Places beams that start on a layer (a rifle on a cutout), as the export does. */
+  layerPoint?: FxLayerPoint
 }) {
   const ref = useRef<HTMLCanvasElement>(null), audio = useRef<AudioContext | null>(null)
   const transport = useRef({ seconds, playing })
@@ -18,8 +20,8 @@ export function SceneFxOverlay({ cues, soundCues, seconds, width, height, playin
   useEffect(() => {
     const ctx = ref.current?.getContext('2d')
     if (!ctx) return
-    ctx.clearRect(0, 0, width, height); paintSceneFx(ctx, width, height, seconds, cues, getSourceRef.current?.() ?? null)
-  }, [cues, seconds, width, height])
+    ctx.clearRect(0, 0, width, height); paintSceneFx(ctx, width, height, seconds, cues, getSourceRef.current?.() ?? null, layerPoint)
+  }, [cues, seconds, width, height, layerPoint])
   useEffect(() => {
     const audible = soundCues ?? cues
     if (!playing || !audible?.some(cue => cue.sound && cue.volume)) return

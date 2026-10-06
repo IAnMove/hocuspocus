@@ -71,8 +71,8 @@ import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTim
 import { seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
 import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneMask } from '../../types'
 import { canonicalSceneFps } from '../../lib/sceneFps.ts'
-import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
-import { paintScene2D } from '../../lib/scene2d/paint'
+import { createSceneEvaluator, type SceneEvaluator } from '../../lib/scene2d/evaluate'
+import { layerPicturePoint, paintScene2D } from '../../lib/scene2d/paint'
 import { assignZ, breakDependencyCycles, dependencyWouldCycleIn, normalizeScene2DLayers, normalizeZ } from '../../lib/scene2d/normalize'
 import { ATMOSPHERE_KINDS, ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS, DEFAULT_EFFECTS, drawAtmosphere, effectFilter, finiteNumber, hasCanvasFilterEffects, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip } from '../../lib/scene2d/layerStyle'
 import type { AnimatorLayer, AnimatorLayerType, AnimatorScene, Atmosphere, LayerEffects, LayerStrip, Point, VisualAnimatorLayer, VisualLayerType } from '../../lib/scene2d/types'
@@ -178,6 +178,11 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const isMissing = (source: string) => source.startsWith('blob:')
 const findLayerElements = (root: HTMLElement | null, id: string) => Array.from(root?.querySelectorAll<HTMLElement>('[data-layer-id]') ?? []).filter(element => element.dataset.layerId === id)
 const findLayerElement = (root: HTMLElement | null, id: string) => findLayerElements(root, id)[0] ?? null
+/** Places the effects that start on a layer (a laser from a cutout's rifle) in the live preview as the export does. */
+const previewLayerPoint = (scene: AnimatorScene, evaluator: SceneEvaluator, stage: { current: HTMLElement | null }, progress: number) =>
+  (scene.sfx ?? []).some(cue => cue.from?.layerId)
+    ? layerPicturePoint(scene, scene, evaluator, layer => findLayerElement(stage.current, layer.id) as HTMLVideoElement | HTMLImageElement | null, progress, progress * scene.duration)
+    : undefined
 const modelViewerCanvas = (element: HTMLElement | null) => {
   const root = element?.shadowRoot
   if (!root) return null
@@ -2663,7 +2668,7 @@ export function SceneAnimatorPanel() {
         {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">{t('animator.titleSafeBadge')}</span></div>}
         {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">{t('animator.verticalBadge')}</span></div>}
         {retroLive && <canvas ref={retroCanvasRef} data-testid="scene-retro-look" className="pointer-events-none absolute inset-0 z-[896] h-full w-full" aria-hidden="true" />}
-        {!retroLive && <SceneFxOverlay cues={scene.sfx} seconds={progress * scene.duration} width={scene.width} height={scene.height} duration={scene.duration} playing={playing} />}
+        {!retroLive && <SceneFxOverlay cues={scene.sfx} seconds={progress * scene.duration} width={scene.width} height={scene.height} duration={scene.duration} playing={playing} layerPoint={previewLayerPoint(scene, evaluator, canvasRef, progress)} />}
         {!retroLive && <KineticTextOverlay cues={scene.texts} lyrics={scene.lyrics} seconds={progress * scene.duration} width={scene.width} height={scene.height} envelope={beatEnvelope(scene.rhythm, progress * scene.duration)} />}
         {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}

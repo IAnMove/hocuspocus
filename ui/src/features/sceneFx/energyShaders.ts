@@ -65,8 +65,10 @@ const BODIES: Record<EnergySurface, string> = {
   aura: `
     vec2 p=vUv; float edge=pow(max(0.,1.-abs(p.x-.5)*2.),1.5);
     float n=fbm(vec2(p.x*8.,p.y*5.-uTime*1.7+uSeed));
-    float flame=smoothstep(.28,.72,n)*edge*(1.-smoothstep(.35,.95,p.y));
-    float shell=pow(max(0.,1.-abs(length((p-vec2(.5,.38))*vec2(2.,1.3))-.5)*12.),2.);
+    // Faded in from the bottom edge of the card, so the flames never end on a straight cut.
+    float base=smoothstep(0.,.16,p.y);
+    float flame=smoothstep(.28,.72,n)*edge*(1.-smoothstep(.35,.95,p.y))*base;
+    float shell=pow(max(0.,1.-abs(length((p-vec2(.5,.38))*vec2(2.,1.3))-.5)*12.),2.)*base;
     gl_FragColor=vec4(uColor*(flame*2.+shell*.25)*uPower,(flame*.7+shell*.12)*uPower);`,
   shock: `
     float r=length((vUv-.5)*2.), radius=.08+uProgress*.82;

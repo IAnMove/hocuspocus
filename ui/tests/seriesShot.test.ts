@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
 import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
-import { blinkTimes, bodyKeyframes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type ShotSpec } from '../scripts/seriesShot.ts'
+import { blinkTimes, bodyKeyframes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
 
 const STATES = ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
 const asset = (id: string, kind: 'image' | 'overlay' = 'overlay', size?: { width: number; height: number }): CharacterKitAsset => ({
@@ -176,4 +176,18 @@ test('scene operations mount a character, add a line and animate the talk', () =
   assert.ok(calm.ok)
   const pose = calm.document.layers.find(layer => layer.characterKitRef && !layer.faceBinding)!
   assert.ok(pose.animation.keyframes!.every(frame => frame.y === pose.transform.y))
+})
+
+test('a beam from a cast member starts on that cutout\'s pose layer; one from the frame keeps its point', () => {
+  const laser = (from: ShotFxSpec['from'], id = 'fx-0') => ({ id, kind: 'laser', start: 0.6, end: 0.9, x: 90, y: 20, color: '#ffd56a', ...(from ? { from } : {}) }) as ShotFxSpec
+  const scene = compileSeriesShot(kits, shot({
+    cast: [{ kitId: 'kevin', characterId: 'kev', x: 34 }, { kitId: 'gary', x: 66 }],
+    sfx: [laser({ cast: 1, point: [95, 46] }), laser({ cast: 'kev', point: [10, 50] }, 'fx-1'), laser({ point: [70, 40] }, 'fx-2'), laser(undefined, 'fx-3')],
+  }))
+  const poses = scene.layers.filter(layer => layer.characterKitRef && layer.type === 'image' && !layer.faceBinding).map(layer => layer.id)
+  assert.deepEqual(scene.sfx!.map(cue => cue.from), [{ layerId: poses[1], x: 95, y: 46 }, { layerId: poses[0], x: 10, y: 50 }, { x: 70, y: 40 }, undefined])
+  assert.ok(poses[1].includes('gary'))
+  const missing = runSeriesShot({ mode: 'shot', kits, shot: shot({ sfx: [laser({ cast: 4, point: [95, 46] })] }) })
+  assert.equal(missing.ok, false)
+  assert.match(missing.ok ? '' : missing.message, /fx-0 starts on cast 4, who is not in this shot/)
 })
