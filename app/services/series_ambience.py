@@ -189,7 +189,10 @@ def bed_filter(beds: Sequence[Bed], gains: Sequence[float], *, has_audio: bool, 
                envelopes: Sequence[str | None] | None = None) -> str:
     """The ffmpeg graph: input 0 is the joined episode and input ``i`` the file of ``beds[i - 1]``; output ``[mix]``.
     A looping bed plays its file from ``seam`` on, the end crossfading into the start it skipped, so the unit
-    repeats without a seam. ``gains`` balance each file like a shot's music (``audio_levels.gain_to``).
+    repeats without a seam. That crossfade is two qsin fades mixed on the reversed file, where the end and the start
+    it skipped line up at the first sample whatever the file's length. It is not ``acrossfade``: ffmpeg 6.x ends that
+    filter's output when its second input is done before the first, as it always is when both are cut from one file.
+    ``gains`` balance each file like a shot's music (``audio_levels.gain_to``).
     ``envelopes`` (one per bed, or None) are ``volume`` expressions of the bed's own time, ``t`` = 0 at its start,
     evaluated every ``ENVELOPE_SAMPLES`` so their ramps are smooth: the ducking under the lines."""
     main = (f"[0:a]{_FORMAT}[main]" if has_audio
@@ -198,10 +201,11 @@ def bed_filter(beds: Sequence[Bed], gains: Sequence[float], *, has_audio: bool, 
     for index, (bed, gain) in enumerate(zip(beds, gains), start=1):
         source = f"[{index}:a]{_FORMAT},asetpts=PTS-STARTPTS"
         if bed.seam:
+            fade = f"afade=t=in:d={bed.seam:.3f}:curve=qsin"
             parts += [f"{source},asplit=2[file{index}a][file{index}b]",
-                      f"[file{index}a]atrim=start={bed.seam:.3f},asetpts=PTS-STARTPTS[rest{index}]",
-                      f"[file{index}b]atrim=end={bed.seam:.3f},asetpts=PTS-STARTPTS[head{index}]"]
-            source = (f"[rest{index}][head{index}]acrossfade=d={bed.seam:.3f}:c1=qsin:c2=qsin,"
+                      f"[file{index}a]atrim=start={bed.seam:.3f},asetpts=PTS-STARTPTS,areverse,{fade}[rest{index}]",
+                      f"[file{index}b]atrim=end={bed.seam:.3f},asetpts=PTS-STARTPTS,{fade},areverse[head{index}]"]
+            source = (f"[rest{index}][head{index}]amix=inputs=2:normalize=0:duration=first,areverse,"
                       f"aloop=loop=-1:size={_LOOP_SAMPLES},asetpts=N/SR/TB")
         length = bed.end - bed.start
         delay = round(bed.start * 1000)

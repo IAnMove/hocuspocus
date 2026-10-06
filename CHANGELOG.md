@@ -6,6 +6,15 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab voice rooms, looping ambience beds and looping score cues work on
+ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
+found`, because the convolution asked `afir` for `irnorm`, an option only
+ffmpeg 7 and later have, and a bed or cue that loops a file shorter than itself
+came out silent, because ffmpeg 6's `acrossfade` ends without the crossfade when
+both of its inputs are cut from one file. Both are now built from filters that
+every ffmpeg from 6.0 on runs alike, and they sound as before: a looped bed is
+the same sample for sample, a room the same to within a thousandth of a dB.
+
 The light screen effects read in dark, painted frames. In a tenebrist episode
 a `shockwave` in gold, used as a prayer spreading over a city, came out as a
 thin flat yellow-green ellipse, and a gold `shield` around a praying woman at

@@ -2,11 +2,13 @@
 import math
 import shutil
 import subprocess
+import wave
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from services.audio_mix import AUDIO_FILTER_TAIL
 from services.episode_finishing import finish_episode, finishing_note, join_spans, lay_ambience
 from services.mix_concat import hold_crossfade_output_seconds
 from services.series_ambience import (
@@ -156,7 +158,11 @@ def test_the_filter_loops_fades_and_places_each_bed():
     beds = [Bed("a.wav", 1.5, 6.5, 0.3, 0.8, 0.4, 1.0, 2), Bed("b.wav", 6.1, 9.0, 1.5, 0.4, 0.8)]
     graph = bed_filter(beds, [0.5, 4.0], has_audio=True, duration=9.0)
     looped, straight = graph.split(";[bed1]")[0], graph.split("[2:a]", 1)[1]
-    assert "atrim=start=1.000" in looped and "acrossfade=d=1.000:c1=qsin:c2=qsin,aloop=loop=-1" in looped
+    assert "[file1a]atrim=start=1.000,asetpts=PTS-STARTPTS,areverse,afade=t=in:d=1.000:curve=qsin[rest1]" in looped
+    assert "[file1b]atrim=end=1.000,asetpts=PTS-STARTPTS,afade=t=in:d=1.000:curve=qsin,areverse[head1]" in looped
+    assert "[rest1][head1]amix=inputs=2:normalize=0:duration=first,areverse,aloop=loop=-1" in looped, \
+        "the end of the file crossfades into the start it skipped, mixed on the reversed file"
+    assert "acrossfade" not in graph, "ffmpeg 6.x acrossfade cuts a crossfade whose inputs come from one file"
     assert "atrim=end=5.000,afade=t=in:d=0.800:curve=qsin,afade=t=out:st=4.600:d=0.400" in looped
     assert "volume=0.1500,adelay=1500|1500[bed1]" in graph
     assert "aloop" not in straight and "volume=2.0000,adelay=6100|6100[bed2]" in straight, "a balanced level stays under 2"
@@ -255,3 +261,28 @@ def test_a_short_file_loops_without_a_gap_and_a_missing_one_is_reported(tmp_path
                            workspace_dir=str(tmp_path), ffmpeg="ffmpeg")
     assert missing == {"applied": False, "reason": "Ambience files not found in the workspace: sfx-gone.wav",
                        "mode": "episode", "missing": ["sfx-gone.wav"]}
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg/ffprobe required")
+def test_a_looping_bed_is_its_crossfaded_unit_repeated_sample_for_sample(tmp_path):
+    """The unit is the file from the seam on, its last ``seam`` seconds crossfading (qsin) into the start it skipped.
+    Noise, so no two moments of the file look alike; the limiter is left out so the samples can be compared."""
+    rate, seam, passes = 48000, 0.375, 4
+    codes = np.round(3000 * np.random.RandomState(3).standard_normal(int(rate * 1.5))).astype("<i2")
+    source = codes / 32768
+    path = tmp_path / "sfx-noise.wav"
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(np.repeat(codes, 2).tobytes())
+    graph = bed_filter([Bed(path.name, 0.0, 4.0, 0.5, 0.0, 0.0, seam, passes)], [1.0], has_audio=False, duration=4.0)
+    assert f",{AUDIO_FILTER_TAIL}[mix]" in graph
+    command = ["ffmpeg", "-v", "error", "-i", str(path), "-i", str(path), "-filter_complex", graph.replace(f",{AUDIO_FILTER_TAIL}", ""),
+               "-map", "[mix]", "-f", "f32le", "-"]
+    heard = np.frombuffer(subprocess.run(command, capture_output=True, timeout=60, check=True).stdout, dtype=np.float32)[::2]
+    count, ramp = int(rate * seam), np.arange(int(rate * seam))
+    seam_mix = source[-count:] * np.sin(np.pi / 2 * (count - 1 - ramp) / count) + source[:count] * np.sin(np.pi / 2 * ramp / count)
+    unit = np.concatenate([source[count:-count], seam_mix])
+    assert len(heard) == 4 * rate
+    assert np.abs(heard - 0.5 * np.tile(unit, passes)[:4 * rate]).max() < 1e-5, "the same seamless loop on every ffmpeg"
