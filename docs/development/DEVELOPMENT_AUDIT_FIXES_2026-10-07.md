@@ -1,7 +1,7 @@
 # Correcciones de la revisión de development frente a main
 
 Este documento describe el alcance del PR contra `development`; no certifica un merge ni una revisión independiente.
-La revisión final de Claude queda pendiente. La rama se construye sobre `8f3a0d75`, en un worktree aislado.
+La revisión final de Claude queda pendiente. La rama parte de `8f3a0d75` e incorpora `development` hasta `36de8526`, incluido su inspector de planos, en un worktree aislado.
 
 ## Comportamientos corregidos
 
@@ -20,7 +20,7 @@ La revisión final de Claude queda pendiente. La rama se construye sobre `8f3a0d
 | 11 · Contexto interno | Una cabecera HTTP no convierte una llamada externa en interna. Production usa LocalMcp con contexto propio; las ediciones bloqueantes se ejecutan fuera del event loop. | `tests/test_agent_activity.py`, `tests/test_production_resume.py`, `tests/test_music_productions_router.py` |
 | 12 · Core | Publica los cinco comandos multimedia CPU, la atribución de actor y la traza del Wizard. | `tests/test_core_media_parity.py` |
 | 13 · Volver al plano | Restaura serie y episodio y comprueba el plano antes de navegar; informa si ya no existe. | `ui/tests/seriesShotEditBanner.test.tsx` |
-| 14 · Escenas 3D mutables | El contenido del documento o plantilla personal participa en la identidad del take y de su registro. | `tests/test_series_scene_inputs.py` |
+| 14 · Escenas 3D mutables | El contenido del documento o plantilla personal participa en la identidad del take y de su registro, también al abrir el editor. Un retake de voz con el mismo nombre invalida renders y cues por sus bytes. | `tests/test_series_scene_inputs.py` |
 | 15 · Exportaciones con alias | Guarda SHA-256, resuelve la versión conservada y declara indisponible una versión ya perdida. La URL verifica el mismo handle que va a transmitir. | `tests/test_export_receipts.py`, `tests/test_export_download_identity.py`, `tests/test_export_output_name.py` |
 | 16 · GPU | La comprobación se refiere al dispositivo visible seleccionado; una GPU secundaria antigua no decide la compatibilidad de todas. | `tests/test_runtime_profiles.py` |
 | 17 · Cutout | Restaura la visibilidad del marcador vacío al terminar la exportación. | `ui/tests/codeRain.test.ts` |
@@ -33,7 +33,7 @@ La revisión final de Claude queda pendiente. La rama se construye sobre `8f3a0d
 - Sólo se conserva una versión `.previous` del alias. Un receipt nuevo incluye SHA-256; si su contenido ya no está, sus referencias de descarga desaparecen. Una URL guardada devuelve HTTP 410 si el alias ya tiene otros bytes, también con peticiones Range. Los receipts históricos sin hash mantienen su comportamiento anterior: no se puede deducir retroactivamente qué bytes tenían.
 - Las capas que usan un nombre estable siguen viendo la última exportación. La comprobación de versión se aplica a las URLs del receipt, mediante `sha256`, sin convertir los nombres de las capas en copias retenidas.
 - No se generó contenido real ni se instaló un runtime de GPU. Las regresiones de renders usan renderizadores inyectados y codificación CPU; no prueban calidad artística ni compatibilidad real de modelos.
-- Este PR no extrae los monolitos de la aplicación. Las correcciones añaden helpers acotados y mantienen las reglas de salud de código.
+- El control completo frente a `main` detectó cinco incumplimientos que el bloqueo inicial ocultaba. Se extraen detección de ojos de Flat Rig, snapshots de canon y codificación de frames; se dividen dos funciones del rig y el informe de música. Se conservan APIs, seams de pruebas y límites de salud. La división general de los demás monolitos queda fuera del PR.
 - En máquinas con varias GPU y orden CUDA desconocido, la capacidad se declara no verificada. No se confunden índices NVML con ordinales CUDA; un selector inexistente con inventario conocido elige Core. La comprobación de compatibilidad real corresponde al runtime instalado.
 
 ## Validación

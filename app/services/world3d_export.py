@@ -16,12 +16,10 @@ import re
 import shutil
 import signal
 import sqlite3
-import struct
 import subprocess
 import threading
 import time
 import uuid
-import zlib
 from urllib.parse import unquote, urlsplit
 
 from fastapi import HTTPException
@@ -32,6 +30,7 @@ from services.asset_manifest import publish_generation_sidecar, sidecar_path
 from services.audio_mix import mux_wav_audio  # noqa: F401 — the shared mixer, re-exported
 from services.workspace_cleanup import keep_export_staging, release_export_staging
 from services import resource_scheduler
+from services.world3d_frame_encoder import write_png, write_prores_master  # noqa: F401 — compatible public exports
 from services.world3d_media_cache import prepare_media_snapshot
 from services.world3d_renderer_support import scene_render_device
 from services.media_refs import parse_media_ref
@@ -361,84 +360,12 @@ def renderer_available(app_url: str | None) -> bool:
     return available(app_url or os.environ.get("HOCUS_APP_URL", ""), playwright_module())
 
 
-def write_png(path: Path, width: int, height: int, rgb: tuple[int, int, int]) -> None:
-    row = b"\x00" + bytes(rgb) * width
-    raw = row * height
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
-
-
 def mux_frame_sequence(frames: list[Path], destination: Path, *, fps: int, duration: float,
                        quality: str = "draft", width: int | None = None, height: int | None = None) -> Path:
-    if not shutil.which("ffmpeg"):
-        raise World3DExportPending("real-render pending: ffmpeg is not available")
-    if not frames:
-        raise RuntimeError("Export produced no frames")
-    temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mp4")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    profile = QUALITY_PROFILES[quality]
-    command = [
-        "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
-        "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "libx264", "-preset", profile["preset"], "-crf", str(profile["crf"]),
-    ]
-    if width and height:
-        level = h264_encode_level(int(width), int(height), int(fps))
-        if level:
-            command.extend(["-level", level])
-    command.extend([
-        "-pix_fmt", "yuv420p", "-threads", profile["threads"],
-        "-t", f"{float(duration):.3f}", "-movflags", "+faststart", str(temporary),
-    ])
-    try:
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=1800, check=False,
-        )
-        if result.returncode != 0 or not temporary.is_file() or temporary.stat().st_size <= 0:
-            detail = (result.stderr or "FFmpeg did not produce an MP4").strip()
-            raise RuntimeError(detail[-1000:])
-        expected = duration if float(duration) >= 0.5 else None
-        validate_scene_recording_output(temporary, expected_duration=expected, expected_fps=fps)
-        os.replace(temporary, destination)
-        return destination
-    except SceneRecordingTranscodeError as error:
-        raise RuntimeError(str(error)) from error
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
-def write_prores_master(frames: list[Path], destination: Path, *, fps: int, duration: float) -> Path:
-    """Optional ProRes 422 HQ master from the same PNG sequence as the H.264 delivery."""
-    if not shutil.which("ffmpeg"):
-        raise RuntimeError("ProRes master needs ffmpeg")
-    if not frames:
-        raise RuntimeError("Export produced no frames")
-    temporary = destination.with_name(f".{destination.stem}.{os.getpid()}.partial.mov")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        "ffmpeg", "-v", "error", "-y", "-framerate", str(int(fps)),
-        "-i", str(frames[0].parent / "frame_%06d.png"),
-        "-c:v", "prores_ks", "-profile:v", "3", "-pix_fmt", "yuv422p10le",
-        "-t", f"{float(duration):.3f}", str(temporary),
-    ]
-    try:
-        result = subprocess.run(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=1800, check=False,
-        )
-        if result.returncode != 0 or not temporary.is_file() or temporary.stat().st_size <= 0:
-            detail = (result.stderr or "FFmpeg did not produce a ProRes master").strip()
-            raise RuntimeError(detail[-1000:])
-        os.replace(temporary, destination)
-        return destination
-    finally:
-        temporary.unlink(missing_ok=True)
+    from services.world3d_frame_encoder import mux_frame_sequence as encode
+    return encode(frames, destination, fps=fps, duration=duration, quality=quality, width=width, height=height,
+                  profiles=QUALITY_PROFILES, level_for=h264_encode_level,
+                  validate_output=validate_scene_recording_output, pending_error=World3DExportPending)
 
 
 def read_geometry_report(staging: Path) -> dict | None:
