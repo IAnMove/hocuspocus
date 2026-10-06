@@ -6,6 +6,32 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab's **5 · Validation** tab is now a grid of every shot of the episode,
+grouped by scene: each tile shows the shot's latest take (or its plan sketched
+from the location and the cast's poses when nothing is rendered), its number,
+length, method and review state, a quick approve and a clear **Open**. An opened
+shot (the shot inspector) plays its take on top, with the other takes to switch
+to, its review and notes, and one call to action, **Re-render this shot**, that
+says what it regenerates (the voice of the lines that changed, the 2D or 3D
+scene, its foley). Below it every part of the shot has its own section with
+**Edit**: characters on screen (pose, position, entrance; Open goes to the
+character's face rig on that pose and comes back to the shot), dialogue (speaker,
+text in every language, emotion, delivery, pause, room; each line plays and can
+be recorded again on its own), location and set (variant, the location's
+background chosen or generated, set layers), props, screen effects, sound effects
+(in/length, on a line or an entrance; they play), music, foley and the voices'
+room (with the episode score and the location ambience it plays under), framing
+and timing, title cards, the 3D scene (its objects, clips and hand holds; **Edit
+in Video 3D** opens the shot's own scene and saving there writes it back to the
+shot), a generated or imported clip (its prompt, start frame and seed, how its
+own sound plays at the cut, another clip as its take) and the takes (use one,
+open its Video 2D or 3D scene). Each part saves through the shot edit, so it is
+checked like a script shot and resets the shot's approvals; an unsaved edit is
+kept across a trip to an editor and shown on the tile. Arrows go to the previous
+and next shot, Escape closes, and it fits a phone. Agents record one line with
+`series.shot.voice` (+ `.status`; `series.shot.voices` lists each line's
+recording) and the Wizard with `regenerate_series_line_voice`.
+
 What agents and the Wizard make is easier to find, open and trace back. The
 Wizard's own changes (a Character Kit, a story, a series episode, a Video 3D
 template or scene) get a row in Activity's Agents view, badged Wizard, with

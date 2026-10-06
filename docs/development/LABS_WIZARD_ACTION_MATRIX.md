@@ -1362,6 +1362,13 @@ fields. Takes are kept; a shot whose take no longer fits loses its approval.
 `series.shots.rerender_one` (`rerender_series_shot`, confirm=true) renders just that
 shot on the server, or with `produce` renders what changed and recuts. Coverage is
 in `ui/tests/seriesShotEditWizard.test.ts` and `tests/test_series_shot_edit.py`.
+`series.shots.record_line_voice` (`regenerate_series_line_voice`, confirm=true)
+records one line of a shot now through `seriesShots.voice`, the route behind the MCP
+tool `series.shot.voice`: the same speech path as the server render, so the next render
+of the shot reuses the recording; `retake` records another take and replaces the old one
+only when it is good. The shot inspector's Dialogue part (Record voice, New take) calls
+the same route. Coverage is in `ui/tests/seriesShotEditWizard.test.ts` and
+`tests/test_series_line_voice.py`.
 
 ## Media tools
 

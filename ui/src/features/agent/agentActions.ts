@@ -24,7 +24,7 @@ import {
   type ConfiguredStorySongIdentity,
 } from './storyWorkflowIdentity'
 import type { AgentProductionWorksAction } from './productionWorkCapabilities'
-import type { AgentEditSeriesShotAction, AgentRerenderSeriesShotAction } from './seriesShotEditCapabilities'
+import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentRerenderSeriesShotAction } from './seriesShotEditCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type {
@@ -636,6 +636,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentProductionWorksAction
   | AgentEditSeriesShotAction
   | AgentRerenderSeriesShotAction
+  | AgentRecordSeriesLineAction
   | AgentMediaToolAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction

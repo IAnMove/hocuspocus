@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import * as api from '../../api/client'
 import { emptySeriesLibrary, normalizeSeriesLibrary, normalizeSeriesProject } from './model'
 import type { SeriesEpisode, SeriesJobStatus, SeriesLibrary, SeriesProject, SeriesReviewChange, SeriesReviewReply } from './types'
+import { editSeriesShot, type SeriesShotEditBody, type SeriesShotEditReply } from '../../api/seriesShotInspector'
 import { mergeSeriesReferenceImport, type SeriesReferenceImport } from './referenceImages'
 
 const activeKey = (workspace: string): string => `maestro-series-lab-active:${workspace}`
@@ -31,6 +32,10 @@ interface SeriesState {
   saveNow: () => Promise<SeriesProject | null>
   /** Send one review change (mode, approvals, notes) after pending edits; merges the server's review without losing edits. */
   saveReview: (episodeId: string, change: SeriesReviewChange) => Promise<SeriesReviewReply>
+  /** Edit one shot on the server (series.shot.update) after pending edits; merges the stored shot, review and versions. */
+  editShot: (episodeId: string, body: SeriesShotEditBody) => Promise<SeriesShotEditReply>
+  /** An episode the server just wrote (a take approved) and the series revision it left. */
+  acceptEpisode: (seriesId: string, episode: SeriesEpisode, revision: number) => void
   newSeries: () => Promise<void>
   newSeriesFromTemplate: (templateId: string, language: 'es' | 'en') => Promise<void>
   duplicateSeries: (seriesId?: string) => Promise<void>
@@ -84,6 +89,20 @@ function withReview(series: SeriesProject, reply: SeriesReviewReply): SeriesProj
     ...series, revision: reply.revision,
     episodesById: { ...series.episodesById, [reply.episodeId]: { ...episode, review: reply.review, updatedAt: reply.episodeUpdatedAt || episode.updatedAt } },
   }
+}
+
+/** The series with one shot as the server stored it after an edit, the episode's new review and versions; the rest kept. */
+function withShotEdit(series: SeriesProject, reply: SeriesShotEditReply): SeriesProject {
+  const stored = reply.stored
+  const episode = stored && series.episodesById[stored.episodeId]
+  if (!stored || !episode) return { ...series, revision: reply.revision }
+  const next: SeriesEpisode = {
+    ...episode, shots: episode.shots.map(shot => shot.id === stored.shot.id ? stored.shot : shot),
+    updatedAt: stored.episodeUpdatedAt || episode.updatedAt,
+  }
+  if (stored.review) next.review = stored.review; else delete next.review
+  if (stored.languageVersions) next.languageVersions = stored.languageVersions
+  return { ...series, revision: reply.revision, episodesById: { ...series.episodesById, [stored.episodeId]: next } }
 }
 
 /** Add a series the server just created to the library and open it. */
@@ -331,6 +350,43 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
       await saveInFlight
       if (get().dirty) void get().saveNow().catch(() => { /* Store exposes the save error. */ })
     }
+  },
+
+  editShot: async (episodeId, body) => {
+    await get().saveNow()
+    const state = get()
+    const project = selectedSeries(state)
+    if (!project?.episodesById[episodeId]) throw new Error('Series episode not found')
+    const projectId = project.id
+    const request = editSeriesShot(state.workspace, projectId, episodeId, body).then(reply => {
+      const latest = get()
+      const current = latest.library.seriesById[projectId]
+      if (current) set({
+        library: { ...latest.library, seriesById: { ...latest.library.seriesById, [projectId]: withShotEdit(current, reply) } },
+        serverRevision: latest.activeSeriesId === projectId ? reply.revision : latest.serverRevision,
+      })
+      return reply
+    })
+    // Like a review change: the save slot is held so an autosave does not send the revision this edit replaces.
+    set({ saving: true })
+    saveInFlight = request.then(() => get().library.seriesById[projectId] || null, () => get().library.seriesById[projectId] || null)
+      .finally(() => { set({ saving: false }); saveInFlight = null })
+    try { return await request }
+    finally {
+      await saveInFlight
+      if (get().dirty) void get().saveNow().catch(() => { /* Store exposes the save error. */ })
+    }
+  },
+
+  acceptEpisode: (seriesId, episode, revision) => {
+    const latest = get()
+    const current = latest.library.seriesById[seriesId]
+    if (!current) return
+    set({
+      library: { ...latest.library, seriesById: { ...latest.library.seriesById, [seriesId]: {
+        ...current, revision, episodesById: { ...current.episodesById, [episode.id]: episode } } } },
+      serverRevision: latest.activeSeriesId === seriesId ? revision : latest.serverRevision,
+    })
   },
 
   newSeries: async () => {
