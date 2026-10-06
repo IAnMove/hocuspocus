@@ -293,3 +293,82 @@ def test_background_without_loop_skips_the_heal(tmp_path):
     assert keyed["input"]["source"] == "band.png"
     assert _alpha(workspace, "layer-1.png")[-1].min() == 255
     assert REGISTRY["background"].estimate(game, asset) == {"image": 2}
+
+
+# kind -> (asset id, spec, simulated outputs per candidate, step names and painted seeds of one candidate)
+_CANDIDATE_CASES = {
+    "tile": ("hierba", {"sizePx": 16, "seed": 3}, ("periodic", "periodic"), ["texture", "seam"], [3]),
+    "tileset": ("suelo", {"sizePx": 16, "seed": 5}, ("grid", "periodic"), ["chunk", "key", "seam"], [5]),
+    "background": (
+        "fondo", {"layers": 2, "widthPx": 64, "heightPx": 32, "method": "separate", "seed": 2}, ("flat",) * 4,
+        ["layer-0", "seam-0", "layer-1", "seam-1", "key-1"], [2, 3],
+    ),
+}
+
+
+def _produce(workspace, kind, candidates):
+    """Run ``kind`` with ``candidates`` (``None`` leaves it unset) on simulated images."""
+    workspace.mkdir(parents=True)
+    _periodic(workspace / "periodic.png")
+    _grid(workspace / "grid.png")
+    _flat(workspace / "flat.png")
+    asset_id, spec, outputs, _steps, _seeds = _CANDIDATE_CASES[kind]
+    asset = {"id": asset_id, "kind": kind, "description": "forest", "spec": dict(spec), "attempts": []}
+    if candidates is not None:
+        asset["candidates"] = candidates
+    game = {"id": "bosque", "style": _style(), "assets": [asset]}
+    fake = Fake([str(workspace / f"{name}.png") for name in outputs] * (candidates or 1))
+    return game, asset, fake, REGISTRY[kind].run(_ctx(workspace, game, asset, fake))
+
+
+def _step_names(fake, asset_id):
+    prefix = f"game-bosque-{asset_id}-a1-"
+    return [args["intent_id"][len(prefix):] for _tool, args in fake.calls if "intent_id" in args]
+
+
+def _painted_seeds(fake):
+    return [args["input"]["params"]["seed"] for args in _images(fake) if "image_guide" not in args["input"]["params"]]
+
+
+@pytest.mark.parametrize("kind", sorted(_CANDIDATE_CASES))
+def test_two_candidates_paint_apart_with_their_own_folder_seed_and_steps(tmp_path, kind):
+    workspace = tmp_path / "ws"
+    game, asset, fake, result = _produce(workspace, kind, 2)
+    asset_id, _spec, _outputs, single_steps, single_seeds = _CANDIDATE_CASES[kind]
+    assert result.metrics["attemptIds"] == ["a1-a1", "a1-a2"]
+    listed = result.metrics["candidates"]
+    assert [item["id"] for item in listed] == ["a1-a1", "a1-a2"]
+    assert result.files == listed[0]["files"]
+    for index, item in enumerate(listed, start=1):
+        folder = workspace / "game" / "bosque" / asset_id / "a1" / f"a{index}"
+        assert item["files"]
+        assert all((workspace / path).is_file() and (workspace / path).parent == folder for path in item["files"].values())
+    assert set(listed[0]["files"].values()).isdisjoint(listed[1]["files"].values())
+    steps = _step_names(fake, asset_id)
+    assert steps == single_steps + [f"{name}-c2" for name in single_steps]
+    assert len(set(steps)) == len(steps)
+    seeds = _painted_seeds(fake)
+    assert seeds == single_seeds + [seed + 1000 for seed in single_seeds]
+    assert len(set(seeds)) == len(seeds)
+    for args in _images(fake):
+        guide = args["input"]["params"].get("image_guide")
+        if guide:
+            expected = "/a1/a2/" if args["intent_id"].endswith("-c2") else "/a1/a1/"
+            assert expected in unquote(urlsplit(guide).path)
+    single = REGISTRY[kind].estimate(game, {**asset, "candidates": 1})
+    assert REGISTRY[kind].estimate(game, asset) == {"image": 2 * single["image"]}
+
+
+@pytest.mark.parametrize("kind", sorted(_CANDIDATE_CASES))
+def test_one_candidate_keeps_the_single_attempt_layout(tmp_path, kind):
+    asset_id, _spec, _outputs, single_steps, single_seeds = _CANDIDATE_CASES[kind]
+    runs = {}
+    for label, candidates in (("unset", None), ("one", 1)):
+        game, asset, fake, result = _produce(tmp_path / label, kind, candidates)
+        assert _step_names(fake, asset_id) == single_steps
+        assert _painted_seeds(fake) == single_seeds
+        assert "candidates" not in result.metrics
+        assert result.metrics["attemptIds"] == ["a1"]
+        assert all(Path(path).parent == Path("game", "bosque", asset_id, "a1") for path in result.files.values())
+        runs[label] = (result.files, REGISTRY[kind].estimate(game, asset))
+    assert runs["unset"] == runs["one"]
