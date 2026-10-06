@@ -43,7 +43,11 @@ def test_the_presets_and_what_each_plans():
             ring = rooms.ring_seconds(preset)
             assert 0 < ring <= MAX_RING
             assert f"apad=pad_dur={ring:.3f}" in graph and f"volume={room.wet}dB[wet]" in graph
-            assert "afir=gtype=none:irnorm=-1" in graph, "the impulse response is used as generated, at unit energy"
+            makeup = 20 * math.log10(float(np.sum(np.abs(rooms.impulse_response(preset)))))
+            assert rooms.ir_makeup_db(preset) == pytest.approx(makeup) and makeup > 0
+            assert f"afir,volume={makeup:.6f}dB" in graph, \
+                "afir's default division by the sum of the taps is given back: the response is used at unit energy"
+            assert "gtype" not in graph and "irnorm" not in graph, "ffmpeg 6.x has no irnorm and 7.0 and later ignore gtype"
             assert f"areverse,afade=t=in:d={ring * rooms.FADE_SHARE:.3f}:curve=qsin,areverse[out]" in graph, "the ring fades out"
         else:
             assert "afir" not in graph and "apad" not in graph
@@ -78,7 +82,7 @@ def test_the_places_are_felt_under_the_voice_not_in_front_of_it():
     for preset, room in ROOMS.items():
         graph = room_filter(preset)
         if room.band != (0.0, 0.0):
-            assert f"afir=gtype=none:irnorm=-1{rooms.wet_band(room)},volume={room.wet}dB[wet]" in graph, "the band is on the room alone"
+            assert f"dB{rooms.wet_band(room)},volume={room.wet}dB[wet]" in graph, "the band is on the room alone"
     assert rooms.wet_band(ROOMS["cathedral"]) == ",highpass=f=350:poles=2,lowpass=f=4000:poles=2"
     assert rooms.wet_band(ROOMS["outdoor"]) == ",highpass=f=200:poles=2" and rooms.wet_band(ROOMS["cockpit"]) == ""
 
@@ -593,6 +597,8 @@ def test_every_place_is_felt_but_keeps_the_voice_clear(tmp_path):
         c50, direct_to_room = 10 * math.log10(early / (float(np.sum(response)) - early)), 10 * math.log10(direct / (float(np.sum(response)) - direct))
         assert c50 >= 18, f"{preset}: the words stay clear ({c50:.1f} dB)"
         assert direct_to_room <= 25, f"{preset}: and the room is still there ({direct_to_room:.1f} dB under the voice)"
+        assert abs(direct_to_room + ROOMS[preset].wet) < 3, \
+            f"{preset}: at its own level ({direct_to_room:.1f} dB under), as the band and the tone leave it: the response is at unit energy"
 
 
 @needs_ffmpeg

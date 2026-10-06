@@ -16,10 +16,12 @@ seconds, faded out.
 The processing is ffmpeg only and deterministic. A preset is a short generated impulse response (early reflections
 and a decaying noise tail, darker as it dies; ``impulse_response``, cached as a wav) convolved with ``afir``,
 band-limited and mixed well under the dry voice, then a tone filter (low cut, EQ, distortion for the radio). The copy
-is levelled to the dry line's loudness, so a room never makes a voice louder or quieter.
+is levelled to the dry line's loudness, so a room never makes a voice louder or quieter. The graph uses only what
+ffmpeg 6.0 and later all have and do alike (``ir_makeup_db``).
 """
 from __future__ import annotations
 
+import functools
 import math
 import os
 import shutil
@@ -185,11 +187,24 @@ def wet_band(room: Room) -> str:
     return "".join(f",{kind}=f={value:g}:poles=2" for kind, value in (("highpass", low), ("lowpass", high)) if value)
 
 
+@functools.lru_cache(maxsize=None)
+def ir_makeup_db(preset: str) -> float:
+    """The gain in dB that gives back what ``afir`` takes off the preset's impulse response.
+
+    ``afir`` divides a response by the sum of its absolute taps unless it is told not to, and the option that tells
+    it changed: ``gtype=none`` up to ffmpeg 6.1, ``irnorm=-1`` from 7.0 (6.x refuses ``irnorm``, 7.0 and later
+    ignore ``gtype``). The default is the same on every version, so the graph keeps it and gains the sum back: the
+    response is convolved as generated, at unit energy, to within a thousandth of a dB (ffmpeg sums the taps in
+    float)."""
+    import numpy as np
+    return 20 * math.log10(float(np.sum(np.abs(impulse_response(preset)))))
+
+
 def room_filter(preset: str) -> str:
     """The ffmpeg graph of a preset: input 0 is the dry line and, when the preset has a tail, input 1 its impulse
     response (``impulse_response``, unit energy); output ``[out]``. The line is padded by the ring, mixed with its
-    convolved copy band-limited (``band``) and ``wet`` dB down, toned, and the ring is faded out over the last
-    ``FADE_SHARE`` of it."""
+    convolved copy (``ir_makeup_db``) band-limited (``band``) and ``wet`` dB down, toned, and the ring is faded out
+    over the last ``FADE_SHARE`` of it."""
     room = ROOMS[preset]
     head = f"[0:a]aresample={RATE},aformat=sample_fmts=fltp:channel_layouts=mono"
     if not has_tail(room):
@@ -197,7 +212,7 @@ def room_filter(preset: str) -> str:
     ring = ring_seconds(preset)
     fade = round(ring * FADE_SHARE, 3)
     return (f"{head},apad=pad_dur={ring:.3f},asplit=2[dry][src];"
-            f"[src][1:a]afir=gtype=none:irnorm=-1{wet_band(room)},volume={room.wet}dB[wet];"
+            f"[src][1:a]afir,volume={ir_makeup_db(preset):.6f}dB{wet_band(room)},volume={room.wet}dB[wet];"
             f"[dry][wet]amix=inputs=2:normalize=0:duration=longest,{room.tone},"
             f"areverse,afade=t=in:d={fade:.3f}:curve=qsin,areverse[out]")
 
