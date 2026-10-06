@@ -69,9 +69,11 @@ read-only against that production and against copies of its artifacts on a devel
   `approvedLanguage`. MCP tools that run through the app's routes send `X-Hocus-Actor`, and
   `ActorHeaderMiddleware` puts it in the caller scope, so `current_actor()` names the agent in the
   route. The Wizard's approvals declare `X-Hocus-UI-Surface: wizard`. Render & Review shows "by an
-  agent", "by the Wizard" or "automatically by the render" on the decision. Music production
-  reviews record `decidedBy` / `decidedAt`, and the artistic verdict's `source` is `human`,
-  `agent` or `mixed` (it was always `human`).
+  agent", "by the Wizard" or "automatically by the render" on the decision. The staged review's
+  plan and preview decisions record `planBy` / `previewBy` with the same words, a note without
+  an author is the decider's, and the Validation cards show it. Music production reviews record
+  `decidedBy` / `decidedAt`, and the artistic verdict's `source` is `human`, `agent` or `mixed`
+  (it was always `human`).
 - **Exports name the scene they rendered.** `scenes.document.save` and the Video 3D save record
   the digest of the document as the exporter normalizes it (`services/scene_links.py`,
   `.scene-digests-v1.json`). When a Video 2D or 3D export finishes, that digest finds the saved
@@ -139,6 +141,7 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record; warp mouths also `kit-*-<pose>-mouth-*.png` in `anchors.<pose>.mouthSources` | Kit face rig, trail | Anchors editable (face rig panel); a warp pose's mouth line in the Face Rig's Mouth line editor | Every PNG has a sidecar (kit, role, style, hints, pose sources as parents); kit record and trail | ✅ (the PNGs still show in the gallery) |
 | `lips.*` | `.lips-creator-library-v1.json` | Lips Creator, trail | Yes | Trail | ✅ |
 | `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail (the Wizard's changes too) | Series Lab | Trail. No creator on the record; translations are not marked as machine-made | ✅ via the trail |
+| `series.episode.review.set` / `series.shot.review.set` | `episode.review` in `.series-library-v1.json` | Series Lab **Validation**, trail | Series Lab | `planBy`, `previewBy` and each note's `by` (`user`, `agent`, `wizard`, `server`), shown on the cards | ✅ |
 | `series.asset.import` (`as_take`), `series.take.approve` | `assets/<series>/asset_*` copy + take | Series Lab only, trail | Series Lab (see the per-shot review work) | The take's `approvedBy` (`user`, `agent`, `wizard` or `server` for a render's own approval), shown in Render & Review | ✅ fixed here |
 | `series.episode.render_native` / `produce` | Jobs in `.series-jobs-v1/`, per-shot scene documents, takes and lines | Series Lab, gallery (scenes and videos), trail | Scenes open in their editors; videos have **Edit scene** | Trail for the call. The render's own steps are not agent work | ✅ fixed here (lines keep their sidecar). Productions are listed in Render & Review with steps, chapters, stop and resume |
 | `series.location.plate3d` | Plate video + `layout2d.plate3d` | Series Lab location | An inline source document is not saved as a scene | Intent only | ⚠️ |
@@ -172,20 +175,16 @@ a montage first. The following results still live only in the browser until the 
 Done in the second pass: Wizard rows, agent origin and audio style/voice in the gallery details,
 readable published names, export previews and the Open dialog's working scenes, Video 2D export
 names and the saved scene in the sidecar, montage links (and the Wizard saving its draft), the
-`audio.shorten` and flat-rig sidecars, take and production-review deciders, and the list of
-productions. Still open:
+`audio.shorten` and flat-rig sidecars, take, staged-review and production-review deciders, and the
+list of productions. Still open:
 
 1. **Previews of scenes that were never exported.** An agent's scene gets a real preview from its
    first export. Before that it keeps the placeholder: a still from the headless renderer would
    take the export lane on every save.
-2. **The staged review's decisions.** The plan and preview decisions of the staged Series review
-   (`series.episode.review.set`, PR #879) should record who decided (`planBy`, `previewBy`) with
-   the same vocabulary as `approvedBy`, read from `current_actor()`; its notes' `by` should accept
-   `wizard` and `server`.
-3. **Who made the series records.** Mark machine translations, and keep the original script of
+2. **Who made the series records.** Mark machine translations, and keep the original script of
    `from_script`.
-4. **Publications.** Link a music production's published page from its card.
-5. **Gallery listing.** The gallery badges agent work once a card loads its sidecar; the listing
+3. **Publications.** Link a music production's published page from its card.
+4. **Gallery listing.** The gallery badges agent work once a card loads its sidecar; the listing
    API could carry `origin` so filters and the grid view can use it.
 
 ## Tests

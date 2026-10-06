@@ -37199,6 +37199,11 @@ from routers.series_language_versions import create_series_language_versions_rou
 api.include_router(create_series_language_versions_router(
     change_episode=_change_series_episode, read_episode=_read_series_episode, translate=_translate_series_version,
 ))
+from routers.series_review import create_series_review_router
+api.include_router(create_series_review_router(
+    resolve_workspace=_series_library_workspace, lock=_series_library_lock, read_library=_read_series_workspace,
+    write_library=_write_series_workspace, iso_now=_series_iso_now,
+))
 
 
 def _character_kit_for_scene(workspace: str, kit_id: str) -> dict | None:
@@ -37238,7 +37243,7 @@ from routers.series_produce import create_series_produce_router
 api.include_router(create_series_produce_router(
     SeriesProduce(ProduceDeps(call=_local_mcp.call, workspace_dir=_workspace_dir,
                               read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
-                              stale_shots=_series_native_render.stale_shots)),
+                              stale_shots=_series_native_render.stale_shots, review_blockers=_series_native_render.review_blockers)),
     call=_local_mcp.call, bind_loop=_local_mcp.bind_loop,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,

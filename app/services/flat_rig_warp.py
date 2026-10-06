@@ -12,6 +12,10 @@ edge where nothing moves.
 The mouth line is placed from (in this order) a hint point, the DWPose outer-lip points, or the rig's painted mouth,
 then snapped onto the darkest thin stroke along it (a pen line between the lips, light above and below): a nose fold
 or a moustache's edge is dark on one side only, or runs across the line, and is never taken.
+
+A small face (a full figure's, ``face_enlarge.SMALL_HEAD``) is enlarged first: the line is snapped and the states are
+warped on the enlarged face, then each is brought back to the pose's pixels (``face_enlarge.put_back``). Each opening
+also drops at least a few pose pixels (``READABLE``), so it still reads when the figure is drawn small.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from services import face_enlarge
 from services.flat_rig_base import INK, SPRITE, STATES, _anchor
 from services.flat_rig_ink import INK_SPAN
 
@@ -46,6 +51,13 @@ RIDGE = 0.1
 # Below this score the landmarks' lips were half guessed (a mouth under a moustache seen from below scores 0.39): the
 # line they place is reported as unsure.
 SURE_LIPS = 0.5
+# The least depth of the widest opening, in pose pixels: a full figure in a wide shot is drawn at about half its pixels,
+# and under ~4 output pixels an "a" reads as a closed mouth. The other openings' least depths are in proportion (at
+# least 2 px), and none is ever more than OVERDRAW times the state's own drop, so a tiny face does not shout. A bust's
+# mouth (55 px and up) drops more than this anyway.
+READABLE, OVERDRAW = 9, 1.5
+# The enlarged face reaches this many pose pixels past what is worked on: Lanczos needs the pixels round its edge.
+MARGIN = 4
 
 
 @dataclass
@@ -71,6 +83,12 @@ class MouthLine:
         clipped = np.clip(x, self.x0, self.x1)
         slope = np.polyval(np.polyder(self.poly), clipped) if len(self.poly) > 1 else np.zeros_like(clipped)
         return np.polyval(self.poly, clipped) + np.clip(slope, -0.5, 0.5) * (x - clipped)
+
+    def affine(self, scale: float, dx: float, dy: float) -> MouthLine:
+        """The same line where every point moves to ``(scale x + dx, scale y + dy)`` (``face_enlarge.view_affine``)."""
+        inner = np.poly1d([1 / scale, -dx / scale])
+        poly = (scale * np.poly1d(self.poly)(inner) + dy).coeffs
+        return MouthLine(np.asarray(poly, float), self.x0 * scale + dx, self.x1 * scale + dx, self.found, self.source)
 
 
 # The line -------------------------------------------------------------------
@@ -107,13 +125,14 @@ def _skin_level(lum: np.ndarray, line: MouthLine) -> float:
     return float(np.percentile(window, 60)) if window.size else 255.0
 
 
-def snap_line(rgba: np.ndarray, seed: MouthLine, up: float, down: float, tilt: float = 0.0) -> MouthLine:
+def snap_line(rgba: np.ndarray, seed: MouthLine, up: float, down: float, tilt: float = 0.0, px: int = 1) -> MouthLine:
     """The seed moved onto the painted line near it: the thin dark stroke (``_ridge``) best followed by the seed's
     curve shifted ``up``..``down`` mouth widths (and tilted up to ``tilt``), over the middle of the mouth; then fitted
-    to that stroke column by column. The seed unchanged (not found) when no stroke is dark enough there."""
+    to that stroke column by column. The seed unchanged (not found) when no stroke is dark enough there. ``px``: image
+    pixels per pose pixel (an enlarged face), for the few lengths that are pixels, not mouth widths."""
     lum = _luma(rgba)
-    width = max(4.0, seed.width)
-    ridge = _ridge(lum, max(2, round(width * 0.06)))
+    width = max(4.0 * px, seed.width)
+    ridge = _ridge(lum, max(2 * px, round(width * 0.06)))
     skin = max(40.0, _skin_level(lum, seed))
     cx, _cy = seed.centre
     xs = np.arange(int(round(cx - width * 0.35)), int(round(cx + width * 0.35)) + 1)
@@ -134,7 +153,7 @@ def snap_line(rgba: np.ndarray, seed: MouthLine, up: float, down: float, tilt: f
     # Column by column along the whole mouth, the darkest stroke row within a few pixels of the best curve.
     cols = np.arange(int(round(seed.x0)), int(round(seed.x1)) + 1)
     near = seed.y(cols.astype(float)) + shift + slope * (cols - cx)
-    reach = max(2, round(width * 0.05))
+    reach = max(2 * px, round(width * 0.05))
     offsets = np.arange(-reach, reach + 1)
     rows = np.clip(np.rint(near).astype(int)[None, :] + offsets[:, None], 0, lum.shape[0] - 1)
     found = ridge[rows, np.clip(cols, 0, lum.shape[1] - 1)[None, :]]
@@ -169,27 +188,28 @@ def _flat(cx: float, cy: float, width: float, source: str, slope: float = 0.0) -
     return MouthLine(np.array([slope, cy - slope * cx]), cx - width / 2, cx + width / 2, False, source)
 
 
-def mouth_line(rgba: np.ndarray, *, point=None, width=None, lips=None, painted=None) -> MouthLine:
+def mouth_line(rgba: np.ndarray, *, point=None, width=None, lips=None, painted=None, px: int = 1) -> MouthLine:
     """Where the lips meet, in figure pixels. ``point`` (a hint on the line) wins and is only snapped a little;
     ``width`` (a hint) sets the corners; ``lips`` are the landmarks' outer-lip points; ``painted`` is ``(cx, cy,
-    width)`` of the mouth the rig found or guessed, the last resort."""
+    width)`` of the mouth the rig found or guessed, the last resort. ``px`` as for ``snap_line``."""
     seeded = lips_line(lips) if lips is not None else None
     if point is not None:
-        px, py = float(point[0]), float(point[1])
-        span = float(width or (seeded.width if seeded else (painted[2] if painted else 40.0)))
+        hx, hy = float(point[0]), float(point[1])
+        span = float(width or (seeded.width if seeded else (painted[2] if painted else 40.0 * px)))
         if seeded:
             # The landmarks' bend and slant, moved to pass through the hint.
-            shifted = MouthLine(seeded.poly.copy(), px - span / 2, px + span / 2, False, "hint")
-            shifted.poly[-1] += py - float(seeded.y(np.array([px]))[0])
-            return snap_line(rgba, shifted, 0.08, 0.08)
-        return snap_line(rgba, _flat(px, py, span, "hint"), 0.08, 0.08, tilt=0.4)
+            shifted = MouthLine(seeded.poly.copy(), hx - span / 2, hx + span / 2, False, "hint")
+            shifted.poly[-1] += hy - float(seeded.y(np.array([hx]))[0])
+            return snap_line(rgba, shifted, 0.08, 0.08, px=px)
+        return snap_line(rgba, _flat(hx, hy, span, "hint"), 0.08, 0.08, tilt=0.4, px=px)
     if seeded:
         if width:
             cx, _ = seeded.centre
             seeded = MouthLine(seeded.poly, cx - width / 2, cx + width / 2, False, "landmarks")
-        return snap_line(rgba, seeded, 0.3, 0.25, tilt=0.08)
-    cx, cy, span = painted if painted else (rgba.shape[1] / 2, rgba.shape[0] / 2, 40.0)
-    return snap_line(rgba, _flat(cx, cy, float(width or span), "painted" if painted else "guess"), 0.12, 0.12, tilt=0.4)
+        return snap_line(rgba, seeded, 0.3, 0.25, tilt=0.08, px=px)
+    cx, cy, span = painted if painted else (rgba.shape[1] / 2, rgba.shape[0] / 2, 40.0 * px)
+    return snap_line(rgba, _flat(cx, cy, float(width or span), "painted" if painted else "guess"), 0.12, 0.12, tilt=0.4,
+                     px=px)
 
 
 # The warp -------------------------------------------------------------------
@@ -209,13 +229,25 @@ def _jaw_profile(u: np.ndarray) -> np.ndarray:
     return 0.5 * (1 + np.cos(np.pi * np.clip((np.abs(u) - JAW_FLAT) / (1 - JAW_FLAT), 0, 1)))
 
 
+def drop_pixels(state: str, width: float) -> int:
+    """How far a state's jaw drops, in whole pose pixels, for a mouth ``width`` pose pixels wide (``READABLE``)."""
+    drop, share = WARP_STATES[state][:2]
+    own = drop * width
+    if drop <= 0 or not share:
+        return round(own)
+    least = max(2.0, READABLE * drop / WARP_STATES["wide"][0])
+    return round(max(own, min(least, own * OVERDRAW)))
+
+
 def patch_box(line: MouthLine) -> tuple[int, int, int]:
     """The square ``(x0, y0, side)`` that holds everything a state moves, plus its faded edge."""
     cx, _cy = line.centre
     width = line.width
     reach = JAW_HALF * width
     top = float(line.y(np.linspace(cx - 0.95 * width, cx + 0.95 * width, 33)).min()) - ABOVE * width
-    bottom = float(line.y(np.linspace(cx - reach, cx + reach, 33)).max()) + (CHIN + FALL) * width
+    # A drop raised to READABLE blends over more than CHIN (``_field``): the square reaches down to where it is still.
+    chin = max(CHIN * width, 4.0 * max(abs(drop_pixels(state, width)) for state in WARP_STATES))
+    bottom = float(line.y(np.linspace(cx - reach, cx + reach, 33)).max()) + chin + FALL * width
     tall, wide = bottom - top, reach * 2
     side = int(math.ceil(max(tall, wide) / (1 - 2 * FEATHER))) + 4
     return int(round(cx - side / 2)), int(round((top + bottom) / 2 - side / 2)), side
@@ -250,7 +282,7 @@ class _Field:
     opening: np.ndarray
 
 
-def _field(line: MouthLine, box: tuple[int, int, int], state: str) -> _Field:
+def _field(line: MouthLine, box: tuple[int, int, int], state: str, px: int = 1) -> _Field:
     drop, share, pinch, _teeth = WARP_STATES[state]
     x0, y0, side = box
     width = line.width
@@ -260,8 +292,8 @@ def _field(line: MouthLine, box: tuple[int, int, int], state: str) -> _Field:
     yy += y0
     lip = line.y(xx[0]).astype(np.float32)[None, :]
     below = yy - lip
-    # A whole number of pixels: where the jaw moves whole its pixels are copied as they are, not resampled.
-    full = float(round(drop * width))
+    # A whole number of pose pixels: where the jaw moves whole its pixels are copied as they are, not resampled.
+    full = float(px * drop_pixels(state, width / px))
     jaw = full * _jaw_profile((xx[0] - cx) / (JAW_HALF * width))[None, :]
     half = max(1.0, share * width / 2)
     opening = (full * _opening((xx[0] - cx) / half, _BELLY.get(state, 1.0)) * (np.abs(xx[0] - cx) < half))[None, :] \
@@ -303,6 +335,24 @@ def _paint_mouth(rgb: np.ndarray, field: _Field, line: MouthLine, box, state: st
     return rgb * (1 - cover) + paint * cover
 
 
+def _warped(rgba: np.ndarray, line: MouthLine, state: str, ink, skin, box: tuple[int, int, int], px: int = 1):
+    """One open state over the ``box`` square before its edge fades: its colour, its alpha, where it differs from the
+    drawing, and its field."""
+    x0, y0, side = box
+    field = _field(line, box, state, px)
+    # Premultiplied, so the transparent background's colour never bleeds into the moved outline.
+    pixels = _crop(rgba, x0, y0, side).astype(np.float32)
+    pixels[..., :3] *= pixels[..., 3:] / 255
+    grid_y, grid_x = np.mgrid[0:side, 0:side].astype(np.float32)
+    moved = cv2.remap(pixels, grid_x + field.dx, grid_y - field.dy, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    moved = np.clip(moved, 0, 255)
+    alpha = moved[..., 3]
+    rgb = np.where(alpha[..., None] > 0, moved[..., :3] * 255 / np.maximum(alpha[..., None], 1e-3), 0)
+    rgb = _paint_mouth(rgb, field, line, box, state, ink, skin)
+    changed = (np.abs(field.dy) > 1e-3) | (np.abs(field.dx) > 1e-3) | (field.gap > 0)
+    return rgb, np.maximum(alpha, field.gap * 255), changed, field
+
+
 def warp_state(rgba: np.ndarray, line: MouthLine, state: str, ink=INK, skin=(200, 160, 130),
                box: tuple[int, int, int] | None = None) -> Image.Image:
     """One state's patch (``patch_box`` square, RGBA). Pixels that do not move keep the drawing exactly; where the
@@ -318,21 +368,24 @@ def warp_state(rgba: np.ndarray, line: MouthLine, state: str, ink=INK, skin=(200
         out = original.copy()
         out[..., 3] = np.round(feather * opaque * 255).astype(np.uint8)
         return Image.fromarray(out)
-    field = _field(line, box, state)
-    # Premultiplied, so the transparent background's colour never bleeds into the moved outline.
-    pixels = original.astype(np.float32)
-    pixels[..., :3] *= pixels[..., 3:] / 255
-    grid_y, grid_x = np.mgrid[0:side, 0:side].astype(np.float32)
-    moved = cv2.remap(pixels, grid_x + field.dx, grid_y - field.dy, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-    moved = np.clip(moved, 0, 255)
-    alpha = moved[..., 3]
-    rgb = np.where(alpha[..., None] > 0, moved[..., :3] * 255 / np.maximum(alpha[..., None], 1e-3), 0)
-    rgb = _paint_mouth(rgb, field, line, box, state, ink, skin)
-    alpha = np.maximum(alpha, field.gap * 255)
-    changed = (np.abs(field.dy) > 1e-3) | (np.abs(field.dx) > 1e-3) | (field.gap > 0)
+    rgb, alpha, changed, _ = _warped(rgba, line, state, ink, skin, box)
     alpha = np.where(changed, alpha, opaque * 255.0) * feather
     out = np.dstack([np.clip(np.round(rgb), 0, 255), np.clip(np.round(alpha), 0, 255)]).astype(np.uint8)
     return Image.fromarray(out)
+
+
+def enlarged_state(rgba: np.ndarray, line: MouthLine, state: str, ink, skin, box: tuple[int, int, int], k: int) -> Image.Image:
+    """``warp_state`` worked on the face enlarged ``k`` times and brought back to the pose's pixels: the same patch
+    square, smoother falloff and opening edges, and ``closed`` still the drawing unchanged."""
+    if state == "closed" or k == 1:
+        return warp_state(rgba, line, state, ink, skin, box)
+    x0, y0, side = box
+    origin = (x0 - MARGIN, y0 - MARGIN)
+    big = face_enlarge.enlarge(rgba, *origin, side + 2 * MARGIN, side + 2 * MARGIN, k)
+    rgb, alpha, changed, field = _warped(big, line.affine(*face_enlarge.view_affine(origin, k)), state, ink, skin,
+                                         (MARGIN * k, MARGIN * k, side * k), k)
+    pure = (np.abs(field.dx) < 1e-3) & (field.gap <= 0)
+    return Image.fromarray(face_enlarge.put_back(rgba, box, k, rgb, alpha, changed, field.dy, pure, _feather(side)))
 
 
 def line_ink(rgba: np.ndarray, line: MouthLine, fallback=INK) -> tuple[int, ...]:
@@ -372,11 +425,12 @@ def face_colour(rgba: np.ndarray, line: MouthLine, fallback=(200, 160, 130)) -> 
 
 
 def pose_patches(rgba: np.ndarray, line: MouthLine, ink_fallback=INK, skin_fallback=(200, 160, 130),
-                 states=STATES) -> tuple[tuple[int, int, int], dict[str, Image.Image]]:
-    """The patch square and each state's patch, in the line's ink (or ``ink_fallback`` when no line was found)."""
+                 states=STATES, k: int = 1) -> tuple[tuple[int, int, int], dict[str, Image.Image]]:
+    """The patch square and each state's patch, in the line's ink (or ``ink_fallback`` when no line was found), worked
+    on the face enlarged ``k`` times (``enlarged_state``)."""
     box = patch_box(line)
     ink, skin = line_ink(rgba, line, ink_fallback), face_colour(rgba, line, skin_fallback)
-    return box, {state: warp_state(rgba, line, state, ink, skin, box) for state in states}
+    return box, {state: enlarged_state(rgba, line, state, ink, skin, box, k) for state in states}
 
 
 def line_hint(line: MouthLine, frame) -> dict[str, Any]:
@@ -388,9 +442,44 @@ def line_hint(line: MouthLine, frame) -> dict[str, Any]:
             "mouthWidth": round(float(line.width) / width * 100, 3), "found": bool(line.found), "from": line.source}
 
 
-def rig_line(rgba: np.ndarray, seeds: dict[str, Any], painted) -> MouthLine:
-    """The mouth line from a pose's seeds (``flat_rig.rig_pose`` ``seeds``: hint point and width, landmark lips)."""
-    return mouth_line(rgba, point=seeds.get("point"), width=seeds.get("width"), lips=seeds.get("lips"), painted=painted)
+def _seed(seeds: dict[str, Any], painted) -> tuple[float, float, float] | None:
+    """Where the line will be looked for, before snapping: ``(cx, cy, width)`` from the hint, the lips or the painted mouth."""
+    lips = lips_line(seeds["lips"]) if seeds.get("lips") is not None else None
+    width = seeds.get("width") or (lips.width if lips else (painted[2] if painted else None))
+    centre = seeds.get("point") or (lips.centre if lips else (painted[:2] if painted else None))
+    return (float(centre[0]), float(centre[1]), float(width or 40.0)) if centre is not None else None
+
+
+def face_scale(seeds: dict[str, Any], painted) -> tuple[int, dict[str, Any]]:
+    """How many times the pose's face is enlarged to warp it (``face_enlarge.factor``) and what is reported of it: the
+    head's size class and pixels (the landmarks', else guessed from the mouth), the landmark pass (``face_landmarks``)
+    and ``upscale``."""
+    face = seeds.get("face") or {}
+    seed = _seed(seeds, painted)
+    head = face.get("head") or (seed[2] * face_enlarge.HEAD_MOUTHS if seed else None)
+    # What is enlarged: the line's window (``rig_line``) and the patch square, a few mouth widths across.
+    k = face_enlarge.factor(head, 6 * seed[2] + 16) if seed else 1
+    return k, {"size": face_enlarge.size_class(head) if head else "normal", "head": round(float(head or 0)),
+               "pass": face.get("pass"), "upscale": k}
+
+
+def rig_line(rgba: np.ndarray, seeds: dict[str, Any], painted, k: int = 1) -> MouthLine:
+    """The mouth line from a pose's seeds (``flat_rig.rig_pose`` ``seeds``: hint point and width, landmark lips),
+    snapped on the face enlarged ``k`` times when ``k`` > 1."""
+    seed = _seed(seeds, painted) if k > 1 else None
+    if seed is None:
+        return mouth_line(rgba, point=seeds.get("point"), width=seeds.get("width"), lips=seeds.get("lips"), painted=painted)
+    cx, cy, width = seed
+    reach = int(math.ceil(width * 1.6)) + MARGIN
+    origin = (int(round(cx)) - reach, int(round(cy)) - reach)
+    big = face_enlarge.enlarge(rgba, *origin, 2 * reach + 1, 2 * reach + 1, k)
+
+    def view(points):
+        return None if points is None else face_enlarge.to_view(points, origin, k)
+    painted_view = (*view(painted[:2]), painted[2] * k) if painted else None
+    found = mouth_line(big, point=view(seeds.get("point")), width=seeds["width"] * k if seeds.get("width") else None,
+                       lips=view(seeds.get("lips")), painted=painted_view, px=k)
+    return found.affine(*face_enlarge.image_affine(origin, k))
 
 
 def painted_seed(rig: dict[str, Any]) -> tuple[float, float, float]:
@@ -412,11 +501,13 @@ def line_warnings(line: MouthLine, seeds: dict[str, Any]) -> list[str]:
 
 def rig_warp(rig: dict[str, Any]) -> dict[str, Any]:
     """One rigged pose's warp mouths: its nine patches, the mouth anchor (the patch square), the line in % of the pose
-    image (``line_hint``) and its warnings (``line_warnings``)."""
+    image (``line_hint``, with ``faceSize``: ``face_scale``'s report) and its warnings (``line_warnings``)."""
     figure = np.array(rig["image"].convert("RGBA"))
     width, height = rig["width"], rig["height"]
     seeds = rig.get("seeds") or {}
-    line = rig_line(figure, seeds, painted_seed(rig))
-    (x0, y0, side), sprites = pose_patches(figure, line, rig.get("ink") or INK, rig.get("skin") or (200, 160, 130))
-    return {"sprites": sprites, "mouth": _anchor(x0 + side / 2, y0 + side / 2, side, width, height),
-            "line": line_hint(line, rig["frame"]), "warnings": line_warnings(line, seeds)}
+    painted = painted_seed(rig)
+    k, face = face_scale(seeds, painted)
+    line = rig_line(figure, seeds, painted, k)
+    (x0, y0, side), sprites = pose_patches(figure, line, rig.get("ink") or INK, rig.get("skin") or (200, 160, 130), k=k)
+    return {"sprites": sprites, "mouth": _anchor(x0 + side / 2, y0 + side / 2, side, width, height), "face_size": face,
+            "line": {**line_hint(line, rig["frame"]), "faceSize": face}, "warnings": line_warnings(line, seeds)}

@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +18 recoverability follow-ups, 2026-10-06). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +14 with the flat rig's small faces, +19 recoverability follow-ups, 2026-10-06). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2702,
+      "weight": 2720,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -243,14 +243,16 @@
         "tests/test_local_mcp.py",
         "tests/test_agent_activity.py",
         "tests/test_recoverable_artifacts.py",
-        "tests/test_verify_clean_repo.py"
+        "tests/test_verify_clean_repo.py",
+        "tests/test_series_review.py",
+        "tests/test_series_review_router.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2709,
+      "weight": 2723,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -263,6 +265,7 @@
         "tests/test_flat_rig_realistic.py",
         "tests/test_flat_rig_guided.py",
         "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",
@@ -487,6 +490,7 @@
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
         "tests/test_llm_resilience.py",
+        "tests/test_series_review_gate.py",
         "tests/test_recoverability_followups.py"
       ]
     }
@@ -498,7 +502,8 @@
         "tests/test_flat_rig.py",
         "tests/test_flat_rig_realistic.py",
         "tests/test_flat_rig_guided.py",
-        "tests/test_flat_rig_warp.py"
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py"
       ]
     },
     {
@@ -583,20 +588,31 @@
       "prefix": "app/services/face_landmarks.py",
       "paths": [
         "tests/test_flat_rig_guided.py",
-        "tests/test_flat_rig_warp.py"
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py"
+      ]
+    },
+    {
+      "prefix": "app/services/face_enlarge.py",
+      "paths": [
+        "tests/test_flat_rig_small.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_guided.py"
       ]
     },
     {
       "prefix": "app/services/flat_rig_warp.py",
       "paths": [
         "tests/test_flat_rig_warp.py",
-        "tests/test_flat_rig.py"
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_small.py"
       ]
     },
     {
       "prefix": "app/services/flat_rig_preview.py",
       "paths": [
-        "tests/test_flat_rig_warp.py"
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py"
       ]
     },
     {
@@ -1540,6 +1556,18 @@
     {
       "prefix": "app/services/export_receipts.py",
       "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
+    },
+    {
+      "prefix": "app/services/series_review.py",
+      "paths": ["tests/test_series_review.py", "tests/test_series_review_gate.py", "tests/test_series_review_router.py"]
+    },
+    {
+      "prefix": "app/services/series_review_gate.py",
+      "paths": ["tests/test_series_review_gate.py", "tests/test_series_review.py"]
+    },
+    {
+      "prefix": "app/routers/series_review.py",
+      "paths": ["tests/test_series_review_router.py"]
     }
   ]
 }

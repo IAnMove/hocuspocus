@@ -21,10 +21,38 @@ lists the working scenes an agent never published. A montage export has **Edit
 montage**, and the Wizard saves its Video Editor draft as a montage before
 exporting it. `audio.shorten` and the flat-rig images have provenance sidecars
 like `studio.key`. Takes record who approved them (`approvedBy`: a person, an
-agent, the Wizard or the render itself) and Render & Review shows it; music
-production reviews say whether people or agents decided. Render & Review also
+agent, the Wizard or the render itself) and Render & Review shows it; the
+staged review's plan and preview decisions record who made them
+(`planBy`, `previewBy`) and the Validation cards show it; music production
+reviews say whether people or agents decided. Render & Review also
 lists the episode's productions with their steps, chapter files, Stop and
 Resume.
+
+Series Lab can make an episode in three production modes, and the user
+validates every shot from inside HocusPocus, also from a phone over the LAN.
+`direct` renders everything, as before, and is what every existing episode
+is. `plan` asks for each shot's plan (cast and poses, lines and speakers,
+framing, camera, set, effects) to be approved before it renders. `preview`
+adds a preview render that the user approves or sends back with notes before
+the final: a 2D shot's preview is its normal render and is promoted to the
+final take without rendering again, a 3D shot's preview is exported at draft
+quality and its final at the shot's own. The new **5 · Validation** tab shows
+every shot in order, grouped by scene, as a card with its latest take (played
+in place), number, method, duration, location, framing, camera, cast with
+poses, lines with speakers and a summary of its effects, sounds, set layers or
+3D template, with Approve / Request change, a notes box that saves itself,
+filters, a progress counter and the next step of the episode. A card edits
+its shot in place, opens exactly its take's scene in the Video 2D or Video 3D
+editor and takes the export back as the shot's take, renders it again, and
+opens each character's Face Rig on the pose the shot uses. The review is the
+server's (`episode.review`): a change to a shot's content puts its approvals
+back to pending and keeps the notes, `series.episode.render_native` and
+`series.episode.produce` render only what the review lets through (the rest
+is listed as waiting, not failed; a production stops as `waiting` before the
+cut and resumes after the approvals), and the assembly of a staged episode is
+refused until it is approved unless forced. Agents read the user's requests
+and answer them with `series.episode.review.get`, `series.episode.review.set`
+and `series.shot.review.set`.
 
 Painted characters that talk with their own drawing are now a repeatable path.
 Character Creator has a **Graphic novel (painted)** style (`graphic-novel`,
@@ -40,6 +68,20 @@ agent's re-rig no longer turns warp mouths back into paper ones; only
 `style.mouthStyle` changes them, and the result's `style` is the look used.
 The agent guide (`series.guide`) and the Wizard describe the path, what to
 check and that a bust pose reads better in dialogue than a full figure.
+
+Warp mouths read on small faces too. On a full figure the head is under 160 px
+and the mouth 20–45 px, and the face landmarks, made on the whole figure, put a
+small mouth's lips on the philtrum and its corners past the painted ones. Such
+a face is now read again on the head alone, its mouth line is snapped and its
+nine states are warped on the face enlarged to a bust's size, and each state
+is fitted back to the pose's own pixels: `closed` is still the drawing
+unchanged, the openings have smooth edges, and every opening is a few pixels
+deep at least, so an "a" still reads when the figure is drawn small in a wide
+shot. Busts warp exactly as before, except one whose landmarks were unsure:
+read on its head alone, its mouth is found where a manual hint had to put it.
+Per pose `faceSize` (in the rig result, the review sheet and the Face Rig's
+Mouth line editor) says how big the face was and whether it was enlarged.
+Rig a kit again to get the new mouths.
 
 Flat-rigged characters can talk with their own drawing. On painted busts
 (graphic-novel art with ink lines and flat black shadows) the ink mouths still

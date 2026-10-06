@@ -218,6 +218,81 @@ export interface SeriesRenderAttempt {
   reviewedBy?: 'user' | 'agent' | 'wizard' | 'server'
   reviewDecision?: 'approved' | 'rejected'
   reviewedAt?: string
+  /** Set by the server render in a staged production: a cheap preview to review, or the final take. */
+  reviewStage?: 'preview' | 'final'
+}
+
+/** How an episode is produced: everything at once, plan approval first, or plan + preview approval before the final. */
+export type SeriesProductionMode = 'direct' | 'plan' | 'preview'
+export type SeriesReviewStatus = 'pending' | 'approved' | 'changes'
+export type SeriesReviewStage = 'plan' | 'preview' | 'final'
+
+export interface SeriesReviewNote {
+  id: string
+  at: string
+  stage: SeriesReviewStage
+  text: string
+  by: SeriesReviewAuthor
+}
+
+/** Who decided or wrote: a person, an MCP agent, Ask to the Wizard, or a production approving on its own. */
+export type SeriesReviewAuthor = 'user' | 'agent' | 'wizard' | 'server'
+
+/** One shot's review (server-owned). A shot without an entry is pending at every stage. */
+export interface SeriesShotReview {
+  plan: SeriesReviewStatus
+  planAt?: string
+  planDigest?: string
+  planBy?: SeriesReviewAuthor
+  preview: SeriesReviewStatus
+  previewAt?: string
+  previewDigest?: string
+  previewBy?: SeriesReviewAuthor
+  /** The take the preview decision is about. */
+  previewAttemptId?: string
+  notes: SeriesReviewNote[]
+}
+
+export interface SeriesEpisodeReview {
+  mode: SeriesProductionMode
+  updatedAt?: string
+  shots: Record<string, SeriesShotReview>
+}
+
+/** One change sent to POST /review; the server validates it and owns the stored state. */
+export interface SeriesShotReviewChange {
+  shotId: string
+  plan?: SeriesReviewStatus
+  preview?: SeriesReviewStatus
+  attemptId?: string
+  note?: { id?: string; text: string; stage?: SeriesReviewStage; by?: 'user' | 'agent' }
+  removeNoteId?: string
+}
+
+export interface SeriesReviewChange {
+  baseRevision?: number
+  mode?: SeriesProductionMode
+  shots?: SeriesShotReviewChange[]
+}
+
+export interface SeriesReviewReply {
+  revision: number
+  episodeId: string
+  episodeUpdatedAt: string
+  review: SeriesEpisodeReview
+  noteIds?: Record<string, string>
+  summary?: Record<string, unknown>
+}
+
+/** A Video 3D shot (series_shot3d.normalize_scene3d): a template or a saved scene, its cast and objects. */
+export interface SeriesShotScene3D {
+  template?: string
+  scene?: string
+  cast?: Array<{ characterId: string; objectId?: string; poseId?: string }>
+  objects?: Array<Record<string, unknown>>
+  quality?: 'draft' | 'final'
+  renderLook?: string
+  [key: string]: unknown
 }
 
 /** Sound generated from the shot's rendered picture (MMAudio) and mixed under its take; volume is relative to the dialogue. */
@@ -283,6 +358,7 @@ export interface SeriesShot {
   scriptDialogueStatus?: 'in_sync' | 'stale' | 'manual_conflict'
   foley?: SeriesShotFoley
   layout2d?: SeriesShotLayout2D
+  scene3d?: SeriesShotScene3D
 }
 
 /** A shot's 2D plan (series_shot_plan.normalize_layout2d); only the set layers are typed here. Its `layers` replace the
@@ -290,6 +366,19 @@ export interface SeriesShot {
 export interface SeriesShotLayout2D {
   layers?: SeriesSetLayer[]
   castDepth?: number
+  framing?: 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
+  camera?: 'static' | 'push'
+  cast?: SeriesShotCastEntry[]
+  timing?: { intro?: number; gap?: number; tail?: number }
+  [key: string]: unknown
+}
+
+/** A cast member of a 2D shot: the character, its Character Kit pose and where it stands (x % of the frame). */
+export interface SeriesShotCastEntry {
+  characterId: string
+  poseId?: string
+  x?: number
+  scale?: number
   [key: string]: unknown
 }
 
@@ -335,6 +424,8 @@ export interface SeriesEpisode {
   assemblyAssetIds?: string[]
   /** A frame of the latest cut (after its title card), set by the assembly. */
   thumbnailAssetId?: string
+  /** Staged production and per-shot approvals (server-owned; absent means direct, everything pending). */
+  review?: SeriesEpisodeReview
   id: string
   seasonId: string
   number: number

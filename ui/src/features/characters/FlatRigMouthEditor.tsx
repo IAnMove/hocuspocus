@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { fetchCharacterKitLibrary, previewFlatRigMouth, rigFlatCharacter, type FlatRigMouthPreview, type FlatRigResult } from '../../api/characters'
+import {
+  fetchCharacterKitLibrary, previewFlatRigMouth, rigFlatCharacter, type FlatRigFaceSize, type FlatRigMouthPreview, type FlatRigResult,
+} from '../../api/characters'
 import { useUiTranslation } from '../../i18n'
 import { characterKitPoseHasOwnMouths, type CharacterKit } from '../../lib/characterKit'
 import {
@@ -32,7 +34,7 @@ export function FlatRigMouthEditor(props: Props) {
   const { t } = useUiTranslation('characters')
   const [open, setOpen] = useState(() => isWarpRigged(props.kit))
   if (!isFlatRigged(props.kit)) return null
-  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} className="rounded border border-amber-300/30 bg-black/15 p-2">
+  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="flat-rig-mouth-line" className="rounded border border-amber-300/30 bg-black/15 p-2">
     <summary className="cursor-pointer text-sm font-medium text-amber-100">{t('mouthLine.title', { pose: characterKitPoseLabel(props.poseId) })}</summary>
     {open && <MouthLineWorkbench key={`${props.kit.id}:${props.poseId}`} {...props} />}
   </details>
@@ -217,12 +219,21 @@ function MouthLineZoom({ kit, poseId, draft, preview, locked, onChange }: { kit:
 }
 
 /** The warped rest, i, e, a, o, u at the line, as the rig would make them. */
+/** What the rig did for a small face (a full figure's): read its points on the head alone and warp it enlarged. */
+function FaceSizeNote({ face }: { face: FlatRigFaceSize }) {
+  const { t } = useUiTranslation('characters')
+  const notes = [face.upscale > 1 ? t('mouthLine.smallFace', { head: face.head, times: face.upscale }) : '',
+    face.pass === 'head' ? t('mouthLine.headPass') : ''].filter(Boolean)
+  return notes.length ? <p data-testid="mouth-line-face" className="text-xs text-text-secondary">{notes.join(' ')}</p> : null
+}
+
 function MouthLineStates({ name, preview, loading, dirty }: { name: string; preview: FlatRigMouthPreview | null; loading: boolean; dirty: boolean }) {
   const { t } = useUiTranslation('characters')
   const status = loading ? 'mouthLine.loading' : preview?.found ? 'mouthLine.snapped' : 'mouthLine.free'
   return <>
     <p aria-live="polite" className="text-xs text-text-secondary">{preview || loading ? t(status) : ''}</p>
     {preview?.warnings?.includes('mouth_line_unsure') && !dirty && <p className="text-xs text-amber-200">{t('mouthLine.unsure')}</p>}
+    {preview?.faceSize && <FaceSizeNote face={preview.faceSize} />}
     <div className="grid grid-cols-3 gap-1">
       {MOUTH_LINE_PREVIEW_STATES.map(({ state, sound }) => <figure key={state} className="overflow-hidden rounded border border-border bg-black/30">
         {preview?.states[state]

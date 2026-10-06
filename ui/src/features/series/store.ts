@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as api from '../../api/client'
 import { emptySeriesLibrary, normalizeSeriesLibrary, normalizeSeriesProject } from './model'
-import type { SeriesEpisode, SeriesJobStatus, SeriesLibrary, SeriesProject } from './types'
+import type { SeriesEpisode, SeriesJobStatus, SeriesLibrary, SeriesProject, SeriesReviewChange, SeriesReviewReply } from './types'
 import { mergeSeriesReferenceImport, type SeriesReferenceImport } from './referenceImages'
 
 const activeKey = (workspace: string): string => `maestro-series-lab-active:${workspace}`
@@ -29,6 +29,8 @@ interface SeriesState {
   adoptRemoteSeries: (series: SeriesProject) => void
   acceptAssetImport: (workspace: string, result: SeriesReferenceImport) => void
   saveNow: () => Promise<SeriesProject | null>
+  /** Send one review change (mode, approvals, notes) after pending edits; merges the server's review without losing edits. */
+  saveReview: (episodeId: string, change: SeriesReviewChange) => Promise<SeriesReviewReply>
   newSeries: () => Promise<void>
   newSeriesFromTemplate: (templateId: string, language: 'es' | 'en') => Promise<void>
   duplicateSeries: (seriesId?: string) => Promise<void>
@@ -73,6 +75,16 @@ function restoredSelection(workspace: string): { seriesId?: string; episodeId?: 
 
 let saveTimer: number | undefined
 let saveInFlight: Promise<SeriesProject | null> | null = null
+
+/** The series with the server's review of one episode and its new revision; every other local field is kept. */
+function withReview(series: SeriesProject, reply: SeriesReviewReply): SeriesProject {
+  const episode = series.episodesById[reply.episodeId]
+  if (!episode) return { ...series, revision: reply.revision }
+  return {
+    ...series, revision: reply.revision,
+    episodesById: { ...series.episodesById, [reply.episodeId]: { ...episode, review: reply.review, updatedAt: reply.episodeUpdatedAt || episode.updatedAt } },
+  }
+}
 
 /** Add a series the server just created to the library and open it. */
 function adoptNewSeries(set: (partial: Partial<SeriesState>) => void, get: () => SeriesState, project: SeriesProject) {
@@ -291,6 +303,34 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
     })()
     const saved = await saveInFlight
     return get().activeSeriesId === projectId && get().dirty ? get().saveNow() : saved
+  },
+
+  saveReview: async (episodeId, change) => {
+    await get().saveNow()
+    const state = get()
+    const project = selectedSeries(state)
+    if (!project?.episodesById[episodeId]) throw new Error('Series episode not found')
+    const projectId = project.id
+    const merge = (reply: SeriesReviewReply) => {
+      const latest = get()
+      const current = latest.library.seriesById[projectId]
+      if (!current) return reply
+      set({
+        library: { ...latest.library, seriesById: { ...latest.library.seriesById, [projectId]: withReview(current, reply) } },
+        serverRevision: latest.activeSeriesId === projectId ? reply.revision : latest.serverRevision,
+      })
+      return reply
+    }
+    const request = api.saveSeriesEpisodeReview(state.workspace, projectId, episodeId, change).then(merge)
+    // Holding the save slot keeps an autosave from sending the revision this request is about to replace.
+    set({ saving: true })
+    saveInFlight = request.then(() => get().library.seriesById[projectId] || null, () => get().library.seriesById[projectId] || null)
+      .finally(() => { set({ saving: false }); saveInFlight = null })
+    try { return await request }
+    finally {
+      await saveInFlight
+      if (get().dirty) void get().saveNow().catch(() => { /* Store exposes the save error. */ })
+    }
   },
 
   newSeries: async () => {

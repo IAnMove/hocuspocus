@@ -130,7 +130,7 @@ def preview_mouth(workspace_dir: str, workspace: str, kit_id: str, pose: str, *,
     """The warped states of ``pose`` at the mouth line through ``mouth`` (``[x, y]`` in % of the pose image) and
     ``mouth_width`` corners apart (% of its width), each a JPEG data URL of the face around the mouth, or with ``sheet``
     one PNG strip in the workspace (for agents; one per pose, kept out of the media library). Also the line it used, in
-    % of the pose image."""
+    % of the pose image, and ``faceSize`` (``flat_rig_warp.face_scale``: a small face is warped enlarged, as the rig does)."""
     library = read_character_kit_library(workspace_dir)
     kit = (library.get("kits") or {}).get(kit_id)
     if kit is None:
@@ -148,7 +148,7 @@ def preview_mouth(workspace_dir: str, workspace: str, kit_id: str, pose: str, *,
         landmarks = _landmarks(path, image)
         near, guide = _pose_guides(image, crop, figure.size, hint, landmarks)
         seeds = {"point": near.get("mouth"), "width": near.get("mouthWidth"), "lips": guide.get("mouth_points"),
-                 "lips_score": guide.get("mouth_score")}
+                 "lips_score": guide.get("mouth_score"), "face": (landmarks or {}).get("face")}
         painted, ink = None, INK
         if seeds["point"] is None and seeds["lips"] is None:
             # Nothing places the line but the rig's own search: run it for the painted mouth.
@@ -156,12 +156,14 @@ def preview_mouth(workspace_dir: str, workspace: str, kit_id: str, pose: str, *,
             painted, ink = flat_rig_warp.painted_seed(rig), rig.get("ink") or INK
         frame = (crop[0], crop[1], image.width, image.height)
     pixels = np.array(figure)
-    line = flat_rig_warp.rig_line(pixels, seeds, painted)
-    box, patches = flat_rig_warp.pose_patches(pixels, line, ink, states=wanted)
+    k, face = flat_rig_warp.face_scale(seeds, painted)
+    line = flat_rig_warp.rig_line(pixels, seeds, painted, k)
+    box, patches = flat_rig_warp.pose_patches(pixels, line, ink, states=wanted, k=k)
     view = _view(line)
     tiles = {state: _tile(figure, patches[state], box, view) for state in wanted}
     xs = np.linspace(line.x0, line.x1, 9)
-    result = {"pose": pose, **flat_rig_warp.line_hint(line, frame), "line": _percent(np.stack([xs, line.y(xs)], 1), frame),
+    result = {"pose": pose, **flat_rig_warp.line_hint(line, frame), "faceSize": face,
+              "line": _percent(np.stack([xs, line.y(xs)], 1), frame),
               "view": _percent(np.array([view[:2], view[2:]], float), frame), "hint": hint,
               "warnings": flat_rig_warp.line_warnings(line, seeds)}
     if sheet:
