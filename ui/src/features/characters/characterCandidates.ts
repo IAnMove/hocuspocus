@@ -13,6 +13,8 @@ export type KeyedCandidate = {
   raw?: string
   keyed?: string
   error?: string
+  /** Share of the keyed image still semi-transparent when studio.key reports a haze (the screen did not key cleanly). */
+  haze?: number
 }
 
 export type CandidateDependencies = {
@@ -53,7 +55,7 @@ export async function generateKeyedCandidates(request: {
       const keyed = await deps.key({ workspace: request.workspace, source: image.source, mode: screen,
         intentId: `character-key-${candidate.seed}` })
       request.signal.throwIfAborted()
-      update(candidate.id, { status: 'ready', keyed: keyed.url })
+      update(candidate.id, { status: 'ready', keyed: keyed.url, ...(keyed.report?.haze ? { haze: keyed.report.semiTransparentShare } : {}) })
     } catch (error) {
       if (request.signal.aborted) return
       update(candidate.id, { status: 'failed', error: (error as Error).message })

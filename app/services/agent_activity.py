@@ -90,6 +90,20 @@ def current_actor() -> str:
     return actor_label()
 
 
+@contextmanager
+def loopback_agent_scope() -> Iterator[None]:
+    """In a route an MCP tool reached through a loopback (``X-Hocus-Actor: agent``), act as that agent while the
+    provenance of the files it makes is written (``requested_by``, ``external_agent``); elsewhere it does nothing.
+
+    Activity is not involved: the MCP dispatcher already recorded the call."""
+    caller = _CALLER.get() or {}
+    if caller.get("actor") != "agent" or is_external_agent():
+        yield
+        return
+    with caller_scope({"surface": "mcp", "tool": AGENT_TOOL}):
+        yield
+
+
 def loopback_actor() -> str | None:
     """The actor a loopback HTTP call carries in ``X-Hocus-Actor``: ``agent`` for an MCP client, ``wizard`` for Ask to
     the Wizard and ``server`` for the server's own jobs (a Series render approving its takes); None for anyone else."""

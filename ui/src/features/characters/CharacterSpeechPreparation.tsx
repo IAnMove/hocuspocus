@@ -7,7 +7,9 @@ import { CharacterKitFaceRigPanel } from './CharacterKitFaceRigPanel'
 import { characterKitPoseOptions } from './characterKitGuide'
 import { speechLibraryServices, useCharacterSpeechLibrary, type SpeechLibraryServices, type SaveSpeechWorkshop } from './useCharacterSpeechLibrary'
 
-type Props = { workspace: string; services?: SpeechLibraryServices; initialKitId?: string; onSaved?: (library: CharacterKitLibrary) => void | Promise<void>;
+type Props = { workspace: string; services?: SpeechLibraryServices; initialKitId?: string;
+  /** The pose the Face Rig opens on (a link from a shot that uses it); the first pose otherwise. */
+  initialPoseId?: string; onSaved?: (library: CharacterKitLibrary) => void | Promise<void>;
   saveRef?: RefObject<SaveSpeechWorkshop | null>;
   onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void }
 type Controller = ReturnType<typeof useCharacterSpeechLibrary>
@@ -17,7 +19,7 @@ export function CharacterSpeechPreparation(props: Props) {
   return <SpeechWorkspace key={props.workspace + '/' + (props.initialKitId ?? '')} {...props} />
 }
 
-function SpeechWorkspace({ workspace, services = speechLibraryServices, initialKitId, onSaved, onDirtyChange, onBusyChange, saveRef }: Props) {
+function SpeechWorkspace({ workspace, services = speechLibraryServices, initialKitId, initialPoseId, onSaved, onDirtyChange, onBusyChange, saveRef }: Props) {
   const { t } = useUiTranslation('characters')
   const controller = useCharacterSpeechLibrary(workspace, services, initialKitId, onSaved)
   const { library, draft, busy, dirty } = controller
@@ -50,7 +52,8 @@ function SpeechWorkspace({ workspace, services = speechLibraryServices, initialK
       </select>
     </label>
     {!initialKitId && <fieldset disabled={faceBusy}><ImportSpeechBase workspace={workspace} controller={controller} /></fieldset>}
-    {draft && <SpeechDraftEditor key={draft.id} kit={draft} workspace={workspace} controller={controller} faceBusy={faceBusy} onBusyChange={setFaceBusy} />}
+    {draft && <SpeechDraftEditor key={`${draft.id}:${draft.id === initialKitId ? initialPoseId ?? '' : ''}`} kit={draft} workspace={workspace} controller={controller} faceBusy={faceBusy} onBusyChange={setFaceBusy}
+      initialPoseId={draft.id === initialKitId ? initialPoseId : undefined} />}
     <div className="flex flex-wrap gap-2">
       <button type="button" className={button} disabled={busy || faceBusy || !dirty || !draft?.base} onClick={controller.save}>{t('speechWorkshop.save')}</button>
       <button type="button" className={button} disabled={busy || faceBusy} onClick={controller.reload}>{t(dirty ? 'speechWorkshop.discardReload' : 'speechWorkshop.reload')}</button>
@@ -79,10 +82,10 @@ function ImportSpeechBase({ workspace, controller }: { workspace: string; contro
     </details>
 }
 
-function SpeechDraftEditor({ kit: draft, workspace, controller, faceBusy, onBusyChange }: { faceBusy: boolean; kit: CharacterKit; workspace: string; controller: Controller; onBusyChange: (busy: boolean) => void }) {
+function SpeechDraftEditor({ kit: draft, workspace, controller, faceBusy, onBusyChange, initialPoseId }: { faceBusy: boolean; kit: CharacterKit; workspace: string; controller: Controller; onBusyChange: (busy: boolean) => void; initialPoseId?: string }) {
   const { t } = useUiTranslation('characters')
   const { busy } = controller
-  const [poseId, setPoseId] = useState('base')
+  const [poseId, setPoseId] = useState(initialPoseId || 'base')
   const poses = characterKitPoseOptions(draft)
   const currentPoseId = poses.some(pose => pose.id === poseId) ? poseId : poses[0]?.id ?? 'base'
   const pose = currentPoseId === 'base' ? draft.base : draft.poses[currentPoseId]
@@ -106,7 +109,8 @@ function SpeechDraftEditor({ kit: draft, workspace, controller, faceBusy, onBusy
       </ul>
       <p className="text-xs text-text-secondary">{t(readiness.previewReady ? 'speechWorkshop.previewReady' : 'speechWorkshop.previewNotReady')}</p>
       <div className="mx-auto w-full max-w-5xl rounded border border-border p-4">
-        <CharacterKitFaceRigPanel key={`${draft.id}:${currentPoseId}`} kit={draft} poseId={currentPoseId} workspace={workspace} disabled={busy} onBusyChange={onBusyChange} onChange={controller.change} onStatus={controller.setStatus} />
+        <CharacterKitFaceRigPanel key={`${draft.id}:${currentPoseId}`} kit={draft} poseId={currentPoseId} workspace={workspace} disabled={busy} onBusyChange={onBusyChange} onChange={controller.change} onStatus={controller.setStatus}
+          onRigged={controller.reload} />
       </div>
     </>
 }

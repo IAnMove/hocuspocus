@@ -47,6 +47,8 @@ import type {
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { executeProductionWorks } from './productionWorkCapabilities'
+import { executeSeriesShotEdit } from './seriesShotEditCapabilities'
+import { executeMediaTool } from './mediaToolCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
@@ -189,6 +191,11 @@ export interface WizardApplicationAdapters {
   lipsCreator: { command(action: AgentLipsCreatorAction, workspace?: string): Promise<AdapterOutcome>; generate(action: AgentGenerateLipsAction, workspace?: string, context?: { onStep?: (message: string) => void; generationContext?: GenerationSubmissionContext }): Promise<AdapterOutcome> }
   world3dTemplates: { command(action: import('./world3dTemplateCapabilities').AgentWorld3DTemplatesAction, workspace?: string): Promise<AdapterOutcome> }
   productionWorks: { command(action: import('./productionWorkCapabilities').AgentProductionWorksAction, workspace?: string): Promise<AdapterOutcome> }
+  seriesShots: {
+    edit(action: import('./seriesShotEditCapabilities').AgentEditSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
+    rerender(action: import('./seriesShotEditCapabilities').AgentRerenderSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
+  }
+  mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -744,6 +751,13 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async command(action, workspace) {
       return executeProductionWorks(action, workspace)
     },
+  }
+  adapters.seriesShots = {
+    async edit(action, workspace) { return executeSeriesShotEdit(action, workspace) },
+    async rerender(action, workspace) { return executeSeriesShotEdit(action, workspace) },
+  }
+  adapters.mediaTools = {
+    async command(action, workspace) { return executeMediaTool(action, workspace) },
   }
   adapters.lipsCreator = {
     async command(action, workspace) {

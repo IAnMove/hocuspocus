@@ -144,7 +144,32 @@ def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
                                            "style": {"mouthStyle": "ink"}, "hints": hints})
     assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
     schema = OPERATIONS["characters.rig.flat"][0]
-    assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink"]} and "hints" in schema
+    assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink", "warp"]} and "hints" in schema
+    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth"}
+
+
+def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
+    preview = {"pose": "busto", "mouth": [61.6, 20.48], "mouthWidth": 6.55, "found": True, "from": "hint",
+               "sheet": "/api/v1/file/.kit-blas-busto-warp-preview.png?workspace=series&v=1"}
+    handlers, calls, _, _ = harness(tmp_path, [preview])
+    result = call(handlers, "characters.rig.flat.preview", {"workspace": "series", "character_id": "blas", "pose": "busto",
+                                                            "mouth": [61.6, 20.1], "mouthWidth": 6.5})
+    method, url, body = calls[0]
+    assert (method, url) == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/blas/flat-rig/preview")
+    assert body == {"workspace": "series", "pose": "busto", "sheet": True, "mouth": [61.6, 20.1], "mouthWidth": 6.5}
+    assert result["result"]["sheet"].endswith("warp-preview.png?workspace=series&v=1")
+    assert OPERATIONS["characters.rig.flat.preview"][2] is False, "a preview saves nothing on the kit"
+
+
+def test_the_agent_trail_names_the_rigged_kit_and_leaves_previews_out():
+    from services.agent_activity import artifact_targets
+    from services.series_commands import _operation_schema
+    rigged = {"result": {"revision": 3, "character": {"id": "blas", "name": "Blas"}, "review": "/api/v1/file/kit-blas-rig-review-1.png"}}
+    targets = artifact_targets({"input": {"workspace": "series", "character_id": "blas"}}, rigged)
+    assert targets[0] == {"kind": "character_kit", "id": "blas", "title": "Blas"}
+    # The dispatcher records mutating calls only: the preview's warped sheet is not something the agent made.
+    preview = OPERATIONS["characters.rig.flat.preview"]
+    assert _operation_schema("characters.rig.flat.preview", *preview)["mutation"] is False
 
 
 def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):
@@ -172,3 +197,17 @@ def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
     assert calls[1][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1?workspace=series")
     call(handlers, "series.episode.render_native.resume", {"workspace": "series", "job_id": "native-1"})
     assert calls[2][:2] == ("POST", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1/resume")
+
+
+def test_a_shot_is_read_and_edited_by_its_number_over_mcp(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"shotId": "e1s04", "number": 5}, {"shotId": "e1s04", "changed": ["fx"]}])
+    read = call(handlers, "series.shot.get", {"workspace": "series", "series_id": "uv", "episode_id": "ep1", "shot": 5})
+    assert calls[0][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/shots/5?workspace=series")
+    assert read["result"]["shotId"] == "e1s04"
+    edited = call(handlers, "series.shot.update", {"workspace": "series", "series_id": "uv", "episode_id": "ep1", "shot": "e1s04",
+                                                   "append": {"fx": [{"kind": "confetti", "at": 1}]}, "render": True})
+    assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/shots/edit",
+                        {"workspace": "series", "shot": "e1s04", "append": {"fx": [{"kind": "confetti", "at": 1}]}, "render": True})
+    assert edited["result"]["changed"] == ["fx"]
+    schema = next(item for item in command_catalog() if item["name"] == "series.shot.update")["inputSchema"]["properties"]["input"]
+    assert schema["required"] == ["workspace", "series_id", "episode_id", "shot"] and "append" in schema["properties"]

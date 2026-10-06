@@ -6,6 +6,22 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Flat-rigged characters can talk with their own drawing. On painted busts
+(graphic-novel art with ink lines and flat black shadows) the ink mouths still
+looked like Flash animation, not like the painting. `characters.rig.flat` with
+`style: {"mouthStyle": "warp"}` keeps the upper lip and moves the lower lip,
+chin and beard down, the drawing's own pixels, and fills the gap between the
+lips with a flat mouth in the character's ink: muted teeth only in `wide` and
+`bite`. The mouths are per pose, square patches of that pose's lower face saved
+as `anchors.<pose>.mouthSources` and used by Video 2D, Series shots, native lip
+sync, Video 3D talking cutouts and the review sheet; `closed` is the drawing
+unchanged, so the rest pose shows no seam. The mouth line is snapped onto the
+painted stroke between the lips, not a nose fold or a moustache's edge, and
+the Face Rig has a **Mouth line** editor: drag a point onto the line and two
+handles to the corners, on a phone too, and the warped rest, i, e, a, o, u
+follow live (`characters.rig.flat.preview`) before saving the line as the
+pose's hint. Rig every pose with `mouthStyle: "warp"` to switch a kit.
+
 Series Lab voice rooms, looping ambience beds and looping score cues work on
 ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
 found`, because the convolution asked `afir` for `irnorm`, an option only
@@ -14,6 +30,29 @@ came out silent, because ffmpeg 6's `acrossfade` ends without the crossfade when
 both of its inputs are cut from one file. Both are now built from filters that
 every ffmpeg from 6.0 on runs alike, and they sound as before: a looped bed is
 the same sample for sample, a room the same to within a thousandth of a dB.
+
+Everything an agent did outside HocusPocus to finish a series episode is now
+done in the app, so its files can be found, redone and edited. One shot is
+edited by its number or id with `series.shot.update` ("edit the fifth shot and
+put a hat on him": `changes` and `append` in the script vocabulary, or an
+`instruction` the server's LLM turns into the edit against the real shot, cast,
+poses and files); only the changed fields are written, the takes stay and a
+take that no longer fits loses its approval. The Wizard does the same with
+`edit_series_shot`, renders one shot again with `rerender_series_shot`, and runs
+the new media tools with `media_tool`. `studio.key` reads the screen from the
+image border and keys relative to it, so a weak generated screen no longer
+leaves a semi-transparent haze over the whole background; it takes the screen
+colour off the edges and reports the residual semi-transparent share, which the
+Character Creator shows. Generated and imported takes get their shot's `sfx`,
+`music` and `foley` at the cut (keeping or dropping the clip's own sound), and
+every clip in another size, frame rate or pixel aspect is conformed to the
+episode's instead of failing the join. A sound cue can play part of its file
+(`in`, `length`). New MCP tools save a frame of a clip (`media.frame`), compose a
+still from cutouts (`media.compose`; `scenes.video2d.preview` with `still`
+keeps a full-size frame of a scene), cut a sound exactly (`audio.trim`) and copy
+a file from another workspace with its provenance
+(`assets.import_from_workspace`); Video 3D and Video 2D exports take an
+`output_name` for a stable file a set layer can name.
 
 The light screen effects read in dark, painted frames. In a tenebrist episode
 a `shockwave` in gold, used as a prayer spreading over a city, came out as a

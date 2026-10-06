@@ -10,6 +10,8 @@ import copy
 import inspect
 import json
 import os
+import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -26,6 +28,7 @@ from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
 from services.series_jobs import SeriesJobStore
 from services.series_score import clip_score
+from services.series_take_sound import plan_take_sound, prepare_clips, prepared_metadata, prepared_note
 from services.task_manager import get_cancellation_token, get_task_registry
 
 
@@ -40,6 +43,12 @@ def _remove_assembly_artifacts(output_path: str | None) -> None:
         except OSError:
             pass
     remove_episode_subtitles(output_path)
+
+
+def _remove_folder(path: str) -> None:
+    """The temporary folder of the clips prepared for one join (series_take_sound)."""
+    if path:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def _publish_cut(series: dict[str, Any], episode: dict[str, Any], job: dict[str, Any], asset_id: str, thumbnail: dict[str, Any]) -> None:
@@ -357,6 +366,7 @@ def create_series_assembly_router(
         published = False
         asset_id = ""
         clip_paths: list[str] = []
+        prepared_dir = ""
         try:
             if token.is_cancelled():
                 update(
@@ -373,6 +383,10 @@ def create_series_assembly_router(
                 for item in job.get("clips", [])
             ]
             output_directory = workspace_dir(str(job["workspace"]))
+            # Generated and imported takes get their shot's sound, and every clip the episode's frame (series_take_sound).
+            prepared_dir = tempfile.mkdtemp(prefix="hocuspocus-assembly-")
+            clip_paths, prepared = prepare_clips(clip_paths, job.get("clips", []), job.get("frame"), output_directory,
+                                                 prepared_dir, cancelled=token.is_cancelled)
             timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
             output_path = available_filename(
                 output_directory,
@@ -458,6 +472,7 @@ def create_series_assembly_router(
                         "loudness": finishing["loudness"],
                         "subtitles": {**finishing["subtitles"], "language": job.get("language") or series.get("spokenLanguage") or series.get("language")},
                         **{key: finishing[key] for key in ("ambience", "score") if key in finishing},
+                        **prepared_metadata(prepared),
                         **({"language": job["language"]} if job.get("language") else {}),
                         "createdAt": completed_at,
                     },
@@ -480,7 +495,8 @@ def create_series_assembly_router(
                 assetId=asset_id,
                 filename=os.path.basename(output_path),
                 finishedAt=time.time(),
-                message=f"Joined {len(clip_paths)} approved clips in episode order. {finishing_note(finishing)}",
+                message=" ".join(filter(None, (f"Joined {len(clip_paths)} approved clips in episode order.",
+                                               prepared_note(prepared), finishing_note(finishing)))),
             )
         except Exception as exc:
             if published:
@@ -516,6 +532,7 @@ def create_series_assembly_router(
                 message="Series episode assembly failed; approved clips were not changed.",
             )
         finally:
+            _remove_folder(prepared_dir)
             with jobs_lock:
                 active_job_ids.discard(job_id)
 
@@ -534,6 +551,7 @@ def create_series_assembly_router(
             try:
                 view_series, view_episode = localized_view(series, episode, payload.language)
                 clips = episode_assembly_plan(view_series, view_episode)
+                frame = plan_take_sound(view_series, view_episode, clips)
                 # Episode-mode ambience and the episode's score are laid at the join: what each clip gets, kept for a resume.
                 ambience = clip_ambience(view_series, view_episode, clips)
                 score = clip_score(view_episode, clips)
@@ -584,6 +602,7 @@ def create_series_assembly_router(
                     "current": 0,
                     "total": len(clips),
                     "clips": clips,
+                    "frame": frame,
                     **({"ambience": ambience} if ambience is not None else {}),
                     **({"score": score} if score is not None else {}),
                     "burnSubtitles": bool(payload.burnSubtitles),

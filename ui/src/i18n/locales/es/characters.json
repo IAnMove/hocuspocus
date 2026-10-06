@@ -620,6 +620,7 @@
     "keying": "Quitando el fondo…",
     "option": "Opción {{number}}",
     "failed": "Esta opción falló: {{error}}",
+    "haze": "Queda un velo en el {{percent}} % de la imagen: el fondo no se quitó limpio. Elige otra opción o genérala de nuevo.",
     "pick": "Elige la opción que más te guste.",
     "noneReady": "Ninguna opción terminó. Vuelve a intentarlo o cambia la descripción.",
     "empty": "Aquí aparecerán las tres opciones.",
@@ -670,5 +671,48 @@
       "chinese": "chino",
       "russian": "ruso"
     }
+  },
+  "mouthLine": {
+    "title": "Línea de la boca · {{pose}}",
+    "intro": "Estas bocas son del propio dibujo: el labio de arriba se queda y el de abajo, la barbilla y la barba bajan. Arrastra el punto a la línea entre los labios y los dos extremos a las comisuras; las bocas lo siguen mientras mueves.",
+    "notWarp": "Al guardar, este personaje pasa a usar estas bocas y se vuelven a riggear todas sus poses.",
+    "noOwn": "Esta pose aún no tiene bocas propias: coloca la línea y guarda para crearlas.",
+    "zoomAlt": "La boca de {{name}}, ampliada",
+    "stateAlt": "{{name}} diciendo {{sound}}",
+    "dot": "Punto de la línea de la boca",
+    "left": "Comisura izquierda",
+    "right": "Comisura derecha",
+    "nudge": {
+      "up": "Arriba",
+      "down": "Abajo",
+      "left": "Izquierda",
+      "right": "Derecha",
+      "narrower": "Más estrecha",
+      "wider": "Más ancha"
+    },
+    "zoomOut": "Ver más cara",
+    "zoomIn": "Más cerca",
+    "loading": "Deformando las bocas…",
+    "snapped": "La línea está sobre la línea pintada entre los labios.",
+    "free": "Aquí no hay línea pintada: la boca se abre justo en el punto.",
+    "sounds": {
+      "rest": "reposo",
+      "i": "i",
+      "e": "e",
+      "a": "a",
+      "o": "o",
+      "u": "u"
+    },
+    "undo": "Deshacer cambios",
+    "save": "Guardar boca",
+    "saving": "Riggeando…",
+    "saved": "Boca de {{pose}} guardada. Los planos que usan esta pose conservan la boca anterior hasta que se vuelvan a renderizar.",
+    "previewOnly": "Para guardar la línea, abre este personaje en Personajes › Preparar habla 2D.",
+    "errors": {
+      "preview": "No se pudieron previsualizar las bocas.",
+      "unsaved": "Guarda antes los demás cambios del personaje: la línea se guarda riggeando de nuevo el personaje guardado.",
+      "save": "No se pudo guardar la línea de la boca."
+    },
+    "unsure": "Los puntos de la cara no eran seguros aquí (bigote, barba, cara vista desde abajo): comprueba que la línea esté entre los labios."
   }
 }

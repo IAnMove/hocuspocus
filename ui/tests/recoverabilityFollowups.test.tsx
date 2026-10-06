@@ -104,8 +104,8 @@ test('gallery provenance names the agent, the music style, the voice and what a 
   const cloned = outputProvenance({ params: { model_type: 'qwen3_tts_base', _audio_sub_mode: 'speech', audio_guide: '/x/outputs/pu/ines-voice.wav', alt_prompt: 'transcript', model_mode: 'spanish' } })
   assert.deepEqual([cloned.voiceReference, cloned.voice], ['ines-voice.wav', ''])
   const keyed = outputProvenance({
-    params: { tool: 'studio.key', mode: 'green', scene_file: 'Duelo-x.world3d.scene.json', video_editor: { montage: { file: 'cierre.montage.json', revision: 2 } } },
-    lineage: { parents: [{ id: 'a', kind: 'image', uri: 'plate.png', role: 'source' }] },
+    params: { source: 'studio.key', mode: 'green', scene_file: 'Duelo-x.world3d.scene.json', video_editor: { montage: { file: 'cierre.montage.json', revision: 2 } } },
+    lineage: { parents: [{ id: 'a', kind: 'image', uri: 'plate.png', role: 'source' }], transformations: [{ tool: 'studio.key', mode: 'green' }] },
   })
   assert.deepEqual([keyed.tool, keyed.parents, keyed.sceneFile, keyed.montageFile], ['studio.key', ['plate.png'], 'Duelo-x.world3d.scene.json', 'cierre.montage.json'])
 })

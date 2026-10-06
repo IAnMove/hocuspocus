@@ -33,7 +33,7 @@ from services.series_language_versions import set_version_take
 from services.series_library import approve_episode_render_attempts, approve_shot_render_attempt, reject_shot_render_attempt
 from services.series_produce import ProduceDeps, SeriesProduce
 from services.task_manager import TaskRegistry
-from services.tool_sidecars import rig_sidecars, shorten_sidecar, source_ref
+from services.tool_sidecars import rig_sidecars
 from services.world3d_export import write_png
 from services.world3d_scenes import publish_scene, working_scenes
 
@@ -244,25 +244,6 @@ def test_a_montage_export_names_the_montage_it_came_from(tmp_path):
 
 # 6. Tool sidecars --------------------------------------------------------------------------------------------------------
 
-def test_a_keyed_file_names_its_source_and_mode(tmp_path):
-    from services.studio_key import command_handlers as key_handlers
-    workspace = tmp_path / "clip"
-    workspace.mkdir()
-    (workspace / "plate.png").write_bytes(_png(2, 1, (0, 255, 0)))
-    handlers = key_handlers(lambda name: str(workspace), lambda: str(tmp_path / "uploads"), find_model=lambda: None)
-    with caller_scope(AGENT):
-        body = asyncio.run(handlers["studio.key"]({"version": 1, "input": {
-            "workspace": "clip", "source": "/api/v1/file/plate.png?workspace=clip", "mode": "green"}}))
-    output = workspace / body["result"]["file"]
-    sidecar = json.loads(output.with_suffix(".meta.json").read_text())
-    assert sidecar["params"]["tool"] == "studio.key" and sidecar["params"]["mode"] == "green"
-    assert sidecar["params"]["source"] == "/api/v1/file/plate.png?workspace=clip"
-    assert sidecar["lineage"]["parents"][0]["uri"] == "plate.png" and sidecar["lineage"]["parents"][0]["role"] == "source"
-    assert sidecar["lineage"]["transformations"] == [{"type": "key", "mode": "green"}]
-    assert sidecar["origin"]["actor"] == "agent" and sidecar["origin"]["capability"] == "studio.key"
-    assert sidecar["requested_by"]["tool"] == "external_agent"
-
-
 def test_a_shortened_song_names_its_source_and_kept_ranges(tmp_path):
     from routers.audio_shorten import shorten_request
     workspace = tmp_path / "song"
@@ -276,10 +257,11 @@ def test_a_shortened_song_names_its_source_and_kept_ranges(tmp_path):
     result = shorten_request({"workspace": "song", "source": "tema.wav", "keep": [[0, 1], [2, 3]]},
                              resolve_source=lambda value, _ws: str(workspace / value), workspace_dir=lambda _ws: str(workspace))
     sidecar = json.loads((workspace / result["file"]).with_suffix(".meta.json").read_text())
-    assert sidecar["params"]["tool"] == "audio.shorten" and sidecar["params"]["keep"] == [[0, 1], [2, 3]]
+    assert sidecar["params"]["source"] == "audio.shorten" and sidecar["params"]["keep"] == [[0, 1], [2, 3]]
     assert sidecar["params"]["duration_seconds"] == result["duration"]
     assert sidecar["lineage"]["parents"][0]["uri"] == "tema.wav"
-    assert sidecar["origin"]["actor"] == "user" and "requested_by" not in sidecar
+    assert sidecar["lineage"]["transformations"][0]["tool"] == "audio.shorten"
+    assert sidecar["origin"]["capability"] == "audio.shorten" and "requested_by" not in sidecar
 
 
 def test_flat_rig_images_name_the_kit_role_and_pose_sources(tmp_path):
@@ -287,31 +269,33 @@ def test_flat_rig_images_name_the_kit_role_and_pose_sources(tmp_path):
     folder.mkdir()
     url = "/api/v1/file/{}?workspace=pu"
     for name in ("kit-ines-base-rig-1.png", "kit-ines-mouth-wide-2.png", "kit-ines-blink-3.png", "kit-ines-rig-review-4.png",
-                 "ines-base.png"):
+                 "kit-ines-base-mouth-open-5.png", "ines-base.png"):
         (folder / name).write_bytes(_png(1, 1, (1, 2, 3)))
     result = {"character": {"id": "ines", "name": "Inés", "base": {"source": url.format("kit-ines-base-rig-1.png")},
                             "mouth": {"wide": {"source": url.format("kit-ines-mouth-wide-2.png")}},
                             "eyes": {"blink": {"source": url.format("kit-ines-blink-3.png")}},
+                            "anchors": {"base": {"mouthSources": {"open": url.format("kit-ines-base-mouth-open-5.png")}}},
                             "provenance": [{"method": "flat-rig", "sources": {"base": url.format("ines-base.png")},
-                                            "style": {"mouthStyle": "ink"}, "hints": {}}]},
+                                            "style": {"mouthStyle": "warp"}, "hints": {}}]},
               "review": url.format("kit-ines-rig-review-4.png")}
+    # The MCP tool reaches the rig route through a loopback that declares the agent (ActorHeaderMiddleware).
     with caller_scope({"surface": "loopback", "internal": "loopback", "actor": "agent"}):
         rig_sidecars(result, workspace="pu", kit_id="ines", folder=str(folder), request={"poses": None})
     mouth = json.loads((folder / "kit-ines-mouth-wide-2.meta.json").read_text())
     assert mouth["params"]["role"] == "mouth.wide.source" and mouth["params"]["kit_id"] == "ines"
-    assert mouth["params"]["style"] == {"mouthStyle": "ink"}
-    assert mouth["lineage"]["parents"] == [{"id": mouth["lineage"]["parents"][0]["id"], "kind": "image", "uri": "ines-base.png",
-                                            "role": "pose:base"}]
-    assert mouth["origin"]["actor"] == "agent" and mouth["requested_by"]["capability"] == "characters.rig.flat"
+    assert mouth["params"]["style"] == {"mouthStyle": "warp"} and mouth["params"]["source"] == "characters.rig.flat"
+    [parent] = mouth["lineage"]["parents"]
+    assert (parent["uri"], parent["role"], parent["kind"]) == ("ines-base.png", "pose:base", "image")
+    assert mouth["origin"]["tool"] == "external_agent" and mouth["requested_by"]["capability"] == "characters.rig.flat"
     assert json.loads((folder / "kit-ines-rig-review-4.meta.json").read_text())["params"]["role"] == "review"
+    pose_mouth = json.loads((folder / "kit-ines-base-mouth-open-5.meta.json").read_text())
+    assert pose_mouth["params"]["role"] == "anchors.base.mouthSources.open"
     assert not (folder / "ines-base.meta.json").exists()
-
-
-def test_source_refs_only_name_workspace_and_upload_files(tmp_path):
-    assert source_ref("/api/v1/uploads/a.png", "w", tmp_path)["uri"] == "uploads/a.png"
-    assert source_ref("https://example.com/a.png", "w", tmp_path) is None
-    assert source_ref("/api/v1/file/../a.png?workspace=w", "w", tmp_path) is None
-    assert source_ref("/api/v1/file/a.png?workspace=other", "w", tmp_path)["uri"] == "other/a.png"
+    # A person's rig keeps the tool's own name.
+    (folder / "kit-ines-mouth-wide-2.meta.json").unlink()
+    rig_sidecars(result, workspace="pu", kit_id="ines", folder=str(folder), request={"poses": ["base"]})
+    mine = json.loads((folder / "kit-ines-mouth-wide-2.meta.json").read_text())
+    assert mine["origin"]["tool"] == "characters.rig.flat" and "requested_by" not in mine
 
 
 # 3 + 4. Saved scenes: the export names them and gives agent saves a real preview ---------------------------------------

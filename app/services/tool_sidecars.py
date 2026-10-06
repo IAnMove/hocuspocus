@@ -1,108 +1,48 @@
-"""Provenance sidecars for files the CPU tools write: ``studio.key``, ``audio.shorten`` and the flat rig.
+"""Provenance sidecars for files ``audio.shorten`` and the flat rig (``characters.rig.flat``) write.
 
-A generation already has a ``.meta.json``. These tools wrote their files bare,
-so the gallery could not say where a keyed sprite, a shortened song or a rig
-mouth came from, nor how to make it again. Each file now gets a v1 sidecar
-(``services/asset_manifest.publish_generation_sidecar``) with:
-
-* ``params``: the tool's own parameters (``tool`` names it), enough to run the
-  step again with the same input;
-* ``parents``: the source file(s), with their asset id when they have one;
-* ``transformations``: what the tool did to them;
-* the actor (``agent`` for an MCP client, ``wizard``, ``user``) and, for an
-  agent, ``requested_by``.
+A generation already has a ``.meta.json``; ``studio.key`` and the media tools
+write theirs with ``services/production_media_common.publish_sidecar``. The
+song shortener and the flat rig wrote their files bare, so the gallery could
+not say where a short song or a rig mouth came from, nor how to make it again.
+They now use the same sidecar: the tool's parameters (enough to run the step
+again), the source files as lineage parents, and the agent that asked.
 
 Writing a sidecar never fails the tool: the file is already on disk.
 """
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from services.agent_activity import AGENT_TOOL, actor_label, agent_attribution, requested_by
-from services.asset_catalog import _stable_unmanaged_id
-from services.asset_manifest import _existing_canonical_asset_id, infer_asset_kind, publish_generation_sidecar_best_effort
-
-UPLOADS = "__uploads__"
+from services.agent_activity import loopback_agent_scope
+from services.production_media_common import publish_sidecar, source_ref
 
 
-def _named_file(source: str, workspace: str) -> tuple[str, str] | None:
-    """``(owner, name)`` of a ``/api/v1/file/…`` or ``/api/v1/uploads/…`` URL, or of a workspace-relative name."""
-    parsed = urlparse(source.strip())
-    if parsed.path.startswith("/api/v1/file/"):
-        owner = (parse_qs(parsed.query).get("workspace") or [workspace])[0]
-        return owner, unquote(parsed.path[len("/api/v1/file/"):])
-    if parsed.path.startswith("/api/v1/uploads/"):
-        return UPLOADS, unquote(parsed.path[len("/api/v1/uploads/"):])
-    if parsed.scheme or parsed.netloc or source.startswith("/"):
-        return None
-    return workspace, source.strip()
-
-
-def source_ref(source: Any, workspace: str, folder: str | os.PathLike[str], role: str = "source") -> dict[str, str] | None:
-    """The lineage parent a tool read: asset id (its sidecar's, or the stable id of an unmanaged file), kind and uri."""
-    if not isinstance(source, str) or not source.strip() or len(source) > 2000:
-        return None
-    named = _named_file(source, workspace)
-    if named is None or not named[1] or ".." in Path(named[1]).parts:
-        return None
-    owner, name = named
-    uri = f"uploads/{name}" if owner == UPLOADS else name if owner == workspace else f"{owner}/{name}"
-    asset_id = _existing_canonical_asset_id(Path(folder) / name) if owner == workspace else None
-    return {"id": asset_id or _stable_unmanaged_id(owner, name), "kind": infer_asset_kind(name), "uri": uri, "role": role}
-
-
-def publish_tool_sidecar(output: str | os.PathLike[str], *, workspace: str, tool: str, capability: str,
-                         params: dict[str, Any], parents: list[dict[str, str] | None],
-                         transformation: dict[str, Any]) -> None:
-    """Write the sidecar of one tool output (best effort, see the module docstring)."""
-    path = Path(output)
-    actor = actor_label()
-    # An MCP tool that runs through the app's routes (a loopback) reaches here as the agent's, not in its scope.
-    attribution = agent_attribution(capability) or ({"tool": AGENT_TOOL, "capability": capability} if actor == "agent" else {})
-    sidecar = {
-        "params": {"tool": capability, **params},
-        "generation_mode": infer_asset_kind(path.name),
-        "output_filename": path.name,
-        "parents": [parent for parent in parents if parent],
-        "transformations": [transformation],
-        **requested_by(attribution),
-    }
-    publish_generation_sidecar_best_effort(path, sidecar, workspace_id=workspace, tool=tool, actor=actor,
-                                           capability=capability)
-
-
-def key_sidecar(result: dict[str, Any], payload: dict[str, Any], folder: str) -> dict[str, Any]:
-    """``studio.key``: the keyed file names its source, screen mode and options. Returns ``result`` unchanged."""
-    name = result.get("file") if isinstance(result, dict) else None
-    if isinstance(name, str) and name and os.path.isfile(os.path.join(folder, name)):
-        workspace = str(payload.get("workspace") or "")
-        options = {key: payload[key] for key in ("adaptive", "despill") if isinstance(payload.get(key), bool)}
-        params = {"source": payload.get("source"), "mode": payload.get("mode", "green"), **options}
-        if isinstance(result.get("report"), dict):
-            params["report"] = result["report"]
-        publish_tool_sidecar(os.path.join(folder, name), workspace=workspace, tool="studio-key", capability="studio.key",
-                             params=params, parents=[source_ref(payload.get("source"), workspace, folder)],
-                             transformation={"type": "key", "mode": params["mode"], **options})
-    return result
-
-
-def shorten_sidecar(destination: str, payload: dict[str, Any], folder: str, *, keep: list, time_map: Any,
-                    duration: float) -> None:
+def shorten_sidecar(destination: str, source: str, payload: dict[str, Any], *, keep: list, time_map: Any, duration: float) -> None:
     """``audio.shorten``: the short WAV names its source and the kept ranges, so the same cut can be made again."""
-    workspace = str(payload.get("workspace") or "")
-    params = {"source": payload.get("source"), "keep": keep, "time_map": time_map, "duration_seconds": duration}
+    params = {"keep": keep, "time_map": time_map, "duration_seconds": duration}
     if payload.get("duration_max") is not None:
         params["duration_max"] = payload.get("duration_max")
-    publish_tool_sidecar(destination, workspace=workspace, tool="audio-shorten", capability="audio.shorten", params=params,
-                         parents=[source_ref(payload.get("source"), workspace, folder)],
-                         transformation={"type": "shorten", "keep": keep})
+    workspace = str(payload.get("workspace") or "")
+    publish_sidecar(destination, workspace, "audio.shorten", "audio", params, [source_ref(source, workspace)])
+
+
+def _workspace_file(url: Any, workspace: str, folder: str) -> str | None:
+    """The path of a ``/api/v1/file/<name>?workspace=<this one>`` URL inside ``folder``, or None."""
+    if not isinstance(url, str) or "/api/v1/file/" not in url:
+        return None
+    parsed = urlparse(url)
+    owner = (parse_qs(parsed.query).get("workspace") or [workspace])[0]
+    name = unquote(parsed.path.split("/api/v1/file/", 1)[-1])
+    if owner != workspace or not name or ".." in name.replace("\\", "/").split("/"):
+        return None
+    path = os.path.join(folder, name)
+    return path if os.path.isfile(path) else None
 
 
 def _rig_files(character: dict[str, Any], kit_id: str) -> dict[str, str]:
-    """``{file: role}`` of every image the rig wrote for the kit: pose rigs, blinks, mouths (shared and per pose)."""
+    """``{url: role}`` of every image the rig wrote for the kit: pose rigs, blinks, mouths (shared and per pose)."""
     found: dict[str, str] = {}
     prefix = f"kit-{kit_id}-"
 
@@ -116,7 +56,7 @@ def _rig_files(character: dict[str, Any], kit_id: str) -> dict[str, str]:
         elif isinstance(value, str) and "/api/v1/file/" in value:
             name = unquote(urlparse(value).path.rsplit("/", 1)[-1])
             if name.startswith(prefix) and name.endswith(".png"):
-                found.setdefault(name, role)
+                found.setdefault(value, role)
     visit({key: character.get(key) for key in ("base", "poses", "mouth", "eyes", "anchors")}, "")
     return found
 
@@ -130,21 +70,20 @@ def rig_sidecars(result: dict[str, Any], *, workspace: str, kit_id: str, folder:
     provenance = next((entry for entry in reversed(character.get("provenance") or [])
                        if isinstance(entry, dict) and entry.get("method") == "flat-rig"), {})
     sources = provenance.get("sources") if isinstance(provenance.get("sources"), dict) else {}
-    parents = [source_ref(source, workspace, folder, role=f"pose:{pose}") for pose, source in sorted(sources.items())]
+    parents = [source_ref(path, workspace, role=f"pose:{pose}") for pose, url in sorted(sources.items())
+               if (path := _workspace_file(url, workspace, folder))]
     files = _rig_files(character, kit_id)
-    review = result.get("review")
-    if isinstance(review, str):
-        files.setdefault(unquote(urlparse(review).path.rsplit("/", 1)[-1]), "review")
+    if isinstance(result.get("review"), str):
+        files.setdefault(result["review"], "review")
     base = {"kit_id": kit_id, "kit_name": character.get("name"), "style": provenance.get("style"),
             "hints": provenance.get("hints"), "poses": request.get("poses")}
-    for name, role in files.items():
-        path = os.path.join(folder, name)
-        if not os.path.isfile(path) or os.path.isfile(os.path.splitext(path)[0] + ".meta.json"):
-            continue  # an image with the same pixels (content-named) already has its sidecar
-        publish_tool_sidecar(path, workspace=workspace, tool="flat-rig", capability="characters.rig.flat",
-                             params={**base, "role": role}, parents=parents,
-                             transformation={"type": "flat-rig", "role": role})
+    with loopback_agent_scope():
+        for url, role in files.items():
+            path = _workspace_file(url, workspace, folder)
+            if path is None or os.path.isfile(os.path.splitext(path)[0] + ".meta.json"):
+                continue  # gone, or an image with the same pixels (content-named) that already has its sidecar
+            publish_sidecar(path, workspace, "characters.rig.flat", "image", {**base, "role": role}, parents)
     return result
 
 
-__all__ = ["key_sidecar", "publish_tool_sidecar", "rig_sidecars", "shorten_sidecar", "source_ref"]
+__all__ = ["rig_sidecars", "shorten_sidecar"]

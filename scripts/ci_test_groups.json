@@ -3,7 +3,7 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +18 recoverability follow-ups, 2026-10-06). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
@@ -20,6 +20,10 @@
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
         "tests/test_assets_upload.py",
+        "tests/test_workspace_asset_import.py",
+        "tests/test_audio_trim.py",
+        "tests/test_media_frame.py",
+        "tests/test_series_take_sound.py",
         "tests/test_audio_analysis_cleanup.py",
         "tests/test_audio_analysis_jobs.py",
         "tests/test_audio_word_timestamps.py",
@@ -246,13 +250,19 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2674,
+      "weight": 2709,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
         "tests/test_series_templates.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_media_compose.py",
+        "tests/test_export_output_name.py",
+        "tests/test_production_media_router.py",
+        "tests/test_production_media_agent_trail.py",
         "tests/test_flat_rig_realistic.py",
         "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",
@@ -476,7 +486,8 @@
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
-        "tests/test_llm_resilience.py"
+        "tests/test_llm_resilience.py",
+        "tests/test_recoverability_followups.py"
       ]
     }
   ],
@@ -486,7 +497,8 @@
       "paths": [
         "tests/test_flat_rig.py",
         "tests/test_flat_rig_realistic.py",
-        "tests/test_flat_rig_guided.py"
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
       ]
     },
     {
@@ -494,7 +506,8 @@
       "paths": [
         "tests/test_flat_rig.py",
         "tests/test_flat_rig_realistic.py",
-        "tests/test_flat_rig_guided.py"
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
       ]
     },
     {
@@ -502,13 +515,88 @@
       "paths": [
         "tests/test_flat_rig.py",
         "tests/test_flat_rig_realistic.py",
-        "tests/test_flat_rig_guided.py"
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
       ]
+    },
+    {
+      "prefix": "app/services/series_take_sound.py",
+      "paths": ["tests/test_series_take_sound.py", "tests/test_series_assembly_router.py"]
+    },
+    {
+      "prefix": "app/services/series_sound_cuts.py",
+      "paths": ["tests/test_series_take_sound.py"]
+    },
+    {
+      "prefix": "app/services/series_video_foley.py",
+      "paths": ["tests/test_series_shot_foley.py", "tests/test_series_take_sound.py"]
+    },
+    {
+      "prefix": "app/services/series_shot_edit.py",
+      "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/services/series_shot_instruction.py",
+      "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/routers/series_shot_edit.py",
+      "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/services/studio_key_clean.py",
+      "paths": ["tests/test_studio_key.py", "tests/test_production_media_agent_trail.py"]
+    },
+    {
+      "prefix": "app/services/export_output_name.py",
+      "paths": ["tests/test_export_output_name.py"]
+    },
+    {
+      "prefix": "app/services/production_media_common.py",
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py", "tests/test_production_media_agent_trail.py"]
+    },
+    {
+      "prefix": "app/services/production_media_commands.py",
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py", "tests/test_production_media_agent_trail.py"]
+    },
+    {
+      "prefix": "app/routers/production_media.py",
+      "paths": ["tests/test_production_media_router.py"]
+    },
+    {
+      "prefix": "app/services/media_frame.py",
+      "paths": ["tests/test_media_frame.py"]
+    },
+    {
+      "prefix": "app/services/media_compose.py",
+      "paths": ["tests/test_media_compose.py"]
+    },
+    {
+      "prefix": "app/services/audio_trim.py",
+      "paths": ["tests/test_audio_trim.py"]
+    },
+    {
+      "prefix": "app/services/workspace_asset_import.py",
+      "paths": ["tests/test_workspace_asset_import.py"]
     },
     {
       "prefix": "app/services/face_landmarks.py",
       "paths": [
-        "tests/test_flat_rig_guided.py"
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_warp.py",
+      "paths": [
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_preview.py",
+      "paths": [
+        "tests/test_flat_rig_warp.py"
       ]
     },
     {
@@ -736,7 +824,8 @@
         "tests/test_character_kit_library_router.py",
         "tests/test_character_language_voices.py",
         "tests/test_lips_creator.py",
-        "tests/test_lips_creator_commands.py"
+        "tests/test_lips_creator_commands.py",
+        "tests/test_flat_rig_warp.py"
       ]
     },
     {

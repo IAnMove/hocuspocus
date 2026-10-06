@@ -84,7 +84,7 @@ def detect(image: Image.Image) -> dict[str, Any] | None:
 
 def guides(landmarks: dict[str, Any] | None) -> dict[str, Any]:
     """What the rig takes from the landmarks it can trust: the eyes' and mouth's centres, the mouth's corner-to-corner
-    width and each eye's outline, in the landmarks' pixels."""
+    width, its twelve outer-lip points and each eye's outline, in the landmarks' pixels."""
     if not landmarks:
         return {}
     found: dict[str, Any] = {}
@@ -97,4 +97,5 @@ def guides(landmarks: dict[str, Any] | None) -> dict[str, Any]:
         mouth = np.asarray(landmarks["mouth"], dtype=float)
         found["mouth"] = tuple(mouth.mean(axis=0))
         found["mouth_width"] = float(np.ptp(mouth[:, 0]))
+        found["mouth_points"], found["mouth_score"] = mouth, float(scores["mouth"])
     return found

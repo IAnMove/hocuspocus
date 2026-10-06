@@ -676,6 +676,50 @@ replace its saved ones, and `null` clears them. The result reports per pose
 `face` (`realistic` or `cartoon`) and `mouthFound`. `unwipedPoses` lists the
 poses whose painted mouth was not found; an ink rig wipes nothing on purpose.
 
+### Warp mouths: each pose talks with its own drawing
+
+Ink openings on painted busts still look drawn on. `style.mouthStyle: "warp"`
+moves the drawing itself (`app/services/flat_rig_warp.py`). The upper lip
+stays. The lower lip, the chin and the beard move down with the jaw: whole in
+the middle third of the jaw, then easing back to still at its sides and down
+the neck, so a beard moves and is never smeared. The gap between the lips is a
+flat opening in the line's own ink, with muted teeth only in `wide` and `bite`
+and a dark tongue in `tongue`. `round` and `pucker` also gather the lips toward
+the middle. Each state is a square patch of that pose's lower face; `closed` is
+the drawing's pixels unchanged, and every patch fades out at its edge where
+nothing moves, so no seam shows.
+
+The patches are per pose. The kit stores them as
+`anchors.<pose>.mouthSources: {state: url}`, placed at `anchors.<pose>.mouth`
+(the patch square), and `kit.mouth` holds the base pose's. Every consumer
+(Video 2D mounting, the Series shot compiler, native lip sync, Video 3D
+talking cutouts, the rig review sheet) shows a pose its own patches while
+`kit.mouth` is still the base pose's; a pose without patches shows no mouth,
+never another pose's face, and a drawing put on the kit later is shared by
+every pose again. Switch a kit to warp mouths by rigging every pose with
+`mouthStyle: "warp"`.
+
+The mouth line is placed from a hint point (a point on the line between the
+lips), else the DWPose outer-lip points, else the rig's painted mouth. It is
+then snapped onto the darkest thin stroke along it: a stroke with light above
+and below, so a moustache's edge or a shadow is never taken, and following the
+mouth's slant across its middle, so a nose fold is not either. A hint is only
+snapped a little; with no stroke there the mouth opens exactly at the point.
+`hints.<pose>.mouthWidth` (corner to corner, in % of the pose image's width)
+sets the mouth's width. Per pose the result gives `mouthLine` (`mouth`,
+`mouthWidth`, `found`, `from`), and warnings `mouth_line_guessed` (no painted
+line there) or `mouth_line_unsure` (the landmarks scored under 0.5, as on a
+mouth under a moustache seen from below).
+
+Place a line by hand in the Face Rig's **Mouth line** editor (Characters ›
+Prepare 2D speech): drag the dot onto the line and the two ends to the
+corners. The warped rest, i, e, a, o, u update as you move, from
+`POST /api/v1/character-kits/library/kits/{id}/flat-rig/preview` (MCP
+`characters.rig.flat.preview`, which returns one sheet image). Nothing is saved
+until **Save mouth**, which re-rigs that pose and the base with the point and
+width as the pose's hint. Shots already rendered with that pose keep the old
+mouth until they are rendered again.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.

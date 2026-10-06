@@ -16,7 +16,7 @@ export interface OutputProvenance {
   voiceReference: string
   /** Speech language. */
   language: string
-  /** The CPU tool that made the file from others (``studio.key``, ``audio.shorten``, ``characters.rig.flat``). */
+  /** The tool that made the file from others (``studio.key``, ``audio.shorten``, ``characters.rig.flat``, ``media.frame``). */
   tool: string
   /** The files it was made from (``lineage.parents``). */
   parents: string[]
@@ -78,11 +78,13 @@ export function outputProvenance(metadata: OutputMetadata | Record<string, unkno
   const parents = (Array.isArray(lineage.parents) ? lineage.parents : [])
     .map(item => text(record(item).uri)).filter(Boolean).slice(0, 8)
   const montage = record(record(params.video_editor).montage)
+  // Tool sidecars (studio.key, audio.shorten, the flat rig, the media tools) name the tool on their transformation.
+  const transformation = record((Array.isArray(lineage.transformations) ? lineage.transformations : [])[0])
   return {
     maker: outputMaker(data),
     style: mode === 'music' ? text(params.alt_prompt) || text(params.music_description) : '',
     ...voice,
-    tool: text(params.tool).includes('.') ? text(params.tool) : '',
+    tool: text(transformation.tool),
     parents,
     sceneFile: text(params.scene_file),
     montageFile: text(montage.file),

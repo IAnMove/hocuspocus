@@ -58,7 +58,7 @@ def create_character_kit_library_router() -> APIRouter:
 
     @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig")
     def rig_flat_character_kit(kit_id: str, body: dict):
-        """Wipe the painted mouths, draw nine paper (or ink) mouths and a blink, and save the anchors."""
+        """Wipe the painted mouths, draw nine paper (or ink, or per-pose warp) mouths and a blink, and save the anchors."""
         from services.flat_rig import FlatRigError, rig_character
 
         workspace = str(body.get("workspace") or "")
@@ -76,6 +76,22 @@ def create_character_kit_library_router() -> APIRouter:
             raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
         except CharacterKitRevisionConflict as exc:
             raise _conflict(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig/preview")
+    def preview_flat_rig_mouth(kit_id: str, body: dict):
+        """Warp one pose's mouths at a mouth line (point and width) without saving: the Face Rig mouth editor."""
+        from services.flat_rig import FlatRigError
+        from services.flat_rig_preview import preview_mouth
+
+        workspace = str(body.get("workspace") or "")
+        try:
+            return preview_mouth(_workspace_dir(workspace), workspace, kit_id, str(body.get("pose") or "base"),
+                                 mouth=body.get("mouth"), mouth_width=body.get("mouthWidth"), states=body.get("states"),
+                                 sheet=body.get("sheet") is True)
+        except FlatRigError as exc:
+            raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

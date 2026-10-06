@@ -66,7 +66,11 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `generation.speech` / `music` / `sfx` | Root `.wav` + sidecar (`prompt`, `alt_prompt`, voice reference) | Gallery (audio), Activity | Load settings restores the Studio audio form | Text and prompt shown. Voice design and music style only in "All info" | ⚠️ details hide the style and voice |
 | `generation.video`, legacy `generate` / `recast` | Root video + sidecar | Gallery, Activity | Retake, Extend, Video Editor, Load settings | Yes. `lineage.parents` stays empty for refs and start frames | ⚠️ lineage |
 | `tools.upscale`, `upscale`, `wizard.image_upscale` | Root file + tool sidecar with parents | Gallery (Edits) | Re-generate does not reopen the Tools form | Source only | ⚠️ |
-| `audio.shorten`, `studio.key` | Root file, **no sidecar** (source and mode only in `.mcp-intents`) | Gallery; trail | As media only; cannot be redone | None on the file | ⚠️ trail only |
+| `audio.shorten` | Root file, **no sidecar** (source and mode only in `.mcp-intents`) | Gallery; trail | As media only; cannot be redone | None on the file | ⚠️ trail only |
+| `studio.key` | Root PNG/WebM + sidecar (source as parent, mode, adaptive, despill, residual haze share) | Gallery; trail | As media; redo with the same source and mode | `requested_by` and `command_id` on the file | ✅ |
+| `media.frame`, `media.compose`, `audio.trim` | Root PNG/JPG/WAV + sidecar (sources as parents, the tool's parameters) | Gallery; trail | As media; the sidecar names every source and setting | `requested_by` and `command_id` on the file | ✅ |
+| `assets.import_from_workspace` | Copy at the root + the source's sidecar rewritten (`copied_from`, lineage parent) | Gallery; trail | As media (a GLB in the 3D viewer) | `copied_from` and `requested_by` on the file | ✅ |
+| `series.shot.update` | The shot's changed fields in the series library (takes kept) | Series Lab; trail (the episode) | Series Lab shot editor | Trail | ✅ |
 | `assets.upload` | Root file (named copies keep the source sidecar) | Gallery, Assets; trail | As media | Trail | ✅ |
 | `world3d.templates.user.put` | `world3d-user-templates.json` row | **My templates → Saved in this workspace**; trail | Opens as an editable shot | `createdBy` badge, dates | ✅ fixed here (was ❌) |
 | `world3d.scene.instantiate` / `apply_query` / `patch` / `talk` | `world3d-edits/w3d-*.json` (working scene) | Trail (one row per scene) | Trail button opens the current revision in Video 3D | Template, tools and counts | ✅ fixed here. Unpublished scenes are still not in the gallery or the editor's Open dialog |
@@ -79,7 +83,7 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `model3d.rig` | `…_rigged_….glb` + meta + `.humanoid.json` | Gallery with clip selector, Activity | View; no "re-rig with these settings" | Engine, profile and clips; now the agent and command | ✅ fixed here (was `actor unknown`) |
 | `model3d.compose` / `model3d.animate` | `compose-*.glb` / `humanoid-*.glb` + recipe sidecar | Gallery, trail | View or rig only (no compose UI). Animate is shown as static | Recipe; agent tool | ⚠️ |
 | `characters.save` | `.character-kit-library-v1.json` | Character Kit library, trail | Character Kit editor | Trail (`kit.provenance` is not shown) | ✅ via the trail |
-| `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record | Kit face rig, trail | Anchors editable (face rig panel) | Kit record and trail | ⚠️ PNG clutter in the gallery |
+| `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record; warp mouths also `kit-*-<pose>-mouth-*.png` in `anchors.<pose>.mouthSources` | Kit face rig, trail | Anchors editable (face rig panel); a warp pose's mouth line in the Face Rig's Mouth line editor | Kit record (`provenance` keeps style, hints and `mouthLines`) and trail | ⚠️ PNG clutter in the gallery |
 | `lips.*` | `.lips-creator-library-v1.json` | Lips Creator, trail | Yes | Trail | ✅ |
 | `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail | Series Lab | Trail. No creator on the record; translations are not marked as machine-made | ✅ via the trail |
 | `series.asset.import` (`as_take`), `series.take.approve` | `assets/<series>/asset_*` copy + take | Series Lab only, trail | Series Lab (see the per-shot review work) | Auto-approvals look like a person's | ⚠️ |
@@ -125,8 +129,9 @@ until the user saves:
    in the sidecar.
 5. **Montage exports.** Record `montage: {file, revision}` in the sidecar, add "Edit in Video
    Editor" from the video, and have the Wizard save a montage before exporting.
-6. **Sidecars for `studio.key`, `audio.shorten` and flat-rig PNGs.** Record the source, mode and
-   parents with `publish_generation_sidecar`.
+6. **Sidecars for `audio.shorten` and flat-rig PNGs.** Record the source, mode and parents with
+   `publish_generation_sidecar`, as `studio.key` and the media tools now do
+   (`services/production_media_common.publish_sidecar`).
 7. **Who approved.**
    - Record the actor on Series take approvals and production reviews.
    - Mark machine translations.

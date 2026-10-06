@@ -46,6 +46,19 @@ test('three candidates are generated with distinct seeds and keyed as they arriv
   assert.ok(updates.some(items => items.some(item => item.status === 'keying')))
 })
 
+test('a candidate whose key left a haze says so', async () => {
+  const found = await generateKeyedCandidates({
+    workspace: 'cast', style, kind: 'character', description: 'Ines', model: 'qwen_image_21',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 7,
+    generate: async () => ({ source: '/api/v1/file/raw-7.png?workspace=cast' }) as never,
+    key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x',
+                        report: { semiTransparentShare: 0.42, transparentShare: 0.1, haze: true } }),
+  })
+  assert.ok(found.every(item => item.status === 'ready' && item.haze === 0.42))
+})
+
 test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
   assert.deepEqual(expectedPitch('Male voice. Calm.'), [75, 175])
   assert.deepEqual(expectedPitch('Voz de mujer joven'), [150, 320])

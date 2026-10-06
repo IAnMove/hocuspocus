@@ -355,3 +355,22 @@ def test_a_3d_shot_names_its_objects_models_clips_and_carriers_before_any_render
     for text in expected:
         assert any(text in problem for problem in problems), (text, problems)
     assert tools.calls == []
+
+
+def test_video_shots_keep_their_kind_clip_sound_and_cue_parts():
+    """kind video / generated make imported and H3 takes; their sfx (with a part of a file), music and clip audio
+    are written on layout2d for the cut, and an unknown kind is refused."""
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "kind": "video", "duration": 6, "clipAudio": "drop", "clipFit": "contain",
+         "sfx": [{"file": "sfx-pen.wav", "at": 1.5, "in": 0.4, "length": 0.3}]},
+        {"scene": "a", "kind": "generated", "duration": 5, "clipVolume": 0.5}]}
+    result = apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    imported, generated = tools.calls[1][1]["episode"]["shots"]
+    assert result["shots"] == ["e2s00", "e2s01"]
+    assert imported["productionMethod"] == "imported_video" and generated["productionMethod"] == "generated_video"
+    assert imported["layout2d"]["clipAudio"] == "drop" and imported["layout2d"]["clipFit"] == "contain"
+    assert imported["layout2d"]["sfx"] == [{"file": "sfx-pen.wav", "at": 1.5, "in": 0.4, "length": 0.3}]
+    assert generated["layout2d"]["clipVolume"] == 0.5 and generated["durationSeconds"] == 5.0
+    with pytest.raises(ScriptError, match="kind must be 2d"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", {**script, "shots": [{"scene": "a", "kind": "movie"}]})

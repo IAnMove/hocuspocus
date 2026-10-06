@@ -14,7 +14,11 @@ def _output_artifact(output: dict, task: dict) -> dict | None:
     url = output.get("url")
     workspace = output.get("workspace") if isinstance(output.get("workspace"), str) else task.get("workspace")
     if isinstance(name, str) and name and isinstance(url, str) and url and isinstance(workspace, str) and workspace:
-        return {"name": name, "url": url, "workspace": workspace}
+        artifact = {"name": name, "url": url, "workspace": workspace}
+        if output.get("replaced") is True and isinstance(output.get("previous"), str):
+            # A named export (output_name) replaced an earlier file, kept as ``previous``.
+            artifact.update(replaced=True, previous=output["previous"])
+        return artifact
     return None
 
 
