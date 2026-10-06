@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +14 with the flat rig's small faces, +19 recoverability follow-ups, +12 its last items, 2026-10-06; +71 game-asset tests, 2026-10-07). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +14 with the flat rig's small faces, +19 recoverability follow-ups, +12 its last items, 2026-10-06; +140 game-asset tests, 2026-10-07). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2775,
+      "weight": 2803,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -263,7 +263,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2763,
+      "weight": 2804,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
