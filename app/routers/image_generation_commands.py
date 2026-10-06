@@ -4,6 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
+from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.image_generation_spec import image_generation_schema
 from services.studio_image_spec import studio_image_schema
 from services.image_generation_commands import command_error
@@ -83,7 +84,8 @@ def image_command_handlers(service):
     def submission_handler(operation):
         async def submit(arguments):
             _generation_arguments(arguments)
-            return await service.submit({**arguments, "operation": operation}, trusted_tool="external_agent")
+            # An MCP client is an external agent; a server job calling the same handler in process is not.
+            return await service.submit({**arguments, "operation": operation}, trusted_tool=agent_trusted_tool(default_external=True))
         return submit
 
     def receipt(arguments):

@@ -1,7 +1,7 @@
 import { ExampleDownloads } from './ExampleDownloads'
 import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
-import { exampleCollections } from './templateCatalog'
+import { exampleCollections, isBuiltinScene3DTemplate } from './templateCatalog'
 import { CinematicControls, AppearanceControls, RenderLookControls } from './CinematicControls'
 import { PixelWorldControls } from './PixelWorldControls'
 import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
@@ -644,7 +644,8 @@ function WorkspaceStageColumn({
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
             onReset={() => {
-              const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id)
+              const pose = isBuiltinScene3DTemplate(sceneDoc.templateId)
+                ? applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id) : undefined
               if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
             }} />}
         </div>

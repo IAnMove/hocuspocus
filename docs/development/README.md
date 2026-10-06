@@ -43,6 +43,7 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 
 - [SHARED_NATIVE_COMMANDS.md](SHARED_NATIVE_COMMANDS.md) — guía · usar los comandos compartidos desde el Wizard o un cliente MCP.
 - [WIZARD_MCP_USAGE.md](WIZARD_MCP_USAGE.md) — guía · guía de uso del corpus de comandos publicados.
+- [MCP_RECOVERABILITY.md](MCP_RECOVERABILITY.md) — contrato · qué deja cada herramienta MCP y acción del Wizard, dónde lo encuentra y edita el usuario (vista «Agentes» de Actividad) y qué falta.
 - [IMAGE_COMMANDS.md](IMAGE_COMMANDS.md), [MUSIC_COMMANDS.md](MUSIC_COMMANDS.md), [SFX_COMMANDS.md](SFX_COMMANDS.md), [SPEECH_COMMANDS.md](SPEECH_COMMANDS.md), [TOOLS_COMMANDS.md](TOOLS_COMMANDS.md), [WORKSPACE_COMMANDS.md](WORKSPACE_COMMANDS.md) — contrato · admisión de comandos por dominio.
 - [SCENE_EFFECTS_AND_MCP.md](SCENE_EFFECTS_AND_MCP.md) — contrato · SFX de escena, voz y cómo activar y conectar MCP.
 - [WIZARD_ACTION_RUNNER.md](WIZARD_ACTION_RUNNER.md) — contrato · runner de acciones del Wizard y adaptadores de aplicación.

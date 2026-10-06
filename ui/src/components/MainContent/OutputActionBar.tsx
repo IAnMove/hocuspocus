@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo } from 'lucide-react'
+import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clapperboard } from 'lucide-react'
 import { editOutputImage, addOutputImageReference } from '../../features/studio/imageInputActions'
 import { beginImageSettingsChange } from '../../features/studio/imageSettingsRestore'
 import { outputImageUrl, outputMediaUrl } from '../../lib/storedImageFiles'
@@ -12,6 +12,7 @@ import { galleryWorkspaceName } from '../../stores/gallerySlice'
 import { useStore } from '../../stores/useStore'
 import { fetchOutputMetadata, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile } from '../../types'
+import { exportedSceneKind, openExportedScene } from '../../lib/exportedScene'
 import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
@@ -364,8 +365,26 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
 
 type OutputActions = ReturnType<typeof useOutputActions>
 
+/** A Video 2D/3D export reopens the scene it was rendered from (also when an agent made it through MCP). */
+function EditSceneButton({ params, t }: { params: Params; t: OutputActions['t'] }) {
+  const [error, setError] = useState('')
+  const kind = exportedSceneKind(params)
+  if (!kind) return null
+  const label = t(kind === '3d' ? 'editScene3d' : 'editScene2d')
+  return (
+    <>
+      <button type="button" data-testid="output-edit-scene" data-scene-kind={kind}
+        onClick={event => { event.stopPropagation(); setError(''); void openExportedScene(params).catch(reason => setError(reason instanceof Error ? reason.message : String(reason))) }}
+        className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title={label} aria-label={label}>
+        <Clapperboard size={13} />
+      </button>
+      {error && <span role="alert" className="max-w-40 truncate text-[9px] text-red-400" title={error}>{error}</span>}
+    </>
+  )
+}
+
 function HandoffActions({ a }: { a: OutputActions }) {
-  const { directorReplacementTarget, editorReplacementTarget, file, handleOpenInVideoEditor, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, montageSelectionError, selectingForMontage, t } = a
+  const { directorReplacementTarget, editorReplacementTarget, file, handleOpenInVideoEditor, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, montageSelectionError, params, selectingForMontage, t } = a
   return (
     <>
         {file.type === 'video' && directorReplacementTarget && (
@@ -399,6 +418,7 @@ function HandoffActions({ a }: { a: OutputActions }) {
             <Film size={13} />
           </button>
         )}
+        {file.type === 'video' && <EditSceneButton params={params} t={t} />}
         {montageSelectionError && <span className="max-w-40 truncate text-[9px] text-red-400" title={montageSelectionError}>{montageSelectionError}</span>}
     </>
   )

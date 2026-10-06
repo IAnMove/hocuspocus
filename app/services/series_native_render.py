@@ -24,6 +24,7 @@ stopped. A recording is keyed by text and voice and reused.
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
@@ -130,6 +131,50 @@ def _discard(path: str) -> None:
             os.remove(item)
         except OSError:
             pass
+
+
+def _sidecar(path: str) -> str:
+    return f"{os.path.splitext(path)[0]}.meta.json"
+
+
+def _carry_sidecar(raw: str, trimmed: str) -> None:
+    """The trimmed line keeps the raw take's provenance (text, voice, model, seed) so the gallery can show and redo it."""
+    try:
+        with open(_sidecar(raw), encoding="utf-8") as handle:
+            sidecar = json.load(handle)
+    except (OSError, ValueError):
+        return
+    if not isinstance(sidecar, dict):
+        return
+    name = os.path.basename(trimmed)
+    asset = sidecar.get("asset") if isinstance(sidecar.get("asset"), dict) else {}
+    media = asset.get("media") if isinstance(asset.get("media"), dict) else {}
+    try:
+        media["size_bytes"] = os.path.getsize(trimmed)
+    except OSError:
+        pass
+    sidecar["asset"] = {**asset, "filename": name, "uri": name, "media": media}
+    sidecar["output_filename"] = name
+    lineage = sidecar.get("lineage") if isinstance(sidecar.get("lineage"), dict) else {}
+    lineage["transformations"] = [*(lineage.get("transformations") or []), {"kind": "trim", "from": os.path.basename(raw)}]
+    sidecar["lineage"] = lineage
+    temporary = f"{_sidecar(trimmed)}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(sidecar, handle, ensure_ascii=False)
+        os.replace(temporary, _sidecar(trimmed))
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.remove(temporary)
+
+
+def _replace_with_sidecar(source: str, target: str) -> None:
+    os.replace(source, target)
+    if os.path.isfile(_sidecar(source)):
+        os.replace(_sidecar(source), _sidecar(target))
+    else:
+        with contextlib.suppress(OSError):
+            os.remove(_sidecar(target))
 
 
 def _ok(result: dict, label: str) -> dict:
@@ -459,6 +504,8 @@ class SeriesNativeRender:
                 raw = self._speak(workspace, job, stem, text, voice, attempt)
                 try:
                     duration = self._trim(os.path.join(root, raw), final)
+                    if duration:
+                        _carry_sidecar(os.path.join(root, raw), final)
                 finally:
                     _discard(os.path.join(root, raw))  # the trimmed take is the recording; the raw one is an intermediate
                 if duration < shortest_line(text):
@@ -469,13 +516,13 @@ class SeriesNativeRender:
                 take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
                 if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
                     best = take
-                    os.replace(final, best_path)
+                    _replace_with_sidecar(final, best_path)
                 if wer is None or wer <= MAX_WER:
                     break
         finally:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
             if os.path.isfile(best_path):
-                os.replace(best_path, final)
+                _replace_with_sidecar(best_path, final)
         if best is None:
             raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
                                     "try another reference voice or reword the line", 502)
