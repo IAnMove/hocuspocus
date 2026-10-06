@@ -245,7 +245,8 @@
         "tests/test_game_gen_animation.py",
         "tests/test_game_gen_vfx.py",
         "tests/test_game_gen_audio.py",
-        "tests/test_game_gen_3d.py"
+        "tests/test_game_gen_3d.py",
+        "tests/test_game_export.py"
       ]
     },
     {
@@ -1390,7 +1391,7 @@
     },
     {
       "prefix": "app/routers/game_library.py",
-      "paths": ["tests/test_game_library_router.py"]
+      "paths": ["tests/test_game_library_router.py", "tests/test_game_export.py"]
     },
     {
       "prefix": "app/shared/game_actions.json",
@@ -1466,7 +1467,11 @@
     },
     {
       "prefix": "app/services/game_sheet.py",
-      "paths": ["tests/test_game_sheet.py"]
+      "paths": ["tests/test_game_sheet.py", "tests/test_game_export.py"]
+    },
+    {
+      "prefix": "app/services/game_export.py",
+      "paths": ["tests/test_game_export.py"]
     },
     {
       "prefix": "app/services/game_generators/animation.py",
