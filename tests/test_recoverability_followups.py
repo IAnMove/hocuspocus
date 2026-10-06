@@ -244,8 +244,8 @@ def test_a_montage_export_names_the_montage_it_came_from(tmp_path):
 
 # 6. Tool sidecars --------------------------------------------------------------------------------------------------------
 
-def test_a_shortened_song_names_its_source_and_kept_ranges(tmp_path):
-    from routers.audio_shorten import shorten_request
+def test_a_shortened_song_names_its_source_and_kept_ranges(tmp_path, monkeypatch):
+    import routers.audio_shorten as shorten
     workspace = tmp_path / "song"
     workspace.mkdir()
     source = workspace / "tema.wav"
@@ -254,6 +254,10 @@ def test_a_shortened_song_names_its_source_and_kept_ranges(tmp_path):
         handle.setsampwidth(2)
         handle.setframerate(8000)
         handle.writeframes((np.sin(np.arange(8000 * 4) / 8) * 8000).astype("<i2").tobytes())
+    # The cut itself (librosa) is song_shorten's; here only what the result file says about it.
+    monkeypatch.setattr(shorten, "load_and_shorten", lambda _path, keep, snap=True: (
+        np.zeros(16000, dtype=np.float32), 8000, [[0.0, 1.0, 0.0], [2.0, 3.0, 1.0]]))
+    shorten_request = shorten.shorten_request
     result = shorten_request({"workspace": "song", "source": "tema.wav", "keep": [[0, 1], [2, 3]]},
                              resolve_source=lambda value, _ws: str(workspace / value), workspace_dir=lambda _ws: str(workspace))
     sidecar = json.loads((workspace / result["file"]).with_suffix(".meta.json").read_text())
