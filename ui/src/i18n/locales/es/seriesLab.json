@@ -959,7 +959,9 @@
       "placeholder": "¿Qué debería cambiar en este plano? Se guarda mientras escribes.",
       "saving": "Guardando…",
       "saved": "Guardado",
-      "failed": "No se pudo guardar la nota"
+      "failed": "No se pudo guardar la nota",
+      "pending": "Nota pendiente de guardar",
+      "retry": "Reintentar guardado"
     },
     "card": {
       "noPreview": "Aún sin previo",

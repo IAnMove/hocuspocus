@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { draftNote } from './reviewModel'
 import { textareaClass } from './styles'
+import { readApprovalNote, saveApprovalNote, writeApprovalNote } from './approvalNoteDraft'
 import type { SeriesReviewReply, SeriesReviewStage, SeriesShotReview } from './types'
 
 const DEBOUNCE_MS = 800
@@ -9,35 +10,36 @@ const DEBOUNCE_MS = 800
 export type SaveNote = (note: { id?: string; text: string; stage: SeriesReviewStage }) => Promise<SeriesReviewReply | undefined>
 
 /** The shot's notes: earlier ones listed, and one box for the user's note at this stage, saved as they type. */
-export function SeriesApprovalNotes({ shotId, entry, stage, onSave }: {
-  shotId: string; entry: SeriesShotReview; stage: SeriesReviewStage; onSave: SaveNote
+export function SeriesApprovalNotes({ draftKey, shotId, entry, stage, onSave }: {
+  draftKey: string; shotId: string; entry: SeriesShotReview; stage: SeriesReviewStage; onSave: SaveNote
 }) {
   const { t } = useUiTranslation('seriesLab')
   const draft = draftNote(entry, stage)
-  const [text, setText] = useState(draft?.text ?? '')
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const [text, setText] = useState(() => readApprovalNote(draftKey)?.text ?? draft?.text ?? '')
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed' | 'pending'>(() => readApprovalNote(draftKey) ? 'pending' : 'idle')
   const [noteId, setNoteId] = useState(draft?.id)
   const idRef = useRef(draft?.id)
-  const pending = useRef<string | null>(null)
   const timer = useRef<number | undefined>(undefined)
   const flush = useCallback(async () => {
-    const value = pending.current
-    pending.current = null
-    if (value === null || (!value.trim() && !idRef.current)) return
+    window.clearTimeout(timer.current); timer.current = undefined
+    if (!readApprovalNote(draftKey)) return
     setState('saving')
     try {
-      const reply = await onSave({ ...(idRef.current ? { id: idRef.current } : {}), text: value.trim() ? value : '', stage })
-      idRef.current = value.trim() ? reply?.noteIds?.[shotId] ?? idRef.current : undefined
+      idRef.current = await saveApprovalNote(draftKey, async note => {
+        if (!note.text.trim() && !note.id) return undefined
+        const reply = await onSave({ ...(note.id ? { id: note.id } : {}), text: note.text.trim() ? note.text : '', stage })
+        return note.text.trim() ? reply?.noteIds?.[shotId] ?? note.id : undefined
+      })
       setNoteId(idRef.current)
-      setState('saved')
+      setState(readApprovalNote(draftKey) ? 'pending' : 'saved')
     } catch { setState('failed') }
-  }, [onSave, shotId, stage])
+  }, [draftKey, onSave, shotId, stage])
   const flushRef = useRef(flush)
   useEffect(() => { flushRef.current = flush }, [flush])
   // A note typed just before the card goes away (a filter, another tab) is still saved.
-  useEffect(() => () => { window.clearTimeout(timer.current); void flushRef.current() }, [])
+  useEffect(() => () => { if (timer.current !== undefined) void flushRef.current() }, [])
   const change = (value: string) => {
-    setText(value); pending.current = value; setState('idle')
+    setText(value); writeApprovalNote(draftKey, value, readApprovalNote(draftKey)?.id ?? idRef.current); setState('pending')
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => { void flushRef.current() }, DEBOUNCE_MS)
   }
@@ -55,5 +57,6 @@ export function SeriesApprovalNotes({ shotId, entry, stage, onSave }: {
     <textarea id={`series-approval-note-${shotId}`} className={`${textareaClass} min-h-16 text-sm sm:text-xs`} value={text} maxLength={2000}
       placeholder={t('approval.notes.placeholder')} onChange={event => change(event.target.value)} />
     <p role="status" className={`text-[10px] ${state === 'failed' ? 'text-red-300' : 'text-text-muted'}`}>{state === 'idle' ? '' : t(`approval.notes.${state}`)}</p>
+    {(state === 'failed' || state === 'pending') && <button type="button" className="text-xs underline" onClick={() => void flush()}>{t('approval.notes.retry')}</button>}
   </div>
 }

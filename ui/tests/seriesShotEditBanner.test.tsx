@@ -9,6 +9,22 @@ Object.assign(globalThis, { window: dom.window, document: dom.window.document, l
   HTMLElement: dom.window.HTMLElement, Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MutationObserver: dom.window.MutationObserver })
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 
+test('returning to an edited shot restores its project and episode before focusing it', async () => {
+  const { useStore } = await import('../src/stores/useStore')
+  const { useSeriesStore } = await import('../src/features/series/store')
+  const { returnToShot, useShotEditSession } = await import('../src/features/series/shotEditSession')
+  const original = series(episode([shot('s1', 1)]))
+  const other = { ...original, id: 'other' }
+  useStore.setState({ activeWorkspace: 'plus-ultra', mediaFilter: 'world3d' })
+  useSeriesStore.setState({ workspace: 'plus-ultra', activeSeriesId: 'other', activeEpisodeId: 'ep1', hydrated: true, dirty: false,
+    library: { schema: 'series-library', version: 1, workspaceId: 'plus-ultra', seriesOrder: [original.id, other.id], seriesById: { [original.id]: original, other } } })
+  await returnToShot({ workspace: 'plus-ultra', seriesId: original.id, episodeId: 'ep1', shotId: 's1', order: 1,
+    episodeTitle: 'Original', sceneFilename: 'scene.json', sceneName: 'scene', dimension: '3d', productionMethod: 'animation_3d', openedAt: 1 })
+  assert.equal(useSeriesStore.getState().activeSeriesId, original.id)
+  assert.equal(useSeriesStore.getState().activeEpisodeId, 'ep1')
+  assert.equal(useShotEditSession.getState().focusShotId, 's1')
+})
+
 test('a video exported after opening a shot in the editor becomes that shot\'s take', { concurrency: false }, async t => {
   const { render, cleanup, fireEvent, waitFor } = await import('@testing-library/react')
   const { useStore } = await import('../src/stores/useStore')

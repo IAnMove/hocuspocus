@@ -29,6 +29,31 @@ const preview = (mouth: [number, number], mouthWidth: number) => ({ pose: 'busto
   line: [[mouth[0] - mouthWidth / 2, mouth[1]], [mouth[0] + mouthWidth / 2, mouth[1]]], view: [[50, 10], [70, 30]], hint: null,
   states: Object.fromEntries(['closed', 'small', 'medium', 'wide', 'round', 'pucker'].map(state => [state, `data:image/jpeg;base64,${state}`])) })
 
+test('closing the mouth editor aborts the active preview and discards its queued change', async t => {
+  const { render, fireEvent, act, cleanup } = await import('@testing-library/react')
+  const { FlatRigMouthEditor } = await import('../src/features/characters/FlatRigMouthEditor')
+  t.after(cleanup)
+  const timers = new Map<number, () => void>()
+  let count = 0
+  t.mock.method(window, 'setTimeout', (callback: () => void) => { timers.set(++count, callback); return count })
+  t.mock.method(window, 'clearTimeout', (id: number) => timers.delete(id))
+  const requests: AbortSignal[] = []
+  t.mock.method(globalThis, 'fetch', (_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    const signal = init!.signal!
+    requests.push(signal)
+    signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+  }))
+  const drain = () => { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(fn => fn()) }
+  const view = render(<FlatRigMouthEditor kit={warpKit()} poseId="busto" workspace="cast" />)
+  act(drain)
+  fireEvent.click(view.getByRole('button', { name: 'Down' }))
+  act(drain)
+  assert.equal(requests.length, 1, 'the second preview waits behind the first')
+  await act(async () => { view.unmount(); await Promise.resolve() })
+  assert.equal(requests[0].aborted, true)
+  assert.equal(requests.length, 1, 'unmount must not start the queued preview')
+})
+
 test('the mouth line editor previews a pose live, moves its line by hand and saves it as the pose hint', async t => {
   const { render, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
   const { FlatRigMouthEditor } = await import('../src/features/characters/FlatRigMouthEditor')

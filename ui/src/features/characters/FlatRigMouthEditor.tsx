@@ -36,7 +36,7 @@ export function FlatRigMouthEditor(props: Props) {
   if (!isFlatRigged(props.kit)) return null
   return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="flat-rig-mouth-line" className="rounded border border-amber-300/30 bg-black/15 p-2">
     <summary className="cursor-pointer text-sm font-medium text-amber-100">{t('mouthLine.title', { pose: characterKitPoseLabel(props.poseId) })}</summary>
-    {open && <MouthLineWorkbench key={`${props.kit.id}:${props.poseId}`} {...props} />}
+    {open && <MouthLineWorkbench key={JSON.stringify([props.workspace, props.kit.id, props.poseId])} {...props} />}
   </details>
 }
 
@@ -47,17 +47,19 @@ function useMouthLinePreview(kit: CharacterKit, poseId: string, workspace: strin
   const [preview, setPreview] = useState<FlatRigMouthPreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const state = useRef<{ busy: boolean; queued?: MouthLineDraft | null; controller?: AbortController }>({ busy: false })
+  const state = useRef<{ busy: boolean; disposed?: boolean; queued?: MouthLineDraft | null; controller?: AbortController }>({ busy: false })
   const latest = useRef({ draft, onFirst })
   useEffect(() => { latest.current = { draft, onFirst } })
   const run = async (value: MouthLineDraft | undefined) => {
     const current = state.current
+    if (current.disposed) return
     if (current.busy) { current.queued = value ?? null; return }
     const controller = new AbortController()
     Object.assign(current, { busy: true, controller }); setLoading(true)
     try {
       const result = await previewFlatRigMouth({ workspace, kitId: kit.id, pose: poseId, signal: controller.signal,
         ...(value ? { mouth: value.mouth, mouthWidth: value.mouthWidth } : {}) })
+      if (controller.signal.aborted || current.disposed) return
       setPreview(result); setError(null)
       // Nothing saved: start from where the rig places the line.
       if (!latest.current.draft) latest.current.onFirst(cleanMouthLine({ mouth: result.mouth, mouthWidth: result.mouthWidth }))
@@ -68,7 +70,7 @@ function useMouthLinePreview(kit: CharacterKit, poseId: string, workspace: strin
       if (!controller.signal.aborted) setLoading(false)
       const next = current.queued
       current.queued = undefined
-      if (next !== undefined) void run(next ?? undefined)
+      if (!controller.signal.aborted && !current.disposed && next !== undefined) void run(next ?? undefined)
     }
   }
   const key = JSON.stringify(draft ?? null)
@@ -77,7 +79,11 @@ function useMouthLinePreview(kit: CharacterKit, poseId: string, workspace: strin
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one preview per change of the line
   }, [key, kit.id, poseId, workspace])
-  useEffect(() => () => state.current.controller?.abort(), [])
+  useEffect(() => {
+    const current = state.current
+    current.disposed = false
+    return () => { current.disposed = true; current.queued = undefined; current.controller?.abort() }
+  }, [])
   return { preview, loading, error }
 }
 

@@ -63,8 +63,8 @@ export function SeriesApprovalPanel({ workspace, series, episode, reload, update
   }, [focusShotId])
   const send = useCallback(async (change: Parameters<typeof saveReview>[1]) => {
     setBusy(true); setError('')
-    try { return await saveReview(episode.id, change) } catch (reason) { setError((reason as Error).message); throw reason } finally { setBusy(false) }
-  }, [episode.id, saveReview])
+    try { return await saveReview(episode.id, change, { workspace, seriesId: series.id }) } catch (reason) { setError((reason as Error).message); throw reason } finally { setBusy(false) }
+  }, [workspace, series.id, episode.id, saveReview])
   const quiet = (task: Promise<unknown>) => { void task.catch(() => { /* shown in the panel */ }) }
   const actions: ApprovalCardActions = {
     review: async (shot, stage, status) => {

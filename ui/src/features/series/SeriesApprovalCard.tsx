@@ -128,7 +128,9 @@ export function SeriesApprovalCard({ workspace, series, episode, shot, entry, mo
       {media?.sceneFilename && <button type="button" className={`${secondaryButton} ${button}`} onClick={() => actions.openEditor(shot)}><ExternalLink size={13} />{t('approval.card.openEditor')}</button>}
       {canRenderOnServer(shot) && <button type="button" className={`${secondaryButton} ${button}`} disabled={renderLive} onClick={() => actions.rerender(shot)}><RotateCcw size={13} />{t('approval.card.rerender')}</button>}
     </div>
-    <SeriesApprovalNotes key={`${shot.id}:${noteStage(mode, entry)}`} shotId={shot.id} entry={entry} stage={noteStage(mode, entry)} onSave={actions.saveNote(shot)} />
+    <SeriesApprovalNotes key={JSON.stringify([workspace, series.id, episode.id, shot.id, noteStage(mode, entry)])}
+      draftKey={JSON.stringify([workspace, series.id, episode.id, shot.id, noteStage(mode, entry)])}
+      shotId={shot.id} entry={entry} stage={noteStage(mode, entry)} onSave={actions.saveNote(shot)} />
     {editing && <SeriesShotEditPanel workspace={workspace} series={series} episode={episode} shot={shot} onChange={actions.changeShot} saveNow={saveNow} />}
   </article>
 }

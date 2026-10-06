@@ -30,7 +30,7 @@ interface SeriesState {
   acceptAssetImport: (workspace: string, result: SeriesReferenceImport) => void
   saveNow: () => Promise<SeriesProject | null>
   /** Send one review change (mode, approvals, notes) after pending edits; merges the server's review without losing edits. */
-  saveReview: (episodeId: string, change: SeriesReviewChange) => Promise<SeriesReviewReply>
+  saveReview: (episodeId: string, change: SeriesReviewChange, scope?: { workspace: string; seriesId: string }) => Promise<SeriesReviewReply>
   newSeries: () => Promise<void>
   newSeriesFromTemplate: (templateId: string, language: 'es' | 'en') => Promise<void>
   duplicateSeries: (seriesId?: string) => Promise<void>
@@ -75,6 +75,7 @@ function restoredSelection(workspace: string): { seriesId?: string; episodeId?: 
 
 let saveTimer: number | undefined
 let saveInFlight: Promise<SeriesProject | null> | null = null
+let reviewTail: Promise<void> = Promise.resolve()
 
 /** The series with the server's review of one episode and its new revision; every other local field is kept. */
 function withReview(series: SeriesProject, reply: SeriesReviewReply): SeriesProject {
@@ -305,32 +306,37 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
     return get().activeSeriesId === projectId && get().dirty ? get().saveNow() : saved
   },
 
-  saveReview: async (episodeId, change) => {
-    await get().saveNow()
-    const state = get()
-    const project = selectedSeries(state)
-    if (!project?.episodesById[episodeId]) throw new Error('Series episode not found')
-    const projectId = project.id
-    const merge = (reply: SeriesReviewReply) => {
-      const latest = get()
-      const current = latest.library.seriesById[projectId]
-      if (!current) return reply
-      set({
-        library: { ...latest.library, seriesById: { ...latest.library.seriesById, [projectId]: withReview(current, reply) } },
-        serverRevision: latest.activeSeriesId === projectId ? reply.revision : latest.serverRevision,
+  saveReview: (episodeId, change, scope) => {
+    const workspace = scope?.workspace ?? get().workspace, projectId = scope?.seriesId ?? get().activeSeriesId
+    const currentScope = () => get().workspace === workspace && get().activeSeriesId === projectId
+    const result = reviewTail.then(async () => {
+      if (!currentScope()) throw new Error('The series workspace or project changed')
+      await get().saveNow()
+      if (!currentScope()) throw new Error('The series workspace or project changed')
+      if (!selectedSeries(get())?.episodesById[episodeId]) throw new Error('Series episode not found')
+      const request = api.saveSeriesEpisodeReview(workspace, projectId, episodeId, change).then(reply => {
+        const latest = get(), current = latest.library.seriesById[projectId]
+        if (latest.workspace !== workspace || !current || current.revision > reply.revision) return reply
+        set({
+          library: { ...latest.library, seriesById: { ...latest.library.seriesById, [projectId]: withReview(current, reply) } },
+          serverRevision: latest.activeSeriesId === projectId ? reply.revision : latest.serverRevision,
+        })
+        return reply
       })
-      return reply
-    }
-    const request = api.saveSeriesEpisodeReview(state.workspace, projectId, episodeId, change).then(merge)
-    // Holding the save slot keeps an autosave from sending the revision this request is about to replace.
-    set({ saving: true })
-    saveInFlight = request.then(() => get().library.seriesById[projectId] || null, () => get().library.seriesById[projectId] || null)
-      .finally(() => { set({ saving: false }); saveInFlight = null })
-    try { return await request }
-    finally {
-      await saveInFlight
-      if (get().dirty) void get().saveNow().catch(() => { /* Store exposes the save error. */ })
-    }
+      // Autosave waits for this request; a later review has already reserved its own turn.
+      set({ saving: true })
+      const held = request.then(() => selectedSeries(get()), () => selectedSeries(get())).finally(() => {
+        if (saveInFlight === held) { saveInFlight = null; set({ saving: false }) }
+      })
+      saveInFlight = held
+      try { return await request }
+      finally {
+        await held
+        if (currentScope() && get().dirty) void get().saveNow().catch(() => { /* Store exposes the save error. */ })
+      }
+    })
+    reviewTail = result.then(() => {}, () => {})
+    return result
   },
 
   newSeries: async () => {
