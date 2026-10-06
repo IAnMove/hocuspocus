@@ -42,12 +42,12 @@ from PIL import Image, ImageDraw
 
 from services import face_landmarks
 from services.character_kit_library import patch_character_kit, read_character_kit_library
+from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _paste_inside
+from services.flat_rig_ink import _ink_sprite_width, draw_ink_mouth, ink_colour
 
-STATES = ("closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue")
 MAPPING = {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small",
            "O": "round", "U": "pucker", "F": "bite", "L": "tongue"}
-SPRITE = (512, 320)
-INK, CAVITY = (34, 22, 20, 255), (92, 26, 30, 255)
+CAVITY = (92, 26, 30, 255)
 TEETH, TONGUE = (250, 248, 240, 255), (222, 98, 110, 255)
 SCREEN_INK, SCREEN_CAVITY = (245, 250, 255, 255), (10, 22, 70, 255)
 STYLE_LIMITS = {"smile": (-1.0, 1.0, 0.15), "smirk": (0.0, 1.0, 0.0), "width": (0.3, 0.9, 0.62),
@@ -57,12 +57,6 @@ STYLE_LIMITS = {"smile": (-1.0, 1.0, 0.15), "smirk": (0.0, 1.0, 0.0), "width": (
 MOUTH_STYLES = ("paper", "ink")
 MAX_PIXELS = 16_777_216
 _CROSS = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
-
-
-class FlatRigError(ValueError):
-    def __init__(self, code: str, message: str, status: int = 422) -> None:
-        super().__init__(message)
-        self.code, self.status = code, status
 
 
 def rig_style(value: Any) -> dict[str, Any]:
@@ -851,15 +845,6 @@ def _arc(draw, centre, width, curve, height, ink, thickness, smirk=0.0) -> None:
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=ink)
 
 
-def _paste_inside(image, outline, fill, box_or_ellipse, kind) -> None:
-    mask = Image.new("L", image.size, 0)
-    ImageDraw.Draw(mask).polygon(outline, fill=255)
-    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    getattr(ImageDraw.Draw(layer), kind)(box_or_ellipse, fill=fill)
-    clip = Image.composite(layer, Image.new("RGBA", image.size, (0, 0, 0, 0)), mask)
-    image.paste(layer, (0, 0), clip.split()[3])
-
-
 def _open_mouth(image, draw, centre, width, height, style, ink, cavity, thickness, *, teeth=True, tongue=True) -> None:
     """A D-shaped open mouth: flatter top lip, round bottom."""
     ox, oy = centre
@@ -913,78 +898,6 @@ def draw_mouth(state: str, style: dict[str, Any]) -> Image.Image:
     else:
         raise FlatRigError("invalid_state", f"Unknown mouth state {state}")
     return image.resize(SPRITE, Image.LANCZOS)
-
-
-# Ink mouths -----------------------------------------------------------------
-# The paper mouths are cartoon drawings: on a face inked in flat blacks they look pasted on. With mouthStyle "ink" the
-# painted mouth stays as the rest shape and each open shape is a hard-edged opening in the painted mouth's own ink,
-# hanging from it (the upper lip stays, the jaw drops), sized from its width.
-
-# The painted mouth's width is this share of an ink sprite's width; the sprite is centred on the painted mouth.
-INK_SPAN = 0.5
-# Each open shape's width and depth in painted-mouth widths. closed and pressed draw nothing: the painted mouth shows.
-INK_OPENINGS = {"small": (0.55, 0.1), "medium": (0.72, 0.22), "wide": (0.88, 0.36), "tongue": (0.66, 0.22),
-                "bite": (0.62, 0.12), "round": (0.46, 0.3), "pucker": (0.3, 0.2)}
-# How square each opening's lower lip hangs (higher: rounder corners) and whether the lower lip is drawn under it.
-_INK_BELLY = {"small": 1.0, "bite": 1.0, "medium": 0.75, "tongue": 0.75, "wide": 0.6, "round": 0.5, "pucker": 0.55}
-_INK_LOWER_LIP = ("medium", "wide", "round", "tongue")
-BONE, FLESH = (232, 222, 200), (150, 52, 46)
-
-
-def ink_colour(rgb: np.ndarray, mask: np.ndarray, background) -> tuple[int, ...]:
-    """The painted mouth's ink: the median of the third of its pixels farthest from the face colour."""
-    pixels = rgb[mask].astype(float)
-    far = np.abs(pixels - np.asarray(background, dtype=float)).sum(axis=1)
-    return tuple(int(v) for v in np.median(pixels[far >= np.percentile(far, 67)], axis=0)) + (255,)
-
-
-def _mix(a, b, share: float) -> tuple[int, ...]:
-    return tuple(round(x * (1 - share) + y * share) for x, y in zip(a[:3], b[:3])) + (255,)
-
-
-def _ink_opening(cx: float, cy: float, w: float, d: float, belly: float) -> list[tuple[float, float]]:
-    """An opening under the painted line: its top runs along the line (the upper lip stays) with a slight bow, its
-    bottom is the dropped lower lip, pointed at the corners like an inked mouth."""
-    ts = [i / 40 * 2 - 1 for i in range(41)]
-    top = [(cx + t * w / 2, cy - d * 0.05 * (1 - t * t)) for t in ts]
-    bottom = [(cx + t * w / 2, cy + d * (1 - abs(t) ** 2.2) ** belly) for t in reversed(ts)]
-    return top + bottom
-
-
-def _lower_lip(draw, cx: float, cy: float, w: float, d: float, belly: float, weight: float, ink) -> None:
-    """A short pen stroke under the opening, following its curve and tapered at both ends: the lower lip as an
-    inker draws it, not a cartoon outline."""
-    gap = d * 0.14 + weight
-    ts = [i / 30 * 1.2 - 0.6 for i in range(31)]
-    curve = [(cx + t * w / 2, cy + d * (1 - abs(t) ** 2.2) ** belly + gap) for t in ts]
-    upper = [(x, y - weight * (1 - (t / 0.6) ** 2)) for (x, y), t in zip(curve, ts)]
-    lower = [(x, y + weight * 0.6 * (1 - (t / 0.6) ** 2)) for (x, y), t in zip(curve, ts)]
-    draw.polygon(upper + list(reversed(lower)), fill=tuple(ink))
-
-
-def draw_ink_mouth(state: str, ink=INK, skin=(200, 160, 130)) -> Image.Image:
-    """One ink mouth sprite (512×320, transparent), drawn at 4× and averaged down: a flat opening in the painted
-    mouth's ink hanging from the painted line, with a tapered lower-lip stroke under the open ones. Only ``wide`` and
-    ``bite`` show a hint of upper teeth (the skin toward bone, never white) and ``tongue`` a dark tongue tip."""
-    if state not in STATES:
-        raise FlatRigError("invalid_state", f"Unknown mouth state {state}")
-    width, height, k = SPRITE[0], SPRITE[1], 4
-    image = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
-    if state in INK_OPENINGS:
-        draw = ImageDraw.Draw(image)
-        painted, cx, cy = width * k * INK_SPAN, width * k / 2, height * k / 2
-        w, d = (share * painted for share in INK_OPENINGS[state])
-        belly = _INK_BELLY[state]
-        outline = _ink_opening(cx, cy, w, d, belly)
-        draw.polygon(outline, fill=tuple(ink))
-        if state in ("wide", "bite"):
-            band = d * (0.16 if state == "wide" else 0.5)
-            _paste_inside(image, outline, _mix(skin, BONE, 0.3), (cx - w * 0.28, cy - d, cx + w * 0.28, cy + band), "rectangle")
-        if state == "tongue":
-            _paste_inside(image, outline, _mix(ink, FLESH, 0.45), (cx - w * 0.2, cy - d * 0.3, cx + w * 0.2, cy + d * 0.55), "ellipse")
-        if state in _INK_LOWER_LIP:
-            _lower_lip(draw, cx, cy, w, d, belly, painted * 0.03, ink)
-    return image.resize(SPRITE, Image.BOX)
 
 
 # Blink ----------------------------------------------------------------------
@@ -1254,6 +1167,20 @@ def _guided_eyes(rgb: np.ndarray, alpha: np.ndarray, near, guide: dict[str, Any]
     return _outlined_eyes(rgb, alpha, guide["eye_outlines"])
 
 
+def _pose_guides(image: Image.Image, crop, size, hint, landmarks) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The pose's hints and what the landmarks give that no hint does, in pixels of the cropped figure."""
+    def inside(x, y):
+        return min(max(x - crop[0], 0), size[0] - 1), min(max(y - crop[1], 0), size[1] - 1)
+    near = {key: inside(point[0] / 100 * image.width, point[1] / 100 * image.height) for key, point in (hint or {}).items()}
+    guide = {key: value for key, value in face_landmarks.guides(landmarks).items() if key not in near}
+    for key in ("eyes", "mouth"):
+        if key in guide:
+            guide[key] = inside(*guide[key])
+    if "eye_outlines" in guide:
+        guide["eye_outlines"] = [outline - np.array(crop[:2], dtype=float) for outline in guide["eye_outlines"]]
+    return near, guide
+
+
 def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[float]] | None = None,
              landmarks: dict[str, Any] | None = None) -> dict[str, Any]:
     """Crop, find the face, wipe the painted mouth (paper mouths) and measure anchors for one keyed pose. ``hint``
@@ -1265,16 +1192,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     figure = cleaned.crop(crop)
     pixels = np.array(figure)
     rgb, alpha = pixels[..., :3], pixels[..., 3]
-
-    def inside(x, y):
-        return min(max(x - crop[0], 0), figure.width - 1), min(max(y - crop[1], 0), figure.height - 1)
-    near = {key: inside(point[0] / 100 * image.width, point[1] / 100 * image.height) for key, point in (hint or {}).items()}
-    guide = {key: value for key, value in face_landmarks.guides(landmarks).items() if key not in near}
-    for key in ("eyes", "mouth"):
-        if key in guide:
-            guide[key] = inside(*guide[key])
-    if "eye_outlines" in guide:
-        guide["eye_outlines"] = [outline - np.array(crop[:2], dtype=float) for outline in guide["eye_outlines"]]
+    near, guide = _pose_guides(image, crop, figure.size, hint, landmarks)
     eyes_box, eyes_mask = _guided_eyes(rgb, alpha, near.get("eyes"), guide)
     ex0, ey0, ex1, ey1 = eyes_box
     covered = eyes_covered(rgb, alpha, eyes_box, eyes_mask)
@@ -1318,15 +1236,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
         warnings.append("mouth_not_found")
     elif wiped and stray_marks(np.array(rigged)[..., :3], alpha, face_eyes, mouth_box):
         warnings.append("stray_mark")
-    if ink:
-        # The sprite holds the painted mouth (or, with none found, the landmarks' mouth or half the eye pair) in
-        # INK_SPAN of its width. A painted line found much shorter than the landmarks' mouth is a piece of it.
-        span = guide.get("mouth_width")
-        painted = mouth_box[2] - mouth_box[0] if found else None
-        mouth_width = painted if painted and not (span and painted < span * 0.6) else span or (ex1 - ex0) * 0.5
-        sprite_width = mouth_width / INK_SPAN
-    else:
-        sprite_width = (ex1 - ex0) * style["mouth_scale"]
+    sprite_width = _ink_sprite_width(mouth_box, guide, eyes_box) if ink else (ex1 - ex0) * style["mouth_scale"]
     lids = background if style["screen"] else _eye_skin(rgb, alpha, eyes_box, background)
     openings = eye_openings(rgb, alpha, eyes_mask, lids, style["screen"])
     ys, xs = np.nonzero(openings)

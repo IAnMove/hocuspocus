@@ -9,9 +9,10 @@ from PIL import Image, ImageDraw
 
 from services.character_kit_library import patch_character_kit, read_character_kit_library
 from services.flat_rig import (
-    INK_OPENINGS, INK_SPAN, REALISTIC_MOUTH, SPRITE, STATES, FlatRigError, _dilate, _face_crop, _figure_box, crop_figure,
+    REALISTIC_MOUTH, SPRITE, STATES, FlatRigError, _dilate, _face_crop, _figure_box, crop_figure,
     draw_ink_mouth, eye_extent, face_realistic, find_eyes, place, rig_character, rig_hints, rig_pose, rig_style,
 )
+from services.flat_rig_ink import INK_OPENINGS, INK_SPAN
 from tests.test_flat_rig import WORKSPACE, _anime_eyes, _code_face, _cutout, _full_body_anime, _small_o_face, _workspace
 
 REAL_SKIN, REAL_INK, BRASS = (214, 166, 112, 255), (26, 18, 14, 255), (120, 90, 30, 255)

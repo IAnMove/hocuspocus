@@ -1,14 +1,16 @@
 """Face landmarks guide the flat rig, closed lids stay on the face, and ink mouths drop the lower lip."""
-import cv2
 import numpy as np
 import pytest
+
+cv2 = pytest.importorskip("cv2")
 from PIL import Image, ImageDraw
 
 from services import face_landmarks
 from services.character_kit_library import patch_character_kit
 from services.flat_rig import (
-    INK_OPENINGS, LUMA, FlatRigError, _figure_box, draw_ink_mouth, place, rig_character, rig_pose, rig_style,
+    LUMA, FlatRigError, _figure_box, draw_ink_mouth, place, rig_character, rig_pose, rig_style,
 )
+from services.flat_rig_ink import INK_OPENINGS
 
 INK = rig_style({"mouthStyle": "ink"})
 SKIN = (205, 140, 70, 255)
