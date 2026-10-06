@@ -1,7 +1,8 @@
 """Estimate source falls from defaults to the J0 trial, then to history."""
 import json
 
-from services.game_estimate import DEFAULTS, NAME, estimate, record, seconds_for
+from services.game_estimate import DEFAULTS, NAME, TRIAL, estimate, read_timings, record, record_run, seconds_for
+from services.game_generators import REGISTRY
 from services.game_library import create_game, normalize_game
 
 NOW = "2026-10-06T12:00:00Z"
@@ -36,3 +37,40 @@ def test_empty_history_uses_the_trial_median():
     animated = estimate(None, game, [animation])
     assert animated["source"] == "trial"
     assert animated["minutes"] == 5.1
+
+
+class _Steps:
+    def __init__(self, counts):
+        self.counts = counts
+
+    def estimate(self, _game, _asset):
+        return dict(self.counts)
+
+
+def test_a_finished_asset_records_one_step_not_the_whole_asset(tmp_path, monkeypatch):
+    _library, game = create_game({}, {"id": "bosque", "title": "Bosque"}, now=NOW)
+    monkeypatch.setitem(REGISTRY, "item", _Steps({"image": 3}))
+    coin = {"id": "moneda", "kind": "item", "spec": {}}
+    record_run(tmp_path, game, coin, 90)
+    assert read_timings(tmp_path)["image"] == [30.0]
+    # The next estimate for the same asset is the time it really took, not 3 x 90 s.
+    assert estimate(tmp_path, game, [coin])["minutes"] == 1.5
+    monkeypatch.setitem(REGISTRY, "model3d", _Steps({"image": 1, "3d": 1}))
+    chest = {"id": "cofre", "kind": "model3d", "spec": {}}
+    elapsed = 2 * (TRIAL["image"] + TRIAL["3d"])
+    record_run(tmp_path / "mixed", game, chest, elapsed)
+    stored = read_timings(tmp_path / "mixed")
+    assert stored["image"] == [round(2 * TRIAL["image"], 3)]
+    assert stored["3d"] == [round(2 * TRIAL["3d"], 3)]
+    assert estimate(tmp_path / "mixed", game, [chest])["minutes"] == round(elapsed / 60.0, 1)
+
+
+def test_a_generator_that_cannot_read_the_spec_falls_back(monkeypatch):
+    class Broken:
+        def estimate(self, _game, _asset):
+            raise ValueError("invalid literal for int()")
+
+    _library, game = create_game({}, {"id": "bosque", "title": "Bosque"}, now=NOW)
+    monkeypatch.setitem(REGISTRY, "item", Broken())
+    report = estimate(None, game, [{"id": "moneda", "kind": "item", "candidates": "many"}])
+    assert report["byKind"]["item"] == round(TRIAL["image"] / 60.0, 3)

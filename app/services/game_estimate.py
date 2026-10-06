@@ -7,6 +7,7 @@ step, the same tail as ``production_estimate.py``.
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,23 @@ def record(root: Any, step_type: str, seconds: float) -> None:
     _write(Path(root), body)
 
 
+def record_run(root: Any, game: dict[str, Any], asset: dict[str, Any], seconds: float) -> None:
+    """Split one asset's wall time over its steps, in proportion to their current estimate.
+
+    ``estimate`` multiplies a per-step median by the step count, so a sample is
+    one step's time: three image candidates that took 90 s record 30 s.
+    """
+    if not root or isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        return
+    counts = steps_for(game, asset)
+    each = {step: seconds_for(root, step)[0] for step in counts}
+    expected = sum(each[step] * times for step, times in counts.items())
+    if expected <= 0:
+        return
+    for step in counts:
+        record(root, step, each[step] * float(seconds) / expected)
+
+
 def seconds_for(root: Any, step_type: str, *, trial: dict[str, float] | None = TRIAL) -> tuple[float, str]:
     """``(seconds, source)`` for one step. ``trial=None`` skips the J0 table."""
     samples = _samples(read_timings(root).get(step_type))
@@ -96,7 +114,10 @@ def steps_for(game: dict[str, Any], asset: dict[str, Any]) -> dict[str, int]:
     """Step counts. Registered generators already include their candidate count."""
     generator = REGISTRY.get(str(asset.get("kind") or ""))
     if generator is not None:
-        counts = generator.estimate(game, asset)
+        try:
+            counts = generator.estimate(game, asset)
+        except Exception:  # a spec the generator cannot read still gets the fallback estimate
+            counts = None
         parsed = _counts(counts)
         if parsed:
             return parsed
@@ -169,10 +190,13 @@ def _overall(sources: list[str], trial: dict[str, float] | None) -> str:
 
 def _write(root: Path, body: dict[str, Any]) -> None:
     path = root / NAME
-    temporary = path.with_suffix(".json.tmp")
+    temporary = root / f"{NAME}.{uuid.uuid4().hex}.tmp"
     try:
         root.mkdir(parents=True, exist_ok=True)
         temporary.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
         temporary.replace(path)
     except OSError:
-        return
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            return

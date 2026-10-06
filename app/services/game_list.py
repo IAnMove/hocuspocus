@@ -44,6 +44,7 @@ STYLE_SAMPLES = (
 )
 
 _LAYERED_MODEL = "qwen_image_layered_20B"
+_MAX_CANDIDATES = 8  # the produce endpoint accepts 1..8
 _LINE = re.compile(r"^(?P<kind>\S+)\s+(?P<id>\S+)\s*:\s*(?P<body>.*)$")
 _SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _KINDS = {
@@ -203,13 +204,28 @@ def _specified(raw: dict[str, Any], line_no: int) -> tuple[list[dict[str, Any]],
     slug = _slug_id(str(raw.get("id") or ""))
     if not slug:
         return [], [_problem(line_no, "invalid_line", "The asset id is empty")]
+    problem = _spec_problem(raw, line_no)
+    if problem:
+        return [], [problem]
     item: dict[str, Any] = {
         "id": slug, "kind": kind, "name": raw.get("name") or slug,
         "description": str(raw.get("description") or ""), "spec": dict(raw.get("spec") or {}), "line": line_no,
     }
-    if raw.get("candidates"):
+    if raw.get("candidates") is not None:
         item["candidates"] = raw["candidates"]
     return [item], []
+
+
+def _spec_problem(raw: dict[str, Any], line_no: int) -> dict[str, Any] | None:
+    spec = raw.get("spec")
+    if spec is not None and not isinstance(spec, dict):
+        return _problem(line_no, "invalid_spec", "spec must be an object")
+    count = raw.get("candidates")
+    if count is None:
+        return None
+    if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= _MAX_CANDIDATES:
+        return _problem(line_no, "invalid_spec", f"candidates must be a whole number from 1 to {_MAX_CANDIDATES}")
+    return None
 
 
 def _one(kind_token: Any, asset_id: Any, description: str, options: list[str], line_no: int, name: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -220,10 +236,9 @@ def _one(kind_token: Any, asset_id: Any, description: str, options: list[str], l
     if not slug:
         return [], [_problem(line_no, "invalid_line", "The asset id is empty")]
     spec: dict[str, Any] = {}
-    for option in options:
-        _apply_option(spec, kind, option)
+    problems = _apply_options(spec, kind, options, line_no)
     label = name.strip() if isinstance(name, str) and name.strip() else slug
-    return [{"id": slug, "kind": kind, "name": label, "description": description.strip(), "spec": spec, "line": line_no}], []
+    return [{"id": slug, "kind": kind, "name": label, "description": description.strip(), "spec": spec, "line": line_no}], problems
 
 
 def _actions(character: str, body: str, options: list[str], line_no: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -231,10 +246,8 @@ def _actions(character: str, body: str, options: list[str], line_no: int) -> tup
     if not slug:
         return [], [_problem(line_no, "invalid_line", "The character id is empty")]
     shared: dict[str, Any] = {}
-    for option in options:
-        _apply_option(shared, "animation", option)
+    problems = _apply_options(shared, "animation", options, line_no)
     items: list[dict[str, Any]] = []
-    problems: list[dict[str, Any]] = []
     for token in [part.strip() for part in body.split(",") if part.strip()]:
         action = resolve_action(token)
         if action is None:
@@ -268,29 +281,39 @@ def _option_list(value: Any) -> list[str]:
     return []
 
 
-def _apply_option(spec: dict[str, Any], kind: str, text: str) -> None:
+def _apply_options(spec: dict[str, Any], kind: str, options: list[str], line_no: int) -> list[dict[str, Any]]:
+    """Apply every option. A typo such as ``8 frame`` is reported, not dropped."""
+    problems = []
+    for option in options:
+        if not _apply_option(spec, kind, option):
+            problems.append(_problem(line_no, "unknown_option", f"Unknown option '{option}'"))
+    return problems
+
+
+def _apply_option(spec: dict[str, Any], kind: str, text: str) -> bool:
     folded = _fold(text)
     if folded in _ROLES:
         spec["role"] = _ROLES[folded]
-        return
+        return True
     if folded in {"9-slice", "9slice"}:
         spec["nineSlice"] = True
-        return
+        return True
     if folded == "retro":
         spec["engine"] = "retro"
-        return
+        return True
     if folded == "multivista":
         spec["multiview"] = True
-        return
-    _apply_numbered(spec, kind, folded)
+        return True
+    return _apply_numbered(spec, kind, folded)
 
 
-def _apply_numbered(spec: dict[str, Any], kind: str, folded: str) -> None:
+def _apply_numbered(spec: dict[str, Any], kind: str, folded: str) -> bool:
     for pattern, key in _NUMBERED:
         match = pattern.fullmatch(folded)
         if match:
             _store_option(spec, kind, key, match.group(1))
-            return
+            return True
+    return False
 
 
 def _store_option(spec: dict[str, Any], kind: str, key: str, raw: str) -> None:
@@ -341,6 +364,8 @@ def _character_problem(item: dict[str, Any], known: set[str]) -> dict[str, Any] 
     character = spec.get("character")
     if item.get("kind") in _NEEDS_CHARACTER and not character:
         return _problem(item.get("line") or 0, "missing_character", "This asset needs a character")
+    if character and not isinstance(character, str):
+        return _problem(item.get("line") or 0, "invalid_spec", "character must be an asset id")
     if character and character not in known:
         return _problem(item.get("line") or 0, "missing_character", f"Character '{character}' is not in the game or the list")
     return None

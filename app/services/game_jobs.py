@@ -14,7 +14,8 @@ from typing import Any
 
 JOBS_DIR = ".game-jobs-v1"
 KIND = "produce"
-_ACTIVE = {"queued", "running", "failed", "cancelled", "interrupted"}
+# Jobs a restart can pick up again: still active, or stopped before every step finished.
+_RECOVERABLE = {"queued", "running", "cancelling", "failed", "cancelled", "interrupted"}
 
 
 class GameJobStore:
@@ -76,7 +77,7 @@ class GameJobStore:
         return sorted(result, key=lambda item: float(item.get("updatedAt") or item.get("createdAt") or 0), reverse=True)
 
     def recoverable(self) -> list[dict]:
-        return [item for item in self.list() if item.get("status") in _ACTIVE]
+        return [item for item in self.list() if item.get("status") in _RECOVERABLE]
 
     def discard(self, job_id: str) -> bool:
         """Discard the checkpoint only. Output media is left in place."""

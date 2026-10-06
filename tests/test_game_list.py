@@ -1,7 +1,9 @@
 """Asset list grammar, checks, and library apply."""
 from services.game_estimate import estimate
 from services.game_library import create_game, normalize_game, read_library
-from services.game_list import EXAMPLE_LIST, apply, check, commit_list, parse_csv, parse_json, parse_lines, parse_report
+from services.game_list import (
+    EXAMPLE_LIST, apply, check, commit_list, parse_csv, parse_json, parse_json_report, parse_lines, parse_report,
+)
 
 NOW = "2026-10-06T12:00:00Z"
 
@@ -146,6 +148,35 @@ def test_commit_writes_the_game_and_leaves_other_games(tmp_path):
     written = read_library(str(tmp_path))
     assert {game["id"] for game in written["games"]} == {"bosque", "otro"}
     assert other["id"] == "otro"
+
+
+
+def test_mistyped_options_are_reported_not_dropped():
+    items, problems = parse_report("objeto moneda: oro | 8 frame\nsfx salto: corto | variants 3 | retro\nanim heroe: idle | 6 frame")
+    assert [(item["line"], item["code"]) for item in problems] == [
+        (1, "unknown_option"), (2, "unknown_option"), (3, "unknown_option"),
+    ]
+    assert "'8 frame'" in problems[0]["message"]
+    by_id = {item["id"]: item for item in items}
+    assert by_id["salto"]["spec"] == {"engine": "retro"}
+    assert set(by_id) == {"moneda", "salto", "heroe-idle"}
+
+
+def test_bad_json_specs_become_problems():
+    items, problems = parse_json_report([
+        {"kind": "item", "id": "a", "spec": "x"},
+        {"kind": "item", "id": "b", "spec": [1]},
+        {"kind": "item", "id": "c", "spec": {}, "candidates": "many"},
+        {"kind": "item", "id": "d", "spec": {}, "candidates": True},
+        {"kind": "item", "id": "e", "spec": None, "candidates": 2},
+    ])
+    assert [(item["line"], item["code"]) for item in problems] == [
+        (1, "invalid_spec"), (2, "invalid_spec"), (3, "invalid_spec"), (4, "invalid_spec"),
+    ]
+    assert [(item["id"], item["spec"], item["candidates"]) for item in items] == [("e", {}, 2)]
+    _library, game = _game()
+    odd = [{"id": "heroe-idle", "kind": "animation", "spec": {"character": [1], "action": "idle"}, "line": 1}]
+    assert [item["code"] for item in check(game, odd)] == ["invalid_spec"]
 
 
 MAX_PLUS = 501

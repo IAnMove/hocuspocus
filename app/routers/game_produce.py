@@ -115,6 +115,8 @@ def create_game_produce_router(service: GameProduce, *, call: Callable[[str, dic
         bind_loop(asyncio.get_running_loop())
 
         def run() -> dict[str, Any]:
+            # A busy game answers 409 before the samples are written. start() checks again under its lock.
+            service.check_idle(body.workspace, game_id)
             _ensure_samples(service, body.workspace, game_id)
             ids = [item["id"] for item in STYLE_SAMPLES]
             return service.start(body.workspace, game_id, asset_ids=ids)
