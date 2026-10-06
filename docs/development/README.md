@@ -126,3 +126,4 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 ## Recursos para videojuegos
 
 - [GAME_ASSETS_BOARD.md](GAME_ASSETS_BOARD.md) — plan · tablero de la pestaña Recursos para videojuegos (J0–J17).
+- [GAME_ASSETS_TRIAL_2026-10-06.md](GAME_ASSETS_TRIAL_2026-10-06.md) — histórico · prueba J0 del 6 de octubre de 2026. Fija los valores por defecto de la animación.
