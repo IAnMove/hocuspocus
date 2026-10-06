@@ -348,8 +348,11 @@ def _select(assets: list[dict], asset_ids: list[str] | None, kinds: list[str] | 
 
 
 def _group_animation_steps(steps: list[dict]) -> list[dict]:
-    """J6 step 3 decides which actions share a clip. Until then each asset is its own step."""
-    return steps
+    """One step per action. J0 left ``groupActions`` false, so clips are not shared."""
+    from services.game_generators.animation import GAME_ANIMATION_DEFAULTS
+    if GAME_ANIMATION_DEFAULTS["groupActions"]:
+        return list(steps)
+    return list(steps)
 
 
 def _find_asset(game: dict, asset_id: str) -> dict | None:

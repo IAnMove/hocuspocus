@@ -241,7 +241,9 @@
         "tests/test_game_inputs.py",
         "tests/test_game_library_router.py",
         "tests/test_game_tools.py",
-        "tests/test_game_prompts.py"
+        "tests/test_game_prompts.py",
+        "tests/test_game_gen_animation.py",
+        "tests/test_game_gen_vfx.py"
       ]
     },
     {
@@ -1432,7 +1434,7 @@
     },
     {
       "prefix": "app/services/game_generators/__init__.py",
-      "paths": ["tests/test_game_gen_still.py"]
+      "paths": ["tests/test_game_gen_still.py", "tests/test_game_gen_animation.py", "tests/test_game_gen_vfx.py"]
     },
     {
       "prefix": "app/services/game_list.py",
@@ -1461,6 +1463,14 @@
     {
       "prefix": "app/services/game_sheet.py",
       "paths": ["tests/test_game_sheet.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/animation.py",
+      "paths": ["tests/test_game_gen_animation.py", "tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/vfx.py",
+      "paths": ["tests/test_game_gen_vfx.py"]
     }
   ]
 }

@@ -42,6 +42,7 @@ def test_kind_defaults_and_walk_action():
         "assets": [
             {"id": "heroe", "kind": "character", "name": "Héroe"},
             {"id": "heroe-walk", "kind": "animation", "spec": {"character": "heroe", "action": "andar"}},
+            {"id": "heroe-idle", "kind": "animation", "spec": {"character": "heroe", "action": "idle"}},
             {"id": "moneda", "kind": "item"},
             {"id": "icono", "kind": "icon"},
             {"id": "boton", "kind": "ui"},
@@ -71,7 +72,8 @@ def test_kind_defaults_and_walk_action():
     assert walk["spec"]["frames"] == 8
     assert walk["spec"]["fps"] == 12
     assert walk["spec"]["loop"] is True
-    assert walk["spec"]["method"] == "h3"
+    assert walk["spec"]["method"] == "strip"
+    assert by_id["heroe-idle"]["spec"]["method"] == "h3"
     assert walk["spec"]["mirror"] is True
     assert walk["dependsOn"] == ["heroe"]
     assert by_id["moneda"]["spec"]["sizePx"] == 32

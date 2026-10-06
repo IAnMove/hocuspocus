@@ -268,13 +268,14 @@ def _spec_animation(raw: dict[str, Any], _game: dict[str, Any]) -> dict[str, Any
     character = _optional_slug(raw.get("character"))
     if not character:
         raise _problem("missing_character", action=action["id"])
+    from services.game_generators.animation import method_for
     return {
         "character": character,
         "action": action["id"],
         "frames": _int(raw.get("frames"), int(action["frames"]), 1),
         "fps": _int(raw.get("fps"), int(action["fps"]), 1),
         "loop": _bool(raw.get("loop"), bool(action["loop"])),
-        "method": _choice(raw.get("method"), ("h3", "strip"), "h3", "invalid_method"),
+        "method": _choice(raw.get("method"), ("h3", "strip"), method_for(action["id"]), "invalid_method"),
         "mirror": _bool(raw.get("mirror"), True),
     }
 
