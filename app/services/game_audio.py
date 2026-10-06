@@ -1,9 +1,10 @@
 """CPU helpers for game loops, jingles, and loudness.
 
 Loop points are sample indices. ``best_loop`` chooses a downbeat pair whose
-length is a multiple of four bars, then scores the crossfade windows. The WAV
-``smpl`` chunk stores an inclusive end, so a loop of the whole buffer is
-``0 .. len-1``.
+length is a multiple of four bars, then scores the crossfade windows. Its end
+is exclusive like a slice, so a loop of the whole buffer is ``(0, len)``. The
+WAV ``smpl`` chunk stores an inclusive end, so the same loop is ``0 .. len-1``
+there.
 """
 from __future__ import annotations
 
@@ -17,7 +18,12 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from services.audio_levels import level_file
+from services.audio_levels import integrated_lufs
+
+# Deterministic files: no random Ogg serial numbers or versioned encoder tags.
+_BITEXACT = ["-fflags", "+bitexact", "-flags:a", "+bitexact"]
+# ``latency=1`` compensates the lookahead, so samples keep their positions.
+_LIMITER = "alimiter=limit=0.95:level=disabled:latency=1"
 
 
 def to_mono(y):
@@ -94,8 +100,23 @@ def peak_normalize(y, peak_db=-1.0):
 
 
 def lufs_normalize(path, target):
-    """Rewrite ``path`` to ``target`` LUFS via ffmpeg. Returns the gain in dB."""
-    return float(level_file(path, target))
+    """Rewrite ``path`` to ``target`` LUFS via ffmpeg. Returns the gain in dB.
+
+    Like ``audio_levels.level_file`` (0.5 dB tolerance, gain held to +-20 dB,
+    peaks limited to 0.95), but the limiter does not shift the audio, a WAV
+    ``smpl`` loop chunk is copied onto the new file, and an Ogg keeps its
+    ``LOOPSTART``/``LOOPLENGTH`` comments, so loop points stay valid.
+    """
+    measured = integrated_lufs(str(path))
+    if measured is None or abs(float(target) - measured) <= 0.5:
+        return 0.0
+    gain = max(-20.0, min(20.0, float(target) - measured))
+    smpl = _riff_chunk(path, b"smpl")
+    if not _apply_gain(path, gain):
+        return 0.0
+    if smpl is not None:
+        _append_chunk(path, smpl)
+    return round(gain, 2)
 
 
 def _positive_mean(values) -> float | None:
@@ -193,9 +214,9 @@ def _pair_score(start, end, mean_bar, sr, target_s, chroma, mfcc, hop, xf):
     return (int(start), int(end), score, distance, gap, multiple)
 
 
-def _near_target(qualified: list) -> list:
+def _near_target(qualified: list, tolerance_s: float) -> list:
     nearest = min(item[3] for item in qualified)
-    return [item for item in qualified if item[3] <= nearest + 1e-3]
+    return [item for item in qualified if item[3] <= nearest + tolerance_s]
 
 
 def _closest_bars(scored: list) -> list:
@@ -205,9 +226,10 @@ def _closest_bars(scored: list) -> list:
     return [item for item in scored if item[4] <= nearest + 1e-6]
 
 
-def _choose_pair(scored: list):
+def _choose_pair(scored: list, tolerance_s: float):
+    """Best seam among four-bar pairs within ``tolerance_s`` of the closest length."""
     qualified = [item for item in scored if item[5] >= 4 and item[4] <= 0.35]
-    pool = _near_target(qualified) if qualified else _closest_bars(scored)
+    pool = _near_target(qualified, tolerance_s) if qualified else _closest_bars(scored)
     if not pool:
         return None
     pool.sort(key=lambda item: (-item[2], item[3], item[0]))
@@ -223,20 +245,29 @@ def _select_loop(downs, n, mean_bar, xf, sr, target_s, chroma, mfcc, hop):
             if end > n or end - start < xf:
                 continue
             scored.append(_pair_score(start, end, mean_bar, sr, target_s, chroma, mfcc, hop, xf))
-    chosen = _choose_pair(scored)
+    # Beat trackers jitter downbeats, so lengths within a bar (or 5% of the
+    # target) of the closest one count as equally close and the seam decides.
+    chosen = _choose_pair(scored, max(mean_bar / sr, 0.05 * target_s))
     if chosen is None:
-        return 0, max(1, n - 1), 0.0
-    return int(chosen[0]), int(chosen[1]), float(chosen[2])
+        return 0, n, 0.0, 0
+    return int(chosen[0]), int(chosen[1]), float(chosen[2]), xf
 
 
-def best_loop(y, sr, beats, downbeats, target_s, xf_beats=1):
-    """Return ``(start, end, score)`` for the best downbeat loop near ``target_s``.
+def best_loop(y, sr, beats, downbeats, target_s, xf_bars=1):
+    """Return ``(start, end, score, xf)`` for the best downbeat loop near ``target_s``.
 
-    ``beats`` and ``downbeats`` are sample indices. ``a`` must keep at least
-    ``xf_beats`` bars before it so the crossfade window exists. The score is
-    the average cosine similarity of chroma and MFCCs on ``[a-xf, a]`` and
-    ``[b-xf, b]``. When no pair lands within 0.35 bars of a multiple of four,
-    the closest four-bar pair that can still be scored is returned.
+    ``beats`` and ``downbeats`` are sample indices. ``end`` is exclusive, so the
+    loop is ``y[start:end]`` and its length is ``end - start``. ``xf`` is the
+    crossfade in samples (``xf_bars`` mean bars) to pass to ``render_loop``;
+    ``start`` keeps at least ``xf`` samples before it so the window exists. The
+    score is the average cosine similarity of chroma and MFCCs on
+    ``[start-xf, start]`` and ``[end-xf, end]``. Pairs within 0.35 bars of a
+    multiple of four bars compete on that score when their length is within
+    one bar or 5% of ``target_s`` (the larger) of the closest length. When no
+    pair is that close to four bars, the closest four-bar pair that can still
+    be scored is returned.
+    Without usable downbeats or pairs the whole buffer comes back as
+    ``(0, len, 0.0, 0)``: there is no audio outside it to crossfade with.
     """
     import librosa
 
@@ -244,27 +275,32 @@ def best_loop(y, sr, beats, downbeats, target_s, xf_beats=1):
     mean_bar = _mean_bar(beats, downbeats)
     downs = _downbeats(downbeats)
     if mean_bar <= 1.0 or len(downs) < 2 or mono.size < 2:
-        return 0, max(1, int(mono.size) - 1), 0.0
-    xf = max(1, int(round(float(xf_beats) * mean_bar)))
+        return 0, int(mono.size), 0.0, 0
+    xf = max(1, int(round(float(xf_bars) * mean_bar)))
     chroma, mfcc, hop = _features(mono, int(sr), librosa)
     return _select_loop(
         downs, int(mono.size), mean_bar, xf, int(sr), float(target_s), chroma, mfcc, hop,
     )
 
 
-def _equal_power(outgoing, incoming, fade_out, fade_in):
-    if outgoing.ndim == 1:
-        return fade_out * outgoing + fade_in * incoming
-    view = (fade_out.shape[0],) + (1,) * (outgoing.ndim - 1)
-    return fade_out.reshape(view) * outgoing + fade_in.reshape(view) * incoming
+def _crossfade(outgoing, incoming, ramp):
+    if outgoing.ndim > 1:
+        ramp = ramp.reshape((ramp.shape[0],) + (1,) * (outgoing.ndim - 1))
+    return (1.0 - ramp) * outgoing + ramp * incoming
 
 
 def render_loop(y, sr, a, b, xf):
-    """Return ``y[a:b]`` with an equal-power crossfade over the last ``xf`` samples.
+    """Return ``y[a:b]`` with a linear crossfade of ``xf`` samples at the seam.
 
-    Outgoing audio is ``y[b-xf:b]`` and incoming audio is ``y[a-xf:a]``.
-    ``t`` runs from 0 to 1: ``cos(pi/2 t) * outgoing + sin(pi/2 t) * incoming``.
-    ``sr`` is part of the call so it matches ``best_loop``; the fade is in samples.
+    ``t`` runs from 0 to 1: ``(1 - t) * outgoing + t * incoming``. Linear, not
+    equal power: ``best_loop`` picks correlated windows, where equal power adds
+    up to 3 dB and clips. When ``a >= xf`` the last ``xf`` samples fade from
+    ``y[b-xf:b]`` into the pre-roll ``y[a-xf:a]``, so the wrap lands on ``y[a]``.
+    When ``a < xf`` (``a == 0`` included) the first ``xf`` samples fade from the
+    post-roll ``y[b:b+xf]`` into ``y[a:a+xf]``, so the wrap from ``y[b-1]`` lands
+    on ``y[b]``. With neither window (a whole-buffer loop) the cut is returned
+    unfaded. ``sr`` is part of the call so it matches ``best_loop``; the fade is
+    in samples.
     """
     if int(sr) <= 0:
         raise ValueError("sample rate must be positive")
@@ -273,14 +309,13 @@ def render_loop(y, sr, a, b, xf):
     end = min(int(audio.shape[0]), max(start, int(b)))
     segment = audio[start:end].copy()
     width = int(xf)
-    if width <= 0 or start < width or segment.shape[0] < width:
+    if width <= 0 or segment.shape[0] < width:
         return segment
     ramp = np.linspace(0.0, 1.0, width, endpoint=True)
-    fade_out = np.cos(0.5 * np.pi * ramp)
-    fade_in = np.sin(0.5 * np.pi * ramp)
-    segment[-width:] = _equal_power(
-        audio[end - width : end], audio[start - width : start], fade_out, fade_in,
-    )
+    if start >= width:
+        segment[-width:] = _crossfade(audio[end - width : end], audio[start - width : start], ramp)
+    elif end + width <= int(audio.shape[0]):
+        segment[:width] = _crossfade(audio[end : end + width], audio[start : start + width], ramp)
     return segment
 
 
@@ -322,11 +357,27 @@ def _smpl_chunk(sr: int, loop_start: int, loop_end: int) -> bytes:
     return b"smpl" + struct.pack("<I", len(payload)) + payload
 
 
-def _append_smpl(path, sr: int, loop_start: int, loop_end: int) -> None:
+def _riff_chunk(path, ident: bytes) -> bytes | None:
+    """The first ``ident`` chunk of a WAV, header included; ``None`` if absent."""
+    blob = Path(path).read_bytes()
+    if blob[:4] != b"RIFF" or blob[8:12] != b"WAVE":
+        return None
+    pos = 12
+    while pos + 8 <= len(blob):
+        size = struct.unpack_from("<I", blob, pos + 4)[0]
+        if blob[pos : pos + 4] == ident:
+            return blob[pos : pos + 8 + size]
+        pos += 8 + size + (size & 1)
+    return None
+
+
+def _append_chunk(path, chunk: bytes) -> None:
     blob = Path(path).read_bytes()
     if blob[:4] != b"RIFF" or blob[8:12] != b"WAVE":
         raise ValueError("expected a RIFF WAVE file")
-    blob = blob + _smpl_chunk(sr, loop_start, loop_end)
+    if len(blob) & 1:
+        blob += b"\0"  # RIFF chunks start on an even offset.
+    blob = blob + chunk
     size = struct.pack("<I", len(blob) - 8)
     Path(path).write_bytes(blob[:4] + size + blob[8:])
 
@@ -334,7 +385,7 @@ def _append_smpl(path, sr: int, loop_start: int, loop_end: int) -> None:
 def write_wav_loop(path, y, sr, loop_start, loop_end) -> None:
     """Write a WAV and append a RIFF ``smpl`` loop from ``loop_start`` to ``loop_end``."""
     sf.write(path, np.asarray(y, dtype=np.float32), int(sr), subtype="PCM_16")
-    _append_smpl(path, int(sr), int(loop_start), int(loop_end))
+    _append_chunk(path, _smpl_chunk(int(sr), int(loop_start), int(loop_end)))
 
 
 def _remove(path: Path) -> None:
@@ -342,64 +393,90 @@ def _remove(path: Path) -> None:
         path.unlink()
 
 
-def _write_vorbis(path, audio: np.ndarray, sr: int) -> bool:
+def _run_ffmpeg(command: list[str], output: Path) -> bool:
+    """Run ``command``; remove a partial ``output`` when it fails."""
     try:
-        sf.write(path, audio, int(sr), format="OGG", subtype="VORBIS")
-    except (RuntimeError, OSError, ValueError, sf.LibsndfileError):
-        return False
-    return Path(path).is_file()
-
-
-def _tag_loop_metadata(path, loop_start: int, loop_length: int) -> bool:
-    if shutil.which("ffmpeg") is None:
-        return False
-    destination = Path(path)
-    # ffmpeg only muxes the Vorbis comments when the destination ends in .ogg.
-    temporary = destination.with_name(destination.stem + ".loop-tag.ogg")
-    command = [
-        "ffmpeg", "-v", "error", "-y", "-i", str(path),
-        "-c", "copy",
-        "-metadata", f"LOOPSTART={int(loop_start)}",
-        "-metadata", f"LOOPLENGTH={int(loop_length)}",
-        str(temporary),
-    ]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=60)
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=120)
     except (OSError, subprocess.SubprocessError):
-        _remove(temporary)
+        _remove(output)
         return False
-    if result.returncode != 0 or not temporary.is_file():
-        _remove(temporary)
+    if result.returncode != 0 or not output.is_file():
+        _remove(output)
         return False
-    os.replace(temporary, path)
     return True
 
 
-def _fallback_wav(path, audio: np.ndarray, sr: int, warning: str) -> str:
+def _apply_gain(path, gain_db: float) -> bool:
+    source = Path(path)
+    temporary = source.with_name(source.stem + ".level" + source.suffix)
+    codec = ["-c:a", "libvorbis"] if source.suffix.lower() == ".ogg" else []
+    command = [
+        "ffmpeg", "-v", "error", "-y", "-i", str(source),
+        "-af", f"volume={gain_db:.2f}dB,{_LIMITER}", *codec, *_BITEXACT, str(temporary),
+    ]
+    if not _run_ffmpeg(command, temporary):
+        return False
+    os.replace(temporary, source)
+    return True
+
+
+def _encode_vorbis(path, audio: np.ndarray, sr: int, loop_start: int, loop_length: int) -> bool:
+    """Encode once with libvorbis, writing the loop comments as it encodes.
+
+    Tagging libsndfile's Vorbis output with ``-c copy`` changed the decoded
+    length for some sizes (88200 frames came back 128 short), so ffmpeg encodes
+    from a float WAV instead.
+    """
+    destination = Path(path)
+    source = destination.with_name(destination.stem + ".loop-source.wav")
+    # The .ogg suffix makes ffmpeg pick the Ogg muxer, which writes the comments.
+    temporary = destination.with_name(destination.stem + ".loop-tag.ogg")
+    try:
+        sf.write(source, audio, int(sr), subtype="FLOAT")
+    except (RuntimeError, OSError, ValueError):
+        _remove(source)
+        return False
+    command = [
+        "ffmpeg", "-v", "error", "-y", "-i", str(source), "-c:a", "libvorbis",
+        "-metadata", f"LOOPSTART={int(loop_start)}",
+        "-metadata", f"LOOPLENGTH={int(loop_length)}",
+        *_BITEXACT, str(temporary),
+    ]
+    encoded = _run_ffmpeg(command, temporary)
+    _remove(source)
+    if encoded:
+        os.replace(temporary, destination)
+    return encoded
+
+
+def _fallback_wav(path, audio: np.ndarray, sr: int, loop_start: int, loop_length: int, warning: str) -> str:
     destination = Path(path)
     if destination.suffix.lower() == ".ogg":
         _remove(destination)
-    wav_path = destination.with_suffix(".wav")
-    sf.write(wav_path, audio, int(sr))
+    loop_end = max(int(loop_start), int(loop_start) + int(loop_length) - 1)
+    write_wav_loop(destination.with_suffix(".wav"), audio, int(sr), int(loop_start), loop_end)
     return warning
 
 
 def write_ogg_loop(path, y, sr, loop_start, loop_length):
-    """Write an Ogg Vorbis loop, or a WAV if Vorbis or ffmpeg cannot tag it.
+    """Write an Ogg Vorbis loop, or a WAV with a ``smpl`` loop if ffmpeg cannot encode it.
 
     Returns ``None`` when the Ogg file carries ``LOOPSTART`` and ``LOOPLENGTH``.
     Returns a warning string when the WAV fallback was written instead.
     """
     audio = np.asarray(y, dtype=np.float32)
-    if not _write_vorbis(path, audio, int(sr)):
-        return _fallback_wav(path, audio, int(sr), "Vorbis encoder unavailable; wrote WAV instead")
-    if not _tag_loop_metadata(path, int(loop_start), int(loop_length)):
-        return _fallback_wav(path, audio, int(sr), "ffmpeg could not tag the Ogg loop; wrote WAV instead")
-    return None
+    if shutil.which("ffmpeg") is None:
+        warning = "ffmpeg unavailable; wrote WAV instead"
+    elif not _encode_vorbis(path, audio, int(sr), int(loop_start), int(loop_length)):
+        warning = "ffmpeg could not encode the Ogg Vorbis loop; wrote WAV instead"
+    else:
+        return None
+    return _fallback_wav(path, audio, int(sr), int(loop_start), int(loop_length), warning)
 
 
 def _nearest_cut(downbeats, target: int, limit: int) -> int:
-    points = [int(item) for item in downbeats if 0 <= int(item) <= limit]
+    # A downbeat at 0 would cut an empty jingle.
+    points = [int(item) for item in downbeats if 0 < int(item) <= limit]
     if not points:
         return max(0, min(int(target), int(limit)))
     return min(points, key=lambda point: (abs(point - target), point))

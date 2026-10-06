@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import shutil
 import struct
+import subprocess
 from pathlib import Path
 
 import numpy as np
 import pytest
 import soundfile as sf
 
+from services import game_audio
 from services.audio_levels import integrated_lufs
 from services.game_audio import (
     best_loop,
@@ -72,20 +74,63 @@ def test_best_loop_picks_four_bar_spans_and_a_small_seam():
     pytest.importorskip("librosa")
     y, sr, beats, downbeats = _bar_chords()
     target_s = 8.0
-    start, end, score = best_loop(y, sr, beats, downbeats, target_s, xf_beats=1)
+    start, end, score, xf = best_loop(y, sr, beats, downbeats, target_s, xf_bars=1)
     mean_bar = float(np.mean(np.diff(downbeats)))
     span = (end - start) / mean_bar
     multiple = int(round(span / 4.0)) * 4
     assert multiple >= 4 and abs(span - multiple) <= 0.35, (start, end, span, score)
-    assert start >= int(mean_bar) - 1
-    xf = max(1, int(round(mean_bar)))
+    assert xf == round(mean_bar)
+    assert start >= xf
     loop = render_loop(y, sr, start, end, xf)
     metrics = seam_metrics(loop, sr)
     assert metrics["sample_jump"] < 0.02
     assert abs(metrics["rms_db"]) < 1.5
 
 
-def _smpl_loop_length(path: Path) -> int:
+def test_best_loop_lets_the_seam_decide_near_the_target():
+    pytest.importorskip("librosa")
+    y, sr, beats, downbeats = _bar_chords()
+    bar = downbeats[1]
+    jitter = round(0.2 * bar)
+    # A late downbeat makes a pair whose length matches the target exactly but
+    # whose seam lands a fifth of a bar into the next chord.
+    downbeats = list(downbeats)
+    downbeats[5] += jitter
+    start, end, score, _xf = best_loop(y, sr, beats, downbeats, (4 * bar + jitter) / sr)
+    assert end - start == 4 * bar, (start, end, score)
+    assert start % bar == 0
+
+
+def test_best_loop_fallback_end_is_exclusive():
+    pytest.importorskip("librosa")
+    y = np.linspace(-0.5, 0.5, 1000)
+    assert best_loop(y, 1000, [], [], 0.5) == (0, len(y), 0.0, 0)
+
+
+def test_render_loop_linear_crossfade_keeps_the_peak():
+    sr = 8000
+    y = 0.8 * np.sin(2.0 * np.pi * 100.0 * np.arange(sr) / sr)
+    # 80-sample period: both windows hold the same audio, the case best_loop picks.
+    loop = render_loop(y, sr, 800, 4800, 400)
+    assert loop.shape[0] == 4000
+    assert float(np.max(np.abs(loop))) <= float(np.max(np.abs(y))) + 1e-9
+    stereo = render_loop(np.column_stack([y, y]), sr, 800, 4800, 400)
+    assert np.allclose(stereo[:, 0], loop)
+
+
+def test_render_loop_at_zero_fades_in_from_the_post_roll():
+    sr = 1000
+    y = np.arange(2000, dtype=np.float64)
+    loop = render_loop(y, sr, 0, 1200, 100)
+    assert loop.shape[0] == 1200
+    assert loop[0] == y[1200]  # the wrap from y[1199] continues into y[1200]
+    assert loop[99] == y[99]
+    assert np.array_equal(loop[100:], y[100:1200])
+    whole = render_loop(y, sr, 0, len(y), 100)
+    assert np.array_equal(whole, y)
+
+
+def _smpl_loop(path: Path) -> tuple[int, int]:
     blob = path.read_bytes()
     assert blob[:4] == b"RIFF" and blob[8:12] == b"WAVE"
     pos = 12
@@ -100,7 +145,12 @@ def _smpl_loop_length(path: Path) -> int:
         pos += 8 + size + (size & 1)
     assert body is not None and len(body) >= 52
     start, end = struct.unpack_from("<II", body, 44)
-    return int(end - start)
+    return int(start), int(end)
+
+
+def _smpl_loop_length(path: Path) -> int:
+    start, end = _smpl_loop(path)
+    return end - start
 
 
 def test_wav_smpl_records_loop_length(tmp_path):
@@ -132,6 +182,24 @@ def test_lufs_normalize_targets_minus_sixteen(tmp_path):
     assert abs(after + 16.0) <= 1.0
 
 
+def test_lufs_normalize_keeps_loop_points_and_timing(tmp_path):
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg cannot measure")
+    sr = 44100
+    t = np.arange(int(sr * 2.5)) / sr
+    tone = 0.03 * np.sin(2.0 * np.pi * 440.0 * t)
+    tone[2000] = 0.1
+    path = tmp_path / "loop.wav"
+    write_wav_loop(path, tone, sr, 100, 5000)
+    gain = lufs_normalize(str(path), -16.0)
+    if gain == 0.0:
+        pytest.skip("ffmpeg cannot measure")
+    out, rate = sf.read(path)
+    assert rate == sr and out.shape[0] == tone.shape[0]
+    assert int(np.argmax(np.abs(out))) == 2000
+    assert _smpl_loop(path) == (100, 5000)
+
+
 def test_peak_fade_and_jingle():
     silent = peak_normalize(np.zeros(16))
     assert np.all(silent == 0.0)
@@ -150,6 +218,11 @@ def test_peak_fade_and_jingle():
     assert float(cut[0]) == 1.0
 
 
+def test_cut_jingle_never_cuts_at_zero():
+    cut = cut_jingle(np.ones(2000), 1000, 0.1, [0, 1000, 1500], fade_ms=100)
+    assert cut.shape[0] == 1000
+
+
 def test_ogg_loop_tags_or_falls_back_to_wav(tmp_path):
     sr = 8000
     y = (0.2 * np.sin(2.0 * np.pi * 440.0 * np.arange(sr) / sr)).astype(np.float32)
@@ -162,7 +235,6 @@ def test_ogg_loop_tags_or_falls_back_to_wav(tmp_path):
     assert path.is_file()
     if shutil.which("ffprobe") is None:
         return
-    import subprocess
     result = subprocess.run(
         [
             "ffprobe", "-v", "error", "-show_entries", "format_tags:stream_tags",
@@ -173,3 +245,46 @@ def test_ogg_loop_tags_or_falls_back_to_wav(tmp_path):
     tags = (result.stdout or "").upper()
     assert "LOOPSTART=0" in tags
     assert f"LOOPLENGTH={len(y)}" in tags
+
+
+def _vorbis_tags(path: Path) -> dict[str, int]:
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-show_entries", "format_tags:stream_tags",
+            "-of", "default=nw=1", str(path),
+        ],
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    tags = {}
+    for line in (result.stdout or "").splitlines():
+        key, _sep, value = line.partition("=")
+        if key.upper() in {"TAG:LOOPSTART", "TAG:LOOPLENGTH"}:
+            tags[key.upper()[4:]] = int(value)
+    return tags
+
+
+def test_ogg_loop_keeps_the_exact_length(tmp_path):
+    if shutil.which("ffprobe") is None:
+        pytest.skip("ffprobe unavailable")
+    sr = 44100
+    y = (0.2 * np.sin(2.0 * np.pi * 440.0 * np.arange(88200) / sr)).astype(np.float32)
+    path = tmp_path / "loop.ogg"
+    if write_ogg_loop(path, y, sr, 0, len(y)):
+        pytest.skip("ffmpeg cannot encode Vorbis")
+    frames = sf.info(str(path)).frames
+    assert frames == len(y)
+    tags = _vorbis_tags(path)
+    assert tags == {"LOOPSTART": 0, "LOOPLENGTH": len(y)}
+    assert tags["LOOPSTART"] + tags["LOOPLENGTH"] <= frames
+    first = path.read_bytes()
+    write_ogg_loop(path, y, sr, 0, len(y))
+    assert path.read_bytes() == first
+
+
+def test_ogg_fallback_wav_keeps_the_loop(tmp_path, monkeypatch):
+    monkeypatch.setattr(game_audio.shutil, "which", lambda _name: None)
+    sr = 8000
+    y = np.linspace(-0.2, 0.2, sr, dtype=np.float32)
+    warning = write_ogg_loop(tmp_path / "loop.ogg", y, sr, 100, 4000)
+    assert warning and "WAV" in warning
+    assert _smpl_loop(tmp_path / "loop.wav") == (100, 4099)

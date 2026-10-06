@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 
 import numpy as np
+import pytest
 
 from services.game_sfxr import PRESETS, generate
 
@@ -34,3 +35,25 @@ def test_every_preset_is_finite_short_and_seeded():
         assert float(np.max(np.abs(first))) <= 1.0
         assert first.shape[0] / rate < 3.0
         assert not np.array_equal(first, second)
+
+
+def test_parameter_dict_fills_in_defaults():
+    samples, rate = generate({"wave": "sine", "frequency": 500.0}, 1)
+    # Default envelope: no attack, 0.08 s sustain, 0.12 s decay.
+    assert samples.shape[0] == round(0.08 * rate) + round(0.12 * rate)
+    assert np.isfinite(samples).all()
+    assert _digest(samples) == _digest(generate({"wave": "sine", "frequency": 500.0}, 1)[0])
+
+
+def test_unknown_wave_is_rejected():
+    with pytest.raises(ValueError, match="triangle"):
+        generate({"wave": "triangle"}, 1)
+
+
+def test_noise_wave_is_not_a_rumble():
+    # sfxr draws 32 noise values per period; one per period put most energy below 100 Hz.
+    for seed in (1, 2, 3):
+        samples, rate = generate("explosion", seed)
+        power = np.abs(np.fft.rfft(samples.astype(np.float64))) ** 2
+        freqs = np.fft.rfftfreq(samples.shape[0], 1.0 / rate)
+        assert float(power[freqs < 100.0].sum() / power.sum()) < 0.3

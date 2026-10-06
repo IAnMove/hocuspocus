@@ -15,6 +15,8 @@ import numpy as np
 
 SR = 44100
 
+_WAVES = ("square", "saw", "sine", "noise")
+
 _DEFAULTS = {
     "wave": "square",
     "duty": 0.5,
@@ -96,14 +98,19 @@ PRESETS = {
 
 
 def _resolve(preset) -> dict:
+    """A preset by name, or a parameter dict filled in from the defaults."""
     if isinstance(preset, str):
         try:
-            return PRESETS[preset]
+            params = PRESETS[preset]
         except KeyError as exc:
             raise KeyError(f"unknown sfxr preset {preset!r}") from exc
-    if isinstance(preset, dict):
-        return preset
-    raise TypeError("preset must be a name or a parameter dict")
+    elif isinstance(preset, dict):
+        params = {**_DEFAULTS, **preset}
+    else:
+        raise TypeError("preset must be a name or a parameter dict")
+    if params["wave"] not in _WAVES:
+        raise ValueError(f"unknown sfxr wave {params['wave']!r}; expected one of {', '.join(_WAVES)}")
+    return params
 
 
 def _seed(seed) -> int:
@@ -140,17 +147,17 @@ def _frequency_curve(n: int, sr: int, params: dict) -> np.ndarray:
     return np.clip(curved * vibrato * jump, floor, sr * 0.45)
 
 
-def _cycles(frequency: np.ndarray, sr: int) -> np.ndarray:
-    increment = np.clip(frequency, 1.0, sr * 0.45) / float(sr)
-    return np.floor(np.cumsum(increment)).astype(np.int64)
+def _pitched_noise(travel: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """sfxr's noise wave: 32 random values per oscillator period.
 
-
-def _pitched_noise(cycles: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    if cycles.size == 0:
+    ``travel`` is the running phase in periods, so ``floor(travel * 32)`` steps
+    to the next value 32 times per cycle, like sfxr's 32-entry noise buffer.
+    """
+    if travel.size == 0:
         return np.zeros(0, dtype=np.float64)
-    count = int(cycles[-1]) + 2
-    table = rng.uniform(-1.0, 1.0, size=max(1, count))
-    return table[np.clip(cycles, 0, table.size - 1)]
+    steps = np.floor(travel * 32.0).astype(np.int64)
+    table = rng.uniform(-1.0, 1.0, size=int(steps[-1]) + 1)
+    return table[steps]
 
 
 def _square(phase: np.ndarray, params: dict, sr: int) -> np.ndarray:
@@ -159,10 +166,11 @@ def _square(phase: np.ndarray, params: dict, sr: int) -> np.ndarray:
     return np.where(phase < width, 1.0, -1.0)
 
 
-def _voice(params: dict, phase: np.ndarray, sr: int, white: np.ndarray, pitched: np.ndarray) -> np.ndarray:
+def _voice(params: dict, travel: np.ndarray, sr: int, white: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     kind = str(params["wave"])
     if kind == "noise":
-        return pitched
+        return _pitched_noise(travel, rng)
+    phase = travel % 1.0
     if kind == "saw":
         shaped = 2.0 * phase - 1.0
     elif kind == "sine":
@@ -256,12 +264,11 @@ def generate(preset, seed) -> tuple[np.ndarray, int]:
     """Synthesize ``preset`` (a name or a parameter dict). The same seed repeats."""
     params = _resolve(preset)
     total, attack, sustain, decay = _duration_samples(params, SR)
-    frequency = _frequency_curve(total, SR, params)
-    phase = np.cumsum(frequency / float(SR)) % 1.0
+    # Running phase in periods; the curve is already clipped to 1 Hz .. 0.45 * SR.
+    travel = np.cumsum(_frequency_curve(total, SR, params) / float(SR))
     rng = np.random.Generator(np.random.PCG64(_seed(seed)))
     white = rng.uniform(-1.0, 1.0, size=total)
-    pitched = _pitched_noise(_cycles(frequency, SR), rng)
-    voice = _voice(params, phase, SR, white, pitched)
+    voice = _voice(params, travel, SR, white, rng)
     shaped = voice * _envelope(total, attack, sustain, decay, float(params["punch"]))
     filtered = _filter_bank(shaped, params, SR)
     phased = _phaser(filtered, SR, params["phaser_offset"], params["phaser_sweep"])
