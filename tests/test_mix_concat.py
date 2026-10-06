@@ -423,3 +423,12 @@ def test_mid_song_offset_does_not_truncate_concat_video(tmp_path):
     )
     frames = int((probe.stdout or "0").strip() or 0)
     assert frames >= 100, frames
+
+
+def test_ffprobe_is_found_beside_ffmpeg_even_in_a_folder_named_after_ffmpeg():
+    """The bug: ``replace("ffmpeg", "ffprobe")`` also rewrote the folder (``/opt/ffmpeg-6/bin/ffmpeg``)."""
+    from app.services.mix_concat import ffprobe_for
+    assert ffprobe_for("ffmpeg") == "ffprobe"
+    assert ffprobe_for("/opt/ffmpeg-6/bin/ffmpeg") == "/opt/ffmpeg-6/bin/ffprobe"
+    assert ffprobe_for("C:/tools/ffmpeg/ffmpeg.exe") == "C:/tools/ffmpeg/ffprobe.exe"
+    assert ffprobe_for("/usr/bin/ffmpeg7") == "/usr/bin/ffprobe7"
