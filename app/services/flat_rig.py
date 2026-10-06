@@ -46,6 +46,7 @@ from PIL import Image, ImageDraw
 
 from services import face_landmarks, flat_rig_warp
 from services.character_kit_library import patch_character_kit, read_character_kit_library
+from services.face_enlarge import face_caption
 from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _anchor, _paste_inside
 from services.flat_rig_ink import _ink_sprite_width, draw_ink_mouth, ink_colour
 # The rig's look lives in flat_rig_look; rig_style stays importable from here.
@@ -1120,7 +1121,8 @@ def _eye_skin(rgb: np.ndarray, alpha: np.ndarray, eyes_box, fallback) -> np.ndar
 
 def _outlined_eyes(rgb: np.ndarray, alpha: np.ndarray, outlines) -> tuple[tuple[int, int, int, int], np.ndarray]:
     """Eyes from the landmarks' outlines when no white blob is there to find (small or shaded eyes): the light pixels
-    inside each outline grown a little, or the outline itself."""
+    in and round each outline grown a little, or the outline itself with them. On a small face the points sit a pixel
+    or two off the eye, and a highlight left out of the cover showed through the closed lid."""
     colour = rgb.astype(np.int16)
     light = (colour.min(axis=2) > 170) & (colour.max(axis=2) - colour.min(axis=2) < 60) & (alpha > 200)
     mask = np.zeros(alpha.shape, bool)
@@ -1129,8 +1131,8 @@ def _outlined_eyes(rgb: np.ndarray, alpha: np.ndarray, outlines) -> tuple[tuple[
         cv2.fillPoly(shape, [np.round(np.asarray(outline)).astype(np.int32)], 1)
         width = max(2, int(np.ptp(np.asarray(outline)[:, 0])))
         shape = _dilate(shape > 0, max(1, int(width * 0.15)))
-        white = shape & light
-        mask |= white if white.sum() >= shape.sum() * 0.15 else shape
+        white = _dilate(shape, max(2, int(width * 0.2))) & light
+        mask |= white if white.sum() >= shape.sum() * 0.15 else shape | white
     if not mask.any():
         raise FlatRigError("eyes_not_found", "The eyes the landmarks found are outside the figure")
     ys, xs = np.nonzero(mask)
@@ -1182,6 +1184,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     pixels = np.array(figure)
     rgb, alpha = pixels[..., :3], pixels[..., 3]
     near, guide = _pose_guides(image, crop, figure.size, hint, landmarks)
+    face_size = (landmarks or {}).get("face")
     eyes_box, eyes_mask = _guided_eyes(rgb, alpha, near.get("eyes"), guide)
     ex0, ey0, ex1, ey1 = eyes_box
     covered = eyes_covered(rgb, alpha, eyes_box, eyes_mask)
@@ -1247,7 +1250,9 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
         # Where the figure was cut from the pose image and that image's size; the warp mouths' seeds in figure pixels.
         "frame": (crop[0], crop[1], image.width, image.height),
         "seeds": {"point": near.get("mouth"), "width": near.get("mouthWidth"), "lips": guide.get("mouth_points"),
-                  "lips_score": guide.get("mouth_score")},
+                  "lips_score": guide.get("mouth_score"), "face": face_size},
+        # The head's size class and the landmark pass (face_landmarks.detect); warp mouths add their enlargement.
+        "face_size": face_size,
     }
 
 
@@ -1282,6 +1287,22 @@ def _tile(frame: Image.Image, height: int, warn: bool) -> Image.Image:
     return tile
 
 
+def _caption(tile: Image.Image, text: str) -> None:
+    """``text`` (comma-separated parts) on the tile's bottom-left corner, a part per line where the tile is narrow."""
+    draw = ImageDraw.Draw(tile)
+    lines: list[str] = []
+    for part in text.split(", "):
+        if lines and draw.textlength(f"{lines[-1]}, {part}") + 8 <= tile.width:
+            lines[-1] = f"{lines[-1]}, {part}"
+        else:
+            lines.append(part)
+    top = tile.height - 14 * len(lines) - 2
+    right = min(tile.width, 8 + max(draw.textlength(line) for line in lines))
+    draw.rectangle((0, top, right, tile.height), fill=(20, 20, 24, 255))
+    for index, line in enumerate(lines):
+        draw.text((4, top + 1 + 14 * index), line, fill=(255, 255, 255, 255))
+
+
 def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image], height: int = 360) -> Image.Image:
     """Per pose: the rig with its rest mouth, then an open mouth with the blink; below, the face before and after the
     wipe, enlarged. Poses with warnings are framed in red."""
@@ -1298,6 +1319,9 @@ def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image
         if rig.get("before") is not None and rig.get("eyes_box"):
             after = talk if rig.get("sprites") else rig["image"]
             rows[1] += [_tile(_face_crop(rig["before"], rig), height // 2, warn), _tile(_face_crop(after, rig), height // 2, warn)]
+        if rig.get("face_size"):
+            # How the face was read and warped (a small face's on it enlarged), on the rest tile's corner.
+            _caption(rows[0][-2], face_caption(rig["face_size"]))
     width = max(sum(tile.width for tile in row) + 8 * (len(row) + 1) for row in rows)
     sheet = Image.new("RGBA", (width, height + height // 2 + 24), (255, 255, 255, 255))
     for top, row in ((8, rows[0]), (height + 16, rows[1])):
@@ -1499,6 +1523,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "mouthFound": rig["found"],
                          "face": "realistic" if rig["realistic"] else "cartoon", "blinks": rig["blinks"],
                          "landmarks": rig["guided"], **({"mouthLine": rig["line"]} if "line" in rig else {}),
+                         **({"faceSize": rig["face_size"]} if rig.get("face_size") else {}),
                          **({"hints": placed[pose]} if pose in placed else {})}
                   for pose, rig in rigs.items()},
     }

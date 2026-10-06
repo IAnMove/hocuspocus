@@ -716,6 +716,8 @@
       "unsaved": "Guarda antes los demás cambios del personaje: la línea se guarda riggeando de nuevo el personaje guardado.",
       "save": "No se pudo guardar la línea de la boca."
     },
-    "unsure": "Los puntos de la cara no eran seguros aquí (bigote, barba, cara vista desde abajo): comprueba que la línea esté entre los labios."
+    "unsure": "Los puntos de la cara no eran seguros aquí (bigote, barba, cara vista desde abajo): comprueba que la línea esté entre los labios.",
+    "smallFace": "Cara pequeña (cabeza de {{head}} px): las bocas se deforman sobre la cara ampliada {{times}}×, se devuelven a la pose y se abren un poco más, para que se lean cuando la figura sale pequeña.",
+    "headPass": "Sus puntos de la cara se leyeron sobre la cabeza sola."
   }
 }

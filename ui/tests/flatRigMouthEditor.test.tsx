@@ -97,3 +97,23 @@ test('the editor refuses to save over unsaved changes and stays out of kits the 
   await waitFor(() => assert.match(view.getByRole('alert').textContent ?? '', /Save the character's other changes first/))
   assert.ok(posts.every(url => url.endsWith('/flat-rig/preview')), 'no rig over unsaved changes')
 })
+
+test('the editor says when a small face was read on the head alone and warped enlarged', async t => {
+  const { render, waitFor, cleanup } = await import('@testing-library/react')
+  const { FlatRigMouthEditor } = await import('../src/features/characters/FlatRigMouthEditor')
+  const kit = warpKit()
+  const originalFetch = globalThis.fetch
+  let face: Record<string, unknown> = { size: 'small', head: 84, pass: 'head', upscale: 5 }
+  globalThis.fetch = async () => new Response(JSON.stringify({ ...preview([61.6, 20.48], 6.5), faceSize: face }))
+  t.after(() => { cleanup(); globalThis.fetch = originalFetch })
+  const small = render(<FlatRigMouthEditor kit={kit} poseId="busto" workspace="cast" />)
+  await waitFor(() => assert.ok(small.getByTestId('mouth-line-face')))
+  const note = small.getByTestId('mouth-line-face').textContent ?? ''
+  assert.match(note, /Small face \(head 84 px\).*enlarged 5×/)
+  assert.match(note, /read on the head alone/)
+  small.unmount()
+  face = { size: 'normal', head: 264, pass: 'whole', upscale: 1 }
+  const bust = render(<FlatRigMouthEditor kit={kit} poseId="busto" workspace="cast" />)
+  await waitFor(() => assert.equal(bust.getAllByRole('img', { name: /Blas saying/ }).length, 6))
+  assert.equal(bust.queryByTestId('mouth-line-face'), null, 'a bust read whole and warped as it is says nothing')
+})

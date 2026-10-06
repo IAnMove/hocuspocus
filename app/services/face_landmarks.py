@@ -8,15 +8,23 @@ ones included, so its eyes and mouth are used where the rig would otherwise gues
 
 It runs on the CPU (two ONNX sessions, loaded once). Without the model files nothing is found and the rig keeps its
 own search.
+
+The model sees each figure squeezed into 288×384 pixels: a full figure's head is a few dozen pixels there, and its lips
+were placed on the philtrum or half on the nose. A small head (``SMALL_HEAD``), or a face the whole-figure pass was
+unsure of, is looked at again on its own (``_head_pass``): the head and shoulders cut out with white round them,
+enlarged (Lanczos) when they are smaller than the model's input, and the points mapped back to the pose image.
 """
 from __future__ import annotations
 
+import math
 import os
 import threading
 from typing import Any
 
 import numpy as np
 from PIL import Image
+
+from services.face_enlarge import SMALL_HEAD, enlarge, to_image, to_view
 
 MODELS = ("pose/yolox_l.onnx", "pose/dw-ll_ucoco_384.onnx")
 # In the whole-body output (body points with the neck inserted, then the feet) the 68 face points start here.
@@ -25,6 +33,14 @@ RIGHT_EYE, LEFT_EYE, MOUTH = range(36, 42), range(42, 48), range(48, 60)
 # Below this mean score a part was guessed, not seen (a face turned away, hair over the eyes). A bearded mouth seen
 # from below scores 0.39.
 MIN_SCORE = 0.35
+# Under this, the whole-figure pass may have half guessed a face (the bearded mouth above put on the beard) and the head
+# pass is tried; it is kept when it is surer.
+UNSURE = 0.5
+# What the head pass shows the model: a square this many head sizes across (head, hair and shoulders: the model reads
+# a face only on a person), its middle this far under the face's. Tighter squares scored under 0.15 on profiles.
+HEAD_VIEW, HEAD_DROP = 4.4, 0.3
+# The model's input width; a view narrower than it (once padded as the model pads it) is enlarged first.
+MODEL_WIDTH, PADDING = 288, 1.25
 
 _lock = threading.Lock()
 _model: Any = None
@@ -52,26 +68,96 @@ def _wholebody():
         return _model or None
 
 
-def detect(image: Image.Image) -> dict[str, Any] | None:
-    """The face of the most confident figure in ``image`` (RGBA keyed cutouts are laid on white): ``eyes`` (two lists
-    of six points, the image's left eye first), ``mouth`` (its twelve outer-lip points) and their mean ``scores``, in
-    pixels of ``image``. None when the model is missing or no figure is found."""
-    model = _wholebody()
-    if model is None:
-        return None
+def _on_white(image: Image.Image) -> np.ndarray:
+    """The image as the model reads it: BGR, with an RGBA keyed cutout laid on white."""
     rgba = np.asarray(image.convert("RGBA"), dtype=np.float32)
     rgb = rgba[..., :3] * (rgba[..., 3:] / 255.0) + 255.0 * (1 - rgba[..., 3:] / 255.0)
-    bgr = np.ascontiguousarray(rgb.clip(0, 255).astype(np.uint8)[..., ::-1])
-    try:
-        with _lock:
-            keypoints, scores, _boxes = model(bgr)
-    except Exception:
-        return None
+    return np.ascontiguousarray(rgb.clip(0, 255).astype(np.uint8)[..., ::-1])
+
+
+def _whole_pass(model, bgr: np.ndarray):
+    """The 68 face points and scores of the most confident figure in the image, or None."""
+    with _lock:
+        keypoints, scores, _boxes = model(bgr)
     if keypoints is None or not len(keypoints):
         return None
     face = scores[:, FACE:FACE + 68]
     best = int(np.argmax(face.mean(axis=1)))
-    points, score = keypoints[best, FACE:FACE + 68], face[best]
+    return keypoints[best, FACE:FACE + 68], face[best]
+
+
+def _pose(model, box, bgr: np.ndarray):
+    """The model's 133 whole-body points and scores for the person in ``box`` (x0, y0, x1, y1), no detector."""
+    from preprocessing.dwpose.onnxpose import inference_pose
+    with _lock:
+        keypoints, scores = inference_pose(model.session_pose, np.array([box], dtype=float), bgr)
+    return keypoints[0], scores[0]
+
+
+def head_size(points: np.ndarray) -> tuple[float, tuple[float, float]]:
+    """The head's size (the larger of the jaw's width and the brows-to-chin height) and its middle, from the 68 points."""
+    jaw, brows = points[0:17], points[17:27]
+    width, height = float(np.ptp(jaw[:, 0])), float(jaw[:, 1].max() - brows[:, 1].min())
+    middle = (float(jaw[:, 0].min() + jaw[:, 0].max()) / 2, float(brows[:, 1].min() + jaw[:, 1].max()) / 2)
+    return max(width, height), middle
+
+
+def head_view(head: float, middle) -> tuple[list[float], tuple[int, int, int, int], int]:
+    """The head pass's box (``HEAD_VIEW`` heads square, ``HEAD_DROP`` under the face's middle), the part of the image the
+    model will see of it (padded and made 3:4 as the model does: ``x0, y0, width, height``) and how many times that part
+    is enlarged so the model never enlarges it itself."""
+    cx, cy = middle[0], middle[1] + HEAD_DROP * head
+    half = HEAD_VIEW * head / 2
+    box = [cx - half, cy - half, cx + half, cy + half]
+    seen_w = 2 * half * PADDING
+    seen_h = seen_w * 4 / 3
+    crop = (int(math.floor(cx - seen_w / 2)) - 2, int(math.floor(cy - seen_h / 2)) - 2,
+            int(math.ceil(seen_w)) + 4, int(math.ceil(seen_h)) + 4)
+    return box, crop, max(1, math.ceil(MODEL_WIDTH / seen_w))
+
+
+def _head_pass(model, bgr: np.ndarray, head: float, middle):
+    """The face points read on the head alone (``head_view``), in pixels of the whole image."""
+    box, (x0, y0, width, height), k = head_view(head, middle)
+    view = enlarge(bgr, x0, y0, width, height, k, fill=255)
+    corners = to_view(np.array([box[:2], box[2:]], dtype=float), (x0, y0), k)
+    keypoints, scores = _pose(model, corners.ravel().tolist(), view)
+    # The raw whole-body points: 17 body and 6 feet points come before the face's (no neck is inserted here).
+    return to_image(keypoints[FACE - 1:FACE + 67], (x0, y0), k), scores[FACE - 1:FACE + 67]
+
+
+def _sure(scores: np.ndarray) -> float:
+    return float(min(scores[list(RIGHT_EYE) + list(LEFT_EYE)].mean(), scores[list(MOUTH)].mean()))
+
+
+def detect(image: Image.Image) -> dict[str, Any] | None:
+    """The face of the most confident figure in ``image`` (RGBA keyed cutouts are laid on white): ``eyes`` (two lists
+    of six points, the image's left eye first), ``mouth`` (its twelve outer-lip points) and their mean ``scores``, in
+    pixels of ``image``; ``face``: the head's ``size`` class (``small`` under ``SMALL_HEAD``, else ``normal``), its
+    ``head`` size in pixels and the ``pass`` the points come from (``head`` when the head pass was used, else
+    ``whole``). None when the model is missing or no figure is found."""
+    model = _wholebody()
+    if model is None:
+        return None
+    bgr = _on_white(image)
+    try:
+        found = _whole_pass(model, bgr)
+    except Exception:
+        return None
+    if found is None:
+        return None
+    head, middle = head_size(found[0])
+    small, used = head < SMALL_HEAD, "whole"
+    if small or _sure(found[1]) < UNSURE:
+        try:
+            closer = _head_pass(model, bgr, head, middle)
+        except Exception:
+            closer = None
+        # A small head is read better alone even when the whole pass scores itself higher (it put a small mouth's lips
+        # on the philtrum at 0.98); a large one only when the head pass is surer.
+        if closer is not None and _sure(closer[1]) >= (MIN_SCORE if small else _sure(found[1])):
+            found, used = closer, "head"
+    points, score = found
 
     def part(indices):
         return [[round(float(x), 2), round(float(y), 2)] for x, y in points[list(indices)]], round(float(score[list(indices)].mean()), 3)
@@ -79,7 +165,8 @@ def detect(image: Image.Image) -> dict[str, Any] | None:
     eyes = sorted((first, second), key=lambda eye: np.mean([p[0] for p in eye[0]]))
     mouth = part(MOUTH)
     return {"eyes": [eyes[0][0], eyes[1][0]], "mouth": mouth[0],
-            "scores": {"eyes": round(min(eyes[0][1], eyes[1][1]), 3), "mouth": mouth[1]}}
+            "scores": {"eyes": round(min(eyes[0][1], eyes[1][1]), 3), "mouth": mouth[1]},
+            "face": {"size": "small" if small else "normal", "head": round(head, 1), "pass": used}}
 
 
 def guides(landmarks: dict[str, Any] | None) -> dict[str, Any]:

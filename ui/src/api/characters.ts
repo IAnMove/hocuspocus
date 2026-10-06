@@ -114,8 +114,12 @@ export async function keyStudioImage(details: { workspace: string; source: strin
 
 /** A pose's hint for the flat rig: points in % of the pose image, `mouthWidth` corner to corner in % of its width. */
 export type FlatRigHint = { mouth?: [number, number]; eyes?: [number, number]; mouthWidth?: number }
+/** How a pose's face was read and warped: its head's size class and pixels, whether the face points were read on the
+ * head alone (`pass: 'head'`) and how many times the face was enlarged to warp it (1: not at all). */
+export type FlatRigFaceSize = { size: 'small' | 'normal'; head: number; pass?: 'head' | 'whole' | null; upscale: number }
 /** The mouth line a warp rig or preview used, in % of the pose image. */
-export type FlatRigMouthLine = { mouth: [number, number]; mouthWidth: number; found: boolean; from: 'hint' | 'landmarks' | 'painted' | 'guess' }
+export type FlatRigMouthLine = { mouth: [number, number]; mouthWidth: number; found: boolean; from: 'hint' | 'landmarks' | 'painted' | 'guess'
+  faceSize?: FlatRigFaceSize }
 
 export type FlatRigResult = {
   revision: number
@@ -123,7 +127,7 @@ export type FlatRigResult = {
   review: string
   unwipedPoses: string[]
   warnings?: Record<string, string[]>
-  poses?: Record<string, { mouthLine?: FlatRigMouthLine; hints?: FlatRigHint }>
+  poses?: Record<string, { mouthLine?: FlatRigMouthLine; hints?: FlatRigHint; faceSize?: FlatRigFaceSize }>
   /** The look the rig used: the style sent over the kit's own (its last rig's, else its style preset's). */
   style?: Record<string, number | boolean | string>
 }

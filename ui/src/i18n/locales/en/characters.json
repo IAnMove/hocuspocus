@@ -716,6 +716,8 @@
       "unsaved": "Save the character's other changes first: the line is saved by rigging the saved character again.",
       "save": "Could not save the mouth line."
     },
-    "unsure": "The face points were unsure here (a moustache, a beard, a face seen from below): check that the line is between the lips."
+    "unsure": "The face points were unsure here (a moustache, a beard, a face seen from below): check that the line is between the lips.",
+    "smallFace": "Small face (head {{head}} px): the mouths are warped on the face enlarged {{times}}×, fitted back to the pose and opened a little deeper, so they read when the figure is drawn small.",
+    "headPass": "Its face points were read on the head alone."
   }
 }
