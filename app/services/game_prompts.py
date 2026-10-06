@@ -28,7 +28,9 @@ _ELEMENT = {
     "cursor": "pointer cursor",
 }
 _ICON_FRAME = {"round": "inside a round frame", "square": "inside a square frame"}
-_NEGATIVE = "text, watermark, frame, border"
+_NEGATIVE = ("text", "watermark", "frame", "border")
+# UI widgets and framed icons are drawn with a frame, so the negative must not forbid one.
+_FRAME_WORDS = frozenset({"frame", "border"})
 _MAX_REFS = 10
 
 
@@ -83,6 +85,11 @@ def _view(kind: str, kind_prompt: str) -> str:
     return ", ".join(part for part in _VIEW if part not in said)
 
 
+def _negative(kind: str, spec: dict) -> str:
+    framed = kind == "ui" or (kind == "icon" and str(spec.get("frame") or "") in _ICON_FRAME)
+    return ", ".join(word for word in _NEGATIVE if not (framed and word in _FRAME_WORDS))
+
+
 def build(game: dict, asset: dict, kind_extra: str = "", *, chroma: bool = True) -> tuple[str, str]:
     """Return ``(prompt, negative)``. ``chroma`` is off for a full-frame sky layer."""
     style = _style(game)
@@ -101,9 +108,9 @@ def build(game: dict, asset: dict, kind_extra: str = "", *, chroma: bool = True)
         _fix_note(asset),
     ]
     prompt = ", ".join(part.strip().strip(",") for part in parts if str(part).strip())
+    base = _negative(kind, spec)
     negative = str(style.get("negative") or "").strip()
-    negative = f"{negative}, {_NEGATIVE}" if negative else _NEGATIVE
-    return prompt, negative
+    return prompt, f"{negative}, {base}" if negative else base
 
 
 def _assets(game: dict) -> list[dict]:
