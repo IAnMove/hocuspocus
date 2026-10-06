@@ -18,6 +18,15 @@ const field = 'w-full rounded border border-border bg-bg-primary p-1'
 type Requester = 'user' | 'agent' | 'wizard' | 'server'
 const REQUESTERS: readonly string[] = ['user', 'agent', 'wizard', 'server'] satisfies Requester[]
 
+/** What Save lines sends: the edited lines, and the cards and title only when they were edited. */
+function draftWrite(drafts: Record<string, string>, cards: Record<string, VersionCardText>, title: string | null): VersionWrite {
+  return { dialogue: drafts, ...(Object.keys(cards).length ? { cards } : {}), ...(title === null ? {} : { title }) }
+}
+
+function missingLines(lines: Line[], version: SeriesLanguageVersion | undefined, drafts: Record<string, string>): number {
+  return version ? lines.filter(line => !(drafts[line.id] ?? version.dialogue[line.id])?.trim()).length : 0
+}
+
 function episodeLines(episode: SeriesEpisode): Line[] {
   return episode.shots.flatMap(shot => shot.dialogueBeats.filter(beat => beat.text.trim())
     .map(beat => ({ id: beat.id, shotId: shot.id, speaker: beat.characterId, text: beat.text })))
@@ -40,8 +49,9 @@ export function SeriesLanguageVersions({ workspace, series, episode }: { workspa
   const cards = useMemo(() => episodeCards(episode), [episode])
   const version = selected ? versions[selected] : undefined
   const marks = machineMarks(version)
-  const missing = version ? lines.filter(line => !(drafts[line.id] ?? version.dialogue[line.id])?.trim()).length : 0
-  const edited = Object.keys(drafts).length + Object.keys(cardDrafts).length + (titleDraft === null ? 0 : 1)
+  const missing = missingLines(lines, version, drafts)
+  const patch = draftWrite(drafts, cardDrafts, titleDraft)
+  const edited = Object.keys(drafts).length + Object.keys(cardDrafts).length + Number('title' in patch)
 
   const clearDrafts = () => { setDrafts({}); setCardDrafts({}); setTitleDraft(null) }
   const run = async (label: Step, task: () => Promise<void>) => {
@@ -61,9 +71,7 @@ export function SeriesLanguageVersions({ workspace, series, episode }: { workspa
     clearDrafts()
     setMessage(label === 'check' ? t('languages.machine.checked') : t('languages.saved', { missing: reply.missingLines.length }))
   })
-  const save = () => write('save', {
-    dialogue: drafts, ...(Object.keys(cardDrafts).length ? { cards: cardDrafts } : {}), ...(titleDraft === null ? {} : { title: titleDraft }),
-  })
+  const save = () => write('save', patch)
   const assemble = () => run('assemble', async () => {
     await startSeriesEpisodeAssembly(workspace, series.id, episode.id, { language: selected, burnSubtitles: true })
     setMessage(t('languages.assembling'))

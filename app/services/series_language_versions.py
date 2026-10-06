@@ -74,18 +74,22 @@ def _optional_fields(value: dict[str, Any], assemblies: list[str], shots: set[st
     return {**found, **({"durations": durations} if durations else {}), **({"music": music} if music else {})}
 
 
+def _marked(ids: Any, kept: Any) -> list[str]:
+    """The ids that ``kept`` (a version's dialogue or cards) still has, sorted."""
+    if not isinstance(ids, list) or not isinstance(kept, dict):
+        return []
+    return sorted({item for item in ids if isinstance(item, str) and item in kept})
+
+
 def _machine(value: Any, version: dict[str, Any]) -> dict[str, Any]:
     """The machine-translation marks of the lines, cards and title the version still has; {} when none is left."""
     if not isinstance(value, dict):
         return {}
-    dialogue, cards = version.get("dialogue") or {}, version.get("cards") or {}
-    marks: dict[str, Any] = {
-        "dialogue": sorted({item for item in value.get("dialogue") or [] if isinstance(item, str) and item in dialogue}),
-        "cards": sorted({item for item in value.get("cards") or [] if isinstance(item, str) and item in cards}),
-    }
+    marks: dict[str, Any] = {"dialogue": _marked(value.get("dialogue"), version.get("dialogue")),
+                             "cards": _marked(value.get("cards"), version.get("cards"))}
     if value.get("title") is True and str(version.get("title") or "").strip():
         marks["title"] = True
-    if not marks["dialogue"] and not marks["cards"] and not marks.get("title"):
+    if not (marks["dialogue"] or marks["cards"] or marks.get("title")):
         return {}
     for key in ("translatedAt", "requestedBy"):
         if isinstance(value.get(key), str) and value[key]:
@@ -279,12 +283,17 @@ def version_from_translation(result: Any, episode: dict[str, Any], previous: dic
     version["title"] = title or str(version.get("title") or "")[:300]
     lines = _merge_lines(version["dialogue"], data.get("lines"), {beat["id"] for shot in shots for beat in shot.get("dialogueBeats") or []})
     cards = _merge_cards(version["cards"], data.get("cards"), {shot["id"] for shot in shots})
-    marks = version.get("machineTranslated") if isinstance(version.get("machineTranslated"), dict) else {}
+    return _mark_translated(version, lines, cards, bool(title), requested_by, now)
+
+
+def _mark_translated(version: dict[str, Any], lines: list[str], cards: list[str], title: bool, requested_by: str | None,
+                     now: str | None) -> dict[str, Any]:
+    """Add what a translation wrote to the version's machine-translation marks (kept for what it did not touch)."""
     from services.series_library import REVIEWERS, _now
-    version["machineTranslated"] = _machine({
+    marks = version.get("machineTranslated") if isinstance(version.get("machineTranslated"), dict) else {}
+    found = _machine({
         "dialogue": [*marks.get("dialogue", []), *lines], "cards": [*marks.get("cards", []), *cards],
-        "title": bool(title) or marks.get("title") is True, "translatedAt": now or _now(),
+        "title": title or marks.get("title") is True, "translatedAt": now or _now(),
         "requestedBy": requested_by if requested_by in REVIEWERS else "user"}, version)
-    if not version["machineTranslated"]:
-        version.pop("machineTranslated")
-    return version
+    version.pop("machineTranslated", None)
+    return {**version, **({"machineTranslated": found} if found else {})}

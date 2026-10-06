@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import html
 import json
+import logging
 import os
 import re
 import shutil
@@ -24,6 +25,7 @@ _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}\Z")
 _WORKSPACE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\Z")
 _EXTENSIONS = {".mp4", ".webm", ".png", ".jpg", ".jpeg", ".wav", ".mp3", ".flac", ".m4a", ".glb", ".json"}
 _lock = threading.Lock()
+_LOGGER = logging.getLogger("loreframe.production.publication")
 
 
 def publication_catalog() -> list[dict]:
@@ -164,7 +166,10 @@ def publish_production(data: dict, workspace_dir) -> dict:
     prefix = base + "/" + directory + "/"
     result = {"page": prefix + page, "video": prefix + "video.mp4", "files": {name: prefix + quote(name) for name in files},
               "publication_id": identity, "mode": "preview" if preview else "release"}
-    record_publication(root, data["production_id"], result)
+    try:
+        record_publication(root, data["production_id"], result)
+    except OSError as error:  # the page is published; only the card's link to it is missing
+        _LOGGER.warning("Could not record the publication of %s: %s", data["production_id"], error)
     return result
 
 
