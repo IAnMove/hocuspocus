@@ -246,7 +246,12 @@
         "tests/test_verify_clean_repo.py",
         "tests/test_series_review.py",
         "tests/test_series_review_router.py",
-        "tests/test_recoverability_last.py"
+        "tests/test_recoverability_last.py",
+        "tests/test_game_library.py",
+        "tests/test_game_inputs.py",
+        "tests/test_game_library_router.py",
+        "tests/test_game_tools.py",
+        "tests/test_game_prompts.py"
       ]
     },
     {
@@ -492,7 +497,15 @@
         "tests/test_h3_frame_lattice.py",
         "tests/test_llm_resilience.py",
         "tests/test_series_review_gate.py",
-        "tests/test_recoverability_followups.py"
+        "tests/test_recoverability_followups.py",
+        "tests/test_game_pixel.py",
+        "tests/test_game_image_ops.py",
+        "tests/test_game_tiles.py",
+        "tests/test_game_gen_still.py",
+        "tests/test_game_gen_tiles.py",
+        "tests/test_game_list.py",
+        "tests/test_game_estimate.py",
+        "tests/test_game_produce.py"
       ]
     }
   ],
@@ -1577,6 +1590,86 @@
     {
       "prefix": "app/services/output_origin.py",
       "paths": ["tests/test_recoverability_last.py", "tests/test_output_completion_time.py"]
+    },
+    {
+      "prefix": "app/services/game_library.py",
+      "paths": ["tests/test_game_library.py", "tests/test_game_library_router.py"]
+    },
+    {
+      "prefix": "app/services/game_inputs.py",
+      "paths": ["tests/test_game_inputs.py", "tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/routers/game_library.py",
+      "paths": ["tests/test_game_library_router.py"]
+    },
+    {
+      "prefix": "app/shared/game_actions.json",
+      "paths": ["tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/shared/game_style_presets.json",
+      "paths": ["tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_pixel.py",
+      "paths": ["tests/test_game_pixel.py"]
+    },
+    {
+      "prefix": "app/services/game_image_ops.py",
+      "paths": ["tests/test_game_image_ops.py"]
+    },
+    {
+      "prefix": "app/services/game_tiles.py",
+      "paths": ["tests/test_game_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_tools.py",
+      "paths": ["tests/test_game_tools.py"]
+    },
+    {
+      "prefix": "app/services/game_prompts.py",
+      "paths": ["tests/test_game_prompts.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/still.py",
+      "paths": ["tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/tiles.py",
+      "paths": ["tests/test_game_gen_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/background.py",
+      "paths": ["tests/test_game_gen_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/base.py",
+      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/__init__.py",
+      "paths": ["tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_list.py",
+      "paths": ["tests/test_game_list.py"]
+    },
+    {
+      "prefix": "app/services/game_estimate.py",
+      "paths": ["tests/test_game_estimate.py", "tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_jobs.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_produce.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/routers/game_produce.py",
+      "paths": ["tests/test_game_produce.py"]
     }
   ]
 }

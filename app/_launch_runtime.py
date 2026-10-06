@@ -37299,6 +37299,13 @@ from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
 from routers.about import create_about_router
 api.include_router(create_about_router(os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))))
+from routers.game_library import create_game_library_router
+_game_library_lock = threading.RLock()
+api.include_router(create_game_library_router(workspace_dir=_workspace_dir, lock=_game_library_lock))
+from services.game_produce import build_produce
+from routers.game_produce import create_game_produce_router
+_game_produce = build_produce(_local_mcp.call, lambda: _scene2d_export.app_url or "", _mcp_access.token, _workspace_dir, _game_library_lock)
+api.include_router(create_game_produce_router(_game_produce, call=_local_mcp.call, bind_loop=_local_mcp.bind_loop, read_game=_game_produce.deps.read_game))
 
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a
