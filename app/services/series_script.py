@@ -15,10 +15,13 @@ clear message instead of halfway through a render::
      "shots": [{"scene": "cold_open", "framing": "wide", "camera": "push",
                 "cast": [["kevin", "base", 58], {"characterId": "mark", "poseId": "wave", "x": 30, "enterFrom": "left"},
                          ["boss", "bust", 80, {"edgeSnap": false}]],
-                "lines": [{"who": "kevin", "es": "...", "en": "...", "pauseBefore": 0.6}],
+                "lines": [{"who": "kevin", "es": "...", "en": "...", "pauseBefore": 0.6},
+                          {"who": "narrator", "es": "...", "voiceRoom": "radio"}],
                 "card": {"kind": "title", "es": ["TITLE", "Episode 3"], "en": [...]},
                 "music": {"file": "mus-theme-es.wav", "en": "mus-theme-en.wav", "volume": 0.9},
-                "sfx": [{"file": "sfx-pen.wav", "line": 1, "offset": 0.2}], "fx": [{"kind": "confetti", "line": 1}],
+                "sfx": [{"file": "sfx-pen.wav", "line": 1, "offset": 0.2},
+                        {"file": "sfx-step.wav", "anchor": "enter", "cast": 1, "repeat": "steps"}],
+                "fx": [{"kind": "confetti", "line": 1}],
                 "props": [{"file": "prop-truck-key.png", "x": 12, "y": 74, "scale": 0.36},
                           {"file": "prop-robot-key.png", "x": 80, "scale": 0.5, "ground": true}], "timing": {"intro": 1.0},
                 "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8},
@@ -30,6 +33,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from services.series_entrances import GAITS
 from services.series_layers import layout_layers
 from services.series_shot3d import normalize_scene3d
 from services.series_shot_extras import EFFECT_KINDS
@@ -169,15 +173,35 @@ class EpisodeScript:
         self._check_layers(shot, where)
 
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
-        for raw in shot.get("cast") or []:
-            entry = _cast_entry(raw)
+        cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
+        for entry in cast:
             self.checker.character(str(entry.get("characterId")), str(entry.get("poseId") or "base"), where)
             if entry.get("motion") not in (None, *MOTIONS):
                 self.checker.problems.append(f"{where}: motion must be one of {', '.join(MOTIONS)}")
+            if entry.get("enterGait") not in (None, *GAITS):
+                self.checker.problems.append(f"{where}: enterGait must be one of {', '.join(GAITS)}")
+        for kind in ("sfx", "fx"):
+            for index, cue in enumerate(shot.get(kind) or []):
+                if isinstance(cue, dict) and cue.get("anchor") == "enter":
+                    self._check_entrance_cue(cue, cast, f"{where} {kind} {index}")
+
+    def _check_entrance_cue(self, cue: dict[str, Any], cast: list[dict[str, Any]], where: str) -> None:
+        """A cue on an entrance names a cast member of the shot (by index or id) who walks in."""
+        ref, problems = cue.get("cast"), self.checker.problems
+        if isinstance(ref, int) and not isinstance(ref, bool):
+            named = cast[ref] if 0 <= ref < len(cast) else None
+        else:
+            named = next((entry for entry in cast if entry.get("characterId") == ref), None)
+        if named is None:
+            problems.append(f"{where}: anchor enter needs cast, an index into the shot's cast or one of its characters")
+        elif named.get("enterFrom") not in ("left", "right"):
+            problems.append(f"{where}: {named.get('characterId')} does not enter (give it enterFrom left or right)")
 
     def _check_lines(self, shot: dict[str, Any], where: str) -> None:
         for index, line in enumerate(shot.get("lines") or []):
             who = line.get("who") if isinstance(line, dict) else None
+            if isinstance(line, dict) and line.get("voiceRoom") is not None and line["voiceRoom"] not in PRESETS:
+                self.checker.problems.append(f"{where}: line {index} voiceRoom must be one of {', '.join(PRESETS)}")
             if who not in self.checker.characters:
                 self.checker.problems.append(f"{where}: line {index} has an unknown speaker {who}")
             elif not _line_text(line, self.original):
@@ -252,7 +276,8 @@ class EpisodeScript:
     def _beats(self, sid: str, lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [{"id": f"{sid}_b{n}", "characterId": line["who"], "emotion": line.get("emotion", ""), "delivery": line.get("delivery", ""),
                  "text": _line_text(line, self.original),
-                 **({"pauseBefore": line["pauseBefore"]} if isinstance(line.get("pauseBefore"), (int, float)) else {})}
+                 **({"pauseBefore": line["pauseBefore"]} if isinstance(line.get("pauseBefore"), (int, float)) else {}),
+                 **({"voiceRoom": line["voiceRoom"]} if line.get("voiceRoom") is not None else {})}
                 for n, line in enumerate(lines)]
 
     def _shot(self, index: int, shot: dict[str, Any]) -> dict[str, Any]:

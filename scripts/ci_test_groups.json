@@ -246,8 +246,10 @@
       "weight": 2674,
       "paths": [
         "tests/test_series_agent_fixes.py",
+        "tests/test_series_entrances.py",
         "tests/test_series_templates.py",
         "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",
@@ -480,7 +482,30 @@
       "prefix": "app/services/flat_rig.py",
       "paths": [
         "tests/test_flat_rig.py",
-        "tests/test_flat_rig_realistic.py"
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_base.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_ink.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py"
+      ]
+    },
+    {
+      "prefix": "app/services/face_landmarks.py",
+      "paths": [
+        "tests/test_flat_rig_guided.py"
       ]
     },
     {
@@ -578,6 +603,12 @@
         "tests/test_series_cutouts.py",
         "tests/test_series_native_render.py",
         "tests/test_series_shot_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_entrances.py",
+      "paths": [
+        "tests/test_series_entrances.py"
       ]
     },
     {

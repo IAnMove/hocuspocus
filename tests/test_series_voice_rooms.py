@@ -67,6 +67,30 @@ def test_the_presets_have_the_character_they_are_named_for():
     assert not rooms.has_tail(radio) and all(word in radio.tone for word in ("highpass", "lowpass", "asoftclip"))
 
 
+def test_the_places_are_felt_under_the_voice_not_in_front_of_it():
+    places = [ROOMS[name] for name in ("small_room", "room", "hall", "cathedral", "outdoor")]
+    assert all(room.wet <= -14 for room in places), "a place sits 14 dB or more under the voice"
+    assert all(room.band[0] >= 200 for room in places), "and carries no low end to mask the words"
+    assert all(0 < room.band[1] <= 6000 for room in places if room.rt60), "nor the highs that smear the consonants"
+    assert all(room.late <= 0 for room in places if room.rt60), "it is mostly early reflections, which the ear fuses with the voice"
+    assert ROOMS["cathedral"].rt60 <= 2.5 and ROOMS["cathedral"].predelay >= 40, "a short tail that starts after the syllable"
+    assert rooms.TRANSMISSIONS == {"radio"} and "radio" in ROOMS
+    for preset, room in ROOMS.items():
+        graph = room_filter(preset)
+        if room.band != (0.0, 0.0):
+            assert f"afir=gtype=none:irnorm=-1{rooms.wet_band(room)},volume={room.wet}dB[wet]" in graph, "the band is on the room alone"
+    assert rooms.wet_band(ROOMS["cathedral"]) == ",highpass=f=350:poles=2,lowpass=f=4000:poles=2"
+    assert rooms.wet_band(ROOMS["outdoor"]) == ",highpass=f=200:poles=2" and rooms.wet_band(ROOMS["cockpit"]) == ""
+
+
+def test_the_tail_sits_under_the_early_reflections_by_its_late_level():
+    cathedral = rooms.impulse_response("cathedral")
+    room = ROOMS["cathedral"]
+    tail_from = int(RATE * (max(ms for ms, _ in room.early) + 2) / 1000)
+    early, late = float(np.sum(cathedral[:tail_from] ** 2)), float(np.sum(cathedral[tail_from:] ** 2))
+    assert 10 * math.log10(late / early) == pytest.approx(room.late, abs=1.0)
+
+
 def _energy_curve_seconds(response, low=-5, high=-25):
     """Reverberation time from the backward energy integral (Schroeder), between two levels of decay."""
     energy = np.cumsum((response ** 2)[::-1])[::-1]
@@ -84,8 +108,8 @@ def test_an_impulse_response_is_deterministic_unit_energy_and_decays_as_planned(
         assert measured == pytest.approx(ROOMS[preset].rt60, rel=0.12), preset
     assert not np.array_equal(rooms.impulse_response("room"), rooms.impulse_response("hall")), "each preset has its own noise"
     cathedral = rooms.impulse_response("cathedral")
-    assert np.abs(cathedral[:int(0.025 * RATE)]).max() < 1e-6, "nothing arrives before the first reflection"
-    assert len(cathedral) / RATE == pytest.approx(0.038 + 1.3 * 3.5, abs=0.01)
+    assert np.abs(cathedral[:int(0.010 * RATE)]).max() < 1e-6, "nothing arrives before the first reflection (14 ms)"
+    assert len(cathedral) / RATE == pytest.approx(0.05 + 1.3 * 2.2, abs=0.01)
 
 
 def test_the_cockpit_is_early_reflections_and_the_outdoor_room_one_slap():
@@ -163,7 +187,7 @@ def test_a_roomed_shot_plays_the_processed_copy_of_each_line_and_keeps_the_dry_t
     dry = build_shot_spec(series, episode, TALK, workspace="cast", recorded=RECORDED)
     heard = roomed(series, TALK, RECORDED, process)
     spec = build_shot_spec(series, episode, TALK, workspace="cast", recorded=heard)
-    assert [line["filename"] for line in spec["lines"]] == ["ln-ep-s1_b0-k0.room-cathedral-v1.wav", "ln-ep-s1_b1-k1.room-cathedral-v1.wav"]
+    assert [line["filename"] for line in spec["lines"]] == [f"ln-ep-s1_b0-k0.room-cathedral-v{rooms.VERSION}.wav", f"ln-ep-s1_b1-k1.room-cathedral-v{rooms.VERSION}.wav"]
     assert [line["filename"] for line in dry["lines"]] == ["ln-ep-s1_b0-k0.wav", "ln-ep-s1_b1-k1.wav"]
     assert made == [("ln-ep-s1_b0-k0.wav", "cathedral"), ("ln-ep-s1_b1-k1.wav", "cathedral")]
     for key in ("duration", "cast", "framing", "audioTracks"):
@@ -183,6 +207,67 @@ def test_a_shot_without_a_room_plays_the_dry_lines_and_asks_for_nothing():
     stale = {**RECORDED, "s1_old": {"filename": "ln-gone.wav", "duration": 1.0}}
     assert roomed(_series(roomByLocation={"nave": "hall"}), TALK, stale, process)["s1_old"] == stale["s1_old"], "only the shot's lines"
     assert asked == ["ln-ep-s1_b0-k0.wav", "ln-ep-s1_b1-k1.wav"]
+
+
+NARRATOR = {"id": "s1_b2", "characterId": "narrator", "text": "Meanwhile, in the nave."}
+NARRATED = {**TALK, "dialogueBeats": [*TALK["dialogueBeats"], NARRATOR]}
+NARRATED_RECORDED = {**RECORDED, "s1_b2": {"key": "k2", "filename": "ln-ep-s1_b2-k2.wav", "duration": 2.0, "cues": []}}
+
+
+def test_a_place_reaches_only_the_speakers_in_the_shot():
+    cathedral = _series(roomByLocation={"nave": "cathedral"})
+    assert rooms.line_rooms(cathedral, NARRATED) == {"s1_b0": "cathedral", "s1_b1": "cathedral"}, "the narrator is not in the church"
+    assert rooms.on_screen(TALK) == {"ana", "leo"}
+    cast = {**NARRATED, "layout2d": {**TALK["layout2d"], "cast": [{"characterId": "leo", "x": 60}]}}
+    assert rooms.on_screen(cast) == {"leo"} and rooms.line_rooms(cathedral, cast) == {"s1_b1": "cathedral"}, \
+        "the 2D cast says who stands there, before visibleCharacterIds"
+    assert rooms.line_rooms(cathedral, {**NARRATED, "layout2d": {"framing": "title"}}) == {}, "nobody stands in a title shot"
+    deck = {**DECK, "visibleCharacterIds": ["ana", "leo"],
+            "dialogueBeats": [*DECK["dialogueBeats"], {"id": "s3_b1", "characterId": "leo", "text": "Over."}]}
+    assert rooms.on_screen(deck) == {"ana"}, "a 3D shot's people are its scene's cast; the others are heard over it"
+    assert rooms.line_rooms(_series(roomByLocation={"deck": "hall"}), deck) == {"s3_b0": "hall"}
+    blank = {**TALK, "dialogueBeats": [{"id": "s1_b0", "characterId": "ana", "text": "  ", "voiceRoom": "hall"}]}
+    assert rooms.line_rooms(cathedral, blank) == {}, "a line without words is not recorded"
+
+
+def test_a_transmission_reaches_every_line_of_its_shot():
+    everyone = {"s1_b0": "radio", "s1_b1": "radio", "s1_b2": "radio"}
+    assert rooms.line_rooms(_series(), {**NARRATED, "layout2d": {**TALK["layout2d"], "voiceRoom": "radio"}}) == everyone
+    assert rooms.line_rooms(_series(roomByLocation={"nave": "radio"}), NARRATED) == everyone, "from its location too"
+
+
+def test_a_line_names_its_own_room_and_it_wins_on_screen_or_off():
+    beats = [{**TALK["dialogueBeats"][0], "voiceRoom": "none"}, TALK["dialogueBeats"][1], {**NARRATOR, "voiceRoom": "radio"}]
+    shot = {**TALK, "dialogueBeats": beats}
+    assert rooms.line_rooms(_series(roomByLocation={"nave": "cathedral"}), shot) == {"s1_b1": "cathedral", "s1_b2": "radio"}, \
+        "ana is dry in the cathedral and the narrator a voice on the radio"
+    assert rooms.line_rooms(_series(), shot) == {"s1_b2": "radio"}, "in a dry place too"
+    assert rooms.line_rooms(_series(), {**TALK, "dialogueBeats": [{**NARRATOR, "voiceRoom": "hall"}]}) == {"s1_b2": "hall"}, \
+        "an off-screen speaker can be given a place (a voice from the next room)"
+    radio = {**shot, "layout2d": {**TALK["layout2d"], "voiceRoom": "radio"}}
+    assert rooms.line_rooms(_series(), radio) == {"s1_b1": "radio", "s1_b2": "radio"}, "none keeps one line off the radio"
+    assert rooms.line_rooms(_series(), {**TALK, "dialogueBeats": [{**NARRATOR, "voiceRoom": "church"}]}) == {}, \
+        "a value that slipped past validation is dry"
+
+
+def test_each_line_plays_the_copy_of_its_own_room():
+    made = []
+
+    def process(filename, preset):
+        made.append((filename, preset))
+        return room_filename(filename, preset)
+
+    series = _series(roomByLocation={"nave": "cathedral"})
+    heard = roomed(series, NARRATED, NARRATED_RECORDED, process)
+    assert [heard[beat]["filename"] for beat in ("s1_b0", "s1_b1", "s1_b2")] == [
+        room_filename("ln-ep-s1_b0-k0.wav", "cathedral"), room_filename("ln-ep-s1_b1-k1.wav", "cathedral"), "ln-ep-s1_b2-k2.wav"]
+    assert made == [("ln-ep-s1_b0-k0.wav", "cathedral"), ("ln-ep-s1_b1-k1.wav", "cathedral")], "the narrator is not processed"
+    made.clear()
+    own = {**NARRATED, "dialogueBeats": [*TALK["dialogueBeats"], {**NARRATOR, "voiceRoom": "radio"}]}
+    assert roomed(series, own, NARRATED_RECORDED, process)["s1_b2"]["filename"] == room_filename("ln-ep-s1_b2-k2.wav", "radio")
+    assert sorted(preset for _name, preset in made) == ["cathedral", "cathedral", "radio"]
+    voice_over = {**TALK, "dialogueBeats": [NARRATOR]}
+    assert roomed(series, voice_over, NARRATED_RECORDED, process) is NARRATED_RECORDED, "a narrated shot in the church is dry"
 
 
 # Validation -------------------------------------------------------------------
@@ -209,6 +294,33 @@ def test_an_unknown_room_is_refused_in_a_series_and_in_a_shot():
     shot["layout2d"]["voiceRoom"] = "church"
     with pytest.raises(ValueError, match="layout2d.voiceRoom"):
         normalize_series_project(project, "show", "default")
+
+
+def test_a_line_room_is_kept_on_its_beat_and_an_unknown_one_is_refused():
+    def saved(beat):
+        shot = {"id": "e1s1", "sceneId": "sc", "productionMethod": "animation_2d", "dialogueBeats": [beat]}
+        project = {"id": "show", "allowedProductionMethods": ["animation_2d"], "characters": [{"id": "narrator", "name": "Narrator"}],
+                   "episodesById": {"ep1": {"id": "ep1", "number": 1, "script": [{"id": "sc"}], "shots": [shot]}}}
+        return normalize_series_project(project, "show", "default")["episodesById"]["ep1"]["shots"][0]["dialogueBeats"][0]
+
+    beat = {"id": "e1s1_b0", "characterId": "narrator", "text": "Meanwhile."}
+    assert saved({**beat, "voiceRoom": "radio"})["voiceRoom"] == "radio"
+    assert "voiceRoom" not in saved({**beat, "voiceRoom": None}), "null clears it"
+    for bad in ("church", "", 3):
+        with pytest.raises(ValueError, match="dialogueBeats.voiceRoom must be one of"):
+            saved({**beat, "voiceRoom": bad})
+
+
+def test_a_script_line_names_its_own_room():
+    tools = Series()
+    talk = SCRIPT["shots"][1]
+    lines = [{**talk["lines"][0], "voiceRoom": "radio"}, talk["lines"][1]]
+    apply_script(tools, tools.read, SCRIPT_KITS, FILES, "cast", {**SCRIPT, "shots": [{**talk, "lines": lines}]})
+    beats = tools.calls[1][1]["episode"]["shots"][0]["dialogueBeats"]
+    assert beats[0]["voiceRoom"] == "radio" and "voiceRoom" not in beats[1]
+    with pytest.raises(ScriptError, match="shot 0 .*line 1 voiceRoom must be one of none, small_room"):
+        apply_script(Series(), tools.read, SCRIPT_KITS, FILES, "cast",
+                     {**SCRIPT, "shots": [{**talk, "lines": [talk["lines"][0], {**talk["lines"][1], "voiceRoom": "church"}]}]})
 
 
 def test_a_script_names_a_shots_room_and_a_typo_is_listed_with_the_other_problems():
@@ -266,6 +378,31 @@ def test_a_shot_whose_room_changes_is_out_of_date_and_the_others_are_not():
     assert override not in (nave["s1"], dry["s1"])
     assert render_inputs(_series(**DESIGN), {**TALK, "layout2d": {**TALK["layout2d"], "voiceRoom": "radio"}}, KITS) == override, \
         "the same room from the shot or from its location is the same take"
+
+
+def test_a_narrator_over_a_roomed_place_keeps_the_dry_digest_and_a_line_room_renders_only_its_shot():
+    roomed_series, dry_series = _series(**DESIGN, roomByLocation={"nave": "cathedral"}), _series(**DESIGN)
+    voice_over = {**TALK, "dialogueBeats": [NARRATOR]}
+    assert render_inputs(roomed_series, voice_over, KITS) == render_inputs(dry_series, voice_over, KITS), \
+        "a voice-over across a church plate renders as it would dry"
+    talk = render_inputs(roomed_series, TALK, KITS)
+    narrated = render_inputs(roomed_series, NARRATED, KITS)
+    radio_line = {**TALK, "dialogueBeats": [TALK["dialogueBeats"][0], {**TALK["dialogueBeats"][1], "voiceRoom": "radio"}]}
+    assert render_inputs(roomed_series, radio_line, KITS) not in (talk, narrated), "a line given its own room renders its shot again"
+    same = {**TALK, "dialogueBeats": [TALK["dialogueBeats"][0], {**TALK["dialogueBeats"][1], "voiceRoom": "cathedral"}]}
+    assert render_inputs(roomed_series, same, KITS) == talk, "naming the room a line already hears changes nothing"
+    dry_line = {**TALK, "dialogueBeats": [{**beat, "voiceRoom": "none"} for beat in TALK["dialogueBeats"]]}
+    assert render_inputs(dry_series, dry_line, KITS) == render_inputs(dry_series, TALK, KITS), "none in a dry place changes nothing"
+    assert render_inputs(roomed_series, dry_line, KITS) == render_inputs(dry_series, TALK, KITS), "a shot of dry lines is a dry take"
+
+
+def test_a_new_version_of_the_rooms_renders_again_only_the_shots_that_hear_one(monkeypatch):
+    from services import series_take_inputs
+    series = _series(**DESIGN, roomByLocation={"nave": "cathedral"})
+    before = [render_inputs(series, shot, KITS) for shot in (TALK, CARD, DECK, {**TALK, "dialogueBeats": [NARRATOR]})]
+    monkeypatch.setattr(series_take_inputs, "ROOM_VERSION", rooms.VERSION + 1)
+    after = [render_inputs(series, shot, KITS) for shot in (TALK, CARD, DECK, {**TALK, "dialogueBeats": [NARRATOR]})]
+    assert after[0] != before[0] and after[1:] == before[1:], "retuned presets reach the shots that hear them"
 
 
 def test_only_the_shots_whose_room_changed_are_stale():
@@ -337,6 +474,23 @@ def test_the_server_render_plays_each_line_in_the_room_of_its_location(tmp_path,
     assert [document["shot"]["duration"] for document in compiled] == [document["shot"]["duration"] for document in plain_compiled], "dry timing"
 
 
+def test_the_server_render_keeps_a_voice_over_dry_and_gives_a_line_its_own_room(tmp_path, monkeypatch):
+    def edit(data):
+        shots = data["seriesById"]["uv"]["episodesById"]["ep1"]["shots"]
+        shots[0]["visibleCharacterIds"] = ["kevin"]
+        shots[2]["dialogueBeats"][0]["voiceRoom"] = "radio"
+
+    render, made, compiled = _rendered(tmp_path, monkeypatch, {"roomByLocation": {"garage": "cathedral"}}, edit)
+    done = native.finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert done["status"] == "completed", done
+    first, second = (document["shot"]["lines"] for document in compiled)
+    recorded = {**done["items"][0]["lines"], **done["items"][1]["lines"]}
+    assert [line["filename"] for line in first] == [room_filename(recorded["s01_d0"]["filename"], "cathedral"), recorded["s01_d1"]["filename"]], \
+        "kevin is in the garage's cathedral, gary is heard over the shot, dry"
+    assert [line["filename"] for line in second] == [room_filename(recorded["s03_d0"]["filename"], "radio")], "a line's own room wins"
+    assert [preset for _root, _name, preset in made] == ["cathedral", "radio"]
+
+
 def test_a_series_without_rooms_never_asks_for_a_copy(tmp_path, monkeypatch):
     render, made, compiled = _rendered(tmp_path, monkeypatch, {"ambienceByLocation": {}})
     native.finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
@@ -350,7 +504,7 @@ def test_a_room_that_cannot_be_made_fails_its_shot_clearly(tmp_path, monkeypatch
     assert "Voice room: ffmpeg failed: boom" in done["items"][0]["error"], "a take must not claim a room it does not have"
 
 
-def test_a_3d_shot_hears_the_room_too_and_its_narrator(tmp_path):
+def test_a_3d_shot_hears_the_room_too_and_its_narrator_stays_dry(tmp_path):
     calls = []
 
     def call(tool, arguments):
@@ -376,8 +530,9 @@ def test_a_3d_shot_hears_the_room_too_and_its_narrator(tmp_path):
     assert [line["audio"] for line in talk["lines"]] == [f"/api/v1/file/ln-a.room-cockpit-v{rooms.VERSION}.wav?workspace=cast"]
     assert talk["lines"][0]["cues"] == lines["s9_d0"]["cues"]
     patch = next(arguments for tool, arguments in calls if tool == "world3d.scene.patch" and "voiceOver" in arguments)
-    assert [line["audio"] for line in patch["voiceOver"]] == [f"/api/v1/file/ln-b.room-cockpit-v{rooms.VERSION}.wav?workspace=cast"]
-    assert heard == ["ln-a.wav", "ln-b.wav"] and lines["s9_d0"]["filename"] == "ln-a.wav"
+    assert [line["audio"] for line in patch["voiceOver"]] == ["/api/v1/file/ln-b.wav?workspace=cast"], \
+        "gary has no object in the scene: a voice over it, not a voice in the cockpit"
+    assert heard == ["ln-a.wav"] and lines["s9_d0"]["filename"] == "ln-a.wav"
 
 
 # The DSP ----------------------------------------------------------------------
@@ -422,6 +577,22 @@ def test_a_cathedral_rings_on_after_the_line_and_without_a_room_nothing_does(tmp
     assert len(_read(tmp_path / "ln-dry.wav")) == burst, "the dry line ends with the burst"
     assert apply_room(str(tmp_path), "ln-dry.wav", "none") == "ln-dry.wav", "no room, no copy"
     assert not any("none" in item for item in os.listdir(tmp_path))
+
+
+@needs_ffmpeg
+def test_every_place_is_felt_but_keeps_the_voice_clear(tmp_path):
+    """C50 (direct and first 50 ms against the rest) and the room's level of a click heard through each preset, as rendered.
+    The presets before 2026-10 measured C50 5.1 dB in the cathedral and 7.7 dB in the hall."""
+    click = np.zeros(RATE * 4)
+    click[RATE // 10] = 0.25
+    _write(tmp_path / "ln-click.wav", click)
+    for preset in sorted(set(ROOMS) - rooms.TRANSMISSIONS):
+        response = _read(tmp_path / apply_room(str(tmp_path), "ln-click.wav", preset))[RATE // 10 - 50:] ** 2
+        direct = float(np.sum(response[:150]))
+        early = float(np.sum(response[:int(0.05 * RATE)]))
+        c50, direct_to_room = 10 * math.log10(early / (float(np.sum(response)) - early)), 10 * math.log10(direct / (float(np.sum(response)) - direct))
+        assert c50 >= 18, f"{preset}: the words stay clear ({c50:.1f} dB)"
+        assert direct_to_room <= 25, f"{preset}: and the room is still there ({direct_to_room:.1f} dB under the voice)"
 
 
 @needs_ffmpeg
