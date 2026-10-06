@@ -483,7 +483,9 @@
         "tests/test_game_gen_tiles.py",
         "tests/test_game_list.py",
         "tests/test_game_estimate.py",
-        "tests/test_game_produce.py"
+        "tests/test_game_produce.py",
+        "tests/test_game_frames.py",
+        "tests/test_game_sheet.py"
       ]
     }
   ],
@@ -1451,6 +1453,14 @@
     {
       "prefix": "app/routers/game_produce.py",
       "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_frames.py",
+      "paths": ["tests/test_game_frames.py"]
+    },
+    {
+      "prefix": "app/services/game_sheet.py",
+      "paths": ["tests/test_game_sheet.py"]
     }
   ]
 }
