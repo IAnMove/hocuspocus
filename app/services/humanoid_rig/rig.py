@@ -86,5 +86,5 @@ def _sidecar(found: dict, skeleton: dict, limits: dict, clips: list[dict]) -> di
         "limits": limits,
         "bones": list(BONE_NAMES),
         "clips": [{"index": index, "id": clip["id"], "name": clip["name"], "duration": clip["duration"],
-                   "contacts": clip.get("contacts", [])} for index, clip in enumerate(clips)],
+                   "loop": clip.get("loop", True), "contacts": clip.get("contacts", [])} for index, clip in enumerate(clips)],
     }

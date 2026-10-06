@@ -43,7 +43,7 @@ def command_catalog():
                             ".gltf inside the workspace (Mixamo, VRM/VRoid, Unreal, Blender, Daz or CMU bone names); every "
                             "animation in it is retargeted in place. path adds a walk along points with the feet planted "
                             "(the clip moves the hips; play it with the slot still). CPU only. Returns each clip index, name, duration and foot landings "
-                            "for a Video 3D slot, plus warnings. Unusable inputs (no skeleton, no humanoid in the file, "
+                            "for a Video 3D slot (library clips add loop; false means play it once), plus warnings. Unusable inputs (no skeleton, no humanoid in the file, "
                             "compressed meshes) answer invalid_input; the same intent replays that answer.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"},

@@ -10,7 +10,8 @@ def command_catalog() -> list[dict]:
                   "names bones like Mixamo, bakes the chosen clips for that body (feet on the floor, arms clear of a big "
                   "belly or head) and fails with not_humanoid plus a reason (hands_stuck, arms_raised, turned, single_leg, "
                   "legs_too_short, asymmetry, not_upright, degenerate) instead of guessing. Procedural clips stay body-chain approximations. "
-                  "Poll model3d.rig.status; a finished humanoid job lists clips as {index, name, duration, contacts} (foot landings).")
+                  "Poll model3d.rig.status; a finished humanoid job lists clips as {index, name, duration, loop, contacts} (foot landings); "
+                  "loop false marks a hold such as kneel_pray or crouch, which ends in its pose: play it once.")
     payload = submit["inputSchema"]["properties"]["input"]
     workspace = payload["properties"]["workspace"]
     payload.update(properties={"workspace": workspace, "source": {"type": "string", "minLength": 1},
