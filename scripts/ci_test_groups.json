@@ -244,7 +244,8 @@
         "tests/test_game_prompts.py",
         "tests/test_game_gen_animation.py",
         "tests/test_game_gen_vfx.py",
-        "tests/test_game_gen_audio.py"
+        "tests/test_game_gen_audio.py",
+        "tests/test_game_gen_3d.py"
       ]
     },
     {
@@ -1413,7 +1414,7 @@
     },
     {
       "prefix": "app/services/game_tools.py",
-      "paths": ["tests/test_game_tools.py"]
+      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_3d.py"]
     },
     {
       "prefix": "app/services/game_prompts.py",
@@ -1437,7 +1438,7 @@
     },
     {
       "prefix": "app/services/game_generators/__init__.py",
-      "paths": ["tests/test_game_gen_still.py", "tests/test_game_gen_animation.py", "tests/test_game_gen_vfx.py", "tests/test_game_gen_audio.py"]
+      "paths": ["tests/test_game_gen_still.py", "tests/test_game_gen_animation.py", "tests/test_game_gen_vfx.py", "tests/test_game_gen_audio.py", "tests/test_game_gen_3d.py"]
     },
     {
       "prefix": "app/services/game_list.py",
@@ -1478,6 +1479,14 @@
     {
       "prefix": "app/services/game_generators/audio.py",
       "paths": ["tests/test_game_gen_audio.py", "tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/three_d.py",
+      "paths": ["tests/test_game_gen_3d.py"]
+    },
+    {
+      "prefix": "app/services/procedural_3d/glb_inspector.py",
+      "paths": ["tests/test_procedural_glb_inspector.py", "tests/test_game_gen_3d.py"]
     },
     {
       "prefix": "app/services/game_audio.py",
