@@ -83,13 +83,13 @@ def _verified_artifact(artifact: dict, folder) -> dict:
 
 
 def project_export_task(task: dict | None, receipt: dict) -> dict | None:
-    """Keep task-ref fallbacks from returning a newer alias when its receipt is superseded."""
+    """Include the receipt's verified URL in task fallbacks, without mutating the stored task."""
     artifacts = receipt.get("artifacts") or []
-    if not task or not artifacts or not artifacts[0].get("superseded"):
+    if not task or not artifacts or not artifacts[0].get("sha256"):
         return task
     artifact = artifacts[0]
     metadata = {**(task.get("metadata") or {}), "output": artifact}
-    return {**task, "metadata": metadata, "result_refs": [artifact["name"]] if artifact.get("available") else []}
+    return {**task, "metadata": metadata, "result_refs": [artifact["name"]] if artifact.get("available", True) else []}
 
 
 def project_export_receipt(receipt: dict, task: dict | None, *, folder=None) -> dict:

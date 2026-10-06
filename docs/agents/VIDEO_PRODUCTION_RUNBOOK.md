@@ -367,6 +367,14 @@ montage adds the song normally. Empty `cast` and all-3D shots request no cast
 images, start frames or H3 generation. Both template and full-document shots
 are supported in `fill`.
 
+Named exports retain one `.previous` version. New receipts include a SHA-256
+identity and resolve their exact bytes at read time; a displaced version that
+is no longer retained has no downloadable artifact. Keep the receipt's URL,
+including its `sha256` query: the file endpoint verifies the open handle before
+streaming and returns HTTP 410 if that saved URL now names another version.
+An ordinary stable-name layer URL continues to show the latest render. Receipts
+created before hashes were recorded cannot verify a historical version.
+
 Cuts containing native 3D use the montage's 24 fps grid: round each absolute
 boundary to its nearest frame, then subtract boundaries for each shot's length.
 The native export, Video 2D wrapper and montage share those lengths. Rounding

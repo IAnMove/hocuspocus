@@ -13,6 +13,7 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 - [AGENT_QA_POLICY.md](AGENT_QA_POLICY.md) — contrato · política mínima de QA para agentes, `CI required` y validador de evidencia.
 - [LOCAL_VALIDATION.md](LOCAL_VALIDATION.md) — guía · validación local sin proveedores (`scripts/validate_local.sh`).
 - [CODE_HEALTH.md](CODE_HEALTH.md) — contrato · ratchet de salud de código para Python y `ui/src`.
+- [DEVELOPMENT_AUDIT_FIXES_2026-10-07.md](DEVELOPMENT_AUDIT_FIXES_2026-10-07.md) — contrato · correcciones de la revisión development/main, regresiones y límites.
 - [CI_CACHE_AND_SHARDS.md](CI_CACHE_AND_SHARDS.md) — contrato · cachés de CI y shards de pytest.
 - [TASK_COST_REPORT.md](TASK_COST_REPORT.md) — contrato · informe de coste obligatorio en cada PR.
 - [MERGE_ELIGIBILITY.md](MERGE_ELIGIBILITY.md) — contrato · simulación de elegibilidad de merge (nunca mezcla).

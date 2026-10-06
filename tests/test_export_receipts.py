@@ -57,3 +57,15 @@ def test_superseded_task_fallback_does_not_return_current_alias(tmp_path, previo
     assert projected['result_refs'] == expected
     assert projected['metadata']['output'] == receipt['artifacts'][0]
     assert task['result_refs'] == ['loop.mp4']
+
+
+def test_current_named_task_also_returns_a_content_checked_url(tmp_path):
+    (tmp_path / 'loop.mp4').write_bytes(b'original')
+    task = {'status': 'completed', 'workspace': 'promo', 'result_refs': ['loop.mp4'],
+            'metadata': {'output': {'name': 'loop.mp4', 'url': '/api/v1/file/loop.mp4', 'workspace': 'promo',
+                                    'sha256': hashlib.sha256(b'original').hexdigest()}}}
+    receipt = project_export_receipt({'status': 'queued'}, task, folder=tmp_path)
+    projected = project_export_task(task, receipt)
+    assert 'sha256=' in projected['metadata']['output']['url']
+    assert projected['result_refs'] == ['loop.mp4']
+    assert task['metadata']['output']['url'] == '/api/v1/file/loop.mp4'
