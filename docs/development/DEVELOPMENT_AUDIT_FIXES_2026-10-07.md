@@ -1,7 +1,7 @@
 # Correcciones de la revisión de development frente a main
 
 Este documento describe el alcance del PR contra `development`; no certifica un merge ni una revisión independiente.
-La revisión final de Claude queda pendiente. La rama parte de `8f3a0d75` e incorpora `development` hasta `36de8526`, incluido su inspector de planos, en un worktree aislado.
+La revisión final de Claude queda pendiente. La rama parte de `8f3a0d75` e incorpora `development` hasta `5718797f`, incluidos el inspector de planos y los módulos de recursos para juegos, en un worktree aislado.
 
 ## Comportamientos corregidos
 

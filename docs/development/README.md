@@ -123,3 +123,8 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 
 - [SERIES_ANIMADAS_PLAN_2026-10-04.md](SERIES_ANIMADAS_PLAN_2026-10-04.md) — plan · series de animación fáciles en tres fases (1A–3 en #802–#805).
 - [SERIE_ANIMADA_MCP_PROBLEMAS_2026-10-04.md](SERIE_ANIMADA_MCP_PROBLEMAS_2026-10-04.md) — histórico · problemas del 1x02 hecho por MCP y sus arreglos.
+
+## Recursos para videojuegos
+
+- [GAME_ASSETS_BOARD.md](GAME_ASSETS_BOARD.md) — plan · tablero de la pestaña Recursos para videojuegos (J0–J17).
+- [GAME_ASSETS_TRIAL_2026-10-06.md](GAME_ASSETS_TRIAL_2026-10-06.md) — histórico · prueba J0 del 6 de octubre de 2026. Fija los valores por defecto de la animación.

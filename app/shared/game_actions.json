@@ -1,0 +1,130 @@
+{
+  "actions": [
+    {
+      "id": "idle",
+      "aliases": ["reposo", "quieto", "respirar", "idle"],
+      "loop": true,
+      "frames": 6,
+      "fps": 8,
+      "endsInStance": true,
+      "beat": "stands in place breathing gently, feet planted"
+    },
+    {
+      "id": "walk",
+      "aliases": ["andar", "caminar", "walk"],
+      "loop": true,
+      "frames": 8,
+      "fps": 12,
+      "endsInStance": true,
+      "beat": "walks in place on an invisible treadmill, full walk cycle, body stays centered, feet return to the same ground line"
+    },
+    {
+      "id": "run",
+      "aliases": ["correr", "run"],
+      "loop": true,
+      "frames": 8,
+      "fps": 14,
+      "endsInStance": true,
+      "beat": "runs in place on an invisible treadmill, full run cycle, body stays centered, feet return to the same ground line"
+    },
+    {
+      "id": "jump",
+      "aliases": ["saltar", "jump"],
+      "loop": false,
+      "frames": 8,
+      "fps": 12,
+      "endsInStance": true,
+      "beat": "crouches, jumps straight up and lands on the same spot, back to the standing pose"
+    },
+    {
+      "id": "fall",
+      "aliases": ["caer", "fall"],
+      "loop": true,
+      "frames": 2,
+      "fps": 8,
+      "endsInStance": false,
+      "beat": "falls with arms up, seen from the side"
+    },
+    {
+      "id": "attack",
+      "aliases": ["atacar", "golpear", "attack"],
+      "loop": false,
+      "frames": 6,
+      "fps": 14,
+      "endsInStance": true,
+      "beat": "one quick attack toward the right, then back to the standing pose"
+    },
+    {
+      "id": "shoot",
+      "aliases": ["disparar", "shoot"],
+      "loop": false,
+      "frames": 4,
+      "fps": 12,
+      "endsInStance": true,
+      "beat": "fires once toward the right, small recoil, back to the standing pose"
+    },
+    {
+      "id": "hurt",
+      "aliases": ["herido", "golpe", "daño", "dano", "hurt"],
+      "loop": false,
+      "frames": 4,
+      "fps": 10,
+      "endsInStance": true,
+      "beat": "flinches backward as if hit from the right, then recovers"
+    },
+    {
+      "id": "death",
+      "aliases": ["morir", "muerte", "death"],
+      "loop": false,
+      "frames": 8,
+      "fps": 10,
+      "endsInStance": false,
+      "beat": "collapses to the ground and lies still"
+    },
+    {
+      "id": "crouch",
+      "aliases": ["agacharse", "crouch"],
+      "loop": false,
+      "frames": 3,
+      "fps": 10,
+      "endsInStance": false,
+      "beat": "crouches down and stays low"
+    },
+    {
+      "id": "climb",
+      "aliases": ["trepar", "climb"],
+      "loop": true,
+      "frames": 6,
+      "fps": 10,
+      "endsInStance": false,
+      "beat": "climbs a ladder in place"
+    },
+    {
+      "id": "victory",
+      "aliases": ["victoria", "celebrar", "victory"],
+      "loop": false,
+      "frames": 8,
+      "fps": 12,
+      "endsInStance": true,
+      "beat": "celebrates with a small jump and a raised fist, back to the standing pose"
+    },
+    {
+      "id": "spin",
+      "aliases": ["girar", "spin"],
+      "loop": true,
+      "frames": 8,
+      "fps": 12,
+      "endsInStance": true,
+      "beat": "the object spins 360 degrees around its vertical axis in place"
+    },
+    {
+      "id": "bob",
+      "aliases": ["flotar", "bob"],
+      "loop": true,
+      "frames": 6,
+      "fps": 8,
+      "endsInStance": true,
+      "beat": "the object floats up and down gently in place"
+    }
+  ]
+}
