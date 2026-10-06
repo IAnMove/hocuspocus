@@ -119,8 +119,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "\"steps\" plays on every footfall; an fx duration is seconds, "
         "0.1-30 and clamped to that, or \"shot\" for the rest of the shot), props (ground true stands one on the floor), "
         "set layers (a video's start, speed and loop hold | pingpong), timing, foley "
-        "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots. It checks every character, "
-        "pose, location, file and effect against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
+        "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots (scene3d.objects with clips, "
+        "hold and appearance as in series.episode.update). It checks every character, pose, location, file, effect and "
+        "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
     ),
     "series.episode.produce": (
@@ -232,7 +233,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "it (repeat: steps on every footfall). A change renders again only the shots it reaches. score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
-        "changing it renders no take.",
+        "changing it renders no take. scene3d.objects[] also take clips (a clip sequence: [{clip name, start, duration?, "
+        "fade?, speed?, offset?, loop?}]), hold {carrier (a 3D model object that does not speak in the shot), hand left|right, "
+        "offset? [x,y,z] m, rotation? [x,y,z] radians, Euler XYZ in the hand bone's frame} and appearance {start, "
+        "duration?, color?}; a model is 1.7 m x scale tall.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},

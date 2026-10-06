@@ -404,3 +404,71 @@ def test_a_shot_with_valid_screen_effect_durations_keeps_its_take_digest():
     clamped = {**shot, "layout2d": normalize_layout2d({**raw, "fx": [{**raw["fx"][1], "duration": 99}]})}
     assert render_inputs(series, clamped, kits) != render_inputs(
         series, {**shot, "layout2d": normalize_layout2d({**raw, "fx": [{**raw["fx"][1], "duration": 1}]})}, kits), "30 s is not 1 s"
+
+
+class World3DWithSlots(World3D):
+    """A template whose instantiated document lists its objects (the cast member elon is a model of the template)."""
+
+    def __call__(self, tool, arguments):
+        reply = super().__call__(tool, arguments)
+        if tool == "world3d.scene.instantiate":
+            reply["result"]["scene"]["document"] = {"slots": [{"id": "elon", "media": "model3d"}, {"id": "sky", "media": "image"}]}
+        return reply
+
+
+def test_a_3d_object_plays_a_clip_sequence_rides_in_a_hand_and_materializes(tmp_path):
+    _glb(tmp_path / "guard.glb", ["Idle", "Run", "Aim"])
+    _glb(tmp_path / "rifle.glb", [])
+    value = series_shot3d.normalize_scene3d({"template": "user-plaza", "objects": [
+        {"objectId": "guard", "file": "guard.glb", "add": True, "grounded": True,
+         "clips": [{"clip": "Aim", "start": 1.5, "fade": 0.4, "loop": False}, {"clip": {"index": 0, "name": "Idle"}, "start": 0}]},
+        {"objectId": "rifle", "file": "rifle.glb", "add": True, "scale": 0.19,
+         "hold": {"carrier": "guard", "hand": "right", "offset": [0, 0.02, 0.05], "rotation": [-1.65, 0.11, 2.76]},
+         "appearance": {"start": 0.5, "duration": 0.6, "color": "#ffcc00"}},
+        {"objectId": "poster", "media": "image", "file": "p.png", "add": True, "clips": [{"clip": "Idle", "start": 0}],
+         "hold": {"carrier": "poster", "hand": "left"}, "appearance": {"start": 900}}]})
+    guard, rifle, poster = value["objects"]
+    assert guard["clips"] == [{"clip": {"index": 0, "name": "Idle"}, "start": 0.0}, {"clip": "Aim", "start": 1.5, "fade": 0.4, "loop": False}]
+    assert rifle["hold"] == {"carrier": "guard", "hand": "right", "offset": [0.0, 0.02, 0.05], "rotation": [-1.65, 0.11, 2.76]}
+    assert rifle["appearance"] == {"start": 0.5, "duration": 0.6, "color": "#ffcc00"}
+    assert set(poster) == {"objectId", "media", "file", "add"}, "an image plays no clips, holds nothing of itself, bad times are dropped"
+    shot = {"id": "s40", "scene3d": {**value, "objects": [guard, rifle]}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", shot, [], 4, {}, {}, NativeRenderError, root=str(tmp_path))
+    bindings = tools.calls[1][1]["input"]["bindings"]
+    assert bindings[0]["clips"] == [{"clip": {"index": 0, "name": "Idle"}, "start": 0.0},
+                                    {"clip": {"index": 2, "name": "Aim"}, "start": 1.5, "fade": 0.4, "loop": False}]
+    assert bindings[1]["hold"] == rifle["hold"] and bindings[1]["appearance"] == rifle["appearance"] and bindings[1]["scale"] == 0.19
+
+    def refused(code, config, lines=(), tools_class=World3D):
+        try:
+            series_shot3d.build_scene(tools_class(), "cast", "job", {"id": "s41", "scene3d": config}, list(lines), 4, {}, {"elon": "kit-elon"},
+                                      NativeRenderError, root=str(tmp_path))
+        except NativeRenderError as error:
+            assert error.code == code, (error.code, str(error))
+            return str(error)
+        raise AssertionError(f"expected {code}")
+    typo = {**value, "objects": [{**guard, "clips": [{"clip": "Aimm", "start": 0}]}]}
+    assert "Idle, Run, Aim" in refused("unknown_clip", typo)
+    cast = [{"characterId": "elon", "objectId": "elon"}]
+    by_elon = {**value, "cast": cast, "objects": [{**rifle, "hold": {"carrier": "elon", "hand": "right"}}]}
+    line = [{"characterId": "elon", "start": 0.2, "filename": "e.wav"}]
+    assert "cutout" in refused("carrier_is_cutout", by_elon, line)
+    quiet = World3DWithSlots()
+    series_shot3d.build_scene(quiet, "cast", "job", {"id": "s42", "scene3d": by_elon}, [], 4, {}, {"elon": "kit-elon"}, NativeRenderError,
+                              root=str(tmp_path))
+    assert quiet.calls[1][1]["input"]["bindings"][0]["hold"]["carrier"] == "elon", "a cast member with no line in the shot is a model"
+    by_sky = {**value, "objects": [{**rifle, "hold": {"carrier": "sky", "hand": "left"}}]}
+    assert "(models: elon)" in refused("unknown_carrier", by_sky, tools_class=World3DWithSlots)
+    by_nobody = {**value, "objects": [{**rifle, "hold": {"carrier": "nobody", "hand": "left"}}]}
+    refused("unknown_carrier", by_nobody, tools_class=World3DWithSlots)
+
+
+def test_scene3d_problems_name_bad_holds_sequences_and_appearances_without_a_workspace():
+    problems = series_shot3d.scene3d_problems({"template": "user-plaza", "objects": [
+        {"objectId": "gun", "hold": {"carrier": "hero", "hand": "right", "rotation": [0, 9, 0]}},
+        {"objectId": "hero", "clips": [{"clip": "Idle", "start": 0, "fadeIn": 1}], "appearance": {"start": 1, "duration": 99}},
+        {"objectId": "ok", "file": "missing.glb", "clips": [{"clip": "Idle", "start": 0}]}]})
+    assert problems == ["scene3d object gun: hold.rotation must be [x, y, z], each -6.2832 to 6.2832 radians",
+                        "scene3d object hero: clips[0] must be {clip, start, duration?, fade?, speed?, offset?, loop?}",
+                        "scene3d object hero: appearance.duration must be 0.1-30 seconds"], "files and clip names wait for a workspace"

@@ -332,3 +332,26 @@ def test_workspace_files_lists_one_folder_down_and_skips_hidden_ones(tmp_path):
     (tmp_path / "music" / "stems").mkdir(); (tmp_path / "music" / "stems" / "deep.wav").write_bytes(b"x")
     (tmp_path / ".series-jobs-v1").mkdir(); (tmp_path / ".series-jobs-v1" / "job.json").write_text("{}")
     assert workspace_files(str(tmp_path)) == {"theme.wav", "music/theme.wav"}
+
+
+def test_a_3d_shot_names_its_objects_models_clips_and_carriers_before_any_render(tmp_path):
+    import json as _json
+    import struct as _struct
+    body = _json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": "Idle"}, {"name": "Aim"}]}).encode()
+    body += b" " * (-len(body) % 4)
+    (tmp_path / "guard.glb").write_bytes(b"glTF" + _struct.pack("<II", 2, 20 + len(body)) + _struct.pack("<I4s", len(body), b"JSON") + body)
+    objects = [{"objectId": "guard", "file": "guard.glb", "add": True, "clips": [{"clip": "Idle", "start": 0}, {"clip": "Aimm", "start": 1}]},
+               {"objectId": "rifle", "file": "rifle.glb", "add": True, "hold": {"carrier": "guard", "hand": "middle"}},
+               {"objectId": "flag", "media": "image", "file": "flag.png", "add": True},
+               {"objectId": "cup", "file": "guard.glb", "add": True, "hold": {"carrier": "flag", "hand": "left"}, "appearance": {"start": 1, "color": "red"}}]
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][2], "scene3d": {**SCRIPT["shots"][2]["scene3d"], "objects": objects}}]}
+    tools = Series()
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, KITS, FILES, "cast", script, root=str(tmp_path))
+    problems = raised.value.problems
+    expected = ["scene3d object guard: no clip 'Aimm' in guard.glb (clips: Idle, Aim)", "scene3d object rifle: hold.hand must be left or right",
+                "scene3d object rifle: file rifle.glb is not in the workspace", "scene3d object flag: file flag.png is not in the workspace",
+                "scene3d object cup: hold.carrier flag is an image cutout", "scene3d object cup: appearance.color must be #rrggbb"]
+    for text in expected:
+        assert any(text in problem for problem in problems), (text, problems)
+    assert tools.calls == []

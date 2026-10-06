@@ -614,3 +614,53 @@ def test_a_voice_over_ducks_the_music_like_a_talking_object_and_replaces_the_pre
     for bad in ("nope", [{"audio": "https://evil.example/a.wav", "start": 0}], [{"start": 0}] * 25):
         with pytest.raises(World3DSceneError):
             patch_scene("studio", "w3d-0000000v0ce1", workspace_dir, {"voiceOver": bad}, 3)
+
+
+def test_a_patch_binds_a_clip_sequence_a_hand_hold_and_an_appearance_and_refuses_bad_ones(tmp_path):
+    from services.world3d_scenes import World3DSceneError
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    slot = lambda slot_id, media="model3d", **more: {"id": slot_id, "slot": "prop", "media": media, "sourceUrl": ROBOT, "clip": None,
+                                                     "position": [0, 0, 0], "rotationY": 0, "scale": 1, **more}
+    document = {"templateId": "dark-still-salt-sea", "duration": 6, "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]},
+                "slots": [slot("hero", clip={"index": 0, "name": "Idle"}), slot("wall", "image", surface="wall")]}
+    record = {"revision": 1, "templateId": "dark-still-salt-sea", "document": document, "warnings": []}
+    (folder / "w3d-0000abcd9999.json").write_text(json.dumps(record), encoding="utf-8")
+    rifle = {"object_id": "rifle", "add": True, "source_url": ROBOT, "scale": 0.19,
+             "hold": {"carrier": "guard", "hand": "right", "offset": [0, 0.02, 0.05], "rotation": [-1.65, 0.11, 2.76]}}
+    guard = {"object_id": "guard", "add": True, "source_url": ROBOT, "appearance": {"start": 0.5},
+             "clips": [{"clip": {"index": 4, "name": "Aim"}, "start": 1.5, "fade": 0.4, "loop": False}, {"clip": {"index": 0, "name": "Idle"}, "start": 0}]}
+    viewed = patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [rifle, guard]}, 1)
+    slots = {item["id"]: item for item in viewed["document"]["slots"]}
+    assert slots["rifle"]["hold"] == {"carrier": "guard", "hand": "right", "offset": [0.0, 0.02, 0.05], "rotation": [-1.65, 0.11, 2.76]}, \
+        "a carrier added later in the same patch counts"
+    assert slots["guard"]["clips"] == [{"clip": {"index": 0, "name": "Idle"}, "start": 0.0},
+                                       {"clip": {"index": 4, "name": "Aim"}, "start": 1.5, "fade": 0.4, "loop": False}]
+    assert slots["guard"]["appearance"] == {"start": 0.5, "duration": 0.9, "color": "#83e8ff"}
+    objects = {item["id"]: item for item in viewed["objects"]}
+    assert objects["rifle"]["hold"]["carrier"] == "guard" and "clips" in objects["guard"] and "hold" not in objects["hero"]
+    assert {"clips", "hold", "appearance"} <= set(viewed["editable"])
+    legacy = patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [{"object_id": "hero", "clips": ["Walk"]}]}, 2)
+    hero = next(item for item in legacy["document"]["slots"] if item["id"] == "hero")
+    assert hero["clip"] is None and "clips" not in hero and legacy["warnings"] == ["incompatible_clip:hero:Idle"], "clip names are the old check"
+    released = patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [{"object_id": "rifle", "hold": None},
+                                                                                       {"object_id": "guard", "clips": None, "appearance": None}]}, 3)
+    slots = {item["id"]: item for item in released["document"]["slots"]}
+    assert not {"hold", "clips", "appearance"} & (set(slots["rifle"]) | set(slots["guard"]))
+    bad = [({"object_id": "rifle", "hold": {"carrier": "ghost", "hand": "right"}}, "unknown_carrier", "(models: hero, guard)"),
+           ({"object_id": "rifle", "hold": {"carrier": "wall", "hand": "right"}}, "unknown_carrier", "'wall'"),
+           ({"object_id": "rifle", "hold": {"carrier": "rifle", "hand": "right"}}, "invalid_hold", "cannot hold itself"),
+           ({"object_id": "rifle", "hold": {"carrier": "hero", "hand": "both"}}, "invalid_hold", "left or right"),
+           ({"object_id": "rifle", "hold": {"carrier": "hero", "hand": "left", "rotation": [0, 0, 7]}}, "invalid_hold", "radians"),
+           ({"object_id": "wall", "hold": {"carrier": "hero", "hand": "left"}}, "invalid_hold", "can be held"),
+           ({"object_id": "wall", "clips": [{"clip": {"index": 0, "name": "Idle"}, "start": 0}]}, "invalid_clips", "model3d"),
+           ({"object_id": "hero", "clips": [{"clip": "Idle", "start": 0}]}, "invalid_clips", "clips[0].clip must be {index, name}"),
+           ({"object_id": "hero", "clips": [{"clip": {"index": 0, "name": "Idle"}}]}, "invalid_clips", "clips[0].start"),
+           ({"object_id": "hero", "clips": [{"clip": {"index": 0, "name": "Idle"}, "start": 0}, "Run"]}, "invalid_clips", "clips[1]"),
+           ({"object_id": "hero", "appearance": {"start": 1, "color": "blue"}}, "invalid_appearance", "#rrggbb")]
+    for binding, code, text in bad:
+        with pytest.raises(World3DSceneError) as raised:
+            patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [binding]}, 4)
+        assert raised.value.code == code and text in str(raised.value), (binding, raised.value.code, str(raised.value))
+    assert inspect_scene("studio", "w3d-0000abcd9999", workspace_dir)["revision"] == 4, "a refused patch writes nothing"

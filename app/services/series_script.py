@@ -35,7 +35,7 @@ from typing import Any, Callable
 
 from services.series_entrances import GAITS
 from services.series_layers import layout_layers
-from services.series_shot3d import normalize_scene3d
+from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
@@ -91,8 +91,8 @@ def _cast_entry(raw: Any) -> dict[str, Any]:
 class Checker:
     """Everything the script names must exist in the series, its kits and its workspace."""
 
-    def __init__(self, series: dict[str, Any], kits: dict[str, Any], files: set[str]) -> None:
-        self.series, self.kits, self.files, self.problems = series, kits, files, []
+    def __init__(self, series: dict[str, Any], kits: dict[str, Any], files: set[str], root: str | None = None) -> None:
+        self.series, self.kits, self.files, self.problems, self.root = series, kits, files, [], root
         self.characters = {item["id"]: item for item in series.get("characters") or []}
         self.locations = {item["id"]: item for item in series.get("locations") or []}
 
@@ -131,10 +131,11 @@ class Checker:
 class EpisodeScript:
     """Turn a script into the episode patch and its language versions; ``check`` lists every problem first."""
 
-    def __init__(self, series: dict[str, Any], script: dict[str, Any], number: int, kits: dict[str, Any], files: set[str]) -> None:
+    def __init__(self, series: dict[str, Any], script: dict[str, Any], number: int, kits: dict[str, Any], files: set[str],
+                 root: str | None = None) -> None:
         self.series, self.script, self.number = series, script, number
         self.original = language_key(series)
-        self.checker = Checker(series, kits, files)
+        self.checker = Checker(series, kits, files, root)
         self.scenes = {str(scene.get("id")): scene for scene in script.get("scenes") or [] if isinstance(scene, dict)}
         self.languages = self._languages()
 
@@ -235,6 +236,7 @@ class EpisodeScript:
             problems.append(f"{where}: a 3d shot needs scene3d with a template or a saved scene and its cast")
         elif config.get("scene"):
             self.checker.file(config["scene"], f"{where} scene3d")
+        problems += [f"{where}: {problem}" for problem in scene3d_problems(shot.get("scene3d"), self.checker.root)]
 
     def _check_layers(self, shot: dict[str, Any], where: str) -> None:
         """Set layers (a shot's own list replaces its location's; [] turns them off) and the cast's depth among them."""
@@ -343,11 +345,14 @@ def _tool_caller(call: Callable[[str, dict], dict], workspace: str, series_id: s
 
 
 def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], dict], kits: dict[str, Any], files: set[str],
-                 workspace: str, script: dict[str, Any], episode_id: str | None = None, check_only: bool = False) -> dict[str, Any]:
-    """Check, then create (or rewrite) the episode and its language versions through the series tools."""
+                 workspace: str, script: dict[str, Any], episode_id: str | None = None, check_only: bool = False,
+                 root: str | None = None) -> dict[str, Any]:
+    """Check, then create (or rewrite) the episode and its language versions through the series tools.
+
+    ``root`` is the workspace folder: 3D objects' models and clip names are checked in it."""
     series = read_series()
     number = _episode_number(series.get("episodesById") or {}, episode_id)
-    built = EpisodeScript(series, script, number, kits, files)
+    built = EpisodeScript(series, script, number, kits, files, root)
     built.check()
     shots = built.shots()
     summary = {"number": number, "shots": [shot["id"] for shot in shots], "original": built.original, "languages": built.languages}

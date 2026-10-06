@@ -208,6 +208,26 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   "motion": {"to": [6, 3, -8], "faceTravel": true}}`. Mix them: 2D cutouts talk, 3D models move.
   `"renderLook": "toon"` draws the 3D models as cel anime with an ink outline (`toon` {steps 2-4, outline 0-8 px,
   ink #rrggbb}) so they sit with the flat cutouts and painted backgrounds; images and cutouts keep their look.
+  An object also takes:
+  - **Clip sequence:** `clips` instead of `clip`: `[{clip (name), start (shot seconds), duration?, fade? (0.3 s), speed?
+    0.1-4, offset? (clip seconds), loop?}]`, crossfaded, up to 32.
+  - **In a hand:** `hold` `{carrier, hand: "left" | "right", offset? [x, y, z] m, rotation? [x, y, z] radians}`
+    carries the object in another model's whole hand, through every clip. The carrier is another 3D object of the
+    shot, a model object of the template, or a cast member's object in a shot where that character does not speak. A
+    speaker is drawn as its Character Kit cutout, which has no hands. `rotation` is Euler XYZ in the hand bone's frame,
+    applied after the bone's rotation. It aligns the prop without editing its file, and it replaces `rotationY`.
+  - **Rig axes:** in a T pose every bone's axes are the character's: +X its left, +Y up, +Z forward. In the rig's `Aim`
+    clip, a prop modelled along +X (top +Y) lies level along the aim with `rotation: [-1.65, 0.11, 2.76]`.
+  - **Appearance:** `appearance` `{start, duration? 0.9, color? #rrggbb}` keeps the object hidden until `start`, then
+    it materializes.
+  - **Size:** a model is 1.7 m × `scale` tall: its bounding-box height, whatever its length. A rifle modelled lying flat
+    (0.99 long, 0.32 high) is 4.7 m long at 0.9, so it needs about 0.16.
+  - **Checks:** `from_script` checks each object's model file, clip names, sequence, hold and appearance before it
+    writes anything. A carrier that is unknown or talks fails the render with a clear message.
+  - **Example:** `{"objectId": "guard", "file": "guard.glb", "add": true, "grounded": true, "clips": [{"clip": "Idle",
+    "start": 0}, {"clip": "Aim", "start": 1.5, "fade": 0.4}]}, {"objectId": "rifle", "file": "rifle.glb", "add": true,
+    "scale": 0.16, "hold": {"carrier": "guard", "hand": "right", "offset": [-0.146, 0.013, -0.038], "rotation": [-1.65,
+    0.11, 2.76]}, "appearance": {"start": 1.5}}`.
 
 ## Sound design
 

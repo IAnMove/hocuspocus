@@ -216,6 +216,77 @@ scene time. Seeking, scrubbing and motion-blur subframes therefore always give t
   as above.
 - **Footsteps.** Foot landings for a sequence come from `cueContactsInScene`.
 
+## A prop in the hand
+
+A Video 3D model or image cutout can ride in the whole hand of a rigged model slot. Put `hold` on the prop's slot:
+
+```json
+{"id": "rifle", "media": "model3d", "sourceUrl": "...rifle.glb", "scale": 0.16,
+ "hold": {"carrier": "guard", "hand": "right", "offset": [-0.146, 0.013, -0.038], "rotation": [-1.65, 0.11, 2.76]}}
+```
+
+- **`carrier` and `hand`.** The id of another model slot, and `left` or `right`. The prop follows the whole `LeftHand`
+  or `RightHand` bone, never a finger bone. Each frame it takes the bone's pose after the carrier is posed, so it
+  follows every clip, crossfade and motion-blur subframe.
+- **`offset`.** Metres in the hand bone's frame, from the bone's origin (the wrist) to the prop's origin, each within
+  ±2. The offset grows with the carrier's `scale`.
+- **`rotation`.** Radians, each within ±2π: an Euler XYZ rotation in the hand bone's frame, applied after the bone's
+  own rotation (three.js order, so the matrix is Rx·Ry·Rz). It aligns any prop in the hand without editing its file.
+  With `rotation`, the slot's `rotationY` is not used. Without it, the prop takes the bone's rotation and then
+  `rotationY` as a turn about the bone's Y axis, as older documents do.
+- **In the editor.** The slot panel shows **Hold in the hand** with the offset and the **Hand turn X/Y/Z** in degrees.
+
+### The hand's frame
+
+The rig gives every bone a canonical frame (`app/services/humanoid_rig/skeleton.py`). In a perfect T pose, the axes of
+every bone are the character's: **+X is the character's left, +Y is up, +Z is forward**. The hand takes the forearm's
+frame. So in the T pose:
+
+| Hand | Fingers point along | Palm faces | Thumb side |
+| --- | --- | --- | --- |
+| Right | −X (out to the right) | −Y (down) | +Z (forward) |
+| Left | +X (out to the left) | −Y (down) | +Z (forward) |
+
+A clip turns these axes with the hand. In `Aim` the right hand is at the right shoulder: its −X (the fingers) points
+forward and about 20° up, its −Y (the palm) faces the character's left, and its +Z points up, tilted back about 20°.
+Measured in that hand's frame, the character's forward (+Z) is about (−0.93, 0.07, −0.37) and up (+Y) is about
+(−0.37, 0.11, 0.92). To move a prop d metres forward, add d times the forward vector to `offset`.
+
+To align a prop in any pose: `rotation` = R_hand⁻¹ · R_wanted, as Euler XYZ. R_hand is the hand's rotation relative to
+the carrier's root, read from the clip. R_wanted is the prop's wanted rotation relative to the same root.
+
+### Worked example: a rifle in the Aim clip
+
+The rifle is modelled lying along +X: the muzzle at +X, the top at +Y and the pistol grip about 0.17 model units
+behind its middle. The carrier is the guard, a humanoid-rigged model playing `Aim`, held in the right hand.
+
+- **`rotation: [-1.5708, 0, 3.1416]`** (−π/2, 0, π) lays the rifle along the fingers. The muzzle points forward and
+  the barrel tilts up about 20° with the hand.
+- **`rotation: [-1.65, 0.11, 2.76]`** puts the rifle level along the model's forward axis. This is the Aim clip's
+  barrel axis. It stays level through the clip's sway and in `Shoot`. On two rigged bodies the measured rotation
+  differed by less than 0.2 rad. If the support hand of a body is off that axis, compute the rotation from the two
+  hands as shown above.
+- **`offset: [-0.146, 0.013, -0.038]`** moves the rifle 0.15 m forward and 2 cm up. This puts the pistol grip in the
+  palm and not the rifle's middle at the wrist. The stock then ends at the shoulder.
+- **`scale: 0.16`** makes the rifle 0.83 m long (see below).
+
+It was checked on a render of the rigged guard at 0.3, 1.0 and 2.5 s of `Aim` and at 0.25 s of `Shoot`, and with the
+carrier at scale 1.3. In all of them the rifle stayed level, pointed forward, and had its grip in the right hand and
+its forend over the left hand.
+
+### How big a model slot is
+
+The loader (`fitGltf` in `ui/src/features/scene3d/gpu.ts`) normalizes the **height**, not the largest dimension. It
+scales every GLB so that its bounding-box height (its Y extent as modelled, in its rest pose) is 1.7 m. Then it
+multiplies by the slot's `scale`. So a model slot is 1.7 × `scale` metres tall, whatever its width or length.
+
+A long, thin prop modelled lying flat is normalized by its thickness. The rifle above is 0.99 × 0.32 model units
+(length × height). At `scale: 0.9` it is 1.53 m tall and 4.7 m long. For a wanted length L:
+
+`scale` = L × height / (length × 1.7) = 0.83 × 0.32 / (0.99 × 1.7) ≈ 0.16
+
+A held prop keeps its own size: the carrier's `scale` moves the hand, but it does not resize the prop.
+
 ## Walk a path without sliding
 
 Video 3D used to move a model along its path while the clip walked in place,
