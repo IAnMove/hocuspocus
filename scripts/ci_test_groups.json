@@ -685,6 +685,22 @@
       ]
     },
     {
+      "prefix": "app/services/world3d_slot_fields.py",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_series_shot_extras.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot3d.py",
+      "paths": [
+        "tests/test_series_shot_extras.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
       "prefix": "app/routers/world3d_templates.py",
       "paths": [
         "tests/test_world3d_templates.py"

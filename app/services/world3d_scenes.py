@@ -12,6 +12,7 @@ import uuid
 from copy import deepcopy
 from pathlib import Path
 
+from services import world3d_slot_fields as slot_fields
 from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
 from services.world3d_look import check_render_look, normalize_toon
@@ -157,8 +158,10 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     document = record["document"]
     warnings = []
     _set_duration(document, changes)
-    for binding in _bindings(changes):
+    bindings = _bindings(changes)
+    for binding in bindings:
         warnings.extend(_bind(document, binding))
+    _check_carriers(document["slots"], bindings)
     if isinstance(changes.get("camera"), dict):
         if "shake" in changes["camera"]:
             _check_shake(changes["camera"]["shake"])
@@ -320,7 +323,53 @@ def _bind(document: dict, binding: dict) -> list[str]:
         elif snake in binding:
             slot[key] = deepcopy(binding[snake])
     _bind_screen(slot, binding)
+    _bind_checked(slot, binding)
     return warnings
+
+
+_CHECKED_FIELDS = ("clips", "hold", "appearance")
+_NOT_HOLDABLE_SURFACES = ("floor", "wall", "environment")
+
+
+def _bind_checked(slot: dict, binding: dict) -> None:
+    """A clip sequence, a hand hold and an appearance are checked before they are stored; ``null`` removes one."""
+    for key in _CHECKED_FIELDS:
+        if key not in binding or (key == "clips" and _clip_names(binding) is not None):
+            continue
+        if binding[key] is None:
+            slot.pop(key, None)
+            continue
+        try:
+            slot[key] = _checked(key, binding[key], slot)
+        except ValueError as error:
+            raise World3DSceneError(f"invalid_{key}", f"{slot.get('id')}: {error}") from error
+
+
+def _checked(key: str, value, slot: dict):
+    media = slot.get("media") or "model3d"
+    if key == "clips":
+        if media != "model3d":
+            raise ValueError("clips plays on a model3d object")
+        return slot_fields.clip_cues(value)
+    if key == "hold":
+        if media not in _ADDED_MEDIA or slot.get("surface") in _NOT_HOLDABLE_SURFACES or (slot.get("loop") or {}).get("cylinder"):
+            raise ValueError("only a model or an image cutout can be held")
+        return slot_fields.hold(value, slot.get("id"))
+    return slot_fields.appearance(value)
+
+
+def _check_carriers(slots: list[dict], bindings: list[dict]) -> None:
+    """A hold set by this patch names another model object of the scene (one added by a later binding counts)."""
+    models = [slot.get("id") for slot in slots if (slot.get("media") or "model3d") == "model3d"]
+    for binding in bindings:
+        if not isinstance(binding.get("hold"), dict):
+            continue
+        slot = _target(slots, binding)
+        carrier = slot["hold"]["carrier"]
+        if carrier not in models:
+            others = ", ".join(str(item) for item in models if item != slot.get("id")) or "none"
+            raise World3DSceneError("unknown_carrier", f"{slot.get('id')}: hold.carrier {carrier!r} is not a 3D model object of "
+                                    f"the scene (models: {others})")
 
 
 def _add_slot(document: dict, binding: dict) -> None:
@@ -416,8 +465,14 @@ def _bind_screen(slot: dict, binding: dict) -> None:
     screen.update(updates)
 
 
-def _clip_warning(slot: dict, binding: dict) -> list[str]:
+def _clip_names(binding: dict) -> list | None:
+    """``clips`` as clip names (the model's own, to drop a bound clip it lacks), not a clip sequence of cue objects."""
     clips = binding.get("clips")
+    return clips if isinstance(clips, list) and all(isinstance(item, str) for item in clips) else None
+
+
+def _clip_warning(slot: dict, binding: dict) -> list[str]:
+    clips = _clip_names(binding)
     current = slot.get("clip")
     name = current.get("name") if isinstance(current, dict) else None
     if isinstance(clips, list):
@@ -468,8 +523,8 @@ def _view(scene_id: str, record: dict) -> dict:
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
-        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded",
-                     "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon"],
+        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "position", "rotationY", "scale",
+                     "motion", "grounded", "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon"],
     }
 
 
@@ -482,6 +537,7 @@ def _objects(document: dict) -> list[dict]:
             "marker": not source, "finished": bool(source), "clip": slot.get("clip"), "position": slot.get("position"),
             "rotationY": slot.get("rotationY"), "scale": slot.get("scale"), "motion": slot.get("motion"),
             "accepted": [slot.get("media") or "model3d"],
+            **{key: slot[key] for key in _CHECKED_FIELDS if slot.get(key) is not None},
         })
     return objects
 

@@ -75,9 +75,9 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
             return found
 
         def run() -> dict:
-            files = workspace_files(workspace_dir(body.workspace))
-            return apply_script(call, read_series, read_kits(body.workspace), files, body.workspace, body.script,
-                                episode_id=body.episodeId, check_only=body.check)
+            root = workspace_dir(body.workspace)
+            return apply_script(call, read_series, read_kits(body.workspace), workspace_files(root), body.workspace, body.script,
+                                episode_id=body.episodeId, check_only=body.check, root=root)
 
         bind_loop(asyncio.get_running_loop())
         try:

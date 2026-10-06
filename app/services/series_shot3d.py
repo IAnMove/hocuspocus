@@ -6,14 +6,20 @@ where and who::
     shot.scene3d = {"template": "user-moon-base",             # or "scene": "<saved>.world3d.scene.json"
                     "cast": [{"characterId": "robot", "objectId": "robot", "poseId": "wave"}],
                     "objects": [{"objectId": "ship", "file": "ship.glb", "clip": "Fly", "add": True, "grounded": False,
-                                 "position": [0, 2, -6], "motion": {"to": [4, 2, -6], "faceTravel": True}}],
+                                 "position": [0, 2, -6], "motion": {"to": [4, 2, -6], "faceTravel": True}},
+                                {"objectId": "guard", "file": "guard.glb", "add": True, "grounded": True,
+                                 "clips": [{"clip": "Idle", "start": 0}, {"clip": "Aim", "start": 1.5, "fade": 0.4}]},
+                                {"objectId": "rifle", "file": "rifle.glb", "add": True, "scale": 0.16,
+                                 "hold": {"carrier": "guard", "hand": "right", "offset": [-0.146, 0.013, -0.038],
+                                          "rotation": [-1.65, 0.11, 2.76]},       # muzzle (+X) along the Aim
+                                 "appearance": {"start": 1.5}}],
                     "renderLook": "toon",                       # models drawn as cel anime with ink
                     "quality": "final"}
 
 and the render records its lines like any 2D shot, instantiates the scene,
 stretches the template's own effects to the shot's length, places the objects
-(3D models with their animation clip, or image cutouts; ``add`` puts one the
-template lacks), makes each cast object talk as its Character Kit cutout
+(3D models with their animation clip or a clip sequence, or image cutouts; ``add`` puts one the
+template lacks; ``hold`` carries one in a model's hand), makes each cast object talk as its Character Kit cutout
 (``world3d.scene.talk``, the line audio joins the soundtrack), publishes,
 exports with ``scenes.world3d.export`` and imports the MP4 as the shot's take.
 """
@@ -143,12 +149,84 @@ def _object_entry(entry: Any) -> dict[str, Any] | None:
         result["add"] = True
     if media == "model3d":
         result.update(_clip_fields(entry))
+    result.update(_slot_fields(entry, media))
     checks = {"position": _vec3, "motion": _motion, "rotationY": lambda value: _number(value, -20, 20),
               "scale": lambda value: _number(value, 0.01, 100)}
     result.update({key: checked for key, check in checks.items() if (checked := check(entry.get(key))) is not None})
     if isinstance(entry.get("grounded"), bool):
         result["grounded"] = entry["grounded"]
     return result if len(result) > 2 else None
+
+
+SLOT_FIELDS = ("clips", "hold", "appearance")
+
+
+def _slot_field_check(key: str, entry: dict[str, Any], media: str) -> Callable[[Any], Any]:
+    """The check of a clip sequence (clips by name or {index, name}), a hand hold or an appearance."""
+    from services import world3d_slot_fields as fields
+    if key == "hold":
+        return lambda value: fields.hold(value, entry["objectId"])
+    if key == "appearance":
+        return fields.appearance
+    if media != "model3d":
+        raise ValueError("clips plays on a 3D model (media model3d)")
+    return lambda value: fields.clip_cues(value, named=True)
+
+
+def _slot_fields(entry: dict[str, Any], media: str) -> dict[str, Any]:
+    """The well-formed ``clips``, ``hold`` and ``appearance`` of an object; ``scene3d_problems`` names the others."""
+    kept: dict[str, Any] = {}
+    for key in SLOT_FIELDS:
+        try:
+            if entry.get(key) is not None:
+                kept[key] = _slot_field_check(key, entry, media)(entry[key])
+        except ValueError:
+            continue
+    return kept
+
+
+def scene3d_problems(value: Any, root: str | None = None) -> list[str]:
+    """What a shot's ``scene3d.objects`` asks that cannot be drawn, for ``series.episode.from_script``: a malformed clip
+    sequence, hold or appearance, a hold on itself or on an image, and (with the workspace ``root``) a missing model file
+    or a clip name the model does not have. A carrier from the template or the cast is checked at render."""
+    raw = value.get("objects") if isinstance(value, dict) and isinstance(value.get("objects"), list) else []
+    entries = [entry for entry in raw if isinstance(entry, dict) and _valid_id(entry.get("objectId"))]
+    images = {entry["objectId"] for entry in entries if entry.get("media") == "image"}
+    return [f"scene3d object {entry['objectId']}: {problem}" for entry in entries for problem in _entry_problems(entry, images, root)]
+
+
+def _entry_problems(entry: dict[str, Any], images: set[str], root: str | None) -> list[str]:
+    problems: list[str] = []
+    for key in SLOT_FIELDS:
+        try:
+            if entry.get(key) is not None:
+                _slot_field_check(key, entry, entry.get("media") or "model3d")(entry[key])
+        except ValueError as error:
+            problems.append(str(error))
+    carrier = entry["hold"].get("carrier") if isinstance(entry.get("hold"), dict) else None
+    if carrier in images:
+        problems.append(f"hold.carrier {carrier} is an image cutout; only a 3D model has hands")
+    return problems + _model_problems(root, entry)
+
+
+def _model_problems(root: str | None, entry: dict[str, Any]) -> list[str]:
+    """A model file that is not in the workspace, or clip names (``clip`` and the cues of ``clips``) it lacks."""
+    normalized = _object_entry(entry)
+    if not root or not normalized or not normalized.get("file"):
+        return []
+    base = Path(root).resolve()
+    path = (base / normalized["file"]).resolve()
+    if not path.is_relative_to(base) or not path.is_file():
+        return [f"file {normalized['file']} is not in the workspace"]
+    resolve = _clip_resolver(root, normalized, lambda _code, message, _status: ValueError(message.split(": ", 1)[-1]))
+    problems = []
+    for clip in [normalized.get("clip"), *[cue["clip"] for cue in normalized.get("clips") or []]]:
+        try:
+            if clip is not None:
+                resolve(clip)
+        except ValueError as error:
+            problems.append(str(error))
+    return list(dict.fromkeys(problems))
 
 
 def _clip_fields(entry: dict[str, Any]) -> dict[str, Any]:
@@ -180,33 +258,76 @@ def glb_clip_names(path: Path) -> list[str]:
     return [str(item.get("name") or "") for item in data.get("animations") or [] if isinstance(item, dict)]
 
 
-def _resolve_clip(root: str | None, entry: dict[str, Any], error: Callable[..., Exception]) -> dict[str, Any]:
-    """A clip named by its name gets its index from the GLB, so a re-exported model does not silently play another clip."""
-    clip = entry["clip"]
-    if isinstance(clip, dict):
-        return clip
-    names = []
-    if root and entry.get("file"):
-        base = Path(root).resolve()
-        path = (base / entry["file"]).resolve()
-        if path.is_relative_to(base) and path.is_file():
-            names = glb_clip_names(path)
-    if clip not in names:
-        raise error("unknown_clip", f"{entry['objectId']}: no clip {clip!r} in {entry.get('file') or 'its model'}"
-                    f" (clips: {', '.join(names) or 'none'})", 400)
-    return {"index": names.index(clip), "name": clip}
+def _model_clip_names(root: str | None, entry: dict[str, Any]) -> list[str]:
+    if not (root and entry.get("file")):
+        return []
+    base = Path(root).resolve()
+    path = (base / entry["file"]).resolve()
+    return glb_clip_names(path) if path.is_relative_to(base) and path.is_file() else []
+
+
+def _clip_resolver(root: str | None, entry: dict[str, Any], error: Callable[..., Exception]) -> Callable[[Any], dict[str, Any]]:
+    """A clip named by its name gets its index from the GLB, so a re-exported model does not silently play another clip.
+    The model is read once, for the first clip given by name."""
+    names: list[str] | None = None
+
+    def resolve(clip: Any) -> dict[str, Any]:
+        nonlocal names
+        if isinstance(clip, dict):
+            return clip
+        if names is None:
+            names = _model_clip_names(root, entry)
+        if clip not in names:
+            where = entry.get("file") or "its model (give the object its file, or the clip as {index, name})"
+            raise error("unknown_clip", f"{entry['objectId']}: no clip {clip!r} in {where} (clips: {', '.join(names) or 'none'})", 400)
+        return {"index": names.index(clip), "name": clip}
+    return resolve
 
 
 def _object_binding(workspace: str, root: str | None, entry: dict[str, Any], error: Callable[..., Exception]) -> dict[str, Any]:
     binding: dict[str, Any] = {"object_id": entry["objectId"], "media": entry["media"], **({"add": True} if entry.get("add") else {})}
     if entry.get("file"):
         binding["source_url"] = f"/api/v1/file/{quote(entry['file'])}?workspace={quote(workspace)}"
+    resolve = _clip_resolver(root, entry, error)
     if "clip" in entry:
-        binding["clip"] = _resolve_clip(root, entry, error)
-    for key in ("clipPlayback", "position", "rotationY", "scale", "motion", "grounded"):
+        binding["clip"] = resolve(entry["clip"])
+    if "clips" in entry:
+        binding["clips"] = [{**cue, "clip": resolve(cue["clip"])} for cue in entry["clips"]]
+    for key in ("clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "hold", "appearance"):
         if key in entry:
             binding[key] = entry[key]
     return binding
+
+
+def _talking(config: dict[str, Any], lines: list[dict[str, Any]], series_characters: dict[str, str]) -> set[str]:
+    """The cast objects that speak in the shot, which are drawn as their Character Kit cutouts."""
+    speakers = {line["characterId"] for line in lines}
+    return {entry["objectId"] for entry in config.get("cast") or []
+            if entry["characterId"] in speakers and series_characters.get(entry["characterId"])}
+
+
+def _shot_media(config: dict[str, Any], document: Any) -> tuple[dict[str, str], bool]:
+    """What each object of the shot is (model3d, image...) and whether the template's own objects are known."""
+    slots = document.get("slots") if isinstance(document, dict) else None
+    known = isinstance(slots, list)
+    media = {slot.get("id"): slot.get("media") or "model3d" for slot in slots if isinstance(slot, dict)} if known else {}
+    media.update({entry["objectId"]: entry["media"] for entry in config.get("objects") or []})
+    return media, known
+
+
+def _check_carriers(config: dict[str, Any], document: Any, talking: set[str], error: Callable[..., Exception]) -> None:
+    """A held object's carrier is a 3D model of the shot that does not talk: a talking cast member is drawn as its
+    Character Kit cutout, which has no hands. Without the template's objects only the shot's own are known."""
+    media, known = _shot_media(config, document)
+    for entry in (item for item in config.get("objects") or [] if "hold" in item):
+        carrier = entry["hold"]["carrier"]
+        if carrier in talking:
+            raise error("carrier_is_cutout", f"{entry['objectId']}: {carrier} talks in this shot, so it is drawn as its Character Kit "
+                        "cutout, which has no hands; let a 3D model that does not talk carry it", 400)
+        if media.get(carrier, None if known else "model3d") != "model3d":
+            models = sorted(str(key) for key, kind in media.items() if kind == "model3d" and key not in {*talking, entry["objectId"]})
+            raise error("unknown_carrier", f"{entry['objectId']}: hold.carrier {carrier!r} is not a 3D model object of the shot "
+                        f"(models: {', '.join(models) or 'none'})", 400)
 
 
 def _voice_over(workspace: str, lines: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +429,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     scene = _ok(call("world3d.scene.instantiate", {"version": 1, "intent_id": f"{stem}-new", "input": {
         "workspace": workspace, "template_id": _template(call, workspace, config, error)}}), "instantiate 3D scene", error)["scene"]
     scene_id = scene["sceneId"]
+    _check_carriers(config, scene.get("document"), _talking(config, lines, series_characters), error)
     revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
         "workspace": workspace, "scene_id": scene_id, "base_revision": scene["revision"], "duration": round(duration, 3),
         **_setup(workspace, root, config, sound, error, effects), **_voice_over(workspace, lines, config)}}),

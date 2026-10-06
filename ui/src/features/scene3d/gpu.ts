@@ -485,8 +485,9 @@ export function paintClipCues(gpu: Pick<SlotGpu, 'root' | 'animations' | 'cues'>
 /** Slots whose contact shadow this frame hid because a hand is carrying them. */
 const handHeldShadows = new WeakSet<SlotGpu>()
 
-/** After every actor is posed, props with `hold` copy that frame's hand bone. No stored previous pose. */
-function carryHeldProps(world: GpuWorld, slots: readonly Scene3DSlot[]) {
+/** After every actor is posed, props with `hold` copy that frame's hand bone. No stored previous pose.
+ * An appearance is synced again in the hand: its reveal plane comes from the prop's bounds where it is drawn. */
+function carryHeldProps(world: GpuWorld, slots: readonly Scene3DSlot[], sceneSeconds: number) {
   for (const slot of slots) {
     const gpu = world.slots.get(slot.id)
     if (!gpu) continue
@@ -498,7 +499,8 @@ function carryHeldProps(world: GpuWorld, slots: readonly Scene3DSlot[]) {
       releaseHandShadow(gpu, world)
       continue
     }
-    followHand(gpu.root, bone, hold.offset ?? [0, 0, 0], slot.rotationY)
+    followHand(gpu.root, bone, hold.offset ?? [0, 0, 0], slot.rotationY, hold.rotation)
+    if (slot.appearance && gpu.appearance) gpu.appearance.sync(gpu.root, slot.appearance, sceneSeconds)
     handHeldShadows.add(gpu)
     if (gpu.contactShadow) gpu.contactShadow.visible = false
   }
@@ -570,7 +572,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)
   hideEmptyCutoutsInExport(world, document.slots)
-  carryHeldProps(world, posedSlots)
+  carryHeldProps(world, posedSlots, sceneSeconds)
   stabilizeSceneSurfaces(document.slots, world.slots)
   paintPixelLight(world, document, posedSlots, sceneSeconds)
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
