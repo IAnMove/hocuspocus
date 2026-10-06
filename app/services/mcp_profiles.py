@@ -17,11 +17,14 @@ SERIES_TOOLS = frozenset({
     "series.episode.render_native", "series.episode.render_native.status", "series.episode.render_native.cancel",
     "series.episode.render_native.resume", "series.asset.import", "series.take.approve",
     "series.assembly.start", "series.assembly.status", "series.location.plate3d", "series.location.plate3d.status",
+    "series.shot.get", "series.shot.update",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "studio.key", "qa.speech", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
+    # Media steps that used to need scripts outside the app.
+    "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
     # Editing a take's scene and Video 3D.
     "scenes.document.get", "scenes.document.save", "scenes.effects.catalog", "scenes.effects.apply",
     "scenes.video2d.export", "scenes.video2d.export.receipt", "scenes.video2d.preview",

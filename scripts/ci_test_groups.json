@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2686,
+      "weight": 2723,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -237,14 +237,18 @@
         "tests/test_production_shot_regeneration.py",
         "tests/test_series_language_versions.py",
         "tests/test_local_mcp.py",
-        "tests/test_verify_clean_repo.py"
+        "tests/test_verify_clean_repo.py",
+        "tests/test_series_take_sound.py",
+        "tests/test_media_frame.py",
+        "tests/test_audio_trim.py",
+        "tests/test_workspace_asset_import.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2674,
+      "weight": 2717,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -474,7 +478,11 @@
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
-        "tests/test_llm_resilience.py"
+        "tests/test_llm_resilience.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_media_compose.py",
+        "tests/test_export_output_name.py",
+        "tests/test_production_media_router.py"
       ]
     }
   ],
@@ -1416,6 +1424,66 @@
     {
       "prefix": "app/services/export_receipts.py",
       "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
+    },
+    {
+      "prefix": "app/services/series_take_sound.py",
+      "paths": ["tests/test_series_take_sound.py", "tests/test_series_assembly_router.py"]
+    },
+    {
+      "prefix": "app/services/series_sound_cuts.py",
+      "paths": ["tests/test_series_take_sound.py"]
+    },
+    {
+      "prefix": "app/services/series_video_foley.py",
+      "paths": ["tests/test_series_shot_foley.py", "tests/test_series_take_sound.py"]
+    },
+    {
+      "prefix": "app/services/series_shot_edit.py",
+      "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/services/series_shot_instruction.py",
+      "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/routers/series_shot_edit.py",
+      "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/services/studio_key_clean.py",
+      "paths": ["tests/test_studio_key.py"]
+    },
+    {
+      "prefix": "app/services/export_output_name.py",
+      "paths": ["tests/test_export_output_name.py"]
+    },
+    {
+      "prefix": "app/services/production_media_common.py",
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py"]
+    },
+    {
+      "prefix": "app/services/production_media_commands.py",
+      "paths": ["tests/test_media_frame.py", "tests/test_media_compose.py", "tests/test_audio_trim.py", "tests/test_workspace_asset_import.py"]
+    },
+    {
+      "prefix": "app/routers/production_media.py",
+      "paths": ["tests/test_production_media_router.py"]
+    },
+    {
+      "prefix": "app/services/media_frame.py",
+      "paths": ["tests/test_media_frame.py"]
+    },
+    {
+      "prefix": "app/services/media_compose.py",
+      "paths": ["tests/test_media_compose.py"]
+    },
+    {
+      "prefix": "app/services/audio_trim.py",
+      "paths": ["tests/test_audio_trim.py"]
+    },
+    {
+      "prefix": "app/services/workspace_asset_import.py",
+      "paths": ["tests/test_workspace_asset_import.py"]
     }
   ]
 }

@@ -6,6 +6,29 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Everything an agent did outside HocusPocus to finish a series episode is now
+done in the app, so its files can be found, redone and edited. One shot is
+edited by its number or id with `series.shot.update` ("edit the fifth shot and
+put a hat on him": `changes` and `append` in the script vocabulary, or an
+`instruction` the server's LLM turns into the edit against the real shot, cast,
+poses and files); only the changed fields are written, the takes stay and a
+take that no longer fits loses its approval. The Wizard does the same with
+`edit_series_shot`, renders one shot again with `rerender_series_shot`, and runs
+the new media tools with `media_tool`. `studio.key` reads the screen from the
+image border and keys relative to it, so a weak generated screen no longer
+leaves a semi-transparent haze over the whole background; it takes the screen
+colour off the edges and reports the residual semi-transparent share, which the
+Character Creator shows. Generated and imported takes get their shot's `sfx`,
+`music` and `foley` at the cut (keeping or dropping the clip's own sound), and
+every clip in another size, frame rate or pixel aspect is conformed to the
+episode's instead of failing the join. A sound cue can play part of its file
+(`in`, `length`). New MCP tools save a frame of a clip (`media.frame`), compose a
+still from cutouts (`media.compose`; `scenes.video2d.preview` with `still`
+keeps a full-size frame of a scene), cut a sound exactly (`audio.trim`) and copy
+a file from another workspace with its provenance
+(`assets.import_from_workspace`); Video 3D and Video 2D exports take an
+`output_name` for a stable file a set layer can name.
+
 Series Lab voice rooms, looping ambience beds and looping score cues work on
 ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
 found`, because the convolution asked `afir` for `irnorm`, an option only
