@@ -68,10 +68,11 @@ def _plain(value: Any) -> Any:
 
 def content_digest(shot: dict) -> str:
     """Fingerprint of what a shot shows and says, as ``same_shot_content`` compares it."""
-    from .series_library import SHOT_CONTENT_FIELDS, _beat_content
+    from .series_library import SHOT_CONTENT_FIELDS, _beat_content, _take_layout
     payload = {}
     for key in sorted(SHOT_CONTENT_FIELDS):
-        value = _beat_content(shot.get(key)) if key == "dialogueBeats" else shot.get(key)
+        # A generated or imported take keeps its look when only the sound laid at the cut changes.
+        value = _beat_content(shot.get(key)) if key == "dialogueBeats" else _take_layout(shot) if key == "layout2d" else shot.get(key)
         if value:
             payload[key] = _plain(value)
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)

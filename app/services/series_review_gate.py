@@ -12,6 +12,9 @@ rendered. In ``preview`` mode each shot the native render is asked for gets one 
 * ``promote``: the approved preview already is the final (a 2D shot, or a 3D shot at draft quality) and nothing it was
   made from changed: it is approved as the shot's take, nothing renders.
 
+A generated or imported take is never rendered by the server (only its foley is): once its preview is approved it is
+promoted to the shot's take, and its foley is made as in plan mode.
+
 A shot whose plan is not approved, or whose current preview waits for the user, is reported as waiting, not failed.
 Language versions follow the original's review: a version renders a shot once the original's plan (``plan``) or
 preview (``preview``) is approved, at full quality.
@@ -21,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from services.series_library import VIDEO_TAKE_METHODS
 from services.series_review import (
     approved_take, episode_mode, full_quality, latest_take, preview_ready, shot_entry,
 )
@@ -53,6 +57,15 @@ def _preview_pass(series: dict, shot: dict, entry: dict, inputs: Callable[[dict]
     return "preview", None
 
 
+def _video_pass(shot: dict, entry: dict) -> tuple[str, str | None]:
+    """A generated or imported take is not rendered here (only its foley is): an approved preview of it becomes the
+    shot's take, and its foley is made like in plan mode."""
+    reviewed = entry.get("previewAttemptId")
+    if entry["preview"] == "approved" and reviewed and reviewed != shot.get("approvedAttemptId"):
+        return "promote", reviewed
+    return "render", None
+
+
 def shot_pass(series: dict, episode: dict, shot: dict, inputs: Callable[[dict], str], *, explicit: bool,
               original: bool = True) -> tuple[str, str | None]:
     """(pass, detail) for one shot: ``render`` (plan mode or direct), ``preview``, ``final``, ``promote`` (detail: the
@@ -65,6 +78,8 @@ def shot_pass(series: dict, episode: dict, shot: dict, inputs: Callable[[dict], 
         return "wait", "plan"
     if mode == "plan":
         return "render", None
+    if shot.get("productionMethod") in VIDEO_TAKE_METHODS:
+        return _video_pass(shot, entry)
     if not original:
         return ("final", None) if entry["preview"] == "approved" else ("wait", "preview")
     return _preview_pass(series, shot, entry, inputs, explicit)

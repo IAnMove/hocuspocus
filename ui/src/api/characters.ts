@@ -100,9 +100,12 @@ async function postJson<T>(path: string, body: unknown, fallback: string, signal
   return response.json()
 }
 
+/** What studio.key read from the border and how much of the image it left semi-transparent (a haze when ``haze``). */
+export type StudioKeyReport = { semiTransparentShare: number; transparentShare: number; haze: boolean; screenColor?: string | null; note?: string }
+
 /** Key a workspace image on a plain screen (studio.key). The same intentId returns the same file. */
 export async function keyStudioImage(details: { workspace: string; source: string; mode: 'green' | 'blue' | 'magenta'; intentId?: string }) {
-  const reply = await postJson<{ result: { file: string; url: string; sha256: string } }>('/api/v1/studio/key', {
+  const reply = await postJson<{ result: { file: string; url: string; sha256: string; report?: StudioKeyReport } }>('/api/v1/studio/key', {
     workspace: details.workspace, source: details.source, mode: details.mode,
     ...(details.intentId ? { intent_id: details.intentId } : {}),
   }, 'Could not remove the background')

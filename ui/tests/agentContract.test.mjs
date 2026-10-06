@@ -190,7 +190,7 @@ test('application adapters navigate and verify targets without rendering React',
   try {
     const adapters = createDefaultApplicationAdapters()
     assert.deepEqual(Object.keys(adapters).sort(), [
-      'characterKit', 'comic', 'lipsCreator', 'openTab', 'productionWorks', 'queue', 'seriesLab', 'storyLab', 'studio', 'tools', 'video3d', 'videoEditor', 'videoclips', 'workspace', 'world3dTemplates',
+      'characterKit', 'comic', 'lipsCreator', 'mediaTools', 'openTab', 'productionWorks', 'queue', 'seriesLab', 'seriesShots', 'storyLab', 'studio', 'tools', 'video3d', 'videoEditor', 'videoclips', 'workspace', 'world3dTemplates',
     ])
     const story = await adapters.storyLab.open()
     assert.equal(useStore.getState().mediaFilter, 'stories')

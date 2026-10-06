@@ -4032,6 +4032,26 @@
       "ordinal": 402
     },
     {
+      "method": "GET",
+      "path": "/api/v1/media/commands",
+      "endpoint": "catalog",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/production_media.py",
+      "ordinal": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/media/commands",
+      "endpoint": "command",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/production_media.py",
+      "ordinal": 404
+    },
+    {
       "method": "POST",
       "path": "/api/v1/studio/key",
       "endpoint": "key_image",
@@ -4039,7 +4059,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/character_tools.py",
-      "ordinal": 403
+      "ordinal": 405
     },
     {
       "method": "POST",
@@ -4049,7 +4069,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/character_tools.py",
-      "ordinal": 404
+      "ordinal": 406
     },
     {
       "method": "POST",
@@ -4059,7 +4079,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/model3d_compose.py",
-      "ordinal": 405
+      "ordinal": 407
     },
     {
       "method": "POST",
@@ -4069,7 +4089,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/model3d_animate.py",
-      "ordinal": 406
+      "ordinal": 408
     },
     {
       "method": "GET",
@@ -4079,7 +4099,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/model3d_animate.py",
-      "ordinal": 407
+      "ordinal": 409
     },
     {
       "method": "POST",
@@ -4089,7 +4109,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/model3d_animate.py",
-      "ordinal": 408
+      "ordinal": 410
     },
     {
       "method": "PUT",
@@ -4099,7 +4119,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_language_versions.py",
-      "ordinal": 409
+      "ordinal": 411
     },
     {
       "method": "POST",
@@ -4109,7 +4129,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_language_versions.py",
-      "ordinal": 410
+      "ordinal": 412
     },
     {
       "method": "DELETE",
@@ -4119,7 +4139,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_language_versions.py",
-      "ordinal": 411
+      "ordinal": 413
     },
     {
       "method": "GET",
@@ -4129,7 +4149,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_review.py",
-      "ordinal": 412
+      "ordinal": 414
     },
     {
       "method": "POST",
@@ -4139,7 +4159,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_review.py",
-      "ordinal": 413
+      "ordinal": 415
     },
     {
       "method": "POST",
@@ -4149,7 +4169,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_native_render.py",
-      "ordinal": 414
+      "ordinal": 416
     },
     {
       "method": "GET",
@@ -4159,7 +4179,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_native_render.py",
-      "ordinal": 415
+      "ordinal": 417
     },
     {
       "method": "POST",
@@ -4169,7 +4189,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_native_render.py",
-      "ordinal": 416
+      "ordinal": 418
     },
     {
       "method": "POST",
@@ -4179,7 +4199,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_native_render.py",
-      "ordinal": 417
+      "ordinal": 419
     },
     {
       "method": "GET",
@@ -4189,7 +4209,27 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_native_render.py",
-      "ordinal": 418
+      "ordinal": 420
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/shots/edit",
+      "endpoint": "edit_shot",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_shot_edit.py",
+      "ordinal": 421
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}",
+      "endpoint": "get_shot",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": null,
+      "source": "app/routers/series_shot_edit.py",
+      "ordinal": 422
     },
     {
       "method": "GET",
@@ -4199,7 +4239,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_guide.py",
-      "ordinal": 419
+      "ordinal": 423
     },
     {
       "method": "GET",
@@ -4209,7 +4249,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_guide.py",
-      "ordinal": 420
+      "ordinal": 424
     },
     {
       "method": "GET",
@@ -4219,7 +4259,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_guide.py",
-      "ordinal": 421
+      "ordinal": 425
     },
     {
       "method": "POST",
@@ -4229,7 +4269,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_produce.py",
-      "ordinal": 422
+      "ordinal": 426
     },
     {
       "method": "POST",
@@ -4239,7 +4279,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_produce.py",
-      "ordinal": 423
+      "ordinal": 427
     },
     {
       "method": "GET",
@@ -4249,7 +4289,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_produce.py",
-      "ordinal": 424
+      "ordinal": 428
     },
     {
       "method": "POST",
@@ -4259,7 +4299,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_produce.py",
-      "ordinal": 425
+      "ordinal": 429
     },
     {
       "method": "POST",
@@ -4269,7 +4309,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_produce.py",
-      "ordinal": 426
+      "ordinal": 430
     },
     {
       "method": "POST",
@@ -4279,7 +4319,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_plates.py",
-      "ordinal": 427
+      "ordinal": 431
     },
     {
       "method": "GET",
@@ -4289,7 +4329,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/series_plates.py",
-      "ordinal": 428
+      "ordinal": 432
     },
     {
       "method": "POST",
@@ -4299,7 +4339,7 @@
       "response_model": null,
       "include_in_schema": false,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 429
+      "ordinal": 433
     },
     {
       "method": "POST",
@@ -4309,7 +4349,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 430
+      "ordinal": 434
     },
     {
       "method": "POST",
@@ -4319,7 +4359,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 431
+      "ordinal": 435
     },
     {
       "method": "GET",
@@ -4329,7 +4369,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 432
+      "ordinal": 436
     },
     {
       "method": "GET",
@@ -4339,7 +4379,7 @@
       "response_model": null,
       "include_in_schema": false,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 433
+      "ordinal": 437
     },
     {
       "method": "GET",
@@ -4349,7 +4389,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/wangp_mcp.py",
-      "ordinal": 434
+      "ordinal": 438
     },
     {
       "method": "GET",
@@ -4359,7 +4399,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/system_capabilities.py",
-      "ordinal": 435
+      "ordinal": 439
     },
     {
       "method": "GET",
@@ -4369,7 +4409,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/about.py",
-      "ordinal": 436
+      "ordinal": 440
     },
     {
       "method": "GET",
@@ -4379,7 +4419,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 437
+      "ordinal": 441
     },
     {
       "method": "POST",
@@ -4389,7 +4429,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 438
+      "ordinal": 442
     },
     {
       "method": "DELETE",
@@ -4399,7 +4439,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 439
+      "ordinal": 443
     },
     {
       "method": "GET",
@@ -4409,7 +4449,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/example_assets.py",
-      "ordinal": 440
+      "ordinal": 444
     },
     {
       "method": "GET",
@@ -4419,7 +4459,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 441
+      "ordinal": 445
     },
     {
       "method": "POST",
@@ -4429,7 +4469,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 442
+      "ordinal": 446
     },
     {
       "method": "DELETE",
@@ -4439,7 +4479,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 443
+      "ordinal": 447
     },
     {
       "method": "GET",
@@ -4449,7 +4489,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/routers/asset_library.py",
-      "ordinal": 444
+      "ordinal": 448
     },
     {
       "method": "GET",
@@ -4459,7 +4499,7 @@
       "response_model": null,
       "include_in_schema": null,
       "source": "app/_launch_runtime.py",
-      "ordinal": 445
+      "ordinal": 449
     }
   ]
 }

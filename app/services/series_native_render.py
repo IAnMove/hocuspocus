@@ -48,6 +48,8 @@ from services.series_review_gate import actionable_shots, assembly_blockers, ren
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
+from services.series_sound_cuts import materialize_cuts
+from services.series_video_foley import VIDEO_METHODS, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
@@ -202,6 +204,16 @@ def _output_file(status: dict, suffixes: tuple[str, ...]) -> str | None:
     return os.path.basename(path) if isinstance(path, str) and path.lower().endswith(suffixes) else None
 
 
+def _renders(shot: dict[str, Any]) -> bool:
+    """A shot the server render makes, or a generated or imported take whose foley it makes."""
+    return series_shot3d.wants_render(shot) or wants_video_foley(shot)
+
+
+def _drawn(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The shots the render draws and voices; a video take only gets its foley (its lines are in the clip)."""
+    return [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
+
+
 def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) -> dict[str, Any]:
     """Generation params for one line in one character voice (reference clone or preset)."""
     seconds = min(30, max(4, round(len(text.split()) * 0.6 + 3)))
@@ -279,8 +291,7 @@ class SeriesNativeRender:
         """The series, the language, the shots to render with their review pass, and the episode's review mode and
         the shots that wait for an approval (``series_review_gate``); refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if series_shot3d.wants_render(shot)
-                  and (not shot_ids or shot["id"] in shot_ids)}
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if _renders(shot) and (not shot_ids or shot["id"] in shot_ids)}
         if not wanted:
             raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
@@ -318,6 +329,7 @@ class SeriesNativeRender:
         """Speakers of a language version whose kit has no voice designed for that language (the default would be the wrong accent)."""
         if language == original:
             return []
+        shots = _drawn(shots)
         kits = self.deps.read_kits(workspace)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         speakers = dict.fromkeys(beat.get("characterId") for shot in shots for beat in shot.get("dialogueBeats") or []
@@ -327,6 +339,7 @@ class SeriesNativeRender:
 
     def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
         """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""
+        shots = _drawn(shots)
         kits = self.deps.read_kits(workspace)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         ids = dict.fromkeys(cid for shot in shots for cid in [*(shot.get("visibleCharacterIds") or []),
@@ -445,7 +458,7 @@ class SeriesNativeRender:
                 return
             self._save(workspace, job, current=index, activeShotId=item["shotId"], message=f"Shot {item['shotId']}")
             try:
-                self._render_item(workspace, job, item, index)
+                self._render_shot(workspace, job, item, index)
                 item.update(status="done", stage="done", error=None)
             except Exception as error:  # one shot must not stop the episode
                 failed += 1
@@ -472,11 +485,6 @@ class SeriesNativeRender:
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
-        if item.get("pass") == "promote":
-            # The approved preview is already the final take (series_review_gate): approve it, nothing renders.
-            self._approve(workspace, job, item["shotId"], item["attemptId"])
-            item.update(stage="done", approved=True)
-            return
         kits = self.deps.read_kits(workspace)
         item["status"] = "running"
         if item["stage"] in ("voices", "scene"):
@@ -682,7 +690,9 @@ class SeriesNativeRender:
             raise NativeRenderError("room_failed", f"Voice room: {error}", 502) from error
 
     def _balance(self, root: str, spec: dict) -> None:
-        """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at."""
+        """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at.
+        A cue with ``in``/``length`` is first pointed at a file of just that part (``series_sound_cuts``)."""
+        materialize_cuts(root, spec.get("audioTracks") or [])
         for track in spec.get("audioTracks") or []:
             path = track_source(root, track.get("filename"))
             if track.get("kind") != "speech" and path is not None and path.is_file():
@@ -818,6 +828,50 @@ class SeriesNativeRender:
             # The intent replayed a job the server no longer knows (it restarted mid-generation): ask again.
             intent = f"{job['jobId']}-{name}"[:150] + f"-{uuid.uuid4().hex[:6]}"
         raise NativeRenderError("tool_failed", "Foley job disappeared twice", 502)
+
+    def _render_shot(self, workspace: str, job: dict, item: dict, index: int) -> None:
+        """A generated or imported take only gets its foley (``_video_foley``); every other shot renders."""
+        if item.get("pass") == "promote":
+            # The approved preview is already the final take (series_review_gate): approve it, nothing renders.
+            self._approve(workspace, job, item["shotId"], item["attemptId"])
+            item.update(stage="done", approved=True)
+            return
+        series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])
+        shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), {})
+        if shot.get("productionMethod") not in VIDEO_METHODS:
+            self._render_item(workspace, job, item, index)
+            return
+        item["status"] = "running"
+        self._video_foley(workspace, job, item, series, episode, shot)
+
+    def _video_foley(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict) -> None:
+        """A generated or imported take's foley (``series_video_foley``): the sound only, made once per take and prompt;
+        the cut lays it under the take. Like any foley it is an extra: a failure leaves a warning, not a failed shot."""
+        root, foley, asset = self.deps.workspace_dir(workspace), shot_foley(shot), video_take(series, shot)
+        source = take_file(asset) if asset else ""
+        if not foley or not source or not os.path.isfile(os.path.join(root, source)):
+            raise NativeRenderError("no_take", f"Shot {shot['id']} needs a finished take and a foley prompt", 400)
+        name = sound_name(os.path.join(root, source), episode["id"], shot["id"], foley)
+        item.pop("warning", None)
+        item.update(video=source, stage="foley", foley={**foley, "file": name, "source": source})
+        try:
+            if os.path.isfile(os.path.join(root, name)):
+                item["foley"]["reused"] = True
+            else:
+                item["duration"] = self.deps.probe(os.path.join(root, source))
+                generated = os.path.join(root, self._generate_foley(workspace, job, item, shot["id"], foley, name[:-4]))
+                try:
+                    self.deps.extract_audio(generated, os.path.join(root, name))
+                finally:
+                    _discard(generated)
+        except (Cancelled, ResourceUnavailable):
+            raise
+        except Exception as error:
+            if self._cancelled(job["jobId"]):
+                raise
+            item["warning"] = f"Foley left out: {error}"[:300]
+        item["stage"] = "done"
+        self._save(workspace, job)
 
     def _approve(self, workspace: str, job: dict, shot_id: str, attempt_id: str) -> None:
         if job.get("original", True):

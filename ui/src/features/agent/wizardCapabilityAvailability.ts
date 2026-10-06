@@ -49,6 +49,8 @@ const SERIES_NEEDS_EPISODE = new Set([
   'generate_series_plan',
   'apply_series_plan',
   'render_series_shots',
+  'edit_series_shot',
+  'rerender_series_shot',
   'review_series_attempts',
   'assemble_series_episode',
   'commit_series_canon',

@@ -239,3 +239,15 @@ def test_rendering_only_changed_shots_follows_the_review(tmp_path):
     with pytest.raises(NativeRenderError) as nothing:
         render.start("cast", "uv", "ep1", changed=True)
     assert nothing.value.code == "up_to_date"
+
+
+def test_a_generated_take_is_promoted_once_its_preview_is_approved_and_its_cut_sound_keeps_the_review():
+    from services.series_review_gate import shot_pass
+    shot = {"id": "g1", "order": 1, "productionMethod": "generated_video", "layout2d": {"sfx": [{"file": "a.wav", "at": 0}]},
+            "attempts": [{"id": "t1", "status": "completed", "outputAssetIds": ["x"]}, {"id": "t2", "status": "completed", "outputAssetIds": ["y"]}],
+            "approvedAttemptId": "t1"}
+    episode = {"id": "ep", "shots": [shot], "review": {"mode": "preview", "shots": {"g1": _decided(shot, preview="approved", attempt="t2")}}}
+    assert shot_pass({}, episode, shot, lambda _shot: "x", explicit=False) == ("promote", "t2"), "the server never renders it"
+    louder = {**shot, "layout2d": {"sfx": [{"file": "b.wav", "at": 1}]}}
+    assert content_digest(louder) == content_digest(shot), "sound laid at the cut is not what the take shows"
+    assert content_digest({**shot, "productionMethod": "animation_2d"}) != content_digest({**louder, "productionMethod": "animation_2d"})

@@ -137,7 +137,8 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
               **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
-              **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d")}
+              **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
+              **extras.normalize_clip_fields(value)}
     return layout or None
 
 
