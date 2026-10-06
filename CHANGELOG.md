@@ -6,6 +6,22 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Flat-rigged characters can talk with their own drawing. On painted busts
+(graphic-novel art with ink lines and flat black shadows) the ink mouths still
+looked like Flash animation, not like the painting. `characters.rig.flat` with
+`style: {"mouthStyle": "warp"}` keeps the upper lip and moves the lower lip,
+chin and beard down, the drawing's own pixels, and fills the gap between the
+lips with a flat mouth in the character's ink: muted teeth only in `wide` and
+`bite`. The mouths are per pose, square patches of that pose's lower face saved
+as `anchors.<pose>.mouthSources` and used by Video 2D, Series shots, native lip
+sync, Video 3D talking cutouts and the review sheet; `closed` is the drawing
+unchanged, so the rest pose shows no seam. The mouth line is snapped onto the
+painted stroke between the lips, not a nose fold or a moustache's edge, and
+the Face Rig has a **Mouth line** editor: drag a point onto the line and two
+handles to the corners, on a phone too, and the warped rest, i, e, a, o, u
+follow live (`characters.rig.flat.preview`) before saving the line as the
+pose's hint. Rig every pose with `mouthStyle: "warp"` to switch a kit.
+
 Series Lab voice rooms, looping ambience beds and looping score cues work on
 ffmpeg 6 (the one Ubuntu 24.04 ships). There every room failed with `Option not
 found`, because the convolution asked `afir` for `irnorm`, an option only

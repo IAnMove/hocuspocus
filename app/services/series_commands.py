@@ -21,6 +21,8 @@ WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
 OBJECT = {"type": "object"}
+POINT = {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 2, "maxItems": 2}
+MOUTH_WIDTH = {"type": "number", "minimum": 0.5, "maximum": 100}
 LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
 # A shot by id ("e1s04") or by its number in the episode (5 = the fifth shot, the #5 Series Lab shows).
@@ -55,11 +57,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "style": {"type": "object", "properties": {
              "screen": {"type": "boolean"}, "smile": {"type": "number", "minimum": -1, "maximum": 1},
              "smirk": {"type": "number", "minimum": 0, "maximum": 1}, "width": {"type": "number", "minimum": 0.3, "maximum": 0.9},
-             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink"]}}},
+             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
-                 "mouth": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 2, "maxItems": 2},
-                 "eyes": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 2, "maxItems": 2}}}]}},
+                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH}}]}},
          "poses": {"type": "array", "items": ID, "maxItems": 32}},
         ["workspace", "character_id", "base_revision"], True,
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
@@ -67,21 +68,45 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "background (studio.key). style: smile -1..1 (frown to grin), smirk 0..1, width, mouth_scale (paper mouths); screen "
         "true for a face that is a screen; mouthStyle ink for realistic or graphic-novel art: the painted mouth is kept "
         "as the rest shape (nothing wiped) and the open shapes are flat openings in its own ink hanging from it (the "
-        "lower lip drops, with a tapered lower-lip stroke), sized from it. When the DWPose models are installed "
+        "lower lip drops, with a tapered lower-lip stroke), sized from it; mouthStyle warp makes each pose talk with its "
+        "own drawing: the upper lip stays, the lower lip, chin and beard move down (the drawing's own pixels) and the gap "
+        "is a flat dark mouth in its ink, muted teeth only in wide and bite. Warp mouths are per pose: square patches of "
+        "the lower face saved as anchors.<pose>.mouthSources {state: url} (kit.mouth holds the base pose's), placed at "
+        "anchors.<pose>.mouth; closed is the drawing unchanged. Their mouth line is the hint, else the landmarks' lips, "
+        "snapped onto the painted line between the lips; per pose mouthLine gives it (mouth, mouthWidth in % of the pose "
+        "image, found, from); warning mouth_line_guessed means no painted line was found there and mouth_line_unsure "
+        "that unsure landmarks placed it: check it with characters.rig.flat.preview and pass a hint. When the DWPose "
+        "models are installed "
         "(ckpts/pose) face landmarks find the eyes and mouth on each pose (busts and full figures, faces the mark "
         "search misses or where it takes a nose or a socket shadow for the mouth); per pose landmarks lists what they "
         "placed. A face with "
         "realistic proportions (small eyes in a wide head) is detected and its mouth taken lower down, past eye bags and "
         "spectacles. Closed lids cover each eye's whole white in the face colour under the eyes, or in the shadow's "
         "colour when the eye sits in a flat black shadow. "
-        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y]}} in % of that pose image (before "
-        "cropping) search only there; a mouth hint with no mark there places the mouth at it, nothing wiped. Hints are "
+        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w}} in % of that pose image "
+        "(before cropping; mouthWidth corner to corner in % of its width) search only there; a mouth hint with no mark "
+        "there places the mouth at it, nothing wiped (with warp mouths it is a point on the line between the lips). "
+        "Hints are "
         "kept and reused by later rigs; null clears a pose's. Returns the saved kit, a review image URL (each pose, and "
         "its face enlarged before and after the wipe; poses with warnings framed in red), unwipedPoses (no painted "
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found. A pose whose eyes are covered (sunglasses) "
         "is saved with anchors.<pose>.blink false and never blinks.",
+    ),
+    "characters.rig.flat.preview": (
+        {"workspace": WORKSPACE, "character_id": ID, "pose": ID, "mouth": POINT, "mouthWidth": MOUTH_WIDTH,
+         "states": {"type": "array", "items": {"enum": ["closed", "small", "wide", "round", "pressed", "medium", "pucker",
+                                                        "bite", "tongue"]}, "minItems": 1, "maxItems": 9}},
+        ["workspace", "character_id", "pose"], False,
+        "Preview one pose's warp mouths (characters.rig.flat with mouthStyle warp) at a mouth line, saving nothing on "
+        "the kit: mouth [x, y] is a point on the line between the lips and mouthWidth the mouth corner to corner, in % of "
+        "the pose image (as hints). Without them the pose's saved hint is used, else the landmarks place the line. The "
+        "point is snapped a little onto the painted line. Returns sheet (an image URL: the face around the mouth in each "
+        "state, by default closed, small, medium, wide, round, pucker = rest, i, e, a, o, u), the line used (mouth, "
+        "mouthWidth, found, from: hint, landmarks, painted or guess; line points), view (the shown area), all in % "
+        "of the pose image, and warnings (mouth_line_guessed, mouth_line_unsure). When it looks right, rig with hints {<pose>: {mouth, mouthWidth}} and mouthStyle warp; "
+        "shots already rendered with that pose need rendering again.",
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
@@ -436,6 +461,14 @@ def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_ex
     return {**rigged, "character": _kit_summary(rigged["character"])}
 
 
+def _preview_flat_rig(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"workspace": data["workspace"], "pose": data["pose"], "sheet": True}
+    for key in ("mouth", "mouthWidth", "states"):
+        if key in data:
+            body[key] = data[key]
+    return request("POST", f"/api/v1/character-kits/library/kits/{_quote(data['character_id'])}/flat-rig/preview", body=body)
+
+
 def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "approve": bool(data.get("approve"))}
     if data.get("language"):
@@ -658,6 +691,7 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.save": _save_character,
     "characters.styles": _character_styles,
     "characters.rig.flat": _rig_flat_character,
+    "characters.rig.flat.preview": _preview_flat_rig,
     "series.episode.render_native": _render_native,
     "series.episode.render_native.status": _native_job("status"),
     "series.episode.render_native.cancel": _native_job("cancel"),

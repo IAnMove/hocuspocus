@@ -164,6 +164,20 @@ def _anchor(value: Any, label: str) -> dict[str, float]:
     return result
 
 
+def _pose_mouth_sources(value: Any, pose_id: str) -> dict[str, str]:
+    """A pose's own mouth drawings by state (flat-rig warp mouths, cut from that pose): they replace the kit's
+    ``mouth`` sources on this pose and share their review state."""
+    if not isinstance(value, dict) or not value or any(key not in _MOUTH_STATES for key in value):
+        raise ValueError(f"Anchors for {pose_id} have invalid mouth sources")
+    sources: dict[str, str] = {}
+    for state, raw in value.items():
+        source = _text(raw, f"{pose_id} mouth {state} source", 1200, required=True)
+        if source.lower().startswith(("blob:", "data:")):
+            raise ValueError(f"{pose_id} mouth {state} source must be persistent, not a browser blob or data URL")
+        sources[state] = source
+    return sources
+
+
 def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("Character Kit must be a JSON object")
@@ -206,6 +220,8 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
                 key: _anchor(anchor, f"{pose_id} mouth {key} anchor")
                 for key, anchor in mouth_states_raw.items()
             }
+        if raw_group.get("mouthSources") is not None:
+            group["mouthSources"] = _pose_mouth_sources(raw_group["mouthSources"], pose_id)
         if raw_group.get("eyes") is not None:
             group["eyes"] = _anchor(raw_group["eyes"], f"{pose_id} eyes anchor")
         # A pose whose eyes are hidden (sunglasses) keeps them still: no blink.
