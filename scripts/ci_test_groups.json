@@ -246,6 +246,7 @@
       "weight": 2674,
       "paths": [
         "tests/test_series_agent_fixes.py",
+        "tests/test_series_entrances.py",
         "tests/test_series_templates.py",
         "tests/test_flat_rig_realistic.py",
         "tests/test_acceptance_runner.py",
@@ -569,6 +570,12 @@
         "tests/test_series_shot_plan.py",
         "tests/test_series_script_produce.py",
         "tests/test_series_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_entrances.py",
+      "paths": [
+        "tests/test_series_entrances.py"
       ]
     },
     {
