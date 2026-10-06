@@ -246,7 +246,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2674,
+      "weight": 2682,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_templates.py",
@@ -473,7 +473,9 @@
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
-        "tests/test_llm_resilience.py"
+        "tests/test_llm_resilience.py",
+        "tests/test_game_audio.py",
+        "tests/test_game_sfxr.py"
       ]
     }
   ],
@@ -1381,6 +1383,14 @@
     {
       "prefix": "app/shared/game_style_presets.json",
       "paths": ["tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_audio.py",
+      "paths": ["tests/test_game_audio.py"]
+    },
+    {
+      "prefix": "app/services/game_sfxr.py",
+      "paths": ["tests/test_game_sfxr.py"]
     }
   ]
 }

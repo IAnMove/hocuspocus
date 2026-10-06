@@ -8,7 +8,7 @@ Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR co
 | J1 Biblioteca | `feat/game-assets-1-library` | #862 | en curso (borrador) | `app/services/game_library.py`, `app/services/game_inputs.py`, `app/routers/game_library.py`, `app/shared/game_actions.json`, `app/shared/game_style_presets.json`, `tests/test_game_library.py`, `tests/test_game_inputs.py`, `tests/test_game_library_router.py`, este tablero |
 | J2 Pixel e imagen | `feat/game-assets-2-pixel` | #864 | en curso (borrador) | `app/services/game_pixel.py`, `app/services/game_image_ops.py`, `app/services/game_tiles.py` |
 | J3 Fotogramas | `feat/game-assets-3-frames` | — | pendiente | `app/services/game_frames.py`, `app/services/game_sheet.py` |
-| J4 Audio | `feat/game-assets-4-audio` | — | pendiente | `app/services/game_audio.py`, `app/services/game_sfxr.py` |
+| J4 Audio | `feat/game-assets-4-audio` | — | en curso | `app/services/game_audio.py`, `app/services/game_sfxr.py` |
 | J5 Imagen estática | `feat/game-assets-5-static` | — | pendiente | `app/services/game_tools.py`, `app/services/game_prompts.py`, `app/services/game_generators/` (still, tiles, background) |
 | J6 Animación | `feat/game-assets-6-animation` | — | pendiente | `app/services/game_generators/animation.py`, `app/services/game_generators/vfx.py` |
 | J7 Audio gen | `feat/game-assets-7-audio-gen` | — | pendiente | `app/services/game_generators/audio.py` |
