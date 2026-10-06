@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +14 with the flat rig's small faces, +19 recoverability follow-ups, +12 its last items, 2026-10-06). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on 98d1f8d8 + this change (2026-10-05): 5360 tests in 12.7s locally (+17 with the warp mouths, +14 with the flat rig's small faces, +19 recoverability follow-ups, +12 its last items, 2026-10-06; +140 game-asset tests, 2026-10-07). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci; four 10-test modules moved to python-a to compensate. Count proxy, not wall-clock: run 37234697917 spent 5.0 min (A) and 3.8 min (B) in pytest. tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2744,
+      "weight": 2803,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -247,6 +247,14 @@
         "tests/test_series_review.py",
         "tests/test_series_review_router.py",
         "tests/test_recoverability_last.py",
+        "tests/test_game_library.py",
+        "tests/test_game_inputs.py",
+        "tests/test_game_library_router.py",
+        "tests/test_game_tools.py",
+        "tests/test_game_prompts.py",
+        "tests/test_game_pixel.py",
+        "tests/test_game_image_ops.py",
+        "tests/test_game_tiles.py",
         "tests/test_series_line_voice.py",
         "tests/test_series_shot3d_editor.py"
       ]
@@ -255,7 +263,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 2723,
+      "weight": 2804,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -494,7 +502,16 @@
         "tests/test_h3_frame_lattice.py",
         "tests/test_llm_resilience.py",
         "tests/test_series_review_gate.py",
-        "tests/test_recoverability_followups.py"
+        "tests/test_recoverability_followups.py",
+        "tests/test_game_gen_still.py",
+        "tests/test_game_gen_tiles.py",
+        "tests/test_game_list.py",
+        "tests/test_game_estimate.py",
+        "tests/test_game_produce.py",
+        "tests/test_game_frames.py",
+        "tests/test_game_sheet.py",
+        "tests/test_game_audio.py",
+        "tests/test_game_sfxr.py"
       ]
     }
   ],
@@ -1593,6 +1610,102 @@
     {
       "prefix": "app/services/output_origin.py",
       "paths": ["tests/test_recoverability_last.py", "tests/test_output_completion_time.py"]
+    },
+    {
+      "prefix": "app/services/game_library.py",
+      "paths": ["tests/test_game_library.py", "tests/test_game_library_router.py"]
+    },
+    {
+      "prefix": "app/services/game_inputs.py",
+      "paths": ["tests/test_game_inputs.py", "tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/routers/game_library.py",
+      "paths": ["tests/test_game_library_router.py"]
+    },
+    {
+      "prefix": "app/shared/game_actions.json",
+      "paths": ["tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/shared/game_style_presets.json",
+      "paths": ["tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_pixel.py",
+      "paths": ["tests/test_game_pixel.py"]
+    },
+    {
+      "prefix": "app/services/game_image_ops.py",
+      "paths": ["tests/test_game_image_ops.py"]
+    },
+    {
+      "prefix": "app/services/game_tiles.py",
+      "paths": ["tests/test_game_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_tools.py",
+      "paths": ["tests/test_game_tools.py"]
+    },
+    {
+      "prefix": "app/services/game_prompts.py",
+      "paths": ["tests/test_game_prompts.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/still.py",
+      "paths": ["tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/tiles.py",
+      "paths": ["tests/test_game_gen_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/background.py",
+      "paths": ["tests/test_game_gen_tiles.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/base.py",
+      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/__init__.py",
+      "paths": ["tests/test_game_gen_still.py"]
+    },
+    {
+      "prefix": "app/services/game_list.py",
+      "paths": ["tests/test_game_list.py"]
+    },
+    {
+      "prefix": "app/services/game_estimate.py",
+      "paths": ["tests/test_game_estimate.py", "tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_jobs.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_produce.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/routers/game_produce.py",
+      "paths": ["tests/test_game_produce.py"]
+    },
+    {
+      "prefix": "app/services/game_frames.py",
+      "paths": ["tests/test_game_frames.py"]
+    },
+    {
+      "prefix": "app/services/game_sheet.py",
+      "paths": ["tests/test_game_sheet.py"]
+    },
+    {
+      "prefix": "app/services/game_audio.py",
+      "paths": ["tests/test_game_audio.py"]
+    },
+    {
+      "prefix": "app/services/game_sfxr.py",
+      "paths": ["tests/test_game_sfxr.py"]
     }
   ]
 }
