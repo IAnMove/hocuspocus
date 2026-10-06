@@ -6,6 +6,43 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series Lab voice rooms are subtle now, and only the people in a shot are in
+its room. The first presets made a cathedral so wet that the dialogue was hard
+to follow: a 3.5 s tail 5 dB under the voice, nearly all of it diffuse. Every
+place is re-tuned to be felt, never to cost a word: the room sits 14–22 dB
+under the voice and is mostly early reflections, its tail is short (the
+cathedral 2.2 s) and starts after a predelay (50 ms in the cathedral), and the
+room's own sound is band-limited (low cut 200–350 Hz, high cut 4–6 kHz), so it
+masks neither the words nor the consonants. Measured on the rendered response,
+the cathedral went from STI 0.53 to 0.92 and from C50 (500 Hz–2 kHz) −0.9 dB to
++12.2 dB, the hall from 0.65 to 0.96, and on real lines STOI against the dry
+voice went from 0.73 to 0.96 in the cathedral. The preset names stay; the
+processing version is now 2, so the copies are made again and every shot that
+hears a room renders again once. A place (every preset but `none` and `radio`)
+now reaches only the speakers in the shot (its `layout2d.cast`, else
+`visibleCharacterIds`; a 3D shot's `scene3d.cast`), so a narrator over a church
+plate stays dry. `radio` is a transmission, not a place, and reaches every
+line of its shot. A line can carry its own `voiceRoom` (on a dialogue beat, or
+on a line of `series.episode.from_script`), which wins over the shot and the
+location for that line, also off screen. The take digest holds the room of
+each line, so only the shots whose lines change room render again, and a shot
+whose lines are all dry keeps the digest it had without rooms.
+
+A character can walk into a 2D shot in time with its footsteps. A cast entry
+with `enterFrom` used to slide in from 0.2 s to 1.4 s while its sound effects
+were placed by hand, so a monk entered silently and his steps sounded after
+he had arrived. `enterAt` and `enterDuration` time the entrance (a slow 3 s
+walk-in), and `"enterGait": "walk"` replaces the quick hop with a walk: the
+body is down on every footfall and up mid-step, leaning `enterSway` degrees to
+alternating sides, at `enterStep` seconds a step (default 0.5), stretched a
+little so the walk is a whole number of steps. A sound or screen effect with
+`{"anchor": "enter", "cast": 1}` (an index into the shot's cast or a character
+id, plus `offset`) starts with that entrance, and an sfx with `"repeat":
+"steps"` plays on every footfall of the walk (or of the hops), so one footstep
+sample walks with the character. Shots without the new fields keep their
+digests. `series.episode.from_script` checks an unknown gait and an entrance
+cue that names nobody, or someone who does not enter.
+
 A timed screen effect (`layout2d.fx`) of a Series shot now keeps the length
 its author gave it. A `duration` above the 30 s maximum was dropped and read
 as the 1 s default, so a vignette, film grain or candle light written with 99
