@@ -10,6 +10,7 @@ import base64
 import binascii
 import glob
 import hashlib
+from contextlib import ExitStack
 import json
 import os
 import re
@@ -24,6 +25,7 @@ from services.core_upload import MAX_UPLOAD_BYTES, extract_upload, save_upload, 
 from services.media_paths import MediaPathNotAllowed, _KIND_EXTENSIONS, resolve_permitted_media_path
 from services.wangp_submission import wangp_media_url
 from services.workspace_store_lock import workspace_store_lock
+from services.media_publication import publication_transaction
 
 
 MAX_ASSETS_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -294,8 +296,11 @@ def _remember(folder: str, intent_id: str, digest: str, result: dict) -> None:
     current = _read_journal(folder)
     current[intent_id] = {"digest": digest, "result": result}
     temporary = path + ".tmp"
-    Path(temporary).write_text(json.dumps(current, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-    os.replace(temporary, path)
+    try:
+        Path(temporary).write_text(json.dumps(current, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def _named_copy_target(source: str, folder: str, payload: dict) -> Path:
@@ -433,15 +438,20 @@ def _upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
     prior = _recall(folder, intent_id, _digest(payload))
     if prior is not None:
         return prior
-    if mode == "data":
-        path = _store_upload(folder, _decode_base64(payload["data_base64"]), _original_name(payload["filename"]))
-    else:
-        path = _existing_file(payload["source"], workspace, uploads_root, folder)
-        if payload.get("copy_to_workspace"):
-            path = _copy_into_workspace(path, folder, payload)
-    result = _canonical(path, workspace, uploads_root, folder)
-    _remember(folder, intent_id, _digest(payload), result)
-    return result
+    with ExitStack() as publication:
+        if mode == "data":
+            path = _store_upload(folder, _decode_base64(payload["data_base64"]), _original_name(payload["filename"]))
+        else:
+            path = _existing_file(payload["source"], workspace, uploads_root, folder)
+            if payload.get("copy_to_workspace"):
+                if "destination_filename" in payload:
+                    target = _named_copy_target(path, folder, payload)
+                    publication.enter_context(publication_transaction(
+                        (target, target.with_suffix(".meta.json"), Path(folder) / _JOURNAL_NAME)))
+                path = _copy_into_workspace(path, folder, payload)
+        result = _canonical(path, workspace, uploads_root, folder)
+        _remember(folder, intent_id, _digest(payload), result)
+        return result
 
 
 def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
