@@ -13,6 +13,7 @@ import { useStore } from '../../stores/useStore'
 import { fetchOutputMetadata, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile } from '../../types'
 import { exportedSceneKind, openExportedScene } from '../../lib/exportedScene'
+import { outputProvenance } from '../../lib/outputProvenance'
 import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
@@ -383,6 +384,23 @@ function EditSceneButton({ params, t }: { params: Params; t: OutputActions['t'] 
   )
 }
 
+/** A Video Editor export made from a saved montage (an agent's montages.export, or the editor) reopens that montage. */
+function EditMontageButton({ params, workspace, t }: { params: Params; workspace: string; t: OutputActions['t'] }) {
+  const file = outputProvenance({ params: params ?? undefined }).montageFile
+  if (!file) return null
+  const label = t('editMontage', { name: file })
+  return (
+    <button type="button" data-testid="output-edit-montage"
+      onClick={event => {
+        event.stopPropagation()
+        void import('../../features/music-productions/useOpenProductionMontage').then(({ requestOpenMontage }) => requestOpenMontage(workspace, file))
+      }}
+      className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title={label} aria-label={label}>
+      <Scissors size={13} />
+    </button>
+  )
+}
+
 function HandoffActions({ a }: { a: OutputActions }) {
   const { directorReplacementTarget, editorReplacementTarget, file, handleOpenInVideoEditor, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, montageSelectionError, params, selectingForMontage, t } = a
   return (
@@ -419,6 +437,7 @@ function HandoffActions({ a }: { a: OutputActions }) {
           </button>
         )}
         {file.type === 'video' && <EditSceneButton params={params} t={t} />}
+        {file.type === 'video' && <EditMontageButton params={params} workspace={a.outputWorkspace} t={t} />}
         {montageSelectionError && <span className="max-w-40 truncate text-[9px] text-red-400" title={montageSelectionError}>{montageSelectionError}</span>}
     </>
   )

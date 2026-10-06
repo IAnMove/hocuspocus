@@ -56,6 +56,11 @@
     "edit": "Edit",
     "attemptsInSlot": "Attempts in this slot",
     "tryN": "try {{count}}",
+    "decidedBy": {
+      "agent": "by an agent",
+      "wizard": "by the Wizard",
+      "server": "automatically by the render"
+    },
     "tryFinal": "try {{count}} · final",
     "noPlayable": "This slot does not have a playable video yet.",
     "editSource": "Edit source data · shot {{order}}",
@@ -733,7 +738,8 @@
       "cancelling": "stopping",
       "completed": "done",
       "failed": "some shots failed",
-      "cancelled": "stopped", "interrupted": "interrupted by a restart"
+      "cancelled": "stopped",
+      "interrupted": "interrupted by a restart"
     },
     "stage": {
       "voices": "voices",
@@ -743,6 +749,34 @@
       "import": "take",
       "done": "done"
     }
+  },
+  "productions": {
+    "title": "Productions",
+    "hint": "Each production renders the episode in every language and cuts the chapters (series.episode.produce, started here, by an agent or by the Wizard). A stopped one resumes where it left off.",
+    "stop": "Stop after this step",
+    "resume": "Resume",
+    "status": {
+      "queued": "queued",
+      "running": "producing",
+      "cancelling": "stopping",
+      "completed": "done",
+      "failed": "failed",
+      "cancelled": "stopped",
+      "interrupted": "interrupted by a restart",
+      "waiting": "waiting for the review"
+    },
+    "step": {
+      "render": "Render {{language}}",
+      "assemble": "Cut {{language}}"
+    },
+    "stepStatus": {
+      "queued": "waiting",
+      "running": "running",
+      "done": "done",
+      "failed": "failed"
+    },
+    "chapter": "Chapter {{language}}",
+    "chapterSubtitled": "Chapter {{language}} with subtitles"
   },
   "languages": {
     "title": "Language versions",
@@ -896,7 +930,9 @@
       "earlier": "Notes on this shot",
       "by": {
         "user": "You",
-        "agent": "Agent"
+        "agent": "Agent",
+        "wizard": "Wizard",
+        "server": "Production"
       },
       "label": "Your note ({{stage}})",
       "placeholder": "What should change in this shot? Saved as you type.",

@@ -3714,12 +3714,14 @@
     "name": "Scene name",
     "save": "Save scene to gallery",
     "open": "Open scene",
-    "help": "Choose a saved Video3D scene. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
+    "help": "Choose a saved Video3D scene, or a working scene an agent made and did not publish. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
     "saved": "Scene saved to this workspace. Open scene to load it again.",
     "changed": "The scene changed while loading. Choose it again to replace the current scene.",
     "previewUnavailable": "Wait for the 3D preview to load before saving.",
     "saveFailed": "Could not save the scene.",
-    "cancelLoad": "Cancel loading"
+    "cancelLoad": "Cancel loading",
+    "workingScene": "{{title}} · working scene, not published (revision {{revision}})",
+    "workingChanged": "{{title}} · working scene, changed since it was published (revision {{revision}})"
   },
   "cinematic": {
     "title": "Cinematic environment",

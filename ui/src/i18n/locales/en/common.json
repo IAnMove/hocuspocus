@@ -153,7 +153,16 @@
       "job_id": "Job ID",
       "task_id": "Task ID",
       "root_task_id": "Root task ID",
-      "director_pipeline_id": "Director pipeline ID"
+      "director_pipeline_id": "Director pipeline ID",
+      "made_by": "Made by",
+      "style": "Music style",
+      "voice": "Voice",
+      "voice_reference": "Voice cloned from",
+      "language": "Language",
+      "tool": "Tool",
+      "made_from": "Made from",
+      "scene_file": "Saved scene",
+      "montage": "Montage"
     },
     "openVideo": "Open video {{name}}",
     "videoTitle": "Video details",
@@ -176,7 +185,11 @@
     "compare": "Compare",
     "stopCompare": "Stop comparing",
     "swap": "Swap A and B",
-    "compareHint": "Arrows and swipes change B"
+    "compareHint": "Arrows and swipes change B",
+    "madeBy": {
+      "agent": "An agent (MCP) · {{capability}}",
+      "wizard": "Ask to the Wizard · {{capability}}"
+    }
   },
   "runtimeUpdate": {
     "message": "An update or server restart was detected. Your current form is kept. Reload when you are ready; unsent edits will be cleared.",

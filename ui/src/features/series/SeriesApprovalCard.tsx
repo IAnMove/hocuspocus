@@ -103,6 +103,8 @@ export function SeriesApprovalCard({ workspace, series, episode, shot, entry, mo
   const { t } = useUiTranslation('seriesLab')
   const [editing, setEditing] = useState(false)
   const media = latestTakeMedia(series, shot)
+  // An agent's, the Wizard's or a production's own decision says so; a person's needs no label.
+  const decider = (by?: string) => by === 'agent' || by === 'wizard' || by === 'server' ? ` · ${t(`review.decidedBy.${by}`)}` : ''
   const stage = reviewStage(mode, entry, shot)
   const status = entry[stage]
   return <article id={`series-approval-${shot.id}`} data-testid={`series-approval-${shot.id}`}
@@ -112,8 +114,8 @@ export function SeriesApprovalCard({ workspace, series, episode, shot, entry, mo
       <span className="min-w-0 max-w-[12rem] truncate font-mono text-[10px] text-text-muted" title={shot.id}>{shot.id}</span>
       <Pill>{t(`production.methods.${shot.productionMethod || 'generated_video'}`)}</Pill>
       <Pill>{t('approval.card.seconds', { seconds: Number(shot.durationSeconds.toFixed(2)) })}</Pill>
-      {mode !== 'direct' && <Pill tone={TONE[entry.plan]}>{t('approval.card.planStatus', { status: t(`approval.status.${entry.plan}`) })}</Pill>}
-      {(mode === 'preview' || (mode === 'direct' && media)) && <Pill tone={TONE[entry.preview]}>{t('approval.card.previewStatus', { status: t(`approval.status.${entry.preview}`) })}</Pill>}
+      {mode !== 'direct' && <Pill tone={TONE[entry.plan]}>{t('approval.card.planStatus', { status: t(`approval.status.${entry.plan}`) })}{decider(entry.planBy)}</Pill>}
+      {(mode === 'preview' || (mode === 'direct' && media)) && <Pill tone={TONE[entry.preview]}>{t('approval.card.previewStatus', { status: t(`approval.status.${entry.preview}`) })}{decider(entry.previewBy)}</Pill>}
       <TakeMarker shot={shot} media={media} />
     </div>
     <div className="flex flex-col gap-3 sm:flex-row">

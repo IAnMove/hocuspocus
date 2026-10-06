@@ -90,12 +90,16 @@ episode:
 "review": {
   "mode": "preview", "updatedAt": "2026-10-06T10:00:00Z",
   "shots": {
-    "e1s05": {"plan": "approved", "planAt": "…", "planDigest": "3f1c…",
+    "e1s05": {"plan": "approved", "planAt": "…", "planDigest": "3f1c…", "planBy": "user",
               "preview": "changes", "previewAt": "…", "previewDigest": "3f1c…", "previewAttemptId": "attempt_…",
+              "previewBy": "agent",
               "notes": [{"id": "note_…", "at": "…", "stage": "preview", "text": "Inés más a la izquierda", "by": "user"}]}
   }
 }
 ```
+
+`planBy`, `previewBy` and a note's `by` say who decided or wrote: `user`, `agent` (an MCP client, through the
+loopback's `X-Hocus-Actor`), `wizard` or `server`, the same words as a take's `approvedBy`.
 
 A shot without an entry is pending. Each decision keeps the digest of the shot's content (lines with speakers, cast,
 `layout2d`, `scene3d`, location, framing, camera, wardrobe, props); when that content changes by any path

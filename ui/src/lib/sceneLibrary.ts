@@ -14,11 +14,16 @@ export const isCompositorVideo = (file: Pick<ApiOutput, 'type' | 'mode' | 'name'
   )
 )
 
+/** A scene file's readable name: without the time stamp and the revision id a save appends
+ *  (``_abc123`` from the editor, ``-<10 hex>`` from scenes.document.save, ``-<32 hex>.world3d`` from Video 3D). */
 export const sceneLibraryTitle = (name: string) => {
   const stem = name
     .replace(/\.scene\.json$/i, '')
     .replace(/\.(mp4|webm)$/i, '')
+    .replace(/\.world3d$/i, '')
     .replace(/^\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m\d{2}s_/, '')
+    .replace(/-[a-f0-9]{32}$/i, '')
+    .replace(/-[a-f0-9]{10}$/i, '')
     .replace(/_3d_[a-f0-9]{6}$/i, '')
     .replace(/_[a-f0-9]{6}$/i, '')
   return stem.replace(/[-_]+/g, ' ').trim() || name

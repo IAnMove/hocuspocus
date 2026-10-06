@@ -1729,7 +1729,16 @@ def update_shot_render_attempt(shot: dict, attempt_id: str, **patch: Any) -> dic
     return updated
 
 
-def approve_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
+# Who decided on a take (``approvedBy`` / ``reviewedBy``): a person in Series Lab, an MCP agent, Ask to the Wizard,
+# or the server's own render approving what it made (``approve: true``, ``series.episode.produce``).
+REVIEWERS = ("user", "agent", "wizard", "server")
+
+
+def _reviewer(value: Any) -> str:
+    return value if value in REVIEWERS else "user"
+
+
+def approve_shot_render_attempt(shot: dict, attempt_id: str, approved_by: str = "user") -> dict:
     updated = copy.deepcopy(shot)
     attempt = next((
         item for item in _objects(updated.get("attempts")) if item.get("id") == attempt_id
@@ -1739,13 +1748,15 @@ def approve_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
     if attempt.get("status") != "completed" or not attempt.get("outputAssetIds"):
         raise ValueError("Only a completed Series shot attempt with output can be approved")
     updated["approvedAttemptId"] = attempt_id
+    now, reviewer = _now(), _reviewer(approved_by)
     updated = update_shot_render_attempt(
-        updated, attempt_id, reviewDecision="approved", reviewedAt=_now(),
+        updated, attempt_id, reviewDecision="approved", reviewedAt=now, reviewedBy=reviewer,
+        approvedBy=reviewer, approvedAt=now,
     )
     return updated
 
 
-def approve_episode_render_attempts(episode: dict, selections: Any) -> dict:
+def approve_episode_render_attempts(episode: dict, selections: Any, approved_by: str = "user") -> dict:
     """Approve a reviewed episode selection atomically on a detached copy."""
     if not isinstance(selections, list) or not selections:
         raise ValueError("Select at least one completed Series shot attempt")
@@ -1768,12 +1779,12 @@ def approve_episode_render_attempts(episode: dict, selections: Any) -> dict:
         shot_index = shot_indexes.get(shot_id)
         if shot_index is None:
             raise ValueError(f"Series shot {shot_id} not found")
-        shots[shot_index] = approve_shot_render_attempt(shots[shot_index], attempt_id)
+        shots[shot_index] = approve_shot_render_attempt(shots[shot_index], attempt_id, approved_by)
     updated["shots"] = shots
     return updated
 
 
-def reject_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
+def reject_shot_render_attempt(shot: dict, attempt_id: str, rejected_by: str = "user") -> dict:
     updated = copy.deepcopy(shot)
     attempt = next((
         item for item in _objects(updated.get("attempts")) if item.get("id") == attempt_id
@@ -1781,7 +1792,7 @@ def reject_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
     if not attempt:
         raise ValueError("Series shot render attempt not found")
     updated = update_shot_render_attempt(
-        updated, attempt_id, reviewDecision="rejected", reviewedAt=_now(),
+        updated, attempt_id, reviewDecision="rejected", reviewedAt=_now(), reviewedBy=_reviewer(rejected_by),
     )
     if updated.get("approvedAttemptId") == attempt_id:
         updated.pop("approvedAttemptId", None)

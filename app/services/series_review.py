@@ -13,11 +13,14 @@ The state lives on the episode, owned by the server (``POST .../review``, ``seri
     episode["review"] = {
         "mode": "direct" | "plan" | "preview", "updatedAt": iso,
         "shots": {shot_id: {
-            "plan": "pending" | "approved" | "changes", "planAt": iso, "planDigest": hex,
-            "preview": "pending" | "approved" | "changes", "previewAt": iso, "previewDigest": hex,
+            "plan": "pending" | "approved" | "changes", "planAt": iso, "planDigest": hex, "planBy": author,
+            "preview": "pending" | "approved" | "changes", "previewAt": iso, "previewDigest": hex, "previewBy": author,
             "previewAttemptId": attempt_id,
             "notes": [{"id": "note_<hex>", "at": iso, "stage": "plan" | "preview" | "final", "text": str,
-                       "by": "user" | "agent"}]}}}
+                       "by": author}]}}}
+
+An author is who decided or wrote: ``user``, ``agent`` (an MCP client), ``wizard`` (Ask to the Wizard) or ``server``
+(a production approving on its own), as on a take's ``approvedBy`` (``services/agent_activity.current_actor``).
 
 A shot without an entry is pending at both stages and has no notes. A decision keeps the digest of the shot's
 content (``SHOT_CONTENT_FIELDS``: lines, cast, layout2d, scene3d, location, framing...) it was made on, so when that
@@ -37,7 +40,7 @@ from typing import Any
 MODES = ("direct", "plan", "preview")
 STATUSES = ("pending", "approved", "changes")
 STAGES = ("plan", "preview", "final")
-AUTHORS = ("user", "agent")
+AUTHORS = ("user", "agent", "wizard", "server")
 MAX_NOTES = 100
 MAX_NOTE_CHARS = 2000
 MAX_CHANGES = 500
@@ -137,6 +140,8 @@ def _decision(value: dict, stage: str, digest: str, shot: dict) -> dict:
     decided = {stage: status, f"{stage}Digest": digest}
     if isinstance(value.get(f"{stage}At"), str):
         decided[f"{stage}At"] = value[f"{stage}At"]
+    if value.get(f"{stage}By") in AUTHORS:
+        decided[f"{stage}By"] = value[f"{stage}By"]
     if stage == "preview":
         decided["previewAttemptId"] = value["previewAttemptId"]
     return decided
@@ -307,27 +312,27 @@ def _status(change: dict, key: str) -> str | None:
     return change[key]
 
 
-def _decide(entry: dict, stage: str, status: str, shot: dict, now: str) -> None:
-    for key in (f"{stage}At", f"{stage}Digest", *(("previewAttemptId",) if stage == "preview" else ())):
+def _decide(entry: dict, stage: str, status: str, shot: dict, now: str, by: str = "user") -> None:
+    for key in (f"{stage}At", f"{stage}Digest", f"{stage}By", *(("previewAttemptId",) if stage == "preview" else ())):
         entry.pop(key, None)
     entry[stage] = status
     if status != "pending":
-        entry.update({f"{stage}At": now, f"{stage}Digest": content_digest(shot)})
+        entry.update({f"{stage}At": now, f"{stage}Digest": content_digest(shot), f"{stage}By": by})
 
 
-def _set_preview(entry: dict, status: str, shot: dict, attempt_id: Any, now: str) -> None:
+def _set_preview(entry: dict, status: str, shot: dict, attempt_id: Any, now: str, by: str = "user") -> None:
     if status != "pending":
         take = next((item for item in _attempts(shot) if item.get("id") == attempt_id), None) if attempt_id else latest_take(shot)
         if take is None or not _usable(take):
             raise ReviewError(f"Shot {shot.get('order')} has no completed take to review yet; render its preview first")
         if not _preview_current(shot, take.get("id")):
             raise ReviewError(f"Shot {shot.get('order')} has a newer take than {take.get('id')}; review the newest one")
-    _decide(entry, "preview", status, shot, now)
+    _decide(entry, "preview", status, shot, now, by)
     if status != "pending":
         entry["previewAttemptId"] = take["id"]
     if status == "approved" and entry["plan"] != "approved":
         # A good preview of a shot is a good plan of it.
-        _decide(entry, "plan", "approved", shot, now)
+        _decide(entry, "plan", "approved", shot, now, by)
 
 
 def default_stage(episode: dict, entry: dict) -> str:
@@ -346,14 +351,14 @@ def _check_note(raw: Any) -> str | None:
     if raw.get("stage") not in (None, *STAGES):
         raise ReviewError(f"note.stage must be one of {', '.join(STAGES)}")
     if raw.get("by") not in (None, *AUTHORS):
-        raise ReviewError("note.by must be user or agent")
+        raise ReviewError(f"note.by must be one of {', '.join(AUTHORS)}")
     note_id = raw.get("id")
     if note_id is not None and (not isinstance(note_id, str) or not _NOTE_ID.match(note_id)):
         raise ReviewError("note.id must be a short id of letters, digits, _ and -")
     return note_id
 
 
-def _write_note(episode: dict, entry: dict, raw: Any, now: str) -> str | None:
+def _write_note(episode: dict, entry: dict, raw: Any, now: str, by: str = "user") -> str | None:
     """Add or update (same id) a note; empty text removes it. Returns the id written."""
     note_id = _check_note(raw)
     existing = next((note for note in entry["notes"] if note_id and note["id"] == note_id), None)
@@ -366,11 +371,11 @@ def _write_note(episode: dict, entry: dict, raw: Any, now: str) -> str | None:
         existing = {"id": note_id or f"note_{uuid.uuid4().hex[:16]}"}
         entry["notes"].append(existing)
     existing.update(at=now, text=raw["text"], stage=raw.get("stage") or existing.get("stage") or default_stage(episode, entry),
-                    by=raw.get("by") or existing.get("by") or "user")
+                    by=raw.get("by") or existing.get("by") or by)
     return existing["id"]
 
 
-def _apply_shot(episode: dict, shots: dict[str, dict], change: Any, now: str) -> tuple[str, str | None]:
+def _apply_shot(episode: dict, shots: dict[str, dict], change: Any, now: str, by: str) -> tuple[str, str | None]:
     if not isinstance(change, dict) or set(change) - CHANGE_KEYS:
         raise ReviewError(f"Each shot change takes {', '.join(sorted(CHANGE_KEYS))}")
     shot = shots.get(change.get("shotId")) if isinstance(change.get("shotId"), str) else None
@@ -379,12 +384,12 @@ def _apply_shot(episode: dict, shots: dict[str, dict], change: Any, now: str) ->
     entry = shot_entry(episode, shot["id"])
     plan, preview = _status(change, "plan"), _status(change, "preview")
     if plan is not None:
-        _decide(entry, "plan", plan, shot, now)
+        _decide(entry, "plan", plan, shot, now, by)
     if preview is not None:
-        _set_preview(entry, preview, shot, change.get("attemptId"), now)
+        _set_preview(entry, preview, shot, change.get("attemptId"), now, by)
     if change.get("removeNoteId"):
         entry["notes"] = [note for note in entry["notes"] if note["id"] != change["removeNoteId"]]
-    note_id = _write_note(episode, entry, change["note"], now) if "note" in change else None
+    note_id = _write_note(episode, entry, change["note"], now, by) if "note" in change else None
     review = episode.setdefault("review", {"mode": episode_mode(episode), "shots": {}})
     review.setdefault("shots", {})[shot["id"]] = entry
     return shot["id"], note_id
@@ -404,9 +409,12 @@ def _check_change(body: Any) -> tuple[str | None, list]:
     return mode, changes
 
 
-def apply_review_change(episode: dict, body: dict, *, now: str) -> dict[str, str]:
+def apply_review_change(episode: dict, body: dict, *, now: str, by: str = "user") -> dict[str, str]:
     """Apply ``{mode?, shots?: [{shotId, plan?, preview?, attemptId?, note?, removeNoteId?}]}`` to ``episode`` in place
-    (validated; nothing is applied when a change is refused). Returns the id of each note written, by shot id."""
+    (validated; nothing is applied when a change is refused). ``by`` is who decides (``AUTHORS``): each decision records
+    it as ``planBy`` / ``previewBy``, and it is a note's author unless the note says otherwise. Returns the id of each
+    note written, by shot id."""
+    by = by if by in AUTHORS else "user"
     mode, changes = _check_change(body)
     working = copy.deepcopy(episode)
     shots = {str(shot.get("id")): shot for shot in working.get("shots") or [] if isinstance(shot, dict)}
@@ -414,7 +422,7 @@ def apply_review_change(episode: dict, body: dict, *, now: str) -> dict[str, str
     review["mode"] = mode or review.get("mode") or "direct"
     note_ids = {}
     for change in changes:
-        shot_id, note_id = _apply_shot(working, shots, change, now)
+        shot_id, note_id = _apply_shot(working, shots, change, now, by)
         if note_id:
             note_ids[shot_id] = note_id
     working["review"]["updatedAt"] = now

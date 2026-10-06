@@ -9,6 +9,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, HTTPException
 
 from services.song_shorten import SongShortenError, load_and_shorten, remap_montage, suggest_keep, write_wav
+from services.tool_sidecars import shorten_sidecar
 
 
 def command_catalog() -> list[dict]:
@@ -80,6 +81,7 @@ def shorten_request(payload: dict, *, resolve_source: Callable[[str, str], str],
     name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_{stem}_short.wav"
     destination = os.path.join(folder, name)
     write_wav(destination, audio, sample_rate)
+    shorten_sidecar(destination, source, payload, keep=keep, time_map=time_map, duration=result["duration"])
     result.update({"file": name, "url": f"/api/v1/file/{name}", "keep": keep})
     return result
 

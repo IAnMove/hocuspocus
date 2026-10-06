@@ -880,6 +880,11 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
         url = base + path + ("?" + urllib.parse.urlencode(query) if query else "")
         data = json.dumps(body, ensure_ascii=False).encode() if body is not None else None
         headers = {"Content-Type": "application/json"} if data is not None else {}
+        # The route records who asked (an agent, the Wizard, a server render) on what it approves.
+        from services.agent_activity import loopback_actor
+        actor = loopback_actor()
+        if actor:
+            headers["X-Hocus-Actor"] = actor
         try:
             with opener(urllib.request.Request(url, data=data, method=method, headers=headers), timeout=120) as response:
                 return json.loads(response.read().decode() or "null")

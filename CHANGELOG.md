@@ -6,6 +6,28 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+What agents and the Wizard make is easier to find, open and trace back. The
+Wizard's own changes (a Character Kit, a story, a series episode, a Video 3D
+template or scene) get a row in Activity's Agents view, badged Wizard, with
+buttons that open each one. The gallery details say who made a file (an agent
+and its tool, or the Wizard), a song's style, a line's voice and language, what
+a tool output was made from, and the saved scene or montage behind an export;
+feed cards badge agent work. A Video 2D or 3D export names the saved scene file
+it rendered, and an agent's scene without a picture takes the export's middle
+frame as its preview. Series shot exports keep the shot id in their name
+(`…_video2d-Plus-Ultra-Mas-alla-del-Plan-La-confesion-e1s163_…`), published
+Video 3D scenes are named after their template, and the Video 3D Open dialog
+lists the working scenes an agent never published. A montage export has **Edit
+montage**, and the Wizard saves its Video Editor draft as a montage before
+exporting it. `audio.shorten` and the flat-rig images have provenance sidecars
+like `studio.key`. Takes record who approved them (`approvedBy`: a person, an
+agent, the Wizard or the render itself) and Render & Review shows it; the
+staged review's plan and preview decisions record who made them
+(`planBy`, `previewBy`) and the Validation cards show it; music production
+reviews say whether people or agents decided. Render & Review also
+lists the episode's productions with their steps, chapter files, Stop and
+Resume.
+
 Series Lab can make an episode in three production modes, and the user
 validates every shot from inside HocusPocus, also from a phone over the LAN.
 `direct` renders everything, as before, and is what every existing episode

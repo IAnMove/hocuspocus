@@ -91,6 +91,21 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
         return await job(service.start, body.workspace, series_id, episode_id, languages=body.languages, burn_subtitles=body.burnSubtitles,
                          rerender=body.rerender)
 
+    @router.get("/api/v1/series/produce/jobs")
+    async def produce_jobs(workspace: str, series_id: str = "", episode_id: str = "", limit: int = 20):
+        """The productions of a workspace, newest first (one series or episode when given): status, steps, chapters.
+
+        Series Lab lists them with resume and cancel, so a production an agent started is found and controlled."""
+        bind_loop(asyncio.get_running_loop())
+        try:
+            found = await run_in_threadpool(service.jobs, workspace)
+        except ProduceError as error:
+            raise HTTPException(status_code=error.status, detail={"code": error.code, "message": str(error)}) from error
+        kept = [item for item in found if (not series_id or item.get("seriesId") == series_id)
+                and (not episode_id or item.get("episodeId") == episode_id)]
+        kept.sort(key=lambda item: -float(item.get("createdAt") or 0))
+        return {"jobs": [public_job(item) for item in kept[:max(1, min(100, limit))]], "total": len(kept)}
+
     @router.get("/api/v1/series/produce/jobs/{job_id}")
     async def produce_status(job_id: str, workspace: str):
         return await job(service.status, workspace, job_id)

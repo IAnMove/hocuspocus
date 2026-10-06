@@ -146,3 +146,19 @@ test('a preview is approved with the take it is about', { concurrency: false }, 
   const second = within(view.getByTestId('series-approval-s2'))
   assert.ok(second.getByText('No preview yet'))
 })
+
+test('a decision an agent or the Wizard made says so on the card', { concurrency: false }, async t => {
+  const review: SeriesEpisodeReview = { mode: 'plan', shots: {
+    s1: { plan: 'approved', planAt: '2026-10-06T10:00:00Z', planBy: 'agent', preview: 'pending', notes: [] },
+    s2: { plan: 'changes', planAt: '2026-10-06T10:00:00Z', planBy: 'user', preview: 'pending',
+      notes: [{ id: 'note_1', at: '2026-10-06T10:00:00Z', stage: 'plan', text: 'Otro plano', by: 'wizard' }] },
+  } }
+  installServer(t, review)
+  const { view, cleanup } = await mount(review)
+  t.after(cleanup)
+  const { within } = await import('@testing-library/react')
+  assert.ok(within(view.getByTestId('series-approval-s1')).getByText('Plan: approved · by an agent'))
+  const second = within(view.getByTestId('series-approval-s2'))
+  assert.ok(second.getByText('Plan: changes requested'), 'a person’s decision needs no label')
+  assert.ok(second.getByText(/^Wizard ·/))
+})

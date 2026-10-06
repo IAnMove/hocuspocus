@@ -213,6 +213,9 @@ export interface SeriesRenderAttempt {
   outputAssetIds: string[]
   error?: string
   retryCount: number
+  /** Who approved or reviewed the take: a person, an MCP agent, Ask to the Wizard or the server render's own approval. */
+  approvedBy?: 'user' | 'agent' | 'wizard' | 'server'
+  reviewedBy?: 'user' | 'agent' | 'wizard' | 'server'
   reviewDecision?: 'approved' | 'rejected'
   reviewedAt?: string
   /** Set by the server render in a staged production: a cheap preview to review, or the final take. */
@@ -229,17 +232,22 @@ export interface SeriesReviewNote {
   at: string
   stage: SeriesReviewStage
   text: string
-  by: 'user' | 'agent'
+  by: SeriesReviewAuthor
 }
+
+/** Who decided or wrote: a person, an MCP agent, Ask to the Wizard, or a production approving on its own. */
+export type SeriesReviewAuthor = 'user' | 'agent' | 'wizard' | 'server'
 
 /** One shot's review (server-owned). A shot without an entry is pending at every stage. */
 export interface SeriesShotReview {
   plan: SeriesReviewStatus
   planAt?: string
   planDigest?: string
+  planBy?: SeriesReviewAuthor
   preview: SeriesReviewStatus
   previewAt?: string
   previewDigest?: string
+  previewBy?: SeriesReviewAuthor
   /** The take the preview decision is about. */
   previewAttemptId?: string
   notes: SeriesReviewNote[]

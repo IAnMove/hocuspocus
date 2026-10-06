@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.agent_activity import current_actor
 from services.series_review import MAX_CHANGES, ReviewError, apply_review_change, report, stored_review, summary
 
 
@@ -59,7 +60,9 @@ def create_series_review_router(*, resolve_workspace: Callable[[Any], str], lock
                     "message": f"Series revision changed from {body.baseRevision} to {revision}; reload before reviewing"})
             now = iso_now()
             try:
-                note_ids = apply_review_change(episode, body.model_dump(include={"mode", "shots"}, exclude_none=True), now=now)
+                # Who decides: a person, or an agent / the Wizard through its declared actor (ActorHeaderMiddleware).
+                note_ids = apply_review_change(episode, body.model_dump(include={"mode", "shots"}, exclude_none=True), now=now,
+                                               by=current_actor())
             except ReviewError as error:
                 raise HTTPException(status_code=error.status, detail={"code": error.code, "message": str(error)}) from error
             series.update(revision=revision + 1, updatedAt=now)

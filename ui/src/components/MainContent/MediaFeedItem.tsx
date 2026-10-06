@@ -4,6 +4,7 @@ import { FeedMediaBody } from './FeedMediaBody'
 import { OutputActionBar } from './OutputActionBar'
 import { openOutputInEditor } from './openOutputEditor'
 import { useUiTranslation } from '../../i18n'
+import { outputMaker } from '../../lib/outputProvenance'
 import { useStore } from '../../stores/useStore'
 import { getStoredAssetUrl, fetchOutputMetadata } from '../../api/client'
 import type { OutputFile, OutputMetadata } from '../../types'
@@ -200,6 +201,7 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
   const uploadFilenames = meta?.upload_filenames as Record<string, string> | undefined
 
   const prompt = (params?._tts_original_prompt as string) || (params?.prompt as string) || ''
+  const maker = outputMaker(meta)
   const modelType = (params?.model_type as string) || ''
   const modelLabel = modelDisplayName(modelType, models)
   const isAudio = file.type === 'audio'
@@ -397,6 +399,8 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
           {params ? (
             <>
               <div className="h-4 truncate text-xs text-text-secondary" title={generationBreakdown || undefined}>
+                {maker && <span data-origin={maker.origin} title={t(`origin.${maker.origin}Title`)}
+                  className="mr-1 rounded border border-fuchsia-400/40 bg-fuchsia-400/10 px-1 text-[9px] text-fuchsia-200">{t(`origin.${maker.origin}`)}</span>}
                 {modelLabel && <span className="font-medium" title={modelType}>{modelLabel}</span>}
                 {resolution && <span className="text-text-muted"> &middot; {resolution}</span>}
                 {seed != null && seed >= 0 && <span className="text-text-muted"> &middot; seed {seed}</span>}

@@ -136,3 +136,24 @@ def test_the_review_tools_are_catalogued_with_intent_ids_and_in_the_series_profi
     assert "force" in OPERATIONS["series.assembly.start"][0]
     note = OPERATIONS["series.shot.review.set"][0]["note"]
     assert note["required"] == ["text"] and note["properties"]["by"]["enum"] == ["user", "agent"]
+
+
+def test_each_decision_and_note_says_who_made_it(tmp_path):
+    """A person in Series Lab is ``user``; an agent's MCP call reaches the route through a loopback that declares it."""
+    from services.agent_activity import ActorHeaderMiddleware
+    _library(tmp_path)
+    client = _app(tmp_path)
+    client.app.add_middleware(ActorHeaderMiddleware)
+    path = "/api/v1/series/mp/episodes/ep1/review"
+    mine = client.post(path, json={"workspace": "plus", "mode": "preview", "shots": [{"shotId": "s01", "plan": "approved"}]})
+    assert mine.json()["review"]["shots"]["s01"]["planBy"] == "user"
+    agent = client.post(path, headers={"X-Hocus-Actor": "agent"}, json={"workspace": "plus", "shots": [
+        {"shotId": "s02", "plan": "approved", "preview": "changes", "note": {"text": "Más luz en la cara"}}]})
+    shot = agent.json()["review"]["shots"]["s02"]
+    assert (shot["planBy"], shot["previewBy"], shot["notes"][0]["by"]) == ("agent", "agent", "agent")
+    wizard = client.post(path, headers={"X-Hocus-UI-Surface": "wizard"}, json={"workspace": "plus", "shots": [
+        {"shotId": "s03", "plan": "changes", "note": {"text": "Otro encuadre", "by": "user"}}]})
+    shot = wizard.json()["review"]["shots"]["s03"]
+    assert shot["planBy"] == "wizard" and shot["notes"][0]["by"] == "user", "a note's own author wins"
+    stored = read_series_library(str(tmp_path), "plus")["seriesById"]["mp"]["episodesById"]["ep1"]["review"]["shots"]
+    assert stored["s02"]["previewBy"] == "agent", "the decider survives normalization"

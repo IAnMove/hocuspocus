@@ -70,7 +70,8 @@ def test_the_stored_review_is_the_documented_json():
     review = _episode(series)["review"]
     digest = content_digest(next(shot for shot in _episode(series)["shots"] if shot["id"] == "s01"))
     assert review["mode"] == "plan" and review["updatedAt"] == NOW
-    assert review["shots"]["s01"] == {"plan": "approved", "planDigest": digest, "planAt": NOW, "preview": "pending", "notes": []}
+    assert review["shots"]["s01"] == {"plan": "approved", "planDigest": digest, "planAt": NOW, "planBy": "user", "preview": "pending",
+                                      "notes": []}
     note = review["shots"]["s02"]["notes"][0]
     assert note == {"id": note_ids["s02"], "at": NOW, "stage": "plan", "text": "Inés más a la izquierda", "by": "user"}
     assert review["shots"]["s02"]["plan"] == "changes"

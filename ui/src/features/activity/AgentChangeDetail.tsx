@@ -21,7 +21,8 @@ export function OriginBadge({ task }: { task: ActivityTaskLike }) {
 }
 
 const OPENABLE = new Set<AgentTarget['kind']>([
-  'world3d_template', 'world3d_scene', 'scene_file', 'character_kit', 'series_episode', 'series', 'montage', 'workspace_collection', 'file',
+  'world3d_template', 'world3d_scene', 'scene_file', 'character_kit', 'series_episode', 'series', 'story', 'montage',
+  'workspace_collection', 'file',
 ])
 
 function targetLabel(t: Translate, target: AgentTarget): string {

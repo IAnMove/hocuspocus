@@ -53,6 +53,9 @@ def save_world3d(body, workspace_dir):
         for path in written:
             path.unlink(missing_ok=True)
         raise
+    # An export of this document will name this file and may give it a real preview (scene_links).
+    from services.scene_links import remember_saved
+    remember_saved(folder, document, source.name)
     suffix = '?workspace=' + quote(workspace, safe='')
     return {'name': source.name, 'type': 'scene', 'workspace_id': workspace,
             'url': '/api/v1/file/' + quote(source.name) + suffix,

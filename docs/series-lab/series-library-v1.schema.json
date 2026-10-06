@@ -579,6 +579,10 @@
       },
       "additionalProperties": true
     },
+    "reviewAuthor": {
+      "description": "Who decided or wrote: a person (user), an MCP agent, Ask to the Wizard, or a production approving on its own (server).",
+      "enum": ["user", "agent", "wizard", "server"]
+    },
     "reviewNote": {
       "type": "object",
       "required": ["id", "at", "stage", "text", "by"],
@@ -587,7 +591,7 @@
         "at": { "$ref": "#/$defs/timestamp" },
         "stage": { "enum": ["plan", "preview", "final"] },
         "text": { "type": "string", "maxLength": 2000 },
-        "by": { "enum": ["user", "agent"] }
+        "by": { "$ref": "#/$defs/reviewAuthor" }
       },
       "additionalProperties": false
     },
@@ -599,9 +603,11 @@
         "plan": { "enum": ["pending", "approved", "changes"] },
         "planAt": { "$ref": "#/$defs/timestamp" },
         "planDigest": { "type": "string" },
+        "planBy": { "$ref": "#/$defs/reviewAuthor" },
         "preview": { "enum": ["pending", "approved", "changes"] },
         "previewAt": { "$ref": "#/$defs/timestamp" },
         "previewDigest": { "type": "string" },
+        "previewBy": { "$ref": "#/$defs/reviewAuthor" },
         "previewAttemptId": { "$ref": "#/$defs/id" },
         "notes": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/reviewNote" } }
       },

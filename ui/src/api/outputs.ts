@@ -37,6 +37,8 @@ export interface ApiOutput {
    *  backend hasn't been updated to emit this yet. */
   edit_sub_mode?: string | null
   result_kind?: 'music_video' | 'trailer' | 'series_episode' | 'chapter' | null
+  /** A title to show instead of the one derived from the file name (a working scene in an Open dialog). */
+  display_title?: string
   /** Catalog identity when the item came from /api/v1/assets. Never invent this. */
   asset_id?: string
   workspace_id?: string
