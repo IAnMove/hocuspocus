@@ -4,7 +4,7 @@ Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR co
 
 | Bloque | Rama | PR | Estado | Archivos (exclusivos) |
 |---|---|---|---|---|
-| J0 Prueba H3 | `docs/game-assets-trial` | — | en curso | `docs/development/GAME_ASSETS_TRIAL_2026-10-06.md` |
+| J0 Prueba H3 | `docs/game-assets-trial` | #863 | en curso (borrador) | `docs/development/GAME_ASSETS_TRIAL_2026-10-06.md` |
 | J1 Biblioteca | `feat/game-assets-1-library` | #862 | en curso (borrador) | `app/services/game_library.py`, `app/services/game_inputs.py`, `app/routers/game_library.py`, `app/shared/game_actions.json`, `app/shared/game_style_presets.json`, `tests/test_game_library.py`, `tests/test_game_inputs.py`, `tests/test_game_library_router.py`, este tablero |
 | J2 Pixel e imagen | `feat/game-assets-2-pixel` | — | en curso | `app/services/game_pixel.py`, `app/services/game_image_ops.py`, `app/services/game_tiles.py`, `tests/test_game_pixel.py`, `tests/test_game_image_ops.py`, `tests/test_game_tiles.py` |
 | J3 Fotogramas | `feat/game-assets-3-frames` | — | pendiente | `app/services/game_frames.py`, `app/services/game_sheet.py` |
