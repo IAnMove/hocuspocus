@@ -124,9 +124,12 @@ export type FlatRigResult = {
   unwipedPoses: string[]
   warnings?: Record<string, string[]>
   poses?: Record<string, { mouthLine?: FlatRigMouthLine; hints?: FlatRigHint }>
+  /** The look the rig used: the style sent over the kit's own (its last rig's, else its style preset's). */
+  style?: Record<string, number | boolean | string>
 }
 
-/** Wipe painted mouths, draw nine paper mouths and a blink, and save anchors (characters.rig.flat). */
+/** Wipe painted mouths, draw nine paper mouths and a blink, and save anchors (characters.rig.flat). Style keys left
+ * out keep the kit's look, so a warp kit stays warp. */
 export async function rigFlatCharacter(details: { workspace: string; kitId: string; baseRevision: number
   style?: Record<string, number | boolean | string>; poses?: string[]; hints?: Record<string, FlatRigHint | null> }): Promise<FlatRigResult> {
   return postJson(`/api/v1/character-kits/library/kits/${encodeURIComponent(details.kitId)}/flat-rig`, {

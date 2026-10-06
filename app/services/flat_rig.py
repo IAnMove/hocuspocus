@@ -23,6 +23,8 @@ mouth and misses a bust's shaded eyes. With ``mouthStyle: "ink"`` the painted
 mouth is kept as the rest shape and the open shapes are drawn in its own ink;
 with ``"warp"`` each pose talks with its own drawing (``flat_rig_warp``): the
 lower lip and jaw move down and the gap is inked, one set of patches per pose.
+A re-rig keeps the kit's look (the last rig's, or its style preset's) for every
+``style`` key the call leaves out, so a warp kit stays warp (``flat_rig_look``).
 
 Ported from the agent script that rigged the six "Uncanny Valley" characters.
 Only OpenCV, numpy and Pillow are needed.
@@ -46,36 +48,16 @@ from services import face_landmarks, flat_rig_warp
 from services.character_kit_library import patch_character_kit, read_character_kit_library
 from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _anchor, _paste_inside
 from services.flat_rig_ink import _ink_sprite_width, draw_ink_mouth, ink_colour
+# The rig's look lives in flat_rig_look; rig_style stays importable from here.
+from services.flat_rig_look import kit_look, rig_style
 
 MAPPING = {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small",
            "O": "round", "U": "pucker", "F": "bite", "L": "tongue"}
 CAVITY = (92, 26, 30, 255)
 TEETH, TONGUE = (250, 248, 240, 255), (222, 98, 110, 255)
 SCREEN_INK, SCREEN_CAVITY = (245, 250, 255, 255), (10, 22, 70, 255)
-STYLE_LIMITS = {"smile": (-1.0, 1.0, 0.15), "smirk": (0.0, 1.0, 0.0), "width": (0.3, 0.9, 0.62),
-                "mouth_scale": (0.4, 1.2, 0.78)}
-# paper: the painted mouth is wiped and nine paper mouths are drawn. ink: it is kept as the rest shape and the open
-# shapes are dark openings in its own ink. warp: the pose's own lower face moves (flat_rig_warp), per pose.
-MOUTH_STYLES = ("paper", "ink", "warp")
 MAX_PIXELS = 16_777_216
 _CROSS = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
-
-
-def rig_style(value: Any) -> dict[str, Any]:
-    """Mouth look: ``smile`` -1..1, ``smirk`` 0..1, ``width`` and ``mouth_scale`` (paper mouths); ``screen`` for a
-    screen face; ``mouthStyle`` ``paper`` (default), ``ink`` or ``warp``."""
-    raw = value if isinstance(value, dict) else {}
-    style: dict[str, Any] = {"screen": raw.get("screen") is True}
-    for key, (low, high, default) in STYLE_LIMITS.items():
-        number = raw.get(key, default)
-        if isinstance(number, bool) or not isinstance(number, (int, float)) or not low <= float(number) <= high:
-            raise FlatRigError("invalid_style", f"style.{key} must be a number from {low} to {high}")
-        style[key] = float(number)
-    mouth_style = raw.get("mouthStyle", "paper")
-    if mouth_style not in MOUTH_STYLES:
-        raise FlatRigError("invalid_style", "style.mouthStyle must be paper, ink or warp")
-    style["mouthStyle"] = mouth_style
-    return style
 
 
 HINT_KEYS = ("mouth", "eyes", "mouthWidth")
@@ -1469,13 +1451,14 @@ def _mouth_files(rigs: dict[str, dict[str, Any]], mouths: dict[str, Image.Image]
 
 def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revision: int,
                   style: Any = None, pose_ids: list[str] | None = None, hints: Any = None) -> dict[str, Any]:
-    """Rig the kit's base and poses, write the images to the workspace and save the kit. ``hints`` (``rig_hints``)
-    are kept in the provenance with the ones saved before, and a later rig reuses them."""
+    """Rig the kit's base and poses, write the images to the workspace and save the kit. ``style`` keys left out keep
+    the kit's look (``kit_look``). ``hints`` (``rig_hints``) are kept in the provenance with the ones saved before, and
+    a later rig reuses them."""
     library = read_character_kit_library(workspace_dir)
     kit = copy.deepcopy((library.get("kits") or {}).get(kit_id))
     if kit is None:
         raise FlatRigError("character_not_found", "Character not found", 404)
-    look = rig_style(style)
+    look = kit_look(kit, style)
     placed = _kit_hints(kit, hints)
     rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids, placed)
     mouths = _kit_mouths(rigs, look)
@@ -1512,7 +1495,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     saved = patch_character_kit(workspace_dir, kit_id, kit, base_revision=base_revision)
     return {
         "revision": saved.get("revision"), "character": saved["kits"][kit_id],
-        "review": _url(sheet, workspace), "unwipedPoses": unwiped, "warnings": warnings,
+        "review": _url(sheet, workspace), "unwipedPoses": unwiped, "warnings": warnings, "style": look,
         "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "mouthFound": rig["found"],
                          "face": "realistic" if rig["realistic"] else "cartoon", "blinks": rig["blinks"],
                          "landmarks": rig["guided"], **({"mouthLine": rig["line"]} if "line" in rig else {}),

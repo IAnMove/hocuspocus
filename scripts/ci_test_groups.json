@@ -600,6 +600,39 @@
       ]
     },
     {
+      "prefix": "app/services/flat_rig_look.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_character_styles.py"
+      ]
+    },
+    {
+      "prefix": "app/services/character_styles.py",
+      "paths": [
+        "tests/test_character_styles.py",
+        "tests/test_series_commands.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/character_styles.json",
+      "paths": [
+        "tests/test_character_styles.py",
+        "tests/test_series_commands.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/series_agent_guide.md",
+      "paths": [
+        "tests/test_character_styles.py",
+        "tests/test_series_agent_fixes.py"
+      ]
+    },
+    {
       "prefix": "app/services/secure_download.py",
       "paths": [
         "tests/test_secure_download.py",
