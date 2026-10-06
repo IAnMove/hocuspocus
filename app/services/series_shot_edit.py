@@ -212,10 +212,14 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
     """Check the merged shot like a script shot; return the stored-shot patch (only what changed) and each language
     version's new texts for this shot."""
     one = _OneShot(series, episode, shot, merged, kits, files, root)
+    languages = one.languages
+    # A version's missing voice is checked when the lines change, not when an effect is added to the shot.
+    one.languages = languages if "lines" in changed else languages[:1]
     try:
         one.check()
     except ScriptError as error:
         raise ShotEditError(str(error), problems=error.problems) from error
+    one.languages = languages
     built = one.shots()[0]
     patch: dict[str, Any] = {"id": shot["id"], **_layout_patch(shot, built, changed)}
     if "cast" in changed:

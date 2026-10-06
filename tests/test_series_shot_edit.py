@@ -204,3 +204,20 @@ def test_an_instruction_without_an_llm_and_a_render_without_changes(tmp_path):
     assert unavailable.value.status_code == 503 and unavailable.value.detail["code"] == "llm_unavailable"
     rendered = asyncio.run(post("uv", "ep2", ShotEdit(workspace="cast", shot=2, render=True, approve=False)))
     assert rendered["changed"] == [] and store.calls[-1][1]["shot_ids"] == ["e2s01"] and store.calls[-1][1]["approve"] is False
+
+
+def test_a_missing_version_voice_blocks_new_lines_but_not_an_effect():
+    series = library()
+    kits = {**KITS, "kit-gary": {"poses": {}}}  # gary has no English voice now
+
+    def edit_with(changes=None, append=None):
+        episode = series["episodesById"]["ep2"]
+        shot, _number = find_shot(episode, 2)
+        merged, changed = merge_changes(to_script(series, episode, shot), changes, append)
+        return build_patch(series, episode, shot, merged, changed, kits, FILES, None)
+
+    patch, _texts = edit_with(append={"fx": [{"kind": "confetti", "at": 1}]})
+    assert len(patch["layout2d"]["fx"]) == 2
+    with pytest.raises(ShotEditError) as voiceless:
+        edit_with(changes={"lines": [{"who": "gary", "es": "Hola.", "en": "Hi."}]})
+    assert any("gary has no english voice" in item for item in voiceless.value.problems)
