@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2718,
+      "weight": 2719,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",

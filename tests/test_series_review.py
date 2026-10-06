@@ -236,3 +236,16 @@ def test_an_approval_survives_the_browser_saving_the_project_back():
     _episode(sent)["shots"][0]["layout2d"]["cast"][0]["x"] = 56
     saved = normalize_series_project(series_put_payload(series, sent), "mp", "cast")
     assert shot_entry(_episode(saved), "s01")["plan"] == "approved"
+
+
+def test_an_edit_by_shot_number_resets_that_shots_review():
+    """series.shot.update ("edit the second shot") writes through the editor patch, so its approvals go back to pending."""
+    from services.series_shot_edit import apply_edit
+    series, _ = _apply(_series(), {"mode": "plan", "shots": [{"shotId": "s01", "plan": "approved"},
+                                                              {"shotId": "s02", "plan": "approved", "note": {"text": "más cerca"}}]})
+    moved = copy.deepcopy(_episode(series)["shots"][1])
+    moved["layout2d"]["cast"][0]["x"] = 70.0
+    edited, _report = apply_edit(series, "ep1", "s02", {"id": "s02", "layout2d": moved["layout2d"]}, {}, ["cast"], False)
+    saved = normalize_series_project(edited, "mp", "cast")
+    assert shot_entry(_episode(saved), "s02")["plan"] == "pending" and shot_entry(_episode(saved), "s02")["notes"][0]["text"] == "más cerca"
+    assert shot_entry(_episode(saved), "s01")["plan"] == "approved"
