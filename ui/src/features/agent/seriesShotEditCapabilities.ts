@@ -29,6 +29,17 @@ export interface AgentRerenderSeriesShotAction {
   confirm: true
 }
 
+/** "Vuelve a grabar la segunda línea del plano 12": one line's voice recorded now (series.shot.voice). */
+export interface AgentRecordSeriesLineAction {
+  type: 'regenerate_series_line_voice'
+  seriesId: string
+  episodeId: string
+  shot: string | number
+  line: number
+  retake: boolean
+  confirm: true
+}
+
 type ShotTarget = { workspace: string, seriesId: string, episodeId: string }
 type ShotReply = {
   shotId?: string, number?: number, changed?: string[], approvalReset?: boolean, note?: string
@@ -110,6 +121,37 @@ export async function executeSeriesShotEdit(action: AgentEditSeriesShotAction | 
   }
 }
 
+type VoiceJob = { jobId?: string, status?: string, beatId?: string, error?: string, result?: { filename?: string } }
+const VOICE_WAIT_MS = 90_000
+const VOICE_POLL_MS = 1500
+
+function lineVoiceMessage(action: AgentRecordSeriesLineAction, job: VoiceJob): string {
+  const line = `Línea ${action.line} del plano ${action.shot}`
+  if (job.status === 'completed') return `${line}: ${action.retake ? 'otra toma grabada' : 'voz grabada'} (${job.result?.filename || ''}). La toma del plano aún no la tiene: renderízalo para oírla.`
+  if (job.status === 'failed' || job.status === 'interrupted') return `${line}: no se pudo grabar (${job.error || job.status}).`
+  return `${line}: sigue grabándose en el servidor (${job.jobId}); aparecerá en el inspector del plano.`
+}
+
+const recording = (job: VoiceJob) => Boolean(job.jobId) && (job.status === 'queued' || job.status === 'running')
+
+/** Record one line now and wait for it (a minute and a half at most: a busy GPU keeps it recording in the background). */
+export async function executeSeriesLineVoice(action: AgentRecordSeriesLineAction, workspace?: string, sleep = (ms: number) => new Promise(done => setTimeout(done, ms))) {
+  const target = await activeShotTarget(action.seriesId, action.episodeId, workspace)
+  const base = `/api/v1/series/${encodeURIComponent(target.seriesId)}/episodes/${encodeURIComponent(target.episodeId)}/shots/${encodeURIComponent(String(action.shot))}/voices`
+  const response = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ workspace: target.workspace, line: action.line, retake: action.retake }) })
+  let job = await response.json() as VoiceJob & ShotReply
+  if (!response.ok) throw failure(job, 'The line could not be recorded')
+  const started = Date.now()
+  while (recording(job) && Date.now() - started < VOICE_WAIT_MS) {
+    await sleep(VOICE_POLL_MS)
+    const polled = await fetch(`/api/v1/series/voice-jobs/${encodeURIComponent(job.jobId!)}?workspace=${encodeURIComponent(target.workspace)}`)
+    if (polled.ok) job = await polled.json() as VoiceJob
+  }
+  return { message: lineVoiceMessage(action, job), metadata: job as Record<string, unknown>, jobId: job.jobId,
+    target: { kind: 'series_episode', id: target.episodeId, title: `${action.shot} · ${action.line}` } }
+}
+
 const SHOT_FIELDS = {
   series_id: { type: 'string', maxLength: 160 },
   episode_id: { type: 'string', maxLength: 160 },
@@ -150,6 +192,35 @@ export function registerSeriesShotEditCapabilities(register: typeof defineCapabi
     report: { targetKind: 'series_episode', successState: 'completed' },
     summarize(_action, outcome) { return outcome.message },
     presentation: { destination: 'series_lab', anchors: ['episode', 'shots'], replay: 'atomic' },
+  })
+  register<AgentRecordSeriesLineAction>({
+    name: 'regenerate_series_line_voice',
+    title: 'Record one line of a Series Lab shot again',
+    description: 'Record the voice of one line of a shot of the open (or named) Series episode now, with the render\'s own voice path (the character\'s voice, trimmed, checked, lip-sync cues): shot_number (#N in the episode) or shot_id, and line_number (1 = the shot\'s first line). retake=true records another take of an unchanged line with another seed and keeps the old one if it fails; otherwise a line already recorded for its text is kept. The shot\'s take is not touched: add rerender_series_shot to hear it in the take.',
+    useWhen: 'The user asks to redo, regenerate or record again the voice of one specific line of a shot ("vuelve a grabar la segunda línea del plano 12", "otra toma de voz de Inés en el plano 3").',
+    parameters: ['series_id', 'episode_id', 'shot_number', 'shot_id', 'line_number', 'retake', 'confirm'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: { type: { const: 'regenerate_series_line_voice' }, ...SHOT_FIELDS, line_number: { type: 'integer', minimum: 0, maximum: 99 },
+        retake: { type: 'boolean' }, confirm: { const: true } },
+      required: ['type', 'confirm'],
+    },
+    risk: 'compute', confirmation: 'required', progress: 'Grabando la línea en el servidor…',
+    resolve(raw) {
+      const shot = shotRef(raw)
+      const line = typeof raw.line_number === 'number' && Number.isInteger(raw.line_number) ? raw.line_number : 0
+      if (raw.confirm !== true || shot === null || line < 1) return null
+      return { type: 'regenerate_series_line_voice', seriesId: text(raw.series_id, 160), episodeId: text(raw.episode_id, 160), shot, line,
+               retake: raw.retake === true, confirm: true }
+    },
+    validate(action) { return action.confirm === true && action.line >= 1 ? [] : ['Say which line (line_number, 1 = the first) and confirm.'] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.seriesShots.voice(action, context.workspace) },
+    correlate(_action, outcome) { return outcome.target },
+    async track(_action, outcome) { return outcome },
+    report: { targetKind: 'series_episode', successState: 'completed' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'series_lab', anchors: ['review', 'lines'], replay: 'atomic' },
   })
   register<AgentRerenderSeriesShotAction>({
     name: 'rerender_series_shot',

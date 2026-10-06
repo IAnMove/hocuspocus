@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { fetchSeriesProject } from '../../api/series'
 import { useUiTranslation } from '../../i18n'
 import { useSeriesStore } from './store'
 import {
@@ -6,10 +7,15 @@ import {
   type CastMember, type ReviewFilter, type SceneGroup,
 } from './reviewModel'
 import { SeriesApprovalHeader } from './SeriesApprovalHeader'
-import { SeriesApprovalCard, type ApprovalCardActions } from './SeriesApprovalCard'
+import type { ApprovalCardActions } from './SeriesApprovalCard'
 import { useApprovalRender } from './useApprovalRender'
-import { openShotInEditor, useShotEditSession } from './shotEditSession'
-import type { SeriesEpisode, SeriesProductionMode, SeriesProject, SeriesShot, SeriesShotReviewChange } from './types'
+import { useShotEditSession } from './shotEditSession'
+import { inspectorKey, openInspectorShot, useEpisodeInspector } from './inspector/inspectorStore'
+import { SeriesShotInspector } from './inspector/SeriesShotInspector'
+import { SeriesShotTile } from './inspector/SeriesShotTile'
+import { forgetKitLibrary, useKitLibrary } from './inspector/useInspectorData'
+import type { SeriesEdits } from './inspector/SetPart'
+import type { SeriesProductionMode, SeriesProject, SeriesEpisode, SeriesShot, SeriesShotReviewChange } from './types'
 
 const MAX_CHANGES = 500
 
@@ -39,28 +45,40 @@ function SceneHeader({ group, series, approved }: { group: SceneGroup; series: S
   </header>
 }
 
-export function SeriesApprovalPanel({ workspace, series, episode, reload, updateEpisode, saveNow, onOpenFaceRig, onOpenResults }: {
-  workspace: string; series: SeriesProject; episode: SeriesEpisode; reload: () => Promise<void>
-  updateEpisode: (updater: (episode: SeriesEpisode) => SeriesEpisode) => void; saveNow: () => Promise<unknown>
-  onOpenFaceRig?: (characterId: string, poseId?: string) => void; onOpenResults?: () => void
+/**
+ * Series Lab → Validation: every shot of the episode as a tile, grouped by scene, each with Open; an opened shot shows
+ * its take and all its parts in the shot inspector. Returning from an editor lands on the same shot.
+ */
+export function SeriesApprovalPanel({ workspace, series, episode, saveNow, onOpenFaceRig, onOpenResults }: {
+  workspace: string; series: SeriesProject; episode: SeriesEpisode; saveNow: () => Promise<unknown>
+  onOpenFaceRig?: (characterId: string, poseId?: string, shotId?: string) => void; onOpenResults?: () => void
 }) {
   const { t } = useUiTranslation('seriesLab')
   const saveReview = useSeriesStore(state => state.saveReview)
   const [filter, setFilter] = useState<ReviewFilter>('all')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const render = useApprovalRender(workspace, series.id, episode.id, reload)
+  // A finished render brings its takes in without reloading the page (a reload would close the open shot).
+  const refresh = useCallback(async () => {
+    await saveNow()
+    useSeriesStore.getState().adoptRemoteSeries(await fetchSeriesProject(workspace, series.id))
+  }, [saveNow, workspace, series.id])
+  const render = useApprovalRender(workspace, series.id, episode.id, refresh)
+  const kits = useKitLibrary(workspace)
+  useEffect(() => () => forgetKitLibrary(workspace), [workspace])
   const { mode } = episodeReview(episode)
   const summary = useMemo(() => reviewSummary(episode), [episode])
   const groups = useMemo(() => groupShotsByScene(episode), [episode])
   const cast = useMemo(() => episodeCast(series, episode), [series, episode])
+  const key = inspectorKey(workspace, series.id, episode.id)
+  const inspector = useEpisodeInspector(key)
+  const open = episode.shots.find(shot => shot.id === inspector.openShotId)
   const focusShotId = useShotEditSession(state => state.focusShotId)
   useEffect(() => {
     if (!focusShotId) return
-    setFilter('all')
-    window.setTimeout(() => document.getElementById(`series-approval-${focusShotId}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 50)
+    if (episode.shots.some(shot => shot.id === focusShotId)) openInspectorShot(key, focusShotId)
     useShotEditSession.setState({ focusShotId: '' })
-  }, [focusShotId])
+  }, [focusShotId, key, episode.shots])
   const send = useCallback(async (change: Parameters<typeof saveReview>[1]) => {
     setBusy(true); setError('')
     try { return await saveReview(episode.id, change) } catch (reason) { setError((reason as Error).message); throw reason } finally { setBusy(false) }
@@ -72,12 +90,22 @@ export function SeriesApprovalPanel({ workspace, series, episode, reload, update
       quiet(send({ shots: [{ shotId: shot.id, ...(stage === 'plan' ? { plan: status } : { preview: status }), ...(take ? { attemptId: take.id } : {}) }] }))
     },
     saveNote: shot => note => send({ shots: [{ shotId: shot.id, note }] }),
-    rerender: shot => { void render.start([shot.id]) },
-    openEditor: shot => { void openShotInEditor(workspace, series, episode, shot).catch(reason => setError((reason as Error).message)) },
-    openFaceRig: onOpenFaceRig,
-    changeShot: next => updateEpisode(current => ({ ...current, shots: current.shots.map(shot => shot.id === next.id ? next : shot) })),
+    rerender: shot => { void (async () => { await saveNow(); await render.start([shot.id]) })() },
+    openFaceRig: onOpenFaceRig && ((characterId, poseId) => onOpenFaceRig(characterId, poseId, inspector.openShotId || undefined)),
+  }
+  const edits: SeriesEdits = {
+    updateSeries: useSeriesStore.getState().updateSeries, saveNow,
+    onAssetImported: useSeriesStore.getState().acceptAssetImport,
   }
   const visible = (shot: SeriesShot) => matchesFilter(filter, shot, shotReview(episode, shot.id), mode)
+  const ordered = useMemo(() => groups.flatMap(group => group.shots), [groups])
+  const visibleOrder = ordered.filter(visible).map(shot => shot.id)
+  const order = open && visibleOrder.includes(open.id) ? visibleOrder : ordered.map(shot => shot.id)
+  const close = () => {
+    const shotId = inspector.openShotId
+    openInspectorShot(key, '')
+    window.setTimeout(() => document.getElementById(`series-approval-${shotId}`)?.scrollIntoView?.({ block: 'center' }), 50)
+  }
   const approveVisible = () => {
     const shots: SeriesShotReviewChange[] = episode.shots.filter(shot => visible(shot) && shotReview(episode, shot.id).plan !== 'approved')
       .map(shot => ({ shotId: shot.id, plan: 'approved' }))
@@ -85,7 +113,14 @@ export function SeriesApprovalPanel({ workspace, series, episode, reload, update
     for (let index = 0; index < shots.length; index += MAX_CHANGES) quiet(send({ shots: shots.slice(index, index + MAX_CHANGES) }))
   }
   const setMode = (value: SeriesProductionMode) => quiet(send({ mode: value }))
-  return <div className="space-y-3 pb-10">
+  if (open) {
+    return <div className="space-y-2">
+      {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
+      <SeriesShotInspector key={open.id} workspace={workspace} series={series} episode={episode} shot={open} entry={shotReview(episode, open.id)} mode={mode}
+        inspector={key} order={order} render={render} actions={actions} edits={edits} onClose={close} onNavigate={shotId => openInspectorShot(key, shotId)} />
+    </div>
+  }
+  return <div className="@container space-y-3 pb-10">
     <SeriesApprovalHeader summary={summary} render={render} busy={busy} cast={cast} onMode={setMode} onFilter={setFilter}
       onApproveVisible={approveVisible} onOpenFaceRig={onOpenFaceRig} onOpenResults={onOpenResults} />
     {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
@@ -97,8 +132,9 @@ export function SeriesApprovalPanel({ workspace, series, episode, reload, update
       const approved = group.shots.filter(shot => matchesFilter('approved', shot, shotReview(episode, shot.id), mode)).length
       return <section key={group.sceneId} className="space-y-2">
         <SceneHeader group={group} series={series} approved={approved} />
-        <div className="grid gap-3 2xl:grid-cols-2">{shots.map(shot => <SeriesApprovalCard key={shot.id} workspace={workspace} series={series} episode={episode}
-          shot={shot} entry={shotReview(episode, shot.id)} mode={mode} renderLive={render.live || render.busy} actions={actions} saveNow={saveNow} />)}</div>
+        <div className="grid grid-cols-2 gap-2 @xl:grid-cols-3 @3xl:grid-cols-4 @6xl:grid-cols-6">{shots.map(shot => <SeriesShotTile key={shot.id} series={series}
+          shot={shot} entry={shotReview(episode, shot.id)} mode={mode} kits={kits} actions={actions}
+          unsaved={Object.keys(inspector.drafts[shot.id] || {}).length} onOpen={() => openInspectorShot(key, shot.id)} />)}</div>
       </section>
     })}
   </div>

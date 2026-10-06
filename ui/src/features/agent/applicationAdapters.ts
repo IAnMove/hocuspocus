@@ -47,7 +47,7 @@ import type {
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { executeProductionWorks } from './productionWorkCapabilities'
-import { executeSeriesShotEdit } from './seriesShotEditCapabilities'
+import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
@@ -194,6 +194,7 @@ export interface WizardApplicationAdapters {
   seriesShots: {
     edit(action: import('./seriesShotEditCapabilities').AgentEditSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
     rerender(action: import('./seriesShotEditCapabilities').AgentRerenderSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
+    voice(action: import('./seriesShotEditCapabilities').AgentRecordSeriesLineAction, workspace?: string): Promise<AdapterOutcome>
   }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string): Promise<AdapterOutcome> }
   queue: QueueAdapter
@@ -755,6 +756,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   adapters.seriesShots = {
     async edit(action, workspace) { return executeSeriesShotEdit(action, workspace) },
     async rerender(action, workspace) { return executeSeriesShotEdit(action, workspace) },
+    async voice(action, workspace) { return executeSeriesLineVoice(action, workspace) },
   }
   adapters.mediaTools = {
     async command(action, workspace) { return executeMediaTool(action, workspace) },

@@ -511,17 +511,34 @@ class SeriesNativeRender:
         if item["stage"] == "import":
             self._import(workspace, job, item, "animation_3d" if three_d else "animation_2d")
 
+    @staticmethod
+    def line_voice(series: dict, beat: dict, kits: dict, language: str) -> tuple[str, dict, str]:
+        """A line's text, its character's voice in ``language`` and the key its recording is named by."""
+        text = str(beat.get("text") or "").strip()
+        ref = kit_ref(series, beat.get("characterId", ""))
+        kit = kits.get(ref["id"]) if ref else None
+        voice = voice_for(kit, language) if kit else None
+        if not voice:
+            raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {language}")
+        return text, voice, recording_key(text, voice)
+
+    def record_line(self, workspace: str, job: dict, series: dict, beat: dict, kits: dict, *, retake: bool = False) -> dict[str, Any]:
+        """One line as ``_voices`` records it (``series_line_voice``): its recording when there is one, else a new one.
+        ``retake`` records another take under its own name (so another seed) and replaces the recording only once
+        that take is good: a failed retake leaves the old recording. The next render of the shot reuses it."""
+        text, voice, key = self.line_voice(series, beat, kits, job["language"])
+        if not retake:
+            return self._reuse(workspace, job, beat["id"], text, key) or self._record(workspace, job, beat["id"], text, voice, key)
+        stem, root = self._stem(job, beat["id"], key), self.deps.workspace_dir(workspace)
+        take = self._record(workspace, job, beat["id"], text, voice, key, stem=f"{stem[:130]}-take{uuid.uuid4().hex[:6]}")
+        _replace_with_sidecar(os.path.join(root, take["filename"]), os.path.join(root, f"{stem}.wav"))
+        return {**take, "filename": f"{stem}.wav", "retake": True}
+
     def _voices(self, workspace: str, job: dict, item: dict, series: dict, shot: dict, kits: dict) -> None:
         for beat in shot.get("dialogueBeats") or []:
-            text = str(beat.get("text") or "").strip()
-            if not text:
+            if not str(beat.get("text") or "").strip():
                 continue
-            ref = kit_ref(series, beat.get("characterId", ""))
-            kit = kits.get(ref["id"]) if ref else None
-            voice = voice_for(kit, job["language"]) if kit else None
-            if not voice:
-                raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {job['language']}")
-            key = recording_key(text, voice)
+            text, voice, key = self.line_voice(series, beat, kits, job["language"])
             done = item["lines"].get(beat["id"])
             if done and done.get("key") == key and os.path.isfile(os.path.join(self.deps.workspace_dir(workspace), done["filename"])):
                 continue
@@ -531,8 +548,13 @@ class SeriesNativeRender:
                 raise NativeRenderError("cancelled", "Cancelled")
 
     @staticmethod
-    def _stem(job: dict, beat_id: str, key: str) -> str:
-        return f"ln-{job['episodeId']}-{beat_id}-{key}"[:150]
+    def recording_stem(episode_id: str, beat_id: str, key: str) -> str:
+        """The file name (without ``.wav``) a line's recording is kept under, reused by every render of it."""
+        return f"ln-{episode_id}-{beat_id}-{key}"[:150]
+
+    @classmethod
+    def _stem(cls, job: dict, beat_id: str, key: str) -> str:
+        return cls.recording_stem(job["episodeId"], beat_id, key)
 
     def _reuse(self, workspace: str, job: dict, beat_id: str, text: str, key: str) -> dict[str, Any] | None:
         """The recording an earlier render made of the same line in the same voice (its file name says so)."""
@@ -550,9 +572,9 @@ class SeriesNativeRender:
         cues = self._cues(workspace, filename, duration, text, job["language"])
         return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0, "reused": True, **cues}
 
-    def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str) -> dict[str, Any]:
+    def _record(self, workspace: str, job: dict, beat_id: str, text: str, voice: dict, key: str, stem: str | None = None) -> dict[str, Any]:
         root = self.deps.workspace_dir(workspace)
-        stem = self._stem(job, beat_id, key)
+        stem = stem or self._stem(job, beat_id, key)
         final, best_path = os.path.join(root, f"{stem}.wav"), os.path.join(root, f"{stem}.best.wav")
         best: dict[str, Any] | None = None
         try:

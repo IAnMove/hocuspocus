@@ -55,11 +55,13 @@ export function SeriesLabPanel() {
     setFocusCharacterId(room === 'characters' ? id : ''); setFocusLocationId(room === 'locations' ? id : ''); setCanonTab(room); setTab('canon')
   }
   const configureCharacter = (id: string) => { void runAction(() => openSeriesCharacterEditor(workspace, activeSeriesId, id)) }
-  const openFaceRig = (id: string, poseId?: string) => { void runAction(() => openSeriesCharacterEditor(workspace, activeSeriesId, id, { poseId })) }
+  const openFaceRig = (id: string, poseId?: string, shotId?: string) => { void runAction(() => openSeriesCharacterEditor(workspace, activeSeriesId, id, { poseId, shotId })) }
   const returnSource = useSeriesCharacterReturn(state => state.source)
   useEffect(() => {
     if (returnSource?.workspace !== workspace || returnSource.seriesId !== activeSeriesId) return
-    setFocusCharacterId(returnSource.characterId); setCanonTab('characters'); setTab('canon')
+    // From a shot open in the Validation inspector: back to that shot (the inspector keeps it open).
+    if (returnSource.shotId) setTab('approval')
+    else { setFocusCharacterId(returnSource.characterId); setCanonTab('characters'); setTab('canon') }
     useSeriesCharacterReturn.setState({ source: null })
   }, [returnSource, workspace, activeSeriesId])
   useEffect(() => listenForAgentSeriesSection(setTab), [])
@@ -213,7 +215,7 @@ export function SeriesLabPanel() {
           {tab === 'canon' && <SeriesCanonPanel series={series} workspace={workspace} update={updateSeries} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAssetImported={acceptAssetImport} initialTab={canonTab} focusCharacterId={focusCharacterId} focusLocationId={focusLocationId} />}
           {tab === 'episode' && (episode ? <SeriesEpisodePanel workspace={workspace} series={series} episode={episode} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} reload={reload} onAdaptToComic={adaptEpisodeToComic} /> : <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-6 text-center text-xs text-violet-200"><button className={primaryButton} onClick={createEpisodeAction}><Plus size={13} />{t('library.createFirstEpisode')}</button></div>)}
           {tab === 'shots' && (episode ? <SeriesShotsPanel focusShotId={focusShotId} workspace={workspace} series={series} episode={episode} updateSeries={updateSeries} updateEpisode={updater => updateEpisode(episode.id, updater)} replaceSeries={adoptRemoteSeries} saveNow={saveNow} onAcknowledgeLipSync={async () => { updateSeries(current => ({ ...current, bestEffortLipSyncAcknowledged: true })); await saveNow() }} onRender={(mode, ids) => void startRender(mode, ids)} onOpenReferences={openReferences} onOpenEpisode={() => setTab('episode')} onConfigureCharacter={configureCharacter} onReviewShot={openReviewShot} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
-          {tab === 'approval' && (episode ? <SeriesApprovalPanel workspace={workspace} series={series} episode={episode} reload={reload} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} onOpenFaceRig={openFaceRig} onOpenResults={() => setTab('review')} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
+          {tab === 'approval' && (episode ? <SeriesApprovalPanel workspace={workspace} series={series} episode={episode} saveNow={saveNow} onOpenFaceRig={openFaceRig} onOpenResults={() => setTab('review')} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
           {tab === 'review' && (episode ? <SeriesReviewPanel requestedShotId={reviewShotId} onOpenReferences={openReferences} onOpenShots={openShots} workspace={workspace} series={series} episode={episode} job={renderJob} setJob={setRenderJob} reload={reload} startRender={startRender} updateEpisode={updater => updateEpisode(episode.id, updater)} saveNow={saveNow} /> : <p className="text-xs text-text-muted">{t('library.createEpisodeFirst')}</p>)}
         </>}
       </div>
