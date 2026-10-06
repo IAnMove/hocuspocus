@@ -352,6 +352,9 @@ def _shot_effects(screen_fx: list[dict[str, Any]] | None) -> list[dict[str, Any]
     return effects
 
 
+shot_effects = _shot_effects
+
+
 def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list[dict[str, Any]],
            error: Callable[..., Exception], effects: list[dict[str, Any]]) -> dict[str, Any]:
     """What the length patch also sets: retiming, the look, the scene's sound, the screen effects and the objects."""
@@ -407,6 +410,29 @@ def _talk(call: Callable, workspace: str, stem: str, scene_id: str, revision: in
     return talked["scene"]["revision"]
 
 
+def scene_sound(workspace: str, tracks: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """A shot's ambience, stinger and music (``series_shot_plan.sound_tracks``) as the scene's own ``scene-*`` tracks."""
+    return [{"id": f"scene-{track['id']}", "audio": f"/api/v1/file/{quote(str(track['filename']))}?workspace={quote(workspace)}",
+             "start": round(float(track.get("startTime") or 0), 3), "gain": round(max(0.0, min(1.0, float(track.get("volume", 1)))), 3)}
+            for track in tracks or []]
+
+
+def open_shot_scene(call: Callable, workspace: str, stem: str, shot: dict[str, Any], duration: float, error: Callable[..., Exception], *,
+                    root: str | None = None, sound: list[dict[str, Any]] | None = None, effects: list[dict[str, Any]] | None = None,
+                    lines: list[dict[str, Any]] | None = None, talking: set[str] | None = None) -> dict[str, Any]:
+    """The shot's scene before anyone talks: its template (or saved scene) instantiated, with the shot's length, look,
+    sound, screen effects, objects and voice-over. Returns the working scene (``sceneId``, ``revision``, ``document``);
+    ``stem`` names the intents, so the same request replays."""
+    config = normalize_scene3d(shot.get("scene3d")) or {}
+    scene = _ok(call("world3d.scene.instantiate", {"version": 1, "intent_id": f"{stem}-new", "input": {
+        "workspace": workspace, "template_id": _template(call, workspace, config, error)}}), "instantiate 3D scene", error)["scene"]
+    _check_carriers(config, scene.get("document"), talking or set(), error)
+    return _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
+        "workspace": workspace, "scene_id": scene["sceneId"], "base_revision": scene["revision"], "duration": round(duration, 3),
+        **_setup(workspace, root, config, sound or [], error, effects or []), **_voice_over(workspace, lines or [], config)}}),
+        "set 3D length", error)["scene"]
+
+
 def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any], lines: list[dict[str, Any]], duration: float,
                 kits: dict[str, Any], series_characters: dict[str, str], error: Callable[..., Exception],
                 tracks: list[dict[str, Any]] | None = None, root: str | None = None,
@@ -419,21 +445,14 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     (``series_shot_extras.fx_cues``), drawn over the 3D frame like over a 2D one.
     """
     config = normalize_scene3d(shot.get("scene3d")) or {}
-    sound = [{"id": f"scene-{track['id']}", "audio": f"/api/v1/file/{quote(str(track['filename']))}?workspace={quote(workspace)}",
-              "start": round(float(track.get("startTime") or 0), 3), "gain": round(max(0.0, min(1.0, float(track.get("volume", 1)))), 3)}
-             for track in tracks or []]
+    sound = scene_sound(workspace, tracks)
     # Intents carry a digest of what was asked: a resumed job replays them, a changed take gets new ones.
     effects = _shot_effects(screen_fx)
     digest = hashlib.sha1(repr((config, round(duration, 3), [(line["filename"], line["start"]) for line in lines], sound, effects)).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
-    scene = _ok(call("world3d.scene.instantiate", {"version": 1, "intent_id": f"{stem}-new", "input": {
-        "workspace": workspace, "template_id": _template(call, workspace, config, error)}}), "instantiate 3D scene", error)["scene"]
-    scene_id = scene["sceneId"]
-    _check_carriers(config, scene.get("document"), _talking(config, lines, series_characters), error)
-    revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
-        "workspace": workspace, "scene_id": scene_id, "base_revision": scene["revision"], "duration": round(duration, 3),
-        **_setup(workspace, root, config, sound, error, effects), **_voice_over(workspace, lines, config)}}),
-        "set 3D length", error)["scene"]["revision"]
+    scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
+                            talking=_talking(config, lines, series_characters))
+    scene_id, revision = scene["sceneId"], scene["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]
         kit_id = series_characters.get(entry["characterId"])

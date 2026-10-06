@@ -32,6 +32,8 @@ class ShotEdit(BaseModel):
     render: bool = False
     approve: bool = True
     produce: bool = False
+    # Series Lab merges the edit into its open copy: the stored shot, the episode's review and language versions.
+    stored: bool = False
 
 
 def _takes(shot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -137,6 +139,9 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
         reply = {"shotId": shot["id"], "number": outcome["number"], "changed": outcome["changed"],
                  "approvalReset": outcome["approvalReset"], "missingLines": outcome["missingLines"],
                  "revision": stored.get("revision"), "shot": shot_view(stored, episode, shot, outcome["number"]), **told}
+        if body.stored:
+            reply["stored"] = {"episodeId": episode_id, "episodeUpdatedAt": episode.get("updatedAt"), "shot": shot,
+                               "review": episode.get("review"), "languageVersions": episode.get("languageVersions")}
         return {**reply, **after_edit(body, series_id, episode_id, shot)}
 
     def render_only(body: ShotEdit, series_id: str, episode_id: str) -> dict[str, Any]:

@@ -319,6 +319,15 @@ other languages update those versions. `check: true` only checks; `render: true`
 and the workspace files (the reply's `instruction` says what it wrote). Use it instead of sending the whole script
 again for a one-shot fix. The Wizard does the same with `edit_series_shot` ("edita el quinto plano y ponle X").
 
+One line's voice, without rendering the shot: `series.shot.voices {…, shot}` lists each line with its recording
+(the `ln-*.wav` the next render reuses: `recorded`, `url`, `room`, and `newerThanTake` when it was recorded after the
+shot's latest take). `series.shot.voice {…, shot, line}` (`line` is the beat id or its number in the shot, 1 = the
+first) records it now with the render's own path, as a job you follow with `series.shot.voice.status`. A line already
+recorded with that text and voice is kept; `retake: true` records another take with another seed and replaces the
+recording only once it is good. Change the text first with `series.shot.update` (`lines`), record the line, listen to
+it, then render the shot (`render: true`) to hear it in the take; the render reuses the recording. Nothing records
+while the episode renders on the server. The Wizard does it with `regenerate_series_line_voice`.
+
 ## Media steps inside HocusPocus
 
 Do these in the app, never with scripts: every file they make has a `.meta.json` that names its source and tool, so
