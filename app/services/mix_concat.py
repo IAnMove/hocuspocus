@@ -175,8 +175,17 @@ def driving_soundtrack_bound(
     return max(0.1, span) + max(0.0, float(slack_sec))
 
 
+def ffprobe_for(ffmpeg_bin: str) -> str:
+    """The ffprobe beside ``ffmpeg_bin``: only the program's own name changes (``ffmpeg`` → ``ffprobe``, keeping a
+    ``.exe``); a folder whose name contains "ffmpeg" is left alone."""
+    folder, name = os.path.split(ffmpeg_bin)
+    stem, ext = os.path.splitext(name)
+    probe = ("ffprobe" + stem[len("ffmpeg"):] if stem.lower().startswith("ffmpeg") else "ffprobe") + ext
+    return os.path.join(folder, probe) if folder else probe
+
+
 def probe_duration_seconds(path: str, ffmpeg_bin: str = "ffmpeg") -> float | None:
-    ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
+    ffprobe_bin = ffprobe_for(ffmpeg_bin)
     try:
         result = subprocess.run(
             [
@@ -201,7 +210,7 @@ def probe_has_audio(path: str, ffmpeg_bin: str = "ffmpeg") -> bool:
     is missing, fall back to ffmpeg stderr (``Audio:``) before assuming
     a stream is present.
     """
-    ffprobe_bin = ffmpeg_bin.replace("ffmpeg", "ffprobe")
+    ffprobe_bin = ffprobe_for(ffmpeg_bin)
     try:
         probe = subprocess.run(
             [
