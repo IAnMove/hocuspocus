@@ -71,6 +71,46 @@ the characters without touching them. Where no off-screen canvas exists, grain a
 canvas draw nothing. A world-space `glitch` (a hologram-like world SFX) is a different
 effect that keeps its own look.
 
+### Light for dark, painted frames
+
+`shockwave`, `shield` and `embers` are drawn straight on the frame with additive light
+(`lighter`), in Video 2D, Series fx, Video 3D sfx and `screenBackdrop`. In 2D overlays
+`shockwave` and `shield` no longer film their 3D world sprite: that showed a ground ring
+seen from the sprite camera (a flat ellipse) and clipped its overdriven colour channel by
+channel, so a gold turned lemon-green. Every layer keeps the hue of `color`: the soft
+glows are the colour at alphas that stay below saturation, their thin edges a deeper
+shade of it (a faint gold over a blue night stays gold, not grey), and only the cores
+whiten. The world kinds of the same names in `worldSfx` keep their 3D look.
+
+| Effect | What it does | Fields |
+| --- | --- | --- |
+| `shockwave` | A ring of light from `x`/`y`. A white-hot flash with a thin horizontal flare at the start (gone in about half a second); a front that eases out (fast, then slowing) and dims to nothing at `end`, made of a long soft trail of lit air, a band of light, a glowing line and a thin hot core, uneven along the ring (three layers of smooth noise slide along it, so it is never a drawn circle) with brighter patches and strands; two fainter, softer echoes 7 % and 15 % of the cue behind it; sparks it throws off that drift on more slowly and dim, a few as four-point glints. | `size` its reach (the front ends half the size from the centre), `intensity` the light. |
+| `shield` | A dome of light around someone (a force field, a holy aura), a little taller than wide: a see-through body brighter toward the rim (never more than 25 % light), a soft rim with an uneven bright line drifting round it, a glow around it that is stronger above, slow shimmer and light ripples rising inside, a highlight high on one side, and motes drifting up through it. It swells in over the first second, breathes about every 3.5 s and fades out in the last half second. | `x`/`y` its centre, `size` its height, `intensity` the light on a square-root curve (0.4 still reads). |
+| `embers` | Sparks rising from the bottom of the cue box and drifting on curved paths as they cool: near white, then `color`, then a darker glow of it; each flickers and leaves a streak about one frame long. | `x`/`y`/`size` the box, `intensity` how many. |
+
+`stars` and `bubbles` take their place across the box from their own random number:
+one shared with their phase lined them up on diagonals. `smoke` is a column of puffs
+broken into lumps lit from above (darker undersides) that swell, turn and drift on a slow
+wind, and the flames of `anime_aura` fade in from the bottom of their card instead of
+ending on a straight cut.
+
+### Beams from a point: `from`
+
+A `laser` or `lightning` cue (catalog entries with `"aim": true`) can start at `from` and
+run to its `x`/`y`, where it lands; `rotation` is then not used. `from: {x, y}` is a point
+in % of the frame. `from: {layerId, x, y}` is a point in % of that layer's picture: the
+Video 2D painter places it where the layer is drawn at that frame (its motion, the camera
+push, the contained, filled or covered fit of the picture and its rotation), so a beam
+leaves a rifle's muzzle on a cutout wherever it stands. Video 2D has no mirrored layers: a
+cutout facing the other way is its own pose image, with its own point. Where no layer can
+be placed (a Video 3D frame, or a layer that is not in the scene) the cue is drawn across
+`x`/`y` as one without `from`. Both values may lie up to half a picture outside it
+(-50–150). A Series shot writes `"from": {"cast": 0, "point": [95, 46]}` in `layout2d.fx`
+(`cast`: an index in the shot's cast or a character id) and the shot compiler turns it
+into the cast member's pose layer; `{"point": [70, 40]}` is a point of the frame, the only
+form a Video 3D shot keeps. `scenes.effects.apply` and `screenFx` of `world3d.scene.patch`
+take `from` too; any other kind refuses it.
+
 Video 3D can also paint cues behind the world: `screenBackdrop`
 (`{"color": "#1c2f86", "sfx": [<cue>, ...]}`) is a flat colour plus the same cues,
 drawn as the frame background, so radial `speedlines` there are focus lines behind

@@ -15,8 +15,11 @@ spot when a tighter framing zooms and pans the background; ``scale`` is a fracti
 frame with a frame-sized image). The Video 2D compiler (``ui/scripts/seriesShot.ts``) gives every layer, and the base
 background, its share of the camera push by depth: far layers grow and move less than the cast, near ones more.
 ``drift`` (frame pixels per second, negative to the left) slides a layer on its own, for fog or smoke; give it a
-``scale`` above 1 so its edge stays out of the frame. A malformed layer is refused, not dropped: a missing pillar
-would change the picture.
+``scale`` above 1 so its edge stays out of the frame. A video layer plays on its own clock when it has any of
+``start`` (seconds into the clip at the shot's first frame), ``speed`` (0.1-4) and ``loop``: ``"loop"`` (start again,
+the default), ``"hold"`` (keep the last frame) or ``"pingpong"`` (back and forth, so a short clip never visibly
+restarts); without them it loops from its first frame in every shot, as before. A malformed layer is refused, not
+dropped: a missing pillar would change the picture.
 """
 from __future__ import annotations
 
@@ -30,7 +33,11 @@ VIDEO_SUFFIXES = (".mp4", ".webm", ".mov", ".m4v")
 KEYS = ("layers", "castDepth")
 # Default depth: just behind the cast's floor plane, or close to the lens in front of it.
 _DEPTH = {False: 0.3, True: 0.9}
-_LIMITS = (("depth", 0, 1), ("opacity", 0, 1), ("x", -50, 150), ("y", -50, 150), ("scale", 0.05, 4), ("drift", -400, 400))
+_LIMITS = (("depth", 0, 1), ("opacity", 0, 1), ("x", -50, 150), ("y", -50, 150), ("scale", 0.05, 4), ("drift", -400, 400),
+           ("start", 0, 3600), ("speed", 0.1, 4))
+LOOPS = ("loop", "hold", "pingpong")
+# How a video layer plays (``seriesShot.ts`` gives a video with any of them its own clock); left out, nothing changes.
+PLAYBACK = ("start", "loop", "speed")
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -56,7 +63,7 @@ def _source(value: dict[str, Any], label: str) -> tuple[str, str]:
 def layer_entry(value: Any, label: str) -> dict[str, Any]:
     """One layer with its defaults filled in; unknown keys are dropped, a bad value is refused."""
     if not isinstance(value, dict):
-        raise ValueError(f"{label} must be an object {{assetId | file, depth, front, opacity, x, y, scale, drift}}")
+        raise ValueError(f"{label} must be an object {{assetId | file, depth, front, opacity, x, y, scale, drift, start, loop, speed}}")
     key, source = _source(value, label)
     if value.get("front") is not None and not isinstance(value["front"], bool):
         raise ValueError(f"{label}.front must be true or false")
@@ -71,6 +78,10 @@ def layer_entry(value: Any, label: str) -> dict[str, Any]:
         entry[name] = number
     if not entry.get("drift"):
         entry.pop("drift", None)
+    if value.get("loop") is not None:
+        if value["loop"] not in LOOPS:
+            raise ValueError(f"{label}.loop must be one of {', '.join(LOOPS)}")
+        entry["loop"] = value["loop"]
     return entry
 
 

@@ -38,6 +38,14 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, allow_inf_nan=False)
 
 
+class FxOrigin(Strict):
+    """Where a laser or lightning cue starts: x/y in % of the frame or, with layerId, in % of that layer's picture (the
+    point follows the layer). The beam runs from there to the cue's x/y."""
+    x: float = Field(ge=-50, le=150)
+    y: float = Field(ge=-50, le=150)
+    layerId: str | None = Field(default=None, min_length=1, max_length=160)
+
+
 class FxCue(Strict):
     id: str = Field(min_length=1, max_length=160)
     kind: str
@@ -53,11 +61,14 @@ class FxCue(Strict):
     seed: int = Field(default=1, ge=1, le=1000000)
     sound: bool = False
     volume: float = Field(default=.25, ge=0, le=1)
+    origin: FxOrigin | None = Field(default=None, alias='from')
 
     @model_validator(mode='after')
     def valid_preset(self):
         if self.kind not in PRESETS or self.end <= self.start:
             raise ValueError('Use a catalog effect and an end later than start')
+        if self.origin and not PRESETS[self.kind].get('aim'):
+            raise ValueError('from starts a beam: use it on a laser or lightning cue')
         self.color = self.color or PRESETS[self.kind]['color']
         # An effect with its own scale or placement has its own defaults (code rain: glyph height
         # in %; light rays: where they come from and where they point).
@@ -65,6 +76,10 @@ class FxCue(Strict):
             if field not in self.model_fields_set and field in PRESETS[self.kind]:
                 setattr(self, field, PRESETS[self.kind][field])
         return self
+
+    def dump(self) -> dict:
+        """The cue as a document stores it: ``from`` by its name, and only when it is set."""
+        return self.model_dump(by_alias=True, exclude_none=True)
 
 
 class DocumentInput(Strict):
@@ -188,7 +203,7 @@ class SpeechPrepare(DocumentInput):
 OPERATIONS = {
     'scenes.speech.capabilities': (Strict, 'Read the shared UI/MCP/Wizard engine policy, CPU phoneme status, Rhubarb and local vocal-isolation availability. No model downloads or inference.'),
     'scenes.effects.catalog': (Strict, f'List {len(CATALOG)} screen overlays plus world-space kinds in result.worldKinds (portal, magic_circle, summoning_gate, lightning, energy_beam, laser, energy_orb, anime_aura, arcane_missiles, shockwave, smoke, sparks, explosion, fire, rain, snow, fog, shield, tornado, splash, dust, ice_burst, black_hole, media_portal). Screen uses percent; world uses meters. Retro looks (psx, vhs, crt, consoles) are screen-only; the cinematic grades (candlelight, vignette, film_grain, light_rays, glitch, canvas) cover the whole frame. No AI generation.'),
-    'scenes.effects.apply': (EffectsApply, 'Return an editable 2D/3D document with timed SFX. Screen cues go to sfx; worldCues go to worldSfx on Video3D only. Matching IDs replace in place. No save or export.'),
+    'scenes.effects.apply': (EffectsApply, 'Return an editable 2D/3D document with timed SFX. Screen cues go to sfx; worldCues go to worldSfx on Video3D only. Matching IDs replace in place. A laser or lightning cue (catalog aim: true) may start at from {x, y} in % of the frame, or {layerId, x, y} in % of that layer\'s picture (it follows the layer, Video 2D only), and runs to its x/y. No save or export.'),
     'scenes.effects.showcase': (EffectsShowcase, f'Return a reusable SFX showcase: all effects {ALL_SECONDS} seconds, collection anime {ANIME_SECONDS} seconds, or collection retro {RETRO_SECONDS} seconds. Retains actors/camera and replaces only SFX. No save or export.'),
     'scenes.speech.prepare': (SpeechPrepare, 'Same lip-sync analysis as the editor and audio.mouth_cues: engine=auto prefers installed CPU phonemes, otherwise reports Rhubarb fallback. Optional engine=phoneme or rhubarb, exact text, language and isolate_vocals. Attach source-clock cues to an exact 3D speaker/clip, preserving audio and face calibration. No downloads, voice generation, save or export.'),
 }
@@ -215,18 +230,18 @@ def _effects(value):
         presets = [item for item in CATALOG if value.collection == 'all' or item['collection'] == value.collection]
         document['duration'] = max(document['duration'], len(presets) * 3)
         cues = [FxCue(id=f"showcase-{item['id']}", kind=item['id'], start=i * 3, end=i * 3 + 2.8,
-                      size=item.get('size', 95), seed=i + 17, sound=value.sound, label=item['id'].replace('speedlines', 'speed lines').title()).model_dump() for i, item in enumerate(presets)]
+                      size=item.get('size', 95), seed=i + 17, sound=value.sound, label=item['id'].replace('speedlines', 'speed lines').title()).dump() for i, item in enumerate(presets)]
         document['sfx'] = cues
         return document
     # `replace` only rewrites the tracks present in the request. A screen-only
     # apply must keep worldSfx; a world-only apply must keep overlays.
     if value.cues or (value.replace and not value.worldCues):
-        current = [] if value.replace else [FxCue.model_validate(cue).model_dump() for cue in document.get('sfx', [])]
+        current = [] if value.replace else [FxCue.model_validate(cue).dump() for cue in document.get('sfx', [])]
         entries = {cue['id']: cue for cue in current}
         for cue in value.cues:
             if cue.end > document['duration']:
                 raise ValueError('Effect timing exceeds the scene duration')
-            entries[cue.id] = cue.model_dump()
+            entries[cue.id] = cue.dump()
         if len(entries) > 64:
             raise ValueError('Maximum 64 effects per scene')
         document['sfx'] = list(entries.values())

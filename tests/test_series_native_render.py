@@ -191,6 +191,27 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert all("cues" not in line for item in public_job(done)["items"] for line in item["lines"].values())
 
 
+def test_the_compiler_gets_each_pose_with_its_cut_edges_and_each_grounded_prop_measured(tmp_path, monkeypatch):
+    from PIL import Image, ImageDraw
+    bust = Image.new("RGBA", (400, 800))
+    ImageDraw.Draw(bust).rectangle((0, 400, 299, 799), fill=(90, 60, 40, 255))
+    bust.save(tmp_path / "k.png")
+    alien = Image.new("RGBA", (100, 200))
+    ImageDraw.Draw(alien).rectangle((40, 10, 60, 179), fill=(120, 120, 140, 255))
+    alien.save(tmp_path / "alien.png")
+    data = library()
+    data["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][0]["layout2d"] = {
+        "props": [{"file": "alien.png", "x": 30, "y": 50, "scale": 0.7, "ground": True}]}
+    monkeypatch.setitem(globals(), "library", lambda: data)
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    assert finished(render, render.start("cast", "uv", "ep1", approve=True)["jobId"], tmp_path)["status"] == "completed"
+    first = compiled[0]
+    assert first["shot"]["props"][0]["ground"] == {"width": 100, "height": 200, "bottom": 0.9}
+    assert first["kits"]["kit-kevin"]["base"]["cut"] == {"left": [[0.5, 1.0]], "bottom": [[0.0, 0.75]]}
+    assert "cut" not in render.deps.read_kits("cast")["kit-kevin"]["base"], "the kit library is not changed"
+
+
 def test_takes_keep_their_render_inputs_and_only_changed_shots_are_out_of_date(tmp_path):
     tools, compiled = Tools(tmp_path), []
     render = service(tmp_path, tools, compiled)

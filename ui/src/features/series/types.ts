@@ -154,6 +154,8 @@ export interface SeriesDialogueBeat {
   text: string
   emotion: string
   delivery: string
+  /** The room this line alone is heard in, on screen or off (`none` keeps it dry); else the shot's, for its cast. */
+  voiceRoom?: SeriesVoiceRoom
 }
 
 export interface SeriesScene {
@@ -388,7 +390,8 @@ export type SeriesVoiceRoom = 'none' | 'small_room' | 'room' | 'hall' | 'cathedr
 /**
  * Sound every shot gets without the script naming it. `ambienceMode` `shot` (default) mixes the location's ambience
  * into each shot; `episode` leaves it out of the shots and the assembly lays one continuous bed per location run.
- * `roomByLocation` makes the voices sound like the place; a shot's `layout2d.voiceRoom` overrides it.
+ * `roomByLocation` makes the voices of the people in a shot sound like the place; a shot's `layout2d.voiceRoom`
+ * overrides it and a line's `voiceRoom` overrides both.
  */
 export interface SeriesSoundDesign {
   stinger?: SeriesSoundCue

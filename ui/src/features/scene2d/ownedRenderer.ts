@@ -12,7 +12,7 @@ import { mixFxAudio } from '../sceneFx/mix'
 import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
-import { sceneProgressFromSeconds, sceneTimeToLayerTime } from '../../lib/sceneTimeline'
+import { sceneProgressFromSeconds, sceneVideoTime } from '../../lib/sceneTimeline'
 import { FrameAccumulator } from '../scene3d/exportQuality.ts'
 import { qualityPaintSize, qualitySampleTimes, type QualityPlan } from './qualityFrame.ts'
 
@@ -64,9 +64,7 @@ async function syncVideos(current: AnimatorScene, seconds: number) {
   for (const layer of current.layers) {
     const element = media.get(layer.id)
     if (layer.type !== 'video' || !(element instanceof HTMLVideoElement) || !(element.duration > 0)) continue
-    const layerTime = sceneTimeToLayerTime(layer, seconds)
-    const finalFrame = Math.max(0, element.duration - 1 / fps)
-    await seek(element, layer.animation.loop ? layerTime % element.duration : Math.min(finalFrame, layerTime))
+    await seek(element, sceneVideoTime(layer, seconds, element.duration, fps))
   }
 }
 

@@ -85,8 +85,10 @@ _SCREEN_FX_NUMBERS = {"start": (0, 600), "end": (0, 600), "x": (0, 100), "y": (0
                       "volume": (0, 1), "rotation": (-180, 180)}
 
 
-def _screen_fx_kinds() -> frozenset:
-    return frozenset(item["id"] for item in json.loads((_ROOT / "app/shared/scene_effects.json").read_text(encoding="utf-8")))
+def _screen_fx_kinds(aimed: bool = False) -> frozenset:
+    """The screen effect kinds, or with ``aimed`` the beams a cue can start at ``from`` (laser, lightning)."""
+    catalog = json.loads((_ROOT / "app/shared/scene_effects.json").read_text(encoding="utf-8"))
+    return frozenset(item["id"] for item in catalog if not aimed or item.get("aim"))
 
 
 def _set_screen_fx(document: dict, cues) -> None:
@@ -119,7 +121,19 @@ def _screen_fx_entry(index: int, cue, kinds: frozenset) -> dict:
         entry["color"] = cue["color"]
     if isinstance(cue.get("sound"), bool):
         entry["sound"] = cue["sound"]
+    if cue.get("from") is not None:
+        entry["from"] = _screen_fx_origin(cue, refuse)
     return entry
+
+
+def _screen_fx_origin(cue: dict, refuse) -> dict:
+    """A beam's (laser, lightning) ``from``: a point of the frame it runs from to the cue's x/y."""
+    origin = cue["from"]
+    if cue["kind"] not in _screen_fx_kinds(aimed=True):
+        raise refuse(".from starts a beam: use it on a laser or lightning")
+    if not isinstance(origin, dict) or any(type(origin.get(key)) not in (int, float) or not -50 <= origin[key] <= 150 for key in ("x", "y")):
+        raise refuse(".from must be {x, y}, each -50-150 (% of the frame)")
+    return {"x": round(float(origin["x"]), 3), "y": round(float(origin["y"]), 3)}
 
 
 VOICE_OVER_PREFIX = "talk-voiceover-"

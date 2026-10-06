@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
-import { blinkTimes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, type ShotSpec } from '../scripts/seriesShot.ts'
+import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
+import { blinkTimes, bodyKeyframes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
 
 const STATES = ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
 const asset = (id: string, kind: 'image' | 'overlay' = 'overlay', size?: { width: number; height: number }): CharacterKitAsset => ({
@@ -96,6 +97,39 @@ test('entering characters hop in; panic shakes; off-screen lines do not move mou
   assert.deepEqual(scene.dialogueBeats![0].mouthLayerIds, [])
 })
 
+test('a walking entrance lands on every step, rises mid-step and sways to alternate sides', () => {
+  const rest = { x: 60, y: 70, scale: 0.5 }
+  const enter = { fromX: -15, start: 0.5, end: 3.5, gait: 'walk' as const, step: 0.6, sway: 1.5 }
+  const frames = bodyKeyframes('monk', rest, 6, [], 'still', enter)
+  const at = (time: number) => frames.find(frame => Math.abs(frame.time - time) < 1e-6)!
+  assert.deepEqual([frames[0].time, frames[0].x, frames[0].curve], [0, -15, 'hold'], 'off screen until the walk starts')
+  for (let step = 0; step <= 5; step++) {
+    const footfall = at(0.5 + 0.6 * step)
+    assert.equal(footfall.y, 70, `down on footfall ${step}`)
+    assert.equal(footfall.rotation, 0)
+    assert.equal(footfall.x, Math.round((-15 + 75 * step / 5) * 1000) / 1000, 'at an even pace')
+  }
+  const peaks = [0, 1, 2, 3, 4].map(step => at(0.8 + 0.6 * step))
+  assert.ok(peaks.every(peak => peak.y === Math.round((70 - WALK_BOB * 0.5) * 1000) / 1000), 'up mid-step')
+  assert.deepEqual(peaks.map(peak => peak.rotation), [1.5, -1.5, 1.5, -1.5, 1.5], 'leaning to alternate sides')
+  const walking = frames.filter(frame => frame.time >= 0.5 && frame.time <= 3.5)
+  assert.ok(walking.every((frame, index) => index === 0 || frame.x > walking[index - 1].x), 'never stops on the way in')
+  assert.equal(at(3.5).x, 60, 'arrives on its mark')
+  const still = bodyKeyframes('monk', rest, 6, [], 'still', { ...enter, sway: 0 })
+  assert.ok(still.every(frame => frame.rotation === 0), 'sway 0 walks upright')
+})
+
+test('a compiled walk bobs between the frames too', () => {
+  const scene = compileSeriesShot(kits, shot({ duration: 4, cast: [{ kitId: 'kevin', x: 50, motion: 'still',
+    enter: { fromX: -15, start: 0, end: 2, gait: 'walk', step: 0.5, sway: 1.5 } }], lines: [] }))
+  const pose = scene.layers.find(layer => layer.id.includes('kevin') && layer.type === 'image' && !layer.faceBinding)!
+  const sample = (time: number) => evaluateSceneLayer(pose, time)
+  const rest = sample(2).y
+  assert.ok(Math.abs(sample(0.5).y - rest) < 1e-6 && Math.abs(sample(1).y - rest) < 1e-6, 'feet down on 0.5 s and 1 s')
+  assert.ok(sample(0.25).y < rest - 0.5 && sample(0.75).y < rest - 0.5, 'up between them')
+  assert.ok(sample(0.125).y < rest && sample(0.125).y > sample(0.25).y, 'rising, not jumping')
+})
+
 test('a perched character sits on its prop, just in front of it, in every framing', () => {
   const desk = { source: '/api/v1/file/desk.png?workspace=cast', width: 808, height: 246 }
   for (const framing of ['wide', 'two', 'medium', 'close'] as const) {
@@ -142,4 +176,18 @@ test('scene operations mount a character, add a line and animate the talk', () =
   assert.ok(calm.ok)
   const pose = calm.document.layers.find(layer => layer.characterKitRef && !layer.faceBinding)!
   assert.ok(pose.animation.keyframes!.every(frame => frame.y === pose.transform.y))
+})
+
+test('a beam from a cast member starts on that cutout\'s pose layer; one from the frame keeps its point', () => {
+  const laser = (from: ShotFxSpec['from'], id = 'fx-0') => ({ id, kind: 'laser', start: 0.6, end: 0.9, x: 90, y: 20, color: '#ffd56a', ...(from ? { from } : {}) }) as ShotFxSpec
+  const scene = compileSeriesShot(kits, shot({
+    cast: [{ kitId: 'kevin', characterId: 'kev', x: 34 }, { kitId: 'gary', x: 66 }],
+    sfx: [laser({ cast: 1, point: [95, 46] }), laser({ cast: 'kev', point: [10, 50] }, 'fx-1'), laser({ point: [70, 40] }, 'fx-2'), laser(undefined, 'fx-3')],
+  }))
+  const poses = scene.layers.filter(layer => layer.characterKitRef && layer.type === 'image' && !layer.faceBinding).map(layer => layer.id)
+  assert.deepEqual(scene.sfx!.map(cue => cue.from), [{ layerId: poses[1], x: 95, y: 46 }, { layerId: poses[0], x: 10, y: 50 }, { x: 70, y: 40 }, undefined])
+  assert.ok(poses[1].includes('gary'))
+  const missing = runSeriesShot({ mode: 'shot', kits, shot: shot({ sfx: [laser({ cast: 4, point: [95, 46] })] }) })
+  assert.equal(missing.ok, false)
+  assert.match(missing.ok ? '' : missing.message, /fx-0 starts on cast 4, who is not in this shot/)
 })

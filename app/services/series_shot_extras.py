@@ -6,11 +6,19 @@ scene. Declared in ``layout2d`` they are planned with the lines:
 * ``timing``: ``{intro, gap, tail}`` seconds (defaults 0.35 / 0.22 / 0.45);
   a dialogue beat's ``pauseBefore`` adds a beat of silence before it.
 * ``sfx``: ``[{file, line, anchor, offset, at, volume}]`` sound effects at a
-  line's start or end (or at an absolute second), next to the shot's music.
+  line's start or end (or at an absolute second), next to the shot's music;
+  ``{"anchor": "enter", "cast": 0}`` (an index into the cast or a character id)
+  at the start of that character's entrance, ``"repeat": "steps"`` on each of
+  its footfalls (``series_entrances``).
 * ``fx``: ``[{kind, line, anchor, offset, at, duration, x, y, size, ...}]``
   screen effects from ``shared/scene_effects.json`` at the same kind of time.
   ``duration`` is seconds (0.1-30, a value outside is clamped to that range,
   1 when missing or not a number) or ``"shot"``: until the end of the shot.
+  A beam (a catalog entry with ``aim``: laser, lightning) can start at
+  ``from``: ``{"cast": 0, "point": [88, 41]}`` is a point in % of that cast
+  member's pose image (``cast`` is an index in the shot's cast or a character
+  id), so it follows the cutout; ``{"point": [70, 40]}`` is a point in % of
+  the frame. The beam then runs from there to the cue's ``x``/``y``.
 * a character with ``layout2d.perch = {file, width, height, top, widthRatio}``
   (a laptop on a desk) is placed on that prop in every framing.
 """
@@ -23,8 +31,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-EFFECT_KINDS = frozenset(item["id"] for item in json.loads(
-    (Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8")))
+from services import series_entrances as entrances
+
+_EFFECTS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8"))
+EFFECT_KINDS = frozenset(item["id"] for item in _EFFECTS)
+# Beams a cue can start at ``from`` (ui/src/features/sceneFx/stormPaint.ts aimedPainters).
+AIMED_KINDS = frozenset(item["id"] for item in _EFFECTS if item.get("aim"))
+FX_ORIGIN_RANGE = (-50, 150)
+CAST_LIMIT = 8
 TIMING_DEFAULTS = {"intro": 0.35, "gap": 0.22, "tail": 0.45}
 # A workspace file, in a subfolder if the user keeps one (``music/theme.wav``); never absolute, never ``..``.
 _FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[^\\\x00]{1,300}$")
@@ -49,10 +63,18 @@ def fx_duration(value: Any) -> float | str:
     return float(min(max(value, low), high))
 
 
+def _cast_ref(value: Any) -> int | str | None:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value if 0 <= value < 8 else None
+    return value[:160] if isinstance(value, str) and value else None
+
+
 def _when(value: dict[str, Any]) -> dict[str, Any]:
-    """When a cue happens: at a line (start or end, plus an offset) or at an absolute second."""
+    """When a cue happens: at a cast member's entrance, at a line (start or end), or at an absolute second; plus an offset."""
     found: dict[str, Any] = {}
-    if isinstance(value.get("line"), int) and not isinstance(value.get("line"), bool) and 0 <= value["line"] < 50:
+    if value.get("anchor") == "enter" and _cast_ref(value.get("cast")) is not None:
+        found.update(anchor="enter", cast=_cast_ref(value.get("cast")))
+    elif isinstance(value.get("line"), int) and not isinstance(value.get("line"), bool) and 0 <= value["line"] < 50:
         found["line"] = value["line"]
         found["anchor"] = "end" if value.get("anchor") == "end" else "start"
     elif _number(value.get("at"), 0, 600) is not None:
@@ -74,14 +96,35 @@ def sfx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or not isinstance(value.get("file"), str) or not _FILE.match(value["file"]) or ".." in value["file"]:
         return None
     volume = _number(value.get("volume"), 0, 1)
-    return {"file": value["file"], **_when(value), "volume": 0.8 if volume is None else volume}
+    return {"file": value["file"], **_when(value), "volume": 0.8 if volume is None else volume,
+            **({"repeat": "steps"} if value.get("repeat") == "steps" else {})}
+
+
+def fx_origin(value: Any) -> dict[str, Any] | None:
+    """Where a beam starts: ``{"cast": index | characterId, "point": [x, y]}`` (% of that cast member's pose image) or
+    ``{"point": [x, y]}`` (% of the frame); x and y may lie up to half a picture outside it. None when it is malformed."""
+    point = value.get("point") if isinstance(value, dict) else None
+    if not isinstance(point, (list, tuple)) or len(point) != 2:
+        return None
+    x, y = (_number(item, *FX_ORIGIN_RANGE) for item in point)
+    if x is None or y is None:
+        return None
+    cast = value.get("cast")
+    if cast is None:
+        return {"point": [x, y]}
+    if isinstance(cast, int) and not isinstance(cast, bool) and 0 <= cast < CAST_LIMIT:
+        return {"cast": cast, "point": [x, y]}
+    if isinstance(cast, str) and cast.strip():
+        return {"cast": cast.strip()[:160], "point": [x, y]}
+    return None
 
 
 def fx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or value.get("kind") not in EFFECT_KINDS:
         return None
     entry = {"kind": value["kind"], **_when(value), "duration": fx_duration(value.get("duration"))}
-    # rotation turns directional effects (a laser leaves the muzzle of a gun that points left: 180).
+    # rotation turns directional effects (a laser across the cue point points left at 180); a beam with ``from``
+    # runs from its origin to x/y instead.
     for key, low, high in (("x", 0, 100), ("y", 0, 100), ("size", 1, 200), ("intensity", 0.1, 2), ("volume", 0, 1),
                            ("rotation", -180, 180)):
         if _number(value.get(key), low, high) is not None:
@@ -90,6 +133,9 @@ def fx_entry(value: Any) -> dict[str, Any] | None:
         entry["color"] = value["color"]
     if isinstance(value.get("sound"), bool):
         entry["sound"] = value["sound"]
+    origin = fx_origin(value.get("from")) if value["kind"] in AIMED_KINDS else None
+    if origin:
+        entry["from"] = origin
     return entry
 
 
@@ -101,9 +147,14 @@ def timing_args(layout: dict[str, Any]) -> dict[str, float]:
     return {**TIMING_DEFAULTS, **(layout.get("timing") or {})}
 
 
-def cue_time(cue: dict[str, Any], timing: list[tuple[float, float]], duration: float) -> float:
-    """Absolute second of a cue; a line index past the shot's lines falls back to the start."""
-    if "line" in cue and cue["line"] < len(timing):
+def cue_time(cue: dict[str, Any], timing: list[tuple[float, float]], duration: float,
+             moves: list | None = None) -> float:
+    """Absolute second of a cue; a line index past the shot's lines, or a cast member who does not enter
+    (``moves``: ``series_entrances.shot_entrances``), falls back to the start."""
+    if cue.get("anchor") == "enter":
+        found = entrances.find(moves, cue.get("cast"))
+        base = found["start"] if found else 0.0
+    elif "line" in cue and cue["line"] < len(timing):
         start, end = timing[cue["line"]]
         base = end if cue.get("anchor") == "end" else start
     else:
@@ -111,22 +162,38 @@ def cue_time(cue: dict[str, Any], timing: list[tuple[float, float]], duration: f
     return round(min(max(0.0, base + cue.get("offset", 0.0)), max(0.0, duration - 0.05)), 3)
 
 
-def sfx_tracks(layout: dict[str, Any], timing: list[tuple[float, float]], duration: float) -> list[dict[str, Any]]:
-    return [{"id": f"sfx-{index}", "filename": cue["file"], "name": "Sound effect", "kind": "sfx",
-             "startTime": cue_time(cue, timing, duration), "volume": cue.get("volume", 0.8)}
-            for index, cue in enumerate(layout.get("sfx") or [])]
+def _steps(cue: dict[str, Any], moves: list | None, duration: float) -> list[float] | None:
+    """The seconds of a ``repeat: steps`` cue: one on every footfall of its entrance, shifted by its offset."""
+    found = entrances.find(moves, cue.get("cast")) if cue.get("repeat") == "steps" and cue.get("anchor") == "enter" else None
+    if not found:
+        return None
+    times = (round(time + cue.get("offset", 0.0), 3) for time in entrances.footfalls(found))
+    return [time for time in times if 0 <= time < duration - 0.05]
 
 
-def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration: float) -> list[dict[str, Any]]:
+def sfx_tracks(layout: dict[str, Any], timing: list[tuple[float, float]], duration: float,
+               moves: list | None = None) -> list[dict[str, Any]]:
+    tracks = []
+    for index, cue in enumerate(layout.get("sfx") or []):
+        steps = _steps(cue, moves, duration)
+        times = [(f"sfx-{index}", cue_time(cue, timing, duration, moves))] if steps is None else [
+            (f"sfx-{index}-step{number}", time) for number, time in enumerate(steps)]
+        tracks += [{"id": track_id, "filename": cue["file"], "name": "Sound effect", "kind": "sfx", "startTime": start,
+                    "volume": cue.get("volume", 0.8)} for track_id, start in times]
+    return tracks
+
+
+def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration: float,
+            moves: list | None = None) -> list[dict[str, Any]]:
     cues = []
     for index, cue in enumerate(layout.get("fx") or []):
-        start = cue_time(cue, timing, duration)
+        start = cue_time(cue, timing, duration, moves)
         length = fx_duration(cue.get("duration"))
         # "shot" lasts to the end of the shot, like any cue that would run past it.
         end = round(min(duration - 0.01, duration if length == FX_TO_SHOT_END else start + length), 3)
         if end <= start:
             continue
-        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation") if key in cue}
+        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation", "from") if key in cue}
         cues.append({"id": f"fx-{index}", "kind": cue["kind"], "start": start, "end": end, **extra})
     return cues
 

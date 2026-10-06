@@ -9,9 +9,10 @@ from PIL import Image, ImageDraw
 
 from services.character_kit_library import patch_character_kit, read_character_kit_library
 from services.flat_rig import (
-    INK_SPAN, REALISTIC_MOUTH, SPRITE, STATES, FlatRigError, _dilate, _face_crop, _figure_box, crop_figure, draw_ink_mouth,
-    eye_extent, face_realistic, find_eyes, place, rig_character, rig_hints, rig_pose, rig_style,
+    REALISTIC_MOUTH, SPRITE, STATES, FlatRigError, _dilate, _face_crop, _figure_box, crop_figure,
+    draw_ink_mouth, eye_extent, face_realistic, find_eyes, place, rig_character, rig_hints, rig_pose, rig_style,
 )
+from services.flat_rig_ink import INK_OPENINGS, INK_SPAN
 from tests.test_flat_rig import WORKSPACE, _anime_eyes, _code_face, _cutout, _full_body_anime, _small_o_face, _workspace
 
 REAL_SKIN, REAL_INK, BRASS = (214, 166, 112, 255), (26, 18, 14, 255), (120, 90, 30, 255)
@@ -294,12 +295,14 @@ def test_ink_sprites_are_openings_in_the_ink_and_closed_draws_nothing():
         # Hard-edged: a solid shape with at most a pixel of soft edge, no glow or shading.
         assert (sprites[state][..., 3] > 0).sum() - solid.sum() <= solid.sum() * 0.25, state
         light = (colours @ LUMA > 150).sum()
-        assert (light > 50) if state == "wide" else (light == 0), f"only wide shows teeth: {state}"
+        assert (light > 50) if state in ("wide", "bite") else (light == 0), f"only wide and bite show teeth: {state}"
+        assert (colours.min(axis=1) > 235).sum() == 0, f"teeth are the skin toward bone, never white: {state}"
         rows, cols = np.nonzero(solid)
         widths[state] = cols.max() - cols.min() + 1
         # Each opening starts at the painted line (the sprite's middle row) and hangs below it: the upper lip stays.
         assert 160 - 0.08 * SPRITE[0] * INK_SPAN <= rows.min() <= 162 and rows.max() > 170, state
-    assert abs(widths["wide"] - 0.9 * SPRITE[0] * INK_SPAN) <= 3
+    # The pointed corners thin out to nothing: the solid shape is a few pixels short of the opening's width.
+    assert -10 <= widths["wide"] - INK_OPENINGS["wide"][0] * SPRITE[0] * INK_SPAN <= 2
     assert widths["pucker"] < widths["round"] < widths["small"] < widths["medium"] < widths["wide"]
 
 

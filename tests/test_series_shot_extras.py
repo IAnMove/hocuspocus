@@ -236,6 +236,34 @@ def test_a_directional_effect_keeps_its_rotation_so_a_laser_leaves_the_gun():
     assert cues[0]["rotation"] == 180.0 and cues[0]["x"] == 30.0
 
 
+def test_a_beam_can_start_on_a_cast_member_or_at_a_point_of_the_frame():
+    layout = normalize_layout2d({"fx": [
+        {"kind": "laser", "at": 0.6, "duration": 0.3, "x": 90, "y": 20, "color": "#ffd56a", "from": {"cast": 0, "point": [95, 46]}},
+        {"kind": "lightning", "at": 1, "from": {"cast": " blas ", "point": [10, -20]}},
+        {"kind": "laser", "at": 1, "from": {"point": [70, 40]}},
+        {"kind": "confetti", "at": 1, "from": {"point": [70, 40]}},
+        {"kind": "laser", "at": 1, "from": {"cast": True, "point": [70, 40]}},
+        {"kind": "laser", "at": 1, "from": {"cast": 0, "point": [70]}},
+        {"kind": "laser", "at": 1, "from": {"cast": 9, "point": [70, 40]}},
+        {"kind": "laser", "at": 1, "from": {"point": [70, 400]}},
+    ]})
+    assert [cue.get("from") for cue in layout["fx"]] == [
+        {"cast": 0, "point": [95.0, 46.0]}, {"cast": "blas", "point": [10.0, -20.0]}, {"point": [70.0, 40.0]}, None, None, None, None, None]
+    cues = fx_cues(layout, [(0.4, 1.4)], 3.0)
+    assert cues[0] == {"id": "fx-0", "kind": "laser", "start": 0.6, "end": 0.9, "x": 90.0, "y": 20.0, "color": "#ffd56a",
+                       "from": {"cast": 0, "point": [95.0, 46.0]}}
+    assert "from" not in cues[3]
+
+
+def test_a_3d_shot_keeps_a_beam_from_the_frame_and_drops_one_from_a_cutout():
+    effects = series_shot3d._shot_effects([{"id": "fx-0", "kind": "laser", "start": 1, "end": 1.3, "from": {"point": [70.0, 40.0]}},
+                                           {"id": "fx-1", "kind": "laser", "start": 1, "end": 1.3, "from": {"cast": 0, "point": [95.0, 46.0]}},
+                                           {"id": "fx-2", "kind": "vignette", "start": 0, "end": 3}])
+    assert effects == [{"id": "shot-fx-0", "kind": "laser", "start": 1, "end": 1.3, "from": {"x": 70.0, "y": 40.0}},
+                       {"id": "shot-fx-1", "kind": "laser", "start": 1, "end": 1.3},
+                       {"id": "shot-fx-2", "kind": "vignette", "start": 0, "end": 3}]
+
+
 def _glb(path, names):
     import json as _json
     import struct as _struct
