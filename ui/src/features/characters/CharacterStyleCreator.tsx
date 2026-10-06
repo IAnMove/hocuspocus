@@ -41,6 +41,8 @@ function Candidates({ candidates, picked, onPick, disabled }: {
         : null}
       {candidate.status === 'failed' && <span role="alert" className="absolute inset-x-1 bottom-1 rounded bg-red-950/80 p-1 text-[11px] text-red-100">
         {t('styleCreator.failed', { error: candidate.error })}</span>}
+      {candidate.status === 'ready' && candidate.haze !== undefined && <span className="absolute inset-x-1 bottom-1 rounded bg-amber-950/80 p-1 text-[11px] text-amber-100">
+        {t('styleCreator.haze', { percent: Math.round(candidate.haze * 100) })}</span>}
     </button>)}
   </div>
 }

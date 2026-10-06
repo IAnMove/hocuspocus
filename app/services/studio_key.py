@@ -2,6 +2,10 @@
 
 Green (or blue / magenta) screen pixels become transparent and the foreground
 is despilled. Pick blue or magenta when the subject itself is green.
+By default the key reads the screen colour from the image border, keys
+relative to it and clears the backdrop connected to the border, so an uneven
+or weak generated screen leaves no haze (services/studio_key_clean.py); the
+result reports the residual semi-transparent share.
 Interior mattes use weights 0.15, 0.7, 0.15. A heavier neighbor weight
 leaves a halo on motion, so those weights stay fixed. ``isnet-anime``
 runs only when that ONNX file is already installed, on CPU, and never
@@ -20,6 +24,7 @@ from fastapi import HTTPException
 from PIL import Image
 
 from services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
+from services.studio_key_clean import KeyOptions, KeyReport, clean_rgba, measure_screen
 from services.wangp_submission import wangp_media_url
 
 
@@ -35,7 +40,7 @@ _ISNET_SIZE = (1024, 1024)
 _IMAGE_EXTENSIONS = {".jpeg", ".jpg", ".png", ".webp"}
 _ENVELOPE_KEYS = frozenset({"version", "input", "intent_id"})
 SCREENS = ("green", "blue", "magenta")
-_INPUT_KEYS = frozenset({"workspace", "source", "mode"})
+_INPUT_KEYS = frozenset({"workspace", "source", "mode", "adaptive", "despill"})
 MAX_SECONDS = 60
 MAX_FRAMES = 1800
 MAX_EDGE = 1920
@@ -59,6 +64,11 @@ def command_catalog() -> list[dict]:
             "source": {"type": "string", "minLength": 1, "maxLength": 2000},
             "mode": {"type": "string", "enum": [*SCREENS, "isnet-anime"],
                      "description": "Screen colour (default green). Use blue or magenta when the subject contains green."},
+            "adaptive": {"type": "boolean", "description": (
+                "Default true: read the screen colour from the image border, key relative to it and clear the "
+                "backdrop connected to the border (no haze on a weak or uneven generated screen). false: fixed key.")},
+            "despill": {"type": "boolean", "description": (
+                "Default true: take the screen colour out of the edges and clamp its spill on the figure.")},
         },
         "required": ["workspace", "source"],
     }
@@ -71,10 +81,15 @@ def command_catalog() -> list[dict]:
             "Key a workspace image or video on the CPU. Green, blue or magenta screen "
             "pixels become transparent, foreground spill is removed, and interior mattes are "
             "smoothed with fixed weights 0.15, 0.7, 0.15. Stronger smoothing leaves "
-            "halos, so those weights do not change. mode isnet-anime runs only when "
+            "halos, so those weights do not change. The key reads the screen colour from the image border "
+            "(adaptive, default true): a weak or uneven generated screen is keyed relative to its own colour and "
+            "the backdrop connected to the border is cleared, so no semi-transparent haze is left; despill "
+            "(default true) cleans the screen colour off the edges. result.report gives semiTransparentShare "
+            "(alpha 6-199), transparentShare, screenColor, screenStrength and haze true when 20 % or more of "
+            "the image is still semi-transparent (then try another mode). mode isnet-anime runs only when "
             "that model is already installed; otherwise the call fails with "
             "model_not_installed and green remains available. Returns file, url, "
-            "sha256, and frames. Does not return pixels, use the GPU, or download a model. "
+            "sha256, frames and report. Does not return pixels, use the GPU, or download a model. "
             "An optional intent_id replays the stored result instead of keying again."
         ),
         "inputSchema": {
@@ -142,12 +157,46 @@ def key_request(arguments, *, workspace_dir, uploads_dir, find_model: Callable[[
     if not isinstance(uploads_root, str) or not uploads_root:
         raise StudioKeyError("invalid_command", "workspace is not available.")
     mode = _mode(payload)
-    session = _session_for(mode, find_model)
+    keyer = _Keyer(mode, _session_for(mode, find_model), _options(payload, mode))
     source = _source(payload["source"], workspace, uploads_root, folder)
     suffix = ".png" if _is_image(source) else ".webm"
     destination = _destination(folder, source, suffix)
-    frames = _key_file(source, destination, mode, session)
-    return _published(destination, workspace, uploads_root, folder, frames)
+    frames = _key_file(source, destination, keyer)
+    return {**_published(destination, workspace, uploads_root, folder, frames), "report": keyer.summary()}
+
+
+class _Keyer:
+    """Keys every frame of one file with the screen measured on its first frame, and counts the result."""
+
+    def __init__(self, mode: str, session, options: KeyOptions | None) -> None:
+        self.mode, self.session, self.options = mode, session, options
+        self.report: KeyReport | None = None
+        self.found = None
+
+    def frame(self, rgb: np.ndarray) -> np.ndarray:
+        flooded = False
+        if self.options is None:
+            rgba = _rgba_frame(rgb, self.mode, self.session)
+        else:
+            if self.report is None and self.options.adaptive:
+                self.found = measure_screen(rgb, self.mode)
+            rgba, flooded = clean_rgba(rgb, self.options, self.found)
+        if self.report is None:
+            self.report = KeyReport(self.options, self.found)
+        self.report.add(rgba[..., 3], flooded)
+        return rgba
+
+    def summary(self) -> dict:
+        return (self.report or KeyReport(self.options, None)).as_dict()
+
+
+def _options(payload: dict, mode: str) -> KeyOptions | None:
+    for key in ("adaptive", "despill"):
+        if key in payload and not isinstance(payload[key], bool):
+            raise StudioKeyError("invalid_command", f"{key} must be true or false.")
+    if mode not in SCREENS:
+        return None
+    return KeyOptions(screen=mode, adaptive=payload.get("adaptive", True), despill=payload.get("despill", True))
 
 
 def screen_rgba(rgb: np.ndarray, screen: str = "green") -> np.ndarray:
@@ -350,9 +399,9 @@ def _destination(folder: str, source: str, suffix: str) -> str:
     return candidate
 
 
-def _key_file(source: str, destination: str, mode: str, session) -> int:
+def _key_file(source: str, destination: str, keyer: _Keyer) -> int:
     try:
-        frames = _key_image(source, destination, mode, session) if _is_image(source) else _key_video(source, destination, mode, session)
+        frames = _key_image(source, destination, keyer) if _is_image(source) else _key_video(source, destination, keyer)
     except StudioKeyError:
         _remove(destination)
         raise
@@ -365,10 +414,10 @@ def _key_file(source: str, destination: str, mode: str, session) -> int:
     return frames
 
 
-def _key_image(source: str, destination: str, mode: str, session) -> int:
+def _key_image(source: str, destination: str, keyer: _Keyer) -> int:
     with Image.open(source) as opened:
         rgb = np.asarray(opened.convert("RGB"))
-    Image.fromarray(_rgba_frame(rgb, mode, session)).save(destination, format="PNG")
+    Image.fromarray(keyer.frame(rgb)).save(destination, format="PNG")
     return 1
 
 
@@ -398,7 +447,7 @@ def _isnet_alpha(image: Image.Image, session) -> np.ndarray:
     return np.asarray(mask.resize(image.size, Image.Resampling.LANCZOS), dtype=np.uint8)
 
 
-def _key_video(source: str, destination: str, mode: str, session) -> int:
+def _key_video(source: str, destination: str, keyer: _Keyer) -> int:
     info = _probe(source)
     window = AlphaWindow()
     encoder = _encoder(destination, info)
@@ -408,7 +457,7 @@ def _key_video(source: str, destination: str, mode: str, session) -> int:
             count += 1
             if count > MAX_FRAMES:
                 raise StudioKeyError("source_too_large", "Video exceeds 1800 frames.")
-            emitted += _write_ready(encoder, window.push(_rgba_frame(rgb, mode, session)))
+            emitted += _write_ready(encoder, window.push(keyer.frame(rgb)))
         emitted += _write_ready(encoder, window.finish())
         _finish_encoder(encoder)
     finally:

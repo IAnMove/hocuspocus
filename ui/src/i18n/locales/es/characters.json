@@ -620,6 +620,7 @@
     "keying": "Quitando el fondo…",
     "option": "Opción {{number}}",
     "failed": "Esta opción falló: {{error}}",
+    "haze": "Queda un velo en el {{percent}} % de la imagen: el fondo no se quitó limpio. Elige otra opción o genérala de nuevo.",
     "pick": "Elige la opción que más te guste.",
     "noneReady": "Ninguna opción terminó. Vuelve a intentarlo o cambia la descripción.",
     "empty": "Aquí aparecerán las tres opciones.",
