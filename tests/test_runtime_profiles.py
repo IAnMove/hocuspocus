@@ -16,6 +16,11 @@ from services.runtime_environment import isolated_environment, python_path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def isolated_cuda_visibility(monkeypatch):
+    monkeypatch.delenv('CUDA_VISIBLE_DEVICES', raising=False)
+
+
 def test_windows_and_linux_choose_distinct_main_abis():
     win = profiles.select_profiles("win32", "AMD64", "nvidia", "581.15")
     linux = profiles.select_profiles("linux", "x86_64", "nvidia", "580.82.09")
@@ -182,16 +187,46 @@ def test_detect_profiles_reads_compute_capability_from_nvidia_smi():
             patch.object(profiles, "installation_current", return_value=False):
         result = profiles.detect_profiles(platform="linux", arch="x64")
     assert result["gpu"] == "nvidia" and result["driver"] == "580.82.09"
-    assert result["computeCapability"] == "6.1"  # the weakest GPU decides
-    assert not result["engines"]["wangp"]["supported"]
-    assert "older than Turing" in result["engines"]["wangp"]["reason"]
-    assert result["engines"]["core"]["supported"]
+    assert result["computeCapability"] == "8.9"  # a secondary old GPU does not block the selected device
+    assert result["cudaDevice"] == "0"
+    assert result["engines"]["wangp"]["supported"]
+    assert not result["engines"]["core"]["supported"]
     nvidia_smi.legacy = True
     with patch.object(profiles.subprocess, "run", side_effect=nvidia_smi), \
             patch.object(profiles, "installation_current", return_value=False):
         legacy = profiles.detect_profiles(platform="linux", arch="x64")
     assert legacy["driver"] == "580.82.09" and legacy["computeCapability"] is None
     assert legacy["engines"]["wangp"]["supported"]
+
+
+@pytest.mark.parametrize('visible,device,capability', [
+    (None, '0', '8.9'), ('0,1', '0', '8.9'), ('1,0', '1', '6.1'),
+    ('GPU-selected', 'GPU-selected', '8.9'), ('', None, None), ('-1', None, None),
+])
+def test_detect_profiles_gates_the_first_visible_cuda_device(monkeypatch, visible, device, capability):
+    if visible is None:
+        monkeypatch.delenv('CUDA_VISIBLE_DEVICES', raising=False)
+    else:
+        monkeypatch.setenv('CUDA_VISIBLE_DEVICES', visible)
+    calls = []
+
+    def nvidia_smi(command, **_kwargs):
+        calls.append(command)
+        selected = next((value.split('=', 1)[1] for value in command if value.startswith('--id=')), None)
+        field = command[1].split('=', 1)[1]
+        output = '580.82.09' if field == 'driver_version' else ('6.1' if selected == '1' else '8.9')
+        return subprocess.CompletedProcess(command, 0, stdout=output + '\n', stderr='')
+
+    monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
+    monkeypatch.setattr(profiles, 'installation_current', lambda *_args: False)
+    result = profiles.detect_profiles(platform='linux', arch='x64', gpu='nvidia')
+    assert result['cudaDevice'] == device
+    assert result['computeCapability'] == capability
+    assert result['engines']['wangp']['supported'] == (capability == '8.9')
+    if device is None:
+        assert not calls
+    else:
+        assert all('--id=' + device in command for command in calls)
 
 
 def test_conda_and_venv_windows_interpreters_are_not_confused(tmp_path):

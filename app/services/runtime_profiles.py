@@ -292,11 +292,11 @@ def find_msvc() -> dict | None:
     return {"vcvars": str(vcvars), "toolset": toolset}
 
 
-def _nvidia_smi(field: str) -> list[str]:
-    """Numeric values of one ``--query-gpu`` field, one per GPU; empty when unavailable."""
+def _nvidia_smi(field: str, device: str) -> list[str]:
+    """Numeric values for the selected physical GPU index/UUID; empty when unavailable."""
     try:
         result = subprocess.run(
-            ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader"],
+            ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader", f"--id={device}"],
             capture_output=True, text=True, timeout=5, check=True,
         )
     except (OSError, subprocess.SubprocessError):
@@ -305,20 +305,25 @@ def _nvidia_smi(field: str) -> list[str]:
             if re.fullmatch(r"\d+(?:\.\d+)+", line.strip())]
 
 
+def _cuda_probe(gpu: str | None) -> tuple[str, str | None, str | None, str | None]:
+    """CUDA lane 0 uses the first visible GPU, not the weakest other installed card."""
+    device = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",", 1)[0].strip()
+    if not device or device == "-1":
+        return "cpu", None, None, None
+    versions = _nvidia_smi("driver_version", device)
+    if not versions:
+        return gpu or "unknown", None, None, device
+    # Legacy nvidia-smi may not understand compute_cap: keep it unverified.
+    capabilities = _nvidia_smi("compute_cap", device)
+    return "nvidia", versions[0], capabilities[0] if capabilities else None, device
+
+
 def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                     gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
-    driver = None
-    compute_capability = None
-    versions = _nvidia_smi("driver_version")
-    if versions:
-        driver = min(versions, key=_version)
-        gpu = "nvidia"
-        # Older nvidia-smi builds reject this field: unknown stays unverified, not blocked.
-        capabilities = _nvidia_smi("compute_cap")
-        if capabilities:
-            compute_capability = min(capabilities, key=_version)
+    gpu, driver, compute_capability, device = _cuda_probe(gpu)
     result = select_profiles(platform or sys.platform, arch or host_platform.machine(),
                              gpu or "unknown", driver, compute_capability)
+    result["cudaDevice"] = device
     for name, item in result["engines"].items():
         if inspect_engines is None or name in inspect_engines:
             item["installed"] = installation_current(name, result["platform"]) if item["supported"] else False
