@@ -125,7 +125,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   30 min, the take is made without it and the render item has a `warning`; fix it and render that shot again by id.
   A new prompt or volume makes `series.episode.produce` render that shot again.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
-  speedlines…), `duration`, `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
+  speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
+  `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
   gun aimed left needs 180 with `x`/`y` just past the muzzle). Keep them off faces: a small burst to one side.
   `impact_flash` (a white frame, then ink focus lines) and `impact_invert` (the negative of the frame) cover the
   whole picture: give them 2–4 frames (`duration` 0.08–0.17 s at 24 fps) right on the hit. `code_rain` (falling
@@ -134,7 +135,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   The cinematic grades also cover the whole picture: `candlelight` (warm flickering key light, `x`/`y` the flame,
   `size` its radius), `vignette`, `film_grain`, `light_rays` (`x`/`y` the window, `rotation` where the light
   goes), `glitch` (bursts of digital tearing) and `canvas` (a painted-canvas texture). Give a grade the whole shot
-  (`at` 0 and a `duration` as long as the shot); it repeats over its cue, so a plate as long as the cue loops.
+  (`at` 0 and `"duration": "shot"`); it repeats over its cue, so a plate as long as the cue loops.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat before it.
 - **voiceRoom:** the room this shot's voices are heard in, instead of its location's (see Sound design): `none`,

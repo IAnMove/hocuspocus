@@ -6,6 +6,24 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A timed screen effect (`layout2d.fx`) of a Series shot now keeps the length
+its author gave it. A `duration` above the 30 s maximum was dropped and read
+as the 1 s default, so a vignette, film grain or candle light written with 99
+to cover the whole shot vanished after one second (673 cues on one real
+episode). A `duration` outside 0.1–30 s is now clamped to the nearest limit
+and only a missing or non-numeric one takes the 1 s default. `"duration":
+"shot"` is the explicit way to say "until the end of the shot": it is stored
+as written and `fx_cues` ends the cue just before the end of the shot, however
+long the shot is. It is documented in `series.guide` and in the
+`series.episode.from_script` description. The script path needed no change: it
+passes the cues to the same normaliser. A shot whose effect durations were
+valid, missing or non-numeric keeps the same take digest and is not rendered
+again; only a shot whose stored duration changes because of the clamp (such as
+99 turning into 30 instead of 1) gets a new digest. Other cues keep their
+earlier handling: a sound effect's `volume`, `offset` and `at`, a line's
+`pauseBefore` and the `timing` values outside their range are still dropped to
+their defaults.
+
 The flat rig (`characters.rig.flat`) now handles faces drawn with realistic
 proportions, such as graphic-novel or tenebrist art with flat black shadows,
 eye bags drawn as strokes, round spectacles and moustaches. It was tuned on

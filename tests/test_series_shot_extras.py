@@ -5,6 +5,7 @@ from services import series_shot3d
 from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender
 from services.series_shot_extras import cue_time, fx_cues, perch, sfx_tracks
 from services.series_shot_plan import build_shot_spec, normalize_layout2d, plan_timing
+from services.series_take_inputs import render_inputs
 
 
 def series():
@@ -318,3 +319,60 @@ def test_a_3d_object_keeps_a_heading_offset_for_a_model_whose_nose_is_not_plus_z
         {"objectId": "bad", "file": "ship.glb", "add": True, "motion": {"to": [0, 2, -30], "headingOffset": 40}}]})
     assert value["objects"][0]["motion"] == {"to": [0.0, 2.0, -30.0], "faceTravel": True, "headingOffset": 1.5708}
     assert "headingOffset" not in value["objects"][1]["motion"]
+
+
+def _durations(value):
+    return [cue["duration"] for cue in normalize_layout2d({"fx": [{"kind": "vignette", "at": 0, "duration": value}]})["fx"]]
+
+
+def test_a_screen_effect_longer_than_the_maximum_is_clamped_not_reset_to_one_second():
+    # An author who writes 99 for "the whole shot" used to get 1 s: the grade vanished after one second.
+    assert _durations(99) == [30.0] and _durations(30.0001) == [30.0] and _durations(1e9) == [30.0]
+    assert _durations(0.05) == [0.1] and _durations(0) == [0.1] and _durations(-5) == [0.1]
+    assert _durations(0.1) == [0.1] and _durations(30) == [30.0] and _durations(2) == [2.0]
+
+
+def test_a_missing_or_non_numeric_effect_duration_takes_the_default_and_shot_is_kept():
+    for value in (None, "soon", "", True, [3], {"s": 3}, float("nan")):
+        assert _durations(value) == [1.0], value
+    layout = normalize_layout2d({"fx": [{"kind": "impact_flash", "line": 0}, {"kind": "vignette", "at": 0, "duration": "shot"},
+                                        {"kind": "film_grain", "at": 0, "duration": " Shot "}]})
+    assert [cue["duration"] for cue in layout["fx"]] == [1.0, "shot", "shot"]
+
+
+def test_a_shot_duration_lasts_to_the_end_of_the_shot_and_a_clamped_one_keeps_its_seconds():
+    timing, duration = plan_timing([1.0, 0.5], intro=1.0, gap=0.2, tail=1.0)
+    layout = normalize_layout2d({"fx": [{"kind": "vignette", "at": 0, "duration": "shot"},
+                                        {"kind": "candlelight", "line": 1, "duration": "shot"},
+                                        {"kind": "film_grain", "at": 0.5, "duration": 99},
+                                        {"kind": "confetti", "at": 1, "duration": 2},
+                                        {"kind": "glitch", "at": 1}]})
+    ends = {cue["kind"]: (cue["start"], cue["end"]) for cue in fx_cues(layout, timing, duration)}
+    last = round(duration - 0.01, 3)
+    assert ends["vignette"] == (0.0, last) and last == 3.698, "until the end of the shot"
+    assert ends["candlelight"] == (2.2, last)
+    assert ends["film_grain"] == (0.5, last), "99 is clamped to 30 s and the shot ends first"
+    assert ends["confetti"] == (1.0, 3.0) and ends["glitch"] == (1.0, 2.0), "seconds and the default are unchanged"
+    long_shot = fx_cues(layout, [(0.0, 1.0)], 45.0)
+    assert {cue["kind"]: cue["end"] for cue in long_shot} == {
+        "vignette": 44.99, "candlelight": 44.99, "film_grain": 30.5, "confetti": 3.0, "glitch": 2.0}, "30 s is the clamp, shot is not"
+
+
+def test_a_shot_with_valid_screen_effect_durations_keeps_its_take_digest():
+    raw = {"framing": "wide", "fx": [{"kind": "confetti", "line": 0, "duration": 1.5, "x": 70}, {"kind": "vignette", "at": 0.5, "duration": 30},
+                                     {"kind": "film_grain", "at": 1, "duration": 0.1}, {"kind": "impact_flash", "line": 0},
+                                     {"kind": "confetti", "line": 0, "duration": "x"}],
+           "sfx": [{"file": "pen.wav", "line": 0}]}
+    layout = normalize_layout2d(raw)
+    assert [cue["duration"] for cue in layout["fx"]] == [1.5, 30.0, 0.1, 1.0, 1.0], "valid, missing and bad ones read as before"
+    series = {"id": "show", "spokenLanguage": "English", "locations": [{"id": "sky", "name": "Sky"}],
+              "characters": [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana", "workspace": "ws"}}}]}
+    kits = {"kit-ana": {"id": "kit-ana", "voice": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}
+    shot = {"id": "s1", "order": 1, "locationId": "sky", "productionMethod": "animation_3d", "visibleCharacterIds": ["ana"],
+            "dialogueBeats": [{"id": "s1_b0", "characterId": "ana", "text": "Hold on!"}], "layout2d": layout,
+            "scene3d": {"template": "user-airship", "cast": [{"characterId": "ana", "objectId": "ana"}], "quality": "draft"}}
+    # Computed with the code before this fix: takes rendered then stay up to date.
+    assert render_inputs(series, shot, kits) == "efa49e2c1b00e41b"
+    clamped = {**shot, "layout2d": normalize_layout2d({**raw, "fx": [{**raw["fx"][1], "duration": 99}]})}
+    assert render_inputs(series, clamped, kits) != render_inputs(
+        series, {**shot, "layout2d": normalize_layout2d({**raw, "fx": [{**raw["fx"][1], "duration": 1}]})}, kits), "30 s is not 1 s"
