@@ -94,8 +94,8 @@ async function failure(response: Response, fallback: string): Promise<Error> {
   return new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : fallback)
 }
 
-async function postJson<T>(path: string, body: unknown, fallback: string): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+async function postJson<T>(path: string, body: unknown, fallback: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
   if (!response.ok) throw await failure(response, fallback)
   return response.json()
 }
@@ -109,20 +109,49 @@ export async function keyStudioImage(details: { workspace: string; source: strin
   return reply.result
 }
 
+/** A pose's hint for the flat rig: points in % of the pose image, `mouthWidth` corner to corner in % of its width. */
+export type FlatRigHint = { mouth?: [number, number]; eyes?: [number, number]; mouthWidth?: number }
+/** The mouth line a warp rig or preview used, in % of the pose image. */
+export type FlatRigMouthLine = { mouth: [number, number]; mouthWidth: number; found: boolean; from: 'hint' | 'landmarks' | 'painted' | 'guess' }
+
 export type FlatRigResult = {
   revision: number
   character: import('../lib/characterKit').CharacterKit
   review: string
   unwipedPoses: string[]
+  warnings?: Record<string, string[]>
+  poses?: Record<string, { mouthLine?: FlatRigMouthLine; hints?: FlatRigHint }>
 }
 
 /** Wipe painted mouths, draw nine paper mouths and a blink, and save anchors (characters.rig.flat). */
 export async function rigFlatCharacter(details: { workspace: string; kitId: string; baseRevision: number
-  style?: Record<string, number | boolean>; poses?: string[] }): Promise<FlatRigResult> {
+  style?: Record<string, number | boolean | string>; poses?: string[]; hints?: Record<string, FlatRigHint | null> }): Promise<FlatRigResult> {
   return postJson(`/api/v1/character-kits/library/kits/${encodeURIComponent(details.kitId)}/flat-rig`, {
     workspace: details.workspace, baseRevision: details.baseRevision,
     ...(details.style ? { style: details.style } : {}), ...(details.poses ? { poses: details.poses } : {}),
+    ...(details.hints ? { hints: details.hints } : {}),
   }, 'Could not rig the character')
+}
+
+export type FlatRigMouthPreview = FlatRigMouthLine & {
+  pose: string
+  /** The line through the mouth, in % of the pose image. */
+  line: Array<[number, number]>
+  /** The face area each state image shows, [[x0, y0], [x1, y1]] in % of the pose image. */
+  view: [[number, number], [number, number]]
+  hint: FlatRigHint | null
+  /** mouth_line_guessed: no painted line here; mouth_line_unsure: unsure face points placed the line. */
+  warnings?: string[]
+  states: Partial<Record<import('../lib/characterMouthStates').CharacterMouthState, string>>
+}
+
+/** Warp one pose's mouths at a mouth line without saving (characters.rig.flat.preview). */
+export async function previewFlatRigMouth(details: { workspace: string; kitId: string; pose: string
+  mouth?: [number, number]; mouthWidth?: number; signal?: AbortSignal }): Promise<FlatRigMouthPreview> {
+  return postJson(`/api/v1/character-kits/library/kits/${encodeURIComponent(details.kitId)}/flat-rig/preview`, {
+    workspace: details.workspace, pose: details.pose,
+    ...(details.mouth ? { mouth: details.mouth } : {}), ...(details.mouthWidth ? { mouthWidth: details.mouthWidth } : {}),
+  }, 'Could not preview the mouths', details.signal)
 }
 
 export type SpeechCheck = {

@@ -19,6 +19,7 @@ SERIES_TOOLS = frozenset({
     "series.assembly.start", "series.assembly.status", "series.location.plate3d", "series.location.plate3d.status",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
+    "characters.rig.flat.preview",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "studio.key", "qa.speech", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
