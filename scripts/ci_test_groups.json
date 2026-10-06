@@ -473,7 +473,10 @@
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
-        "tests/test_llm_resilience.py"
+        "tests/test_llm_resilience.py",
+        "tests/test_game_pixel.py",
+        "tests/test_game_image_ops.py",
+        "tests/test_game_tiles.py"
       ]
     }
   ],
@@ -1381,6 +1384,18 @@
     {
       "prefix": "app/shared/game_style_presets.json",
       "paths": ["tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_pixel.py",
+      "paths": ["tests/test_game_pixel.py"]
+    },
+    {
+      "prefix": "app/services/game_image_ops.py",
+      "paths": ["tests/test_game_image_ops.py"]
+    },
+    {
+      "prefix": "app/services/game_tiles.py",
+      "paths": ["tests/test_game_tiles.py"]
     }
   ]
 }
