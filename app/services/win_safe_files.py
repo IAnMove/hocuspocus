@@ -234,7 +234,7 @@ class ShareDeleteFileResponse(Response):
             return
 
         try:
-            if not await run_in_threadpool(self._matches_content, f):
+            if not await self._content_available(f):
                 await self._send_error(send, 410)
                 return
             try:
@@ -307,10 +307,11 @@ class ShareDeleteFileResponse(Response):
         finally:
             f.close()
 
+    async def _content_available(self, handle) -> bool:
+        return self.expected_sha256 is None or await run_in_threadpool(self._matches_content, handle)
+
     def _matches_content(self, handle) -> bool:
         """Verify and stream the same open inode, even if the alias is replaced."""
-        if self.expected_sha256 is None:
-            return True
         import hashlib
         digest = hashlib.sha256()
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):

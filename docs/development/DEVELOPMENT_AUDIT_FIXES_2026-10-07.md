@@ -41,7 +41,7 @@ La revisión final de Claude queda pendiente. La rama se construye sobre `8f3a0d
 Pruebas de regresión del backend y de UI, más los tres comandos obligatorios:
 
 ```bash
-cd ui && npm run check
+(cd ui && npm run check)
 BASE_REF=origin/development bash scripts/check_code_health_pr_base.sh
 python3 scripts/check_documentation_links.py
 ```

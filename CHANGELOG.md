@@ -6,6 +6,17 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Series approvals keep pending note drafts and ignore saves and render polls
+from another episode. Changed dialogue pauses and saved 3D scenes invalidate
+their takes; reviewed imported/generated videos promote correctly and prepare
+their foley. Media tools serialize retries and publication, and Wizard and
+Production use the shared command paths in full and Core runtimes. Failed
+named asset publication restores the previous files. New named scene export
+receipts verify their exact video bytes, including on download; an overwritten
+version is reported unavailable. GPU profile checks respect visible-device
+identity and report uncertain CUDA ordering explicitly. See the
+[audit corrections and regression tests](docs/development/DEVELOPMENT_AUDIT_FIXES_2026-10-07.md).
+
 What agents and the Wizard make is easier to find, open and trace back. The
 Wizard's own changes (a Character Kit, a story, a series episode, a Video 3D
 template or scene) get a row in Activity's Agents view, badged Wizard, with
