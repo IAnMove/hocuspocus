@@ -1,9 +1,12 @@
 """SFX, looping music, jingles and voice lines for one game asset.
 
 Retro effects stay on the CPU. MMAudio, ACE-Step and speech go through the
-tool wrappers. Peak normalisation happens after resampling so the delivered
-WAV keeps the requested peak. Music loop points are sample indices; the
-analyzer reports times in seconds and this module converts them.
+tool wrappers; their outputs are resolved against the workspace. Peak
+normalisation happens after resampling so the delivered WAV keeps the
+requested peak. Music loop points are sample indices; the analyzer reports
+times in seconds and this module converts them. SFX variants share one
+attempt. Music, jingles and voice lines make one attempt per candidate, each
+with its own seed, intent ids and raw file names.
 """
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ import soundfile as sf
 
 from services.audio_levels import integrated_lufs
 from services.game_audio import (
+    best_loop,
     cut_jingle,
     fades,
     lufs_normalize,
@@ -26,13 +30,23 @@ from services.game_audio import (
     write_ogg_loop,
     write_wav_loop,
 )
-from services.game_generators.base import AttemptResult, GenContext, attempt_dir
-from services.game_sfxr import generate
-from services.game_tools import music, sfx, speech
+from services.game_generators.base import (
+    AttemptResult,
+    GenContext,
+    attempt_dir,
+    candidate_dirs,
+    candidate_result,
+    relative,
+    spec_seed,
+)
+from services.game_sfxr import PRESETS, generate
+from services.game_tools import GameToolError, music, resolve_path, sfx, speech
 
 _LOOP_JUMP = 0.05
 _LOOP_RMS_DB = 2.0
 _VOICE_LUFS = -16
+# Measured loudness further than this from the target is reported, not hidden.
+_LUFS_TOLERANCE = 1.0
 
 
 def loop_warnings(sample_jump: float, rms_db: float) -> list[str]:
@@ -46,6 +60,11 @@ def music_seconds(loop_seconds: float, bpm: float) -> float:
     """``loopSeconds`` plus four bars plus eight seconds of extra tail."""
     bars = 16.0 * 60.0 / float(bpm)
     return float(loop_seconds) + bars + 8.0
+
+
+def jingle_seconds(seconds: float) -> float:
+    """Ten seconds, or six seconds past ``seconds`` so a downbeat lies beyond the cut."""
+    return max(10.0, float(seconds) + 6.0)
 
 
 def _spec(asset: dict) -> dict:
@@ -78,22 +97,56 @@ def _variants(asset: dict) -> int:
         return 1
 
 
-def _seed(asset: dict, index: int) -> int:
-    try:
-        base = int(_spec(asset).get("seed") or 1)
-    except (TypeError, ValueError):
-        base = 1
-    return base + index
+def _lines(asset: dict) -> list[str]:
+    lines = _spec(asset).get("lines")
+    if not isinstance(lines, list):
+        return []
+    return [str(line).strip() for line in lines if str(line).strip()]
 
 
-def _relative(ctx: GenContext, path: Path) -> str:
-    return str(path.relative_to(Path(ctx.workspace_dir(ctx.workspace))))
+def _seed(asset: dict, offset: int) -> int:
+    return spec_seed(asset) + int(offset)
 
 
-def _folder(ctx: GenContext) -> Path:
-    folder = attempt_dir(ctx)
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder
+def _folder(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _merge(into: list, items: list) -> None:
+    for item in items:
+        if item not in into:
+            into.append(item)
+
+
+def _candidates(ctx: GenContext) -> list[tuple[str, Path, str]]:
+    """``(attemptId, folder, tag)`` per candidate; the tag is empty for a single one.
+
+    The tag keeps intent ids and raw outputs apart, so a second candidate never
+    gets the first candidate's job back from the journal.
+    """
+    dirs = candidate_dirs(ctx, _count(ctx.asset))
+    single = len(dirs) == 1
+    return [(attempt_id, folder, "" if single else f"a{index}") for index, (attempt_id, folder) in enumerate(dirs, start=1)]
+
+
+def _step(name: str, tag: str) -> str:
+    return f"{name}-{tag}" if tag else name
+
+
+def _raw_name(asset: dict, tag: str, rest: str) -> str:
+    return f"{asset['id']}-{tag}-{rest}" if tag else f"{asset['id']}-{rest}"
+
+
+def _each_candidate(ctx: GenContext, make) -> AttemptResult:
+    """``make(ctx, index, folder, tag) -> ({files, metrics}, warnings)`` per candidate."""
+    written: list[dict] = []
+    warnings: list[str] = []
+    for index, (attempt_id, folder, tag) in enumerate(_candidates(ctx)):
+        row, found = make(ctx, index, _folder(folder), tag)
+        written.append({"id": attempt_id, **row})
+        _merge(warnings, found)
+    return candidate_result(written, warnings, ctx.steps)
 
 
 def _bpm(asset: dict, game: dict) -> float:
@@ -104,6 +157,10 @@ def _bpm(asset: dict, game: dict) -> float:
     if isinstance(pair, list) and len(pair) == 2:
         return max(1.0, (_number(pair[0], 90) + _number(pair[1], 140)) / 2.0)
     return 120.0
+
+
+def _sample_rate(game: dict) -> int:
+    return max(1, int(_number(_style_audio(game).get("sampleRate"), 48000)))
 
 
 def _resample(y: np.ndarray, src: int, dst: int) -> np.ndarray:
@@ -135,8 +192,8 @@ def _peak_db(y: np.ndarray):
     return round(20.0 * math.log10(peak), 3)
 
 
-def _load(path: str) -> tuple[np.ndarray, int]:
-    data, sr = sf.read(path, always_2d=False)
+def _load(path) -> tuple[np.ndarray, int]:
+    data, sr = sf.read(str(path), always_2d=False)
     return np.asarray(data, dtype=np.float64), int(sr)
 
 
@@ -157,12 +214,30 @@ def _shape_sfx(y: np.ndarray, sr: int, seconds: float, peak_db: float, sample_ra
 
 
 def _measure(path: Path) -> dict:
-    data, sr = _load(str(path))
+    data, sr = _load(path)
     return {
         "peakDb": _peak_db(data),
         "duration": round(float(data.shape[0]) / float(sr), 4) if sr else 0.0,
         "lufs": integrated_lufs(str(path)),
     }
+
+
+def _leveled(path: Path, target: float) -> tuple[dict, list[str]]:
+    """Level ``path`` to ``target`` LUFS and measure it.
+
+    ``lufs_normalize`` gives up quietly (ffmpeg failed, or the gain hit its
+    20 dB cap), so a result still more than 1 LU off warns ``loudness_off_target``.
+    """
+    lufs_normalize(str(path), target)
+    measured = _measure(path)
+    lufs = measured["lufs"]
+    if lufs is not None and abs(float(lufs) - float(target)) > _LUFS_TOLERANCE:
+        return measured, ["loudness_off_target"]
+    return measured, []
+
+
+def _caption(*parts) -> str:
+    return ", ".join(text for text in (str(part or "").strip() for part in parts) if text)
 
 
 def _prompt_text(asset: dict) -> str:
@@ -190,149 +265,162 @@ def _samples(values, sr: int) -> list[int]:
     return [_index(item, sr) for item in values]
 
 
-def _bar_samples(beats: list[int], downbeats: list[int]) -> int:
-    for points in (downbeats, beats):
-        gaps = [b - a for a, b in zip(points, points[1:]) if b > a]
-        if gaps:
-            mean = sum(gaps) / len(gaps)
-            return max(1, int(round(mean if points is downbeats else mean * 4.0)))
-    return 1
-
-
-def _analyze(path: str) -> dict:
+def _analyze(path) -> dict:
     from services.audio_analysis import analyze
 
-    report = analyze(path, transcribe=False)
+    report = analyze(str(path), transcribe=False)
     return report if isinstance(report, dict) else {}
 
 
-def _best_loop(y, sr, beats, downbeats, target_s):
-    from services.game_audio import best_loop
+def _retro(spec: dict, seed: int) -> tuple[np.ndarray, int]:
+    preset = str(spec.get("retroPreset") or "")
+    if not preset:
+        raise GameToolError("missing_preset", "retro sfx needs retroPreset")
+    if preset not in PRESETS:
+        raise GameToolError("unknown_preset", f"retroPreset {preset!r} is not one of {', '.join(sorted(PRESETS))}")
+    data, sr = generate(preset, seed)
+    return np.asarray(data, dtype=np.float64), int(sr)
 
-    return best_loop(y, sr, beats, downbeats, target_s)
 
-
-def _level(path: Path, target: float) -> None:
-    lufs_normalize(str(path), target)
+def _sfx_audio(ctx: GenContext, engine: str, index: int, name: str) -> np.ndarray:
+    """Variant ``index`` (1-based) shaped to ``seconds``, ``sfxPeakDb`` and ``sampleRate``."""
+    spec = _spec(ctx.asset)
+    seconds = _number(spec.get("seconds"), 1.0)
+    # Above 0 dBFS the 16-bit WAV would clip.
+    peak_db = min(0.0, _number(_style_audio(ctx.game).get("sfxPeakDb"), -1.0))
+    seed = _seed(ctx.asset, index - 1)
+    if engine == "retro":
+        data, sr = _retro(spec, seed)
+    else:
+        asked = max(1, int(math.ceil(seconds)))
+        raw = sfx(ctx, f"v{index}", prompt=_sfx_prompt(ctx.asset, ctx.game), seconds=asked, seed=seed, output_name=name)
+        data, sr = _load(resolve_path(ctx, raw))
+    return _shape_sfx(data, sr, seconds, peak_db, _sample_rate(ctx.game))
 
 
 def _run_sfx(ctx: GenContext) -> AttemptResult:
     asset = ctx.asset
-    spec = _spec(asset)
-    engine = str(spec.get("engine") or "mmaudio")
-    seconds = _number(spec.get("seconds"), 1.0)
-    peak_db = _number(_style_audio(ctx.game).get("sfxPeakDb"), -1.0)
-    sample_rate = int(_number(_style_audio(ctx.game).get("sampleRate"), 48000))
-    folder = _folder(ctx)
+    engine = str(_spec(asset).get("engine") or "mmaudio")
+    folder = _folder(attempt_dir(ctx))
     files: dict[str, str] = {}
     rows = []
+    warnings: list[str] = []
     for index in range(1, _variants(asset) + 1):
         path = folder / f"{asset['id']}-{index}.wav"
-        if engine == "retro":
-            shaped = _retro(spec, _seed(asset, index - 1), seconds, peak_db, sample_rate)
-        else:
-            asked = max(1, int(math.ceil(seconds)))
-            raw = sfx(ctx, f"v{index}", prompt=_sfx_prompt(asset, ctx.game), seconds=asked, seed=_seed(asset, index - 1), output_name=path.name)
-            data, sr = _load(raw)
-            shaped = _shape_sfx(data, sr, seconds, peak_db, sample_rate)
-        _write(path, shaped, sample_rate)
-        files[str(index)] = _relative(ctx, path)
-        rows.append({"file": path.name, **_measure(path)})
-    return AttemptResult(files, {"engine": engine, "variants": rows}, [], {"steps": list(ctx.steps)})
-
-
-def _retro(spec: dict, seed: int, seconds: float, peak_db: float, sample_rate: int) -> np.ndarray:
-    preset = str(spec.get("retroPreset") or "")
-    if not preset:
-        from services.game_tools import GameToolError
-        raise GameToolError("missing_preset", "retro sfx needs retroPreset")
-    data, sr = generate(preset, seed)
-    return _shape_sfx(np.asarray(data, dtype=np.float64), int(sr), seconds, peak_db, sample_rate)
+        _write(path, _sfx_audio(ctx, engine, index, path.name), _sample_rate(ctx.game))
+        row = {"file": path.name, **_measure(path)}
+        if row["peakDb"] is None:
+            _merge(warnings, ["sfx_silent"])
+        files[str(index)] = relative(ctx, path)
+        rows.append(row)
+    return AttemptResult(files, {"engine": engine, "variants": rows}, warnings, {"steps": list(ctx.steps)})
 
 
 def _music_prompt(asset: dict, game: dict) -> str:
     audio = _style_audio(game)
-    parts = [
-        str(audio.get("genre") or "").strip(),
-        str(audio.get("instruments") or "").strip(),
-        str(_spec(asset).get("mood") or "").strip(),
-        str(asset.get("description") or "").strip(),
+    return _caption(
+        audio.get("genre"), audio.get("instruments"), _spec(asset).get("mood"), asset.get("description"),
         "seamless loopable game background music, no intro, no ending",
-    ]
-    return ", ".join(part for part in parts if part)
+    )
 
 
-def _loop_points(path: str, audio: np.ndarray, sr: int, target: float) -> tuple[int, int, int]:
+def _grid_loop(frames: int, sr: int, target: float, bpm: float) -> tuple[int, int, int]:
+    """A loop from 0 on the requested tempo, for audio without usable downbeats.
+
+    Its length is the multiple of four bars nearest ``target`` that leaves one
+    more bar after it; ``render_loop`` fades that bar into the start. When not
+    even four bars fit, the whole buffer comes back unfaded.
+    """
+    bar = 240.0 * int(sr) / float(bpm)
+    phrase = 4.0 * bar
+    xf = int(round(bar))
+    phrases = min(max(1, int(round(float(target) * int(sr) / phrase))), int((frames - xf) // phrase))
+    if phrases < 1:
+        return 0, int(frames), 0
+    return 0, int(round(phrases * phrase)), xf
+
+
+def _loop_points(path, audio: np.ndarray, sr: int, target: float, bpm: float) -> tuple[int, int, int, list[str]]:
+    """``(start, end_exclusive, crossfade, warnings)`` for the loop nearest ``target`` seconds."""
     report = _analyze(path)
     beats = _samples(report.get("beats"), sr)
     downs = _samples(report.get("downbeats"), sr)
-    start, end, _score = _best_loop(audio, sr, beats, downs, target)
-    return int(start), int(end), _bar_samples(beats, downs)
+    start, end, _score, xf = best_loop(audio, sr, beats, downs, target)
+    if int(xf) > 0:
+        return int(start), int(end), int(xf), []
+    # best_loop found no downbeat pair and returned the whole (too long) take.
+    start, end, xf = _grid_loop(int(audio.shape[0]), sr, target, bpm)
+    return start, end, xf, ["loop_no_downbeats"]
 
 
-def _run_music(ctx: GenContext) -> AttemptResult:
-    asset = ctx.asset
-    spec = _spec(asset)
-    bpm = _bpm(asset, ctx.game)
-    target = _number(spec.get("loopSeconds"), 60)
-    asked = music_seconds(target, bpm)
-    folder = _folder(ctx)
-    raw_path = music(
-        ctx, "loop", prompt="[Instrumental]", alt_prompt=_music_prompt(asset, ctx.game),
-        seconds=asked, seed=_seed(asset, 0), bpm=int(round(bpm)), output_name=f"{asset['id']}-raw.wav",
-    )
-    audio, sr = _load(raw_path)
-    start, end, fade = _loop_points(raw_path, audio, sr, target)
-    loop = render_loop(audio, sr, start, end, fade)
-    wav_path = folder / f"{asset['id']}.wav"
-    _write(wav_path, loop, sr)
-    _level(wav_path, _number(_style_audio(ctx.game).get("musicLufs"), -16))
-    leveled, leveled_sr = _load(str(wav_path))
-    write_wav_loop(wav_path, leveled, leveled_sr, 0, max(0, int(leveled.shape[0]) - 1))
-    ogg_path = folder / f"{asset['id']}.ogg"
-    warning = write_ogg_loop(ogg_path, leveled, leveled_sr, 0, int(leveled.shape[0]))
-    seam = seam_metrics(leveled, leveled_sr)
-    files = {"wav": _relative(ctx, wav_path)}
+def _music_files(ctx: GenContext, folder: Path, loop: np.ndarray, sr: int) -> tuple[dict, dict, list[str]]:
+    """Leveled WAV with ``smpl`` 0..len-1 and an Ogg with LOOPSTART/LOOPLENGTH."""
+    wav_path = folder / f"{ctx.asset['id']}.wav"
+    write_wav_loop(wav_path, loop, sr, 0, max(0, int(loop.shape[0]) - 1))
+    # lufs_normalize keeps the smpl chunk and the sample count.
+    measured, warnings = _leveled(wav_path, _number(_style_audio(ctx.game).get("musicLufs"), -16))
+    leveled, leveled_sr = _load(wav_path)
+    ogg_path = wav_path.with_suffix(".ogg")
+    fallback = write_ogg_loop(ogg_path, leveled, leveled_sr, 0, int(leveled.shape[0]))
+    files = {"wav": relative(ctx, wav_path)}
     if ogg_path.is_file():
-        files["ogg"] = _relative(ctx, ogg_path)
-    warnings = loop_warnings(seam["sample_jump"], seam["rms_db"])
-    if warning:
-        warnings.append(str(warning))
+        files["ogg"] = relative(ctx, ogg_path)
+    seam = seam_metrics(leveled, leveled_sr)
+    _merge(warnings, loop_warnings(seam["sample_jump"], seam["rms_db"]))
+    if fallback:
+        warnings.append(str(fallback))
     metrics = {
         "loopStart": 0,
         "loopEnd": max(0, int(leveled.shape[0]) - 1),
         "sampleJump": seam["sample_jump"],
         "rmsDb": seam["rms_db"],
-        "bpm": round(bpm, 3),
-        "duration": round(float(leveled.shape[0]) / float(leveled_sr), 4),
+        **measured,
     }
-    return AttemptResult(files, metrics, warnings, {"steps": list(ctx.steps)})
+    return files, metrics, warnings
 
 
-def _run_jingle(ctx: GenContext) -> AttemptResult:
+def _music_candidate(ctx: GenContext, index: int, folder: Path, tag: str) -> tuple[dict, list[str]]:
+    asset = ctx.asset
+    bpm = _bpm(asset, ctx.game)
+    tempo = max(1, int(round(bpm)))
+    target = _number(_spec(asset).get("loopSeconds"), 60)
+    raw = resolve_path(ctx, music(
+        ctx, _step("loop", tag), prompt="[Instrumental]", alt_prompt=_music_prompt(asset, ctx.game),
+        seconds=music_seconds(target, bpm), seed=_seed(asset, index), bpm=tempo,
+        output_name=_raw_name(asset, tag, "raw.wav"),
+    ))
+    audio, sr = _load(raw)
+    start, end, xf, warnings = _loop_points(raw, audio, sr, target, tempo)
+    files, metrics, found = _music_files(ctx, folder, render_loop(audio, sr, start, end, xf), sr)
+    _merge(warnings, found)
+    return {"files": files, "metrics": {**metrics, "bpm": round(bpm, 3)}}, warnings
+
+
+def _jingle_prompt(asset: dict, game: dict, mood: str) -> str:
+    audio = _style_audio(game)
+    return _caption(
+        audio.get("genre"), audio.get("instruments"), asset.get("description"),
+        f"short {mood} game jingle, ends clearly",
+    )
+
+
+def _jingle_candidate(ctx: GenContext, index: int, folder: Path, tag: str) -> tuple[dict, list[str]]:
     asset = ctx.asset
     spec = _spec(asset)
     mood = str(spec.get("mood") or "victory")
     seconds = _number(spec.get("seconds"), 4)
-    folder = _folder(ctx)
-    raw_path = music(
-        ctx, "jingle", prompt=f"short {mood} game jingle, ends clearly",
-        alt_prompt=f"short {mood} game jingle, ends clearly",
-        seconds=10, seed=_seed(asset, 0), bpm=int(round(_bpm(asset, ctx.game))),
-        output_name=f"{asset['id']}-raw.wav",
-    )
-    audio, sr = _load(raw_path)
-    downs = _samples(_analyze(raw_path).get("downbeats"), sr)
-    clipped = cut_jingle(audio, sr, seconds, downs)
+    # ACE-Step sings ``prompt`` as lyrics; the description goes in ``alt_prompt``.
+    raw = resolve_path(ctx, music(
+        ctx, _step("jingle", tag), prompt="[Instrumental]", alt_prompt=_jingle_prompt(asset, ctx.game, mood),
+        seconds=jingle_seconds(seconds), seed=_seed(asset, index), bpm=max(1, int(round(_bpm(asset, ctx.game)))),
+        output_name=_raw_name(asset, tag, "raw.wav"),
+    ))
+    audio, sr = _load(raw)
+    downs = _samples(_analyze(raw).get("downbeats"), sr)
     path = folder / f"{asset['id']}.wav"
-    _write(path, clipped, sr)
-    _level(path, _number(_style_audio(ctx.game).get("musicLufs"), -16))
-    return AttemptResult(
-        {"wav": _relative(ctx, path)},
-        {"mood": mood, "seconds": seconds, **_measure(path)},
-        [],
-        {"steps": list(ctx.steps)},
-    )
+    _write(path, cut_jingle(audio, sr, seconds, downs), sr)
+    measured, warnings = _leveled(path, _number(_style_audio(ctx.game).get("musicLufs"), -16))
+    return {"files": {"wav": relative(ctx, path)}, "metrics": {"mood": mood, "seconds": seconds, **measured}}, warnings
 
 
 def _character(game: dict, slug: str) -> dict | None:
@@ -353,6 +441,15 @@ def _kit_voice(ctx: GenContext, kit_id: str):
     return voice_for(kit, "english")
 
 
+def _speaker(ctx: GenContext) -> tuple[dict | None, str]:
+    """The character kit's voice, else ``None``, and the ``traits`` for voice design."""
+    spec = _spec(ctx.asset)
+    character = _character(ctx.game, str(spec.get("character") or ""))
+    kit_id = str(((character or {}).get("spec") or {}).get("kitId") or "")
+    voice = _kit_voice(ctx, kit_id) if kit_id else None
+    return (voice if isinstance(voice, dict) else None), str(spec.get("traits") or "")
+
+
 def _speech_extra(voice: dict, line: str, seed: int) -> tuple[str, dict]:
     from services.series_native_render import speech_params
 
@@ -361,39 +458,52 @@ def _speech_extra(voice: dict, line: str, seed: int) -> tuple[str, dict]:
     return str(params.get("model_type") or voice.get("model") or ""), extra
 
 
-def _speak(ctx: GenContext, index: int, line: str, voice: dict | None, traits: str) -> str:
-    seed = _seed(ctx.asset, index - 1)
-    name = f"{ctx.asset['id']}-{index}.wav"
+def _speak(ctx: GenContext, step: str, name: str, seed: int, line: str, speaker: tuple[dict | None, str]) -> str:
+    voice, traits = speaker
     if voice:
         model, extra = _speech_extra(voice, line, seed)
-        return speech(ctx, f"line-{index}", prompt=line, model=model, seed=seed, output_name=name, extra=extra)
+        return speech(ctx, step, prompt=line, model=model, seed=seed, output_name=name, extra=extra)
     extra = {"alt_prompt": traits} if traits else None
-    return speech(ctx, f"line-{index}", prompt=line, model="qwen3_tts_voicedesign", seed=seed, output_name=name, extra=extra)
+    return speech(ctx, step, prompt=line, model="qwen3_tts_voicedesign", seed=seed, output_name=name, extra=extra)
+
+
+def _voice_take(ctx: GenContext, index: int, folder: Path, tag: str, lines: list[str], speaker) -> tuple[dict, list[str]]:
+    """Every line once. Candidate ``index`` uses the seeds after the previous candidate's."""
+    asset = ctx.asset
+    files: dict[str, str] = {}
+    rows = []
+    warnings: list[str] = []
+    for number, line in enumerate(lines, start=1):
+        seed = _seed(asset, index * len(lines) + number - 1)
+        raw = _speak(ctx, _step(f"line-{number}", tag), _raw_name(asset, tag, f"{number}.wav"), seed, line, speaker)
+        data, sr = _load(resolve_path(ctx, raw))
+        path = folder / f"{asset['id']}-{number}.wav"
+        _write(path, to_mono(data), sr)
+        measured, found = _leveled(path, _VOICE_LUFS)
+        _merge(warnings, found)
+        files[str(number)] = relative(ctx, path)
+        rows.append({"file": path.name, "line": line, **measured})
+    metrics = {"lines": len(lines), "voicedesign": speaker[0] is None, "takes": rows}
+    return {"files": files, "metrics": metrics}, warnings
 
 
 def _run_voice(ctx: GenContext) -> AttemptResult:
-    spec = _spec(ctx.asset)
-    lines = [str(line) for line in spec.get("lines") or [] if str(line).strip()]
-    character = _character(ctx.game, str(spec.get("character") or ""))
-    kit_id = str((character or {}).get("spec", {}).get("kitId") or "")
-    voice = _kit_voice(ctx, kit_id) if kit_id else None
-    traits = str(spec.get("traits") or "")
-    folder = _folder(ctx)
-    files: dict[str, str] = {}
-    for index, line in enumerate(lines, start=1):
-        raw = _speak(ctx, index, line, voice if isinstance(voice, dict) else None, traits)
-        data, sr = _load(raw)
-        path = folder / f"{ctx.asset['id']}-{index}.wav"
-        _write(path, to_mono(data), sr)
-        _level(path, _VOICE_LUFS)
-        files[str(index)] = _relative(ctx, path)
-    return AttemptResult(files, {"lines": len(lines), "voicedesign": voice is None}, [], {"steps": list(ctx.steps)})
+    lines = _lines(ctx.asset)
+    if not lines:
+        raise GameToolError("no_lines", "the voice asset has no lines to speak")
+    speaker = _speaker(ctx)
+    return _each_candidate(
+        ctx, lambda run, index, folder, tag: _voice_take(run, index, folder, tag, lines, speaker),
+    )
 
 
 class SfxGenerator:
     kind = "sfx"
 
     def estimate(self, _game: dict, asset: dict) -> dict[str, int]:
+        # Retro effects are synthesized on the CPU; they wait for no tool.
+        if str(_spec(asset).get("engine") or "") == "retro":
+            return {}
         return {"sfx": _variants(asset)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
@@ -407,7 +517,7 @@ class MusicGenerator:
         return {"music": _count(asset)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
-        return _run_music(ctx)
+        return _each_candidate(ctx, _music_candidate)
 
 
 class JingleGenerator:
@@ -417,15 +527,14 @@ class JingleGenerator:
         return {"music": _count(asset)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
-        return _run_jingle(ctx)
+        return _each_candidate(ctx, _jingle_candidate)
 
 
 class VoiceGenerator:
     kind = "voice"
 
     def estimate(self, _game: dict, asset: dict) -> dict[str, int]:
-        lines = _spec(asset).get("lines") if isinstance(_spec(asset).get("lines"), list) else []
-        return {"sfx": max(1, len(lines)) * _count(asset)}
+        return {"sfx": max(1, len(_lines(asset))) * _count(asset)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
         return _run_voice(ctx)
