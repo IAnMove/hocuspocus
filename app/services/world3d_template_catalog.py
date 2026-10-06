@@ -83,7 +83,7 @@ def _limit(value: int | None) -> int:
     return value
 
 
-def _user_cards(workspace_dir, workspace: str) -> list[dict]:
+def _user_rows(workspace_dir, workspace: str) -> list[dict]:
     path = Path(workspace_dir(workspace)) / USER_FILE
     if not path.is_file():
         return []
@@ -94,7 +94,40 @@ def _user_cards(workspace_dir, workspace: str) -> list[dict]:
     rows = data.get("templates") if isinstance(data, dict) else None
     if not isinstance(rows, list):
         raise World3DTemplateError("user_templates_unreadable", "Personal Video 3D templates are unreadable", 409)
-    return [_user_card(row) for row in rows if isinstance(row, dict)]
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
+
+
+def _user_cards(workspace_dir, workspace: str) -> list[dict]:
+    return [_user_card(row) for row in _user_rows(workspace_dir, workspace)]
+
+
+def list_user_templates(workspace_dir, workspace: str) -> list[dict]:
+    """Every personal template of the workspace (newest first) for the Video 3D editor, without documents."""
+    summaries = [_template_summary(row) for row in _user_rows(workspace_dir, workspace)]
+    return sorted(summaries, key=lambda item: str(item.get("updatedAt") or ""), reverse=True)
+
+
+def _template_summary(row: dict) -> dict:
+    document = row.get("document") if isinstance(row.get("document"), dict) else {}
+    slots = [slot for slot in document.get("slots") or [] if isinstance(slot, dict)]
+    width, height = document.get("width") or 1280, document.get("height") or 720
+    base = document.get("templateId")
+    return {
+        "id": row["id"], "title": row.get("title") or row["id"], "description": str(row.get("description") or ""),
+        "createdAt": row.get("createdAt"), "updatedAt": row.get("updatedAt") or row.get("createdAt"),
+        "createdBy": row.get("createdBy"), "baseTemplateId": base if isinstance(base, str) and not base.startswith("user-") else None,
+        "duration": document.get("duration") or 0, "width": width, "height": height,
+        "format": "portrait" if height > width else "landscape",
+        "slots": len(slots), "pending": sum(1 for slot in slots if not slot.get("sourceUrl")),
+    }
+
+
+def user_template_row(template_id: str, workspace_dir, workspace: str) -> dict:
+    """One stored personal template with its document exactly as saved (the editor keeps its base shot id)."""
+    for row in _user_rows(workspace_dir, workspace):
+        if row.get("id") == template_id and isinstance(row.get("document"), dict):
+            return deepcopy(row)
+    raise World3DTemplateError("unknown_template", f"unknown_template:{template_id}", 404)
 
 
 def _user_card(row: dict) -> dict:

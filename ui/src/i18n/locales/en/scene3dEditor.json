@@ -3991,5 +3991,19 @@
     "current": "Current",
     "pickOne": "Pick a shot to see it here.",
     "hint": "Double-click or press Enter to use a shot straight away"
+  },
+  "workspaceTemplates": {
+    "title": "Saved in this workspace",
+    "help": "Templates an agent, the Wizard or you saved in this workspace (world3d.templates.user.put). Pick one and press “Use this shot”: it opens as an editable shot.",
+    "objects_one": "{{count}} object",
+    "objects_other": "{{count}} objects",
+    "pending_one": "{{count}} empty slot",
+    "pending_other": "{{count}} empty slots",
+    "by": {
+      "agent": "Agent",
+      "wizard": "Wizard"
+    },
+    "invalid": "This workspace template is not a valid Video 3D document.",
+    "shotTitle": "Workspace template · {{id}}"
   }
 }

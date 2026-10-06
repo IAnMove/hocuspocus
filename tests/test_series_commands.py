@@ -161,6 +161,17 @@ def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
     assert OPERATIONS["characters.rig.flat.preview"][2] is False, "a preview saves nothing on the kit"
 
 
+def test_the_agent_trail_names_the_rigged_kit_and_leaves_previews_out():
+    from services.agent_activity import artifact_targets
+    from services.series_commands import _operation_schema
+    rigged = {"result": {"revision": 3, "character": {"id": "blas", "name": "Blas"}, "review": "/api/v1/file/kit-blas-rig-review-1.png"}}
+    targets = artifact_targets({"input": {"workspace": "series", "character_id": "blas"}}, rigged)
+    assert targets[0] == {"kind": "character_kit", "id": "blas", "title": "Blas"}
+    # The dispatcher records mutating calls only: the preview's warped sheet is not something the agent made.
+    preview = OPERATIONS["characters.rig.flat.preview"]
+    assert _operation_schema("characters.rig.flat.preview", *preview)["mutation"] is False
+
+
 def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [])
     listed = call(handlers, "characters.styles", {})["result"]

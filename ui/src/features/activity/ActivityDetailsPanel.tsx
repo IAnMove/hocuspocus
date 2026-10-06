@@ -29,6 +29,24 @@ interface ActivityDetailsPanelProps {
   onControl: (task: CanonicalTask, action: TaskControlAction) => void
   onCopyId: (task: CanonicalTask) => void
   onCopyPrompt: (task: CanonicalTask) => void
+  originFilter?: 'all' | 'agents'
+  onOriginFilterChange?: (filter: 'all' | 'agents') => void
+}
+
+function OriginFilter({ value, onChange }: { value: 'all' | 'agents'; onChange?: (filter: 'all' | 'agents') => void }) {
+  const { t } = useUiTranslation('activity')
+  if (!onChange) return null
+  return (
+    <div role="group" aria-label={t('origin.filterLabel')} className="flex items-center gap-1">
+      {(['all', 'agents'] as const).map(option => (
+        <button key={option} type="button" aria-pressed={value === option} data-testid={`activity-origin-${option}`}
+          onClick={() => onChange(option)} title={t(`origin.filter.${option}Title`)}
+          className={`rounded border px-1.5 py-0.5 text-[9px] ${value === option ? 'border-fuchsia-300/70 bg-fuchsia-400/10 text-text-primary' : 'border-border text-text-muted hover:text-text-primary'}`}>
+          {t(`origin.filter.${option}`)}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 export function ActivityDetailsPanel({
@@ -53,6 +71,8 @@ export function ActivityDetailsPanel({
   onControl,
   onCopyId,
   onCopyPrompt,
+  originFilter = 'all',
+  onOriginFilterChange,
 }: ActivityDetailsPanelProps) {
   const { t: tCommon } = useUiTranslation('common')
   const { t: tActivity } = useUiTranslation('activity')
@@ -70,7 +90,8 @@ export function ActivityDetailsPanel({
     >
       <div className="mb-1.5 flex items-center justify-between px-1">
         <span className="font-semibold text-text-primary">{tActivity('panelTitle')}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <OriginFilter value={originFilter} onChange={onOriginFilterChange} />
           {historicalCount > 0 ? (
             <button
               type="button"
@@ -88,7 +109,7 @@ export function ActivityDetailsPanel({
       </div>
       <div className="space-y-1.5">
         {loadFailed ? <p role="alert" className="px-2 py-3 text-amber-300">{tActivity('loadFailed')}</p> : null}
-        {!groups.length && !loadFailed ? <p role="status" className="px-2 py-3 text-text-secondary">{tActivity(loading ? 'loadingHistory' : 'emptyHistory')}</p> : null}
+        {!groups.length && !loadFailed ? <p role="status" className="px-2 py-3 text-text-secondary">{tActivity(originFilter === 'agents' ? 'origin.emptyAgents' : loading ? 'loadingHistory' : 'emptyHistory')}</p> : null}
         {groups.map(group => (
           <ActivityExecutionDetail
             key={group.id}
