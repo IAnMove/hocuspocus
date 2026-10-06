@@ -28,7 +28,7 @@ from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
 from services.series_jobs import SeriesJobStore
 from services.series_score import clip_score
-from services.series_take_sound import plan_take_sound, prepare_clips, prepared_note
+from services.series_take_sound import plan_take_sound, prepare_clips, prepared_metadata, prepared_note
 from services.task_manager import get_cancellation_token, get_task_registry
 
 
@@ -163,6 +163,12 @@ class SeriesAssemblyDiscardResponse(BaseModel):
     discarded: bool
     jobId: str
     outputsPreserved: bool
+
+
+def _remove_folder(path: str) -> None:
+    """The temporary folder of the clips prepared for one join (series_take_sound)."""
+    if path:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -378,7 +384,7 @@ def create_series_assembly_router(
             ]
             output_directory = workspace_dir(str(job["workspace"]))
             # Generated and imported takes get their shot's sound, and every clip the episode's frame (series_take_sound).
-            prepared_dir = tempfile.mkdtemp(prefix="hocuspocus-assembly-") if job.get("frame") else ""
+            prepared_dir = tempfile.mkdtemp(prefix="hocuspocus-assembly-")
             clip_paths, prepared = prepare_clips(clip_paths, job.get("clips", []), job.get("frame"), output_directory,
                                                  prepared_dir, cancelled=token.is_cancelled)
             timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
@@ -466,7 +472,7 @@ def create_series_assembly_router(
                         "loudness": finishing["loudness"],
                         "subtitles": {**finishing["subtitles"], "language": job.get("language") or series.get("spokenLanguage") or series.get("language")},
                         **{key: finishing[key] for key in ("ambience", "score") if key in finishing},
-                        **({"preparedClips": prepared} if prepared else {}),
+                        **prepared_metadata(prepared),
                         **({"language": job["language"]} if job.get("language") else {}),
                         "createdAt": completed_at,
                     },
@@ -526,8 +532,7 @@ def create_series_assembly_router(
                 message="Series episode assembly failed; approved clips were not changed.",
             )
         finally:
-            if prepared_dir:
-                shutil.rmtree(prepared_dir, ignore_errors=True)
+            _remove_folder(prepared_dir)
             with jobs_lock:
                 active_job_ids.discard(job_id)
 

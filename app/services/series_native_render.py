@@ -223,15 +223,13 @@ class SeriesNativeRender:
                    language: str | None) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
         """The series, the language and the 2D shots to render; refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or []
-                  if (series_shot3d.wants_render(shot) or wants_video_foley(shot)) and (not shot_ids or shot["id"] in shot_ids)}
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if _renders(shot) and (not shot_ids or shot["id"] in shot_ids)}
         if not wanted:
             raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
-        # A generated or imported take only gets its foley: its lines are in the clip, no kit or voice is needed.
-        rendered = [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
+        rendered = _drawn(shots)
         missing = self._missing_kits(workspace, series, rendered)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
@@ -384,11 +382,15 @@ class SeriesNativeRender:
         self._save(workspace, job, activeShotId=None, finishedAt=time.time(), status="failed",
                    message=f"Stopped at shot {item['shotId']}: {error}"[:300])
 
-    def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
+    def _item_shot(self, workspace: str, job: dict, item: dict) -> tuple[dict, dict, dict]:
         series, episode = self._episode(workspace, job["seriesId"], job["episodeId"], job["language"])
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
+        return series, episode, shot
+
+    def _render_item(self, workspace: str, job: dict, item: dict, index: int) -> None:
+        series, episode, shot = self._item_shot(workspace, job, item)
         kits = self.deps.read_kits(workspace)
         item["status"] = "running"
         if shot.get("productionMethod") in VIDEO_METHODS:
@@ -795,6 +797,16 @@ class SeriesNativeRender:
             self._approve(workspace, job, item["shotId"], attempt["id"])
             item["approved"] = True
         self._save(workspace, job)
+
+
+def _renders(shot: dict[str, Any]) -> bool:
+    """A shot the server render makes, or a generated or imported take whose foley it makes."""
+    return series_shot3d.wants_render(shot) or wants_video_foley(shot)
+
+
+def _drawn(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The shots the render draws and voices; a video take only gets its foley (its lines are in the clip)."""
+    return [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:

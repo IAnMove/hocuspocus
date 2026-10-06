@@ -27,16 +27,20 @@ def shot_foley(shot: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
 
+def _video_asset(assets: dict[str, Any], attempt: dict[str, Any]) -> dict[str, Any] | None:
+    found = (assets.get(str(asset_id)) for asset_id in attempt.get("outputAssetIds") or [])
+    return next((asset for asset in found if isinstance(asset, dict) and asset.get("kind") == "video" and asset.get("uri")), None)
+
+
 def video_take(series: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any] | None:
     """The asset of the shot's approved take, else of its newest completed one."""
     assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
     attempts = [item for item in shot.get("attempts") or [] if isinstance(item, dict) and item.get("status") == "completed"]
     approved = [item for item in attempts if item.get("id") == shot.get("approvedAttemptId")]
-    for attempt in approved or list(reversed(attempts)):
-        for asset_id in attempt.get("outputAssetIds") or []:
-            asset = assets.get(str(asset_id))
-            if isinstance(asset, dict) and asset.get("kind") == "video" and asset.get("uri"):
-                return asset
+    for attempt in approved or attempts[::-1]:
+        asset = _video_asset(assets, attempt)
+        if asset:
+            return asset
     return None
 
 

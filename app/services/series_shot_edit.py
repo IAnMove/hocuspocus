@@ -125,6 +125,11 @@ def _music(layout: dict[str, Any], shot_id: str, versions: dict[str, dict[str, A
     return found
 
 
+def _script_lines(shot: dict[str, Any], original: str, versions: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_line(beat, original, versions) for beat in shot.get("dialogueBeats") or []
+            if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+
+
 def to_script(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
     """The stored shot in the script vocabulary of ``series.episode.from_script``."""
     original, versions = language_key(series), _versions(episode)
@@ -135,8 +140,7 @@ def to_script(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, A
     for key in LAYOUT_KEYS:
         if key not in ("card", "music") and layout.get(key) is not None:
             script[key] = copy.deepcopy(layout[key])
-    lines = [_line(beat, original, versions) for beat in shot.get("dialogueBeats") or []
-             if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+    lines = _script_lines(shot, original, versions)
     if lines:
         script["lines"] = lines
     optional = {"card": _card(layout, shot["id"], original, versions), "music": _music(layout, shot["id"], versions),
@@ -146,15 +150,19 @@ def to_script(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, A
     return script
 
 
-def merge_changes(current: dict[str, Any], changes: dict[str, Any] | None, append: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:
-    """``changes`` replaces keys (null removes one), ``append`` adds items to list keys; returns the shot and what changed."""
-    changes, append = changes or {}, append or {}
+def _check_keys(changes: dict[str, Any], append: dict[str, Any]) -> None:
     unknown = sorted((set(changes) - set(SCRIPT_KEYS)) | (set(append) - set(LIST_KEYS)))
     if unknown:
         raise ShotEditError(f"Unknown shot keys: {', '.join(unknown)} (changes: {', '.join(SCRIPT_KEYS)}; "
                             f"append: {', '.join(LIST_KEYS)})")
     if not changes and not append:
         raise ShotEditError("Send changes or append")
+
+
+def merge_changes(current: dict[str, Any], changes: dict[str, Any] | None, append: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:
+    """``changes`` replaces keys (null removes one), ``append`` adds items to list keys; returns the shot and what changed."""
+    changes, append = changes or {}, append or {}
+    _check_keys(changes, append)
     merged = copy.deepcopy(current)
     for key, value in changes.items():
         if value is None:
@@ -186,6 +194,19 @@ class _OneShot(EpisodeScript):
         return self.stored_id
 
 
+def _layout_patch(shot: dict[str, Any], built: dict[str, Any], changed: list[str]) -> dict[str, Any]:
+    """The stored layout2d with only the changed keys taken from the built shot (a key it no longer has is removed)."""
+    layout = copy.deepcopy(shot.get("layout2d")) if isinstance(shot.get("layout2d"), dict) else {}
+    for key in (key for key in LAYOUT_KEYS if key in changed):
+        if key in built["layout2d"]:
+            layout[key] = built["layout2d"][key]
+        else:
+            layout.pop(key, None)
+    patch: dict[str, Any] = {"layout2d": layout} if set(changed) & set(LAYOUT_KEYS) else {}
+    patch.update({key: layout[key] for key in ("framing", "camera") if key in changed and key in layout})
+    return patch
+
+
 def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], merged: dict[str, Any], changed: list[str],
                 kits: dict[str, Any], files: set[str], root: str | None) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     """Check the merged shot like a script shot; return the stored-shot patch (only what changed) and each language
@@ -196,19 +217,7 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
     except ScriptError as error:
         raise ShotEditError(str(error), problems=error.problems) from error
     built = one.shots()[0]
-    patch: dict[str, Any] = {"id": shot["id"]}
-    layout = copy.deepcopy(shot.get("layout2d")) if isinstance(shot.get("layout2d"), dict) else {}
-    for key in LAYOUT_KEYS:
-        if key in changed:
-            if key in built["layout2d"]:
-                layout[key] = built["layout2d"][key]
-            else:
-                layout.pop(key, None)
-    if set(changed) & set(LAYOUT_KEYS):
-        patch["layout2d"] = layout
-    for key in ("framing", "camera"):
-        if key in changed and key in layout:
-            patch[key] = layout[key]
+    patch: dict[str, Any] = {"id": shot["id"], **_layout_patch(shot, built, changed)}
     if "cast" in changed:
         patch["visibleCharacterIds"] = [_cast_entry(raw)["characterId"] for raw in merged.get("cast") or []]
     if "lines" in changed:
@@ -233,24 +242,38 @@ def take_still_fits(shot: dict[str, Any], changed: list[str]) -> bool:
     return shot.get("productionMethod") in VIDEO_METHODS and set(changed) <= CUT_KEYS
 
 
+def _spoken_beats(episode: dict[str, Any], shot_id: str) -> list[str]:
+    shot = next(item for item in episode.get("shots") or [] if item.get("id") == shot_id)
+    return [beat["id"] for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
+
+
+def _version_dialogue(version: dict[str, Any], old_beats: list[str], new: dict[str, str], beats: list[str]) -> list[str]:
+    """The version's lines of this shot replaced by the new ones; returns the beats it still lacks."""
+    dialogue = {key: value for key, value in (version.get("dialogue") or {}).items() if key not in old_beats}
+    dialogue.update(new)
+    version["dialogue"] = dialogue
+    return [beat for beat in beats if beat not in dialogue]
+
+
+def _version_shot_map(version: dict[str, Any], key: str, shot_id: str, new: dict[str, Any]) -> None:
+    """A version's per-shot ``cards`` or ``music`` entry for this shot replaced by the new one (or removed)."""
+    own = dict(version.get(key) or {})
+    own.pop(shot_id, None)
+    own.update(new)
+    version[key] = own
+
+
 def _write_versions(episode: dict[str, Any], shot_id: str, old_beats: list[str], texts: dict[str, dict[str, Any]],
                     changed: list[str]) -> dict[str, list[str]]:
     missing: dict[str, list[str]] = {}
+    beats = _spoken_beats(episode, shot_id)
+    maps = [key for key, field in (("cards", "card"), ("music", "music")) if field in changed]
     for language, version in _versions(episode).items():
         new = texts.get(language) or {}
         if "lines" in changed:
-            dialogue = {key: value for key, value in (version.get("dialogue") or {}).items() if key not in old_beats}
-            dialogue.update(new.get("dialogue") or {})
-            version["dialogue"] = dialogue
-            beats = [beat["id"] for shot in episode.get("shots") or [] if shot.get("id") == shot_id
-                     for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
-            missing[language] = [beat for beat in beats if beat not in dialogue]
-        for key in ("cards", "music"):
-            if (key == "cards" and "card" in changed) or (key == "music" and "music" in changed):
-                own = dict(version.get(key) or {})
-                own.pop(shot_id, None)
-                own.update(new.get(key) or {})
-                version[key] = own
+            missing[language] = _version_dialogue(version, old_beats, new.get("dialogue") or {}, beats)
+        for key in maps:
+            _version_shot_map(version, key, shot_id, new.get(key) or {})
     return missing
 
 

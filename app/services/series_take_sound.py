@@ -180,35 +180,48 @@ def _sources(root: str, sound: dict[str, Any], duration: float, gain: Callable[[
     return found
 
 
+def _clip_command(path: str, target: str, sources: list[tuple[Path, float, float]], graph: str, duration: float,
+                  video: str | None) -> list[str]:
+    """ffmpeg for one prepared clip: ``video`` is the conform filter (None copies the picture)."""
+    command = ["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", path]
+    for source, _start, _volume in sources:
+        command += ["-i", str(source)]
+    if video is None:
+        command += ["-filter_complex", graph, "-map", "0:v:0", "-map", "[mix]", "-c:v", "copy"]
+    else:
+        command += ["-filter_complex", f"[0:v]{video}[v];{graph}", "-map", "[v]", "-map", "[mix]",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"]
+    return command + ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-t", f"{duration:.4f}", "-movflags", "+faststart", target]
+
+
+def _clip_report(info: dict[str, Any], sound: dict[str, Any], sources: list, foley: Any, mode: str | None) -> dict[str, Any]:
+    report: dict[str, Any] = {"conformed": mode is not None}
+    if mode is not None:
+        report.update({"from": f"{info['width']}x{info['height']}@{info['fps']:.3g}", "fit": mode})
+    if sound:
+        report.update(sounds=len(sources), clipAudio="drop" if sound.get("clipAudio") == "drop" else "keep")
+    if sound.get("foley"):
+        report["foley"] = bool(foley)
+        if not foley:
+            report["warning"] = "foley not made yet: render the shot (series.episode.render_native) or produce the episode"
+    return report
+
+
 def render_clip(path: str, target: str, info: dict[str, Any], frame: dict[str, int], *, root: str,
                 sound: dict[str, Any] | None = None, fit: str | None = None, gain: Callable[[str], float] = gain_to) -> dict[str, Any]:
     """One clip as the cut needs it: conformed when its format differs, with its shot's sound when it has some."""
     sound = sound or {}
-    duration = info["duration"]
-    sources = _sources(root, sound, duration, gain) if sound else []
+    sources = _sources(root, sound, info["duration"], gain) if sound else []
     foley = _foley_source(root, path, sound["foley"], gain) if sound.get("foley") else None
-    if foley:
-        sources.append(foley)
-    conform = needs_conform(info, frame)
-    graph, mixed = _audio_graph(info, sound, sources, duration)
-    command = ["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", path]
-    for source, _start, _volume in sources:
-        command += ["-i", str(source)]
-    mode = fit_mode(info, frame, fit)
-    if conform:
-        graph = f"[0:v]{video_filter(info, frame, mode)}[v];{graph}"
-    command += ["-filter_complex", graph, "-map", "[v]" if conform else "0:v:0", "-map", "[mix]"]
-    command += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"] if conform else ["-c:v", "copy"]
-    command += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-t", f"{duration:.4f}", "-movflags", "+faststart", target]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=1800, check=False)
+    sources += [foley] if foley else []
+    mode = fit_mode(info, frame, fit) if needs_conform(info, frame) else None
+    graph, mixed = _audio_graph(info, sound, sources, info["duration"])
+    video = video_filter(info, frame, mode) if mode else None
+    result = subprocess.run(_clip_command(path, target, sources, graph, info["duration"], video),
+                            capture_output=True, text=True, timeout=1800, check=False)
     if result.returncode != 0 or not os.path.isfile(target):
         raise RuntimeError(("Preparing a take for the cut failed: " + (result.stderr or "")).strip()[-600:])
-    return {"conformed": conform, **({"from": f"{info['width']}x{info['height']}@{info['fps']:.3g}", "fit": mode} if conform else {}),
-            **({"sounds": len(sources), "clipAudio": "drop" if sound.get("clipAudio") == "drop" else "keep"} if sound else {}),
-            **({"foley": bool(foley)} if sound.get("foley") else {}),
-            **({"warning": "foley not made yet: render the shot (series.episode.render_native) or produce the episode"}
-               if sound.get("foley") and not foley else {}),
-            "mixedInputs": mixed}
+    return {**_clip_report(info, sound, sources, foley, mode), "mixedInputs": mixed}
 
 
 def prepare_clips(paths: list[str], clips: list[dict[str, Any]], frame: dict[str, int] | None, root: str, folder: str, *,
@@ -241,6 +254,11 @@ def prepare_clips(paths: list[str], clips: list[dict[str, Any]], frame: dict[str
     return prepared, report
 
 
+def prepared_metadata(report: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the cut's asset records about the clips it conformed or gave their shot's sound (nothing when none)."""
+    return {"preparedClips": report} if report else {}
+
+
 def prepared_note(report: list[dict[str, Any]]) -> str:
     """One sentence for the assembly message: how many clips were conformed and how many takes got their shot's sound."""
     conformed = sum(1 for item in report if item.get("conformed"))
@@ -252,4 +270,4 @@ def prepared_note(report: list[dict[str, Any]]) -> str:
 
 
 __all__ = ["CLIP_AUDIO", "CLIP_FIT", "VIDEO_METHODS", "episode_frame", "fit_mode", "needs_conform", "normalize_clip_fields",
-           "plan_take_sound", "prepare_clips", "prepared_note", "probe_clip", "render_clip", "sound_tracks", "video_filter"]
+           "plan_take_sound", "prepare_clips", "prepared_metadata", "prepared_note", "probe_clip", "render_clip", "sound_tracks", "video_filter"]
