@@ -45,6 +45,8 @@ from services.series_language_versions import LANGUAGES, localized_view, missing
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
+from services.series_sound_cuts import materialize_cuts
+from services.series_video_foley import VIDEO_METHODS, missing_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
@@ -221,17 +223,19 @@ class SeriesNativeRender:
                    language: str | None) -> tuple[dict[str, Any], str, list[dict[str, Any]]]:
         """The series, the language and the 2D shots to render; refuses what would fail later."""
         raw_series, raw_episode = self._episode(workspace, series_id, episode_id)
-        wanted = {shot["id"] for shot in raw_episode.get("shots") or [] if series_shot3d.wants_render(shot)
-                  and (not shot_ids or shot["id"] in shot_ids)}
+        wanted = {shot["id"] for shot in raw_episode.get("shots") or []
+                  if (series_shot3d.wants_render(shot) or wants_video_foley(shot)) and (not shot_ids or shot["id"] in shot_ids)}
         if not wanted:
             raise NativeRenderError("no_2d_shots", "The episode has no 2D shots (or 3D shots with scene3d) to render", 400)
         language = self._check_language(raw_series, raw_episode, language, wanted)
         series, episode = self._episode(workspace, series_id, episode_id, language)
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
-        missing = self._missing_kits(workspace, series, shots)
+        # A generated or imported take only gets its foley: its lines are in the clip, no kit or voice is needed.
+        rendered = [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
+        missing = self._missing_kits(workspace, series, rendered)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
-        voiceless = self._missing_voices(workspace, series, shots, language, language_key(raw_series))
+        voiceless = self._missing_voices(workspace, series, rendered, language, language_key(raw_series))
         if voiceless:
             raise NativeRenderError("no_voice", f"{', '.join(voiceless)} have no {language} voice (voicesByLanguage); "
                                     f"design one before rendering this version", 400)
@@ -294,7 +298,8 @@ class SeriesNativeRender:
         """Shots to render in ``language``: no approved take yet, or one made from other inputs (see ``render_inputs``)."""
         raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
         series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
-        return stale_shot_ids(series, episode, self.deps.read_kits(workspace))
+        foley = missing_video_foley(series, episode, self.deps.workspace_dir(workspace))
+        return [*stale_shot_ids(series, episode, self.deps.read_kits(workspace)), *foley]
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
@@ -386,6 +391,9 @@ class SeriesNativeRender:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
         kits = self.deps.read_kits(workspace)
         item["status"] = "running"
+        if shot.get("productionMethod") in VIDEO_METHODS:
+            self._video_foley(workspace, job, item, series, episode, shot)
+            return
         if item["stage"] in ("voices", "scene"):
             # Recorded lines are reused; a resume after a restart (or after a cleanup) only records what is missing.
             self._voices(workspace, job, item, series, shot, kits)
@@ -587,7 +595,9 @@ class SeriesNativeRender:
             raise NativeRenderError("room_failed", f"Voice room: {error}", 502) from error
 
     def _balance(self, root: str, spec: dict) -> None:
-        """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at."""
+        """Music and effect volumes mean "relative to the dialogue", whatever loudness their file was made at.
+        A cue with ``in``/``length`` is first pointed at a file of just that part (``series_sound_cuts``)."""
+        materialize_cuts(root, spec.get("audioTracks") or [])
         for track in spec.get("audioTracks") or []:
             path = track_source(root, track.get("filename"))
             if track.get("kind") != "speech" and path is not None and path.is_file():
@@ -721,6 +731,35 @@ class SeriesNativeRender:
             # The intent replayed a job the server no longer knows (it restarted mid-generation): ask again.
             intent = f"{job['jobId']}-{name}"[:150] + f"-{uuid.uuid4().hex[:6]}"
         raise NativeRenderError("tool_failed", "Foley job disappeared twice", 502)
+
+    def _video_foley(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict) -> None:
+        """A generated or imported take's foley (``series_video_foley``): the sound only, made once per take and prompt;
+        the cut lays it under the take. Like any foley it is an extra: a failure leaves a warning, not a failed shot."""
+        root, foley, asset = self.deps.workspace_dir(workspace), shot_foley(shot), video_take(series, shot)
+        source = take_file(asset) if asset else ""
+        if not foley or not source or not os.path.isfile(os.path.join(root, source)):
+            raise NativeRenderError("no_take", f"Shot {shot['id']} needs a finished take and a foley prompt", 400)
+        name = sound_name(os.path.join(root, source), episode["id"], shot["id"], foley)
+        item.pop("warning", None)
+        item.update(video=source, stage="foley", foley={**foley, "file": name, "source": source})
+        try:
+            if os.path.isfile(os.path.join(root, name)):
+                item["foley"]["reused"] = True
+            else:
+                item["duration"] = self.deps.probe(os.path.join(root, source))
+                generated = os.path.join(root, self._generate_foley(workspace, job, item, shot["id"], foley, name[:-4]))
+                try:
+                    self.deps.extract_audio(generated, os.path.join(root, name))
+                finally:
+                    _discard(generated)
+        except (Cancelled, ResourceUnavailable):
+            raise
+        except Exception as error:
+            if self._cancelled(job["jobId"]):
+                raise
+            item["warning"] = f"Foley left out: {error}"[:300]
+        item["stage"] = "done"
+        self._save(workspace, job)
 
     def _approve(self, workspace: str, job: dict, shot_id: str, attempt_id: str) -> None:
         if job.get("original", True):

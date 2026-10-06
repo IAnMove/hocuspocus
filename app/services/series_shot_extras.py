@@ -5,8 +5,9 @@ scene. Declared in ``layout2d`` they are planned with the lines:
 
 * ``timing``: ``{intro, gap, tail}`` seconds (defaults 0.35 / 0.22 / 0.45);
   a dialogue beat's ``pauseBefore`` adds a beat of silence before it.
-* ``sfx``: ``[{file, line, anchor, offset, at, volume}]`` sound effects at a
-  line's start or end (or at an absolute second), next to the shot's music;
+* ``sfx``: ``[{file, line, anchor, offset, at, volume, in, length}]`` sound effects
+  at a line's start or end (or at an absolute second), next to the shot's music;
+  ``in``/``length`` play only that part of the file (``series_sound_cuts``);
   ``{"anchor": "enter", "cast": 0}`` (an index into the cast or a character id)
   at the start of that character's entrance, ``"repeat": "steps"`` on each of
   its footfalls (``series_entrances``).
@@ -32,6 +33,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services import series_entrances as entrances
+from services.series_sound_cuts import cut_fields, track_cut
 
 _EFFECTS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8"))
 EFFECT_KINDS = frozenset(item["id"] for item in _EFFECTS)
@@ -46,6 +48,8 @@ _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 FX_DURATION_RANGE = (0.1, 30.0)
 FX_DEFAULT_DURATION = 1.0
 FX_TO_SHOT_END = "shot"
+CLIP_AUDIO = ("keep", "drop")
+CLIP_FIT = ("cover", "contain")
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -97,7 +101,7 @@ def sfx_entry(value: Any) -> dict[str, Any] | None:
         return None
     volume = _number(value.get("volume"), 0, 1)
     return {"file": value["file"], **_when(value), "volume": 0.8 if volume is None else volume,
-            **({"repeat": "steps"} if value.get("repeat") == "steps" else {})}
+            **({"repeat": "steps"} if value.get("repeat") == "steps" else {}), **cut_fields(value)}
 
 
 def fx_origin(value: Any) -> dict[str, Any] | None:
@@ -179,7 +183,7 @@ def sfx_tracks(layout: dict[str, Any], timing: list[tuple[float, float]], durati
         times = [(f"sfx-{index}", cue_time(cue, timing, duration, moves))] if steps is None else [
             (f"sfx-{index}-step{number}", time) for number, time in enumerate(steps)]
         tracks += [{"id": track_id, "filename": cue["file"], "name": "Sound effect", "kind": "sfx", "startTime": start,
-                    "volume": cue.get("volume", 0.8)} for track_id, start in times]
+                    "volume": cue.get("volume", 0.8), **track_cut(cue)} for track_id, start in times]
     return tracks
 
 
@@ -196,6 +200,20 @@ def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration:
         extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation", "from") if key in cue}
         cues.append({"id": f"fx-{index}", "kind": cue["kind"], "start": start, "end": end, **extra})
     return cues
+
+
+def normalize_clip_fields(value: dict[str, Any]) -> dict[str, Any]:
+    """How a generated or imported take plays at the cut (``series_take_sound``): ``clipAudio`` keep | drop its own
+    sound, ``clipVolume`` 0-2 and ``clipFit`` cover | contain when its frame differs from the episode's."""
+    found: dict[str, Any] = {}
+    if value.get("clipAudio") in CLIP_AUDIO:
+        found["clipAudio"] = value["clipAudio"]
+    volume = _number(value.get("clipVolume"), 0, 2)
+    if volume is not None:
+        found["clipVolume"] = volume
+    if value.get("clipFit") in CLIP_FIT:
+        found["clipFit"] = value["clipFit"]
+    return found
 
 
 def perch(character: dict[str, Any], workspace: str) -> dict[str, Any] | None:

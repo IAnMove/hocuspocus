@@ -290,3 +290,53 @@ def test_the_foley_goes_under_the_take_at_its_volume_and_the_picture_is_copied(t
     with pytest.raises(RuntimeError, match="Foley audio extraction failed"):
         extract_audio(str(silent), str(tmp_path / "nothing.wav"))
     assert not list(tmp_path.glob("nothing*"))
+
+
+def _video_take(data, tmp_path, foley=AIRSHIP):
+    """s02 (generated_video) with an approved imported take on disk and a foley prompt."""
+    series = data["seriesById"]["uv"]
+    shot = next(item for item in series["episodesById"]["ep1"]["shots"] if item["id"] == "s02")
+    shot.update(foley=foley, approvedAttemptId="att-h3",
+                attempts=[{"id": "att-h3", "status": "completed", "outputAssetIds": ["asset_h3"]}])
+    series["assets"]["asset_h3"] = {"id": "asset_h3", "kind": "video", "uri": "assets/uv/asset_h3.mp4"}
+    (tmp_path / "assets" / "uv").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "assets" / "uv" / "asset_h3.mp4").write_bytes(b"h3 picture")
+    return shot
+
+
+def test_a_video_take_gets_its_foley_as_a_sound_the_cut_lays_under_it(tmp_path):
+    """A generated or imported take is not rendered: its foley is made from it once and kept as a sound file;
+    no new take is imported and the approval stays."""
+    from services.series_take_sound import plan_take_sound
+    from services.series_video_foley import missing_video_foley, sound_name
+    tools, mixes, data = FoleyTools(tmp_path), [], library()
+    _video_take(data, tmp_path)
+    render = foley_render(tmp_path, tools, data, mixes, probe=lambda _path: 4.0)
+    episode = data["seriesById"]["uv"]["episodesById"]["ep1"]
+    assert missing_video_foley(data["seriesById"]["uv"], episode, str(tmp_path)) == ["s02"]
+    assert "s02" in render.stale_shots("cast", "uv", "ep1")
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s02"])["jobId"], tmp_path)
+    assert done["status"] == "completed", done
+    [item] = done["items"]
+    expected = sound_name(str(tmp_path / "assets/uv/asset_h3.mp4"), "ep1", "s02", AIRSHIP)
+    assert item["foley"]["file"] == expected and (tmp_path / expected).read_bytes().startswith(b"sound of ")
+    [(_, sfx)] = [(name, args) for name, args in tools.calls if name == "generation.sfx"]
+    assert sfx["input"]["params"]["video_guide"] == "/api/v1/file/assets/uv/asset_h3.mp4?workspace=cast"
+    assert sfx["input"]["params"]["duration_seconds"] == 4.0
+    assert imports(tools) == {} and mixes == [], "the take is not changed and no take is imported"
+    assert missing_video_foley(data["seriesById"]["uv"], episode, str(tmp_path)) == []
+    # The cut lays it: the plan carries the prompt, volume and names; a second render reuses the file.
+    clips = [{"shotId": "s02"}]
+    plan_take_sound(data["seriesById"]["uv"], episode, clips)
+    assert clips[0]["takeSound"]["foley"] == {**AIRSHIP, "episodeId": "ep1", "shotId": "s02"}
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s02"])["jobId"], tmp_path)
+    assert again["items"][0]["foley"]["reused"] is True and len([n for n, _ in tools.calls if n == "generation.sfx"]) == 1
+
+
+def test_a_video_foley_that_fails_leaves_a_warning_and_needs_no_kit_or_voice(tmp_path):
+    tools, mixes, data = FoleyTools(tmp_path, sfx="missing"), [], library()
+    shot = _video_take(data, tmp_path)
+    shot["dialogueBeats"] = [{"id": "s02_d0", "characterId": "nobody", "text": "Hola"}]
+    render = foley_render(tmp_path, tools, data, mixes, probe=lambda _path: 4.0)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s02"])["jobId"], tmp_path)
+    assert done["status"] == "completed" and "MMAudio" in done["items"][0]["warning"]
