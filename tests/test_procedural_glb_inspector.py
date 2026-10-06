@@ -590,16 +590,37 @@ def test_indexed_cube_counts_twelve_triangles():
     assert report.total_triangles == 12
 
 
-def test_non_triangle_mode_has_no_count():
-    positions = _f32(0, 0, 0, 1, 0, 0, 0, 1, 0)
+def _five_vertex_mesh(*primitives: dict) -> bytes:
+    positions = _f32(0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 2, 0, 0)
     document = {
         "asset": {"version": "2.0"},
-        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 5}]}],
+        "meshes": [{"primitives": list(primitives)}],
         "buffers": [{"byteLength": len(positions)}],
         "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(positions)}],
-        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"}],
+        "accessors": [{"bufferView": 0, "componentType": 5126, "count": 5, "type": "VEC3"}],
     }
-    report = inspect_glb_bytes(pack_glb(document, positions))
+    return pack_glb(document, positions)
+
+
+@pytest.mark.parametrize("mode", [5, 6])
+def test_strips_and_fans_count_n_minus_two_triangles(mode):
+    report = inspect_glb_bytes(_five_vertex_mesh({"attributes": {"POSITION": 0}, "mode": mode}))
+    assert report.meshes[0].triangle_count == 3
+    assert report.total_triangles == 3
+
+
+def test_points_and_lines_do_not_hide_the_triangles_beside_them():
+    strip = {"attributes": {"POSITION": 0}, "mode": 5, "targets": [{"POSITION": 0}]}
+    lines = {"attributes": {"POSITION": 0}, "mode": 1}
+    points = {"attributes": {"POSITION": 0}, "mode": 0}
+    report = inspect_glb_bytes(_five_vertex_mesh(strip, lines, points))
+    assert report.meshes[0].morph_target_count == 1
+    assert report.meshes[0].triangle_count == 3
+    assert report.total_triangles == 3
+
+
+def test_unknown_mode_has_no_count():
+    report = inspect_glb_bytes(_five_vertex_mesh({"attributes": {"POSITION": 0}, "mode": 7}))
     assert report.meshes[0].triangle_count is None
     assert report.total_triangles is None
 

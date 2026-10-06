@@ -1118,24 +1118,32 @@ def _accessor_count(accessors: list[Any], index: object) -> int | None:
     return count
 
 
-def _primitive_triangles(accessors: list[Any], primitive: dict[str, Any]) -> int | None:
-    """Indexed triangles use ``count(indices) / 3``. Otherwise ``count(POSITION) / 3``.
+def _vertex_count(accessors: list[Any], primitive: dict[str, Any]) -> int | None:
+    """``count(indices)`` for an indexed primitive, otherwise ``count(POSITION)``."""
+    if "indices" in primitive:
+        return _accessor_count(accessors, primitive.get("indices"))
+    attributes = primitive.get("attributes")
+    position = attributes.get("POSITION") if isinstance(attributes, dict) else None
+    return _accessor_count(accessors, position)
 
-    Mode 4 is TRIANGLES. An omitted mode is the glTF default, which is also 4.
-    Any other mode is ``None``.
+
+def _primitive_triangles(accessors: list[Any], primitive: dict[str, Any]) -> int | None:
+    """Triangles one primitive draws, or ``None`` when that cannot be read.
+
+    TRIANGLES (mode 4, also the default when ``mode`` is omitted) draws
+    ``n / 3``. TRIANGLE_STRIP (5) and TRIANGLE_FAN (6) draw ``n - 2``.
+    POINTS and LINES (0 to 3) draw none, so they do not hide the triangles of
+    the other primitives. Morph targets move vertices and add no triangles.
     """
     mode = primitive.get("mode", 4)
-    if isinstance(mode, bool) or not isinstance(mode, int) or mode != 4:
+    if isinstance(mode, bool) or not isinstance(mode, int) or not 0 <= mode <= 6:
         return None
-    if "indices" in primitive:
-        count = _accessor_count(accessors, primitive.get("indices"))
-    else:
-        attributes = primitive.get("attributes")
-        position = attributes.get("POSITION") if isinstance(attributes, dict) else None
-        count = _accessor_count(accessors, position)
-    if count is None or count % 3:
+    if mode < 4:
+        return 0
+    count = _vertex_count(accessors, primitive)
+    if count is None or (mode == 4 and count % 3):
         return None
-    return count // 3
+    return count // 3 if mode == 4 else max(0, count - 2)
 
 
 def _mesh_triangles(accessors: list[Any], primitives: list[Any]) -> int | None:
