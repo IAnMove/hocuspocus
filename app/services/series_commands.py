@@ -105,7 +105,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
-        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx, props, set layers, timing, foley "
+        "[[character, pose, x]], lines {who, es, en, pauseBefore}, cards, music, timed sfx and fx (an fx duration is seconds, "
+        "0.1-30 and clamped to that, or \"shot\" for the rest of the shot), props, set layers, timing, foley "
         "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots. It checks every character, "
         "pose, location, file and effect against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",

@@ -9,12 +9,15 @@ scene. Declared in ``layout2d`` they are planned with the lines:
   line's start or end (or at an absolute second), next to the shot's music.
 * ``fx``: ``[{kind, line, anchor, offset, at, duration, x, y, size, ...}]``
   screen effects from ``shared/scene_effects.json`` at the same kind of time.
+  ``duration`` is seconds (0.1-30, a value outside is clamped to that range,
+  1 when missing or not a number) or ``"shot"``: until the end of the shot.
 * a character with ``layout2d.perch = {file, width, height, top, widthRatio}``
   (a laptop on a desk) is placed on that prop in every framing.
 """
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -26,10 +29,24 @@ TIMING_DEFAULTS = {"intro": 0.35, "gap": 0.22, "tail": 0.45}
 # A workspace file, in a subfolder if the user keeps one (``music/theme.wav``); never absolute, never ``..``.
 _FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[^\\\x00]{1,300}$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+FX_DURATION_RANGE = (0.1, 30.0)
+FX_DEFAULT_DURATION = 1.0
+FX_TO_SHOT_END = "shot"
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high else None
+
+
+def fx_duration(value: Any) -> float | str:
+    """How long a screen effect lasts: seconds clamped to 0.1-30 (an author who writes 99 means "long", not 1 s),
+    ``"shot"`` for the rest of the shot, and 1 s only when it is missing or not a number."""
+    if isinstance(value, str) and value.strip().lower() == FX_TO_SHOT_END:
+        return FX_TO_SHOT_END
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or math.isnan(value):
+        return FX_DEFAULT_DURATION
+    low, high = FX_DURATION_RANGE
+    return float(min(max(value, low), high))
 
 
 def _when(value: dict[str, Any]) -> dict[str, Any]:
@@ -63,7 +80,7 @@ def sfx_entry(value: Any) -> dict[str, Any] | None:
 def fx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or value.get("kind") not in EFFECT_KINDS:
         return None
-    entry = {"kind": value["kind"], **_when(value), "duration": _number(value.get("duration"), 0.1, 30) or 1.0}
+    entry = {"kind": value["kind"], **_when(value), "duration": fx_duration(value.get("duration"))}
     # rotation turns directional effects (a laser leaves the muzzle of a gun that points left: 180).
     for key, low, high in (("x", 0, 100), ("y", 0, 100), ("size", 1, 200), ("intensity", 0.1, 2), ("volume", 0, 1),
                            ("rotation", -180, 180)):
@@ -104,7 +121,9 @@ def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration:
     cues = []
     for index, cue in enumerate(layout.get("fx") or []):
         start = cue_time(cue, timing, duration)
-        end = round(min(duration - 0.01, start + cue.get("duration", 1.0)), 3)
+        length = fx_duration(cue.get("duration"))
+        # "shot" lasts to the end of the shot, like any cue that would run past it.
+        end = round(min(duration - 0.01, duration if length == FX_TO_SHOT_END else start + length), 3)
         if end <= start:
             continue
         extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation") if key in cue}
