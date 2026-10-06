@@ -1510,6 +1510,21 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any, *, replac
     return result
 
 
+def _keep_dropped_take_files(series: dict, episode_id: str, before: Any, after: Any) -> None:
+    """A rewrite that drops shots or takes (``replaceShots``) leaves the files they owned: those assets go to the
+    episode, so they stay listed and the project still validates (an asset owned by a removed take failed it)."""
+    def owners(shots: Any) -> tuple[set[str], set[str]]:
+        shots = _objects(shots)
+        return ({str(shot.get("id")) for shot in shots},
+                {str(attempt.get("id")) for shot in shots for attempt in _objects(shot.get("attempts"))})
+    shots_before, attempts_before = owners(before)
+    shots_after, attempts_after = owners(after)
+    dropped = {"shot": shots_before - shots_after, "attempt": attempts_before - attempts_after}
+    for asset in (series.get("assets") or {}).values():
+        if isinstance(asset, dict) and str(asset.get("ownerId")) in dropped.get(str(asset.get("ownerType")), ()):
+            asset["ownerType"], asset["ownerId"] = "episode", episode_id
+
+
 def update_series_episode(
     series: dict,
     episode_id: str,
@@ -1556,6 +1571,7 @@ def update_series_episode(
             merged[key] = copy.deepcopy(patch[key])
     if "shots" in patch:
         merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"], replace=patch.get("replaceShots") is True)
+        _keep_dropped_take_files(updated, episode_id, current.get("shots"), merged["shots"])
     if "score" in patch:
         # A cue just written must name shots the episode has; one left behind by a rewrite is only skipped at assembly.
         from .series_score import normalize_score

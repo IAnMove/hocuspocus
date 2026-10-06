@@ -33,3 +33,26 @@ def test_content_comparison_ignores_annotations_order_and_lengths():
     assert not same_shot_content(before, {**after, "framing": "close"})
     assert not same_shot_content(before, {**after, "layout2d": {"props": [{"file": "key.png"}]}})
     assert not same_shot_content(before, {**after, "dialogueBeats": [{"id": "e1s00_b0", "characterId": "gary", "text": "Hola"}]})
+
+
+def test_a_rewrite_keeps_the_files_of_the_shots_and_takes_it_drops_owned_by_the_episode():
+    """The bug: a rewrite dropping a shot (or a changed shot's take) left the take's video owned by an attempt that no
+    longer existed, and the whole project then failed validation, so the script could not be written at all."""
+    from services.series_library import update_series_episode
+    shots = [{**stored("e1s00", "¿Oyes eso?"), "attempts": [{"id": "att-0", "status": "completed"}], "approvedAttemptId": "att-0"},
+             {**stored("e1s01", "...No.", "gary"), "attempts": [{"id": "att-1", "status": "completed"}], "approvedAttemptId": "att-1"},
+             {**stored("e1s02", "Adiós."), "attempts": [{"id": "att-2", "status": "completed"}], "approvedAttemptId": "att-2"}]
+    video = lambda owner_type, owner: {"kind": "video", "uri": f"{owner}.mp4", "ownerType": owner_type, "ownerId": owner}
+    series = {"id": "show", "revision": 3, "episodesById": {"e1": {"id": "e1", "shots": shots}},
+              "assets": {"a0": video("attempt", "att-0"), "a1": video("attempt", "att-1"), "a2": video("attempt", "att-2"),
+                         "a3": video("shot", "e1s02"), "a4": video("series", "show")}}
+    incoming = [{"id": "e1s00", "order": 1, "locationId": "garage", "framing": "two",
+                 "dialogueBeats": [{"id": "e1s00_b0", "characterId": "kevin", "text": "¿Oyes eso?"}]},
+                {"id": "e1s01", "order": 2, "locationId": "garage", "framing": "two",
+                 "dialogueBeats": [{"id": "e1s01_b0", "characterId": "gary", "text": "Sí, un camión."}]}]
+    updated = update_series_episode(series, "e1", {"shots": incoming, "replaceShots": True}, base_series_revision=3)
+    owners = {asset_id: (asset["ownerType"], asset["ownerId"]) for asset_id, asset in updated["assets"].items()}
+    assert owners["a0"] == ("attempt", "att-0"), "the take that still fits keeps its file"
+    assert owners["a1"] == ("episode", "e1") and owners["a2"] == ("episode", "e1"), "dropped takes' files stay, on the episode"
+    assert owners["a3"] == ("episode", "e1") and owners["a4"] == ("series", "show")
+    assert series["assets"]["a1"]["ownerType"] == "attempt", "the stored project is not changed in place"
