@@ -26,6 +26,7 @@ from services.media_refs import parse_media_ref
 from services.scene2d_schema import document_schema, fill_sfx_colors
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.export_receipts import project_export_receipt
+from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot
 from services.audio_mix import (  # noqa: F401 — re-exported for callers and tests of the 2D mixer
     DUCK_ATTACK, DUCK_MARGIN, DUCK_RELEASE, audio_seconds, duck_db, duck_expression, mix_audio_tracks, mux_wav_audio,
 )
@@ -52,6 +53,7 @@ WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 LAYER_TYPES = frozenset({"image", "video", "overlay", "effect", "camera"})
 AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"})
 DURABLE_PREFIXES = ("/api/v1/file/", "/api/v1/uploads/", "/examples/")
+INPUT_KEYS = frozenset({"workspace", "document", "quality", "shutter", "output_name"})
 
 
 def _envelope(command) -> dict:
@@ -63,7 +65,7 @@ def _envelope(command) -> dict:
     if not isinstance(intent, str) or not 1 <= len(intent) <= 160 or intent != intent.strip():
         raise http_error(422, "invalid_command", "An exact intent_id is required")
     payload = command.get("input")
-    if not isinstance(payload, dict) or set(payload) - {"workspace", "document", "quality", "shutter"} or "document" not in payload:
+    if not isinstance(payload, dict) or set(payload) - INPUT_KEYS or "document" not in payload:
         raise http_error(422, "invalid_command", "input must include workspace and document")
     if not isinstance(payload.get("workspace"), str) or not WORKSPACE_RE.fullmatch(payload["workspace"]):
         raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
@@ -189,7 +191,8 @@ def freeze_export_command(command) -> dict:
     payload = envelope["input"]
     document = validated_document(payload["document"])
     refs = media_refs(document, payload["workspace"])
-    snapshot = {"workspace": payload["workspace"], "document": document, "refs": refs, "plan": _export_plan(document, payload)}
+    snapshot = name_snapshot({"workspace": payload["workspace"], "document": document, "refs": refs,
+                              "plan": _export_plan(document, payload)}, payload, http_error)
     effective = {"version": 1, "operation": OPERATION, "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
     return {"original": deepcopy(envelope), "effective": effective,
             "fingerprint": _digest({"operation": OPERATION, "input": effective["input"]}), "fingerprint_version": 1}
@@ -306,7 +309,8 @@ def command_catalog() -> list[dict]:
                                    "quality": {"enum": list(QUALITIES), "default": "draft",
                                                "description": "draft stays the current painter. final and master add motion blur and a slower encode. Video 2D also supersamples when the plan asks for it."},
                                    "shutter": {"type": "number", "minimum": 0, "maximum": 360,
-                                               "description": "Motion blur shutter in degrees for final/master (default 180; 0 = sharp)."}},
+                                               "description": "Motion blur shutter in degrees for final/master (default 180; 0 = sharp)."},
+                                   "output_name": OUTPUT_NAME_SCHEMA},
                     "required": ["workspace", "document"]}
 
     def entry(name, mutation, description, properties, required):
@@ -318,7 +322,9 @@ def command_catalog() -> list[dict]:
         entry(OPERATION, True, "Render a version 1 Video 2D scene (layers with keyframes, camera, atmosphere, screen FX, kinetic "
               "texts and audioTracks) to MP4 on the server with the Scene Animator's own painter, on a CPU lane. "
               "audioMix {duckDb} dips every track that is not speech under the speech tracks (10 is a good start). Media must be "
-              "durable workspace/example URLs. Returns a receipt; poll the receipt for the published MP4.",
+              "durable workspace/example URLs. Returns a receipt; poll the receipt for the published MP4. output_name publishes it "
+              "under a stable file name (fg-fog.mp4) that a later export with the same name replaces, keeping the replaced "
+              "file as fg-fog.previous.mp4.",
               {"intent_id": intent, "input": export_input}, ["intent_id", "input"]),
         entry(RECEIPT_OPERATION, False,
               "Read a Video 2D export admission and its current canonical task. The returned receipt status follows "
