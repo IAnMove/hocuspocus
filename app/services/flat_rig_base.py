@@ -1,4 +1,4 @@
-"""What the flat rig's modules share: the mouth states, the sprite size, the default ink and the error."""
+"""What the flat rig's modules share: the mouth states, the sprite size, the default ink, anchors and the error."""
 from __future__ import annotations
 
 from PIL import Image, ImageDraw
@@ -21,3 +21,11 @@ def _paste_inside(image, outline, fill, box_or_ellipse, kind) -> None:
     getattr(ImageDraw.Draw(layer), kind)(box_or_ellipse, fill=fill)
     clip = Image.composite(layer, Image.new("RGBA", image.size, (0, 0, 0, 0)), mask)
     image.paste(layer, (0, 0), clip.split()[3])
+
+
+def _anchor(cx: float, cy: float, size: float, width: int, height: int) -> dict[str, float]:
+    """A pose-local anchor: the centre in % of the pose's longer edge from its middle, and the height ``size`` as a share
+    of that edge."""
+    edge = max(width, height)
+    return {"offsetX": round((cx - width / 2) / edge * 100, 3), "offsetY": round((cy - height / 2) / edge * 100, 3),
+            "scale": round(size / edge, 5), "rotation": 0.0}

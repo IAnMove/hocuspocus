@@ -254,6 +254,16 @@ export function normalizeFaceRigAnchor(value?: Partial<CharacterFaceAnchor> | nu
   }
 }
 
+/** A pose's anchors, or the base pose's to start from. The base's own mouth drawings (flat-rig warp mouths) are cut
+ * from its drawing: another pose never inherits them. */
+function poseAnchorsOrBase(kit: CharacterKit, poseId: string): CharacterKit['anchors'][string] | undefined {
+  const own = kit.anchors[poseId]
+  if (own || !kit.anchors.base) return own
+  const base = { ...kit.anchors.base }
+  delete base.mouthSources
+  return base
+}
+
 /** Resolve the saved relative anchor for one Face Rig state, falling back to the legacy mouth slot. */
 export function faceRigAnchorFor(kit: CharacterKit, poseId: string, state: CharacterKitFaceRigState): CharacterFaceAnchor {
   if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
@@ -271,7 +281,11 @@ export function lockFaceRigMouthPlacement(
 ): CharacterKit {
   const normalizedPoseId = poseId.trim() || 'base'
   const nextAnchor = normalizeFaceRigAnchor(anchor)
-  const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  const current = poseAnchorsOrBase(kit, normalizedPoseId) ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  // The pose keeps what is its own: its mouth and blink drawings and a hidden-eyes flag.
+  const own = kit.anchors[normalizedPoseId]
+  const kept = { ...(own?.mouthSources ? { mouthSources: own.mouthSources } : {}),
+    ...(own?.blinkSource ? { blinkSource: own.blinkSource } : {}), ...(own?.blink === false ? { blink: false } : {}) }
   const mouthStates = {
     closed: nextAnchor,
     small: nextAnchor,
@@ -283,7 +297,7 @@ export function lockFaceRigMouthPlacement(
     ...kit,
     anchors: {
       ...kit.anchors,
-      [normalizedPoseId]: { mouth: nextAnchor, mouthStates, eyes: current.eyes },
+      [normalizedPoseId]: { ...kept, mouth: nextAnchor, mouthStates, eyes: current.eyes },
     },
     ...(record ? {
       provenance: [...kit.provenance, {
@@ -305,7 +319,7 @@ export function lockFaceRigEyePlacement(
 ): CharacterKit {
   const normalizedPoseId = poseId.trim() || 'base'
   const nextAnchor = normalizeFaceRigAnchor(anchor)
-  const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  const current = poseAnchorsOrBase(kit, normalizedPoseId) ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
   return {
     ...kit,
     anchors: {
@@ -334,7 +348,7 @@ export function setFaceRigAnchor(
   if (!CHARACTER_FACE_RIG_STATES.includes(state)) throw new Error(`Unknown Face Rig state: ${state}`)
   const normalizedPoseId = poseId.trim() || 'base'
   const nextAnchor = normalizeFaceRigAnchor(anchor)
-  const current = kit.anchors[normalizedPoseId] ?? kit.anchors.base ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
+  const current = poseAnchorsOrBase(kit, normalizedPoseId) ?? { mouth: DEFAULT_FACE_RIG_ANCHOR }
   const nextPoseAnchors = isFaceRigEyeState(state)
     ? { ...current, mouth: normalizeFaceRigAnchor(current.mouth), mouthStates: current.mouthStates, eyes: nextAnchor }
     : {

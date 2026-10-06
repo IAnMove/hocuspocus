@@ -69,6 +69,9 @@ export interface CharacterKit {
     blink?: boolean
     /** This pose's own closed eyes (flat rig); without it the kit blink is scaled onto the pose. */
     blinkSource?: string
+    /** This pose's own mouth drawings (flat-rig warp mouths, cut from its drawing), placed at `mouth`; they share
+     * the review of the kit's mouth for the same state. See characterKitMouthSource. */
+    mouthSources?: Partial<Record<CharacterMouthState, string>>
   }>
   provenance: Array<Record<string, unknown>>
   /** Style + traits the user picked; Face Rig fills overlay prompts from this. */
@@ -331,6 +334,22 @@ export function fittedCharacterFaceTransform(pose: SceneLayer['transform'], anch
 
 const stateForBinding = (state: CharacterMouthState): SceneFaceBindingState => state
 
+/** The drawing a pose shows for a mouth state. Flat-rig warp mouths are cut from each pose's own drawing
+ * (`anchors[pose].mouthSources`) and the kit's mouth holds the base pose's: while it does, each pose shows its own
+ * and a pose without any shows none, never another pose's face. A drawing put on the kit later (a pack, a generated
+ * mouth) is shared by every pose again. */
+export function characterKitMouthSource(kit: CharacterKit, poseId: string, state: CharacterMouthState): string | undefined {
+  const asset = kit.mouth[state]
+  if (!asset) return undefined
+  if (kit.anchors.base?.mouthSources?.[state] !== asset.source || poseId === 'base') return asset.source
+  return kit.anchors[poseId]?.mouthSources?.[state]
+}
+
+/** Whether a pose talks with its own drawing (flat-rig warp mouths). */
+export function characterKitPoseHasOwnMouths(kit: CharacterKit, poseId: string): boolean {
+  return Boolean(kit.anchors[poseId]?.mouthSources && Object.keys(kit.anchors[poseId]!.mouthSources!).length)
+}
+
 export function mountCharacterKitLayers(
   kit: CharacterKit,
   poseId = 'base',
@@ -358,13 +377,14 @@ export function mountCharacterKitLayers(
   let z = 21
   for (const state of CHARACTER_MOUTH_STATES) {
     const asset = kit.mouth[state]
-    if (!asset || !usableCharacterAsset(asset, reviewPolicy)) continue
+    const source = characterKitMouthSource(kit, poseId, state)
+    if (!asset || !source || !usableCharacterAsset(asset, reviewPolicy)) continue
     assertFacePatchPose(asset, poseId, poseAsset.source)
     const anchor = anchors?.mouthStates?.[state] ?? mouthAnchor
     const placed = asset.facePatch ? facePatchSceneTransform(transform, anchor, asset.facePatch, viewport) : faceTransform(anchor)
     const mouthTransform = { ...placed, opacity: state === restState ? 1 : 0 }
     layers.push({
-      id: `kit-${kit.id}-mouth-${state}`, name: `${kit.name} Mouth ${state}`, type: 'overlay', source: asset.source,
+      id: `kit-${kit.id}-mouth-${state}`, name: `${kit.name} Mouth ${state}`, type: 'overlay', source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: mouthTransform,
       animation: { start: { ...mouthTransform }, end: { ...mouthTransform }, duration, curve: 'hold' },
       faceBinding: { poseLayerId, role: 'mouth', state: stateForBinding(state), ...(kit.mouthMapping ? { mouthMapping: { ...kit.mouthMapping } } : {}) },

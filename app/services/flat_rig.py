@@ -20,7 +20,9 @@ the eye or mouth search for anything else. Where no hint is given, DWPose face
 landmarks (``face_landmarks``, when its models are installed) place the search:
 the mark search alone takes a nose stroke or a socket shadow for a graphic-novel
 mouth and misses a bust's shaded eyes. With ``mouthStyle: "ink"`` the painted
-mouth is kept as the rest shape and the open shapes are drawn in its own ink.
+mouth is kept as the rest shape and the open shapes are drawn in its own ink;
+with ``"warp"`` each pose talks with its own drawing (``flat_rig_warp``): the
+lower lip and jaw move down and the gap is inked, one set of patches per pose.
 
 Ported from the agent script that rigged the six "Uncanny Valley" characters.
 Only OpenCV, numpy and Pillow are needed.
@@ -40,9 +42,9 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from services import face_landmarks
+from services import face_landmarks, flat_rig_warp
 from services.character_kit_library import patch_character_kit, read_character_kit_library
-from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _paste_inside
+from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _anchor, _paste_inside
 from services.flat_rig_ink import _ink_sprite_width, draw_ink_mouth, ink_colour
 
 MAPPING = {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small",
@@ -53,15 +55,15 @@ SCREEN_INK, SCREEN_CAVITY = (245, 250, 255, 255), (10, 22, 70, 255)
 STYLE_LIMITS = {"smile": (-1.0, 1.0, 0.15), "smirk": (0.0, 1.0, 0.0), "width": (0.3, 0.9, 0.62),
                 "mouth_scale": (0.4, 1.2, 0.78)}
 # paper: the painted mouth is wiped and nine paper mouths are drawn. ink: it is kept as the rest shape and the open
-# shapes are dark openings in its own ink.
-MOUTH_STYLES = ("paper", "ink")
+# shapes are dark openings in its own ink. warp: the pose's own lower face moves (flat_rig_warp), per pose.
+MOUTH_STYLES = ("paper", "ink", "warp")
 MAX_PIXELS = 16_777_216
 _CROSS = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
 
 
 def rig_style(value: Any) -> dict[str, Any]:
     """Mouth look: ``smile`` -1..1, ``smirk`` 0..1, ``width`` and ``mouth_scale`` (paper mouths); ``screen`` for a
-    screen face; ``mouthStyle`` ``paper`` (default) or ``ink``."""
+    screen face; ``mouthStyle`` ``paper`` (default), ``ink`` or ``warp``."""
     raw = value if isinstance(value, dict) else {}
     style: dict[str, Any] = {"screen": raw.get("screen") is True}
     for key, (low, high, default) in STYLE_LIMITS.items():
@@ -71,17 +73,29 @@ def rig_style(value: Any) -> dict[str, Any]:
         style[key] = float(number)
     mouth_style = raw.get("mouthStyle", "paper")
     if mouth_style not in MOUTH_STYLES:
-        raise FlatRigError("invalid_style", "style.mouthStyle must be paper or ink")
+        raise FlatRigError("invalid_style", "style.mouthStyle must be paper, ink or warp")
     style["mouthStyle"] = mouth_style
     return style
 
 
-HINT_KEYS = ("mouth", "eyes")
+HINT_KEYS = ("mouth", "eyes", "mouthWidth")
 
 
-def rig_hints(value: Any) -> dict[str, dict[str, list[float]] | None]:
-    """Placement hints per pose: ``{"<pose>": {"mouth": [x, y], "eyes": [x, y]}}`` in % of that pose image (the
-    keyed source, before cropping), 0–100. ``null`` or ``{}`` for a pose clears the hints saved for it."""
+def _hint_value(pose: str, key: str, value: Any):
+    """A hint point ``[x, y]`` in % of the pose image, or ``mouthWidth``: the mouth corner to corner in % of its width."""
+    if key == "mouthWidth":
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0.5 <= value <= 100:
+            raise FlatRigError("invalid_hints", f"hints.{pose}.mouthWidth must be a number from 0.5 to 100 (% of the pose image width)")
+        return round(float(value), 3)
+    if (not isinstance(value, (list, tuple)) or len(value) != 2
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 100 for v in value)):
+        raise FlatRigError("invalid_hints", f"hints.{pose}.{key} must be [x, y] in % of the pose image, from 0 to 100")
+    return [round(float(value[0]), 3), round(float(value[1]), 3)]
+
+
+def rig_hints(value: Any) -> dict[str, dict[str, Any] | None]:
+    """Placement hints per pose: ``{"<pose>": {"mouth": [x, y], "eyes": [x, y], "mouthWidth": w}}`` in % of that pose
+    image (the keyed source, before cropping), 0–100. ``null`` or ``{}`` for a pose clears the hints saved for it."""
     if value is None:
         return {}
     if not isinstance(value, dict) or len(value) > 32:
@@ -94,15 +108,8 @@ def rig_hints(value: Any) -> dict[str, dict[str, list[float]] | None]:
             hints[pose] = None
             continue
         if not isinstance(hint, dict) or any(key not in HINT_KEYS for key in hint):
-            raise FlatRigError("invalid_hints", f"hints.{pose} takes mouth and eyes points")
-        clean = {}
-        for key, point in hint.items():
-            if (not isinstance(point, (list, tuple)) or len(point) != 2
-                    or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 100
-                           for v in point)):
-                raise FlatRigError("invalid_hints", f"hints.{pose}.{key} must be [x, y] in % of the pose image, from 0 to 100")
-            clean[key] = [round(float(point[0]), 3), round(float(point[1]), 3)]
-        hints[pose] = clean
+            raise FlatRigError("invalid_hints", f"hints.{pose} takes mouth and eyes points and a mouthWidth")
+        hints[pose] = {key: _hint_value(pose, key, point) for key, point in hint.items()}
     return hints
 
 
@@ -1102,12 +1109,6 @@ def blink_sprite(rgb: np.ndarray, eyes: np.ndarray, fallback, screen: bool = Fal
 
 # One pose -------------------------------------------------------------------
 
-def _anchor(cx: float, cy: float, size: float, width: int, height: int) -> dict[str, float]:
-    edge = max(width, height)
-    return {"offsetX": round((cx - width / 2) / edge * 100, 3), "offsetY": round((cy - height / 2) / edge * 100, 3),
-            "scale": round(size / edge, 5), "rotation": 0.0}
-
-
 # Video 2D fits every layer into a frame-shaped box: a sprite wider than 16:9 is drawn narrower than its anchor
 # height says. A pair of round eyes is ~2.5:1, so the closed lids came out at ~70% and the eyes showed around them.
 MAX_SPRITE_RATIO = 16 / 9
@@ -1171,13 +1172,19 @@ def _pose_guides(image: Image.Image, crop, size, hint, landmarks) -> tuple[dict[
     """The pose's hints and what the landmarks give that no hint does, in pixels of the cropped figure."""
     def inside(x, y):
         return min(max(x - crop[0], 0), size[0] - 1), min(max(y - crop[1], 0), size[1] - 1)
-    near = {key: inside(point[0] / 100 * image.width, point[1] / 100 * image.height) for key, point in (hint or {}).items()}
+    points = {key: point for key, point in (hint or {}).items() if key != "mouthWidth"}
+    near = {key: inside(point[0] / 100 * image.width, point[1] / 100 * image.height) for key, point in points.items()}
     guide = {key: value for key, value in face_landmarks.guides(landmarks).items() if key not in near}
     for key in ("eyes", "mouth"):
         if key in guide:
             guide[key] = inside(*guide[key])
     if "eye_outlines" in guide:
         guide["eye_outlines"] = [outline - np.array(crop[:2], dtype=float) for outline in guide["eye_outlines"]]
+    if "mouth_points" in guide:
+        guide["mouth_points"] = guide["mouth_points"] - np.array(crop[:2], dtype=float)
+    if (hint or {}).get("mouthWidth"):
+        # A width hint is the mouth corner to corner, in % of the pose image's width.
+        near["mouthWidth"] = guide["mouth_width"] = hint["mouthWidth"] / 100 * image.width
     return near, guide
 
 
@@ -1199,7 +1206,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     realistic = not style["screen"] and face_realistic(rgb, alpha, eyes_box, eyes_mask)
     # A realistic face's mouth is looked for and placed from the eyes' whole whites; a cartoon's as it always was.
     face_eyes = eye_extent(rgb, alpha, eyes_box, eyes_mask) if realistic else eyes_box
-    ink = style.get("mouthStyle") == "ink"
+    # Warp mouths keep the painted mouth too; their line is placed from it, the hints and the landmarks (rig_warp).
+    ink = style.get("mouthStyle") in ("ink", "warp")
     mouth_near = near.get("mouth") or guide.get("mouth")
     try:
         mouth_box, mouth_mask, background = find_mouth(rgb, alpha, face_eyes, style["screen"], realistic=realistic,
@@ -1254,6 +1262,10 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
                               alpha[by0:by1, bx0:bx1]),
         "eyes_box": list(eyes_box), "mouth_box": list(mouth_box) if mouth_box else None,
         "guided": sorted(key for key in ("eyes", "mouth") if key in guide),
+        # Where the figure was cut from the pose image and that image's size; the warp mouths' seeds in figure pixels.
+        "frame": (crop[0], crop[1], image.width, image.height),
+        "seeds": {"point": near.get("mouth"), "width": near.get("mouthWidth"), "lips": guide.get("mouth_points"),
+                  "lips_score": guide.get("mouth_score")},
     }
 
 
@@ -1294,13 +1306,16 @@ def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image
     rows: list[list[Image.Image]] = [[], []]
     for rig in poses.values():
         warn = bool(rig.get("warnings"))
-        rest = place(rig["image"], mouths["closed"], rig["mouth"])
+        # Warp mouths are the pose's own; the rest share the kit's.
+        own = rig.get("sprites") or mouths
+        rest = place(rig["image"], own["closed"], rig["mouth"])
         # Each pose shows its own blink at its eye anchor, as the kit plays it; covered eyes do not blink.
-        talk = place(rig["image"], mouths["wide"], rig["mouth"])
+        talk = place(rig["image"], own["wide"], rig["mouth"])
         talk = place(talk, rig["blink"], rig["eyes"]) if rig["blinks"] else talk
         rows[0] += [_tile(rest, height, warn), _tile(talk, height, warn)]
         if rig.get("before") is not None and rig.get("eyes_box"):
-            rows[1] += [_tile(_face_crop(rig["before"], rig), height // 2, warn), _tile(_face_crop(rig["image"], rig), height // 2, warn)]
+            after = talk if rig.get("sprites") else rig["image"]
+            rows[1] += [_tile(_face_crop(rig["before"], rig), height // 2, warn), _tile(_face_crop(after, rig), height // 2, warn)]
     width = max(sum(tile.width for tile in row) + 8 * (len(row) + 1) for row in rows)
     sheet = Image.new("RGBA", (width, height + height // 2 + 24), (255, 255, 255, 255))
     for top, row in ((8, rows[0]), (height + 16, rows[1])):
@@ -1399,7 +1414,10 @@ def _kit_hints(kit: dict[str, Any], hints: Any) -> dict[str, dict[str, list[floa
 
 
 def _kit_mouths(rigs: dict[str, dict[str, Any]], look: dict[str, Any]) -> dict[str, Image.Image]:
-    """Paper mouths, or ink mouths in the base pose's painted ink (another pose's when the base has no painted mouth)."""
+    """Paper mouths, ink mouths in the base pose's painted ink (another pose's when the base has no painted mouth), or
+    the base pose's own warp mouths."""
+    if look.get("mouthStyle") == "warp":
+        return rigs["base"]["sprites"]
     if look.get("mouthStyle") != "ink":
         return {state: draw_mouth(state, look) for state in STATES}
     painted = [rig for pose, rig in sorted(rigs.items(), key=lambda item: item[0] != "base") if rig.get("ink")]
@@ -1412,8 +1430,15 @@ def _overlay(kit_id: str, name: str, label: str, file: str, workspace: str) -> d
             "kind": "overlay", "alphaStatus": "transparent", "reviewState": "approved", "workspace": workspace}
 
 
+def pose_source(kit: dict[str, Any], pose: str) -> str:
+    """The image a pose is rigged from: the recorded original only stands in for this rig's own output; a pose replaced
+    since then is rigged as given."""
+    current = (kit.get("base") if pose == "base" else (kit.get("poses") or {}).get(pose))["source"]
+    original = _original_sources(kit).get(pose)
+    return original if original and f"kit-{kit.get('id', '')}-{pose}-rig-" in current else current
+
+
 def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, pose_ids, hints=None):
-    originals = _original_sources(kit)
     assets = {"base": kit.get("base"), **(kit.get("poses") or {})}
     wanted = list(pose_ids) if pose_ids else [pose for pose, asset in assets.items() if asset]
     if "base" not in wanted or not assets.get("base"):
@@ -1422,16 +1447,24 @@ def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, p
     for pose in wanted:
         if not assets.get(pose):
             raise FlatRigError("unknown_pose", f"The character has no pose {pose}")
-        current = assets[pose]["source"]
-        # The recorded original only stands in for this rig's own output; a pose replaced since then is rigged as given.
-        rigged = f"kit-{kit.get('id', '')}-{pose}-rig-" in current
-        sources[pose] = originals[pose] if rigged and originals.get(pose) else current
+        sources[pose] = pose_source(kit, pose)
         with Image.open(_workspace_file(sources[pose], workspace, workspace_dir)) as image:
             try:
                 rigs[pose] = rig_pose(image, style, (hints or {}).get(pose), face_landmarks.detect(image))
             except FlatRigError as error:
                 raise FlatRigError(error.code, f"Pose {pose}: {error}", error.status) from error
+        if style["mouthStyle"] == "warp":
+            warped = flat_rig_warp.rig_warp(rigs[pose])
+            rigs[pose].update(warped, warnings=rigs[pose]["warnings"] + warped["warnings"])
     return rigs, sources
+
+
+def _mouth_files(rigs: dict[str, dict[str, Any]], mouths: dict[str, Image.Image], kit_id: str, workspace_dir: str):
+    """The kit's mouth files and each pose's own (warp mouths, ``{pose: {state: file}}``); with warp mouths the kit's
+    are the base pose's."""
+    own = {pose: {state: _save(sprite, workspace_dir, f"kit-{kit_id}-{pose}-mouth-{state}") for state, sprite in rig["sprites"].items()}
+           for pose, rig in rigs.items() if rig.get("sprites")}
+    return own.get("base") or {state: _save(mouths[state], workspace_dir, f"kit-{kit_id}-mouth-{state}") for state in STATES}, own
 
 
 def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revision: int,
@@ -1447,8 +1480,8 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids, placed)
     mouths = _kit_mouths(rigs, look)
     name = kit.get("name") or kit_id
-    kit["mouth"] = {state: _overlay(kit_id, name, f"mouth-{state}", _save(mouths[state], workspace_dir, f"kit-{kit_id}-mouth-{state}"), workspace)
-                    for state in STATES}
+    shared, own_mouths = _mouth_files(rigs, mouths, kit_id, workspace_dir)
+    kit["mouth"] = {state: _overlay(kit_id, name, f"mouth-{state}", shared[state], workspace) for state in STATES}
     kit["mouthMapping"] = dict(MAPPING)
     blink_file = _save(rigs["base"]["blink"], workspace_dir, f"kit-{kit_id}-blink")
     kit["eyes"] = {"blink": _overlay(kit_id, name, "blink", blink_file, workspace)}
@@ -1461,6 +1494,9 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         # Each pose closes its own eyes: the base blink, scaled to another pose's eye height, left the
         # sclera showing wherever the eyes sit wider apart or larger than in the base.
         own = {"blinkSource": _url(_save(rig["blink"], workspace_dir, f"kit-{kit_id}-{pose}-blink"), workspace)} if rig["blinks"] else {}
+        if pose in own_mouths:
+            # Warp mouths are cut from this pose's own drawing: they are its own, in place of the kit's.
+            own["mouthSources"] = {state: _url(file, workspace) for state, file in own_mouths[pose].items()}
         anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **own, **({} if rig["blinks"] else {"blink": False})}
     kit["anchors"] = anchors
     kit["style"] = "cutout"
@@ -1471,6 +1507,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     kit["provenance"] = [*(kit.get("provenance") or []), {
         "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": look, "hints": placed,
         "unwipedPoses": unwiped, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        **({"mouthLines": {pose: rig["line"] for pose, rig in rigs.items()}} if look["mouthStyle"] == "warp" else {}),
     }]
     saved = patch_character_kit(workspace_dir, kit_id, kit, base_revision=base_revision)
     return {
@@ -1478,7 +1515,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         "review": _url(sheet, workspace), "unwipedPoses": unwiped, "warnings": warnings,
         "poses": {pose: {"mouth": rig["mouth"], "eyes": rig["eyes"], "wiped": rig["wiped"], "mouthFound": rig["found"],
                          "face": "realistic" if rig["realistic"] else "cartoon", "blinks": rig["blinks"],
-                         "landmarks": rig["guided"],
+                         "landmarks": rig["guided"], **({"mouthLine": rig["line"]} if "line" in rig else {}),
                          **({"hints": placed[pose]} if pose in placed else {})}
                   for pose, rig in rigs.items()},
     }

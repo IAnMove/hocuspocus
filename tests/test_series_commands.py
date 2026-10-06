@@ -144,7 +144,21 @@ def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
                                            "style": {"mouthStyle": "ink"}, "hints": hints})
     assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
     schema = OPERATIONS["characters.rig.flat"][0]
-    assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink"]} and "hints" in schema
+    assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink", "warp"]} and "hints" in schema
+    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth"}
+
+
+def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
+    preview = {"pose": "busto", "mouth": [61.6, 20.48], "mouthWidth": 6.55, "found": True, "from": "hint",
+               "sheet": "/api/v1/file/.kit-blas-busto-warp-preview.png?workspace=series&v=1"}
+    handlers, calls, _, _ = harness(tmp_path, [preview])
+    result = call(handlers, "characters.rig.flat.preview", {"workspace": "series", "character_id": "blas", "pose": "busto",
+                                                            "mouth": [61.6, 20.1], "mouthWidth": 6.5})
+    method, url, body = calls[0]
+    assert (method, url) == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/blas/flat-rig/preview")
+    assert body == {"workspace": "series", "pose": "busto", "sheet": True, "mouth": [61.6, 20.1], "mouthWidth": 6.5}
+    assert result["result"]["sheet"].endswith("warp-preview.png?workspace=series&v=1")
+    assert OPERATIONS["characters.rig.flat.preview"][2] is False, "a preview saves nothing on the kit"
 
 
 def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):
