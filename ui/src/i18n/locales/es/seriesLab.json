@@ -810,7 +810,28 @@
       "create": "Creando la versión…",
       "save": "Guardando…",
       "assemble": "Iniciando el montaje…",
-      "remove": "Quitando…"
+      "remove": "Quitando…",
+      "check": "Guardando…"
+    },
+    "versionTitle": "Título en este idioma",
+    "cards": "Rótulos",
+    "cardTitleLabel": "Título del rótulo de {{id}}",
+    "cardBodyLabel": "Texto del rótulo de {{id}}",
+    "machine": {
+      "badge": "Traducción automática",
+      "badgeTitle": "Lo tradujo el modelo de lenguaje (series.episode.translate) y nadie lo ha revisado todavía. Tu edición, o Revisado, quita la marca.",
+      "check": "Revisado",
+      "checkLabel": "Marcar {{id}} como revisado",
+      "checkAll": "Marcar todo como revisado",
+      "checked": "Marcado como revisado por ti.",
+      "summary_one": "{{count}} texto de esta versión es una traducción automática, pedida por {{by}}. Léelo antes de renderizar: tu edición, o Revisado, quita la marca.",
+      "summary_other": "{{count}} textos de esta versión son traducciones automáticas, pedidas por {{by}}. Léelos antes de renderizar: tu edición, o Revisado, quita cada marca.",
+      "by": {
+        "user": "una persona",
+        "agent": "un agente (MCP)",
+        "wizard": "el Wizard",
+        "server": "el servidor"
+      }
     }
   },
   "plates": {
@@ -1013,5 +1034,30 @@
       "noExports": "No se ha exportado ningún vídeo desde que abriste este plano.",
       "useThis": "Usar {{name}}"
     }
+  },
+  "scripts": {
+    "title": "Guiones de los que salió este capítulo",
+    "description": "Cada guion enviado a series.episode.from_script (por un agente, el Wizard o una persona) se guarda tal como llegó. Míralo, descárgalo o vuelve a escribir el capítulo a partir de él.",
+    "revision": "Revisión {{revision}}",
+    "by": {
+      "user": "de una persona",
+      "agent": "de un agente (MCP)",
+      "wizard": "del Wizard",
+      "server": "del servidor"
+    },
+    "shots_one": "{{count}} plano",
+    "shots_other": "{{count}} planos",
+    "created": "creó el capítulo",
+    "restoredFrom": "reescrito desde la revisión {{revision}}",
+    "applied": "escrito {{count}} veces",
+    "view": "Ver",
+    "hide": "Ocultar",
+    "download": "Descargar",
+    "rewrite": "Reescribir desde este guion",
+    "viewerLabel": "Guion de la revisión {{revision}}",
+    "confirmTitle": "¿Reescribir el capítulo desde la revisión {{revision}}?",
+    "confirmMessage": "El capítulo vuelve a ser este guion. Los planos cuyo contenido cambie pierden sus tomas y vuelven a revisión pendiente; los demás conservan las suyas. Antes se comprueba el guion contra la serie.",
+    "confirm": "Reescribir",
+    "rewritten": "Capítulo reescrito desde la revisión {{revision}} (ahora revisión {{current}})."
   }
 }

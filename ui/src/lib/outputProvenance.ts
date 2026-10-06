@@ -1,4 +1,4 @@
-import type { OutputMetadata } from '../types'
+import type { OutputMetadata, OutputOrigin } from '../types'
 
 /** Who asked for an output: an MCP client (``agent``) or Ask to the Wizard (``wizard``), and with which tool. */
 export interface OutputMaker {
@@ -48,6 +48,12 @@ export function outputMaker(metadata: OutputMetadata | Record<string, unknown> |
     return { origin: 'agent', capability }
   }
   return null
+}
+
+/** The maker the gallery listing already carries (`origin`), so a card or tile badges agent work before its sidecar loads. */
+export function listedMaker(origin: OutputOrigin | null | undefined): OutputMaker | null {
+  if (origin?.actor !== 'agent' && origin?.actor !== 'wizard') return null
+  return { origin: origin.actor, capability: text(origin.capability) }
 }
 
 function audioMode(params: Record<string, unknown>): string {

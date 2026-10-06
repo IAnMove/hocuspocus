@@ -376,6 +376,13 @@ export interface GenerationTaskTiming {
   phase_timings: Array<{ phase: string; seconds: number }>
 }
 
+/** The listing's `origin` of a file an agent made (`GET /api/v1/outputs`, services/output_origin.py). */
+export interface OutputOrigin {
+  actor: 'agent' | 'wizard'
+  /** The MCP tool or Wizard capability that made it. */
+  capability?: string
+}
+
 export interface OutputFile {
   name: string
   url: string
@@ -397,6 +404,8 @@ export interface OutputFile {
   thumbnail_url?: string | null
   /** Assembled production result, never a component clip. */
   result_kind?: VideoResultKind | null
+  /** Who asked for it, from its sidecar: an MCP agent or the Wizard (absent for a person's work). */
+  origin?: OutputOrigin | null
   /** Pixel size when the listing knows it. The gallery sizes rows from it. */
   width?: number
   height?: number
@@ -714,7 +723,7 @@ export interface SceneCatalogAssetReference {
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
-export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
+export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'agents' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'

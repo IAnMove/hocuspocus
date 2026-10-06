@@ -33424,8 +33424,11 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = "", origin: str = ""):
     """List generated output files (newest first) from the active workspace.
+
+    Each row carries ``origin`` ({actor: agent | wizard, capability}) when an agent or the Wizard asked for the file,
+    and ``origin=agent`` keeps only those (``mcp`` or ``wizard`` one of them; services/output_origin.py).
 
     Supports pagination via limit/offset query params.
     Returns {outputs, total} where total is the full count before pagination.
@@ -33562,6 +33565,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         except Exception:
             def classify_output_result_kind(name, params=None, metadata=None):
                 return None
+        from services.output_origin import output_origin
         for name, filepath, ext, mtime in raw_entries:
             meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
             if not os.path.isfile(meta_path):
@@ -33573,6 +33577,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 continue
             params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
             sidecar_cache[name] = {
+                "origin": output_origin(meta),
                 "mode": meta.get("generation_mode"),
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
@@ -33653,6 +33658,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             # identify retake/inpaint/outpaint/restyle/edit_anything outputs.
             "edit_sub_mode": edit_sub_mode,
             "result_kind": cached.get("result_kind"),
+            "origin": cached.get("origin"),
             "favorite": name in favs,
             "size": size,
             "created_at": mtime,
@@ -33683,6 +33689,8 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
     if media_type:
         files = [item for item in files if item["type"] == media_type]
+    from services.output_origin import filter_by_origin
+    files = filter_by_origin(files, origin)
     # Ordered before paging so every page follows the gallery's chosen order.
     if order == "oldest":
         files.reverse()
