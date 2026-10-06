@@ -4,7 +4,8 @@
     "canon": "2 · Biblia",
     "episode": "3 · Episodio",
     "shots": "4 · Planos",
-    "review": "5 · Resultados"
+    "approval": "5 · Validación",
+    "review": "6 · Resultados"
   },
   "review": {
     "orderedAssembly": "Montaje ordenado",
@@ -101,7 +102,8 @@
     "shotPlayErrorContinue": "No se pudo reproducir el plano {{order}}; se continúa con el siguiente disponible.",
     "approvePendingLabel": "Aprobar pendientes",
     "replaceFinalsLabel": "Sustituir finales",
-    "seedRandom": "aleatoria"
+    "seedRandom": "aleatoria",
+    "assembleAnyway": "Algunos planos aún esperan su aprobación: {{message}}\n\n¿Montar el episodio de todos modos?"
   },
   "library": {
     "loading": "Cargando Series Lab…",
@@ -795,5 +797,185 @@
     "language": "Idioma",
     "contents": "Reparto: {{characters}} · piloto de {{shots}} planos 2D",
     "create": "Crear «{{title}}»"
+  },
+  "approval": {
+    "title": "Validación de planos",
+    "empty": "Este episodio aún no tiene planos.",
+    "mode": {
+      "label": "Modo de producción",
+      "direct": {
+        "label": "Todo de una vez",
+        "hint": "Cada plano se renderiza directamente en su toma final, como hasta ahora. Las aprobaciones y notas son opcionales."
+      },
+      "plan": {
+        "label": "Aprobar planes",
+        "hint": "Cada plano solo se renderiza cuando apruebas su plan (lo que muestra y dice)."
+      },
+      "preview": {
+        "label": "Plan + previo",
+        "hint": "Aprueba el plan, mira un previo rápido de cada plano y apruébalo o pide cambios antes del render final."
+      }
+    },
+    "progress": {
+      "plan": "Planes aprobados",
+      "preview": "Previos aprobados",
+      "reviewed": "Tomas revisadas",
+      "ready": "Listos para el montaje"
+    },
+    "next": {
+      "approve_plan": "Aprueba el plan de {{count}} planos",
+      "approve_plan_one": "Aprueba el plan de 1 plano",
+      "render": "Renderiza los {{count}} planos aprobados",
+      "render_one": "Renderiza el plano aprobado",
+      "render_previews": "Renderiza los previos de los {{count}} planos aprobados",
+      "render_previews_one": "Renderiza el previo del plano aprobado",
+      "approve_previews": "Revisa {{count}} previos",
+      "approve_previews_one": "Revisa 1 previo",
+      "render_final": "Renderiza el final de {{count}} previos aprobados",
+      "render_final_one": "Renderiza el final del previo aprobado",
+      "changes": "{{count}} planos esperan los cambios que pediste",
+      "changes_one": "1 plano espera los cambios que pediste",
+      "assemble": "Todos los planos están listos: monta el episodio"
+    },
+    "steps": {
+      "changes": "{{count}} con cambios pedidos",
+      "changes_one": "1 con cambios pedidos",
+      "approve_plan": "{{count}} planes por aprobar",
+      "approve_plan_one": "1 plan por aprobar",
+      "render": "{{count}} por renderizar",
+      "render_one": "1 por renderizar",
+      "render_previews": "{{count}} previos por renderizar",
+      "render_previews_one": "1 previo por renderizar",
+      "approve_previews": "{{count}} previos por revisar",
+      "approve_previews_one": "1 previo por revisar",
+      "render_final": "{{count}} finales por renderizar",
+      "render_final_one": "1 final por renderizar"
+    },
+    "actions": {
+      "approveVisible": "Aprobar los planes visibles",
+      "approveVisibleConfirm": "¿Aprobar el plan de estos {{count}} planos?",
+      "showPending": "Ver pendientes",
+      "showChanges": "Ver cambios pedidos",
+      "render": "Renderizar planos aprobados",
+      "render_previews": "Renderizar previos",
+      "render_final": "Renderizar finales",
+      "openResults": "Ir a Resultados",
+      "rerenderChanged": "Volver a renderizar los planos con cambios"
+    },
+    "render": {
+      "progress": "Render en el servidor: {{done}} de {{total}} · {{status}}",
+      "waiting": "{{count}} esperan aprobación",
+      "waiting_one": "1 espera aprobación"
+    },
+    "cast": {
+      "title": "Reparto del episodio ({{count}}) · bocas y rig facial",
+      "faceRig": "{{name}} · rig facial"
+    },
+    "filters": {
+      "label": "Filtrar planos",
+      "all": "Todos ({{count}})",
+      "pending": "Pendientes ({{count}})",
+      "changes": "Cambios pedidos ({{count}})",
+      "approved": "Aprobados ({{count}})"
+    },
+    "scene": {
+      "title": "Escena {{number}}",
+      "progress": "{{done}} / {{total}} aprobados"
+    },
+    "status": {
+      "pending": "pendiente",
+      "approved": "aprobado",
+      "changes": "cambios pedidos"
+    },
+    "stage": {
+      "plan": "plan",
+      "preview": "previo",
+      "final": "final"
+    },
+    "notes": {
+      "earlier": "Notas de este plano",
+      "by": {
+        "user": "Tú",
+        "agent": "Agente"
+      },
+      "label": "Tu nota ({{stage}})",
+      "placeholder": "¿Qué debería cambiar en este plano? Se guarda mientras escribes.",
+      "saving": "Guardando…",
+      "saved": "Guardado",
+      "failed": "No se pudo guardar la nota"
+    },
+    "card": {
+      "noPreview": "Aún sin previo",
+      "play": "Reproducir el plano {{order}}",
+      "draftPreview": "Previo en borrador",
+      "finalTake": "Toma final",
+      "approvedTake": "Toma aprobada",
+      "take": "Toma por revisar",
+      "location": "Localización: {{name}}",
+      "framing": "Encuadre: {{value}}",
+      "camera": "Cámara: {{value}}",
+      "cast": "Reparto",
+      "faceRig": "Abrir la boca / rig facial de {{name}}",
+      "noLines": "Sin diálogo",
+      "fx": "efectos: {{list}}",
+      "sfx": "{{count}} sonidos",
+      "props": "{{count}} objetos",
+      "layers": "{{count}} capas de decorado",
+      "cardKind": "rótulo {{kind}}",
+      "music": "música: {{file}}",
+      "scene3d": "3D {{source}} · {{objects}} objetos · {{quality}}",
+      "undo": "Deshacer",
+      "approvePlan": "Aprobar plan",
+      "approvePreview": "Aprobar previo",
+      "requestChange": "Pedir cambio",
+      "edit": "Editar",
+      "openEditor": "Abrir en el editor",
+      "rerender": "Volver a renderizar este plano",
+      "seconds": "{{seconds}} s",
+      "planStatus": "Plan: {{status}}",
+      "previewStatus": "Previo: {{status}}"
+    },
+    "edit": {
+      "resetHint": "Editar este plano devuelve sus aprobaciones a pendiente y lo marca para renderizarse de nuevo.",
+      "planTitle": "Plan 2D",
+      "framing": "Encuadre",
+      "camera": "Cámara",
+      "auto": "Automático",
+      "intro": "Entrada (s)",
+      "tail": "Cola (s)",
+      "castHint": "Reparto en pantalla: personaje, pose del Character Kit y posición (x % del encuadre).",
+      "castCharacter": "Personaje",
+      "castPose": "Pose",
+      "poseDefault": "Pose por defecto",
+      "castX": "Posición x %",
+      "castRemove": "Quitar del plano",
+      "castAdd": "Añadir un personaje",
+      "advanced": "Plan 2D avanzado (efectos, sonidos, objetos, capas, rótulo, música) en JSON",
+      "scene3d": "Escena 3D (plantilla o escena, objetos, calidad) en JSON",
+      "applyJson": "Aplicar",
+      "jsonObject": "Escribe un objeto JSON"
+    },
+    "framings": {
+      "wide": "General",
+      "two": "Plano a dos",
+      "medium": "Medio",
+      "close": "Primer plano",
+      "insert": "Inserto",
+      "title": "Título"
+    },
+    "cameras": {
+      "static": "Fija",
+      "push": "Acercamiento"
+    },
+    "editor": {
+      "title": "Editando el plano #{{order}}",
+      "exportTake": "Exportar y usar como toma del plano",
+      "chooseExport": "Elegir una exportación reciente",
+      "back": "Volver al plano",
+      "discard": "Dejar de editar este plano",
+      "recent": "Exportaciones recientes",
+      "noExports": "No se ha exportado ningún vídeo desde que abriste este plano.",
+      "useThis": "Usar {{name}}"
+    }
   }
 }

@@ -4,7 +4,8 @@
     "canon": "2 · Bible",
     "episode": "3 · Episode",
     "shots": "4 · Shots",
-    "review": "5 · Results"
+    "approval": "5 · Validation",
+    "review": "6 · Results"
   },
   "review": {
     "orderedAssembly": "Ordered episode assembly",
@@ -101,7 +102,8 @@
     "shotPlayErrorContinue": "Shot {{order}} could not be played; continuing with the next available shot.",
     "approvePendingLabel": "Approve pending",
     "replaceFinalsLabel": "Replace finals",
-    "seedRandom": "random"
+    "seedRandom": "random",
+    "assembleAnyway": "Some shots still wait for their approval: {{message}}\n\nAssemble the episode anyway?"
   },
   "library": {
     "loading": "Loading Series Lab…",
@@ -795,5 +797,185 @@
     "language": "Language",
     "contents": "Cast: {{characters}} · pilot of {{shots}} 2D shots",
     "create": "Create “{{title}}”"
+  },
+  "approval": {
+    "title": "Shot validation",
+    "empty": "This episode has no shots yet.",
+    "mode": {
+      "label": "Production mode",
+      "direct": {
+        "label": "All at once",
+        "hint": "Every shot renders straight to its final take, as before. Approvals and notes here are optional."
+      },
+      "plan": {
+        "label": "Approve plans",
+        "hint": "Each shot renders only after you approve its plan (what it shows and says)."
+      },
+      "preview": {
+        "label": "Plan + preview",
+        "hint": "Approve the plan, then watch a quick preview of each shot and approve it or ask for changes before the final render."
+      }
+    },
+    "progress": {
+      "plan": "Plans approved",
+      "preview": "Previews approved",
+      "reviewed": "Takes reviewed",
+      "ready": "Ready for the cut"
+    },
+    "next": {
+      "approve_plan": "Approve the plan of {{count}} shots",
+      "approve_plan_one": "Approve the plan of 1 shot",
+      "render": "Render the {{count}} approved shots",
+      "render_one": "Render the approved shot",
+      "render_previews": "Render previews of the {{count}} approved shots",
+      "render_previews_one": "Render the preview of the approved shot",
+      "approve_previews": "Review {{count}} previews",
+      "approve_previews_one": "Review 1 preview",
+      "render_final": "Render the final of {{count}} approved previews",
+      "render_final_one": "Render the final of the approved preview",
+      "changes": "{{count}} shots wait for the changes you asked for",
+      "changes_one": "1 shot waits for the changes you asked for",
+      "assemble": "Every shot is ready: assemble the episode"
+    },
+    "steps": {
+      "changes": "{{count}} with changes requested",
+      "changes_one": "1 with changes requested",
+      "approve_plan": "{{count}} plans to approve",
+      "approve_plan_one": "1 plan to approve",
+      "render": "{{count}} to render",
+      "render_one": "1 to render",
+      "render_previews": "{{count}} previews to render",
+      "render_previews_one": "1 preview to render",
+      "approve_previews": "{{count}} previews to review",
+      "approve_previews_one": "1 preview to review",
+      "render_final": "{{count}} finals to render",
+      "render_final_one": "1 final to render"
+    },
+    "actions": {
+      "approveVisible": "Approve the visible plans",
+      "approveVisibleConfirm": "Approve the plan of these {{count}} shots?",
+      "showPending": "Show pending",
+      "showChanges": "Show change requests",
+      "render": "Render approved shots",
+      "render_previews": "Render previews",
+      "render_final": "Render finals",
+      "openResults": "Go to Results",
+      "rerenderChanged": "Re-render shots with changes"
+    },
+    "render": {
+      "progress": "Server render: {{done}} of {{total}} · {{status}}",
+      "waiting": "{{count}} waiting for approval",
+      "waiting_one": "1 waiting for approval"
+    },
+    "cast": {
+      "title": "Cast of the episode ({{count}}) · mouths and face rig",
+      "faceRig": "{{name}} · face rig"
+    },
+    "filters": {
+      "label": "Filter shots",
+      "all": "All ({{count}})",
+      "pending": "Pending ({{count}})",
+      "changes": "Changes requested ({{count}})",
+      "approved": "Approved ({{count}})"
+    },
+    "scene": {
+      "title": "Scene {{number}}",
+      "progress": "{{done}} / {{total}} approved"
+    },
+    "status": {
+      "pending": "pending",
+      "approved": "approved",
+      "changes": "changes requested"
+    },
+    "stage": {
+      "plan": "plan",
+      "preview": "preview",
+      "final": "final"
+    },
+    "notes": {
+      "earlier": "Notes on this shot",
+      "by": {
+        "user": "You",
+        "agent": "Agent"
+      },
+      "label": "Your note ({{stage}})",
+      "placeholder": "What should change in this shot? Saved as you type.",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "failed": "Could not save the note"
+    },
+    "card": {
+      "noPreview": "No preview yet",
+      "play": "Play shot {{order}}",
+      "draftPreview": "Draft preview",
+      "finalTake": "Final take",
+      "approvedTake": "Approved take",
+      "take": "Take to review",
+      "location": "Location: {{name}}",
+      "framing": "Framing: {{value}}",
+      "camera": "Camera: {{value}}",
+      "cast": "Cast",
+      "faceRig": "Open {{name}}'s mouth / face rig",
+      "noLines": "No dialogue",
+      "fx": "fx: {{list}}",
+      "sfx": "{{count}} sfx",
+      "props": "{{count}} props",
+      "layers": "{{count}} set layers",
+      "cardKind": "{{kind}} card",
+      "music": "music: {{file}}",
+      "scene3d": "3D {{source}} · {{objects}} objects · {{quality}}",
+      "undo": "Undo",
+      "approvePlan": "Approve plan",
+      "approvePreview": "Approve preview",
+      "requestChange": "Request change",
+      "edit": "Edit",
+      "openEditor": "Open in the editor",
+      "rerender": "Re-render this shot",
+      "seconds": "{{seconds}} s",
+      "planStatus": "Plan: {{status}}",
+      "previewStatus": "Preview: {{status}}"
+    },
+    "edit": {
+      "resetHint": "Editing this shot sends its approvals back to pending and marks it to render again.",
+      "planTitle": "2D plan",
+      "framing": "Framing",
+      "camera": "Camera",
+      "auto": "Automatic",
+      "intro": "Intro (s)",
+      "tail": "Tail (s)",
+      "castHint": "Cast on screen: character, Character Kit pose and position (x % of the frame).",
+      "castCharacter": "Character",
+      "castPose": "Pose",
+      "poseDefault": "Default pose",
+      "castX": "Position x %",
+      "castRemove": "Remove from the shot",
+      "castAdd": "Add a character",
+      "advanced": "Advanced 2D plan (effects, sounds, props, set layers, card, music) as JSON",
+      "scene3d": "3D scene (template or scene, objects, quality) as JSON",
+      "applyJson": "Apply",
+      "jsonObject": "Write a JSON object"
+    },
+    "framings": {
+      "wide": "Wide",
+      "two": "Two-shot",
+      "medium": "Medium",
+      "close": "Close-up",
+      "insert": "Insert",
+      "title": "Title"
+    },
+    "cameras": {
+      "static": "Static",
+      "push": "Push in"
+    },
+    "editor": {
+      "title": "Editing shot #{{order}}",
+      "exportTake": "Export and use as the shot's take",
+      "chooseExport": "Choose a recent export",
+      "back": "Back to the shot",
+      "discard": "Stop editing this shot",
+      "recent": "Recent exports",
+      "noExports": "No video exported since you opened this shot.",
+      "useThis": "Use {{name}}"
+    }
   }
 }

@@ -34,7 +34,7 @@ export function FlatRigMouthEditor(props: Props) {
   const { t } = useUiTranslation('characters')
   const [open, setOpen] = useState(() => isWarpRigged(props.kit))
   if (!isFlatRigged(props.kit)) return null
-  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} className="rounded border border-amber-300/30 bg-black/15 p-2">
+  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} data-testid="flat-rig-mouth-line" className="rounded border border-amber-300/30 bg-black/15 p-2">
     <summary className="cursor-pointer text-sm font-medium text-amber-100">{t('mouthLine.title', { pose: characterKitPoseLabel(props.poseId) })}</summary>
     {open && <MouthLineWorkbench key={`${props.kit.id}:${props.poseId}`} {...props} />}
   </details>

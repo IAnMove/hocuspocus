@@ -23,6 +23,16 @@ REVISION = {"type": "integer", "minimum": 0}
 OBJECT = {"type": "object"}
 POINT = {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 100}, "minItems": 2, "maxItems": 2}
 MOUTH_WIDTH = {"type": "number", "minimum": 0.5, "maximum": 100}
+REVIEW_MODE = {"enum": ["direct", "plan", "preview"]}
+REVIEW_STATUS = {"enum": ["pending", "approved", "changes"]}
+REVIEW_NOTE = {"type": "object", "additionalProperties": False, "required": ["text"], "properties": {
+    "id": {"type": "string", "maxLength": 80}, "text": {"type": "string", "maxLength": 2000},
+    "stage": {"enum": ["plan", "preview", "final"]}, "by": {"enum": ["user", "agent"]}}}
+REVIEW_CHANGE = {"type": "object", "additionalProperties": False, "required": ["shot_id"], "properties": {
+    "shot_id": ID, "plan": REVIEW_STATUS, "preview": REVIEW_STATUS, "attempt_id": ID, "note": REVIEW_NOTE,
+    "remove_note_id": ID}}
+# Mutations that take an envelope intent_id: a retried call replays the first result instead of writing again.
+INTENT_OPERATIONS = frozenset({"series.episode.review.set", "series.shot.review.set"})
 LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
 # A shot by id ("e1s04") or by its number in the episode (5 = the fifth shot, the #5 Series Lab shows).
@@ -119,7 +129,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
-         "approve": {"type": "boolean"}, "language": LANGUAGE},
+         "approve": {"type": "boolean"}, "language": LANGUAGE, "only_changed": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id"], True,
         "Render every 2D animation shot of an episode on the server, no browser needed: each line in the character's voice "
         "for the series language (checked with qa.speech, up to three takes), phonetic mouth cues, an editable Video 2D "
@@ -129,7 +139,14 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "(approve: true approves it). A shot with foley {prompt, volume} gets sound generated from its exported picture "
         "(generation.sfx, MMAudio) mixed under its own before the take; when that fails the take is made without it and "
         "the item has a warning. language renders a language version (its lines, the characters' voices for that "
-        "language, its own takes). Returns the job; poll series.episode.render_native.status. Resumable.",
+        "language, its own takes). The episode's review mode (series.episode.review.get) gates it: plan renders only "
+        "shots whose plan is approved; preview gives each shot a pass (items[].pass): preview (first render of an "
+        "approved plan, 3D at draft quality, never approved, take reviewStage preview), final (after the preview is "
+        "approved, 3D at its own quality, approved) or promote (an approved 2D or draft-3D preview is the final: "
+        "approved, nothing renders); shots waiting for an approval are listed in job.waiting, not failed. shot_ids "
+        "render a new preview of a shot whose preview waits for review; only_changed renders just the shots without an "
+        "up-to-date approved take that the review lets through (like produce). Returns the job; poll "
+        "series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -160,7 +177,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "{prompt, volume} (sound generated from the rendered picture) and 3D dialogue shots (scene3d.objects with clips, "
         "hold and appearance as in series.episode.update). It checks every character, pose, location, file, effect and "
         "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
-        "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id).",
+        "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id; its review "
+        "mode and notes too, and a shot whose content changed goes back to pending review).",
     ),
     "series.episode.produce": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "languages": {"type": "array", "items": LANGUAGE, "maxItems": 10},
@@ -170,7 +188,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "narrows it) with automatic approval, retries failed shots once, then assembles each language with subtitles burned "
         "in (burn_subtitles false skips it). Only shots without an approved take made from their current script, kits and "
         "location are rendered, so producing again after a fix just renders what changed and recuts; rerender true renders "
-        "every shot again. Poll series.episode.produce.status every minute or two; chapters lists the files.",
+        "every shot again. An episode in plan or preview review mode renders what its review lets through and, while "
+        "shots wait for an approval, stops before the cut with status waiting and job.waiting [{shotId, order, reason "
+        "plan|preview|final}]; resume after the approvals (previews then get their finals). Poll "
+        "series.episode.produce.status every minute or two; chapters lists the files.",
     ),
     "series.episode.produce.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
@@ -208,6 +229,36 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
         "Read one episode compactly: script, shots with their layout2d and lines, the last takes (id, language, seconds, "
         "editable scene file), its language versions and score. Use it instead of series.get to copy an episode's style.",
+    ),
+    "series.episode.review.get": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
+        "Read an episode's staged review: its production mode (direct renders everything as before; plan: each shot's "
+        "plan must be approved before it renders; preview: plan approval, then a preview render the user approves or "
+        "sends back with notes, then the final render), counts, the steps left (changes, approve_plan, render, "
+        "render_previews, approve_previews, render_final) and the next one, and per shot in order its plan and preview "
+        "status (pending | approved | changes), the take the preview decision is about, the latest take and its "
+        "reviewStage, its step, and every note {id, at, stage, text, by}. Read the notes of shots in changes, fix the "
+        "shots (series.episode.update or from_script: a change of a shot's content puts its decisions back to pending, "
+        "notes stay), answer with a note by agent, then render again.",
+    ),
+    "series.episode.review.set": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "mode": REVIEW_MODE, "base_revision": REVISION,
+         "shots": {"type": "array", "maxItems": 500, "items": REVIEW_CHANGE}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Set an episode's production mode (direct | plan | preview) and/or decide many shots at once: per shot plan, "
+        "preview (approving a preview needs a completed take, attempt_id or the latest one, and approves its plan "
+        "too), a note {text, id?, stage? plan|preview|final, by? user|agent} (same id updates it, empty text removes "
+        "it) or remove_note_id. All or nothing; base_revision (optional) refuses a stale write. The mode is kept by "
+        "series.episode.update and from_script rewrites. Optional envelope intent_id replays the first result.",
+    ),
+    "series.shot.review.set": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_id": ID, "plan": REVIEW_STATUS,
+         "preview": REVIEW_STATUS, "attempt_id": ID, "note": REVIEW_NOTE, "remove_note_id": ID},
+        ["workspace", "series_id", "episode_id", "shot_id"], True,
+        "Decide one shot of an episode's staged review and/or write a note on it: plan and preview pending | approved "
+        "| changes (preview is about attempt_id, default the latest completed take), note {text, id?, stage?, by?}; "
+        "an agent answering a user's note writes by: agent. Returns the shot's review and the episode's next step. "
+        "Optional envelope intent_id replays the first result.",
     ),
     "series.templates": (
         {"language": {"enum": ["es", "en"]}}, [], False,
@@ -299,12 +350,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "series' own), it approves the take for that language version only and keeps the take's length as the version's.",
     ),
     "series.assembly.start": (
-        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE, "burn_subtitles": {"type": "boolean"}},
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE, "burn_subtitles": {"type": "boolean"},
+         "force": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id"], True,
         "Assemble the approved takes of an episode into one chapter video (shown under Capítulos), at -16 LUFS with SRT/VTT "
         "subtitles; burn_subtitles also writes a copy with them on the picture. language assembles that language version's "
         "approved takes. With soundDesign.ambienceMode \"episode\" it lays each location's ambience as one continuous "
-        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. Returns a job.",
+        "bed under the cut, and the episode's score (ducked under the lines), before the loudness. An episode in plan or "
+        "preview review mode is refused (409 review_pending, with the shots it waits for) until every plan, and in "
+        "preview mode every preview and its final take, is approved; force: true assembles anyway. Returns a job.",
     ),
     "series.episode.language_version.set": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "language": LANGUAGE,
@@ -365,12 +419,15 @@ class SeriesCommandError(ValueError):
 
 
 def _operation_schema(name: str, properties: dict[str, Any], required: list[str], mutation: bool, description: str) -> dict[str, Any]:
+    envelope: dict[str, Any] = {
+        "version": {"type": "integer", "const": 1},
+        "input": {"type": "object", "additionalProperties": False, "properties": properties, "required": required},
+    }
+    if name in INTENT_OPERATIONS:
+        envelope["intent_id"] = {"type": "string", "minLength": 1, "maxLength": 160}
     return {
         "name": name, "version": 1, "domain": name.split(".")[0], "mutation": mutation, "description": description,
-        "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"], "properties": {
-            "version": {"type": "integer", "const": 1},
-            "input": {"type": "object", "additionalProperties": False, "properties": properties, "required": required},
-        }},
+        "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"], "properties": envelope},
     }
 
 
@@ -484,6 +541,8 @@ def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: 
         body["language"] = data["language"]
     if data.get("shot_ids"):
         body["shotIds"] = data["shot_ids"]
+    if data.get("only_changed"):
+        body["changed"] = True
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/native-render"
     return {"job": request("POST", path, body=body)}
 
@@ -543,6 +602,44 @@ def _guide(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 def _episode_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/compact"
     return {"episode": request("GET", path, query={"workspace": data["workspace"]})}
+
+
+def _review_path(data: dict[str, Any]) -> str:
+    return f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/review"
+
+
+def _review_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return {"review": request("GET", _review_path(data), query={"workspace": data["workspace"]})}
+
+
+_REVIEW_FIELDS = (("shot_id", "shotId"), ("plan", "plan"), ("preview", "preview"), ("attempt_id", "attemptId"),
+                  ("note", "note"), ("remove_note_id", "removeNoteId"))
+
+
+def _review_change(item: dict[str, Any]) -> dict[str, Any]:
+    return {target: item[source] for source, target in _REVIEW_FIELDS if source in item}
+
+
+def _review_write(data: dict[str, Any], request: Callable[..., Any], shots: list[dict[str, Any]]) -> dict[str, Any]:
+    body: dict[str, Any] = {"workspace": data["workspace"], "shots": [_review_change(item) for item in shots]}
+    if data.get("mode"):
+        body["mode"] = data["mode"]
+    if data.get("base_revision") is not None:
+        body["baseRevision"] = data["base_revision"]
+    saved = request("POST", _review_path(data), body=body)
+    entries = (saved.get("review") or {}).get("shots") or {}
+    return {"revision": saved.get("revision"), **(saved.get("summary") or {}), "noteIds": saved.get("noteIds") or {},
+            "shots": {item["shot_id"]: entries.get(item["shot_id"]) or {"plan": "pending", "preview": "pending", "notes": []}
+                      for item in shots}}
+
+
+def _review_set(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return _review_write(data, request, data.get("shots") or [])
+
+
+def _shot_review_set(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    change = {key: data[key] for key in ("shot_id", "plan", "preview", "attempt_id", "note", "remove_note_id") if key in data}
+    return _review_write({key: data[key] for key in ("workspace", "series_id", "episode_id")}, request, [change])
 
 
 def _list_templates(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -658,6 +755,8 @@ def _start_assembly(data: dict[str, Any], request: Callable[..., Any], **_extra:
         body["language"] = data["language"]
     if data.get("burn_subtitles"):
         body["burnSubtitles"] = True
+    if data.get("force"):
+        body["force"] = True
     return {"job": request("POST", path, body=body)}
 
 
@@ -714,6 +813,9 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.location.plate3d.status": _plate_status,
     "series.guide": _guide,
     "series.episode.get": _episode_get,
+    "series.episode.review.get": _review_get,
+    "series.episode.review.set": _review_set,
+    "series.shot.review.set": _shot_review_set,
     "series.templates": _list_templates,
     "series.create_from_template": _create_from_template,
     "series.list": _list_series,
@@ -740,6 +842,25 @@ def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any],
     if runner is None:
         raise SeriesCommandError("Unknown operation")
     return runner(data, request)
+
+
+def _run_once(name: str, data: dict[str, Any], intent: Any, run: Callable[[], Any], workspace_dir: Callable[[str], str]) -> Any:
+    """Replay the stored result of ``intent`` (services/mcp_intent.py); the same id with other input conflicts."""
+    from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
+    try:
+        intent_id = check_intent_id(intent)
+        digest = intent_digest(data)
+        root = Path(workspace_dir(data["workspace"]))
+        previous = load_intent(root, name, intent_id, digest)
+    except IntentConflict as error:
+        raise SeriesCommandError({"code": "intent_conflict", "message": str(error)}, status=409) from error
+    except (OSError, ValueError) as error:
+        raise SeriesCommandError({"code": "intent_conflict", "message": "Stored intention is unreadable"}, status=409) from error
+    if previous is not None:
+        return {**previous, "replayed": True}
+    result = run()
+    store_intent(root, name, intent_id, digest, result)
+    return result
 
 
 def _error_detail(error: SeriesCommandError) -> dict[str, Any]:
@@ -776,8 +897,10 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
             raise SeriesCommandError("Use an existing file inside the workspace", status=404)
         return candidate
 
-    def run(name: str, data: dict[str, Any]) -> Any:
-        return _run_operation(name, data, request, workspace_file, uploads_dir)
+    def run(name: str, data: dict[str, Any], intent: Any = None) -> Any:
+        if intent is None or name not in INTENT_OPERATIONS:
+            return _run_operation(name, data, request, workspace_file, uploads_dir)
+        return _run_once(name, data, intent, lambda: _run_operation(name, data, request, workspace_file, uploads_dir), workspace_dir)
 
     def handler(name: str) -> Callable[[Any], Any]:
         properties, required, _, _ = OPERATIONS[name]
@@ -789,7 +912,7 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
             if not isinstance(data, dict) or set(data) - set(properties) or any(key not in data for key in required):
                 raise HTTPException(422, {"code": "invalid_command", "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
             try:
-                result = await run_in_threadpool(run, name, data)
+                result = await run_in_threadpool(run, name, data, arguments.get("intent_id"))
             except SeriesCommandError as error:
                 raise HTTPException(error.status if error.status < 500 else 502, _error_detail(error)) from error
             return {"version": 1, "status": "completed", "operation": name, "result": result}

@@ -44,6 +44,32 @@ use only those ids and file names, never invent one.
 The lower-level tools (`series.episode.create`/`update`, `series.episode.language_version.set`,
 `series.episode.render_native`, `series.assembly.start`) do the same steps one by one.
 
+## The user's review (production modes)
+
+An episode is made in one of three modes, chosen by the user in Series Lab (Validation) or with
+`series.episode.review.set` `mode`:
+
+- `direct` (default): steps 4–5 above, nothing waits.
+- `plan`: each shot's plan (cast, poses, lines, framing, camera, set) is approved by the user before it renders.
+  `series.episode.render_native` and `produce` render only approved shots; the rest are listed as `waiting`.
+- `preview`: plan approval, then a preview render the user approves or sends back with notes, then the final. The
+  preview of a 2D shot is its normal render; a 3D shot's preview is exported at `draft` quality. An approved 2D (or
+  draft 3D) preview becomes the final take without rendering again; a 3D shot at `final` quality renders its final.
+
+Work with the user's review like this:
+
+1. `series.episode.review.get`: the mode, the steps left and, per shot, `plan`/`preview` (`pending | approved |
+   changes`), its `step` and every note `{stage, text, by}`. Shots in `changes` are the user's requests.
+2. Fix each requested shot (`series.shot.update` for one shot, `series.episode.update`, or the script again with
+   `episode_id`). Changing a shot's content
+   puts its approvals back to pending (notes stay), so the user looks at it again; a new take of a shot puts its
+   preview back to pending.
+3. Answer on the shot: `series.shot.review.set` with `note: {text: "what I changed", by: "agent"}` (and `plan` or
+   `preview: "pending"` if you changed nothing the review can see). Never approve on the user's behalf unless asked.
+4. `series.episode.produce` (or `render_native`): it renders what the review lets through and stops `waiting` before
+   the cut while shots wait; `resume` it after the user approved. `series.assembly.start` refuses a staged episode
+   that is not fully approved (409 `review_pending`) unless `force: true`.
+
 ## Painted / graphic-novel characters that talk
 
 For painted art (graphic novel: bold ink, flat black shadows) use the `graphic-novel` character style. Its mouths
@@ -399,3 +425,5 @@ ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let
 - `generation.*` receipts can stay `queued` while the job finished: wait with `jobs.wait` and read the files from the
   receipt's `task.result_refs`.
 - `qa.export` flags cards and pauses as problems; judge an episode by looking at its takes.
+- In `plan` or `preview` mode a render or production that seems to do nothing is waiting for the user's approvals:
+  read `job.waiting` or `series.episode.review.get` instead of rendering again.

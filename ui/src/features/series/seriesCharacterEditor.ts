@@ -20,7 +20,14 @@ function sourceCharacter(source: Source) {
   return { series, character }
 }
 
-export async function openSeriesCharacterEditor(workspace: string, seriesId: string, characterId: string) {
+/** The pose to open, when the kit has it. */
+function kitPose(kit: ReturnType<typeof seriesCharacterKit>, poseId?: string) {
+  return poseId === 'base' || (poseId && kit.poses[poseId]) ? poseId : undefined
+}
+
+/** Open a series character's Character Kit in the Characters tool; with `poseId` its speech workshop opens on that pose's
+ * mouth / face rig (the pose a shot uses). */
+export async function openSeriesCharacterEditor(workspace: string, seriesId: string, characterId: string, options: { poseId?: string } = {}) {
   const source = { workspace, seriesId, characterId, episodeId: useSeriesStore.getState().activeEpisodeId }
   sourceCharacter(source)
   await useSeriesStore.getState().saveNow()
@@ -35,8 +42,9 @@ export async function openSeriesCharacterEditor(workspace: string, seriesId: str
   if (pending && pending.sourceId !== sourceId) {
     throw new Error(i18n.t('seriesLab:speech.finishEditor'))
   }
-  useCharacterEditorHandoff.setState({ request: pending ?? {
-    workspace, kit, sourceId, sourceLabel: `${series.title} · ${character.name}`,
+  const poseId = kitPose(kit, options.poseId)
+  useCharacterEditorHandoff.setState({ request: pending ? { ...pending, poseId } : {
+    workspace, kit, sourceId, sourceLabel: `${series.title} · ${character.name}`, poseId,
     onSaved: async saved => {
       const current = sourceCharacter(source).character.voiceProfile?.characterKitRef
       if (current && (current.workspace !== workspace || (current.id !== ref?.id && current.id !== saved.id))) throw new Error(i18n.t('seriesLab:speech.changedLink'))

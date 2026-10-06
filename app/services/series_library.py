@@ -340,6 +340,9 @@ def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
     })
     if attempt.get("reviewDecision") not in {"approved", "rejected"}:
         attempt.pop("reviewDecision", None)
+    # How the server render made it for a staged review (series_review): a cheap preview or the final take.
+    if attempt.get("reviewStage") not in {"preview", "final"}:
+        attempt.pop("reviewStage", None)
     return attempt
 
 
@@ -566,6 +569,9 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
         episode["score"] = score
     else:
         episode.pop("score", None)
+    # The staged review (series_review): mode, per-shot decisions on the current content, notes.
+    from .series_review import normalize_episode_review
+    normalize_episode_review(episode)
     from .series_shot_dialogue import annotate_episode_shot_dialogue
     return annotate_episode_shot_dialogue(episode)
 
@@ -794,8 +800,11 @@ def _validate_project_graph_ids(project: dict) -> None:
 def series_put_payload(current: dict, sent: dict) -> dict:
     """The project a ``PUT /api/v1/series/{id}`` stores: what was sent, and the current value of every top-level field
     that was not. An agent that sent only ``allowedProductionMethods`` emptied the episodes, characters, locations
-    and assets of a finished series. To clear a field, send it empty."""
-    return {**copy.deepcopy(current), **sent}
+    and assets of a finished series. To clear a field, send it empty. Each episode keeps its stored review."""
+    from .series_review import keep_stored_review
+    payload = {**copy.deepcopy(current), **copy.deepcopy(sent)}
+    keep_stored_review(current, payload)
+    return payload
 
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
