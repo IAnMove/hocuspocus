@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from routers.wangp_mcp import RequestJournal, UncertainRequest
 from services.asset_manifest import publish_generation_sidecar
 from services.mcp_intent import check_intent_id, intent_digest
+from services.agent_activity import trusted_tool as agent_trusted_tool
 
 OPERATION = "model3d.animate"
 _IMPORT_SUFFIXES = {".bvh", ".glb", ".gltf"}
@@ -338,7 +339,7 @@ def _publish(folder: Path, filename: str, payload: dict, intent: str, clips: lis
          "params": {"workspace": payload["workspace"], "source": payload["source"], "clips": clips,
                     "bpm": bpm, "import": None if imported is None else imported.name, "path": path,
                     "interactions": interactions}},
-        output_folder=payload["workspace"], tool="model3d", actor="user", capability=OPERATION,
+        output_folder=payload["workspace"], tool=agent_trusted_tool() or "model3d", actor="user", capability=OPERATION,
     )
 
 

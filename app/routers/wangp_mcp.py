@@ -16,6 +16,7 @@ from copy import deepcopy
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from services.agent_activity import caller_from_headers, caller_scope
 from services.wangp_submission import JsonRequest
 from services.workspace_commands import catalog as command_catalog
 
@@ -235,7 +236,9 @@ def _prepare_generate_params(params):
         params['image_mode'] = 1 if params.get('generation_mode') == 'image' else 0
 
 
-def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None, profiles=None, oauth=None):
+def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None, profiles=None, oauth=None,
+                            on_mutation=None):
+    """``on_mutation(name, arguments, result)`` hears every successful mutating call from an MCP client."""
     router = APIRouter()
     journal = RequestJournal(journal_path)
     token_getter = token_getter or (lambda: os.environ.get('HOCUS_MCP_TOKEN', ''))
@@ -243,6 +246,16 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
     operations, operation_names = _selected_operations(command_operations)
     operations_by_name = {operation['name']: operation for operation in operations}
     callable_names = LEGACY_TOOLS | operation_names
+
+    def _notify_mutation(name, arguments, result):
+        if on_mutation is None:
+            return
+        if name in operation_names:
+            changed = operations_by_name[name].get('mutation', True)
+        else:
+            changed = name in MUTATIONS and not _tool_result_is_error(result)
+        if changed:
+            on_mutation(name, arguments, result)
 
     async def call_tool(name, arguments, allowed=None):
         if not isinstance(name, str) or name not in callable_names or not callable(handlers.get(name)) or not isinstance(arguments, dict):
@@ -252,7 +265,9 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         if name in operation_names:
             _check_version(operations_by_name[name], arguments)
             result = handlers[name](arguments)
-            return await result if inspect.isawaitable(result) else result
+            result = await result if inspect.isawaitable(result) else result
+            _notify_mutation(name, arguments, result)
+            return result
         if name in REQUEST_TOOLS:
             request_id, params, digest = _request_arguments(name, arguments)
             validate = (lambda: _validate_generate_params(params)) if name == 'generate' else None
@@ -281,13 +296,15 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             params = dict(params)
             if name == 'generate':
                 _prepare_generate_params(params)
+            from services.agent_activity import trusted_tool
             from services.generation_provenance import normalize_submission_provenance
-            provenance = normalize_submission_provenance(params.get('provenance'), trusted_tool='external_agent')
+            agent_tool = trusted_tool(default_external=True)
+            provenance = normalize_submission_provenance(params.get('provenance'), trusted_tool=agent_tool)
             provenance.update(actor='user', capability=name)
             provenance['command']['command_id'] = request_id
             params['provenance'] = provenance
             try:
-                result = handlers[name](JsonRequest(params, trusted_tool='external_agent'))
+                result = handlers[name](JsonRequest(params, trusted_tool=agent_tool))
                 if inspect.isawaitable(result):
                     result = await result
             except HTTPException as error:
@@ -297,6 +314,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
             # Unexpected failures deliberately retain the reservation. A queue
             # admission could have succeeded before its response was lost.
             journal.finish(request_id, result)
+            _notify_mutation(name, arguments, result)
             return result
         if name == 'status':
             result = handlers[name](arguments['job_id'])
@@ -384,7 +402,8 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         body = await payload(request)
         if body is None:
             return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
-        return await mcp_payload_response(body, dispatch)
+        with caller_scope(caller_from_headers(request.headers)):
+            return await mcp_payload_response(body, dispatch)
 
     @router.post('/api/v1/mcp/{profile_name}')
     async def mcp_profile(profile_name: str, request: Request):
@@ -401,7 +420,8 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
 
         async def profile_dispatch(message):
             return await dispatch(message, allowed, chosen.get('instructions') or default_instructions)
-        return await mcp_payload_response(body, profile_dispatch)
+        with caller_scope(caller_from_headers(request.headers, profile_name)):
+            return await mcp_payload_response(body, profile_dispatch)
 
     @router.get('/api/v1/mcp/{profile_name}')
     async def no_profile_stream(profile_name: str):

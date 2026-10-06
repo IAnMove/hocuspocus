@@ -15,6 +15,14 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from services.agent_activity import SERVER_CALLER, caller_scope
+
+
+async def _as_server(awaitable: Any) -> Any:
+    """Run a handler coroutine inside the server caller scope on whichever loop executes it."""
+    with caller_scope(SERVER_CALLER):
+        return await awaitable
+
 
 class LocalMcp:
     def __init__(self, handlers: Callable[[], dict[str, Callable[[Any], Any]]], timeout: float = 1800) -> None:
@@ -30,6 +38,7 @@ class LocalMcp:
     def _run(self, value: Any) -> Any:
         if not inspect.isawaitable(value):
             return value
+        value = _as_server(value)
         loop = self._loop
         if loop is not None and loop.is_running():
             try:
@@ -48,7 +57,9 @@ class LocalMcp:
         if not callable(handler):
             return {"_is_error": True, "error": {"code": "unknown_tool", "message": f"{tool} is not available", "retryable": False}}
         try:
-            result = self._run(handler(arguments))
+            with caller_scope(SERVER_CALLER):  # the server's own job: never reported as agent work
+                value = handler(arguments)
+            result = self._run(value)
         except HTTPException as error:
             detail = error.detail if isinstance(error.detail, dict) else {"code": "failed", "message": str(error.detail)}
             return {"_is_error": True, "error": {**detail, "status": error.status_code}}

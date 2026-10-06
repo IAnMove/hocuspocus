@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 from fastapi import HTTPException
 
 from routers.wangp_mcp import RequestJournal, UncertainRequest
+from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.generation_provenance import normalize_submission_provenance
 from services.mcp_intent import check_intent_id, intent_digest
 from services.wangp_submission import JsonRequest
@@ -89,7 +90,8 @@ def command_handlers(*, generate, status, journal_path, operations=("model3d.gen
         payload = _input(arguments, mutation=True)
         intent = check_intent_id(arguments.get("intent_id"))
         digest = intent_digest(payload)
-        provenance = normalize_submission_provenance(payload.get("provenance"), trusted_tool="external_agent")
+        tool = agent_trusted_tool(default_external=True)
+        provenance = normalize_submission_provenance(payload.get("provenance"), trusted_tool=tool)
         # Scope retries to the workspace without exposing paths in a journal key.
         identity = hashlib.sha256(f"{submit_operation}:{payload['workspace']}:{intent}".encode()).hexdigest()
         try:
@@ -103,7 +105,7 @@ def command_handlers(*, generate, status, journal_path, operations=("model3d.gen
         provenance["command"]["command_id"] = intent
         payload["provenance"] = provenance
         try:
-            job = generate(JsonRequest(payload, trusted_tool="external_agent"))
+            job = generate(JsonRequest(payload, trusted_tool=tool))
             job = await job if inspect.isawaitable(job) else job
             result = _result(submit_operation, job)
         except HTTPException as error:
