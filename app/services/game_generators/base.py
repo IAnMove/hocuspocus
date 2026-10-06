@@ -44,16 +44,53 @@ class Generator(Protocol):
         """Produce the attempt and write its files under ``attempt_dir``."""
 
 
+def workspace_root(ctx: GenContext) -> Path:
+    """The workspace folder. Attempt files are stored relative to it."""
+    return Path(ctx.workspace_dir(ctx.workspace))
+
+
 def attempt_dir(ctx: GenContext) -> Path:
     """``<workspace>/game/<gameId>/<assetId>/<attemptId>/``."""
-    root = Path(ctx.workspace_dir(ctx.workspace))
-    return root / "game" / str(ctx.game["id"]) / str(ctx.asset["id"]) / str(ctx.attempt_id)
+    return workspace_root(ctx) / "game" / str(ctx.game["id"]) / str(ctx.asset["id"]) / str(ctx.attempt_id)
+
+
+def relative(ctx: GenContext, path: Path) -> str:
+    """``path`` relative to the workspace, as the attempt ``files`` store it."""
+    return str(Path(path).relative_to(workspace_root(ctx)))
+
+
+def spec_seed(asset: dict) -> int:
+    """``spec.seed`` as given (``0`` is a valid seed), else ``1``."""
+    value = (asset.get("spec") or {}).get("seed")
+    if value is None or isinstance(value, bool):
+        return 1
+    return int(value)
 
 
 def candidate_dirs(ctx: GenContext, count: int) -> list[tuple[str, Path]]:
-    """One directory per candidate. A single candidate keeps ``ctx.attempt_id``."""
+    """One ``(id, folder)`` per candidate.
+
+    A single candidate keeps ``ctx.attempt_id`` and ``attempt_dir``. Several
+    candidates are ``<attemptId>-a<i>`` in ``attempt_dir / a<i>``, so a second
+    production never reuses the ids or folders of the first.
+    """
     count = max(1, int(count))
+    folder = attempt_dir(ctx)
     if count == 1:
-        return [(str(ctx.attempt_id), attempt_dir(ctx))]
-    parent = attempt_dir(ctx).parent
-    return [(f"a{index}", parent / f"a{index}") for index in range(1, count + 1)]
+        return [(str(ctx.attempt_id), folder)]
+    return [(f"{ctx.attempt_id}-a{index}", folder / f"a{index}") for index in range(1, count + 1)]
+
+
+def candidate_result(written: list[dict], warnings: list, steps: list) -> AttemptResult:
+    """Fold ``{"id", "files", "metrics"}`` candidates into one result.
+
+    ``files`` and ``metrics`` describe the first candidate. Several candidates
+    also list every one under ``metrics["candidates"]``.
+    """
+    first = written[0]
+    metrics = {**first["metrics"], "attemptIds": [item["id"] for item in written]}
+    if len(written) > 1:
+        metrics["candidates"] = [
+            {"id": item["id"], "files": dict(item["files"]), "metrics": dict(item["metrics"])} for item in written
+        ]
+    return AttemptResult(files=dict(first["files"]), metrics=metrics, warnings=list(warnings), provenance={"steps": list(steps)})

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 from services.game_generators.base import GenContext
 
@@ -24,9 +25,13 @@ _TERMINAL = frozenset({"completed", "failed", "cancelled", "discarded", "error"}
 
 
 def file_ref(ctx: GenContext, path) -> str:
-    """Workspace file URL. Nested paths are served by ``/api/v1/file``."""
-    rel = str(path).lstrip("/")
-    return f"/api/v1/file/{rel}?workspace={ctx.workspace}"
+    """Workspace file URL. Nested paths are served by ``/api/v1/file``.
+
+    The path and the workspace are percent-encoded, as ``wangp_media_url``
+    does, so names with spaces or ``+`` survive the round trip.
+    """
+    rel = str(path).replace("\\", "/").lstrip("/")
+    return f"/api/v1/file/{quote(rel)}?{urlencode({'workspace': ctx.workspace})}"
 
 
 def resolve_path(ctx: GenContext, path) -> Path:

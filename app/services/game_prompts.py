@@ -1,7 +1,9 @@
 """Prompt, screen colour and reference order for a game asset.
 
 The prompt is assembled in a fixed order: style traits, the preset phrase for
-the kind, the description, the side-view rule for a character, the flat screen
+the kind, the description, the spec phrase (character role, sprite pose, icon
+frame, UI element), the generator extra, the side-view rule for a character
+(only the parts the preset phrase does not already say), the flat screen
 sentence, then the latest rejection note. References stay at ten or fewer and
 never point at a rejected attempt.
 """
@@ -11,7 +13,21 @@ from services.character_styles import screen_for as character_screen
 from services.game_library import preset_catalog
 
 
-_VIEW = "side view, facing right, full body, centered"
+_VIEW = ("side view", "facing right", "full body", "centered")
+_ROLE = {
+    "player": "player character",
+    "enemy": "enemy character",
+    "npc": "non-player character",
+    "boss": "boss character",
+}
+_ELEMENT = {
+    "button": "button",
+    "panel": "panel",
+    "bar": "horizontal bar",
+    "frame": "empty frame",
+    "cursor": "pointer cursor",
+}
+_ICON_FRAME = {"round": "inside a round frame", "square": "inside a square frame"}
 _NEGATIVE = "text, watermark, frame, border"
 _MAX_REFS = 10
 
@@ -45,18 +61,42 @@ def _fix_note(asset: dict) -> str:
     return f"Fix: {note}" if note else ""
 
 
+def _spec_phrase(kind: str, spec: dict) -> str:
+    """The spec fields that change the picture, as prompt words."""
+    if kind == "character":
+        return _ROLE.get(str(spec.get("role") or ""), "")
+    if kind == "sprite":
+        pose = str(spec.get("pose") or "").strip()
+        return f"pose: {pose}" if pose else ""
+    if kind == "ui":
+        return _ELEMENT.get(str(spec.get("element") or ""), "")
+    if kind == "icon":
+        return _ICON_FRAME.get(str(spec.get("frame") or ""), "")
+    return ""
+
+
+def _view(kind: str, kind_prompt: str) -> str:
+    """The side-view rule, without the parts the preset phrase already says."""
+    if kind not in {"character", "sprite"}:
+        return ""
+    said = kind_prompt.lower()
+    return ", ".join(part for part in _VIEW if part not in said)
+
+
 def build(game: dict, asset: dict, kind_extra: str = "", *, chroma: bool = True) -> tuple[str, str]:
     """Return ``(prompt, negative)``. ``chroma`` is off for a full-frame sky layer."""
     style = _style(game)
     kind = str(asset.get("kind") or "")
     kind_prompt = str((_preset(style).get("kindPrompts") or {}).get(kind) or "")
     screen = screen_for(game, asset)
+    spec = asset.get("spec") if isinstance(asset.get("spec"), dict) else {}
     parts = [
         str(style.get("traits") or ""),
         kind_prompt,
         str(asset.get("description") or ""),
+        _spec_phrase(kind, spec),
         kind_extra,
-        _VIEW if kind in {"character", "sprite"} else "",
+        _view(kind, kind_prompt),
         f"flat solid {screen} background, no shadow, no floor" if chroma else "",
         _fix_note(asset),
     ]

@@ -1,8 +1,10 @@
 """Still generators for characters, sprites, items, icons and UI elements.
 
-Each candidate is its own attempt directory (``a1``, ``a2``, ``a3``). The
-full-resolution crop is ``raw-key.png``. ``main.png`` is the cell, and a pixel
-style also writes a nearest-neighbor ``preview.png``.
+Several candidates are ``<attemptId>-a1``, ``-a2``... in the folders ``a1``,
+``a2``... of the attempt directory. The full-resolution crop is
+``raw-key.png``. ``main.png`` is the cell, and a pixel style also writes a
+nearest-neighbor ``preview.png``. The figure is scaled so its opaque box fits
+the cell in both directions, so a wide item is not clipped.
 """
 from __future__ import annotations
 
@@ -11,7 +13,9 @@ import json
 import numpy as np
 from PIL import Image
 
-from services.game_generators.base import AttemptResult, GenContext, candidate_dirs
+from services.game_generators.base import (
+    AttemptResult, GenContext, candidate_dirs, candidate_result, relative, spec_seed,
+)
 from services.game_image_ops import crop_figure, feet_point, place_on_cell, to_illustration
 from services.game_pixel import median_cut, pixel_metrics, preview_nearest, to_pixel
 from services.game_prompts import build, refs_for, screen_for
@@ -40,11 +44,23 @@ def _frame(kind: str, game: dict, asset: dict) -> tuple[int, int]:
     return size, size
 
 
+def _extent(opaque: np.ndarray, axis: int, fallback: int) -> int:
+    found = np.nonzero(opaque.any(axis=axis))[0]
+    if len(found) == 0:
+        return max(1, int(fallback))
+    return max(1, int(found[-1] - found[0] + 1))
+
+
 def _opaque_height(rgba: np.ndarray) -> int:
-    rows = np.nonzero((rgba[..., 3] > 128).any(axis=1))[0]
-    if len(rows) == 0:
-        return max(1, int(rgba.shape[0]))
-    return max(1, int(rows[-1] - rows[0] + 1))
+    return _extent(rgba[..., 3] > 128, 1, rgba.shape[0])
+
+
+def _fit_ratio(rgba: np.ndarray, target_w: int, target_h: int) -> float:
+    """Downscale ratio that fits the opaque box inside ``target_w`` by ``target_h``."""
+    opaque = rgba[..., 3] > 128
+    height = _extent(opaque, 1, rgba.shape[0])
+    width = _extent(opaque, 0, rgba.shape[1])
+    return max(height / float(max(1, target_h)), width / float(max(1, target_w)))
 
 
 def _dither(pixel: dict):
@@ -68,12 +84,13 @@ def _palette(style: dict, cropped: np.ndarray) -> tuple[list[str], bool]:
     return [str(item) for item in style.get("palette") or []], False
 
 
-def _render(cropped: np.ndarray, style: dict, screen: str, target_h: int) -> tuple[np.ndarray, list[str], bool]:
+def _render(cropped: np.ndarray, style: dict, screen: str, target: tuple[int, int]) -> tuple[np.ndarray, list[str], bool]:
     pixel = style.get("pixel") or {}
     palette, free = _palette(style, cropped)
+    ratio = _fit_ratio(cropped, target[0], target[1])
     if not pixel.get("enabled"):
-        return to_illustration(cropped, target_h, screen), palette, free
-    factor = max(1, int(round(_opaque_height(cropped) / float(max(1, target_h)))))
+        return to_illustration(cropped, max(1, int(round(cropped.shape[0] / ratio))), screen), palette, free
+    factor = max(1, int(round(ratio)))
     rendered = to_pixel(
         cropped, factor, palette or None, str(pixel.get("outline") or "none"),
         _dither(pixel), int(pixel.get("colors") or 16),
@@ -104,13 +121,11 @@ def _place(kind: str, rendered: np.ndarray, width: int, height: int) -> np.ndarr
     return place_on_cell(rendered, (width, height), (width / 2.0, height / 2.0), center)
 
 
-def _metrics(kind: str, style: dict, cropped: np.ndarray, palette: list[str], free: bool, screen: str, height: int) -> dict:
+def _metrics(kind: str, cropped: np.ndarray, palette: list[str], free: bool, screen: str, height: int) -> dict:
     measured = dict(pixel_metrics(cropped, palette or ["#000000"], screen))
     if kind == "character" and free:
         measured["palette"] = list(palette)
         measured["scale"] = float(height) / float(_opaque_height(cropped))
-    if not (style.get("pixel") or {}).get("enabled"):
-        measured["colors"] = measured.get("colors", 0)
     return measured
 
 
@@ -118,8 +133,8 @@ def _write_attempt(ctx, kind, folder, attempt_id, raw, screen, width, height) ->
     style = ctx.game.get("style") or {}
     keyed = key(ctx, f"key-{attempt_id}", raw, screen)
     cropped = crop_figure(_load(ctx, keyed))
-    target_h = max(1, height - max(1, height // 16))
-    rendered, palette, free = _render(cropped, style, screen, target_h)
+    pad = max(1, height // 16)
+    rendered, palette, free = _render(cropped, style, screen, (max(1, width - pad), max(1, height - pad)))
     placed = _place(kind, rendered, width, height)
     folder.mkdir(parents=True, exist_ok=True)
     raw_path = folder / "raw-key.png"
@@ -129,17 +144,16 @@ def _write_attempt(ctx, kind, folder, attempt_id, raw, screen, width, height) ->
     _save(main_path, placed)
     preview = preview_nearest(placed, 4) if (style.get("pixel") or {}).get("enabled") else placed
     _save(preview_path, preview)
-    root = folder.parents[3]
     files = {
-        "main": str(main_path.relative_to(root)),
-        "preview": str(preview_path.relative_to(root)),
-        "rawKey": str(raw_path.relative_to(root)),
+        "main": relative(ctx, main_path),
+        "preview": relative(ctx, preview_path),
+        "rawKey": relative(ctx, raw_path),
     }
     if kind == "ui":
         margins = nine_slice_margins(placed)
         (folder / "nine.json").write_text(json.dumps(margins), encoding="utf-8")
-        files["nine"] = str((folder / "nine.json").relative_to(root))
-    metrics = _metrics(kind, style, cropped, palette, free, screen, height)
+        files["nine"] = relative(ctx, folder / "nine.json")
+    metrics = _metrics(kind, cropped, palette, free, screen, height)
     (folder / "metrics.json").write_text(json.dumps(metrics), encoding="utf-8")
     return {"id": attempt_id, "files": files, "metrics": metrics}
 
@@ -158,7 +172,7 @@ class StillGenerator:
         screen = screen_for(ctx.game, ctx.asset)
         count = _count(self.kind, ctx.asset)
         resolution = "768x1024" if self.kind in {"character", "sprite"} else "1024x1024"
-        seed = int((ctx.asset.get("spec") or {}).get("seed") or 1)
+        seed = spec_seed(ctx.asset)
         raws = image(
             ctx, "still", prompt=prompt, negative=negative, resolution=resolution,
             refs=refs_for(ctx.game, ctx.asset), seed=seed, batch=count,
@@ -168,8 +182,4 @@ class StillGenerator:
             _write_attempt(ctx, self.kind, folder, attempt_id, raw, screen, width, height)
             for (attempt_id, folder), raw in zip(candidate_dirs(ctx, len(raws)), raws)
         ]
-        first = written[0]
-        metrics = {**first["metrics"], "attemptIds": [item["id"] for item in written]}
-        return AttemptResult(
-            files=first["files"], metrics=metrics, warnings=[], provenance={"steps": list(ctx.steps)},
-        )
+        return candidate_result(written, [], ctx.steps)

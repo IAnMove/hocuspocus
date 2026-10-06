@@ -1,10 +1,12 @@
 """Simulated MCP waits for the game image tool."""
 from __future__ import annotations
 
+from urllib.parse import parse_qs, unquote, urlsplit
+
 import pytest
 
 from services.game_generators.base import GenContext
-from services.game_tools import GameToolError, image
+from services.game_tools import GameToolError, file_ref, image
 
 
 class Fake:
@@ -91,3 +93,14 @@ def test_intent_id_is_stable(tmp_path):
     image(context, "still", prompt="knight", negative="text", resolution="768x1024", seed=7)
     intents = [args["intent_id"] for tool, args in fake.calls if tool == "generation.image"]
     assert intents == ["game-bosque-heroe-a1-still", "game-bosque-heroe-a1-still"]
+
+
+def test_file_ref_encodes_the_path_and_the_workspace(tmp_path):
+    context = _ctx(tmp_path, Fake([]))
+    context.workspace = "a+b & c"
+    url = file_ref(context, "game/x y/main#1.png")
+    parts = urlsplit(url)
+    assert parts.path.startswith("/api/v1/file/")
+    assert unquote(parts.path[len("/api/v1/file/"):]) == "game/x y/main#1.png"
+    assert parse_qs(parts.query) == {"workspace": ["a+b & c"]}
+    assert file_ref(context, "/plain.png").startswith("/api/v1/file/plain.png?workspace=")

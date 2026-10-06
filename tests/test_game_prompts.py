@@ -31,7 +31,7 @@ def _game(assets, references):
 
 def test_build_keeps_the_fixed_order_and_the_rejection_note():
     asset = _asset(
-        "heroe", "character", description="short bronze knight",
+        "heroe", "character", description="short bronze knight", spec={"role": "boss"},
         attempts=[{"id": "a1", "decision": "rejected", "note": "make the cape red"}],
     )
     game = _game([asset], [])
@@ -40,13 +40,45 @@ def test_build_keeps_the_fixed_order_and_the_rejection_note():
         prompt.index("16-bit pixel art"),
         prompt.index("full body character"),
         prompt.index("short bronze knight"),
-        prompt.index("side view, facing right, full body, centered"),
+        prompt.index("boss character"),
         prompt.index("flat solid magenta background, no shadow, no floor"),
         prompt.index("Fix: make the cape red"),
     ]
     assert indexes == sorted(indexes)
     assert "blur, photo" in negative
     assert "text, watermark, frame, border" in negative
+
+
+def test_the_view_rule_is_not_repeated_after_the_preset_phrase():
+    character = _asset("heroe", "character", description="knight")
+    prompt, _negative = build(_game([character], []), character)
+    for part in ("side view", "facing right", "full body", "centered"):
+        assert prompt.count(part) == 1, part
+    sprite = _asset("salto", "sprite", description="knight")
+    prompt, _negative = build(_game([sprite], []), sprite)
+    assert prompt.count("side view") == 1
+    assert prompt.count("full body") == 1
+    assert "centered" in prompt
+    game = _game([sprite], [])
+    game["style"]["preset"] = "lowpoly-ps1"
+    prompt, _negative = build(game, sprite)
+    assert prompt.count("side view") == 1
+    assert "full body, centered" in prompt
+
+
+def test_spec_fields_reach_the_prompt():
+    cases = [
+        (_asset("heroe", "character", spec={"role": "npc"}), "non-player character"),
+        (_asset("salto", "sprite", spec={"pose": "mid-air jump"}), "pose: mid-air jump"),
+        (_asset("barra", "ui", spec={"element": "bar"}), "horizontal bar"),
+        (_asset("moneda", "icon", spec={"frame": "round"}), "inside a round frame"),
+    ]
+    for asset, phrase in cases:
+        prompt, _negative = build(_game([asset], []), asset)
+        assert phrase in prompt, asset["kind"]
+    plain = _asset("moneda", "icon", spec={"frame": "none"})
+    prompt, _negative = build(_game([plain], []), plain)
+    assert "inside a" not in prompt
 
 
 def test_screen_auto_follows_the_description():
