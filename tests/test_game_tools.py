@@ -18,6 +18,8 @@ class Fake:
             return {"receipt": {"result": {"job_id": "job-1"}}}
         if tool == "jobs.wait":
             return self.waits.pop(0)
+        if tool == "jobs.resume":
+            return {"version": 1, "status": "completed", "result": {"status": "queued", "started": True}}
         raise AssertionError(tool)
 
 
@@ -51,6 +53,17 @@ def test_image_retries_jobs_wait_until_completed(tmp_path):
     params = fake.calls[0][1]["input"]["params"]
     assert params["priority"] == 10
     assert "priority" not in fake.calls[0][1]
+
+
+def test_image_resumes_an_interrupted_job_once(tmp_path):
+    fake = Fake([
+        {"status": "interrupted", "timed_out": True},
+        {"status": "completed", "output_files": ["hero.png"]},
+    ])
+    found = image(_ctx(tmp_path, fake), "still", prompt="knight", negative="text", resolution="768x1024", seed=7)
+    assert found == ["hero.png"]
+    resumed = [args for tool, args in fake.calls if tool == "jobs.resume"]
+    assert resumed == [{"version": 1, "input": {"intent_id": "game-bosque-heroe-a1-still"}}]
 
 
 def test_empty_output_raises(tmp_path):

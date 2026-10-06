@@ -97,13 +97,21 @@ def _job_id(submitted: dict) -> str:
     return str(job)
 
 
-def _wait_job(ctx: GenContext, job_id: str) -> dict:
+def _wait_job(ctx: GenContext, job_id: str, intent_id: str | None = None) -> dict:
+    """Wait until the image job finishes. A restart leaves it interrupted: resume that same job once."""
+    resumed = False
     while True:
         _check(ctx)
         payload = _status_payload(ctx.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 110}}))
         status = str(payload.get("status") or "")
         if status in _TERMINAL:
             return payload
+        if status == "interrupted":
+            if intent_id and not resumed:
+                resumed = True
+                _raise_tool(ctx.call("jobs.resume", {"version": 1, "input": {"intent_id": intent_id}}))
+                continue
+            raise GameToolError("interrupted", "the generation stopped when the server restarted")
         if not payload.get("timed_out") and status not in {"", "queued", "running", "pending", "started"}:
             raise GameToolError("no_status", "jobs.wait returned no terminal status")
 
@@ -198,7 +206,7 @@ def image(ctx, step, *, prompt, negative, resolution, refs=(), seed, batch=1, gu
         "input": {"workspace": ctx.workspace, "output_name": f"{ctx.asset['id']}-{step}", "params": params},
     })
     job_id = _job_id(submitted)
-    files = _require_files(_wait_job(ctx, job_id))
+    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
     _finish(ctx, tool="generation.image", model="qwen_image_21", seed=int(seed), prompt=prompt, refs=prepared, job_id=job_id, started=started)
     return files
 
@@ -229,7 +237,7 @@ def _video(ctx, step, params) -> str:
         "input": {"workspace": ctx.workspace, "params": params},
     })
     job_id = _job_id(submitted)
-    files = _require_files(_wait_job(ctx, job_id))
+    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
     _finish(ctx, tool="generation.video", model=str(params.get("model_type") or ""), seed=params.get("seed"), prompt=str(params.get("prompt") or ""), refs=[], job_id=job_id, started=started)
     return files[0]
 
@@ -276,7 +284,7 @@ def orbit(ctx, step, ref) -> str:
     started = time.perf_counter()
     submitted = ctx.loopback("generate", {"request_id": _intent(ctx, step), "params": params})
     job_id = _job_id(submitted if isinstance(submitted, dict) else {})
-    files = _require_files(_wait_job(ctx, job_id))
+    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
     _finish(ctx, tool="generate", model="minimax_h3_legacy", seed=None, prompt=params["prompt"], refs=[image_ref], job_id=job_id, started=started)
     return files[0]
 
@@ -290,7 +298,7 @@ def _audio(ctx, tool, step, params, output_name) -> str:
         "input": {"workspace": ctx.workspace, "output_name": output_name, "params": params},
     })
     job_id = _job_id(submitted)
-    files = _require_files(_wait_job(ctx, job_id))
+    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
     _finish(ctx, tool=tool, model=str(params.get("model_type") or ""), seed=params.get("seed"), prompt=str(params.get("prompt") or ""), refs=[], job_id=job_id, started=started)
     return files[0]
 
