@@ -43,6 +43,9 @@ from services.series_voice_rooms import PRESETS
 
 CODES = {key: code for code, key in LANGUAGE_KEYS.items()}
 CARD_KINDS = ("title", "disclaimer", "end")
+# kind "video": a take imported with series.asset.import as_take; "generated": a MiniMax H3 take. Both get the shot's
+# sfx and music at the cut (services/series_take_sound.py).
+METHODS = {"3d": "animation_3d", "video": "imported_video", "generated": "generated_video"}
 
 
 class ScriptError(ValueError):
@@ -167,6 +170,8 @@ class EpisodeScript:
             check.problems.append(f"{where}: framing must be one of {', '.join(FRAMINGS)}")
         if shot.get("voiceRoom") is not None and shot["voiceRoom"] not in PRESETS:
             check.problems.append(f"{where}: voiceRoom must be one of {', '.join(PRESETS)}")
+        if shot.get("kind") not in (None, "2d", *METHODS):
+            check.problems.append(f"{where}: kind must be 2d, {', '.join(METHODS)}")
         self._check_cast(shot, where)
         self._check_lines(shot, where)
         self._check_files(shot, where)
@@ -263,8 +268,8 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing", "voiceRoom"):
-            if shot.get(key):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit"):
+            if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
         layout.update(layout_layers(shot, "layout2d"))
         if isinstance(shot.get("card"), dict):
@@ -286,7 +291,7 @@ class EpisodeScript:
         sid, scene, lines = self.shot_id(index), self.scenes[shot["scene"]], shot.get("lines") or []
         body = {"id": sid, "order": index + 1, "sceneId": f"e{self.number}_{shot['scene']}",
                 "locationId": shot.get("location") or scene.get("location"),
-                "productionMethod": "animation_3d" if shot.get("kind") == "3d" else "animation_2d",
+                "productionMethod": METHODS.get(shot.get("kind"), "animation_2d"),
                 "framing": shot.get("framing", "wide"), "camera": shot.get("camera", "static"),
                 "visibleCharacterIds": [_cast_entry(raw)["characterId"] for raw in shot.get("cast") or []],
                 "speakingCharacterIds": sorted({line["who"] for line in lines}), "dialogueBeats": self._beats(sid, lines),

@@ -34,8 +34,8 @@ use only those ids and file names, never invent one.
    with `qa.speech`, up to three takes per line; failed shots retried once), approves the takes and cuts each language
    with subtitles burned in. Poll `series.episode.produce.status` every minute or two; `chapters` lists the files.
 5. **Look and fix:** `series.episode.get` lists each take's editable scene (`sceneFilename`): `scenes.video2d.preview`
-   it, or open it with `scenes.document.get`. Fix a shot by changing the script and sending it again with `episode_id`
-   (takes are kept by shot id), then `series.episode.produce` again: it renders only the shots whose script, kits or
+   it, or open it with `scenes.document.get`. Fix one shot with `series.shot.update` (by id or its number, below), or
+   change the script and send it again with `episode_id` (takes are kept by shot id), then `series.episode.produce` again: it renders only the shots whose script, kits or
    location changed since their approved take, and recuts. `rerender: true` renders every shot again; a 3D template
    edited in place is not detected, so render those shots with `series.episode.render_native` and `shot_ids`.
 
@@ -151,9 +151,19 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   0–1. Files from the bible only. `{"anchor": "enter", "cast": 1}` plays it when that cast member's entrance starts
   (`cast` is an index into the shot's `cast` or a character id; plus `offset`), so footsteps or a door start with
   the walk instead of after it; a cast member who does not enter plays it at the start of the shot. A cue plays
-  its whole file: to make footsteps last exactly the entrance, give one footstep and `"repeat": "steps"`, which
-  plays it on every footfall of the walk (or of the hops), or cut a loop to `enterDuration`. `fx` take the same
-  `anchor`/`cast`.
+  its whole file unless it has `in` (the second of the file it starts at) and/or `length` (seconds): `{"file":
+  "sfx-steps.wav", "in": 2.4, "length": 0.35, "anchor": "enter", "cast": 1, "repeat": "steps"}` plays one footstep
+  of an 8 s walk on every footfall. The part is written once as `<file>-cut-<hash>.wav` (with its provenance) and
+  the take's scene names that file. To make footsteps last exactly the entrance, give one footstep and `"repeat":
+  "steps"`, or cut a loop to `enterDuration`. `fx` take the same `anchor`/`cast`.
+- **video takes (`kind: "video"` in the script = `imported_video`, `"generated"` = a MiniMax H3 `generated_video`
+  shot):** import the clip with `series.asset.import` (`as_take: true`). Its shot's `sfx` (at `at` + `offset`
+  seconds; it has no lines to anchor on), `music` and `foley` are laid on the take at `series.assembly.start`, over
+  the clip's own sound: `"clipAudio": "drop"` drops it, `"clipVolume"` (0-2) sets it. Every clip whose size, frame
+  rate or pixel aspect differ from the episode's (1920x1080 or 1080x1920, 24 fps) is conformed at the cut: scaled
+  and centre-cropped when its shape is within 6 % of the frame's, else fitted with bars (`"clipFit": "cover" |
+  "contain"` forces it). The take file is never changed and changing its sound only recuts. Do not mux sound or
+  re-encode clips with ffmpeg before importing them.
 - **foley** (on the shot, not in `layout2d` or `scene3d`; same key in the script)**:** `{"prompt": "wooden airship
   creaking, wind, cannon shots", "volume": 0.5}`. After the shot is exported, MMAudio (`generation.sfx` with the
   export as `video_guide`) makes sound that follows the shot's own picture, and it is mixed under the lines, music
@@ -161,7 +171,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   cannot follow the motion (ships, swords, creatures, explosions; 3D shots above all) and describe sounds only: the
   take already has its voices and music. It is an extra: without MMAudio installed, or when it fails or takes over
   30 min, the take is made without it and the render item has a `warning`; fix it and render that shot again by id.
-  A new prompt or volume makes `series.episode.produce` render that shot again.
+  A new prompt or volume makes `series.episode.produce` render that shot again. On a video take the render makes
+  only the sound (`foley-<episode>-<shot>-<key>.wav`, from that take's picture) and the cut lays it under the take:
+  make it with `series.shot.update` (`render: true`) or `series.episode.render_native` with its `shot_ids` (a render
+  of every shot makes it too); until then the cut goes without it and its `preparedClips` says so.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
   `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
@@ -231,6 +244,55 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
     "start": 0}, {"clip": "Aim", "start": 1.5, "fade": 0.4}]}, {"objectId": "rifle", "file": "rifle.glb", "add": true,
     "scale": 0.16, "hold": {"carrier": "guard", "hand": "right", "offset": [-0.146, 0.013, -0.038], "rotation": [-1.65,
     0.11, 2.76]}, "appearance": {"start": 1.5}}`.
+
+## Edit one shot ("the fifth shot")
+
+`series.shot.get {workspace, series_id, episode_id, shot}` reads one shot, and `series.shot.update` edits it, by id
+(`"e3s04"`) or by its number in the episode (`5` is the fifth shot, the `#5` Series Lab shows; ids from
+`from_script` count from `s00`, so the fifth shot is `e3s04`). Send only what changes, in the script keys above:
+
+```json
+{"workspace": "ws", "series_id": "uv", "episode_id": "ep3", "shot": 5,
+ "changes": {"camera": "push", "timing": {"tail": 1.0}},
+ "append": {"fx": [{"kind": "manga_impact", "line": 1, "x": 70}], "props": [{"file": "prop-hat.png", "x": 30, "y": 22, "scale": 0.1}]},
+ "render": true}
+```
+
+`changes` replaces keys (`null` removes one), `append` adds to `cast`, `lines`, `sfx`, `fx`, `props` or `layers`.
+The shot is checked like a script shot and only the changed fields are written; the takes stay. A shot whose take no
+longer fits loses its approval in every language (a video take keeps it when only its cut sound changed). Lines in
+other languages update those versions. `check: true` only checks; `render: true` renders just that shot (approved;
+`approve: false` keeps it pending); `produce: true` renders what changed in every language and recuts. Without
+`changes`, `instruction: "put a hat on Kevin"` has the server's LLM write the edit from the shot, the cast's poses
+and the workspace files (the reply's `instruction` says what it wrote). Use it instead of sending the whole script
+again for a one-shot fix. The Wizard does the same with `edit_series_shot` ("edita el quinto plano y ponle X").
+
+## Media steps inside HocusPocus
+
+Do these in the app, never with scripts: every file they make has a `.meta.json` that names its source and tool, so
+it can be found, reused and redone.
+
+- **Cutouts:** `studio.key` reads the screen colour from the image border (`adaptive`, default true), keys relative
+  to it and clears the backdrop connected to the border, and `despill` (default true) takes the screen colour off
+  the edges. Check `result.report`: `semiTransparentShare` is the residual haze (alpha 6-199); `haze: true` (20 % or
+  more) means the screen did not key: try another `mode` or generate the image again. Do not re-key with scipy.
+- **A frame of a clip:** `media.frame {workspace, source, at: seconds | "first" | "last", output_name}` saves it as
+  a PNG (for an image-to-video start frame, or a reference).
+- **A still from layers:** `media.compose {workspace, base (an image, or a video with base_at), layers: [{file, x, y,
+  scale, anchor: "bottom", flip, rotation, opacity}], output_name}` pastes keyed cutouts over a frame or a canvas. A
+  whole Video 2D scene at one time: `scenes.video2d.preview` with one time, `still: true` and `output_name` (full
+  size, kept as an image).
+- **Part of a sound:** a cue's `in`/`length` (above), or `audio.trim {workspace, source, start, length | end,
+  output_name}` for a new audio file (an exact cut, keeps the sample rate and channels).
+- **Files from another workspace:** `assets.import_from_workspace {workspace, source_workspace, file,
+  destination_filename}` copies a GLB, image, audio or video with its metadata and records where it came from
+  (Hunyuan3D models made on the main install, for example). Do not `cp` between workspaces.
+- **A stable name for an export:** `scenes.world3d.export` and `scenes.video2d.export` take `output_name`
+  (`"set-crane-loop"` publishes `set-crane-loop.mp4`). Exporting again with the same name replaces that file once the
+  new render is encoded, so a layer or prop that names it shows the new render; the replaced file is kept as
+  `set-crane-loop.previous.mp4`. Name it in `layers` (`{"file": "set-crane-loop.mp4", "depth": 0.2}`) instead of
+  copying the export. A file changed under the same name is not seen as a change: render the shots that show it
+  again (`series.shot.update` with `render`, or `series.episode.render_native` with their `shot_ids`).
 
 ## Sound design
 

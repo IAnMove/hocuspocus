@@ -197,3 +197,17 @@ def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
     assert calls[1][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1?workspace=series")
     call(handlers, "series.episode.render_native.resume", {"workspace": "series", "job_id": "native-1"})
     assert calls[2][:2] == ("POST", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1/resume")
+
+
+def test_a_shot_is_read_and_edited_by_its_number_over_mcp(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"shotId": "e1s04", "number": 5}, {"shotId": "e1s04", "changed": ["fx"]}])
+    read = call(handlers, "series.shot.get", {"workspace": "series", "series_id": "uv", "episode_id": "ep1", "shot": 5})
+    assert calls[0][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/shots/5?workspace=series")
+    assert read["result"]["shotId"] == "e1s04"
+    edited = call(handlers, "series.shot.update", {"workspace": "series", "series_id": "uv", "episode_id": "ep1", "shot": "e1s04",
+                                                   "append": {"fx": [{"kind": "confetti", "at": 1}]}, "render": True})
+    assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/shots/edit",
+                        {"workspace": "series", "shot": "e1s04", "append": {"fx": [{"kind": "confetti", "at": 1}]}, "render": True})
+    assert edited["result"]["changed"] == ["fx"]
+    schema = next(item for item in command_catalog() if item["name"] == "series.shot.update")["inputSchema"]["properties"]["input"]
+    assert schema["required"] == ["workspace", "series_id", "episode_id", "shot"] and "append" in schema["properties"]

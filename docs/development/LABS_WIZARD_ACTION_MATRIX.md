@@ -1348,3 +1348,27 @@ start a generator. The same intent reuses the production. `production.works.link
 attaches one existing production id to an existing project and does not match
 titles. `production.review` stays the vision QA tool. Coverage is in
 `ui/tests/productionWorksWizard.test.ts` and `tests/test_production_journey.py`.
+
+## Series shots by instruction
+
+`series.shots.edit_by_instruction` edits one shot of the open (or named) episode by
+its number (`#N`, "the fifth shot" is 5) or id through `seriesShots.edit`,
+registered by `registerSeriesShotEditCapabilities` in
+`ui/src/features/agent/seriesShotEditCapabilities.ts`. The Wizard passes the user's
+words as `instruction`; the server route behind the MCP tool `series.shot.update`
+has its LLM write the edit against the real shot, cast, poses, files and effects,
+checks it like a `series.episode.from_script` shot and writes only the changed
+fields. Takes are kept; a shot whose take no longer fits loses its approval.
+`series.shots.rerender_one` (`rerender_series_shot`, confirm=true) renders just that
+shot on the server, or with `produce` renders what changed and recuts. Coverage is
+in `ui/tests/seriesShotEditWizard.test.ts` and `tests/test_series_shot_edit.py`.
+
+## Media tools
+
+`media.tools.run` (`media_tool`) runs one media step through `mediaTools.command`,
+registered by `registerMediaToolCapabilities` in
+`ui/src/features/agent/mediaToolCapabilities.ts`: `media.frame`, `media.compose`,
+`audio.trim`, `assets.import_from_workspace` or `studio.key`, posted to
+`/api/v1/media/commands`, the handlers the MCP tools of the same names run. Each
+result is a workspace file with a provenance sidecar. Coverage is in
+`ui/tests/mediaToolWizard.test.ts` and `tests/test_production_media_router.py`.

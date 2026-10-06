@@ -40,6 +40,7 @@ from services.scene_recording import SceneRecordingTranscodeError, validate_scen
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import get_cancellation_token, new_task_id
 from services.export_receipts import project_export_receipt
+from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot, publish_export_file
 
 
 OPERATION = "scenes.world3d.export"
@@ -49,7 +50,7 @@ WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 BLOCKED_URLS = ("blob:", "file:", "javascript:", "filesystem:")
 MEDIA_KINDS = frozenset({"model3d", "image", "screen"})
 COMMAND_KEYS = frozenset({"version", "operation", "intent_id", "input"})
-INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter", "prores"})
+INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter", "prores", "output_name"})
 INTENT_RE = re.compile(r"[A-Za-z0-9._-]{1,160}")
 # Render and encode settings of each export quality level. Draft is the export as it was
 # before levels existed: its plan carries no quality fields, so earlier intents replay.
@@ -478,7 +479,8 @@ def _reject_prores(value: dict) -> None:
 
 def _input(value) -> dict:
     if not isinstance(value, dict) or set(value) - INPUT_KEYS:
-        raise http_error(422, "invalid_command", "input may only include workspace, document, refs, quality, shutter and prores")
+        raise http_error(422, "invalid_command",
+                         "input may only include workspace, document, refs, quality, shutter, prores and output_name")
     if value.get("quality", "draft") not in QUALITY_PROFILES:
         raise http_error(422, "invalid_command", f"quality must be one of {', '.join(QUALITIES)}")
     _reject_prores(value)
@@ -684,6 +686,7 @@ def freeze_export_command(command) -> dict:
         document, refs, payload["workspace"], payload.get("quality", "draft"), payload.get("shutter"),
         prores=payload.get("prores") is True,
     )
+    name_snapshot(snapshot, payload, http_error)
     original = deepcopy(envelope)
     effective = {"version": 1, "operation": OPERATION,
                  "input": {"workspace": payload["workspace"], "snapshot": snapshot}}
@@ -708,11 +711,12 @@ def command_catalog() -> list[dict]:
                                    "shutter": {"type": "number", "minimum": 0, "maximum": 360,
                                                "description": "Motion blur shutter in degrees of one frame for final/master (default 180; 0 = sharp). Pixel worlds stay sharp."},
                                    "prores": {"type": "boolean", "default": False,
-                                              "description": "Optional ProRes 422 HQ master beside the H.264 delivery. Only quality master. Off unless true."}},
+                                              "description": "Optional ProRes 422 HQ master beside the H.264 delivery. Only quality master. Off unless true."},
+                                   "output_name": OUTPUT_NAME_SCHEMA},
                     "required": ["workspace", "document"]}
     return [
         {"name": OPERATION, "version": 1, "supportedVersions": [1], "domain": "scenes", "mutation": True,
-         "description": "Admit an immutable Video 3D snapshot and durable media refs as one canonical task. A server-owned worker renders with the existing world3d exporter (headless browser is allowed). Closing the UI does not cancel. Reuse intent_id only to recover the receipt; inspect its task for progress, cancel, retry and the validated MP4.",
+         "description": "Admit an immutable Video 3D snapshot and durable media refs as one canonical task. A server-owned worker renders with the existing world3d exporter (headless browser is allowed). Closing the UI does not cancel. Reuse intent_id only to recover the receipt; inspect its task for progress, cancel, retry and the validated MP4. output_name publishes it under a stable file name (set-crane-loop.mp4) that a later export with the same name replaces, keeping the replaced file as set-crane-loop.previous.mp4.",
          "inputSchema": {"type": "object", "additionalProperties": False,
                          "properties": {"version": {"type": "integer", "const": 1},
                                         "operation": {"const": OPERATION}, "intent_id": intent,
@@ -1018,15 +1022,13 @@ class World3DExportService:
             master = staging / "master.mov"
             write_prores_master(frames, master, fps=plan["fps"], duration=plan["duration"])
         self._ensure_active(token, registry, task_id)
-        name = self.output_name(snapshot)
+        name = snapshot.get("outputName") or self.output_name(snapshot)
         output = Path(self.workspace_dir(workspace)) / name
-        os.replace(encoded, output)
-        if master is not None:
-            os.replace(master, output.with_suffix(".mov"))
+        replaced = publish_export_file(encoded, output, master)
         sidecar = {**self.sidecar(snapshot, name), **requested_by((registry.get(task_id) or {}).get("metadata"))}
         publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool=self.slug,
                                    capability=self.operation, actor="user")
-        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace}
+        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace, **replaced}
 
     # -- hooks ------------------------------------------------------------------------
     def freeze(self, command) -> dict:

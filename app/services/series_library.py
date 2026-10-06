@@ -1429,12 +1429,26 @@ def _beat_content(beats: Any) -> list[tuple[str, str]]:
             for beat in beats if isinstance(beat, dict)] if isinstance(beats, list) else []
 
 
+# A generated or imported take gets these at the cut (services/series_take_sound.py): changing them keeps the take.
+CUT_APPLIED_LAYOUT = frozenset({"sfx", "music", "clipAudio", "clipVolume", "clipFit"})
+VIDEO_TAKE_METHODS = frozenset({"generated_video", "imported_video"})
+
+
+def _take_layout(shot: dict) -> Any:
+    layout = shot.get("layout2d")
+    if shot.get("productionMethod") not in VIDEO_TAKE_METHODS or not isinstance(layout, dict):
+        return layout
+    return {key: value for key, value in layout.items() if key not in CUT_APPLIED_LAYOUT} or None
+
+
 def same_shot_content(stored: dict, incoming: dict) -> bool:
     """True when the incoming shot shows and says what the stored one does (its takes still fit)."""
     for key in SHOT_CONTENT_FIELDS:
         if key not in incoming and key not in stored:
             continue
         before, after = stored.get(key), incoming.get(key)
+        if key == "layout2d":
+            before, after = _take_layout(stored), _take_layout(incoming)
         if key == "dialogueBeats":
             if _beat_content(before) != _beat_content(after):
                 return False

@@ -32,7 +32,7 @@ LIVE_STATUSES = frozenset({"queued", "waiting_resource", "running", "interrupted
 # A staging folder touched this recently may belong to a worker that has not registered yet.
 SETTLE_SECONDS = 300
 VOICE_RAW = re.compile(r"^(ln-.+)-raw\d+\.wav$")
-TEMP_PREFIXES = ("hocuspocus-speech-",)
+TEMP_PREFIXES = ("hocuspocus-speech-", "hocuspocus-assembly-")
 
 
 def keep_export_staging() -> bool:

@@ -619,6 +619,7 @@
     "generating": "Creating…",
     "keying": "Removing background…",
     "option": "Option {{number}}",
+    "haze": "A haze is left over {{percent}}% of the image: the screen did not key cleanly. Pick another option or generate it again.",
     "failed": "This option failed: {{error}}",
     "pick": "Pick the option you like.",
     "noneReady": "No option finished. Try again or change the description.",

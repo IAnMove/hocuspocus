@@ -56,3 +56,18 @@ def test_a_rewrite_keeps_the_files_of_the_shots_and_takes_it_drops_owned_by_the_
     assert owners["a1"] == ("episode", "e1") and owners["a2"] == ("episode", "e1"), "dropped takes' files stay, on the episode"
     assert owners["a3"] == ("episode", "e1") and owners["a4"] == ("series", "show")
     assert series["assets"]["a1"]["ownerType"] == "attempt", "the stored project is not changed in place"
+
+
+def test_a_video_take_survives_a_rewrite_that_only_changes_its_sound():
+    """Generated and imported takes get sfx, music and clip audio at the cut: changing them keeps the take."""
+    video = {"id": "e1s03", "order": 4, "locationId": "garage", "productionMethod": "imported_video",
+             "layout2d": {"framing": "wide", "camera": "static", "sfx": [{"file": "boom.wav", "at": 1.0}]}, **TAKE}
+    louder = {**{key: value for key, value in video.items() if key not in TAKE},
+              "layout2d": {"framing": "wide", "camera": "static", "sfx": [{"file": "boom.wav", "at": 2.0, "in": 0.5}],
+                           "music": {"file": "theme.wav"}, "clipAudio": "drop"}}
+    assert same_shot_content(video, louder)
+    merged = _merge_episode_shot_patch([video], [louder], replace=True)
+    assert merged[0]["approvedAttemptId"] == "att-1" and merged[0]["layout2d"]["clipAudio"] == "drop"
+    assert not same_shot_content(video, {**louder, "productionMethod": "animation_2d"}), "a 2D shot renders its sound"
+    assert not same_shot_content({**video, "productionMethod": "animation_2d"},
+                                 {**louder, "productionMethod": "animation_2d"})
