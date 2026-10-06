@@ -276,6 +276,13 @@ class SeriesNativeRender:
         thread = self._threads.get(job["jobId"])
         if thread is not None and (thread.ident is None or thread.is_alive()):
             return job
+        if thread is not None:
+            # It ran here and has ended: its own last save is the job's state. ``job`` may have been read while it ran,
+            # and marking that copy interrupted overwrote a finished job (a test failed now and then on it).
+            stored = self._store(workspace).load(job["jobId"]) or job
+            if stored.get("status") not in ACTIVE:
+                return stored
+            job = stored
         for item in job.get("items") or []:
             if item.get("status") == "running":
                 item["status"] = "queued"

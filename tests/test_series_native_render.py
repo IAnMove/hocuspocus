@@ -426,6 +426,26 @@ def test_a_render_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
     assert render.status("cast", done["jobId"])["status"] == "completed", "a finished job is never marked interrupted"
 
 
+def test_a_job_read_while_its_thread_ran_is_not_marked_interrupted_after_the_thread_finished(tmp_path):
+    """The race: a reader loads the job (running), the thread saves completed and ends, then the reader's stale copy was
+    marked interrupted and saved over the finished job."""
+    import threading
+    from services.series_jobs import SeriesJobStore
+    render = service(tmp_path, Tools(tmp_path), [])
+    store = SeriesJobStore(str(tmp_path), "native")
+    running = {"jobId": "native-race", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running", "approve": True,
+               "language": "spanish", "original": True, "current": 0, "total": 1, "createdAt": time.time(), "message": "Shot s01",
+               "items": [{"shotId": "s01", "stage": "export", "status": "running", "lines": {}}]}
+    store.save(running)
+    stale = store.load("native-race")
+    finisher = threading.Thread(target=lambda: store.save({**running, "status": "completed", "message": "done",
+                                                            "items": [{**running["items"][0], "stage": "done", "status": "done"}]}))
+    render._threads["native-race"] = finisher
+    finisher.start(); finisher.join()
+    seen = render._reconcile("cast", stale)
+    assert seen["status"] == "completed" and store.load("native-race")["status"] == "completed"
+
+
 def test_an_export_the_server_lost_is_asked_for_again_under_a_new_intent(tmp_path):
     """An interrupted, discarded or forgotten export cannot complete: waiting for it would never end."""
     tools = Tools(tmp_path)
