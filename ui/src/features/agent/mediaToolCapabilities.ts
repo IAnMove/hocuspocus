@@ -44,11 +44,15 @@ export function mediaToolMessage(operation: MediaToolOperation, reply: MediaRepl
   return `${verb[operation]}: ${file}.${haze}`
 }
 
-export async function executeMediaTool(action: AgentMediaToolAction, workspace?: string) {
+export async function executeMediaTool(action: AgentMediaToolAction, workspace?: string, commandId?: string) {
+  if (workspace && action.input.workspace && action.input.workspace !== workspace) {
+    throw new Error('La acción multimedia debe guardar su resultado en el espacio activo.')
+  }
   const input = { ...action.input, workspace: typeof action.input.workspace === 'string' && action.input.workspace ? action.input.workspace : workspace || '' }
+  const intentId = commandId || globalThis.crypto?.randomUUID?.() || `media-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const response = await fetch('/api/v1/media/commands', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ operation: action.operation, version: 1, input }),
+    method: 'POST', headers: { 'content-type': 'application/json', 'X-Hocus-UI-Surface': 'wizard' },
+    body: JSON.stringify({ operation: action.operation, version: 1, intent_id: intentId, input }),
   })
   const reply = await response.json() as MediaReply
   if (!response.ok) {
@@ -57,6 +61,7 @@ export async function executeMediaTool(action: AgentMediaToolAction, workspace?:
   return {
     message: mediaToolMessage(action.operation, reply),
     metadata: reply as Record<string, unknown>,
+    outputNames: reply.result?.file ? [reply.result.file] : [],
     target: { kind: 'output', id: reply.result?.file || action.operation, title: action.operation },
   }
 }
@@ -80,7 +85,7 @@ export function registerMediaToolCapabilities(register: typeof defineCapability)
     },
     validate(action) { return operations.has(action.operation) ? [] : ['Choose a media tool operation.'] },
     async prepare(action) { return action },
-    async execute(action, context) { return context.adapters.mediaTools.command(action, context.workspace) },
+    async execute(action, context) { return context.adapters.mediaTools.command(action, context.workspace, context.generationContext?.commandId) },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
     report: { targetKind: 'output', successState: 'completed' },

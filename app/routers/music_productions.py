@@ -97,6 +97,7 @@ def create_music_productions_router(
     uploads_dir: Callable[[], str] | None = None,
     app_url: Callable[[], str] | None = None,
     token: Callable[[], str] | None = None,
+    mcp: Callable[[str, dict], dict] | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -110,10 +111,10 @@ def create_music_productions_router(
         return root, state
 
     def studio():
-        if uploads_dir is None or app_url is None or token is None or not token() or not app_url():
+        if uploads_dir is None or (mcp is None and (app_url is None or token is None or not token() or not app_url())):
             raise HTTPException(status_code=503, detail={"code": "mcp_unavailable", "message": "Shot editing needs the studio runtime"})
         from services.music_production import Production, loopback_mcp
-        return Production, loopback_mcp(app_url, token)
+        return Production, mcp or loopback_mcp(app_url, token)
 
     def hold_edit(workspace: str, production_id: str):
         """Occupy the production so a retake or another edit cannot overwrite the state file."""
@@ -159,7 +160,7 @@ def create_music_productions_router(
         from services.music_production import RUN, command_handlers
         studio()
         state_of(workspace, production_id)
-        handlers = command_handlers(workspace_dir, uploads_dir, app_url, token)
+        handlers = command_handlers(workspace_dir, uploads_dir, app_url, token, mcp=mcp)
         return await handlers[RUN]({"version": 1, "input": {"workspace": workspace, "production_id": production_id, "retake": [shot]}})
 
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}")

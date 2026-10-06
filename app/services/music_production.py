@@ -581,9 +581,7 @@ def loopback_mcp(app_url: Callable[[], str], token: Callable[[], str], sleep: Ca
     def call(tool: str, arguments: dict) -> dict:
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}).encode()
         request = urllib.request.Request(app_url().rstrip("/") + "/api/v1/mcp", data=body, method="POST", headers={
-            "Authorization": f"Bearer {token()}", "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
-            # The production's own steps: its agent call is already in Activity, these are not agent work.
-            "X-Hocus-Caller": "production"})
+            "Authorization": f"Bearer {token()}", "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
         with open_mcp(request, timeout=600, sleep=sleep) as response:
             result = json.loads(response.read()).get("result") or {}
         if isinstance(result.get("structuredContent"), dict):
@@ -610,7 +608,8 @@ def _refuse_locked_retake(production: Production, data: dict) -> tuple[str, ...]
     return retake
 
 
-def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str]) -> dict:
+def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str],
+                     token: Callable[[], str], *, mcp: Callable[[str, dict], dict] | None = None) -> dict:
     from fastapi import HTTPException
 
     def _input(arguments: Any) -> dict:
@@ -624,14 +623,15 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if data.get("dry_run") is True:
             from services.production_dry_run import dry_run
             return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]))}
-        if not token() or not app_url():
+        if mcp is None and (not token() or not app_url()):
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"
         with _lock:
             busy = _slot_busy(key)
         if busy:
             raise HTTPException(409, {"code": "already_running", "message": "This production is running: wait for production.status to finish (or use another production_id) before sending a new spec", "retryable": True})
-        production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir, mcp=loopback_mcp(app_url, token))
+        production = Production(data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir,
+                                mcp=mcp or loopback_mcp(app_url, token))
         if "auto_resume" in data:
             production.state["auto_resume"] = data["auto_resume"] is True
         preview = data.get("preview")
@@ -699,4 +699,4 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         return {"version": 1, "status": "completed", "operation": PLAN, "result": {"spec": spec}}
 
     from services.production_shot_commands import review_handlers
-    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token), **publication_handlers(workspace_dir), **review_handlers(workspace_dir, uploads_dir, app_url, token)}
+    return {RUN: run, STATUS: status, PLAN: plan, **extra_handlers(workspace_dir, uploads_dir, app_url, token, mcp=mcp), **publication_handlers(workspace_dir), **review_handlers(workspace_dir, uploads_dir, app_url, token, mcp=mcp)}

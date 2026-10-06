@@ -21,6 +21,9 @@ function text(value: unknown): string {
 
 function reportTarget(target: AgentExecutionTarget | undefined): WizardChangeTarget | null {
   if (!target?.id) return null
+  if (target.kind === 'output') {
+    return { kind: 'file', id: target.id, file: target.id, ...(target.title ? { title: target.title } : {}) }
+  }
   if (target.kind === 'video_3d_scene' && /^w3d-[0-9a-f]{12}$/.test(target.id)) {
     return { kind: 'world3d_scene', id: target.id, ...(target.title ? { title: target.title } : {}) }
   }

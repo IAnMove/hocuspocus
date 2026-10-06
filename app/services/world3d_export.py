@@ -28,7 +28,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from services.agent_activity import agent_attribution, requested_by
-from services.asset_manifest import publish_generation_sidecar
+from services.asset_manifest import publish_generation_sidecar, sidecar_path
 from services.audio_mix import mux_wav_audio  # noqa: F401 — the shared mixer, re-exported
 from services.workspace_cleanup import keep_export_staging, release_export_staging
 from services import resource_scheduler
@@ -39,8 +39,9 @@ from services.scene_commands import DocumentInput, command_error as scene_error
 from services.scene_recording import SceneRecordingTranscodeError, validate_scene_recording_output
 from services.task_command_admission import TaskCommandConflict
 from services.task_manager import get_cancellation_token, new_task_id
-from services.export_receipts import project_export_receipt
-from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot, publish_export_file
+from services.export_receipts import project_export_receipt, project_export_task
+from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot, previous_path, publish_export_file
+from services.media_publication import file_sha256, publication_lock, publication_transaction
 
 
 OPERATION = "scenes.world3d.export"
@@ -909,7 +910,8 @@ class World3DExportService:
             if entry is None:
                 raise http_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
             task = registry.get(entry["task_id"])
-            return {"receipt": project_export_receipt(entry["receipt"], task), "task": task, "capabilities": self.capabilities()}
+            receipt = project_export_receipt(entry["receipt"], task, folder=self.workspace_dir(workspace))
+            return {"receipt": receipt, "task": project_export_task(task, receipt), "capabilities": self.capabilities()}
         except (OSError, sqlite3.Error) as error:
             raise http_error(503, "storage_unavailable", "Command storage is unavailable") from error
 
@@ -1033,11 +1035,15 @@ class World3DExportService:
         self._ensure_active(token, registry, task_id)
         name = snapshot.get("outputName") or self.output_name(snapshot)
         output = Path(self.workspace_dir(workspace)) / name
-        replaced = publish_export_file(encoded, output, master)
-        sidecar = {**self.sidecar(snapshot, name), **requested_by((registry.get(task_id) or {}).get("metadata"))}
-        publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool=self.slug,
-                                   capability=self.operation, actor="user")
-        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace, **replaced}
+        identity = {"sha256": file_sha256(encoded)} if snapshot.get("outputName") else {}
+        files = (output, previous_path(output), output.with_suffix(".mov"), previous_path(output.with_suffix(".mov")))
+        paths = [path for media in files for path in (media, sidecar_path(media))]
+        with publication_lock(output.parent), publication_transaction(paths):
+            replaced = publish_export_file(encoded, output, master)
+            sidecar = {**self.sidecar(snapshot, name), **requested_by((registry.get(task_id) or {}).get("metadata"))}
+            publish_generation_sidecar(output, sidecar, workspace_id=workspace, tool=self.slug,
+                                       capability=self.operation, actor="user")
+        return {"name": name, "url": f"/api/v1/file/{name}", "workspace": workspace, **replaced, **identity}
 
     # -- hooks ------------------------------------------------------------------------
     def freeze(self, command) -> dict:

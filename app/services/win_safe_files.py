@@ -41,6 +41,7 @@ import threading
 from typing import Optional
 
 from starlette.responses import FileResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.types import Send, Receive, Scope
 
@@ -157,8 +158,10 @@ class ShareDeleteFileResponse(Response):
         filename: Optional[str] = None,
         method: Optional[str] = None,
         stat_result: Optional[os.stat_result] = None,
+        expected_sha256: Optional[str] = None,
     ):
         self.path = path
+        self.expected_sha256 = expected_sha256
         self.filename = filename
         self.send_header_only = method is not None and method.upper() == "HEAD"
 
@@ -231,6 +234,9 @@ class ShareDeleteFileResponse(Response):
             return
 
         try:
+            if not await run_in_threadpool(self._matches_content, f):
+                await self._send_error(send, 410)
+                return
             try:
                 size = os.fstat(f.fileno()).st_size
             except OSError:
@@ -301,8 +307,19 @@ class ShareDeleteFileResponse(Response):
         finally:
             f.close()
 
+    def _matches_content(self, handle) -> bool:
+        """Verify and stream the same open inode, even if the alias is replaced."""
+        if self.expected_sha256 is None:
+            return True
+        import hashlib
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+        handle.seek(0)
+        return digest.hexdigest() == self.expected_sha256
+
     async def _send_error(self, send: Send, status: int) -> None:
-        msg = {404: b"Not Found", 416: b"Range Not Satisfiable"}.get(status, b"Error")
+        msg = {404: b"Not Found", 410: b"Export version no longer available", 416: b"Range Not Satisfiable"}.get(status, b"Error")
         body = msg
         await send({
             "type": "http.response.start",
@@ -351,6 +368,7 @@ def share_delete_file_response(
     media_type: Optional[str] = None,
     filename: Optional[str] = None,
     method: Optional[str] = None,
+    expected_sha256: Optional[str] = None,
 ) -> Response:
     """Drop-in replacement for FastAPI's FileResponse that uses
     FILE_SHARE_DELETE on Windows.
@@ -360,7 +378,7 @@ def share_delete_file_response(
     thumbnails, etc.
     """
     return ShareDeleteFileResponse(
-        path=path, media_type=media_type, filename=filename, method=method
+        path=path, media_type=media_type, filename=filename, method=method, expected_sha256=expected_sha256
     )
 
 

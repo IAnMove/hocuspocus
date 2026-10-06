@@ -14,7 +14,7 @@ import tempfile
 from typing import Any
 
 from services.production_media_common import (
-    OUTPUT_NAME, SOURCE, WORKSPACE, MediaToolError, media_url, operation_schema, output_path, publish_sidecar,
+    OUTPUT_NAME, SOURCE, WORKSPACE, MediaToolError, media_url, operation_schema, output_destination, publish_sidecar,
     read_input, remove_quietly, resolve_source, sha256_file, source_ref, uploads_root, workspace_folder,
 )
 
@@ -159,14 +159,10 @@ def run(arguments: Any, *, workspace_dir, uploads_dir) -> dict[str, Any]:
     at = _requested(payload)
     label = at if isinstance(at, str) else f"{at:.2f}s".replace(".", "_")
     stem = os.path.splitext(os.path.basename(source))[0][:80]
-    destination = output_path(folder, payload.get("output_name"), f"{stem}-frame-{label}", ".png")
-    try:
+    with output_destination(folder, payload.get("output_name"), f"{stem}-frame-{label}", ".png") as destination:
         found = capture(source, destination, at)
-    except Exception:
-        remove_quietly(destination)
-        raise
-    sidecar = publish_sidecar(destination, workspace, OPERATION, "image",
-                              {"time": found["time"], "at": at, "source_name": os.path.basename(source)},
-                              [source_ref(source, workspace)])
-    return {"file": os.path.basename(destination), "url": media_url(destination, workspace, uploads, folder),
-            **found, "sha256": sha256_file(destination), "sidecar": sidecar}
+        sidecar = publish_sidecar(destination, workspace, OPERATION, "image",
+                                  {"time": found["time"], "at": at, "source_name": os.path.basename(source)},
+                                  [source_ref(source, workspace)])
+        return {"file": os.path.basename(destination), "url": media_url(destination, workspace, uploads, folder),
+                **found, "sha256": sha256_file(destination), "sidecar": sidecar}

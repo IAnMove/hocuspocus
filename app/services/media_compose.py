@@ -16,7 +16,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from services.production_media_common import (
-    OUTPUT_NAME, SOURCE, WORKSPACE, MediaToolError, media_url, number, operation_schema, output_path,
+    OUTPUT_NAME, SOURCE, WORKSPACE, MediaToolError, media_url, number, operation_schema, output_destination,
     publish_sidecar, read_input, remove_quietly, resolve_source, sha256_file, source_ref, uploads_root,
     workspace_folder,
 )
@@ -196,16 +196,15 @@ def run(arguments: Any, *, workspace_dir, uploads_dir) -> dict[str, Any]:
     if fmt not in ("png", "jpg"):
         raise MediaToolError("invalid_command", "format must be png or jpg.")
     canvas, sources = compose(payload, ctx)
-    destination = output_path(ctx["folder"], payload.get("output_name"), "compose", f".{fmt}")
-    try:
-        _save(canvas, destination, fmt, _background(payload.get("background")))
-    except OSError as exc:
-        remove_quietly(destination)
-        raise MediaToolError("compose_failed", "The composed image could not be saved.") from exc
-    refs = [source_ref(path, workspace, "base" if index == 0 and "base" in payload else "layer")
-            for index, path in enumerate(sources)]
-    params = {key: payload[key] for key in ("base_at", "size", "background", "layers") if key in payload}
-    sidecar = publish_sidecar(destination, workspace, OPERATION, "image", params, refs)
-    return {"file": os.path.basename(destination), "url": media_url(destination, workspace, ctx["uploads"], ctx["folder"]),
-            "width": canvas.width, "height": canvas.height, "sha256": sha256_file(destination),
-            "layers": len(payload["layers"]), "sidecar": sidecar}
+    with output_destination(ctx["folder"], payload.get("output_name"), "compose", f".{fmt}") as destination:
+        try:
+            _save(canvas, destination, fmt, _background(payload.get("background")))
+        except OSError as exc:
+            raise MediaToolError("compose_failed", "The composed image could not be saved.") from exc
+        refs = [source_ref(path, workspace, "base" if index == 0 and "base" in payload else "layer")
+                for index, path in enumerate(sources)]
+        params = {key: payload[key] for key in ("base_at", "size", "background", "layers") if key in payload}
+        sidecar = publish_sidecar(destination, workspace, OPERATION, "image", params, refs)
+        return {"file": os.path.basename(destination), "url": media_url(destination, workspace, ctx["uploads"], ctx["folder"]),
+                "width": canvas.width, "height": canvas.height, "sha256": sha256_file(destination),
+                "layers": len(payload["layers"]), "sidecar": sidecar}

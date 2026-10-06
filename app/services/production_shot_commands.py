@@ -35,9 +35,9 @@ def review_catalog() -> list[dict[str, Any]]:
     ]
 
 
-def review_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str]) -> dict:
+def review_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str], *, mcp: Callable[[str, dict], dict] | None = None) -> dict:
     from services.music_production import ProductionError
-    from services.production_commands import _edit_error, _input, _ok, _open, _spec, holding_edit
+    from services.production_commands import _edit_error, _input, _ok, _open, _spec, holding_edit, threaded_command
     from services.production_shot_edit import ShotEditError
     from services.production_shot_request import RequestError
     from services.production_shot_review import ReviewError
@@ -66,11 +66,12 @@ def review_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[
             _edit_error(error)
         return _ok(LOCK, result)
 
-    async def redo_command(arguments: Any) -> dict:
+    @threaded_command
+    def redo_command(arguments: Any) -> dict:
         data = _input(arguments)
         _require_shot(data)
         with holding_edit(runner(), data["workspace"], data["production_id"]):
-            production = _open(runner(), data, workspace_dir, uploads_dir, app_url, token)
+            production = _open(runner(), data, workspace_dir, uploads_dir, app_url, token, mcp=mcp)
             try:
                 from services.production_shot_redo import redo
                 result = redo(production, _spec(production), data["shot"], data.get("from"), frame_prompt=_text(data.get("frame_prompt")), action=_text(data.get("action")), shoot_frame=_shoot_frame, shoot_clip=_shoot_clip, export_scene=_export_scene)
@@ -78,7 +79,8 @@ def review_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[
                 _edit_error(error)
         return _ok(REDO, result)
 
-    async def request_command(arguments: Any) -> dict:
+    @threaded_command
+    def request_command(arguments: Any) -> dict:
         data = _input(arguments)
         _require_shot(data)
         from services.production_shot_request import RequestError, apply_plan, resolve_plan
@@ -89,21 +91,22 @@ def review_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[
         applied: list[str] = []
         if data.get("apply") is True:
             with holding_edit(runner(), data["workspace"], data["production_id"]):
-                production = _open(runner(), data, workspace_dir, uploads_dir, app_url, token)
+                production = _open(runner(), data, workspace_dir, uploads_dir, app_url, token, mcp=mcp)
                 try:
                     applied = apply_plan(plan, lambda change: _act(production, _spec(production), data["shot"], change))
                 except (ProductionError, ShotEditError, ReviewError, RequestError) as error:
                     _edit_error(error)
         return _ok(REQUEST, {"plan": plan, "applied": applied})
 
-    async def undo_command(arguments: Any) -> dict:
+    @threaded_command
+    def undo_command(arguments: Any) -> dict:
         data = _input(arguments)
         _require_shot(data)
         history_id = data.get("history_id")
         if not isinstance(history_id, str) or not history_id:
             _edit_error(RequestError("invalid_command", "history_id is required"))
         with holding_edit(runner(), data["workspace"], data["production_id"]):
-            production = _open(runner(), data, workspace_dir, uploads_dir, app_url, token)
+            production = _open(runner(), data, workspace_dir, uploads_dir, app_url, token, mcp=mcp)
             try:
                 from services.production_shot_redo import undo
                 result = undo(production, _spec(production), data["shot"], history_id, export_scene=_export_scene)

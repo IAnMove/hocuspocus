@@ -195,7 +195,7 @@ export interface WizardApplicationAdapters {
     edit(action: import('./seriesShotEditCapabilities').AgentEditSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
     rerender(action: import('./seriesShotEditCapabilities').AgentRerenderSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
   }
-  mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string): Promise<AdapterOutcome> }
+  mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -757,7 +757,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async rerender(action, workspace) { return executeSeriesShotEdit(action, workspace) },
   }
   adapters.mediaTools = {
-    async command(action, workspace) { return executeMediaTool(action, workspace) },
+    async command(action, workspace, commandId) { return executeMediaTool(action, workspace, commandId) },
   }
   adapters.lipsCreator = {
     async command(action, workspace) {

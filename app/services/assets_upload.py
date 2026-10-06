@@ -25,7 +25,7 @@ from services.core_upload import MAX_UPLOAD_BYTES, extract_upload, save_upload, 
 from services.media_paths import MediaPathNotAllowed, _KIND_EXTENSIONS, resolve_permitted_media_path
 from services.wangp_submission import wangp_media_url
 from services.workspace_store_lock import workspace_store_lock
-from services.media_publication import publication_transaction
+from services.media_publication import file_sha256 as _file_sha256, publication_lock, publication_transaction
 
 
 MAX_ASSETS_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -363,14 +363,6 @@ def _refuse_shared_sidecar(target: Path, content: str | None) -> None:
                                 "choose a destination_filename with another name before the extension", 409)
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _sidecar_content(source: str, target: Path, workspace: str) -> str | None:
     source_meta = Path(source).with_suffix(".meta.json")
     if source_meta.is_symlink():
@@ -458,7 +450,7 @@ def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
     _, payload = _invocation(arguments)
     _payload_mode(payload)
     folder = _folder(workspace_dir, _workspace_name(payload.get("workspace")))
-    with workspace_store_lock(Path(folder) / _JOURNAL_NAME):
+    with workspace_store_lock(Path(folder) / _JOURNAL_NAME), publication_lock(folder):
         return _upload_asset(arguments, workspace_dir=workspace_dir, uploads_dir=uploads_dir)
 
 

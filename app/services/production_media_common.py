@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+from weakref import WeakValueDictionary
 
 from fastapi import HTTPException
+from services.media_publication import publication_lock
+from services.workspace_store_lock import workspace_store_lock
 
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 SOURCE = {"type": "string", "minLength": 1, "maxLength": 2000}
@@ -27,6 +31,18 @@ OUTPUT_NAME = {"type": "string", "minLength": 1, "maxLength": 180, "description"
 _ENVELOPE_KEYS = frozenset({"version", "input", "intent_id"})
 # The agent call a tool runs for (services/agent_activity.py), so the file's sidecar names it with its intent_id.
 _REQUEST: ContextVar[dict | None] = ContextVar("production_media_request", default=None)
+_LOCKS: WeakValueDictionary = WeakValueDictionary()
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(key: tuple):
+    """One lock per active intent; completed requests leave no growing lock registry."""
+    with _LOCKS_GUARD:
+        lock = _LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _LOCKS[key] = lock
+        return lock
 
 
 class MediaToolError(Exception):
@@ -139,7 +155,27 @@ def output_path(folder: str, output_name: Any, default_stem: str, extension: str
         if not stem or stem in {".", ".."}:
             raise MediaToolError("invalid_output_name", "Output name must be a single file name inside the workspace")
     safe = "".join(char if char.isalnum() or char in "-_.() " else "_" for char in stem).strip(" .")[:160] or "output"
-    return os.path.join(folder, available_name(folder, f"{safe}{extension}"))
+    while True:
+        destination = os.path.join(folder, available_name(folder, f"{safe}{extension}"))
+        try:
+            descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            continue
+        os.close(descriptor)
+        return destination
+
+
+@contextmanager
+def output_destination(folder: str, output_name: Any, default_stem: str, extension: str) -> Iterator[str]:
+    """Reserve a file through publication, including its sidecar shared by different output extensions."""
+    with publication_lock(folder):
+        destination = output_path(folder, output_name, default_stem, extension)
+        try:
+            yield destination
+        except Exception:
+            remove_quietly(destination)
+            remove_quietly(str(Path(destination).with_suffix(".meta.json")))
+            raise
 
 
 def sha256_file(path: str) -> str:
@@ -175,7 +211,10 @@ def requested(operation: str) -> tuple[str, str, dict[str, Any]]:
 
     attribution = _REQUEST.get() or agent_attribution(operation)
     # The manifest's actors are user, wizard and system: an agent is the user's tool (external_agent), as on exports.
-    return trusted_tool() or operation, "wizard" if actor_label() == "wizard" else "user", requested_by(attribution)
+    asked = requested_by(attribution)
+    if attribution.get("command_id"):
+        asked["command_id"] = attribution["command_id"]
+    return trusted_tool() or operation, "wizard" if actor_label() == "wizard" else "user", asked
 
 
 def publish_sidecar(path: str, workspace: str, operation: str, mode: str, params: dict[str, Any],
@@ -213,14 +252,17 @@ def run_once(arguments: Any, operation: str, folder_for: Callable[[dict], str], 
         intent_id = check_intent_id(intent)
         digest = intent_digest(payload)
         root = Path(folder_for(payload))
-        previous = load_intent(root, operation, intent_id, digest)
+        lock_key = hashlib.sha256(f"{operation}\0{intent_id}".encode()).hexdigest()
+        lock_path = root / ".mcp-intents" / ".locks" / lock_key
+        with _lock_for((os.path.normcase(str(root.resolve())), operation, intent_id)), workspace_store_lock(lock_path):
+            previous = load_intent(root, operation, intent_id, digest)
+            if previous is not None:
+                return {**previous, "replayed": True}
+            result = run()
+            store_intent(root, operation, intent_id, digest, result)
+            return result
     except IntentConflict as exc:
         raise MediaToolError("intent_conflict", str(exc), 409) from exc
-    if previous is not None:
-        return {**previous, "replayed": True}
-    result = run()
-    store_intent(root, operation, intent_id, digest, result)
-    return result
 
 
 @contextmanager
@@ -228,7 +270,7 @@ def request_scope(operation: str, arguments: Any) -> Iterator[None]:
     """While a tool runs: the agent call it runs for (if any), for ``publish_sidecar``."""
     from services.agent_activity import agent_attribution
     intent = arguments.get("intent_id") if isinstance(arguments, dict) and isinstance(arguments.get("intent_id"), str) else None
-    token = _REQUEST.set(agent_attribution(operation, intent))
+    token = _REQUEST.set({**agent_attribution(operation, intent), **({"command_id": intent} if intent else {})})
     try:
         yield
     finally:

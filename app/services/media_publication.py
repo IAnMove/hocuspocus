@@ -5,10 +5,25 @@ are kept as hard links (copies on filesystems without links); writers replace
 files rather than changing those inodes. This does not claim crash atomicity.
 """
 from contextlib import contextmanager
+import hashlib
 import os
 from pathlib import Path
 import shutil
 from tempfile import TemporaryDirectory
+from services.workspace_store_lock import workspace_store_lock
+
+
+def publication_lock(folder):
+    """One cross-process lock for workspace media and sidecar publishers."""
+    return workspace_store_lock(Path(folder).resolve() / ".media-publication")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _backup(path: Path, target: Path) -> Path | None:

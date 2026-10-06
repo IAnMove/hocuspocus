@@ -26,6 +26,7 @@ from routers.mcp_access import create_mcp_access_router
 from routers.projects import create_projects_router
 from routers.music_productions import create_music_productions_router
 from routers.productions import create_productions_router
+from routers.production_media import create_production_media_router
 from routers.recipes import create_recipes_router
 from routers.scene_commands import create_scene_commands_router
 from routers.scene_packages import create_scene_packages_router
@@ -35,6 +36,7 @@ from routers.style_library import create_style_library_router
 from routers.system_capabilities import create_system_capabilities_router, require_capability_http
 from routers.user_diagnostics import create_user_diagnostics_router
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
+from routers.wizard_activity import create_wizard_activity_router
 from routers.world3d_export import create_world3d_export_router, bind_world3d_renderer_origin
 from routers.workspace_collections import create_workspace_collections_router
 from services import (
@@ -49,6 +51,9 @@ from services import (
     core_workspace as core,
 )
 from services.mcp_access import McpAccess
+from services.agent_activity import ActorHeaderMiddleware, AgentActivity
+from services.production_media_commands import command_handlers as production_media_handlers
+from services.studio_key import command_handlers as studio_key_handlers
 from services.platform_capabilities import platform_capabilities
 from services.scene_commands import SceneCommands
 from services.style_library import StyleLibrary
@@ -68,6 +73,7 @@ from services.world3d_export import World3DExportService
 from services.workspace_registry import WorkspaceRegistry
 
 api = FastAPI(title="HocusPocus core")
+api.add_middleware(ActorHeaderMiddleware)
 from services.host_guard import install_host_guard
 install_host_guard(api)
 api.add_middleware(
@@ -172,6 +178,12 @@ api.include_router(create_canonical_tasks_router(
     upsert_task=core_canonical_tasks.upsert_task,
     control_task=core_canonical_tasks.control_task,
 ))
+api.include_router(create_production_media_router({
+    **production_media_handlers(core.workspace_dir, core.uploads_dir),
+    **studio_key_handlers(core.workspace_dir, core.uploads_dir),
+}))
+_agent_activity = AgentActivity(core_generation_commands.registry_for, core.active_workspace)
+api.include_router(create_wizard_activity_router(_agent_activity))
 
 BLOCKED = (
     ("POST", "/api/v1/recast", "wangp_local"),
@@ -318,12 +330,13 @@ def list_outputs(workspace: str = "", media_type: str = "", limit: int = 0, offs
 
 
 @api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None):
+def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
+    from services.win_safe_files import share_delete_file_response
     folder = core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace)
     path = core.safe_join(folder, filename)
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Output file not found")
-    return FileResponse(path)
+    return share_delete_file_response(path, expected_sha256=sha256)
 
 
 @api.get("/api/v1/system-config")
