@@ -126,8 +126,16 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   A new prompt or volume makes `series.episode.produce` render that shot again.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
-  `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` points right at 0, so a
-  gun aimed left needs 180 with `x`/`y` just past the muzzle). Keep them off faces: a small burst to one side.
+  `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
+  points right at 0). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
+  in % of that cast member's pose image (`cast`: the index in the shot's `cast`, or a character id), so the beam leaves the
+  muzzle wherever the cutout stands, however big it is drawn and while the camera pushes in; `{"point": [70, 40]}` is a
+  point of the frame. The beam then runs from `from` to `x`/`y` (where it lands) and `rotation` is not used. A `cast` that
+  names no one in the shot fails the render; a 3D shot keeps only a frame point. Keep effects off faces: a small burst to
+  one side. Light for dark, painted frames: `shockwave` is a ring of light from `x`/`y` (`size` its reach) with a flash, a
+  soft halo, trailing echoes and sparks; `shield` is a dome of light around someone (`size` its height) that reads even at
+  `intensity` 0.4 and stays see-through; `embers` rise and cool from the bottom of their box; all keep `color` (gold stays
+  gold).
   `impact_flash` (a white frame, then ink focus lines) and `impact_invert` (the negative of the frame) cover the
   whole picture: give them 2–4 frames (`duration` 0.08–0.17 s at 24 fps) right on the hit. `code_rain` (falling
   green code; `size` is the glyph height in %, default 3) covers the whole picture too, faces included: for a

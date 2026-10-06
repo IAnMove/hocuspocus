@@ -306,6 +306,8 @@ def _sfx() -> dict:
         "size": _number(1, 200), "intensity": _number(0.1, 2), "color": HEX,
         "rotation": _number(-180, 180), "seed": {"type": "integer", "minimum": 1, "maximum": 1000000},
         "sound": {"type": "boolean"}, "volume": _number(0, 1),
+        # A laser or lightning from this point to x/y: % of the frame, or of the picture of the layer it names.
+        "from": _object({"x": _number(-50, 150), "y": _number(-50, 150), "layerId": _string(160)}, ["x", "y"]),
     }, ["id", "kind", "start", "end"]), max_items=64)
 
 

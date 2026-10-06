@@ -272,3 +272,23 @@ def test_world_portal_media_strips_transient_urls(service, url):
                               'input': {'document': doc, 'worldCues': [cue]}})['result']['document']
     assert result['worldSfx'][0]['kind'] == 'media_portal'
     assert not result['worldSfx'][0].get('sourceUrl')
+
+
+def test_a_laser_cue_starts_at_its_origin_and_other_kinds_refuse_one(service):
+    doc = showcase(service, '2d')
+    laser = {'id': 'shot', 'kind': 'laser', 'start': 0, 'end': 1, 'x': 90, 'y': 20,
+             'from': {'x': 95, 'y': 46, 'layerId': 'kit-guard-pose-base'}}
+    apply = lambda document, cues: service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                                                    'input': {'document': document, 'cues': cues}})['result']['document']
+    applied = apply(doc, [laser])
+    assert next(cue for cue in applied['sfx'] if cue['id'] == 'shot')['from'] == {'x': 95.0, 'y': 46.0, 'layerId': 'kit-guard-pose-base'}
+    assert all('from' not in cue for cue in applied['sfx'] if cue['id'] != 'shot'), 'no empty from on the other cues'
+    again = apply(applied, [{'id': 'bolt', 'kind': 'lightning', 'start': 1, 'end': 2, 'from': {'x': 10, 'y': -20}}])
+    kept = {cue['id']: cue.get('from') for cue in again['sfx'] if cue['id'] in ('shot', 'bolt')}
+    assert kept == {'shot': {'x': 95.0, 'y': 46.0, 'layerId': 'kit-guard-pose-base'}, 'bolt': {'x': 10.0, 'y': -20.0}}, 'an additive apply keeps it'
+    for bad in ({'id': 'x', 'kind': 'sparks', 'start': 0, 'end': 1, 'from': {'x': 10, 'y': 20}},
+                {'id': 'x', 'kind': 'laser', 'start': 0, 'end': 1, 'from': {'x': 10, 'y': 900}}):
+        with pytest.raises(ValueError):
+            apply(doc, [bad])
+    schema = next(item for item in command_catalog() if item['name'] == 'scenes.effects.apply')['inputSchema']
+    assert 'from' in json.dumps(schema)

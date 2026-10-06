@@ -7,12 +7,13 @@ import { mountCharacterKitLayers, type CharacterKit } from '../src/lib/character
 import { rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
 import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
+import type { SceneFx } from '../src/features/sceneFx/types.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
 export type Motion = 'idle' | 'still' | 'shake'
 export type CastSpec = {
-  kitId: string; poseId?: string; x: number; z?: number; motion?: Motion
+  kitId: string; characterId?: string; poseId?: string; x: number; z?: number; motion?: Motion
   /** Size multiplier for this character (a small robot, a tall giant). */
   boost?: number
   transform?: Pose; blinks?: number[]
@@ -36,13 +37,16 @@ export type SetLayerSpec = {
   /** Idle drift in frame pixels per second, negative to the left (fog, smoke). */
   drift?: number
 }
+/** A screen effect as planned (``series_shot_extras.fx_cues``). A beam's ``from`` is a point in % of the frame, or with
+ * ``cast`` (an index in the shot's cast or a character id) in % of that cast member's pose image. */
+export type ShotFxSpec = Omit<SceneFx, 'from'> & { from?: { cast?: number | string; point: [number, number] } }
 export type ShotSpec = {
   name: string; workspace: string; width: number; height: number; fps: 24 | 30 | 60; duration: number
   framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number }
   cast: CastSpec[]; lines: LineSpec[]; props?: PropSpec[]
   /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
   layers?: SetLayerSpec[]; castDepth?: number
-  audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: Scene['sfx']; finish?: Scene['finish']
+  audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
   camera?: 'static' | 'push'; narrative?: Scene['narrative']
 }
 type Beat = NonNullable<Scene['dialogueBeats']>[number]
@@ -286,6 +290,21 @@ function propLayer(prop: PropSpec, duration: number): SceneLayer {
     parallax: 1, transform, animation: { start: { ...transform }, end: { ...transform }, duration, curve: 'linear' } } as SceneLayer
 }
 
+/** The shot's screen effects with each beam's ``from`` placed: on the pose layer of the cast member it names, so the
+ * point follows the cutout (its placement, body motion and the camera push), or in the frame. A ``cast`` that names no
+ * one in the shot is an error: the beam would leave from the wrong place. */
+export function shotEffects(sfx: ShotFxSpec[] | undefined, cast: CastSpec[], poseLayerIds: string[]): SceneFx[] | undefined {
+  return sfx?.map(cue => {
+    if (!cue.from) return cue as SceneFx
+    const { cast: who, point: [x, y] } = cue.from
+    if (who === undefined) return { ...cue, from: { x, y } }
+    const index = typeof who === 'number' ? who : cast.findIndex(item => item.characterId === who || item.kitId === who)
+    const layerId = poseLayerIds[index]
+    if (!layerId) throw new Error(`Screen effect ${cue.id} starts on cast ${JSON.stringify(who)}, who is not in this shot (${cast.length} cast)`)
+    return { ...cue, from: { layerId, x, y } }
+  })
+}
+
 /** One editable Video 2D shot: background, set layers behind the cast, props, mounted cast, set layers in front of it,
  * recorded lines with mouths, camera and finish. */
 export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: ShotSpec): Scene {
@@ -298,6 +317,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
   layers.push(...setLayers(shot, false, 1, 0.5))
   for (const prop of shot.props ?? []) layers.push(propLayer(prop, shot.duration))
   const mouthIds = new Map<string, string[]>()
+  const poseLayerIds: string[] = []
   shot.cast.forEach((cast, index) => {
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
@@ -312,11 +332,13 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
       .map(line => [line.start, line.end] as [number, number])
     const mounted = mountCast(kit, { ...cast, z }, base, shot.duration, viewport, shot.workspace, talking)
     mouthIds.set(cast.kitId, mounted.mouthIds)
+    poseLayerIds.push(mounted.layers[0].id)
     layers.push(...mounted.layers)
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
   if (shot.camera === 'push') layers.push(cameraLayer(shot.duration))
   const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthIds.get(line.kitId) ?? []))
+  const sfx = shotEffects(shot.sfx, shot.cast, poseLayerIds)
   return {
     version: 1, name: shot.name, width: shot.width, height: shot.height, fps: shot.fps, duration: round(shot.duration),
     generationPolicy: 'provided_only',
@@ -325,7 +347,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     // Music and effects dip while someone speaks, as in Video 3D.
     ...(shot.lines.length ? { audioMix: { duckDb: DIALOGUE_DUCK_DB } } : {}),
     ...(shot.texts?.length ? { texts: shot.texts } : {}),
-    ...(shot.sfx?.length ? { sfx: shot.sfx } : {}),
+    ...(sfx?.length ? { sfx } : {}),
     ...(shot.finish ? { finish: shot.finish } : {}),
     ...(shot.narrative ? { narrative: shot.narrative } : {}),
   } as Scene

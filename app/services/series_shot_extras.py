@@ -11,6 +11,11 @@ scene. Declared in ``layout2d`` they are planned with the lines:
   screen effects from ``shared/scene_effects.json`` at the same kind of time.
   ``duration`` is seconds (0.1-30, a value outside is clamped to that range,
   1 when missing or not a number) or ``"shot"``: until the end of the shot.
+  A beam (a catalog entry with ``aim``: laser, lightning) can start at
+  ``from``: ``{"cast": 0, "point": [88, 41]}`` is a point in % of that cast
+  member's pose image (``cast`` is an index in the shot's cast or a character
+  id), so it follows the cutout; ``{"point": [70, 40]}`` is a point in % of
+  the frame. The beam then runs from there to the cue's ``x``/``y``.
 * a character with ``layout2d.perch = {file, width, height, top, widthRatio}``
   (a laptop on a desk) is placed on that prop in every framing.
 """
@@ -23,8 +28,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-EFFECT_KINDS = frozenset(item["id"] for item in json.loads(
-    (Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8")))
+_EFFECTS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8"))
+EFFECT_KINDS = frozenset(item["id"] for item in _EFFECTS)
+# Beams a cue can start at ``from`` (ui/src/features/sceneFx/stormPaint.ts aimedPainters).
+AIMED_KINDS = frozenset(item["id"] for item in _EFFECTS if item.get("aim"))
+FX_ORIGIN_RANGE = (-50, 150)
+CAST_LIMIT = 8
 TIMING_DEFAULTS = {"intro": 0.35, "gap": 0.22, "tail": 0.45}
 # A workspace file, in a subfolder if the user keeps one (``music/theme.wav``); never absolute, never ``..``.
 _FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[^\\\x00]{1,300}$")
@@ -77,11 +86,31 @@ def sfx_entry(value: Any) -> dict[str, Any] | None:
     return {"file": value["file"], **_when(value), "volume": 0.8 if volume is None else volume}
 
 
+def fx_origin(value: Any) -> dict[str, Any] | None:
+    """Where a beam starts: ``{"cast": index | characterId, "point": [x, y]}`` (% of that cast member's pose image) or
+    ``{"point": [x, y]}`` (% of the frame); x and y may lie up to half a picture outside it. None when it is malformed."""
+    point = value.get("point") if isinstance(value, dict) else None
+    if not isinstance(point, (list, tuple)) or len(point) != 2:
+        return None
+    x, y = (_number(item, *FX_ORIGIN_RANGE) for item in point)
+    if x is None or y is None:
+        return None
+    cast = value.get("cast")
+    if cast is None:
+        return {"point": [x, y]}
+    if isinstance(cast, int) and not isinstance(cast, bool) and 0 <= cast < CAST_LIMIT:
+        return {"cast": cast, "point": [x, y]}
+    if isinstance(cast, str) and cast.strip():
+        return {"cast": cast.strip()[:160], "point": [x, y]}
+    return None
+
+
 def fx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or value.get("kind") not in EFFECT_KINDS:
         return None
     entry = {"kind": value["kind"], **_when(value), "duration": fx_duration(value.get("duration"))}
-    # rotation turns directional effects (a laser leaves the muzzle of a gun that points left: 180).
+    # rotation turns directional effects (a laser across the cue point points left at 180); a beam with ``from``
+    # runs from its origin to x/y instead.
     for key, low, high in (("x", 0, 100), ("y", 0, 100), ("size", 1, 200), ("intensity", 0.1, 2), ("volume", 0, 1),
                            ("rotation", -180, 180)):
         if _number(value.get(key), low, high) is not None:
@@ -90,6 +119,9 @@ def fx_entry(value: Any) -> dict[str, Any] | None:
         entry["color"] = value["color"]
     if isinstance(value.get("sound"), bool):
         entry["sound"] = value["sound"]
+    origin = fx_origin(value.get("from")) if value["kind"] in AIMED_KINDS else None
+    if origin:
+        entry["from"] = origin
     return entry
 
 
@@ -126,7 +158,7 @@ def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration:
         end = round(min(duration - 0.01, duration if length == FX_TO_SHOT_END else start + length), 3)
         if end <= start:
             continue
-        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation") if key in cue}
+        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation", "from") if key in cue}
         cues.append({"id": f"fx-{index}", "kind": cue["kind"], "start": start, "end": end, **extra})
     return cues
 

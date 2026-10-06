@@ -581,12 +581,18 @@ def test_a_patch_puts_the_shot_screen_effects_over_the_template_ones(tmp_path):
     assert [cue["id"] for cue in effects] == ["template-lines", "shot-fx-0"]
     assert effects[1] == {"id": "shot-fx-0", "kind": "manga_impact", "start": 1.2, "end": 1.6, "x": 40.0, "y": 30.0, "size": 25.0,
                           "rotation": -150.0, "color": "#ffffff"}
-    again = patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": []}, 2)
+    again = patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": [
+        {"id": "shot-fx-1", "kind": "laser", "start": 1, "end": 1.3, "x": 90, "y": 20, "from": {"x": 70, "y": 40}}]}, 2)
+    assert again["document"]["sfx"][1]["from"] == {"x": 70.0, "y": 40.0}, "a beam from a point of the frame"
+    again = patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": []}, 3)
     assert [cue["id"] for cue in again["document"]["sfx"]] == ["template-lines"], "the shot's effects are replaced, the template's stay"
     for bad in ([{"id": "fx-0", "kind": "manga_impact", "start": 0, "end": 1}], [{"id": "shot-x", "kind": "nope", "start": 0, "end": 1}],
-                [{"id": "shot-x", "kind": "manga_impact", "start": 2, "end": 1}], [{"id": "shot-x", "kind": "manga_impact", "start": 0, "end": 1, "x": 400}]):
+                [{"id": "shot-x", "kind": "manga_impact", "start": 2, "end": 1}], [{"id": "shot-x", "kind": "manga_impact", "start": 0, "end": 1, "x": 400}],
+                [{"id": "shot-x", "kind": "laser", "start": 0, "end": 1, "from": {"x": 70}}],
+                [{"id": "shot-x", "kind": "laser", "start": 0, "end": 1, "from": {"x": 70, "y": 900}}],
+                [{"id": "shot-x", "kind": "manga_impact", "start": 0, "end": 1, "from": {"x": 70, "y": 40}}]):
         with pytest.raises(World3DSceneError) as caught:
-            patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": bad}, 3)
+            patch_scene("studio", "w3d-0000000fx001", workspace_dir, {"screenFx": bad}, 4)
         assert caught.value.code == "invalid_screen_fx"
 
 
