@@ -3,6 +3,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
+
+
+def audio_content(root: str | None, filenames: Iterable[str]) -> dict[str, str]:
+    """Identify the bytes behind recording aliases, which a voice retake replaces in place."""
+    from services.audio_mix import track_source
+    from services.series_shot_foley import file_digest
+
+    if root is None:
+        return {}
+    content = {}
+    for filename in sorted(set(filenames)):
+        path = track_source(root, filename)
+        try:
+            content[filename] = file_digest(str(path)) if path else "unavailable"
+        except OSError:
+            content[filename] = "unavailable"
+    return content
 
 
 def document_digest(document: dict) -> str:

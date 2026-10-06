@@ -98,3 +98,29 @@ test('opening a shot in the editor loads exactly its take\'s scene and remembers
     { shotId: 's1', sceneFilename: 'mp-es-ep1-s1.scene.json', sceneName: 'mp-es-ep1-s1', dimension: '2d' })
   assert.match(sessionStorage.getItem('hocuspocus:series-shot-edit') || '', /"shotId":"s1"/, 'the session survives a reload of the tab')
 })
+
+test('return navigation waits for restore and shows failure without discarding the editor session', { concurrency: false }, async t => {
+  const { render, cleanup, fireEvent, waitFor } = await import('@testing-library/react')
+  const { useStore } = await import('../src/stores/useStore')
+  const { useSeriesStore } = await import('../src/features/series/store')
+  const { setShotEditSession, useShotEditSession } = await import('../src/features/series/shotEditSession')
+  const { SeriesShotEditBanner } = await import('../src/features/series/SeriesShotEditBanner')
+  useStore.setState({ activeWorkspace: 'plus-ultra', mediaFilter: 'world3d' })
+  useSeriesStore.setState({ workspace: 'plus-ultra', hydrated: true, activeSeriesId: 'other', dirty: false })
+  const session = { workspace: 'plus-ultra', seriesId: 'mp-es', episodeId: 'ep1', shotId: 's1', order: 1, episodeTitle: 'Original',
+    sceneFilename: '', sceneName: 'scene', dimension: '3d' as const, target: 'plan' as const, productionMethod: 'animation_3d', openedAt: 1 }
+  setShotEditSession(session)
+  t.after(() => { cleanup(); setShotEditSession(null) })
+  let reject!: (reason: Error) => void
+  const original = useSeriesStore.getState().openSeries
+  useSeriesStore.setState({ openSeries: () => new Promise<void>((_, failed) => { reject = failed }) })
+  t.after(() => useSeriesStore.setState({ openSeries: original }))
+  const view = render(<SeriesShotEditBanner />)
+  fireEvent.click(view.getByRole('button', { name: 'Back to the shot' }))
+  await waitFor(() => assert.ok(reject))
+  assert.equal((view.getByRole('button', { name: 'Back to the shot' }) as HTMLButtonElement).disabled, true)
+  reject(new Error('The edited project could not be restored'))
+  await waitFor(() => assert.match(view.getByRole('alert').textContent || '', /could not be restored/))
+  assert.equal(useShotEditSession.getState().session, session)
+  assert.equal(useStore.getState().mediaFilter, 'world3d')
+})

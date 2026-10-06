@@ -16,6 +16,7 @@ export const AGENT_ACTION_TYPES = [
   'production_works',
   'edit_series_shot',
   'rerender_series_shot',
+  'regenerate_series_line_voice',
   'media_tool',
   'open_story_section',
   'open_series_section',

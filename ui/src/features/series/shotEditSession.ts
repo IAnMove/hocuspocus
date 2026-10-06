@@ -26,6 +26,8 @@ export interface ShotEditSession {
   dimension: '2d' | '3d'
   productionMethod: string
   openedAt: number
+  /** `take` (default): the take's scene, exported back as a new take. `plan`: a 3D shot's plan, saved back to its scene3d. */
+  target?: 'take' | 'plan'
 }
 
 const KEY = 'hocuspocus:series-shot-edit'
@@ -44,9 +46,9 @@ export function setShotEditSession(session: ShotEditSession | null) {
   useShotEditSession.setState({ session })
 }
 
-/** Open EXACTLY the scene the shot's latest take was rendered from, in its own editor. */
-export async function openShotInEditor(workspace: string, series: SeriesProject, episode: SeriesEpisode, shot: SeriesShot) {
-  const sceneFilename = latestTakeMedia(series, shot)?.sceneFilename
+/** Open EXACTLY the scene the shot's latest take (or the take that names `scene`) was rendered from, in its own editor. */
+export async function openShotInEditor(workspace: string, series: SeriesProject, episode: SeriesEpisode, shot: SeriesShot, scene?: string) {
+  const sceneFilename = scene || latestTakeMedia(series, shot)?.sceneFilename
   if (!sceneFilename) throw new Error('This take has no editable scene')
   const response = await fetch(api.getFileUrl(sceneFilename, workspace))
   if (!response.ok) throw new Error('Could not load the scene of this take')
@@ -76,7 +78,6 @@ async function importTake(session: ShotEditSession, uploadPath: string, name: st
     metadata: { productionMethod: session.productionMethod, sceneFilename, editedInEditor: true },
   })
   useSeriesStore.getState().acceptAssetImport(session.workspace, result)
-  setShotEditSession(null)
 }
 
 /** Save and export the open 2D scene (as the server-side batch does), then make the video the shot's new take. */

@@ -82,3 +82,88 @@ test('an unmount flush bound to another workspace is rejected before posting', a
   await useSeriesStore.getState().saveReview('ep1', { mode: 'plan' })
   assert.equal(fetch.mock.callCount(), 1, 'a rejected queue entry does not block the next save')
 })
+
+test('shot edits and reviews share one queue before either request starts', async t => {
+  reset()
+  const pending: Array<(value: Response) => void> = []
+  t.mock.method(globalThis, 'fetch', () => new Promise<Response>(resolve => pending.push(resolve)))
+  const review = useSeriesStore.getState().saveReview('ep1', { mode: 'plan' })
+  const edit = useSeriesStore.getState().editShot('ep1', { shot: 's1', changes: { duration: 4 } })
+  await tick()
+  const concurrent = pending.length
+  pending[0](reply(8))
+  pending[1]?.(jsonResponse({ revision: 9 }))
+  await review
+  await tick()
+  pending[1](jsonResponse({ revision: 9 }))
+  await edit
+  assert.equal(concurrent, 1)
+  assert.equal(useSeriesStore.getState().serverRevision, 9)
+})
+
+test('a late shot edit cannot downgrade revisions or enter another workspace', async t => {
+  reset()
+  let resolve!: (value: Response) => void
+  t.mock.method(globalThis, 'fetch', () => new Promise<Response>(done => { resolve = done }))
+  const saving = useSeriesStore.getState().editShot('ep1', { shot: 's1', changes: { duration: 4 } })
+  await tick()
+  const library = useSeriesStore.getState().library
+  useSeriesStore.setState({ serverRevision: 10, library: { ...library, seriesById: { 'mp-es': { ...library.seriesById['mp-es'], revision: 10 } } } })
+  resolve(jsonResponse({ revision: 8 }))
+  await saving
+  assert.equal(useSeriesStore.getState().serverRevision, 10)
+  const old = useSeriesStore.getState().editShot('ep1', { shot: 's1', changes: { duration: 5 } })
+  await tick()
+  useSeriesStore.setState({ workspace: 'two' })
+  resolve(jsonResponse({ revision: 11 }))
+  await old
+  assert.equal(useSeriesStore.getState().serverRevision, 10)
+})
+
+test('episode replies and project refreshes keep drafts and reject stale scopes', () => {
+  for (const change of ['workspace', 'project', 'dirty', 'revision'] as const) {
+    reset()
+    const snapshot = useSeriesStore.getState().library.seriesById['mp-es']
+    const scope = { workspace: 'one', seriesId: snapshot.id, snapshot }
+    const incoming = { ...snapshot.episodesById.ep1, title: 'Remote episode' }
+    if (change === 'workspace') useSeriesStore.setState({ workspace: 'two' })
+    if (change === 'project') useSeriesStore.setState({ activeSeriesId: 'other' })
+    if (change === 'dirty') useSeriesStore.setState({ dirty: true })
+    if (change === 'revision') useSeriesStore.setState({ serverRevision: 10, library: { ...useSeriesStore.getState().library,
+      seriesById: { 'mp-es': { ...snapshot, revision: 10 } } } })
+    const before = useSeriesStore.getState().library.seriesById['mp-es']
+    useSeriesStore.getState().acceptEpisode(snapshot.id, incoming, 8, scope)
+    useSeriesStore.getState().adoptRemoteSeries({ ...snapshot, revision: 8, title: 'Remote project' }, scope)
+    assert.equal(useSeriesStore.getState().library.seriesById['mp-es'], before, change)
+    assert.equal(useSeriesStore.getState().dirty, change === 'dirty')
+  }
+})
+
+test('a queued shot edit stays bound to its original workspace and does not post after switching', async t => {
+  reset()
+  let resolve!: (value: Response) => void
+  const fetch = t.mock.method(globalThis, 'fetch', () => new Promise<Response>(done => { resolve = done }))
+  const first = useSeriesStore.getState().saveReview('ep1', { mode: 'plan' })
+  const second = useSeriesStore.getState().editShot('ep1', { shot: 's1', changes: { duration: 4 } })
+  const rejected = assert.rejects(second, /changed/)
+  await tick()
+  useSeriesStore.setState({ workspace: 'two' })
+  resolve(reply(8))
+  await first
+  await rejected
+  assert.equal(fetch.mock.callCount(), 1)
+})
+
+test('an unchanged snapshot accepts the take approval and subsequent project refresh', () => {
+  reset()
+  const snapshot = useSeriesStore.getState().library.seriesById['mp-es']
+  useSeriesStore.getState().acceptEpisode(snapshot.id, { ...snapshot.episodesById.ep1, title: 'Approved take' }, 8,
+    { workspace: 'one', seriesId: snapshot.id, snapshot })
+  const accepted = useSeriesStore.getState().library.seriesById[snapshot.id]
+  assert.equal(accepted.episodesById.ep1.title, 'Approved take')
+  assert.equal(useSeriesStore.getState().serverRevision, 8)
+  useSeriesStore.getState().adoptRemoteSeries({ ...accepted, title: 'Refreshed', revision: 9 },
+    { workspace: 'one', seriesId: snapshot.id, snapshot: accepted })
+  assert.equal(useSeriesStore.getState().library.seriesById[snapshot.id].title, 'Refreshed')
+  assert.equal(useSeriesStore.getState().serverRevision, 9)
+})

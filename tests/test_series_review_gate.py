@@ -149,7 +149,8 @@ def test_a_render_with_nothing_approved_says_it_waits_for_the_review(tmp_path):
 def test_a_3d_preview_is_exported_at_draft_quality(tmp_path, monkeypatch):
     from services import series_shot3d
     calls = []
-    monkeypatch.setattr(series_shot3d, "build_scene", lambda *args, **kwargs: {"revision": 3, "document": {}, "file": "x.world3d.scene.json"})
+    monkeypatch.setattr(series_shot3d, "build_scene", lambda *args, **kwargs: {
+        "revision": 3, "document": {}, "file": "x.world3d.scene.json", "renderDigest": "scene-inputs"})
     render = _render(tmp_path, lambda tool, arguments: calls.append((tool, arguments)) or {"result": {}}, library())
     shot = {"id": "s09", "order": 9, "sceneId": "scene_1", "productionMethod": "animation_3d", "dialogueBeats": [],
             "durationSeconds": 4, "scene3d": {"template": "deck", "quality": "final"}}

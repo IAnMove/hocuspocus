@@ -418,6 +418,29 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "in the series language (series.episode.render_native, approve default true); produce true runs "
         "series.episode.produce (renders what changed in every language and recuts). Returns the shot as series.shot.get.",
     ),
+    "series.shot.voices": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT, "language": LANGUAGE},
+        ["workspace", "series_id", "episode_id", "shot"], False,
+        "List each line of one shot with its recording, the file the next render reuses (ln-*.wav, named by the text and "
+        "the voice): recorded, filename, url, room, and newerThanTake when it was recorded after the shot's latest take "
+        "(render the shot again to hear it). A line without a voice for the language says why.",
+    ),
+    "series.shot.voice": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT,
+         "line": {"anyOf": [{"type": "string", "minLength": 1, "maxLength": 160}, {"type": "integer", "minimum": 1, "maximum": 99}]},
+         "retake": {"type": "boolean"}, "language": LANGUAGE},
+        ["workspace", "series_id", "episode_id", "shot", "line"], True,
+        "Record one line's voice now, by its beat id or its number in the shot (1 = the first), with the render's own path "
+        "(the character's voice for the language, silence trimmed, qa.speech, mouth cues). A line already recorded with "
+        "this text and voice is kept unless retake is true: then another take with another seed replaces it once it is "
+        "good (a failed retake keeps the old one). The shot's take is not touched: render the shot (series.shot.update "
+        "render) to hear it. Refused while the episode renders on the server. Returns a job: poll series.shot.voice.status.",
+    ),
+    "series.shot.voice.status": (
+        {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
+        "Read a line recording job of series.shot.voice: queued, running, completed (result: filename, url, duration, wer) "
+        "or failed (error).",
+    ),
 }
 
 
@@ -808,6 +831,20 @@ def _shot_update(data: dict[str, Any], request: Callable[..., Any], **_extra: An
     return request("POST", f"{_shot_path(data)}/edit", body=body)
 
 
+def _shot_voices(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    query = {"workspace": data["workspace"], **({"language": data["language"]} if data.get("language") else {})}
+    return request("GET", f"{_shot_path(data)}/{_quote(data['shot'])}/voices", query=query)
+
+
+def _shot_voice(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {key: data[key] for key in ("workspace", "line", "retake", "language") if key in data}
+    return {"job": request("POST", f"{_shot_path(data)}/{_quote(data['shot'])}/voices", body=body)}
+
+
+def _shot_voice_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return {"job": request("GET", f"/api/v1/series/voice-jobs/{_quote(data['job_id'])}", query={"workspace": data["workspace"]})}
+
+
 def _assembly_status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     job = request("GET", f"/api/v1/series/assembly/jobs/{_quote(data['job_id'])}", query={"workspace": data["workspace"]})
     return {"job": job}
@@ -853,6 +890,9 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.assembly.status": _assembly_status,
     "series.shot.get": _shot_get,
     "series.shot.update": _shot_update,
+    "series.shot.voices": _shot_voices,
+    "series.shot.voice": _shot_voice,
+    "series.shot.voice.status": _shot_voice_status,
 }
 
 

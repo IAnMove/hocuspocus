@@ -68,11 +68,12 @@ def test_editing_a_3d_source_invalidates_the_take_and_renders_its_current_inputs
 
 def test_saved_scene_registration_and_instantiation_intents_follow_the_document(tmp_path):
     document = {"version": 1, "slots": [], "duration": 2}
-    intents, registered = {}, []
+    intents, registered, reads = {}, [], []
     tools = RenderTools(tmp_path)
 
     def call(name, arguments):
         if name == "scenes.document.get":
+            reads.append(arguments)
             return {"result": {"document": copy.deepcopy(document)}}
         if name == "world3d.templates.user.put":
             intent, payload = arguments["intent_id"], arguments["input"]
@@ -86,5 +87,33 @@ def test_saved_scene_registration_and_instantiation_intents_follow_the_document(
         document["duration"] = duration
         series_shot3d.build_scene(call, "cast", "same-job", shot, [], 2, {}, {}, NativeRenderError)
     assert registered[0] != registered[1] == registered[2]
+    assert len(reads) == 3, "each render resolves its template once and passes it to the shared editor helper"
     instantiate = [args["intent_id"] for name, args in tools.calls if name == "world3d.scene.instantiate"]
     assert instantiate[0] != instantiate[1] == instantiate[2], "resume replays only the same source revision"
+
+
+@pytest.mark.parametrize("source", ["scene", "template"])
+def test_opening_the_editor_follows_source_edits_and_reads_a_saved_scene_once(tmp_path, source):
+    from services.series_shot3d_editor import editor_scene
+    from tests.test_series_shot3d_editor import World3D
+
+    document = {"version": 1, "duration": 2, "slots": []}
+    tools, reads = World3D(), []
+
+    def call(name, arguments):
+        if name == "scenes.document.get":
+            reads.append(arguments)
+            return {"result": {"document": copy.deepcopy(document)}}
+        if name == "world3d.templates.user.put":
+            return {"result": {"template": {"id": arguments["input"]["id"]}}}
+        return tools(name, arguments)
+
+    shot = {"id": "s", "productionMethod": "animation_3d", "durationSeconds": 2,
+            "scene3d": {source: "set.world3d.scene.json" if source == "scene" else "user-set"}}
+    for duration in (2, 3, 3):
+        document["duration"] = duration
+        _save_source(tmp_path, source, document)
+        editor_scene(call, "cast", str(tmp_path), {}, {"id": "ep", "shots": [shot]}, shot)
+    intents = [args["intent_id"] for name, args in tools.calls if name == "world3d.scene.instantiate"]
+    assert intents[0] != intents[1] == intents[2], "the editor must not replay an older source revision"
+    assert len(reads) == (3 if source == "scene" else 0)

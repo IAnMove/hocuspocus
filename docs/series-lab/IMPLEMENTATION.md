@@ -43,6 +43,7 @@ The `/api/v1/series` resource (routes in `tests/fixtures/route_table.json`) incl
 - **produce** (`POST .../episodes/{episode_id}/produce`; jobs under `/series/produce/jobs/{job_id}` with status/cancel/resume): render the original and every language version with automatic approval, retry failed shots once, then assemble each language;
 - **3D location plates** (`POST`/`GET .../locations/{location_id}/plate3d`): a Video 3D scene rendered once as the silent looping background of a location; 2D shots in that location use it;
 - **staged review** (`GET`/`POST .../episodes/{episode_id}/review`): the episode's production mode and each shot's plan and preview decision and notes (see below);
+- **one shot** (`GET .../episodes/{episode_id}/shots/{shot}` and `POST .../shots/edit`, by id or number; `stored: true` also returns the stored shot, the episode's review and language versions for Series Lab to merge); **its lines' voices** (`GET`/`POST .../shots/{shot}/voices`, jobs at `GET /series/voice-jobs/{job_id}`): each line's recording and one line recorded (or retaken) now with the render's speech path; **its 3D scene in the editor** (`POST .../shots/{shot}/scene3d/editor` returns the shot's working scene before anyone talks, `POST .../scene3d/from-editor` saves the edited scene and returns the shot's new `scene3d`); and the workspace files a shot can name (`GET .../{series_id}/shot-files?kind=audio|image|video|model`);
 - asset import (`POST .../assets/import`, also `asTake` for finished shot videos), selected CanonDelta commit, and the guides `GET /api/v1/series-agent/guide` (working guide) and `GET .../{series_id}/guide` (guide plus the live series bible).
 
 All mutating requests carry a workspace in their JSON body, or a workspace query parameter for DELETE. Generated video metadata records the exact effective prompt, negative prompt, H3 model, seed, settings/frame count, reference manifest, request hash, job ID, creation/submission/completion timestamps and elapsed milliseconds.
@@ -65,9 +66,46 @@ The same operations are published as `series.*` tools on `/api/v1/mcp` and on th
 | `series.assembly.start`, `series.assembly.status` | Cut the approved takes of a language into a chapter with subtitles and read the job. |
 | `series.episode.produce` (+ `.status`, `.cancel`, `.resume`) | Render and cut an episode in one call: every language, automatic approval, one retry per failed shot, burned-in subtitles unless disabled; `chapters` lists the files. |
 | `series.episode.review.get`, `series.episode.review.set`, `series.shot.review.set` | Read an episode's staged review (mode, steps left, every shot's decisions and notes) and set the mode, decide shots or answer a note (`by: agent`); the setters take an envelope `intent_id`. |
+| `series.shot.get`, `series.shot.update` | Read and edit one shot by id or its number in the episode, in the script vocabulary; only what changed is written and a take that no longer fits loses its approval. |
+| `series.shot.voices`, `series.shot.voice` (+ `.status`) | List each line of a shot with the recording the next render reuses, and record one line now (or `retake` it) as a job; the take is untouched until the shot renders again. |
 | `series.location.plate3d` (+ `.status`) | Render a Video 3D scene or document as the looping plate of a location; when the export is ready it becomes the location video. |
 
 The same module publishes the character tools the profile also serves (`characters.list`, `characters.get`, `characters.save`, `characters.styles`, `characters.rig.flat`), next to `qa.speech` and `studio.key` from the shared catalog; `tests/test_series_commands.py` and `tests/test_local_mcp.py` keep the HTTP and MCP surfaces aligned.
+
+## Shot inspector
+
+**5 · Validation** shows every shot of the episode as a tile, grouped by scene: the latest take's thumbnail, or the
+shot's plan sketched from its location background and the cast's pose drawings (`planBackground`, `planCast` in
+`ui/src/features/series/inspector/model.ts`), with its number, length, method, review state, a quick approve and
+**Open**. The opened shot (`inspector/SeriesShotInspector.tsx`) reads the shot as `series.shot.get` returns it and
+shows its take (switch takes, scrub), its review and notes, and one **Re-render this shot** that says what the render
+regenerates: the lines without a recording for their text and voice, the 2D or 3D scene and the take, the foley. A
+generated or imported take is not rendered: its cut sound is laid at the assembly. Every part of the shot is a
+section with **Edit** (`inspector/*Part.tsx`):
+
+| Part | Edits (script keys) | Also |
+| --- | --- | --- |
+| Characters | `cast` (character, pose, x, scale, motion, entrance); a 3D shot's `scene3d.cast` poses | Open the character's kit on that pose; it returns to the shot. |
+| Dialogue | `lines` (speaker, text in every language, emotion, delivery, pause, room) | Play each line (and its room copy); record it or a new take alone (`.../voices`). |
+| Location and set | `location`, `variant`, `layers` (own list, `[]` turns the location's off), `castDepth` | Pick the location's background among its images or generate one (location-wide). |
+| Props, screen effects, sound effects | `props`, `fx`, `sfx` (at a second, on a line's start or end, on an entrance; `in`/`length`) | Sound effects play here. |
+| Music and foley | `music`, `foley`, `voiceRoom` | The episode score cue and the location ambience it plays under. |
+| Framing and timing, card | `framing`, `camera`, `timing`, `duration`; `card` | |
+| 3D scene | `scene3d` quality, look, objects (position, rotation, scale, clips, hold, motion, appearance) | **Edit in Video 3D**: see below. |
+| Video take | `clipAudio`, `clipVolume`, `clipFit` | The source clip's prompt, start frame and seed (its sidecar); another clip as a new take. |
+| Takes | | Use a take; open the Video 2D/3D scene it was made from (exported back as a new take). |
+
+A section keeps its draft in session storage (`inspector/inspectorStore.ts`) until **Save** sends only what changed
+through `series.shot.update` (`store.editShot`, which merges the stored shot, review and versions without reloading
+the library); so a trip to an editor and back keeps it, and the tile says the shot has unsaved edits. **Edit in Video
+3D** (`inspector/scene3dPlan.ts`) opens the shot's working scene (`series_shot3d.open_shot_scene`: template or saved
+scene, length, look, sound, screen effects and objects) in the Video 3D editor; **Save to the shot** in the editor
+banner saves the scene as a `.world3d.scene.json` without the shot's own `shot-*` effects and `scene-*` sound, makes
+it the shot's `scene3d.scene` and refreshes its objects from the editor (an object deleted there leaves the list; a
+speaking cast member's object must stay), then writes it with the shot edit and returns to the shot. One line's voice
+(`services/series_line_voice.py`) is recorded with `SeriesNativeRender.record_line`, the render's own path, as
+`ln-<episode>-<beat>-<key>.wav`; a retake records under another name (another seed) and replaces the recording only
+when it is good. Nothing records while the episode renders on the server.
 
 ## Staged review (production modes)
 

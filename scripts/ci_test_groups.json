@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 (2026-10-07): 5985 tests across 480 files; python-a 2985 tests/240 files in 36.71s, python-b 3000 tests/240 files in 33.35s (groups collected concurrently). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 (2026-10-07): 6005 tests across 482 files; python-a 3002 tests/242 files in 15.76s, python-b 3003 tests/240 files in 15.04s (groups collected concurrently). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2985,
+      "weight": 3002,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -250,14 +250,16 @@
         "tests/test_verify_clean_repo.py",
         "tests/test_series_review.py",
         "tests/test_series_review_router.py",
-        "tests/test_recoverability_last.py"
+        "tests/test_recoverability_last.py",
+        "tests/test_series_line_voice.py",
+        "tests/test_series_shot3d_editor.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 3000,
+      "weight": 3003,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -544,6 +546,18 @@
       "paths": ["tests/test_series_shot_foley.py", "tests/test_series_take_sound.py", "tests/test_series_video_produce.py"]
     },
     {
+      "prefix": "app/services/flat_rig_eyes.py",
+      "paths": ["tests/test_flat_rig.py", "tests/test_flat_rig_realistic.py", "tests/test_flat_rig_guided.py", "tests/test_flat_rig_small.py", "tests/test_flat_rig_warp.py"]
+    },
+    {
+      "prefix": "app/services/series_canon_snapshot.py",
+      "paths": ["tests/test_series_library.py", "tests/test_series_production.py"]
+    },
+    {
+      "prefix": "app/services/world3d_frame_encoder.py",
+      "paths": ["tests/test_world3d_export.py", "tests/test_export_output_name.py", "tests/test_scene2d_export.py"]
+    },
+    {
       "prefix": "app/services/series_scene_inputs.py",
       "paths": ["tests/test_series_scene_inputs.py", "tests/test_series_native_render.py"]
     },
@@ -570,6 +584,18 @@
     {
       "prefix": "app/routers/series_shot_edit.py",
       "paths": ["tests/test_series_shot_edit.py"]
+    },
+    {
+      "prefix": "app/services/series_line_voice.py",
+      "paths": ["tests/test_series_line_voice.py"]
+    },
+    {
+      "prefix": "app/services/series_shot3d_editor.py",
+      "paths": ["tests/test_series_shot3d_editor.py"]
+    },
+    {
+      "prefix": "app/routers/series_shot_inspector.py",
+      "paths": ["tests/test_series_line_voice.py", "tests/test_series_shot3d_editor.py"]
     },
     {
       "prefix": "app/services/studio_key_clean.py",
@@ -859,7 +885,8 @@
       "paths": [
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
-        "tests/test_series_native_render.py"
+        "tests/test_series_native_render.py",
+        "tests/test_series_shot3d_editor.py"
       ]
     },
     {
@@ -910,7 +937,8 @@
     {
       "prefix": "app/services/series_commands.py",
       "paths": [
-        "tests/test_series_commands.py"
+        "tests/test_series_commands.py",
+        "tests/test_series_line_voice.py"
       ]
     },
     {

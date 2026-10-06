@@ -6,7 +6,8 @@ import { useSeriesStore } from './store'
 import { seriesCharacterKit } from './seriesCharacterKit'
 import i18n from '../../i18n'
 
-type Source = { workspace: string; seriesId: string; characterId: string; episodeId: string }
+/** Where the editor was opened from; `shotId`: a shot open in the Validation tab's inspector, where it returns. */
+type Source = { workspace: string; seriesId: string; characterId: string; episodeId: string; shotId?: string }
 export const useSeriesCharacterReturn = create<{ source: Source | null }>(() => ({ source: null }))
 
 function sourceCharacter(source: Source) {
@@ -27,8 +28,8 @@ function kitPose(kit: ReturnType<typeof seriesCharacterKit>, poseId?: string) {
 
 /** Open a series character's Character Kit in the Characters tool; with `poseId` its speech workshop opens on that pose's
  * mouth / face rig (the pose a shot uses). */
-export async function openSeriesCharacterEditor(workspace: string, seriesId: string, characterId: string, options: { poseId?: string } = {}) {
-  const source = { workspace, seriesId, characterId, episodeId: useSeriesStore.getState().activeEpisodeId }
+export async function openSeriesCharacterEditor(workspace: string, seriesId: string, characterId: string, options: { poseId?: string; shotId?: string } = {}) {
+  const source: Source = { workspace, seriesId, characterId, episodeId: useSeriesStore.getState().activeEpisodeId, ...(options.shotId ? { shotId: options.shotId } : {}) }
   sourceCharacter(source)
   await useSeriesStore.getState().saveNow()
   const library = await fetchCharacterKitLibrary(workspace)
