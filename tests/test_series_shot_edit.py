@@ -221,3 +221,19 @@ def test_a_missing_version_voice_blocks_new_lines_but_not_an_effect():
     with pytest.raises(ShotEditError) as voiceless:
         edit_with(changes={"lines": [{"who": "gary", "es": "Hola.", "en": "Hi."}]})
     assert any("gary has no english voice" in item for item in voiceless.value.problems)
+
+
+def test_series_lab_asks_for_the_stored_shot_to_merge_the_edit_into_its_open_copy(tmp_path):
+    """The shot inspector saves a section with stored: true and merges the shot, the review and the versions it gets back."""
+    store = Library()
+    post = _router(tmp_path, store)[("/api/v1/series/{series_id}/episodes/{episode_id}/shots/edit", "POST")]
+    plain = asyncio.run(post("uv", "ep2", ShotEdit(workspace="cast", shot=2, changes={"camera": "static"})))
+    assert "stored" not in plain, "an agent's reply stays compact"
+    reply = asyncio.run(post("uv", "ep2", ShotEdit(workspace="cast", shot=2, stored=True, changes={"lines": [
+        {"who": "kevin", "spanish": "¿Y el sombrero?", "english": "And the hat?"}]})))
+    stored = reply["stored"]
+    assert stored["episodeId"] == "ep2" and stored["shot"]["id"] == "e2s01"
+    assert [beat["text"] for beat in stored["shot"]["dialogueBeats"]] == ["¿Y el sombrero?"]
+    assert stored["languageVersions"]["english"]["dialogue"]["e2s01_b0"] == "And the hat?"
+    assert stored["shot"] == next(item for item in store.series["episodesById"]["ep2"]["shots"] if item["id"] == "e2s01")
+    assert reply["revision"] == store.series["revision"]

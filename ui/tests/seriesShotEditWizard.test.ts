@@ -80,3 +80,35 @@ test('an exact edit is sent as changes and rendering again is a separate confirm
   }
   assert.match(shotEditMessage({ shotId: 'e1s09', number: 10, note: 'laid at the cut' }), /Plano 10 \(e1s09\): laid at the cut/)
 })
+
+test('"vuelve a grabar la segunda línea del plano 12" records that line through the shot voice route and waits for it', async () => {
+  assert.equal(AGENT_ACTION_TYPES.includes('regenerate_series_line_voice'), true)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /regenerate_series_line_voice/)
+  const capability = getCapability('regenerate_series_line_voice')!
+  assert.equal(capability.risk, 'compute')
+  assert.equal(capability.resolve({ type: 'regenerate_series_line_voice', shot_number: 12, line_number: 2 }), null, 'needs confirm')
+  assert.equal(capability.resolve({ type: 'regenerate_series_line_voice', shot_number: 12, line_number: 0, confirm: true }), null, 'needs a line')
+  const action = capability.resolve({ type: 'regenerate_series_line_voice', shot_number: 12, line_number: 2, retake: true, confirm: true })
+  assert.deepEqual(action, { type: 'regenerate_series_line_voice', seriesId: '', episodeId: '', shot: 12, line: 2, retake: true, confirm: true })
+  const calls: Call[] = []
+  const previousFetch = globalThis.fetch
+  useSeriesStore.setState({ workspace: 'show', activeSeriesId: 'pu', activeEpisodeId: 'ep1', saveNow: async () => null, reload: async () => undefined })
+  let polls = 0
+  Object.assign(globalThis, { fetch: async (url: string, init?: { body?: string }) => {
+    calls.push({ url, body: JSON.parse(init?.body || '{}') })
+    if (url.endsWith('/voices')) return { ok: true, json: async () => ({ jobId: 'voice-1', status: 'queued', beatId: 'e1s11_b1' }) }
+    polls += 1
+    return { ok: true, json: async () => ({ jobId: 'voice-1', status: polls > 1 ? 'completed' : 'running', result: { filename: 'ln-ep1-e1s11_b1-abc.wav' } }) }
+  } })
+  try {
+    const { executeSeriesLineVoice } = await import('../src/features/agent/seriesShotEditCapabilities.ts')
+    const outcome = await executeSeriesLineVoice(action as never, 'show', async () => {})
+    assert.equal(calls[0].url, '/api/v1/series/pu/episodes/ep1/shots/12/voices')
+    assert.deepEqual(calls[0].body, { workspace: 'show', line: 2, retake: true })
+    assert.equal(calls[1].url, '/api/v1/series/voice-jobs/voice-1?workspace=show')
+    assert.match(outcome.message, /Línea 2 del plano 12: otra toma grabada \(ln-ep1-e1s11_b1-abc\.wav\)\. La toma del plano aún no la tiene/)
+    assert.equal(outcome.jobId, 'voice-1')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})

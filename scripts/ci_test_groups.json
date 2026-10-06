@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 2763,
+      "weight": 2775,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -254,7 +254,9 @@
         "tests/test_game_prompts.py",
         "tests/test_game_pixel.py",
         "tests/test_game_image_ops.py",
-        "tests/test_game_tiles.py"
+        "tests/test_game_tiles.py",
+        "tests/test_series_line_voice.py",
+        "tests/test_series_shot3d_editor.py"
       ]
     },
     {
@@ -567,6 +569,18 @@
       "paths": ["tests/test_series_shot_edit.py"]
     },
     {
+      "prefix": "app/services/series_line_voice.py",
+      "paths": ["tests/test_series_line_voice.py"]
+    },
+    {
+      "prefix": "app/services/series_shot3d_editor.py",
+      "paths": ["tests/test_series_shot3d_editor.py"]
+    },
+    {
+      "prefix": "app/routers/series_shot_inspector.py",
+      "paths": ["tests/test_series_line_voice.py", "tests/test_series_shot3d_editor.py"]
+    },
+    {
       "prefix": "app/services/studio_key_clean.py",
       "paths": ["tests/test_studio_key.py", "tests/test_production_media_agent_trail.py"]
     },
@@ -854,7 +868,8 @@
       "paths": [
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
-        "tests/test_series_native_render.py"
+        "tests/test_series_native_render.py",
+        "tests/test_series_shot3d_editor.py"
       ]
     },
     {
@@ -905,7 +920,8 @@
     {
       "prefix": "app/services/series_commands.py",
       "paths": [
-        "tests/test_series_commands.py"
+        "tests/test_series_commands.py",
+        "tests/test_series_line_voice.py"
       ]
     },
     {

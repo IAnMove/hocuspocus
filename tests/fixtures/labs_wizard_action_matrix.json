@@ -84,7 +84,8 @@
       "commit_series_canon",
       "stage_series_comic",
       "edit_series_shot",
-      "rerender_series_shot"
+      "rerender_series_shot",
+      "regenerate_series_line_voice"
     ],
     "blocked": [],
     "availability": {
@@ -3391,6 +3392,32 @@
       "presentation": "series_lab",
       "test": "ui/tests/seriesShotEditWizard.test.ts",
       "notes": "The instruction goes to the server, whose LLM writes changes/append against the real shot, cast, poses, files and effects; the edit is checked like a from_script shot. It does not render.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
+    },
+    {
+      "id": "series.shots.record_line_voice",
+      "lab": "series",
+      "surface": "shots",
+      "user_operation": "Record one line of a shot again (\"vuelve a grabar la segunda línea del plano 12\")",
+      "control": "Series Lab › Validation › shot inspector › Dialogue (Record voice / New take); Ask to the Wizard; MCP series.shot.voice",
+      "ui_handler": "seriesShots.voice",
+      "domain_function": "registerSeriesShotEditCapabilities",
+      "domain_module": "ui/src/features/agent/seriesShotEditCapabilities.ts",
+      "adapter": "seriesShots.voice",
+      "api": "POST /api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}/voices",
+      "wizard_capability": "regenerate_series_line_voice",
+      "wizard_schema": "seriesShotEditCapabilities.regenerate_series_line_voice.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "operativa",
+      "phase": "out_of_scope",
+      "preconditions": "An open (or named) episode; the shot's number (#N) or id and the line's number; the speaker's Character Kit voice; no server render of the episode running",
+      "persistence": "Workspace: the line's recording ln-<episode>-<beat>-<key>.wav (+ sidecar), reused by the next render of the shot; the take is not touched",
+      "presentation": "series_lab",
+      "test": "ui/tests/seriesShotEditWizard.test.ts",
+      "notes": "Same speech path as the server render (voice for the language, trim, qa.speech, mouth cues). retake records another seed and replaces the recording only when it is good. Confirmed (compute).",
       "prompt_fixture": "",
       "blocking_defect": ""
     },
