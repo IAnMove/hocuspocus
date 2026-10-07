@@ -35,7 +35,7 @@ Call `production.plan` with the eight-field brief when you do not already have a
 
 The agent makes these calls for a finished video:
 
-`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. `lyrics` (or `letra`) is required: the plan does not write placeholder lines that a singer would perform (`invalid_brief` without it). An optional `footer` (or `aviso`) is the small print on every scene. Reading rules: an explicit look word beats a subject word ("zine riso sobre Omarchy" is `riso-zine`), `124 BPM` or `110-125 bpm` is the tempo (decades such as `2000s` are not), `1:30`, `90 s` and `2 minutos` are lengths, and accents survive in titles. What the non-sung shots are follows the look: your `stills`, the native desktop for `omarchy-desktop` (nobody sings on screen), otherwise short H3 clips of the protagonist. Then start at step 1.
+`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. `lyrics` (or `letra`) is required: the plan does not write placeholder lines that a singer would perform (`invalid_brief` without it). An optional `footer` (or `aviso`) is the small print on every scene. An optional `idioma` (or `language`) sets `song.language`; without it the plan tells the language from the lyrics, then from the brief's own text (a Spanish brief gives `es`). Reading rules: an explicit look word beats a subject word ("zine riso sobre Omarchy" is `riso-zine`), `124 BPM` or `110-125 bpm` is the tempo (decades such as `2000s` are not), `1:30`, `90 s` and `2 minutos` are lengths, and accents survive in titles. What the non-sung shots are follows the look: your `stills`, the native desktop for `omarchy-desktop` (nobody sings on screen), otherwise short H3 clips of the protagonist. Then start at step 1.
 
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
 2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls. Do not save tokens at the expense of the result: opening `frames_sheet` before the clips and one real-size frame of each sung shot and of the first caption before delivering costs a few thousand tokens, and it is what catches a duplicated character, an unreadable caption or a title that covers the picture. A retake with a stricter action is cheaper than a video that is delivered wrong.
@@ -44,7 +44,7 @@ The agent makes these calls for a finished video:
 
 Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
 
-- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
+- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Without `image_model` they use the run's default (Qwen Image 2.1, at its own steps). Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
 - `{workspace, production_id, spec, through:"frames"}` stops after cast and frames (`status` `frames_ready`). Restart the isolated runtime if a large image model would slow H3, then resume with `production.run` `{workspace, production_id}` and continue at step 2.
 - `{workspace, production_id, spec, through:"animatic"}` builds a CPU preview after those frames: the start frames play as stills with the lyrics, titles and the song (`status` `animatic_ready`). `production.status` reports the preview as `animatic` (not `video`) plus `contact_sheet` and `animatic_warnings` (a title card covering the picture, the same image used twice, a still stretch over 10 seconds, or an unreadable caption). A restart does not treat `animatic_ready` as `running`, so it does not start a GPU run by itself. Resume with `production.run` `{workspace, production_id}` and the run continues at the clips, reuses the frames, and re-exports a scene once its clip is different from the still it previewed.
 
@@ -122,9 +122,9 @@ Use `treatment.moments[].at` with a beat name to say what the reveal or the tens
 
 | Step | Tool it uses | Decision made by code |
 |---|---|---|
-| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
+| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL, or `song.model`) in `song.language` | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
-| cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member, then a plain full-body portrait of that one person |
+| cast | `generation.image` (`style.image_model`, Qwen Image 2.1 by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
 | frames | `generation.image` with that portrait as the reference (the sheet if the portrait failed) | one start frame per `h3` shot |
 | clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
@@ -230,6 +230,13 @@ The four code questions:
 }
 ```
 
+`song.language` is the sung language: a code or a name (`es`, `en`, `Spanish`, `español`, `fr`). Without it the run tells
+Spanish or English from the lyrics, and uses English only when the lyrics cannot tell. The music model gets it as
+`lyrics_language` (ACE-Step also as its `language` setting) and the lyric transcription that picks the best candidate and
+times the captions listens for it (an unknown language is detected by Whisper, not forced to English). Declare it when a
+lyric mixes languages. An unknown name fails with `invalid_spec`. `song.model` picks the music model
+(default `ace_step_v1_5_xl_sft_lm_4b`; `minimax_music3` takes no bpm/key settings, the caption carries them).
+
 `style` may be only a preset. That stands in for the long image, video, finish and lyric block (about 2k tokens when the prompts are written out). `production.run` expands `style.preset` before it checks the spec. The expansion fills `image`, `video`, `finish`, `lyric_template`, `theme` and `image_model`, plus the other style fields from the production that already rendered that look. A key you set next to `preset` replaces that field. Presets live in `app/shared/style_presets.json` and carry no person or project names: put a footer, a name or a lip-sync rule for one production in the spec (for example `footer`).
 
 | preset | look it copies |
@@ -247,9 +254,11 @@ An unknown id fails with code `unknown_style_preset`. The full style block in th
 
 Style fields beyond the example:
 
-- `image_model` (default `flux2_klein_9b`) and `image_params`: model for cast sheets and frames. Flux 2 Klein does not
-  recognise public figures; `qwen_image_21` does (it takes ~40 steps from `app/defaults`; do not run it next to H3 on one GPU:
-  generate all images first). `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
+- `image_model` (default `qwen_image_21`, or `qwen_image_21_gguf_q4_k` on a 10–16 GB card) and `image_params`: model for
+  cast sheets and frames. Qwen takes 40 steps from `app/defaults`. `flux2_klein_9b` stays selectable (4 steps, fast; it does not
+  recognise public figures). A model chosen without `image_steps` runs at its own steps from `app/defaults`, never at the
+  steps a preset set for another model. Do not run Qwen next to H3 on one GPU: `production.run` already makes every cast
+  sheet, portrait and start frame before it submits the first H3 clip. `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
 - `lyric_template`: any text template; the lyric goes in its `caption`/`line` field (`ransom`, `dymo`, `social-caption`, ...).
 - `theme`: an Omarchy colour theme (`tokyo-night`, `catppuccin`, `gruvbox`, `nord`, `rose-pine`, `kanagawa`): lyrics become
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
@@ -273,7 +282,7 @@ Shot fields:
 
 Style fields for native Video 2D finishing:
 
-- `image_model` chooses the Studio image model for cast and frames (default `flux2_klein_9b`; `qwen_image_21` is useful for a recognizable public-person caricature). `image_steps` sets its step count; individual cast members or H3 shots may override either field.
+- `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21`; `flux2_klein_9b` is the fast alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
 - `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate.
 - `lyric_template` may be `ransom` or `dymo` as well as `social-caption`. `title_style` and `lyric_style` are Video 2D text patches, for example `{"font":"mono","color":"#A9B1D6"}`.
 - `footer` adds a persistent small-print line to every scene. `footer_style` can set its color, font and background through the Video 2D text patch fields.

@@ -37,6 +37,7 @@ from services.production_structure import require_direction
 from services.production_quality import expand_quality
 from services.production_review import review_for_status
 from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
+from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps
 from services.production_style_presets import expand_style_preset
 from services.production_commands import extra_catalog, extra_handlers
 from services.production_control import Cancelled, sleep_until
@@ -80,7 +81,8 @@ SPEC_SCHEMA: dict[str, Any] = {
             "lyrics": {"type": "string", "maxLength": 20000}, "caption": {"type": "string", "maxLength": 2000},
             "duration": {"type": "number", "minimum": 10, "maximum": 300}, "bpm": {"type": "integer", "minimum": 60, "maximum": 200},
             "key": {"type": "string"}, "seeds": {"type": "array", "items": {"type": "integer"}, "maxItems": 6},
-            "model": {"type": "string"}, "file": {"type": "string", "description": "Use an existing workspace song instead of generating"}}},
+            "model": {"type": "string"}, "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
+            "language": {"type": "string", "description": "sung language (es, en, Spanish, ...). Default: told from the lyrics, else en"}}},
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                    "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
@@ -129,6 +131,8 @@ def _require_spec_fields(spec: dict) -> None:
         raise ProductionError("invalid_spec", "spec.song needs lyrics, caption, duration and bpm")
     if not isinstance(spec.get("style"), dict):
         raise ProductionError("invalid_spec", "spec.style must be an object")
+    from services.production_song import require_song_language
+    require_song_language(song)
 
 
 def _image_models(spec: dict) -> list:
@@ -386,9 +390,9 @@ class Production:
         return done
 
     def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int,
-              model: str = "flux2_klein_9b", steps: int | None = None, attempt: int = 0) -> str | None:
+              model: str = DEFAULT_IMAGE_MODEL, steps: int | None = None, attempt: int = 0) -> str | None:
         params = {"prompt": prompt, "model_type": model, "resolution": res, "seed": seed, "guidance_scale": 1,
-                  "num_inference_steps": steps or (40 if model.startswith("qwen_image_21") else 4)}
+                  "num_inference_steps": steps or default_image_steps(model)}
         if refs:
             params.update(image_refs=refs, video_prompt_type="I")
         r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}" + (f"-r{attempt}" if attempt else ""),
@@ -563,7 +567,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them) and an optional footer (small print on every scene).",
+        {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them), an optional footer (small print on every scene) and an optional idioma/language (else told from the lyrics; fills song.language).",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
         {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
