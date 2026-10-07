@@ -74,3 +74,18 @@ def test_a_generator_that_cannot_read_the_spec_falls_back(monkeypatch):
     monkeypatch.setitem(REGISTRY, "item", Broken())
     report = estimate(None, game, [{"id": "moneda", "kind": "item", "candidates": "many"}])
     assert report["byKind"]["item"] == round(TRIAL["image"] / 60.0, 3)
+
+
+def test_retro_sfx_costs_no_gpu_step(monkeypatch):
+    from services.game_estimate import steps_for
+
+    class Retro:
+        def estimate(self, _game, _asset):
+            return {}
+
+    retro = {"id": "salto", "kind": "sfx", "spec": {"engine": "retro", "variants": 3}}
+    monkeypatch.setitem(REGISTRY, "sfx", Retro())
+    assert steps_for({}, retro) == {}
+    monkeypatch.delitem(REGISTRY, "sfx")
+    assert steps_for({}, retro) == {}
+    assert steps_for({}, {**retro, "spec": {"engine": "mmaudio", "variants": 3}}) == {"sfx": 3}
