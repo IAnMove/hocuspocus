@@ -549,6 +549,8 @@ def _finish(ctx: GenContext, slot: tuple[str, Path], frames, art: dict, report: 
         "scale": scale,
         "method": "h3" if shared_stage else "strip",
         "frames": len(placed),
+        "fps": _fps(ctx.asset),
+        "loop": _loops(ctx.asset),
     }
     files = write_sheet(ctx, folder, sheet, atlas, placed, _fps(ctx.asset))
     return {"id": attempt_id, "files": files, "metrics": metrics, "warnings": list(warnings)}

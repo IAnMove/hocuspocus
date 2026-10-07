@@ -486,3 +486,19 @@ def test_export_route_refuses_an_empty_pack(tmp_path):
     assert not (tmp_path / "game-exports").exists() or list((tmp_path / "game-exports").iterdir()) == []
     stored = client.get("/api/v1/games/vacio", params={"workspace": "lab"})
     assert stored.json()["exports"] == []
+
+
+def test_animations_keep_their_recorded_fps_loop_and_mirror(tmp_path):
+    _png(tmp_path / "f.png", (1, 2, 3, 255))
+    _game, result = _export(tmp_path, [
+        _asset("walk", "animation", {"frames": ["f.png"]}, spec={"character": "h", "action": "walk"},
+               metrics={"fps": 12, "loop": True}),
+        _asset("wave", "animation", {"frames": ["f.png"]}, spec={"character": "h", "action": "wave", "mirror": False},
+               metrics={"fps": 10, "loop": False}),
+    ])
+    with zipfile.ZipFile(tmp_path / result["file"]) as archive:
+        atlas = json.loads(archive.read("g-r1/characters/h/h.json"))
+    durations = {name.rsplit("_", 1)[0]: frame["duration"] for name, frame in atlas["frames"].items()}
+    assert durations == {"walk": 83, "wave": 100}
+    assert atlas["meta"]["loop"] == {"walk": True, "wave": False}
+    assert atlas["meta"]["mirror"] is False

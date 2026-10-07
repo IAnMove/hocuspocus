@@ -187,7 +187,8 @@ def _pack_anim_sheet(pack: _Pack, game: dict, slug: str, character, anims: list)
     if character is not None:
         owners.append(character)
     cell = uniform_cell(frames, _grid(game.get("style") or {}), 1)
-    mirror = (game.get("view") or "side") != "topdown"
+    # One sheet, one flag: mirror only when every animation on it allows it (spec.mirror defaults to true).
+    mirror = (game.get("view") or "side") != "topdown" and all((item.get("spec") or {}).get("mirror", True) is not False for item in anims)
     _write_sheet(pack, f"characters/{slug}/{slug}.png", pack_rows(rows, cell), owners, mirror=mirror)
 
 
@@ -204,7 +205,7 @@ def _anim_rows(pack: _Pack, anims: list) -> tuple[list, list, list]:
             "name": _unique_tag(asset, used),
             "frames": images,
             "fps": _fps(asset),
-            "loop": bool((asset.get("spec") or {}).get("loop")),
+            "loop": _loop(asset),
         })
         frames.extend(images)
         owners.append(asset)
@@ -264,7 +265,7 @@ def _pack_one_row(pack: _Pack, asset: dict, directory: str, frames: list) -> Non
         "name": name,
         "frames": frames,
         "fps": _fps(asset),
-        "loop": bool((asset.get("spec") or {}).get("loop")),
+        "loop": _loop(asset),
     }], uniform_cell(frames, 1, 1))
     _write_sheet(pack, f"{directory}/{name}.png", packed, [asset], mirror=False)
 
@@ -683,11 +684,20 @@ def _action_rank(asset: dict, order: list[str]) -> tuple:
 
 
 def _fps(asset: dict) -> float:
-    try:
-        rate = float((asset.get("spec") or {}).get("fps") or 8)
-    except (TypeError, ValueError):
-        return 8.0
-    return rate if rate > 0 else 8.0
+    """``spec.fps``, else the rate the generator recorded on the approved attempt, else 8."""
+    for source in ((asset.get("spec") or {}), _metrics(asset)):
+        try:
+            rate = float(source.get("fps") or 0)
+        except (TypeError, ValueError):
+            rate = 0.0
+        if rate > 0:
+            return rate
+    return 8.0
+
+
+def _loop(asset: dict) -> bool:
+    spec = asset.get("spec") or {}
+    return bool(spec["loop"]) if "loop" in spec else bool(_metrics(asset).get("loop"))
 
 
 def _grid(style: dict) -> int:
