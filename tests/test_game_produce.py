@@ -562,3 +562,19 @@ def test_from_list_check_reports_a_bad_json_spec_instead_of_failing(tmp_path):
     assert [(item["line"], item["code"]) for item in response.json()["problems"]] == [
         (1, "invalid_spec"), (2, "invalid_spec"), (3, "invalid_spec"),
     ]
+
+
+def test_replace_with_a_list_of_only_comments_keeps_every_asset(tmp_path):
+    library, _game = create_game({}, {"id": "bosque", "title": "Bosque"}, now=NOW)
+    write_library(tmp_path, library, now=NOW)
+    _service_unused, client = _client(tmp_path)
+    kept = client.post("/api/v1/games/bosque/assets/from-list", json={"workspace": "lab", "text": EXAMPLE_LIST})
+    assert kept.status_code == 200
+    before = len(kept.json()["assets"])
+    response = client.post("/api/v1/games/bosque/assets/from-list", json={
+        "workspace": "lab", "text": "# nothing yet\n", "replace": True,
+    })
+    assert response.status_code == 422
+    assert "empty_list" in response.text
+    from services.game_library import read_library
+    assert len(read_library(tmp_path)["games"][0]["assets"]) == before
