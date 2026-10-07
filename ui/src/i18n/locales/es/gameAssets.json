@@ -327,5 +327,16 @@
     "invalid_json": "El JSON tiene que ser una lista de recursos.",
     "missing_kit": "Falta el kit del personaje.",
     "editor_busy": "Termina o guarda primero el personaje que está abierto en el Creador de personajes."
-  }
+  },
+  "example": "Ejemplo",
+  "warnLoopSeam": "La costura del bucle se oye.",
+  "warnDuplicate": "Se parece a un duplicado de {{id}}.",
+  "playMissing": "Falta en la prueba",
+  "mute": "Silencio",
+  "unmute": "Con sonido",
+  "exportApproved": "Aprobados",
+  "exportMissing": "Sin aprobar",
+  "exportPack": "Exportar",
+  "exportHistory": "Historial de exportación",
+  "exportEmpty": "Todavía no hay exportaciones."
 }

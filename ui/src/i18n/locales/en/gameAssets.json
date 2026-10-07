@@ -327,5 +327,16 @@
     "invalid_json": "The JSON must be a list of assets.",
     "missing_kit": "The character kit is missing.",
     "editor_busy": "Finish or save the character that is open in the Character Creator first."
-  }
+  },
+  "example": "Example",
+  "warnLoopSeam": "The loop seam is audible.",
+  "warnDuplicate": "Looks like a duplicate of {{id}}.",
+  "playMissing": "Missing from the playtest",
+  "mute": "Mute",
+  "unmute": "Unmute",
+  "exportApproved": "Approved",
+  "exportMissing": "Not approved",
+  "exportPack": "Export",
+  "exportHistory": "Export history",
+  "exportEmpty": "No exports yet."
 }

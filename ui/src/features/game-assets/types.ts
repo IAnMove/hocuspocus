@@ -170,4 +170,4 @@ export interface ExportResult {
 }
 
 export const GAME_SECTIONS: GameSection[] = ['setup', 'style', 'cast', 'list', 'produce', 'review', 'play', 'export']
-export const LATER_SECTIONS: GameSection[] = ['play', 'export']
+export const LATER_SECTIONS: GameSection[] = []

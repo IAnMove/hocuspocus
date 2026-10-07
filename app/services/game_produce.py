@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from services.game_estimate import record_run
+from services.game_qa import note_style
 from services.game_generators import REGISTRY
 from services.game_generators.base import GenContext
 from services.game_inputs import asset_inputs
@@ -341,8 +342,10 @@ class GameProduce:
         provenance = result.provenance if isinstance(getattr(result, "provenance", None), dict) else {"steps": []}
         common = list(getattr(result, "warnings", None) or [])
         shared = {"provenance": provenance, "inputs": asset_inputs(game, asset)}
+        root = self.deps.workspace_dir(job["workspace"])
         for attempt_id, files, metrics, own in _candidates(result, step["attemptId"]):
             warnings = [*_for_candidate(common, attempt_id), *own]
+            metrics, warnings = self._style_note(job, root, game, asset, files, metrics, warnings)
             attempt = {"id": attempt_id, "status": "ok", "createdAt": iso_now(), "files": files, "metrics": metrics, "warnings": warnings, **shared}
             self.deps.write_attempt(job["workspace"], job["gameId"], asset["id"], attempt, "review")
         step.update(status="done", error=None, reason=None)
@@ -353,6 +356,13 @@ class GameProduce:
         except OSError as error:
             step["archiveWarning"] = str(error)[:300]
             self._save(job)
+
+    def _style_note(self, job: dict, root: str, game: dict, asset: dict, files: dict, metrics: dict, warnings: list):
+        """Score one candidate against the style. A failed check never loses the candidate."""
+        try:
+            return note_style(self.deps.loopback, root, job["workspace"], game, asset, files, metrics, warnings)
+        except Exception as error:  # vision is advisory; the attempt is still saved for review
+            return metrics, [*warnings, {"code": "style_check_failed", "message": _error_text(error)}]
 
     def _abandon(self, job: dict, step: dict, error: Exception) -> None:
         """The attempt could not be stored. The step fails and the batch goes on."""
