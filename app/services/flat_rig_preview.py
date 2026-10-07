@@ -67,7 +67,8 @@ def _hint(kit: dict[str, Any], pose: str, mouth: Any, width: Any) -> dict[str, A
     asked = {key: value for key, value in (("mouth", mouth), ("mouthWidth", width)) if value is not None}
     if not asked:
         return saved or None
-    return {**saved, **(rig_hints({pose: asked})[pose] or {})}
+    # The editor's point is placed by a person looking at the face: shown where it is, as a save keeps it (exact).
+    return {**saved, **(rig_hints({pose: asked})[pose] or {}), **({"exact": True} if "mouth" in asked else {})}
 
 
 def _view(line: flat_rig_warp.MouthLine) -> tuple[int, int, int, int]:
@@ -148,7 +149,8 @@ def preview_mouth(workspace_dir: str, workspace: str, kit_id: str, pose: str, *,
         landmarks = _landmarks(path, image)
         near, guide = _pose_guides(image, crop, figure.size, hint, landmarks)
         seeds = {"point": near.get("mouth"), "width": near.get("mouthWidth"), "lips": guide.get("mouth_points"),
-                 "lips_score": guide.get("mouth_score"), "face": (landmarks or {}).get("face")}
+                 "lips_score": guide.get("mouth_score"), "face": (landmarks or {}).get("face"),
+                 "exact": bool((hint or {}).get("exact"))}
         painted, ink = None, INK
         if seeds["point"] is None and seeds["lips"] is None:
             # Nothing places the line but the rig's own search: run it for the painted mouth.

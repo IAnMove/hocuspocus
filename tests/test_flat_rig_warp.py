@@ -88,13 +88,21 @@ def test_a_moustache_edge_above_the_mouth_is_not_taken_for_its_line():
     assert line.found and abs(line.centre[1] - MOUTH_Y) <= 2, "dark on one side only: a moustache's edge"
 
 
-def test_a_hint_point_is_kept_and_only_snapped_a_little():
+def test_an_exact_hint_point_is_kept_and_only_snapped_a_little():
     face = _face()
-    near = _line(face, point=(210, MOUTH_Y + 4), width=80)
+    near = _line(face, point=(210, MOUTH_Y + 4), width=80, exact=True)
     assert near.source == "hint" and near.found and abs(near.centre[1] - MOUTH_Y) <= 2
-    # Far from any stroke the hint is kept as given: it is the user's.
-    far = _line(face, point=(210, 380), width=80)
+    # Far from any stroke an exact hint is kept as given: a person placed it.
+    far = _line(face, point=(210, 380), width=80, exact=True)
     assert not far.found and abs(far.centre[1] - 380) < 0.5 and far.width == 80
+    off = _line(face, point=(210, MOUTH_Y + 22), width=80, exact=True)
+    assert not off.found and abs(off.centre[1] - (MOUTH_Y + 22)) < 0.5, "22 px off is where the person put it"
+
+
+def test_a_hint_typed_without_looking_is_snapped_onto_the_painted_lips():
+    # An agent's point 22 px (0.28 mouth widths) under the lips: the line is drawn on the lips, as the landmarks' is.
+    off = _line(_face(), point=(210, MOUTH_Y + 22), width=80)
+    assert off.source == "hint" and off.found and abs(off.centre[1] - MOUTH_Y) <= 2
 
 
 def test_a_line_placed_by_unsure_landmarks_or_found_nowhere_is_flagged():
@@ -102,7 +110,7 @@ def test_a_line_placed_by_unsure_landmarks_or_found_nowhere_is_flagged():
     sure = _line(face, lips=_lips())
     assert flat_rig_warp.line_warnings(sure, {"lips_score": 0.9}) == []
     assert flat_rig_warp.line_warnings(sure, {"lips_score": 0.39}) == ["mouth_line_unsure"]
-    nowhere = _line(face, point=(210, 380), width=80)
+    nowhere = _line(face, point=(210, 380), width=80, exact=True)
     assert flat_rig_warp.line_warnings(nowhere, {}) == ["mouth_line_guessed"]
 
 

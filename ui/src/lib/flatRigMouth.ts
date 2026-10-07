@@ -119,6 +119,7 @@ export function mouthLineRigRequest(kit: CharacterKit, poseId: string, draft: Mo
   return {
     ...(isWarpRigged(kit) ? { poses: [...new Set(['base', poseId])] } : {}),
     style: { ...(rig?.style ?? {}), mouthStyle: 'warp' },
-    hints: { [poseId]: { ...(eyes ? { eyes } : {}), mouth: clean.mouth, mouthWidth: clean.mouthWidth } } as Record<string, FlatRigHint>,
+    // Placed by a person on the image: the rig keeps it there (exact) instead of snapping it or trusting the landmarks.
+    hints: { [poseId]: { ...(eyes ? { eyes } : {}), mouth: clean.mouth, mouthWidth: clean.mouthWidth, exact: true } } as Record<string, FlatRigHint>,
   }
 }

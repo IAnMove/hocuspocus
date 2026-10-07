@@ -88,7 +88,10 @@ dark mouth in the character's ink.
    put) or `mouth_line_unsure` (unsure face points, a mouth under a moustache) means: see it with
    `characters.rig.flat.preview` and rig again with `hints: {"<pose>": {"mouth": [x, y], "mouthWidth": w}}`, a point
    on the line between the lips and the width corner to corner, in % of the pose image. In the app a user does the
-   same in Characters › Prepare 2D speech › Face Rig › **Mouth line**.
+   same in Characters › Prepare 2D speech › Face Rig › **Mouth line**. Only a hint with `"exact": true` is followed as
+   given: add it only after looking at the preview. Without it, face landmarks that are sure of the lips place the
+   mouth (`mouth_hint_ignored` when your point was far off them) and unsure ones let your point in, snapped onto the
+   painted lips. Never type mouth points you have not looked at: a wrong one moved mouths onto a cheek and a chin.
 4. **Make a bust for dialogue.** In a full figure the face is small and the moving lips read less: add a bust pose
    (`"bust, head and shoulders, ..."`) and use it in `medium` and `close` shots (`"cast": [["ana", "bust", 50]]`).
 5. **Nothing else changes.** `series.episode.from_script` and `series.episode.produce` show each pose its own mouths.

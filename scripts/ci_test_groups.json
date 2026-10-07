@@ -288,6 +288,7 @@
         "tests/test_production_media_agent_trail.py",
         "tests/test_flat_rig_realistic.py",
         "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_hints.py",
         "tests/test_flat_rig_warp.py",
         "tests/test_flat_rig_small.py",
         "tests/test_acceptance_runner.py",
@@ -577,7 +578,7 @@
     },
     {
       "prefix": "app/services/flat_rig_eyes.py",
-      "paths": ["tests/test_flat_rig.py", "tests/test_flat_rig_realistic.py", "tests/test_flat_rig_guided.py", "tests/test_flat_rig_small.py", "tests/test_flat_rig_warp.py"]
+      "paths": ["tests/test_flat_rig.py", "tests/test_flat_rig_realistic.py", "tests/test_flat_rig_guided.py", "tests/test_flat_rig_small.py", "tests/test_flat_rig_warp.py", "tests/test_flat_rig_hints.py"]
     },
     {
       "prefix": "app/services/series_canon_snapshot.py",
@@ -683,6 +684,10 @@
         "tests/test_flat_rig_warp.py",
         "tests/test_flat_rig_guided.py"
       ]
+    },
+    {
+      "prefix": "app/services/flat_rig_hints.py",
+      "paths": ["tests/test_flat_rig_hints.py", "tests/test_flat_rig_guided.py", "tests/test_flat_rig_warp.py"]
     },
     {
       "prefix": "app/services/flat_rig_warp.py",

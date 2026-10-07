@@ -67,14 +67,35 @@ def test_the_landmarks_put_the_mouth_on_its_line_and_not_on_the_nose():
     assert x1 - x0 >= 60
 
 
-def test_a_hint_still_wins_over_the_landmarks():
+def _mouth_y(face, rig):
+    _ox, oy = _figure_offset(face)
+    edge = max(rig["width"], rig["height"])
+    return rig["height"] / 2 + rig["mouth"]["offsetY"] * edge / 100 + oy
+
+
+def test_an_exact_hint_still_wins_over_the_landmarks():
+    face = _face()
+    hint = {"mouth": [215 / face.width * 100, 245 / face.height * 100], "exact": True}
+    rig = rig_pose(face, INK, hint, _landmarks())
+    assert rig["guided"] == ["eyes"] and _mouth_y(face, rig) < 270, "the hint, not the landmarks' mouth"
+    assert "mouth_hint_ignored" not in rig["warnings"]
+
+
+def test_a_far_hint_loses_to_sure_landmarks_and_says_so():
+    # On the 1x03 an agent's hints put a mouth on a cheek while DWPose had the lips at 0.94.
     face = _face()
     hint = {"mouth": [215 / face.width * 100, 245 / face.height * 100]}
     rig = rig_pose(face, INK, hint, _landmarks())
-    _ox, oy = _figure_offset(face)
-    edge = max(rig["width"], rig["height"])
-    mouth_y = rig["height"] / 2 + rig["mouth"]["offsetY"] * edge / 100 + oy
-    assert rig["guided"] == ["eyes"] and mouth_y < 270, "the hint, not the landmarks' mouth"
+    assert rig["guided"] == ["eyes", "mouth"] and abs(_mouth_y(face, rig) - MOUTH_Y) <= 6, "the landmarks' mouth"
+    assert "mouth_hint_ignored" in rig["warnings"]
+    ignored = rig["seeds"]["hint_ignored"]
+    assert ignored["hint"] == hint["mouth"] and ignored["far"] and ignored["score"] == 0.9
+    # One near the lips gives way to the sure landmarks too, without a warning.
+    near = rig_pose(face, INK, {"mouth": [212 / face.width * 100, (MOUTH_Y + 6) / face.height * 100]}, _landmarks())
+    assert near["guided"] == ["eyes", "mouth"] and "mouth_hint_ignored" not in near["warnings"]
+    # Unsure landmarks (a beard seen from below) do not overrule it.
+    unsure = rig_pose(face, INK, hint, _landmarks(mouth=0.6))
+    assert _mouth_y(face, unsure) < 270 and "mouth_hint_ignored" not in unsure["warnings"]
 
 
 def test_unsure_landmarks_are_not_used():
