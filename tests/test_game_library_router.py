@@ -89,3 +89,28 @@ def test_corrupt_library_is_not_a_500(tmp_path):
         assert client.get("/api/v1/games", params={"workspace": "lab"}).status_code == status
         assert client.get("/api/v1/games/bosque", params={"workspace": "lab"}).status_code == status
         assert client.delete("/api/v1/games/bosque", params={"workspace": "lab"}).status_code == status
+
+
+def test_export_packs_outside_the_library_lock_and_records_it(tmp_path, monkeypatch):
+    import routers.game_library as module
+
+    lock = threading.RLock()
+    seen = {}
+
+    def fake_export(directory, game, *, workspace, now):
+        seen["locked"] = lock._is_owned()
+        (tmp_path / "game-exports").mkdir(exist_ok=True)
+        (tmp_path / "game-exports" / "bosque-r1.zip").write_bytes(b"zip")
+        game.setdefault("exports", []).append({"id": "e1", "file": "game-exports/bosque-r1.zip"})
+        return {"file": "game-exports/bosque-r1.zip", "counts": {}, "missing": []}
+
+    monkeypatch.setattr(module, "export_game", fake_export)
+    app = FastAPI()
+    app.include_router(create_game_library_router(workspace_dir=lambda _name: str(tmp_path), lock=lock))
+    client = TestClient(app)
+    assert client.post("/api/v1/games", json={"workspace": "lab", "game": {"id": "bosque", "title": "Bosque"}}).status_code == 201
+    response = client.post("/api/v1/games/bosque/export", json={"workspace": "lab"})
+    assert response.status_code == 200, response.text
+    assert seen["locked"] is False
+    stored = client.get("/api/v1/games/bosque", params={"workspace": "lab"}).json()
+    assert [item["file"] for item in stored["exports"]] == ["game-exports/bosque-r1.zip"]
