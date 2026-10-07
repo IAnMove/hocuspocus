@@ -16,6 +16,7 @@ from app.services.mix_concat import (
     driving_soundtrack_bound,
     hold_crossfade_output_seconds,
     probe_audio_flags,
+    probe_duration_seconds,
     probe_has_audio,
     should_use_hold_crossfade,
 )
@@ -57,13 +58,24 @@ def test_hold_crossfade_filter_covers_every_clip_and_xfade():
     filter_str, video, audio = build_hold_crossfade_filter([5.0, 5.0, 5.0])
     assert (
         "[0:v]settb=AVTB,setpts=PTS-STARTPTS,"
-        "tpad=stop_mode=clone:stop_duration=0.500[v0]"
+        "tpad=stop_mode=clone:stop_duration=1.500,trim=end=5.500000[v0]"
     ) in filter_str
-    assert "[1:a]apad=pad_dur=0.500[a1]" in filter_str
+    assert "apad=whole_dur=5.500000,atrim=end=5.500000[a1]" in filter_str
     assert "xfade=transition=fade:duration=0.400" in filter_str
-    assert "acrossfade=d=0.400" in filter_str
+    assert "acrossfade=d=0.400000" in filter_str
     assert video == "vx2"
     assert audio == "ax2"
+
+
+def test_hold_crossfade_cuts_every_clip_to_the_length_its_dissolve_is_placed_by():
+    # A decoded AAC track runs up to a frame past its container duration and silence comes in whole 1024-sample
+    # frames. Chained untrimmed, the sound drifted ~10 ms a join behind the pictures: 2.7 s over a 268-shot episode.
+    filter_str, _video, _audio = build_hold_crossfade_filter([2.25, 3.0], has_audio=[True, False])
+    assert "trim=end=2.750000[v0]" in filter_str and "trim=end=3.500000[v1]" in filter_str
+    assert "[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS," \
+        "apad=whole_dur=2.750000,atrim=end=2.750000[a0]" in filter_str
+    assert "anullsrc=channel_layout=stereo:sample_rate=48000,atrim=end=3.500000," in filter_str
+    assert ":d=" not in filter_str
 
 
 def test_hold_crossfade_forces_a_common_timebase_before_xfade():
@@ -138,7 +150,7 @@ def test_mixed_audio_keeps_dialogue_when_the_first_clip_is_silent():
     assert "[1:a]aresample=48000" in filter_str
     assert "[2:a]aresample=48000" in filter_str
     assert "[0:a]" not in filter_str
-    assert "acrossfade=d=0.400" in filter_str
+    assert "acrossfade=d=0.400000" in filter_str
     assert video == "vx2"
     assert audio == "ax2"
 
@@ -432,3 +444,38 @@ def test_ffprobe_is_found_beside_ffmpeg_even_in_a_folder_named_after_ffmpeg():
     assert ffprobe_for("/opt/ffmpeg-6/bin/ffmpeg") == "/opt/ffmpeg-6/bin/ffprobe"
     assert ffprobe_for("C:/tools/ffmpeg/ffmpeg.exe") == "C:/tools/ffmpeg/ffprobe.exe"
     assert ffprobe_for("/usr/bin/ffmpeg7") == "/usr/bin/ffprobe7"
+
+
+def _decoded_seconds(path: Path, stream: str) -> float:
+    """Length of a stream as decoded (frames at 24 fps, or samples at 48 kHz), not as the container states it."""
+    if stream == "v":
+        out = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
+                              "stream=nb_read_frames", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+        return int(out.stdout.strip()) / 24
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a", "-ac", "1", "-ar", "48000",
+                          "-f", "s16le", "-"], capture_output=True).stdout
+    return len(pcm) / 2 / 48000
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg is required")
+def test_soft_join_keeps_sound_on_the_pictures_over_many_clips(tmp_path):
+    # Twelve talking clips of uneven length, as a Series episode has, plus a silent one: the joined sound must end
+    # with the pictures. Untrimmed, each AAC tail pushed the sound ~10 ms later per join.
+    lengths = [1.07, 1.33, 0.91, 1.58, 1.21, 0.87, 1.44, 1.12, 0.96, 1.66, 1.05, 1.29, 1.17]
+    clips = []
+    for index, seconds in enumerate(lengths):
+        path = tmp_path / f"clip{index:02d}.mp4"
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=c=gray:s=160x120:r=24:d={seconds}"]
+        if index != 6:
+            cmd += ["-f", "lavfi", "-i", f"sine=f={300 + 20 * index}:sample_rate=48000:d={seconds}", "-c:a", "aac"]
+        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-t", f"{seconds}", str(path)]
+        assert subprocess.run(cmd, capture_output=True, timeout=30).returncode == 0
+        clips.append(str(path))
+    out = tmp_path / "joined.mp4"
+    assert concat_with_tail_hold_and_crossfade(clips, str(out)) is True
+    planned = hold_crossfade_output_seconds([probe_duration_seconds(path) for path in clips])
+    video, sound = _decoded_seconds(out, "v"), _decoded_seconds(out, "a")
+    # The sound follows the planned timeline to within one AAC frame of the output's own encoder (it ran 71 ms over
+    # here before the cut); the pictures to within the 24 fps frames the last dissolve rounds to.
+    assert abs(sound - planned) < 0.025, (sound, planned)
+    assert abs(video - planned) < 0.1, (video, planned)
