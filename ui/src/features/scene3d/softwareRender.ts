@@ -4,6 +4,7 @@ import { cameraEyeAtTime, cameraLookAtTime, projectPoint } from './camera.ts'
 import { shakeCamera } from './cameraShake.ts'
 import { scene3dSlotColor } from './document.ts'
 import type { Scene3DDocument, Scene3DLoop } from './types.ts'
+import { renderMotionLabSoftware } from './motionlab/software'
 
 export type SoftwareFrame = {
   width: number
@@ -50,15 +51,17 @@ function fillScrollingWorld(frame: SoftwareFrame, sceneSeconds: number, loop: Sc
 }
 
 export function renderScene3DSoftware(document: Scene3DDocument, sceneSeconds: number): SoftwareFrame {
+  const native = renderMotionLabSoftware(document, sceneSeconds)
   const width = 160
   const height = Math.max(1, Math.round(160 * document.height / Math.max(1, document.width)))
   const pixels = new Uint8Array(width * height * 4)
   pixels.fill(18)
   for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255
-  const frame = { width, height, pixels }
+  const frame = native ?? { width, height, pixels }
   const cylinder = document.slots.find(isCylinderBackdrop)
   const fallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos, document.dressing) : null
-  if (cylinder?.loop) fillScrollingWorld(frame, sceneSeconds, cylinder.loop)
+  if (native) { /* Native sets already rasterized their geometry and sky. */ }
+  else if (cylinder?.loop) fillScrollingWorld(frame, sceneSeconds, cylinder.loop)
   else if (fallback) {
     fillRect(frame, 0, 0, width, height, fallback.sky)
     fillRect(frame, 0, height * 0.62, width, height, fallback.ground)

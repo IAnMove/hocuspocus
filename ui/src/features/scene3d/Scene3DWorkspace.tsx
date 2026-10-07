@@ -25,6 +25,8 @@ import { useSpeechProfiles } from './speech/useSpeechProfiles'
 import { SPEECH_HANDOFF_EVENT, takeSpeechProduction, preserveSpeechDraft } from './speech/production'
 import { Scene3DSoundtrackControls } from './speech/Scene3DSoundtrackControls'
 import { SceneSpeechAudio } from './speech/preview'
+import { MotionLabAudio } from './motionlab/previewAudio'
+import { MotionLabControls } from './motionlab/controls'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
@@ -379,6 +381,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     <div className="flex w-full flex-col gap-2" data-testid="scene3d-workspace">
       <ExampleDownloads required={exampleCollections(sceneDoc)} disabled={editingLocked} onInstalled={() => { if (!exportingRef.current) bumpGeneration() }} />
       <SceneSpeechAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} />
+      <MotionLabAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} speed={speed} />
       {sceneDoc.production && <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm" data-testid="speech-production-origin">
         {editorT(`speech.kind.${sceneDoc.production.kind}`)} · {sceneDoc.production.title}
         <span className="mt-1 block text-xs text-text-muted">{editorT('speech.productionReady')}</span>
@@ -420,6 +423,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
         onToggle={() => { setPickTarget(undefined); setSpeechOpen(open => !open) }} onSelect={selectSlot} />
       <CinematicControls environment={sceneDoc.environment} disabled={editingLocked} onChange={environment => applyScene(current => ({ ...current, environment }))} />
       <RenderLookControls document={sceneDoc} disabled={editingLocked} onChange={look => applyScene(current => ({ ...current, ...look }))} />
+      <MotionLabControls document={sceneDoc} disabled={editingLocked} onChange={motionLab => applyScene(current => ({ ...current, motionLab }))} />
       <PixelWorldControls pixelWorld={sceneDoc.pixelWorld} dressing={sceneDoc.dressing} tvs={sceneDoc.slots.filter(slot => slot.screen?.style === 'crt').length} slots={sceneDoc.slots.length} disabled={editingLocked}
         onChange={patch => applyScene(current => ({ ...current, ...patch }))} onAddTv={() => applyScene(current => addTv(current))} />
       <SceneFxControls cues={sceneDoc.sfx} duration={sceneDoc.duration} disabled={editingLocked} onChange={sfx => applyScene(current => ({ ...current, sfx }))} onShowcase={collection => applyScene(current => withFxShowcase(current, collection))} />

@@ -6,6 +6,13 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Video 3D adds eight complete procedural motion sets: beat landings, a contact
+music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
+journey, volumetric poster lettering and particle morph typography. Editor, MCP
+and Wizard share their controls; visible music contacts and local notes share
+one deterministic timeline. MCP previews rasterize the native geometry. See
+[native motion templates](docs/development/WORLD3D_MOTION_LAB.md).
+
 Series approvals keep pending note drafts and ignore saves and render polls
 from another episode. Changed dialogue pauses and saved 3D scenes invalidate
 their takes; reviewed imported/generated videos promote correctly and prepare

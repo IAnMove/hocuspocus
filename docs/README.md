@@ -27,6 +27,7 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 - [tools/HOWUSEIT.md](tools/HOWUSEIT.md) — guía · Studio Tools: upscale, revoice, quitar fondo.
 - [video-editor/HOWUSEIT.md](video-editor/HOWUSEIT.md) — guía · Video Editor y mezclas ensambladas.
 - [video-editor/MONTAGES.md](video-editor/MONTAGES.md) — guía · montajes editables y export Video 2D en servidor.
+- [development/WORLD3D_MOTION_LAB.md](development/WORLD3D_MOTION_LAB.md) — contrato · ocho escenarios 3D nativos de movimiento y música, compartidos con MCP/Wizard.
 - [templates/TEMPLATE_PACKAGES.md](templates/TEMPLATE_PACKAGES.md) — guía · plantillas de escena compartibles (`.hptemplate`).
 - [workspaces/HOWUSEIT.md](workspaces/HOWUSEIT.md) — guía · pestaña Workspaces (hilos de Director).
 - [help/HELP_OVERLAY.md](help/HELP_OVERLAY.md) — guía · mantenimiento del tutorial de ayuda dentro de la app.

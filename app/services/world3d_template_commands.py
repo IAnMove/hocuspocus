@@ -28,6 +28,20 @@ _TOON = {"type": "object", "additionalProperties": False, "description": "Settin
     "steps": {"type": "integer", "minimum": 2, "maximum": 4, "description": "Light bands (default 3)"},
     "outline": {"type": "number", "minimum": 0, "maximum": 8, "description": "Ink width in pixels of a 1080p frame (default 3; 0 = no ink)"},
     "ink": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "Ink colour (default #141018)"}}}
+_MOTION_LAB = {"type": "object", "additionalProperties": False,
+               "description": "Native procedural scene controls. A partial patch merges into the stored settings; omitted fields retain their values.",
+               "properties": {
+                   "bpm": {"type": "number", "minimum": 40, "maximum": 240, "default": 120},
+                   "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647, "default": 7},
+                   "title": {"type": "string", "maxLength": 24, "default": "HOCUS", "description": "Trimmed before storing"},
+                   "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "default": "#54ddff"},
+                   "secondaryColor": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "default": "#ffb86b"},
+                   "density": {"type": "integer", "minimum": 200, "maximum": 3000, "default": 900},
+                   "amplitude": {"type": "number", "minimum": 0.1, "maximum": 3, "default": 1},
+                   "speed": {"type": "number", "minimum": 0.1, "maximum": 3, "default": 1},
+                   "sound": {"type": "boolean", "default": True},
+                   "volume": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.35},
+               }}
 _MUTATIONS = {
     "world3d.scene.instantiate", "world3d.scene.patch", "world3d.scene.publish",
     "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
@@ -51,8 +65,11 @@ _OPERATIONS = {
 def command_catalog():
     result = []
     for name, (mutation, description, properties, required) in _OPERATIONS.items():
+        fields = {"workspace": _WORKSPACE, **properties}
+        if name == "world3d.scene.patch":
+            fields["motionLab"] = _MOTION_LAB
         envelope = {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False,
-                    "properties": {"workspace": _WORKSPACE, **properties}, "required": ["workspace", *required]}}
+                    "properties": fields, "required": ["workspace", *required]}}
         keys = ["version", "input"]
         if mutation:
             envelope["intent_id"] = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"}

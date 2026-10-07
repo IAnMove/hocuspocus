@@ -3436,6 +3436,38 @@
     "anime-code-rain": {
       "title": "Lluvia de código",
       "description": "Código verde cae sobre negro detrás de una figura, que toma un tinte verde; empuje lento. Sin figura, el plano es un fondo que se repite sin corte."
+    },
+    "motion-bouncing-ball": {
+      "title": "Salto a compás",
+      "description": "Una bola 3D cae sobre plataformas afinadas: cada contacto visible coincide con una nota sintetizada localmente."
+    },
+    "motion-music-machine": {
+      "title": "Máquina musical de contactos",
+      "description": "Un mecanismo 3D golpea barras y tambores. Las notas originales siguen el mismo calendario de contactos."
+    },
+    "motion-sunset-flight": {
+      "title": "Vuelo al atardecer",
+      "description": "Aviones originales se inclinan sobre un océano 3D con islas y nubes en movimiento."
+    },
+    "motion-seasonal-carriage": {
+      "title": "Vagón de las cuatro estaciones",
+      "description": "Interior volumétrico de tren con taza, mesa y ventana; el paisaje móvil cambia por las cuatro estaciones."
+    },
+    "motion-data-assembly": {
+      "title": "Montaje del centro de datos",
+      "description": "Racks, procesadores y refrigeración se montan por fases, con flujos de datos en un escenario completamente 3D."
+    },
+    "motion-lighthouse-story": {
+      "title": "El viaje del farero",
+      "description": "Un farero geométrico sube al faro costero; la baliza gira sobre un mar y una isla volumétricos."
+    },
+    "motion-poster-breakout": {
+      "title": "Más allá del marco",
+      "description": "Letras con volumen, anillos y una esfera atraviesan un marco físico. Título editable."
+    },
+    "motion-particle-morph": {
+      "title": "Tipografía de partículas",
+      "description": "Una nube de puntos 3D se transforma entre esfera, toro, corazón y letras editables."
     }
   },
   "atmos": {
@@ -4007,5 +4039,19 @@
     },
     "invalid": "Esta plantilla del workspace no es un documento de Video 3D válido.",
     "shotTitle": "Plantilla del workspace · {{id}}"
+  },
+  "motionLab": {
+    "controls": "Escenas de movimiento nativas",
+    "bpm": "Tempo (BPM)",
+    "speed": "Velocidad de movimiento",
+    "amplitude": "Tamaño del movimiento",
+    "color": "Color principal",
+    "secondaryColor": "Color de acento",
+    "seed": "Semilla de variación",
+    "title": "Título de bloques (24 caracteres)",
+    "density": "Número de partículas",
+    "sound": "Música local por contactos",
+    "volume": "Volumen de música",
+    "audioBlocked": "Permite el audio del navegador y vuelve a pulsar Reproducir."
   }
 }

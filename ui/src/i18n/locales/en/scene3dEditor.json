@@ -3436,6 +3436,38 @@
     "anime-code-rain": {
       "title": "Code rain",
       "description": "Green code falls on black behind one figure, which takes a green tint from it; a slow push-in. Without a figure the shot is a plate that loops with no seam."
+    },
+    "motion-bouncing-ball": {
+      "title": "Beat landing",
+      "description": "A 3D ball lands on tuned platforms; every visible contact shares its time with a locally synthesized note."
+    },
+    "motion-music-machine": {
+      "title": "Contact music machine",
+      "description": "A choreographed 3D mechanism strikes bars and drums. Original local notes follow the same deterministic contact timeline."
+    },
+    "motion-sunset-flight": {
+      "title": "Sunset formation flight",
+      "description": "Original aircraft bank over a 3D ocean, islands and moving clouds in a sunset formation."
+    },
+    "motion-seasonal-carriage": {
+      "title": "Four seasons carriage",
+      "description": "A volumetric train interior with a cup, table and window; moving scenery changes through four seasons."
+    },
+    "motion-data-assembly": {
+      "title": "Data centre assembly",
+      "description": "Racks, processing and cooling components assemble in phases, with moving data flows in a fully 3D set."
+    },
+    "motion-lighthouse-story": {
+      "title": "Lightkeeper journey",
+      "description": "A geometric keeper climbs a coastal lighthouse; the beacon rotates over a volumetric sea and island."
+    },
+    "motion-poster-breakout": {
+      "title": "Beyond the poster frame",
+      "description": "Solid block lettering, rings and an orb move through a physical frame. Editable title; no flat poster footage."
+    },
+    "motion-particle-morph": {
+      "title": "Particle shape typography",
+      "description": "A genuine 3D point cloud morphs between a sphere, torus, heart and editable block lettering."
     }
   },
   "atmos": {
@@ -4007,5 +4039,19 @@
     },
     "invalid": "This workspace template is not a valid Video 3D document.",
     "shotTitle": "Workspace template · {{id}}"
+  },
+  "motionLab": {
+    "controls": "Native motion scenes",
+    "bpm": "Tempo (BPM)",
+    "speed": "Motion speed",
+    "amplitude": "Motion size",
+    "color": "Primary colour",
+    "secondaryColor": "Accent colour",
+    "seed": "Variation seed",
+    "title": "Block title (24 characters)",
+    "density": "Particle count",
+    "sound": "Local contact music",
+    "volume": "Music volume",
+    "audioBlocked": "Allow browser audio and press Play again."
   }
 }

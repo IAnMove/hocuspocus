@@ -69,6 +69,14 @@ These are plain document fields, for any Video 3D shot.
 - `camera.framing.moveStart` / `moveEnd` (fractions of the shot, 0–1) hold the camera at `from` before the move and at `to` after it. `ease: "snap"` leaves at full speed and settles, like a crash zoom; `smooth` (the default) eases in and out. Without them a framing move takes the whole shot, as before. Framing is ignored on the `fixed` family.
 - `screenBackdrop`: `{"color": "#1c2f86", "sfx": [<screen cue>, ...]}` is painted as the frame background, behind every object. Its cues are ordinary screen effects; radial `speedlines` there are focus lines behind the characters. It is set by the template or in the document; `world3d.scene.patch` does not edit it.
 
+## Native motion sets
+
+Eight complete native motion sets (musical contacts, sunset flight, seasonal
+carriage, data assembly, lighthouse journey, volumetric poster and particle
+typography) use no external assets. Their `motionLab` controls are shared by
+the editor and `world3d.scene.patch`; see
+[native motion templates](WORLD3D_MOTION_LAB.md) for ids, bounds and timing.
+
 ## Planner
 
 A brief field `world3d` or `toma` selects one shot. `world3d_subject` or `sujeto_3d` is the subject URL. `dolly zoom` becomes `scene3d.template = cine-dolly-zoom`. `girar alrededor` is a tie and the plan fails with `ambiguous_template` instead of inventing a path. `órbita` is not a tie: it is the exact Spanish title of `pixel-orbit`. Briefs without the field stay on the normal shot list.

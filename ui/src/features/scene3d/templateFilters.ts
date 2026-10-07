@@ -10,8 +10,15 @@ export const TEMPLATE_SETTINGS = [
   'jungle', 'forest', 'snow', 'casino', 'studio', 'street', 'stage', 'canyon', 'cave', 'volcano', 'islands', 'room', 'grid', 'circuit', 'mainframe',
 ] as const
 export type TemplateSetting = typeof TEMPLATE_SETTINGS[number]
+const MOTION_SETTINGS: Partial<Record<Scene3DDressing, TemplateSetting>> = {
+  'motion-seasonal-carriage': 'train', 'motion-data-assembly': 'mainframe',
+  'motion-sunset-flight': 'sea', 'motion-lighthouse-story': 'sea',
+  'motion-bouncing-ball': 'stage', 'motion-music-machine': 'stage',
+}
 
 export function settingFromDressing(dressing: Scene3DDressing | undefined): TemplateSetting {
+  const motion = MOTION_SETTINGS[dressing ?? 'none']
+  if (motion) return motion
   if (dressing === 'open-sea') return 'sea'
   if (dressing === 'lunar') return 'moon'
   if (dressing === 'rooftop') return 'rooftop'

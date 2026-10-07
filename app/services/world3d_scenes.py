@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -35,6 +36,16 @@ _CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", 
 _SHAKE_RANGES = {"start": (0, 600), "end": (0, 600), "amplitude": (0, 2), "frequency": (0, 60), "decay": (0, 60), "seed": (0, 1_000_000)}
 _SHAKE_REQUIRED = {"start", "end", "amplitude", "frequency"}
 _SHAKE_WINDOWS = 16
+MOTION_LAB_DEFAULTS = {
+    "bpm": 120, "seed": 7, "title": "HOCUS", "color": "#54ddff", "secondaryColor": "#ffb86b",
+    "density": 900, "amplitude": 1, "speed": 1, "sound": True, "volume": 0.35,
+}
+_MOTION_LAB_RANGES = {
+    "bpm": (40, 240), "seed": (0, 2147483647), "density": (200, 3000),
+    "amplitude": (0.1, 3), "speed": (0.1, 3), "volume": (0, 1),
+}
+# ECMAScript trim and string length keep these title controls identical to parseMotionLab.
+_MOTION_LAB_SPACE = "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
 
 class World3DSceneError(ValueError):
@@ -178,6 +189,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         _set_screen_fx(document, changes["screenFx"])
     if "voiceOver" in changes:
         _set_voice_over(document, changes["voiceOver"], workspace)
+    if "motionLab" in changes:
+        _set_motion_lab(document, changes["motionLab"])
     _set_render_look(document, changes)
     _retarget(document)
     record["revision"] += 1
@@ -187,6 +200,37 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     viewed = _view(scene_id, record)
     viewed["warnings"] = warnings
     return viewed
+
+
+def _motion_lab_settings(raw) -> dict:
+    """Match the editor's bounded procedural controls before persisting a patch."""
+    if not isinstance(raw, dict) or set(raw) - set(MOTION_LAB_DEFAULTS):
+        raise World3DSceneError("invalid_motion_lab", "motionLab must contain only the documented settings")
+    settings = {**MOTION_LAB_DEFAULTS, **raw}
+    for key, (low, high) in _MOTION_LAB_RANGES.items():
+        value = settings[key]
+        if not _number_in(value, low, high) or (key in ("seed", "density") and value % 1):
+            raise World3DSceneError("invalid_motion_lab", f"Invalid motionLab.{key}")
+    title = settings["title"]
+    if not isinstance(title, str):
+        raise World3DSceneError("invalid_motion_lab", "motionLab.title must be a string")
+    title = title.strip(_MOTION_LAB_SPACE)
+    if len(title.encode("utf-16-le", errors="surrogatepass")) // 2 > 24:
+        raise World3DSceneError("invalid_motion_lab", "motionLab.title must have at most 24 trimmed characters")
+    settings["title"] = title
+    for key in ("color", "secondaryColor"):
+        if not isinstance(settings[key], str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", settings[key]):
+            raise World3DSceneError("invalid_motion_lab", f"Invalid motionLab.{key}")
+    if not isinstance(settings["sound"], bool):
+        raise World3DSceneError("invalid_motion_lab", "motionLab.sound must be a boolean")
+    return settings
+
+
+def _set_motion_lab(document: dict, raw) -> None:
+    if not isinstance(raw, dict):
+        raise World3DSceneError("invalid_motion_lab", "motionLab must be a settings object")
+    previous = _motion_lab_settings(document.get("motionLab", {}))
+    document["motionLab"] = _motion_lab_settings({**previous, **raw})
 
 
 def _number_in(value, low: float, high: float) -> bool:
@@ -588,7 +632,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "position", "rotationY", "scale",
-                     "motion", "grounded", "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon"],
+                     "motion", "grounded", "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon", "motionLab"],
     }
 
 
@@ -624,6 +668,7 @@ def _traits(document: dict) -> dict:
         "worldSfx": [cue.get("kind") for cue in document.get("worldSfx") or [] if isinstance(cue, dict)],
         "roles": [slot.get("slot") for slot in document.get("slots") or []],
         "slotIds": [slot.get("id") for slot in document.get("slots") or []],
+        **({"motionLab": deepcopy(document["motionLab"])} if "motionLab" in document else {}),
     }
 
 

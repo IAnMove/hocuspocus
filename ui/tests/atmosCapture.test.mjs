@@ -17,6 +17,12 @@ test('capture args accept one template and an export flag', () => {
   assert.equal(parsed.port, 4199)
 })
 
+test('draft samples are bounded and optional without changing existing capture defaults', () => {
+  assert.deepEqual(parseCaptureArgs(['motion-poster-breakout', '--samples', '0,2.5,8'], {}).samples, [0, 2.5, 8])
+  assert.equal(parseCaptureArgs(['motion-poster-breakout'], {}).samples, undefined)
+  for (const value of ['-1', '601', 'NaN', '0,,2', '0,1,2,3,4,5,6']) assert.throws(() => parseCaptureArgs(['motion-poster-breakout', '--samples', value], {}))
+})
+
 test('capture args reject a missing id, a bad port, and an output inside the repo', () => {
   assert.throws(() => parseCaptureArgs([], {}), /template id/)
   assert.throws(() => parseCaptureArgs(['atmos-clearing-wide', '--port', '0'], {}), /Port/)
