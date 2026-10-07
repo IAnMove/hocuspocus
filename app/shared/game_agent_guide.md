@@ -66,7 +66,7 @@ A write with problems is refused with 422 `invalid_list` and the same list.
 - Measure one asset before a large batch. Read the estimate from the check.
 - `rerender` only for stale assets, or for assets in review the user asked to redo (name them in `asset_ids`). A locked asset stays put when the style changes.
 - Characters face right. Left is the mirrored sprite. One scale for every frame of a character.
-- Walk and run default to a still strip. Other body actions default to one video clip. Do not group actions.
+- Walk and run, and the item spin and bob, default to a still strip. Other actions default to one video clip. Do not group actions.
 - The pack is PNG plus atlas JSON, GLB, WAV/OGG with loop points, and `manifest.json`. No engine project files.
 - Generated media stays in the workspace. Do not commit PNGs, WAVs or GLBs.
 
