@@ -1,4 +1,5 @@
 import { useUiTranslation } from '../../i18n'
+import { NumberField } from './gameUi'
 import { fieldClass, panelClass } from './styles'
 import { useGameAssetsStore } from './store'
 import type { GameGenre, GameView } from './types'
@@ -30,16 +31,9 @@ export function GameSetupPanel() {
         </select>
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          {t('tile')}
-          <input className={fieldClass} type="number" min={1} value={game.style.pixel.tile}
-            onChange={event => patchGame({ style: { pixel: { ...game.style.pixel, tile: Number(event.target.value) } } })} />
-        </label>
-        <label className="block text-sm">
-          {t('spriteHeight')}
-          <input className={fieldClass} type="number" min={1} value={game.style.pixel.spriteHeight}
-            onChange={event => patchGame({ style: { pixel: { ...game.style.pixel, spriteHeight: Number(event.target.value) } } })} />
-        </label>
+        <NumberField label={t('tile')} min={1} value={game.style.pixel.tile} onValue={tile => patchGame({ style: { pixel: { tile } } })} />
+        <NumberField label={t('spriteHeight')} min={1} value={game.style.pixel.spriteHeight}
+          onValue={spriteHeight => patchGame({ style: { pixel: { spriteHeight } } })} />
       </div>
     </div>
   )

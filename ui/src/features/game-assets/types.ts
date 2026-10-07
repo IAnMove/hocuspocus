@@ -3,6 +3,9 @@ export type GameView = 'side' | 'topdown'
 export type GameSection = 'setup' | 'style' | 'cast' | 'list' | 'produce' | 'review' | 'play' | 'export'
 export type PaletteMode = 'locked' | 'free'
 
+/** A warning is a code, or ``{code, message?, file?, candidate?}``. */
+export type GameWarning = string | { code?: string; message?: string; file?: string; candidate?: string }
+
 export interface GameAttempt {
   id: string
   status: string
@@ -10,7 +13,7 @@ export interface GameAttempt {
   decision?: string | null
   note?: string
   metrics?: Record<string, unknown>
-  warnings?: string[]
+  warnings?: GameWarning[]
 }
 
 export interface GameAsset {
@@ -26,6 +29,7 @@ export interface GameAsset {
   locked: boolean
   attempts: GameAttempt[]
   approvedAttemptId: string | null
+  updatedAt?: string
 }
 
 export interface GamePixel {
@@ -49,6 +53,12 @@ export interface GameAudio {
 export interface StyleReference {
   assetId: string
   attemptId: string
+}
+
+export type StylePatch = Partial<Omit<GameStyle, 'pixel' | 'audio' | 'model3d'>> & {
+  pixel?: Partial<GamePixel>
+  audio?: Partial<GameAudio>
+  model3d?: Partial<GameStyle['model3d']>
 }
 
 export interface GameStyle {
@@ -89,6 +99,9 @@ export interface Game {
   exports: GameExportRecord[]
 }
 
+/** Setup and style edits that are not on the server yet. */
+export type GamePatch = Partial<Pick<Game, 'title' | 'genre' | 'view'>> & { style?: StylePatch }
+
 export interface GameLibrary {
   schema: string
   version: number
@@ -120,6 +133,7 @@ export interface ProduceJob {
   jobId?: string
   status: string
   message?: string
+  error?: string | null
   gameId?: string
   steps?: ProduceStep[]
 }
@@ -130,11 +144,16 @@ export interface GameEstimate {
   byKind: Record<string, number>
 }
 
-export interface ListProblem {
+/** One server problem. ``line`` is 1-based; 0 means the whole list. */
+export interface GameProblem {
   line?: number
   code?: string
+  field?: string
   message?: string
+  [detail: string]: unknown
 }
+
+export type ListProblem = GameProblem
 
 export interface ListReport {
   items: unknown[]

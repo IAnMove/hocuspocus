@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { AudioLoopPlayer } from './AudioLoopPlayer'
+import { AudioVariants, MusicLoopPlayer } from './AudioLoopPlayer'
 import { GlbPreview } from './GlbPreview'
 import { SpriteSheetPlayer } from './SpriteSheetPlayer'
-import { clipNames, fileUrl, layerFiles, loopRange, modelFile, playbackSources, sheetFile, stillFile } from './reviewModel'
+import { atlasFrames, clipNames, fileUrl, layerFiles, loopSamples, modelFile, musicFile, playbackSources, sheetFile, stillFile } from './reviewModel'
 import type { GameAsset, GameAttempt } from './types'
 
 const AUDIO = new Set(['sfx', 'music', 'jingle', 'voice'])
@@ -10,7 +10,7 @@ const SHEET = new Set(['animation', 'vfx'])
 
 export function AttemptPreview({ asset, attempt, pixel, workspace }: { asset: GameAsset; attempt: GameAttempt; pixel: boolean; workspace: string }) {
   const files = attempt.files || {}
-  if (AUDIO.has(asset.kind)) return <AudioPreview files={files} attempt={attempt} workspace={workspace} />
+  if (AUDIO.has(asset.kind)) return <AudioPreview kind={asset.kind} files={files} attempt={attempt} workspace={workspace} />
   if (asset.kind === 'model3d' || asset.kind === 'character3d') {
     return <GlbPreview url={fileUrl(modelFile(files), workspace)} clips={clipNames(attempt.metrics)} />
   }
@@ -71,23 +71,30 @@ function LayerStack({ files, workspace, pixel }: { files: Record<string, string>
   )
 }
 
+/** The sheet animates from its atlas; a missing or unreadable atlas shows the still sheet. */
 function Sheet({ files, workspace, pixel }: { files: Record<string, string>; workspace: string; pixel: boolean }) {
-  const [atlas, setAtlas] = useState<unknown>(null)
-  const sheet = sheetFile(files)
+  const atlasUrl = files.atlas ? fileUrl(files.atlas, workspace) : ''
+  const [loaded, setLoaded] = useState<{ url: string; atlas: unknown } | null>(null)
+  const sheet = fileUrl(sheetFile(files), workspace)
   useEffect(() => {
-    if (!files.atlas) return undefined
+    if (!atlasUrl) return undefined
     let cancel = false
-    void fetch(fileUrl(files.atlas, workspace)).then(response => response.json()).then(data => {
-      if (!cancel) setAtlas(data)
-    }).catch(() => { /* a missing atlas still shows the sheet */ })
+    const done = (atlas: unknown) => { if (!cancel) setLoaded({ url: atlasUrl, atlas }) }
+    fetch(atlasUrl).then(response => response.ok ? response.json() : null).then(done, () => done(null))
     return () => { cancel = true }
-  }, [files.atlas, workspace])
-  if (atlas) return <SpriteSheetPlayer imageUrl={fileUrl(sheet, workspace)} atlas={atlas} pixel={pixel} />
-  return <Still url={fileUrl(sheet, workspace)} pixel={pixel} name="" />
+  }, [atlasUrl])
+  const atlas = loaded?.url === atlasUrl ? loaded.atlas : null
+  if (atlas && atlasFrames(atlas).length) return <SpriteSheetPlayer imageUrl={sheet} atlas={atlas} pixel={pixel} />
+  return <Still url={sheet} pixel={pixel} name="" />
 }
 
-function AudioPreview({ files, attempt, workspace }: { files: Record<string, string>; attempt: GameAttempt; workspace: string }) {
+/** Music loops (or any take with loop points); SFX variants, jingles and voices just play. */
+function AudioPreview({ kind, files, attempt, workspace }: { kind: string; files: Record<string, string>; attempt: GameAttempt; workspace: string }) {
+  const loop = loopSamples(attempt.metrics)
+  if (kind === 'music' || loop) {
+    const url = fileUrl(musicFile(files), workspace)
+    return <MusicLoopPlayer key={url} url={url} loop={loop} />
+  }
   const sources = playbackSources(files).map(item => ({ key: item.key, url: fileUrl(item.file, workspace) }))
-  const range = loopRange(attempt.metrics)
-  return <AudioLoopPlayer sources={sources} loopStart={range.start} loopEnd={range.end} />
+  return <AudioVariants sources={sources} />
 }

@@ -67,22 +67,51 @@ export function readEstimate(value: unknown): GameEstimate {
   }
 }
 
-export interface KindBar { kind: string; done: number; total: number }
+export interface KindBar { kind: string; done: number; waiting: number; total: number }
+
+/** A step waiting for an approved dependency is not done: resume runs it later. */
+export function isWaitingStep(step: ProduceStep): boolean {
+  return step.status === 'skipped' && step.reason === 'waiting_dependency'
+}
+
+function stepFinished(step: ProduceStep): boolean {
+  return step.status === 'done' || step.status === 'failed' || (step.status === 'skipped' && !isWaitingStep(step))
+}
 
 export function kindProgress(steps: ProduceStep[] | undefined): KindBar[] {
   const bars = new Map<string, KindBar>()
   for (const step of steps || []) {
     const kind = step.kind || 'other'
-    const bar = bars.get(kind) || { kind, done: 0, total: 0 }
+    const bar = bars.get(kind) || { kind, done: 0, waiting: 0, total: 0 }
     bar.total += 1
-    if (step.status === 'done' || step.status === 'failed' || step.status === 'skipped') bar.done += 1
+    if (stepFinished(step)) bar.done += 1
+    if (isWaitingStep(step)) bar.waiting += 1
     bars.set(kind, bar)
   }
   return [...bars.values()]
 }
 
 export function waitingSteps(steps: ProduceStep[] | undefined): ProduceStep[] {
-  return (steps || []).filter(step => step.reason === 'waiting_dependency')
+  return (steps || []).filter(isWaitingStep)
+}
+
+/** The from-list items for an estimate. Candidates count: each one is a generation. */
+export function produceItems(assets: GameAsset[]): Record<string, unknown>[] {
+  return assets.map(asset => ({
+    kind: asset.kind, id: asset.id, name: asset.name, description: asset.description, spec: asset.spec,
+    candidates: Math.min(8, Math.max(1, Math.round(asset.candidates || 1))),
+  }))
+}
+
+/** Assets a replace would drop: every one whose id is not in the checked items. */
+export function removedByReplace(assets: GameAsset[], items: unknown[]): GameAsset[] {
+  const kept = new Set(items.map(item => (item && typeof item === 'object' ? (item as { id?: unknown }).id : undefined)).filter(Boolean))
+  return assets.filter(asset => !kept.has(asset.id))
+}
+
+/** One decimal, in the reader's language. */
+export function formatMinutes(minutes: number, language: string): string {
+  return new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(minutes)
 }
 
 export function specPatch(asset: GameAsset, draft: Record<string, string>): Record<string, unknown> {
@@ -98,12 +127,17 @@ export function specPatch(asset: GameAsset, draft: Record<string, string>): Reco
   return { name: draft.name ?? asset.name, description: draft.description ?? asset.description, spec }
 }
 
-export function listBody(text: string, format: 'lines' | 'csv' | 'json'): { text?: string; csv?: string; items?: unknown[]; format: string } {
+export type ListFormat = 'lines' | 'csv' | 'json'
+export const LIST_FORMATS: ListFormat[] = ['lines', 'csv', 'json']
+
+/** The from-list body, or ``null`` when JSON text is not a list. */
+export function listBody(text: string, format: ListFormat): { text?: string; csv?: string; items?: unknown[]; format: string } | null {
   if (format === 'csv') return { csv: text, format: 'csv' }
-  if (format === 'json') {
+  if (format !== 'json') return { text, format: 'lines' }
+  try {
     const parsed = JSON.parse(text) as unknown
-    if (!Array.isArray(parsed)) throw new Error('JSON items must be a list')
-    return { items: parsed, format: 'json' }
+    return Array.isArray(parsed) ? { items: parsed, format: 'json' } : null
+  } catch {
+    return null
   }
-  return { text, format: 'lines' }
 }

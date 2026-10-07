@@ -1,8 +1,15 @@
-import type { Game, GameAsset } from './types'
+import type { Game, GameAsset, GameAttempt } from './types'
 
 export const fieldClass = 'w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm'
 export const buttonClass = 'rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50'
 export const panelClass = 'rounded-lg border border-border bg-bg-secondary p-3'
+export const errorClass = 'text-sm text-red-500'
+
+/** A tab or list button; the selected one keeps a visible border and weight. */
+export function choiceClass(selected: boolean): string {
+  const base = 'rounded-md border px-3 py-1.5 text-sm disabled:opacity-50'
+  return selected ? `${base} border-accent-blue bg-muted font-medium` : `${base} border-border bg-card hover:bg-muted`
+}
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
@@ -70,13 +77,25 @@ export function colorsFromImageData(data: Uint8ClampedArray, count: number): str
   return buckets.map(bucket => hex(average(bucket)))
 }
 
-export function assetImage(asset: GameAsset, workspace: string): string | null {
-  const attempt = asset.attempts.find(item => item.id === asset.approvedAttemptId)
-    || asset.attempts.find(item => item.status === 'ok' && item.decision !== 'rejected')
-  const file = Object.values(attempt?.files || {}).find(value => typeof value === 'string' && /\.(png|webp|jpe?g)$/i.test(value))
+const IMAGE = /\.(png|webp|jpe?g)$/i
+
+/** The still of one attempt: ``preview`` or ``main`` first, else any image file. */
+export function attemptImage(attempt: GameAttempt | undefined, workspace: string): string | null {
+  const files = attempt?.files || {}
+  const file = [files.preview, files.main, ...Object.values(files)].find(value => typeof value === 'string' && IMAGE.test(value))
   if (!file) return null
   const path = file.split('/').map(encodeURIComponent).join('/')
   return `/api/v1/file/${path}?workspace=${encodeURIComponent(workspace)}`
+}
+
+/** An attempt the user may still pick: it succeeded and nobody rejected it. */
+export function usableAttempt(attempt: GameAttempt): boolean {
+  return attempt.status === 'ok' && attempt.decision !== 'rejected'
+}
+
+export function assetImage(asset: GameAsset, workspace: string): string | null {
+  const attempt = asset.attempts.find(item => item.id === asset.approvedAttemptId) || asset.attempts.find(usableAttempt)
+  return attemptImage(attempt, workspace)
 }
 
 export function waitingApprovals(game: Game): { id: string; name: string; count: number }[] {
@@ -93,6 +112,31 @@ export function waitingApprovals(game: Game): { id: string; name: string; count:
 }
 
 export function slugFromName(name: string): string {
-  const slug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const slug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return slug || 'personaje'
+}
+
+/** The server's id limit (``MAX_ID``) and the folder names Windows refuses. */
+export const MAX_ASSET_ID = 64
+const RESERVED = new Set(['con', 'prn', 'aux', 'nul', ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap(n => [`com${n}`, `lpt${n}`])])
+
+/** Cut at a hyphen when one falls inside the limit, like ``game_library._truncate``. */
+export function truncateId(slug: string, limit = MAX_ASSET_ID): string {
+  if (slug.length <= limit) return slug
+  const head = slug.slice(0, limit + 1)
+  const cut = head.includes('-') ? head.slice(0, head.lastIndexOf('-')) : slug.slice(0, limit)
+  return cut.replace(/-+$/g, '') || slug.slice(0, limit)
+}
+
+/** A fresh asset id for a character name: slug, at most 64 characters, not reserved, not taken. */
+export function newCharacterId(name: string, assets: GameAsset[]): string {
+  const slug = truncateId(slugFromName(name))
+  const wanted = RESERVED.has(slug) ? `${slug}-personaje` : slug
+  const taken = new Set(assets.map(asset => asset.id))
+  let candidate = wanted
+  for (let suffix = 2; taken.has(candidate); suffix += 1) {
+    const tail = `-${suffix}`
+    candidate = `${wanted.slice(0, MAX_ASSET_ID - tail.length).replace(/-+$/g, '')}${tail}`
+  }
+  return candidate
 }

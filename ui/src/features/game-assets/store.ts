@@ -1,11 +1,16 @@
 import { create } from 'zustand'
 import * as api from '../../api/gameAssets'
-import { GameRevisionConflict } from '../../api/gameAssets'
+import { GameApiError, GameRevisionConflict } from '../../api/gameAssets'
+import { errorText, gameText, GameCodeError, problemsOf, type GameAction } from './gameErrors'
 import { approvableClean } from './reviewModel'
-import type { Game, GameSection, GameStyle, ListReport, PaletteMode, ProduceJob, StylePreset, StyleReference } from './types'
+import { newCharacterId } from './styles'
+import {
+  applyGamePatch, finishedSteps, forgetGame, isActiveJob, mergeGamePatch, pollDelay, readSelection, rememberGame, rememberJob, upsertGame,
+} from './storeModel'
+import type { Game, GamePatch, GameProblem, GameSection, ListReport, ProduceJob, StylePatch, StylePreset, StyleReference } from './types'
 
-const SELECTION = 'hocuspocus.gameAssets.'
-const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'canceled', 'interrupted'])
+export interface ListBodyInput { text?: string; csv?: string; items?: unknown[]; format?: string; replace?: boolean }
+export type ListOutcome = { ok: true; report: ListReport } | { ok: false; error: string; problems: GameProblem[] }
 
 interface GameAssetsState {
   workspace: string
@@ -13,10 +18,13 @@ interface GameAssetsState {
   games: Game[]
   game: Game | null
   serverRevision: number
+  /** Setup and style edits that the server has not stored yet. */
+  unsaved: GamePatch | null
   dirty: boolean
   editSeq: number
   saving: boolean
   error: string | null
+  problems: GameProblem[]
   notice: string | null
   section: GameSection
   presets: StylePreset[]
@@ -26,93 +34,277 @@ interface GameAssetsState {
   load: (workspace: string) => Promise<void>
   openGame: (gameId: string) => Promise<void>
   setSection: (section: GameSection) => void
-  patchGame: (patch: Partial<Pick<Game, 'title' | 'genre' | 'view'>> & { style?: Partial<GameStyle> }) => void
-  applyPreset: (presetId: string) => void
+  patchGame: (patch: GamePatch) => void
+  applyPreset: (presetId: string) => Promise<boolean>
+  /** Saves every pending edit, one request at a time. ``null`` when a save failed. */
   saveNow: () => Promise<Game | null>
-  createGame: () => Promise<void>
-  duplicateGame: () => Promise<void>
-  deleteGame: () => Promise<void>
-  startStyleSheet: () => Promise<void>
-  approveStyle: (references: StyleReference[]) => Promise<void>
-  discardSample: (assetId: string, attemptId: string, note: string) => Promise<void>
-  addCharacter: (name: string) => Promise<void>
-  linkKit: (assetId: string, kitId: string) => Promise<void>
+  createGame: () => Promise<boolean>
+  duplicateGame: () => Promise<boolean>
+  deleteGame: () => Promise<boolean>
+  startStyleSheet: () => Promise<boolean>
+  approveStyle: (references: StyleReference[]) => Promise<boolean>
+  discardSample: (assetId: string, attemptId: string, note: string) => Promise<boolean>
+  addCharacter: (name: string) => Promise<boolean>
+  linkKit: (assetId: string, kitId: string) => Promise<boolean>
   toggleSelected: (assetId: string) => void
-  saveAsset: (assetId: string, patch: Record<string, unknown>) => Promise<void>
-  previewList: (body: { text?: string; csv?: string; items?: unknown[]; format?: string }) => Promise<ListReport>
-  commitList: (body: { text?: string; csv?: string; items?: unknown[]; format?: string; replace?: boolean }) => Promise<ListReport>
-  startProduce: (body: { assetIds?: string[]; rerender?: boolean }) => Promise<void>
-  cancelProduce: () => Promise<void>
-  resumeProduce: () => Promise<void>
-  approveAttempt: (assetId: string, attemptId: string) => Promise<void>
-  rejectAttempt: (assetId: string, attemptId: string, note: string) => Promise<void>
-  setLock: (assetId: string, locked: boolean) => Promise<void>
-  approveClean: () => Promise<void>
-  regenerateAsset: (assetId: string) => Promise<void>
+  saveAsset: (assetId: string, patch: Record<string, unknown>) => Promise<boolean>
+  previewList: (body: ListBodyInput) => Promise<ListOutcome>
+  commitList: (body: ListBodyInput) => Promise<ListOutcome>
+  startProduce: (body: { assetIds?: string[]; rerender?: boolean }) => Promise<boolean>
+  cancelProduce: () => Promise<boolean>
+  resumeProduce: () => Promise<boolean>
+  approveAttempt: (assetId: string, attemptId: string) => Promise<boolean>
+  rejectAttempt: (assetId: string, attemptId: string, note: string) => Promise<boolean>
+  setLock: (assetId: string, locked: boolean) => Promise<boolean>
+  approveClean: () => Promise<boolean>
+  regenerateAsset: (assetId: string) => Promise<boolean>
+  showError: (error: unknown, action: GameAction) => void
 }
+
+type JobSlot = 'produceJob' | 'styleJob'
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
-let pollTimer: ReturnType<typeof setTimeout> | undefined
-let produceTimer: ReturnType<typeof setTimeout> | undefined
+let saveRun: Promise<Game | null> | null = null
+/** The patch of the PUT in flight; a server copy read meanwhile keeps it on top. */
+let inflight: GamePatch | null = null
+let watching = true
+const pollTimers: Partial<Record<JobSlot, ReturnType<typeof setTimeout>>> = {}
+const pollFailures: Record<JobSlot, number> = { produceJob: 0, styleJob: 0 }
 
-function remember(workspace: string, gameId: string, produceJobId?: string): void {
+const store = () => useGameAssetsStore.getState()
+const update = (partial: Partial<GameAssetsState>) => useGameAssetsStore.setState(partial)
+const setJob = (slot: JobSlot, job: ProduceJob | null) => update(slot === 'produceJob' ? { produceJob: job } : { styleJob: job })
+
+function fail(error: unknown, action: GameAction): void {
+  update({ error: errorText(error, action), problems: problemsOf(error) })
+}
+
+/** Adopt a server copy of the open game; unsaved and in-flight edits stay on top of it. */
+function adoptGame(fresh: Game, workspace: string): void {
+  const state = store()
+  if (state.workspace !== workspace) return
+  const games = upsertGame(state.games, fresh)
+  if (state.game?.id !== fresh.id) {
+    update({ games })
+    return
+  }
+  if (fresh.revision < state.serverRevision) return // an older read finished after a newer save
+  update({ game: applyGamePatch(fresh, mergeGamePatch(inflight, state.unsaved)), serverRevision: fresh.revision, games })
+}
+
+async function reloadCurrent(): Promise<void> {
+  const { workspace, game } = store()
+  if (!game) return
+  adoptGame(await api.fetchGame(workspace, game.id), workspace)
+}
+
+function refreshQuietly(): Promise<void> {
+  return reloadCurrent().catch(() => undefined)
+}
+
+async function reloadAfterConflict(): Promise<void> {
   try {
-    const previous = JSON.parse(window.localStorage.getItem(SELECTION + workspace) || '{}') as { produceJobId?: string }
-    const jobId = produceJobId === undefined ? previous.produceJobId || '' : produceJobId
-    window.localStorage.setItem(SELECTION + workspace, JSON.stringify({ gameId, produceJobId: jobId }))
-  } catch { /* selection is optional */ }
-}
-
-function rememberedJob(workspace: string): string {
-  try { return JSON.parse(window.localStorage.getItem(SELECTION + workspace) || '{}').produceJobId || '' } catch { return '' }
-}
-
-function remembered(workspace: string): string {
-  try { return JSON.parse(window.localStorage.getItem(SELECTION + workspace) || '{}').gameId || '' } catch { return '' }
-}
-
-function setupPatch(game: Game): Record<string, unknown> {
-  const style = game.style
-  return {
-    title: game.title, genre: game.genre, view: game.view,
-    style: {
-      preset: style.preset, traits: style.traits, negative: style.negative, palette: style.palette,
-      paletteMode: style.paletteMode, pixel: style.pixel, light: style.light, screen: style.screen,
-      model3d: style.model3d, audio: style.audio,
-    },
+    await reloadCurrent()
+    update({ notice: 'revision_conflict' })
+  } catch (error) {
+    fail(error, 'open')
   }
 }
 
-function mergeStyle(style: GameStyle, patch?: Partial<GameStyle>): GameStyle {
-  if (!patch) return style
-  return {
-    ...style, ...patch,
-    pixel: { ...style.pixel, ...(patch.pixel || {}) },
-    audio: { ...style.audio, ...(patch.audio || {}) },
-    model3d: { ...style.model3d, ...(patch.model3d || {}) },
+function stopPoll(slot: JobSlot): void {
+  clearTimeout(pollTimers[slot])
+  pollTimers[slot] = undefined
+}
+
+function stopAllPolls(): void {
+  stopPoll('produceJob')
+  stopPoll('styleJob')
+}
+
+function schedulePoll(slot: JobSlot, jobId: string, delay: number): void {
+  stopPoll(slot)
+  if (!watching) return
+  pollTimers[slot] = setTimeout(() => { void pollJob(slot, jobId) }, delay)
+}
+
+/** Show ``job`` and poll it while the server works on it. */
+function watchJob(slot: JobSlot, job: ProduceJob): void {
+  watching = true
+  pollFailures[slot] = 0
+  setJob(slot, job)
+  if (isActiveJob(job)) schedulePoll(slot, job.id, pollDelay(0))
+  else stopPoll(slot)
+}
+
+async function pollJob(slot: JobSlot, jobId: string): Promise<void> {
+  pollTimers[slot] = undefined
+  const { workspace } = store()
+  const before = store()[slot]
+  if (before?.id !== jobId) return
+  try {
+    const next = await api.fetchProduceJob(workspace, jobId)
+    if (store().workspace !== workspace || store()[slot]?.id !== jobId) return
+    pollFailures[slot] = 0
+    setJob(slot, next)
+    const active = isActiveJob(next)
+    // A job bumps the game revision on every attempt it writes; keep the copy current.
+    if (!active || finishedSteps(next) !== finishedSteps(before)) await refreshQuietly()
+    if (active) schedulePoll(slot, jobId, pollDelay(0))
+  } catch (error) {
+    pollFailed(slot, jobId, error)
   }
 }
 
-function armProducePoll(jobId: string): void {
-  const tick = async () => {
-    const state = useGameAssetsStore.getState()
-    if (state.produceJob?.id !== jobId || TERMINAL.has(state.produceJob.status)) return
-    try {
-      const next = await api.fetchProduceJob(state.workspace, jobId)
-      if (useGameAssetsStore.getState().produceJob?.id !== jobId) return
-      useGameAssetsStore.setState({ produceJob: next })
-      if (!TERMINAL.has(next.status)) {
-        produceTimer = setTimeout(() => { void tick() }, 1000)
-        return
-      }
-      const gameId = useGameAssetsStore.getState().game?.id
-      if (gameId) await useGameAssetsStore.getState().openGame(gameId)
-    } catch (error) {
-      useGameAssetsStore.setState({ error: error instanceof Error ? error.message : 'Could not read production' })
+function pollFailed(slot: JobSlot, jobId: string, error: unknown): void {
+  if (store()[slot]?.id !== jobId) return
+  if (error instanceof GameApiError && error.status === 404) {
+    setJob(slot, null)
+    return
+  }
+  pollFailures[slot] += 1
+  if (pollFailures[slot] === 3) fail(error, 'poll')
+  schedulePoll(slot, jobId, pollDelay(pollFailures[slot]))
+}
+
+/** Resume polling the jobs that are still running, e.g. when the panel mounts again. */
+export function watchGameJobs(): void {
+  watching = true
+  for (const slot of ['produceJob', 'styleJob'] as const) {
+    const job = store()[slot]
+    if (job && isActiveJob(job) && !pollTimers[slot]) schedulePoll(slot, job.id, pollDelay(0))
+  }
+}
+
+/** Stop every poll; the jobs stay in the store. */
+export function stopGamePolling(): void {
+  watching = false
+  stopAllPolls()
+}
+
+function switchGame(workspace: string, game: Game): void {
+  clearTimeout(saveTimer)
+  stopAllPolls()
+  rememberGame(workspace, game.id)
+  update({
+    game, games: upsertGame(store().games, game), serverRevision: game.revision, unsaved: null, dirty: false,
+    error: null, problems: [], notice: null, selectedIds: [], produceJob: null, styleJob: null,
+  })
+}
+
+async function restoreJob(workspace: string, gameId: string): Promise<void> {
+  const jobId = readSelection(workspace).jobs[gameId]
+  if (!jobId) return
+  try {
+    const job = await api.fetchProduceJob(workspace, jobId)
+    if (store().workspace !== workspace || store().game?.id !== gameId) return
+    watchJob('produceJob', job)
+  } catch (error) {
+    if (error instanceof GameApiError && error.status === 404) rememberJob(workspace, gameId, '')
+  }
+}
+
+function takeUnsaved(): GamePatch {
+  const sent = store().unsaved || {}
+  inflight = sent
+  update({ unsaved: null, saving: true })
+  return sent
+}
+
+async function putUnsaved(workspace: string, gameId: string, baseRevision: number): Promise<void> {
+  const sent = takeUnsaved()
+  try {
+    const saved = await api.updateGame(workspace, gameId, sent, baseRevision)
+    inflight = null
+    adoptGame(saved, workspace)
+  } catch (error) {
+    inflight = null
+    if (store().game?.id === gameId) update({ unsaved: mergeGamePatch(sent, store().unsaved) })
+    throw error
+  }
+}
+
+/** A second conflict: show the server copy and drop the edits that could not be saved. */
+async function dropUnsaved(workspace: string, gameId: string): Promise<boolean> {
+  update({ unsaved: null })
+  try {
+    adoptGame(await api.fetchGame(workspace, gameId), workspace)
+  } catch (error) {
+    fail(error, 'open')
+  }
+  update({ notice: 'revision_conflict' })
+  return false
+}
+
+/** Reload, keep the unsaved edits on top of the fresh copy and send them once more. */
+async function retryAfterConflict(workspace: string, gameId: string): Promise<boolean> {
+  try {
+    const fresh = await api.fetchGame(workspace, gameId)
+    adoptGame(fresh, workspace)
+    update({ notice: 'revision_conflict' })
+    await putUnsaved(workspace, gameId, fresh.revision)
+    return true
+  } catch (error) {
+    if (error instanceof GameRevisionConflict) return dropUnsaved(workspace, gameId)
+    fail(error, 'save')
+    return false
+  }
+}
+
+async function saveRound(gameId: string): Promise<boolean> {
+  const { workspace, serverRevision } = store()
+  try {
+    await putUnsaved(workspace, gameId, serverRevision)
+    return true
+  } catch (error) {
+    // Awaited so ``finally`` runs after the retry, not before it.
+    if (error instanceof GameRevisionConflict) return await retryAfterConflict(workspace, gameId)
+    fail(error, 'save')
+    return false
+  } finally {
+    update({ saving: false, dirty: Boolean(store().unsaved) })
+  }
+}
+
+async function flushSaves(): Promise<Game | null> {
+  // Edits made while a PUT is in flight are sent next, with the revision that PUT returned.
+  for (let round = 0; round < 8; round += 1) {
+    const { game, unsaved } = store()
+    if (!game) return null
+    if (!unsaved) return game
+    if (!(await saveRound(game.id))) return null
+  }
+  return store().game
+}
+
+interface RunOptions {
+  /** Save pending edits first (default). */
+  save?: boolean
+  /** On revision_conflict reload and run once more instead of only showing the notice. */
+  retry?: boolean
+}
+
+/** Run one server action: errors become a translated message, a conflict reloads the game. */
+async function run(action: GameAction, work: (game: Game, workspace: string) => Promise<void>, options: RunOptions = {}): Promise<boolean> {
+  if (!store().game) return false
+  if (options.save !== false && !(await store().saveNow())) return false
+  const game = store().game
+  if (!game) return false
+  try {
+    await work(game, store().workspace)
+  } catch (error) {
+    if (!(error instanceof GameRevisionConflict)) {
+      fail(error, action)
+      return false
     }
+    await reloadAfterConflict()
+    return options.retry ? run(action, work, { save: false }) : false
   }
-  clearTimeout(produceTimer)
-  produceTimer = setTimeout(() => { void tick() }, 1000)
+  update({ error: null, problems: [] })
+  return true
+}
+
+function listFailure(error: unknown, action: GameAction): ListOutcome {
+  return { ok: false, error: errorText(error, action), problems: problemsOf(error) }
 }
 
 export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
@@ -121,10 +313,12 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   games: [],
   game: null,
   serverRevision: 0,
+  unsaved: null,
   dirty: false,
   editSeq: 0,
   saving: false,
   error: null,
+  problems: [],
   notice: null,
   section: 'setup',
   presets: [],
@@ -133,39 +327,43 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   selectedIds: [],
 
   load: async workspace => {
-    set({ workspace, ready: false, error: null })
+    if (get().game && get().workspace !== workspace) await get().saveNow()
+    clearTimeout(saveTimer)
+    stopAllPolls()
+    set({
+      workspace, ready: false, error: null, problems: [], notice: null, games: [], game: null, serverRevision: 0,
+      unsaved: null, dirty: false, produceJob: null, styleJob: null, selectedIds: [],
+    })
     try {
       const [library, presets] = await Promise.all([api.fetchGameLibrary(workspace), api.fetchGamePresets()])
       if (get().workspace !== workspace) return
       const games = library.games || []
-      const wanted = remembered(workspace)
-      const id = games.some(item => item.id === wanted) ? wanted : games[0]?.id || ''
       set({ games, presets: presets.presets || [], ready: true })
+      const wanted = readSelection(workspace).gameId
+      const id = games.some(item => item.id === wanted) ? wanted : games[0]?.id
       if (id) await get().openGame(id)
-      else set({ game: null, serverRevision: 0, dirty: false })
-      const jobId = rememberedJob(workspace)
-      if (jobId && get().workspace === workspace) {
-        try {
-          const job = await api.fetchProduceJob(workspace, jobId)
-          if (get().workspace !== workspace || (job.gameId && job.gameId !== get().game?.id)) return
-          set({ produceJob: job })
-          if (!TERMINAL.has(job.status)) armProducePoll(job.id)
-        } catch { /* an old job id is optional */ }
-      }
     } catch (error) {
-      if (get().workspace === workspace) set({ ready: true, error: error instanceof Error ? error.message : 'Could not load games' })
+      if (get().workspace !== workspace) return
+      set({ ready: true })
+      fail(error, 'load')
     }
   },
 
   openGame: async gameId => {
-    const workspace = get().workspace
-    const game = await api.fetchGame(workspace, gameId)
-    if (get().workspace !== workspace) return
-    remember(workspace, game.id)
-    set({
-      game, serverRevision: game.revision, dirty: false, error: null, selectedIds: [],
-      games: get().games.some(item => item.id === game.id) ? get().games.map(item => item.id === game.id ? game : item) : [...get().games, game],
-    })
+    const { workspace, game: current } = get()
+    if (current && current.id !== gameId) await get().saveNow()
+    try {
+      const game = await api.fetchGame(workspace, gameId)
+      if (get().workspace !== workspace) return
+      if (get().game?.id === game.id) {
+        adoptGame(game, workspace)
+        return
+      }
+      switchGame(workspace, game)
+      await restoreJob(workspace, game.id)
+    } catch (error) {
+      if (get().workspace === workspace) fail(error, 'open')
+    }
   },
 
   setSection: section => set({ section }),
@@ -173,255 +371,170 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   patchGame: patch => {
     const game = get().game
     if (!game) return
-    const next: Game = { ...game, ...patch, style: mergeStyle(game.style, patch.style) }
-    set({ game: next, dirty: true, editSeq: get().editSeq + 1, notice: null })
+    set({
+      game: applyGamePatch(game, patch), unsaved: mergeGamePatch(get().unsaved, patch),
+      dirty: true, editSeq: get().editSeq + 1, notice: null,
+    })
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { void get().saveNow() }, 750)
   },
 
-  applyPreset: presetId => {
-    const preset = get().presets.find(item => item.id === presetId)
-    const game = get().game
-    if (!preset || !game) return
-    get().patchGame({
-      style: {
-        preset: preset.id,
-        traits: preset.traits,
-        negative: preset.negative,
-        palette: [...preset.palette],
-        pixel: { ...preset.pixel },
-        screen: preset.screenDefault || game.style.screen,
-        audio: { ...game.style.audio, genre: preset.audio.genre, instruments: preset.audio.instruments, bpm: [...preset.audio.bpm] },
-      },
-    })
-  },
+  // The server resets the preset-derived keys itself; send only the preset and adopt its answer.
+  applyPreset: presetId => run('preset', async (game, workspace) => {
+    const preset = store().presets.find(item => item.id === presetId)
+    const style: StylePatch = { preset: presetId }
+    if (preset?.screenDefault && preset.screenDefault !== game.style.screen) style.screen = preset.screenDefault
+    adoptGame(await api.updateGame(workspace, game.id, { style }, store().serverRevision), workspace)
+  }),
 
-  saveNow: async () => {
+  saveNow: () => {
     clearTimeout(saveTimer)
-    const state = get()
-    const game = state.game
-    if (!game || !state.dirty) return game
-    const seq = state.editSeq
-    const id = game.id
-    set({ saving: true })
-    try {
-      const saved = await api.updateGame(state.workspace, id, setupPatch(game), state.serverRevision || game.revision)
-      const latest = get()
-      const current = latest.game
-      if (!current || current.id !== id) {
-        set({ saving: false })
-        return saved
-      }
-      const edited = latest.editSeq !== seq
-      const visible = edited ? { ...current, revision: saved.revision } : saved
-      set({
-        game: edited ? current : saved,
-        games: latest.games.map(item => item.id === saved.id ? visible : item),
-        serverRevision: saved.revision,
-        dirty: edited,
-        saving: false,
-        error: null,
-      })
-      return edited ? get().saveNow() : saved
-    } catch (error) {
-      if (error instanceof GameRevisionConflict && get().game?.id === id) {
-        const fresh = await api.fetchGame(get().workspace, id)
-        set({
-          game: fresh, serverRevision: fresh.revision, dirty: false, saving: false,
-          notice: 'revision_conflict', error: null,
-          games: get().games.map(item => item.id === fresh.id ? fresh : item),
-        })
-        return fresh
-      }
-      set({ saving: false, error: error instanceof Error ? error.message : 'Could not save the game' })
-      throw error
-    }
+    if (!saveRun) saveRun = flushSaves().finally(() => { saveRun = null })
+    return saveRun
   },
 
   createGame: async () => {
-    await get().saveNow()
-    const created = await api.createGame(get().workspace, { title: 'Untitled game', genre: 'platformer', view: 'side' })
-    remember(get().workspace, created.id, '')
-    set({ games: [...get().games, created], game: created, serverRevision: created.revision, dirty: false, section: 'setup', error: null, produceJob: null, selectedIds: [] })
+    if (get().game && !(await get().saveNow())) return false
+    const workspace = get().workspace
+    try {
+      const created = await api.createGame(workspace, { title: gameText('untitled'), genre: 'platformer', view: 'side' })
+      switchGame(workspace, created)
+      set({ section: 'setup' })
+      return true
+    } catch (error) {
+      fail(error, 'create')
+      return false
+    }
   },
 
-  duplicateGame: async () => {
-    const source = get().game
-    if (!source) return
-    await get().saveNow()
-    const created = await api.createGame(get().workspace, {
-      title: `${source.title} copy`, genre: source.genre, view: source.view,
+  duplicateGame: () => run('duplicate', async (source, workspace) => {
+    const created = await api.createGame(workspace, {
+      title: gameText('copyTitle', { title: source.title }), genre: source.genre, view: source.view,
       style: { ...source.style, approval: 'draft', approvedAt: null, references: [] },
     })
-    remember(get().workspace, created.id, '')
-    set({ games: [...get().games, created], game: created, serverRevision: created.revision, dirty: false, error: null, produceJob: null, selectedIds: [] })
-  },
+    switchGame(workspace, created)
+  }),
 
-  deleteGame: async () => {
-    const current = get().game
-    if (!current) return
-    await api.deleteGame(get().workspace, current.id)
-    const games = get().games.filter(item => item.id !== current.id)
-    set({ games, game: null, dirty: false })
-    if (games[0]) await get().openGame(games[0].id)
-  },
+  deleteGame: () => run('delete', async (current, workspace) => {
+    clearTimeout(saveTimer) // no autosave PUT for a game that is going away
+    await api.deleteGame(workspace, current.id)
+    forgetGame(workspace, current.id)
+    stopAllPolls()
+    const games = store().games.filter(item => item.id !== current.id)
+    update({ games, game: null, unsaved: null, dirty: false, produceJob: null, styleJob: null, selectedIds: [] })
+    if (games[0]) await store().openGame(games[0].id)
+  }, { save: false }),
 
-  startStyleSheet: async () => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    const job = await api.startStyleSheet(get().workspace, game.id)
-    set({ styleJob: job })
-    const watch = async () => {
-      const current = get().styleJob
-      if (!current || current.id !== job.id || TERMINAL.has(current.status)) return
-      try {
-        const next = await api.fetchProduceJob(get().workspace, job.id)
-        if (get().styleJob?.id === job.id) set({ styleJob: next })
-        if (!TERMINAL.has(next.status)) pollTimer = setTimeout(() => { void watch() }, 1000)
-        else await get().openGame(game.id)
-      } catch (error) {
-        set({ error: error instanceof Error ? error.message : 'Could not read the style sheet' })
-      }
-    }
-    clearTimeout(pollTimer)
-    pollTimer = setTimeout(() => { void watch() }, 1000)
-  },
+  startStyleSheet: () => run('styleSheet', async (game, workspace) => {
+    watchJob('styleJob', await api.startStyleSheet(workspace, game.id))
+    await refreshQuietly()
+  }),
 
-  approveStyle: async references => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    const saved = await api.approveGameStyle(get().workspace, game.id, get().serverRevision, references)
-    set({ game: saved, serverRevision: saved.revision, dirty: false, games: get().games.map(item => item.id === saved.id ? saved : item) })
-  },
+  approveStyle: references => run('approveStyle', async (game, workspace) => {
+    adoptGame(await api.approveGameStyle(workspace, game.id, store().serverRevision, references), workspace)
+  }),
 
-  discardSample: async (assetId, attemptId, note) => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    await api.rejectGameAttempt(get().workspace, game.id, assetId, attemptId, note, get().serverRevision)
-    await get().openGame(game.id)
-  },
+  discardSample: (assetId, attemptId, note) => run('discard', async (game, workspace) => {
+    await api.rejectGameAttempt(workspace, game.id, assetId, attemptId, note, store().serverRevision)
+    await reloadCurrent()
+  }),
 
-  addCharacter: async name => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    const slug = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'personaje'
-    const report = await api.gameAssetsFromList(get().workspace, game.id, { text: `personaje ${slug}: ${name} | jugador` })
-    if (report.problems?.length) {
-      set({ error: report.problems.map(item => item.message || item.code || 'invalid').join(' ') })
-      return
-    }
-    await get().openGame(game.id)
-  },
+  addCharacter: name => run('addCharacter', async (_game, workspace) => {
+    await reloadCurrent() // the id must be free on the server, not only in this copy
+    const game = store().game
+    if (!game) throw new GameCodeError('game_not_found')
+    const id = newCharacterId(name, game.assets)
+    await api.gameAssetsFromList(workspace, game.id, { items: [{ kind: 'character', id, name, description: name, options: ['jugador'] }] })
+    await reloadCurrent()
+  }),
 
-  linkKit: async (assetId, kitId) => {
-    const game = get().game
-    const asset = game?.assets.find(item => item.id === assetId)
-    if (!game || !asset) return
-    await get().saveNow()
-    await api.updateGameAsset(get().workspace, game.id, assetId, { spec: { ...asset.spec, kitId } }, get().serverRevision)
-    await get().openGame(game.id)
-  },
+  linkKit: (assetId, kitId) => run('linkKit', async (game, workspace) => {
+    const asset = game.assets.find(item => item.id === assetId)
+    if (!asset) throw new GameCodeError('missing_character')
+    await api.updateGameAsset(workspace, game.id, assetId, { spec: { ...asset.spec, kitId } }, store().serverRevision)
+    await reloadCurrent()
+  }, { retry: true }),
 
   toggleSelected: assetId => {
     const selected = get().selectedIds
     set({ selectedIds: selected.includes(assetId) ? selected.filter(item => item !== assetId) : [...selected, assetId] })
   },
 
-  saveAsset: async (assetId, patch) => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    await api.updateGameAsset(get().workspace, game.id, assetId, patch, get().serverRevision)
-    await get().openGame(game.id)
-  },
+  saveAsset: (assetId, patch) => run('saveAsset', async (game, workspace) => {
+    await api.updateGameAsset(workspace, game.id, assetId, patch, store().serverRevision)
+    await reloadCurrent()
+  }, { retry: true }),
 
   previewList: async body => {
     const game = get().game
-    if (!game) throw new Error('No game')
-    return api.gameAssetsFromList(get().workspace, game.id, { ...body, check: true })
+    if (!game) return listFailure(null, 'checkList')
+    try {
+      return { ok: true, report: await api.gameAssetsFromList(get().workspace, game.id, { ...body, check: true }) }
+    } catch (error) {
+      return listFailure(error, 'checkList')
+    }
   },
 
   commitList: async body => {
     const game = get().game
-    if (!game) throw new Error('No game')
-    await get().saveNow()
-    const report = await api.gameAssetsFromList(get().workspace, game.id, body)
-    if (report.problems?.length) {
-      set({ error: report.problems.map(item => item.message || item.code || 'invalid').join(' ') })
-      return report
+    if (!game) return listFailure(null, 'commitList')
+    if (!(await get().saveNow())) return { ok: false, error: get().error || gameText('actions.save'), problems: [] }
+    try {
+      const report = await api.gameAssetsFromList(get().workspace, game.id, { ...body, check: false })
+      await refreshQuietly()
+      return { ok: true, report }
+    } catch (error) {
+      return listFailure(error, 'commitList')
     }
-    await get().openGame(game.id)
-    return report
   },
 
-  startProduce: async body => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    const job = await api.produceGame(get().workspace, game.id, body)
-    remember(get().workspace, game.id, job.id)
-    set({ produceJob: job, error: null })
-    if (!TERMINAL.has(job.status)) armProducePoll(job.id)
-  },
+  startProduce: body => run('produce', async (game, workspace) => {
+    const job = await api.produceGame(workspace, game.id, body)
+    rememberJob(workspace, game.id, job.id)
+    watchJob('produceJob', job)
+  }),
 
-  cancelProduce: async () => {
-    const job = get().produceJob
-    if (!job) return
-    const next = await api.cancelProduceJob(get().workspace, job.id)
-    set({ produceJob: next })
-  },
+  cancelProduce: () => run('cancel', async (_game, workspace) => {
+    const job = store().produceJob
+    if (job) watchJob('produceJob', await api.cancelProduceJob(workspace, job.id))
+  }, { save: false }),
 
-  resumeProduce: async () => {
-    const job = get().produceJob
-    if (!job) return
-    const next = await api.resumeProduceJob(get().workspace, job.id)
-    set({ produceJob: next, error: null })
-    if (!TERMINAL.has(next.status)) armProducePoll(next.id)
-  },
+  resumeProduce: () => run('resume', async (_game, workspace) => {
+    const job = store().produceJob
+    if (job) watchJob('produceJob', await api.resumeProduceJob(workspace, job.id))
+  }),
 
-  approveAttempt: async (assetId, attemptId) => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    await api.approveGameAttempt(get().workspace, game.id, assetId, attemptId, get().serverRevision)
-    await get().openGame(game.id)
-  },
+  approveAttempt: (assetId, attemptId) => run('approve', async (game, workspace) => {
+    await api.approveGameAttempt(workspace, game.id, assetId, attemptId, store().serverRevision)
+    await reloadCurrent()
+  }),
 
   rejectAttempt: async (assetId, attemptId, note) => {
-    const game = get().game
-    if (!game || !note.trim()) return
-    await get().saveNow()
-    await api.rejectGameAttempt(get().workspace, game.id, assetId, attemptId, note.trim(), get().serverRevision)
-    await get().openGame(game.id)
+    if (!note.trim()) return false
+    return run('reject', async (game, workspace) => {
+      await api.rejectGameAttempt(workspace, game.id, assetId, attemptId, note.trim(), store().serverRevision)
+      await reloadCurrent()
+    })
   },
 
-  setLock: async (assetId, locked) => {
-    const game = get().game
-    if (!game) return
-    await get().saveNow()
-    await api.lockGameAsset(get().workspace, game.id, assetId, locked, get().serverRevision)
-    await get().openGame(game.id)
-  },
+  setLock: (assetId, locked) => run('lock', async (game, workspace) => {
+    await api.lockGameAsset(workspace, game.id, assetId, locked, store().serverRevision)
+    await reloadCurrent()
+  }),
 
-  approveClean: async () => {
-    const game = get().game
-    if (!game) return
-    const picks = approvableClean(game.assets)
-    await get().saveNow()
-    for (const pick of picks) {
-      await api.approveGameAttempt(get().workspace, game.id, pick.assetId, pick.attemptId, get().serverRevision)
-      await get().openGame(game.id)
+  approveClean: () => run('approveClean', async (game, workspace) => {
+    for (const pick of approvableClean(game.assets)) {
+      await api.approveGameAttempt(workspace, game.id, pick.assetId, pick.attemptId, store().serverRevision)
+      await reloadCurrent()
     }
-  },
+  }),
 
   regenerateAsset: async assetId => {
-    await get().startProduce({ assetIds: [assetId], rerender: true })
-    get().setSection('produce')
+    const started = await get().startProduce({ assetIds: [assetId], rerender: true })
+    if (started) get().setSection('produce')
+    return started
   },
+
+  showError: (error, action) => fail(error, action),
 }))
 
-export type { PaletteMode }

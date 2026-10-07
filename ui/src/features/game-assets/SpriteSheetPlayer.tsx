@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { atlasFrames, atlasLoops, frameDelayMs, stepFrame, type AtlasFrame } from './reviewModel'
 import { buttonClass } from './styles'
@@ -48,27 +48,31 @@ function fillBackdrop(ctx: CanvasRenderingContext2D, width: number, height: numb
 
 export function SpriteSheetPlayer({ imageUrl, atlas, pixel }: { imageUrl: string; atlas: unknown; pixel: boolean }) {
   const { t } = useUiTranslation('gameAssets')
-  const frames = atlasFrames(atlas)
+  const frames = useMemo(() => atlasFrames(atlas), [atlas])
   const [index, setIndex] = useState(0)
   const [scale, setScale] = useState(1)
   const [mirror, setMirror] = useState(false)
   const [loop, setLoop] = useState(() => atlasLoops(atlas))
   const [backdrop, setBackdrop] = useState<Backdrop>('checker')
   const [color, setColor] = useState('#1a1a25')
+  const [loaded, setLoaded] = useState<{ url: string; image: HTMLImageElement } | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const imageRef = useRef<HTMLImageElement | null>(null)
   const frame = frames[Math.min(index, Math.max(0, frames.length - 1))]
   const delay = frameDelayMs(frame?.duration)
+  const image = loaded?.url === imageUrl ? loaded.image : null
+
+  // The sheet loads once per URL; frames repaint from the loaded image.
+  useEffect(() => {
+    if (!imageUrl) return undefined
+    const next = new Image()
+    next.onload = () => setLoaded({ url: imageUrl, image: next })
+    next.src = imageUrl
+    return () => { next.onload = null }
+  }, [imageUrl])
 
   useEffect(() => {
-    const image = new Image()
-    image.onload = () => {
-      imageRef.current = image
-      paintFrame(canvasRef.current, image, frame, { scale, mirror, pixel, backdrop, color })
-    }
-    image.src = imageUrl
-    return () => { image.onload = null }
-  }, [imageUrl, frame, scale, mirror, pixel, backdrop, color])
+    if (image) paintFrame(canvasRef.current, image, frame, { scale, mirror, pixel, backdrop, color })
+  }, [image, frame, scale, mirror, pixel, backdrop, color])
 
   useEffect(() => {
     const timer = setTimeout(() => setIndex(current => stepFrame(current, frames.length, loop)), delay)

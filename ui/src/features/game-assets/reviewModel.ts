@@ -64,38 +64,78 @@ export function stepFrame(index: number, count: number, loop: boolean): number {
   return loop ? 0 : index
 }
 
-export function attemptWarnings(attempt: GameAttempt | null | undefined): string[] {
-  return Array.isArray(attempt?.warnings) ? attempt.warnings.map(item => String(item)) : []
+/** One warning with a stable key. ``code`` picks the translation; ``message`` is the server text. */
+export interface ReviewWarning {
+  key: string
+  code: string
+  message: string
+  file: string
+  /** ``duplicate_of:<id>`` keeps the id here. */
+  ref: string
 }
 
-export function chosenAttempt(asset: GameAsset): GameAttempt | null {
-  const approved = asset.attempts.find(item => item.id === asset.approvedAttemptId)
-  if (approved) return approved
-  const open = [...asset.attempts].reverse().find(item => item.status === 'ok' && item.decision !== 'rejected')
-  return open || asset.attempts[asset.attempts.length - 1] || null
+function readWarning(item: unknown, index: number): ReviewWarning {
+  if (typeof item === 'string') {
+    const [code, ref = ''] = item.split(':', 2)
+    return { key: `${item}-${index}`, code, message: item, file: '', ref }
+  }
+  const entry = record(item)
+  const code = typeof entry.code === 'string' ? entry.code : ''
+  const file = typeof entry.file === 'string' ? entry.file : ''
+  const message = typeof entry.message === 'string' ? entry.message : ''
+  return { key: `${code || 'warning'}-${file}-${index}`, code, message, file, ref: '' }
 }
 
+export function attemptWarnings(attempt: GameAttempt | null | undefined): ReviewWarning[] {
+  return Array.isArray(attempt?.warnings) ? attempt.warnings.map(readWarning) : []
+}
+
+/** Candidates that succeeded and still wait for a decision. */
+export function undecidedAttempts(asset: GameAsset): GameAttempt[] {
+  return asset.attempts.filter(item => item.status === 'ok' && !item.decision)
+}
+
+/** Assets in review, and rejected assets whose other candidates are still undecided. */
 export function reviewAssets(assets: GameAsset[], kind: string): GameAsset[] {
-  return assets.filter(asset => asset.status === 'review' && (!kind || asset.kind === kind))
+  return assets.filter(asset => {
+    if (kind && asset.kind !== kind) return false
+    if (asset.status === 'review') return true
+    return asset.status === 'rejected' && undecidedAttempts(asset).length > 0
+  })
 }
 
+/** One pick per listed asset that has exactly one undecided candidate and no warning on it. */
 export function approvableClean(assets: GameAsset[]): { assetId: string; attemptId: string }[] {
   const picks: { assetId: string; attemptId: string }[] = []
-  for (const asset of assets) {
-    if (asset.status !== 'review') continue
-    const attempt = chosenAttempt(asset)
-    if (!attempt || attemptWarnings(attempt).length) continue
-    picks.push({ assetId: asset.id, attemptId: attempt.id })
+  for (const asset of reviewAssets(assets, '')) {
+    const open = undecidedAttempts(asset)
+    if (open.length !== 1 || attemptWarnings(open[0]).length) continue
+    picks.push({ assetId: asset.id, attemptId: open[0].id })
   }
   return picks
 }
 
+const HIDDEN_METRICS = new Set(['candidates', 'attemptIds'])
+const FIRST_METRICS = ['loopStart', 'loopEnd', 'missingClips']
+
+function metricValue(value: unknown): string | null {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value) && value.every(item => typeof item === 'string' || typeof item === 'number')) return value.join(', ')
+  return null
+}
+
+/** ``key: value`` lines; loop points and missing clips come first and are never cut. */
 export function metricLines(metrics: Record<string, unknown> | undefined): string[] {
   if (!metrics) return []
-  return Object.entries(metrics)
-    .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-    .slice(0, 8)
-    .map(([key, value]) => `${key}: ${value}`)
+  const keys = Object.keys(metrics).filter(key => !HIDDEN_METRICS.has(key))
+  const ordered = [...FIRST_METRICS.filter(key => keys.includes(key)), ...keys.filter(key => !FIRST_METRICS.includes(key))]
+  const lines: string[] = []
+  for (const key of ordered) {
+    const value = metricValue(metrics[key])
+    if (value === null || (key === 'missingClips' && !value)) continue
+    lines.push(`${key}: ${value}`)
+  }
+  return lines.slice(0, 10) // the first metrics lead, so the cut never drops them
 }
 
 export function stillFile(files: Record<string, string>): string {
@@ -119,25 +159,16 @@ export function playbackSources(files: Record<string, string>): AudioSource[] {
   return []
 }
 
-export function loopRange(metrics: Record<string, unknown> | undefined, sampleRate = 48000): { start: number; end: number } {
-  const duration = num(metrics?.duration)
-  let start = num(metrics?.loopStart)
-  let end = num(metrics?.loopEnd)
-  if (sampleRate > 0 && end > duration + 1) {
-    start /= sampleRate
-    end /= sampleRate
-  }
-  if (end <= start) end = duration > start ? duration : start
-  return { start, end }
+/** The music file for the Web Audio loop: the WAV keeps sample-exact loop points. */
+export function musicFile(files: Record<string, string>): string {
+  return files.wav || files.ogg || files.main || ''
 }
 
-export function seamTime(end: number): number {
-  return Math.max(0, end - 2)
-}
-
-export function countLoop(previous: number, current: number, end: number, turns: number): number {
-  if (current + 0.05 < previous && previous > end - 0.25) return turns + 1
-  return turns
+/** Loop points in samples, ``loopEnd`` inclusive; ``null`` when the take has none. */
+export function loopSamples(metrics: Record<string, unknown> | undefined): { start: number; end: number } | null {
+  const end = metrics?.loopEnd
+  if (typeof end !== 'number' || !Number.isFinite(end)) return null
+  return { start: num(metrics?.loopStart), end }
 }
 
 export function clipNames(metrics: Record<string, unknown> | undefined): string[] {
