@@ -56,6 +56,18 @@ test('bulk approve skips warnings, decided assets and assets with several undeci
   ])
 })
 
+test('style-check notes do not block bulk approve; a style mismatch or a duplicate does', () => {
+  const picks = approvableClean([
+    asset('unchecked', [attempt('u-a', ['style_check_unavailable'])]),
+    asset('check-crashed', [attempt('f-a', [{ code: 'style_check_failed', message: 'analyze timed out' }])]),
+    asset('both-notes', [attempt('b-a', ['style_check_unavailable', { code: 'style_check_failed', message: 'x' }])]),
+    asset('off-style', [attempt('o-a', ['style_mismatch'])]),
+    asset('copy', [attempt('c-a', ['duplicate_of:heroe'])]),
+    asset('note-and-copy', [attempt('n-a', ['style_check_unavailable', 'duplicate_of:heroe'])]),
+  ])
+  assert.deepEqual(picks.map(pick => pick.assetId), ['unchecked', 'check-crashed', 'both-notes'])
+})
+
 test('review lists rejected assets that still have an undecided ok candidate', () => {
   const assets = [
     asset('open', [attempt('o-a1', [], { decision: 'rejected', note: 'x' }), attempt('o-a2')], 'rejected'),

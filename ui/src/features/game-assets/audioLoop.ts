@@ -92,8 +92,10 @@ export class LoopEngine {
     this.context = this.context || new Context()
     const context = this.context
     const buffer = await this.load(context)
+    if (this.context !== context) return // closed while the take loaded
     this.stop()
     if (context.state === 'suspended') await context.resume()
+    if (this.context !== context) return
     const source = context.createBufferSource()
     source.buffer = buffer
     source.loop = true
@@ -117,6 +119,15 @@ export class LoopEngine {
     if (!source) return
     try { source.stop() } catch { /* a source that never started cannot stop */ }
     source.disconnect()
+  }
+
+  /** Pause the context (e.g. a hidden tab); ``resume`` carries on from the same sample. */
+  suspend(): void {
+    if (this.context?.state === 'running') void this.context.suspend().catch(() => undefined)
+  }
+
+  resume(): void {
+    if (this.source && this.context?.state === 'suspended') void this.context.resume().catch(() => undefined)
   }
 
   close(): void {

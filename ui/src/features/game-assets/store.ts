@@ -7,7 +7,7 @@ import { newCharacterId } from './styles'
 import {
   applyGamePatch, finishedSteps, forgetGame, isActiveJob, mergeGamePatch, pollDelay, readSelection, rememberGame, rememberJob, upsertGame,
 } from './storeModel'
-import type { Game, GamePatch, GameProblem, GameSection, ListReport, ProduceJob, StylePatch, StylePreset, StyleReference } from './types'
+import type { ExportResult, Game, GamePatch, GameProblem, GameSection, ListReport, ProduceJob, StylePatch, StylePreset, StyleReference } from './types'
 
 export interface ListBodyInput { text?: string; csv?: string; items?: unknown[]; format?: string; replace?: boolean }
 export type ListOutcome = { ok: true; report: ListReport } | { ok: false; error: string; problems: GameProblem[] }
@@ -31,6 +31,9 @@ interface GameAssetsState {
   styleJob: ProduceJob | null
   produceJob: ProduceJob | null
   selectedIds: string[]
+  /** The last export of the open game; cleared when another game opens. */
+  exportResult: { gameId: string; result: ExportResult } | null
+  exporting: boolean
   load: (workspace: string) => Promise<void>
   openGame: (gameId: string) => Promise<void>
   setSection: (section: GameSection) => void
@@ -58,6 +61,8 @@ interface GameAssetsState {
   setLock: (assetId: string, locked: boolean) => Promise<boolean>
   approveClean: () => Promise<boolean>
   regenerateAsset: (assetId: string) => Promise<boolean>
+  /** Saves pending edits, writes the zip and reloads the game so ``exports`` lists it. */
+  exportPack: () => Promise<boolean>
   showError: (error: unknown, action: GameAction) => void
 }
 
@@ -187,7 +192,7 @@ function switchGame(workspace: string, game: Game): void {
   rememberGame(workspace, game.id)
   update({
     game, games: upsertGame(store().games, game), serverRevision: game.revision, unsaved: null, dirty: false,
-    error: null, problems: [], notice: null, selectedIds: [], produceJob: null, styleJob: null,
+    error: null, problems: [], notice: null, selectedIds: [], produceJob: null, styleJob: null, exportResult: null,
   })
 }
 
@@ -325,6 +330,8 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   styleJob: null,
   produceJob: null,
   selectedIds: [],
+  exportResult: null,
+  exporting: false,
 
   load: async workspace => {
     if (get().game && get().workspace !== workspace) await get().saveNow()
@@ -332,7 +339,7 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
     stopAllPolls()
     set({
       workspace, ready: false, error: null, problems: [], notice: null, games: [], game: null, serverRevision: 0,
-      unsaved: null, dirty: false, produceJob: null, styleJob: null, selectedIds: [],
+      unsaved: null, dirty: false, produceJob: null, styleJob: null, selectedIds: [], exportResult: null,
     })
     try {
       const [library, presets] = await Promise.all([api.fetchGameLibrary(workspace), api.fetchGamePresets()])
@@ -421,7 +428,7 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
     forgetGame(workspace, current.id)
     stopAllPolls()
     const games = store().games.filter(item => item.id !== current.id)
-    update({ games, game: null, unsaved: null, dirty: false, produceJob: null, styleJob: null, selectedIds: [] })
+    update({ games, game: null, unsaved: null, dirty: false, produceJob: null, styleJob: null, selectedIds: [], exportResult: null })
     if (games[0]) await store().openGame(games[0].id)
   }, { save: false }),
 
@@ -533,6 +540,20 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
     const started = await get().startProduce({ assetIds: [assetId], rerender: true })
     if (started) get().setSection('produce')
     return started
+  },
+
+  exportPack: async () => {
+    if (get().exporting) return false
+    set({ exporting: true, exportResult: null })
+    try {
+      return await run('export', async (game, workspace) => {
+        const result = await api.exportGame(workspace, game.id)
+        update({ exportResult: { gameId: game.id, result } })
+        await refreshQuietly() // the server appended the export record; show it in the history
+      })
+    } finally {
+      set({ exporting: false })
+    }
   },
 
   showError: (error, action) => fail(error, action),

@@ -104,12 +104,24 @@ export function reviewAssets(assets: GameAsset[], kind: string): GameAsset[] {
   })
 }
 
-/** One pick per listed asset that has exactly one undecided candidate and no warning on it. */
+/** Notes that say a check could not run; they say nothing against the candidate itself. */
+const INFORMATIONAL_WARNINGS = new Set(['style_check_unavailable', 'style_check_failed'])
+
+export function informationalWarning(warning: ReviewWarning): boolean {
+  return INFORMATIONAL_WARNINGS.has(warning.code)
+}
+
+/** Warnings that should stop a bulk approval (``style_mismatch``, ``duplicate_of``…), without the informational ones. */
+export function blockingWarnings(attempt: GameAttempt | null | undefined): ReviewWarning[] {
+  return attemptWarnings(attempt).filter(warning => !informationalWarning(warning))
+}
+
+/** One pick per listed asset that has exactly one undecided candidate and no blocking warning on it. */
 export function approvableClean(assets: GameAsset[]): { assetId: string; attemptId: string }[] {
   const picks: { assetId: string; attemptId: string }[] = []
   for (const asset of reviewAssets(assets, '')) {
     const open = undecidedAttempts(asset)
-    if (open.length !== 1 || attemptWarnings(open[0]).length) continue
+    if (open.length !== 1 || blockingWarnings(open[0]).length) continue
     picks.push({ assetId: asset.id, attemptId: open[0].id })
   }
   return picks
@@ -124,18 +136,31 @@ function metricValue(value: unknown): string | null {
   return null
 }
 
-/** ``key: value`` lines; loop points and missing clips come first and are never cut. */
-export function metricLines(metrics: Record<string, unknown> | undefined): string[] {
+/** ``[key, value]`` pairs; loop points and missing clips come first and are never cut. */
+export function metricEntries(metrics: Record<string, unknown> | undefined): [string, string][] {
   if (!metrics) return []
   const keys = Object.keys(metrics).filter(key => !HIDDEN_METRICS.has(key))
   const ordered = [...FIRST_METRICS.filter(key => keys.includes(key)), ...keys.filter(key => !FIRST_METRICS.includes(key))]
-  const lines: string[] = []
+  const entries: [string, string][] = []
   for (const key of ordered) {
     const value = metricValue(metrics[key])
     if (value === null || (key === 'missingClips' && !value)) continue
-    lines.push(`${key}: ${value}`)
+    entries.push([key, value])
   }
-  return lines.slice(0, 10) // the first metrics lead, so the cut never drops them
+  return entries.slice(0, 10) // the first metrics lead, so the cut never drops them
+}
+
+/** ``key: value`` lines of ``metricEntries``. */
+export function metricLines(metrics: Record<string, unknown> | undefined): string[] {
+  return metricEntries(metrics).map(([key, value]) => `${key}: ${value}`)
+}
+
+/** The approved attempt, as the export packs it: ``null`` when it is absent, failed or rejected. */
+export function approvedAttempt(asset: GameAsset): GameAttempt | null {
+  if (!asset.approvedAttemptId) return null
+  const attempt = asset.attempts.find(item => item.id === asset.approvedAttemptId)
+  if (!attempt || (attempt.status || 'ok') !== 'ok' || attempt.decision === 'rejected') return null
+  return attempt
 }
 
 export function stillFile(files: Record<string, string>): string {

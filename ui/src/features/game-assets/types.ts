@@ -162,12 +162,22 @@ export interface ListReport {
   assets?: GameAsset[]
 }
 
+/** ``problem`` is set for an approved asset the pack lost: ``no_approved_attempt``, ``not_packed`` or ``files_missing``. */
+export interface ExportMissing {
+  id?: string
+  assetId?: string
+  kind?: string
+  status?: string
+  problem?: string
+  files?: string[]
+}
+
 export interface ExportResult {
   file: string
   url: string
   counts: Record<string, number>
-  missing: unknown[]
+  missing: ExportMissing[]
 }
 
 export const GAME_SECTIONS: GameSection[] = ['setup', 'style', 'cast', 'list', 'produce', 'review', 'play', 'export']
-export const LATER_SECTIONS: GameSection[] = ['play', 'export']
+export const LATER_SECTIONS: GameSection[] = []

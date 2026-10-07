@@ -6,7 +6,7 @@ import type { GameProblem } from './types'
 export type GameAction =
   | 'load' | 'open' | 'save' | 'preset' | 'create' | 'duplicate' | 'delete' | 'styleSheet' | 'approveStyle'
   | 'discard' | 'addCharacter' | 'linkKit' | 'openEditor' | 'saveAsset' | 'checkList' | 'commitList'
-  | 'produce' | 'cancel' | 'resume' | 'poll' | 'approve' | 'reject' | 'lock' | 'approveClean'
+  | 'produce' | 'cancel' | 'resume' | 'poll' | 'approve' | 'reject' | 'lock' | 'approveClean' | 'export'
 
 /** A local failure that carries a translatable ``errors.<code>``. */
 export class GameCodeError extends Error {

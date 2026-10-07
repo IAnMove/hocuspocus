@@ -261,7 +261,10 @@
     "over_budget": "The model is over the triangle budget.",
     "triangles_unknown": "The triangle count is unknown.",
     "clip_missing": "Some animation clips are missing.",
-    "seam_visible": "The tile seam is visible."
+    "seam_visible": "The tile seam is visible.",
+    "style_mismatch": "The style does not match the references.",
+    "style_check_unavailable": "The style check could not run.",
+    "style_check_failed": "The style check failed."
   },
   "actions": {
     "load": "Could not load the games.",
@@ -287,7 +290,8 @@
     "approve": "Could not approve the attempt.",
     "reject": "Could not reject the attempt.",
     "lock": "Could not change the lock.",
-    "approveClean": "Could not approve every clean asset."
+    "approveClean": "Could not approve every clean asset.",
+    "export": "Could not export the pack."
   },
   "errors": {
     "revision_conflict": "The game changed on the server. Reloaded the latest revision.",
@@ -326,6 +330,54 @@
     "invalid_request": "The request was not valid.",
     "invalid_json": "The JSON must be a list of assets.",
     "missing_kit": "The character kit is missing.",
-    "editor_busy": "Finish or save the character that is open in the Character Creator first."
+    "editor_busy": "Finish or save the character that is open in the Character Creator first.",
+    "nothing_to_export": "Nothing to export: approve at least one asset whose files exist."
+  },
+  "example": "Example",
+  "warnLoopSeam": "The loop seam is audible.",
+  "warnDuplicate": "Looks like a duplicate of {{id}}.",
+  "playMissing": "Missing from the playtest",
+  "mute": "Mute",
+  "exportApproved": "Approved: {{count}}",
+  "exportMissing": "Not approved: {{count}}",
+  "exportPack": "Export",
+  "exportHistory": "Export history",
+  "exportEmpty": "No exports yet.",
+  "playControls": "Click the game or focus it with Tab. Arrows move, Shift runs, Space or Up jumps, X attacks. Music starts with the first key.",
+  "playCanvas": "Side-view playtest",
+  "playMissingItems": {
+    "hero": "An approved player character",
+    "animation": "Hero animation: {{name}}",
+    "tile": "A ground tile or tileset",
+    "background": "A background",
+    "music": "Music",
+    "sfx": "Sound effect: {{name}}"
+  },
+  "playActions": {
+    "idle": "idle",
+    "walk": "walk",
+    "run": "run",
+    "jump": "jump",
+    "fall": "fall",
+    "attack": "attack"
+  },
+  "playTriggers": {
+    "jump": "jump",
+    "coin": "coin",
+    "hit": "hit"
+  },
+  "exporting": "Exporting…",
+  "exportDone": "Pack written:",
+  "exportLost": "Approved but not fully packed",
+  "exportTotal": "Total: {{count}}",
+  "exportRevision": "Revision {{revision}}",
+  "exportNeedsApproval": "Approve at least one asset to export a pack.",
+  "exportProblems": {
+    "no_approved_attempt": "its approved attempt is missing, failed or rejected",
+    "not_packed": "no file could be packed",
+    "files_missing": "some files are missing"
+  },
+  "metrics": {
+    "styleScore": "Style match (1–5)"
   }
 }
