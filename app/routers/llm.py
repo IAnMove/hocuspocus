@@ -17,6 +17,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from services.lyrics_language import detect_language
+
 
 # The song-writer system prompts live in editable guide files (loaded via
 # services.guide_loader.load_guide at request time, cached after first read):
@@ -90,10 +92,19 @@ def _optional_lyria_warning(lyria_prompt: str, requested: bool) -> str:
     return ""
 
 
+def _requested_language(body: dict, description: str) -> str:
+    """The lyrics language the caller asked for, else the one its description is written in, else English. The
+    Director song writer and Music Simple send none: a Spanish description used to get English lyrics."""
+    given = str(body.get("language") or "").strip()[:80]
+    if given:
+        return given
+    return {"es": "Spanish", "en": "English"}.get(detect_language(description), "English")
+
+
 def _minimax_song_request_prompt(body: dict, description: str, instrumental: bool) -> str:
     """Build a labelled brief so references never leak into the final provider prompt."""
     model = str(body.get("model") or "music-3.0").strip()
-    language = str(body.get("language") or "English").strip()[:80]
+    language = _requested_language(body, description)
     try:
         duration = max(20, min(360, int(body.get("duration_seconds") or 90)))
     except (TypeError, ValueError):
@@ -449,7 +460,7 @@ def create_llm_router(
         instrumental = bool(body.get("instrumental"))
         target = str(body.get("target") or "ace-step").strip().lower()
         model = str(body.get("model") or "music-3.0").strip()
-        language = str(body.get("language") or "English").strip()[:80]
+        language = _requested_language(body, description)
         image_paths = _song_writer_image_paths(body)
         system_prompt, user_prompt, include_lyria = _song_writer_prompts(
             body, description, instrumental, target, language,
