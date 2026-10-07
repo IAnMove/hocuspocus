@@ -9,20 +9,26 @@ without the render history noise, for copying an earlier episode's style.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from services.pose_facing import kit_facings
 
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SHOT_FIELDS = ("id", "order", "sceneId", "locationId", "locationVariantId", "productionMethod", "durationSeconds",
                "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "foley", "approvedAttemptId")
+# Detecting the facing of poses not read before stops after this many seconds; the rest are read by later calls.
+FACING_BUDGET = 20.0
 
 
 def guide_text() -> str:
     return GUIDE_PATH.read_text(encoding="utf-8")
 
 
-def _character(character: dict[str, Any], kits: dict[str, Any]) -> dict[str, Any]:
+def _character(character: dict[str, Any], kits: dict[str, Any], root: str | None = None,
+               late: Callable[[], bool] = lambda: False) -> dict[str, Any]:
     ref = ((character.get("voiceProfile") or {}).get("characterKitRef") or {}).get("id")
     kit = kits.get(ref) or {}
     voices = kit.get("voicesByLanguage") or {}
@@ -34,6 +40,10 @@ def _character(character: dict[str, Any], kits: dict[str, Any]) -> dict[str, Any
              "rigged": bool(kit.get("mouth"))}
     if isinstance(character.get("layout2d"), dict) and character["layout2d"]:
         entry["layout2d"] = character["layout2d"]
+    # Which way each pose looks (left, right, front): stand it on the other side of the frame (look room).
+    facing = kit_facings(kit, root, late) if kit else {}
+    if facing:
+        entry["facing"] = facing
     if not ref or not kit:
         entry["missing"] = "no Character Kit yet: make one before rendering a shot with this character"
     return entry
@@ -85,12 +95,15 @@ def _series_summary(series: dict[str, Any]) -> dict[str, Any]:
             "themes": canon.get("themes") or []}
 
 
-def build_bible(series: dict[str, Any], kits: dict[str, Any], workspace_files: list[str]) -> dict[str, Any]:
+def build_bible(series: dict[str, Any], kits: dict[str, Any], workspace_files: list[str], root: str | None = None) -> dict[str, Any]:
+    """The series bible; with the workspace ``root`` the poses' images are read for which way they look."""
     episodes = sorted((series.get("episodesById") or {}).values(), key=lambda item: item.get("number") or 0)
     next_number = max([episode.get("number") or 0 for episode in episodes] + [0]) + 1
+    deadline = time.monotonic() + FACING_BUDGET
     return {
         "series": _series_summary(series),
-        "characters": [_character(character, kits) for character in series.get("characters") or []],
+        "characters": [_character(character, kits, root, lambda: time.monotonic() > deadline)
+                       for character in series.get("characters") or []],
         "locations": [_location(location) for location in series.get("locations") or []],
         "soundDesign": series.get("soundDesign") or {},
         "audio": audio_files(workspace_files),

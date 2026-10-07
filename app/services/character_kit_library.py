@@ -16,6 +16,7 @@ from typing import Any
 
 from .character_face_patch import normalize_character_face_patch
 from .character_speech_definition import normalize_speech3d, normalize_character_voice, normalize_character_voices_by_language
+from .pose_facing import normalize_facing
 
 
 CHARACTER_KIT_LIBRARY_FILENAME = ".character-kit-library-v1.json"
@@ -101,6 +102,10 @@ def _asset(value: Any, label: str) -> dict[str, Any]:
     }
     if face_patch is not None:
         result["facePatch"] = face_patch
+    # Which way the figure looks (left, right or front): set by hand or by the flat rig, used for look room.
+    facing = normalize_facing(value.get("facing"), f"{label} facing")
+    if facing:
+        result["facing"] = facing
     result.update(_asset_dimensions(value, label))
     for key, maximum in (("prompt", 4000), ("model", 240), ("workspace", 120)):
         text = _text(value.get(key), f"{label} {key}", maximum)

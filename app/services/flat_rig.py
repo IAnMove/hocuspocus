@@ -24,7 +24,8 @@ mouth is kept as the rest shape and the open shapes are drawn in its own ink;
 with ``"warp"`` each pose talks with its own drawing (``flat_rig_warp``): the
 lower lip and jaw move down and the gap is inked, one set of patches per pose.
 A re-rig keeps the kit's look (the last rig's, or its style preset's) for every
-``style`` key the call leaves out, so a warp kit stays warp (``flat_rig_look``).
+``style`` key the call leaves out, so a warp kit stays warp (``flat_rig_look``). Which way each pose looks is read
+from the same landmarks and kept on the pose as ``facing`` (``pose_facing``; one the user set since is kept).
 
 Ported from the agent script that rigged the six "Uncanny Valley" characters.
 Only OpenCV, numpy and Pillow are needed.
@@ -44,7 +45,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from services import face_landmarks, flat_rig_warp
+from services import face_landmarks, flat_rig_warp, pose_facing
 from services.character_kit_library import patch_character_kit, read_character_kit_library
 from services.face_enlarge import face_caption
 from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _anchor, _paste_inside
@@ -1024,10 +1025,13 @@ def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, p
             raise FlatRigError("unknown_pose", f"The character has no pose {pose}")
         sources[pose] = pose_source(kit, pose)
         with Image.open(_workspace_file(sources[pose], workspace, workspace_dir)) as image:
+            landmarks = face_landmarks.detect(image)
             try:
-                rigs[pose] = rig_pose(image, style, (hints or {}).get(pose), face_landmarks.detect(image))
+                rigs[pose] = rig_pose(image, style, (hints or {}).get(pose), landmarks)
             except FlatRigError as error:
                 raise FlatRigError(error.code, f"Pose {pose}: {error}", error.status) from error
+        # Which way the pose looks, from the same landmarks (pose_facing): stored on the pose for look room.
+        rigs[pose]["facing"] = pose_facing.from_landmarks(landmarks)
         if style["mouthStyle"] == "warp":
             warped = flat_rig_warp.rig_warp(rigs[pose])
             rigs[pose].update(warped, warnings=rigs[pose]["warnings"] + warped["warnings"])
@@ -1048,6 +1052,7 @@ def _pose_reports(rigs: dict[str, dict[str, Any]], placed: dict) -> dict[str, di
                    "face": "realistic" if rig["realistic"] else "cartoon", "blinks": rig["blinks"],
                    "landmarks": rig["guided"], **({"mouthLine": rig["line"]} if "line" in rig else {}),
                    **({"faceSize": rig["face_size"]} if rig.get("face_size") else {}),
+                   **({"facing": rig["facing"]} if rig.get("facing") else {}),
                    **({"hints": placed[pose]} if pose in placed else {})}
             for pose, rig in rigs.items()}
 
@@ -1071,12 +1076,13 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     kit["mouthMapping"] = dict(MAPPING)
     blink_file = _save(rigs["base"]["blink"], workspace_dir, f"kit-{kit_id}-blink")
     kit["eyes"] = {"blink": _overlay(kit_id, name, "blink", blink_file, workspace)}
-    anchors = dict(kit.get("anchors") or {})
+    anchors, facings = dict(kit.get("anchors") or {}), pose_facing.rigged_facings(kit)
     for pose, rig in rigs.items():
         file = _save(rig["image"], workspace_dir, f"kit-{kit_id}-{pose}-rig")
         target = kit["base"] if pose == "base" else kit["poses"][pose]
         target.update({"source": _url(file, workspace), "width": rig["width"], "height": rig["height"],
                        "alphaStatus": "transparent", "workspace": workspace})
+        facings[pose] = pose_facing.settle(target, rig["facing"], facings.get(pose))
         # Each pose closes its own eyes: the base blink, scaled to another pose's eye height, left the
         # sclera showing wherever the eyes sit wider apart or larger than in the base.
         own = {"blinkSource": _url(_save(rig["blink"], workspace_dir, f"kit-{kit_id}-{pose}-blink"), workspace)} if rig["blinks"] else {}
@@ -1092,6 +1098,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     unwiped = sorted(pose for pose, rig in rigs.items() if not rig["found"])
     kit["provenance"] = [*(kit.get("provenance") or []), {
         "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": look, "hints": placed,
+        "facings": {pose: facing for pose, facing in facings.items() if facing},
         "unwipedPoses": unwiped, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         **({"mouthLines": {pose: rig["line"] for pose, rig in rigs.items()}} if look["mouthStyle"] == "warp" else {}),
     }]

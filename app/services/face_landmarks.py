@@ -27,9 +27,12 @@ from PIL import Image
 from services.face_enlarge import SMALL_HEAD, enlarge, to_image, to_view
 
 MODELS = ("pose/yolox_l.onnx", "pose/dw-ll_ucoco_384.onnx")
-# In the whole-body output (body points with the neck inserted, then the feet) the 68 face points start here.
-FACE = 24
+# In the whole-body output (body points with the neck inserted, then the feet) the 68 face points start here; the first
+# 18 are the body's in OpenPose order (nose, neck, right shoulder, ..., left ear).
+FACE, BODY = 24, 18
 RIGHT_EYE, LEFT_EYE, MOUTH = range(36, 42), range(42, 48), range(48, 60)
+# The jaw line round the face and the nose (bridge and nostrils): where the head turns (``pose_facing``).
+CONTOUR, NOSE = range(0, 17), range(27, 36)
 # Below this mean score a part was guessed, not seen (a face turned away, hair over the eyes). A bearded mouth seen
 # from below scores 0.39.
 MIN_SCORE = 0.35
@@ -76,14 +79,15 @@ def _on_white(image: Image.Image) -> np.ndarray:
 
 
 def _whole_pass(model, bgr: np.ndarray):
-    """The 68 face points and scores of the most confident figure in the image, or None."""
+    """The 68 face points and scores of the most confident figure in the image and its 18 body points (x, y, score),
+    or None."""
     with _lock:
         keypoints, scores, _boxes = model(bgr)
     if keypoints is None or not len(keypoints):
         return None
     face = scores[:, FACE:FACE + 68]
     best = int(np.argmax(face.mean(axis=1)))
-    return keypoints[best, FACE:FACE + 68], face[best]
+    return keypoints[best, FACE:FACE + 68], face[best], np.column_stack([keypoints[best, :BODY], scores[best, :BODY]])
 
 
 def _pose(model, box, bgr: np.ndarray):
@@ -135,7 +139,8 @@ def detect(image: Image.Image) -> dict[str, Any] | None:
     of six points, the image's left eye first), ``mouth`` (its twelve outer-lip points) and their mean ``scores``, in
     pixels of ``image``; ``face``: the head's ``size`` class (``small`` under ``SMALL_HEAD``, else ``normal``), its
     ``head`` size in pixels and the ``pass`` the points come from (``head`` when the head pass was used, else
-    ``whole``). None when the model is missing or no figure is found."""
+    ``whole``); ``nose`` and ``contour`` (the jaw line) with their scores and the whole pass's 18 ``body`` points
+    ``[x, y, score]``, for ``pose_facing``. None when the model is missing or no figure is found."""
     model = _wholebody()
     if model is None:
         return None
@@ -146,6 +151,7 @@ def detect(image: Image.Image) -> dict[str, Any] | None:
         return None
     if found is None:
         return None
+    found, body = found[:2], found[2]
     head, middle = head_size(found[0])
     small, used = head < SMALL_HEAD, "whole"
     if small or _sure(found[1]) < UNSURE:
@@ -163,10 +169,11 @@ def detect(image: Image.Image) -> dict[str, Any] | None:
         return [[round(float(x), 2), round(float(y), 2)] for x, y in points[list(indices)]], round(float(score[list(indices)].mean()), 3)
     first, second = part(RIGHT_EYE), part(LEFT_EYE)
     eyes = sorted((first, second), key=lambda eye: np.mean([p[0] for p in eye[0]]))
-    mouth = part(MOUTH)
-    return {"eyes": [eyes[0][0], eyes[1][0]], "mouth": mouth[0],
-            "scores": {"eyes": round(min(eyes[0][1], eyes[1][1]), 3), "mouth": mouth[1]},
-            "face": {"size": "small" if small else "normal", "head": round(head, 1), "pass": used}}
+    mouth, nose, contour = part(MOUTH), part(NOSE), part(CONTOUR)
+    return {"eyes": [eyes[0][0], eyes[1][0]], "mouth": mouth[0], "nose": nose[0], "contour": contour[0],
+            "scores": {"eyes": round(min(eyes[0][1], eyes[1][1]), 3), "mouth": mouth[1], "nose": nose[1], "contour": contour[1]},
+            "face": {"size": "small" if small else "normal", "head": round(head, 1), "pass": used},
+            "body": [[round(float(x), 2), round(float(y), 2), round(float(score), 3)] for x, y, score in body]}
 
 
 def guides(landmarks: dict[str, Any] | None) -> dict[str, Any]:

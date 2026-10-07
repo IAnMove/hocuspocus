@@ -85,7 +85,9 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
             **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value),
             **_explicit_transform(value.get("transform")),
             # A pose cut by its image border is moved so the cut stays out of the frame; false keeps it where x puts it.
-            **({"edgeSnap": False} if value.get("edgeSnap") is False else {})}
+            **({"edgeSnap": False} if value.get("edgeSnap") is False else {}),
+            # from_script moves a cast member looking out of the frame (series_look_room); false keeps x.
+            **({"lookRoom": False} if value.get("lookRoom") is False else {})}
 
 
 def _prop_entry(value: Any) -> dict[str, Any] | None:
@@ -138,7 +140,7 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
               **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
-              **extras.normalize_clip_fields(value)}
+              **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {})}
     return layout or None
 
 
@@ -251,6 +253,18 @@ def _cast_x(entry: dict[str, Any], framing: str, count: int, homes: dict[str, fl
     if framing in ("medium", "close") and count == 1:
         return 50.0
     return homes.get(entry["characterId"], default)
+
+
+def cast_x(series: dict[str, Any], shot: dict[str, Any]) -> list[float]:
+    """Where ``plan_cast`` stands each entry of the shot's ``layout2d.cast`` (x %, in their order; none in a title)."""
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    framing = _shot_framing(layout, shot, layout.get("card") if isinstance(layout.get("card"), dict) else None)
+    entries = [item for item in layout.get("cast") or [] if isinstance(item, dict) and item.get("characterId")]
+    if framing == "title" or not entries:
+        return []
+    width, height = frame_size(series)
+    homes, defaults = _homes(series, shot), spread(len(entries), height > width)
+    return [_cast_x(entry, framing, len(entries), homes, defaults[index]) for index, entry in enumerate(entries)]
 
 
 def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration: float, workspace: str = "") -> dict[str, Any] | None:

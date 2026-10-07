@@ -29,6 +29,16 @@ the existing budgets and historical checks. Eye detection, frozen canon snapshot
 and frame encoding move to focused helpers; smaller rig and score functions clear
 the release gates without changing their limits.
 
+Series 2D shots keep look room: HocusPocus now knows which way each pose looks
+(left, right or front), read on the pose's face with DWPose on the CPU or set on
+the kit pose as `facing`; the flat rig stores it on each pose and the series
+bible lists it. `series.episode.from_script` stands a character facing left
+right of centre and one facing right left of it, swaps two people who look away
+from each other, and reports every move (`lookRoom`) and who still looks out
+(`lookRoomKept`: three or more people, a pose held on its cut side by edge snap).
+`lookRoom: false` on a cast entry or a shot keeps its `x`; `series.shot.update`
+never moves anyone and only warns.
+
 Series Lab's **5 · Validation** tab is now a grid of every shot of the episode,
 grouped by scene: each tile shows the shot's latest take (or its plan sketched
 from the location and the cast's poses when nothing is rendered), its number,

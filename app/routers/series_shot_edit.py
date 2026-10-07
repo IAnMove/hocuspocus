@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from routers.series_produce import workspace_files
+from services.series_look_room import warnings as look_room_warnings
 from services.series_shot_edit import (
     ShotEditError, apply_edit, build_patch, find_shot, merge_changes, take_still_fits, to_script,
 )
@@ -118,6 +119,11 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
                 changes, append = planned["changes"], planned["append"]
         told = {"instruction": planned} if planned else {}
 
+        def look(series: dict, shot: dict) -> dict[str, Any]:
+            """Who the edited cast leaves looking out of the frame: a warning only, the user's x is kept."""
+            found = look_room_warnings(series, kits, shot, root) if "cast" in outcome["changed"] else []
+            return {"warnings": found} if found else {}
+
         def change(series: dict) -> None:
             plan(series, series["episodesById"][episode_id], changes, append)
             updated, info = apply_edit(series, episode_id, outcome["shot"]["id"], outcome["patch"], outcome["texts"],
@@ -127,9 +133,11 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
             outcome.update(info)
 
         if body.check:
-            plan(*episode_of(body.workspace, series_id, episode_id), changes, append)
+            series, episode = episode_of(body.workspace, series_id, episode_id)
+            plan(series, episode, changes, append)
             return {"checked": True, "shotId": outcome["shot"]["id"], "number": outcome["number"], "changed": outcome["changed"],
-                    "patch": outcome["patch"], "keepsApproval": outcome["keep"], **told}
+                    "patch": outcome["patch"], "keepsApproval": outcome["keep"], **told,
+                    **look(series, {**outcome["shot"], **outcome["patch"]})}
         try:
             stored = change_series(body.workspace, series_id, change)
         except KeyError as error:
@@ -138,7 +146,8 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
         shot = next(item for item in episode["shots"] if item["id"] == outcome["shot"]["id"])
         reply = {"shotId": shot["id"], "number": outcome["number"], "changed": outcome["changed"],
                  "approvalReset": outcome["approvalReset"], "missingLines": outcome["missingLines"],
-                 "revision": stored.get("revision"), "shot": shot_view(stored, episode, shot, outcome["number"]), **told}
+                 "revision": stored.get("revision"), "shot": shot_view(stored, episode, shot, outcome["number"]), **told,
+                 **look(stored, shot)}
         if body.stored:
             reply["stored"] = {"episodeId": episode_id, "episodeUpdatedAt": episode.get("updatedAt"), "shot": shot,
                                "review": episode.get("review"), "languageVersions": episode.get("languageVersions")}
