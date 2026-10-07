@@ -24,7 +24,7 @@ T9, el bucle de música de J4, no se ha escuchado. El control de estilo de J16 t
 
 ## Borradores
 
-Ninguno está fusionado. Este PR depende de #899. No fusionar antes de #899. El diff contra `development` arrastra también #898, #897, #896, #895, #893, #892, #891, #890, #888, #866, #868, #865, #867, #864 y #862. J0 es #863 y va en su propia rama.
+Ninguno está fusionado. #900 depende de #899. No fusionar antes de #899. El diff contra `development` arrastra también #898, #897, #896, #895, #893, #892, #891, #890, #888, #866, #868, #865, #867, #864 y #862. J0 es #863 y va en su propia rama.
 
 | Bloque | PR |
 |---|---|
@@ -45,7 +45,7 @@ Ninguno está fusionado. Este PR depende de #899. No fusionar antes de #899. El 
 | J14 UI revisión | #897 |
 | J15 UI prueba | #898 |
 | J16 Control de estilo | #899 |
-| J17 Aceptación | este PR |
+| J17 Aceptación | #900 |
 
 ## Problemas
 
