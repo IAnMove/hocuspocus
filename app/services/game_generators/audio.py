@@ -141,12 +141,12 @@ def _raw_name(asset: dict, tag: str, rest: str) -> str:
 def _each_candidate(ctx: GenContext, make) -> AttemptResult:
     """``make(ctx, index, folder, tag) -> ({files, metrics}, warnings)`` per candidate."""
     written: list[dict] = []
-    warnings: list[str] = []
     for index, (attempt_id, folder, tag) in enumerate(_candidates(ctx)):
         row, found = make(ctx, index, _folder(folder), tag)
-        written.append({"id": attempt_id, **row})
-        _merge(warnings, found)
-    return candidate_result(written, warnings, ctx.steps)
+        own: list[str] = []
+        _merge(own, found)
+        written.append({"id": attempt_id, **row, "warnings": own})
+    return candidate_result(written, [], ctx.steps)
 
 
 def _bpm(asset: dict, game: dict) -> float:

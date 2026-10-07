@@ -338,12 +338,11 @@ class GameProduce:
 
     def _succeed(self, job: dict, step: dict, game: dict, asset: dict, result: Any, elapsed: float) -> None:
         provenance = result.provenance if isinstance(getattr(result, "provenance", None), dict) else {"steps": []}
-        shared = {
-            "warnings": list(getattr(result, "warnings", None) or []),
-            "provenance": provenance, "inputs": asset_inputs(game, asset),
-        }
-        for attempt_id, files, metrics in _candidates(result, step["attemptId"]):
-            attempt = {"id": attempt_id, "status": "ok", "createdAt": iso_now(), "files": files, "metrics": metrics, **shared}
+        common = list(getattr(result, "warnings", None) or [])
+        shared = {"provenance": provenance, "inputs": asset_inputs(game, asset)}
+        for attempt_id, files, metrics, own in _candidates(result, step["attemptId"]):
+            warnings = [*_for_candidate(common, attempt_id), *own]
+            attempt = {"id": attempt_id, "status": "ok", "createdAt": iso_now(), "files": files, "metrics": metrics, "warnings": warnings, **shared}
             self.deps.write_attempt(job["workspace"], job["gameId"], asset["id"], attempt, "review")
         step.update(status="done", error=None, reason=None)
         self._save(job)
@@ -505,8 +504,13 @@ def _error_text(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"[:500]
 
 
-def _candidates(result: Any, fallback: str) -> list[tuple[str, dict, dict]]:
-    """``(attemptId, files, metrics)`` per candidate.
+def _for_candidate(warnings: list, attempt_id: str) -> list:
+    """Warnings for every candidate, without those tagged for another one."""
+    return [item for item in warnings if not isinstance(item, dict) or item.get("candidate") in (None, attempt_id)]
+
+
+def _candidates(result: Any, fallback: str) -> list[tuple[str, dict, dict, list]]:
+    """``(attemptId, files, metrics, ownWarnings)`` per candidate.
 
     ``metrics["candidates"]`` gives each candidate its own files and metrics.
     Without it, only the first id in ``attemptIds`` gets the result's files.
@@ -517,18 +521,19 @@ def _candidates(result: Any, fallback: str) -> list[tuple[str, dict, dict]]:
         return listed
     files = _mapping(getattr(result, "files", None))
     return [
-        (attempt_id, files if index == 0 else {}, metrics if index == 0 else {})
+        (attempt_id, files if index == 0 else {}, metrics if index == 0 else {}, [])
         for index, attempt_id in enumerate(_attempt_ids(metrics, fallback))
     ]
 
 
-def _listed_candidates(raw: Any) -> list[tuple[str, dict, dict]]:
+def _listed_candidates(raw: Any) -> list[tuple[str, dict, dict, list]]:
     if not isinstance(raw, list):
         return []
     found = []
     for item in raw:
         if isinstance(item, dict) and str(item.get("id") or "").strip():
-            found.append((str(item["id"]), _mapping(item.get("files")), _mapping(item.get("metrics"))))
+            own = item.get("warnings") if isinstance(item.get("warnings"), list) else []
+            found.append((str(item["id"]), _mapping(item.get("files")), _mapping(item.get("metrics")), list(own)))
     return found
 
 

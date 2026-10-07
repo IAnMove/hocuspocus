@@ -21,7 +21,7 @@ from PIL import Image
 
 from services.game_frames import drift_correct, extract_frames, find_cycle, key_frames, sample_frames
 from services.game_generators.base import (
-    AttemptResult, GenContext, attempt_dir, candidate_dirs, candidate_result, relative, spec_seed,
+    AttemptResult, GenContext, attempt_dir, candidate_dirs, candidate_result, relative, seed_for_step, spec_seed,
 )
 from services.game_generators.still import StillGenerator
 from services.game_image_ops import SCREEN_RGB, compose_start_frame, feet_point, place_on_cell, to_illustration
@@ -115,7 +115,7 @@ def render_clip(ctx: GenContext, step: str, *, prompt: str, start: str, end: str
         frames=int(GAME_ANIMATION_DEFAULTS["frames"]),
         model=str(GAME_ANIMATION_DEFAULTS["model"]),
         resolution=str(GAME_ANIMATION_DEFAULTS["resolution"]),
-        steps=int(GAME_ANIMATION_DEFAULTS["steps"]),
+        steps=int(GAME_ANIMATION_DEFAULTS["steps"]), seed=seed_for_step(ctx.asset, step),
     )
     return resolve_path(ctx, video)
 
@@ -147,16 +147,8 @@ def write_sheet(ctx: GenContext, folder: Path, sheet, atlas: dict, frames, fps: 
 
 
 def fold_candidates(ctx: GenContext, written: list[dict]) -> AttemptResult:
-    """``base.candidate_result`` with the warnings of every candidate.
-
-    The result carries one warning list for all candidates, so several
-    candidates also keep their own codes in ``metrics["warnings"]``.
-    """
-    warnings = list(dict.fromkeys(code for item in written for code in item.get("warnings") or []))
-    if len(written) > 1:
-        for item in written:
-            item["metrics"]["warnings"] = list(item.get("warnings") or [])
-    return candidate_result(written, warnings, ctx.steps)
+    """``base.candidate_result``; each candidate keeps its own ``warnings``."""
+    return candidate_result(written, [], ctx.steps)
 
 
 def split_figures(rgba) -> list[np.ndarray]:

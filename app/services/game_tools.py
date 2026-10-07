@@ -249,9 +249,11 @@ def _video(ctx, step, params) -> str:
     return files[0]
 
 
-def video_fl2va(ctx, step, *, prompt, start, end=None, frames, model, resolution, steps=None) -> str:
+def video_fl2va(ctx, step, *, prompt, start, end=None, frames, model, resolution, steps=None, seed=None) -> str:
     """First-and-last-frame video. ``end`` is omitted when the action leaves the stance."""
     params = {"prompt": prompt, "model_type": model, "resolution": resolution, "video_length": int(frames), "image_start": start}
+    if seed is not None:
+        params["seed"] = int(seed)
     if end:
         params["image_end"] = end
     if steps is not None:

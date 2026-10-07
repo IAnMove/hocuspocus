@@ -222,11 +222,11 @@ def test_model_candidates_get_their_own_ids_folders_and_jobs(tmp_path):
     assert [args["input"]["image_path"] for args in meshes] == ["cofre-concept.png", "cofre-concept-2.png"]
     assert len({args["intent_id"] for args in meshes}) == 2
     saved = _candidates(result, "a1")
-    assert [attempt_id for attempt_id, _files, _metrics in saved] == ["a1-a1", "a1-a2"]
-    assert [files["model"] for _id, files, _metrics in saved] == [
+    assert [attempt_id for attempt_id, _files, _metrics, _own in saved] == ["a1-a1", "a1-a2"]
+    assert [files["model"] for _id, files, _metrics, _own in saved] == [
         "game/bosque/cofre/a1/a1/model.glb", "game/bosque/cofre/a1/a2/model.glb",
     ]
-    assert all(metrics["triangles"] == 12 for _id, _files, metrics in saved)
+    assert all(metrics["triangles"] == 12 for _id, _files, metrics, _own in saved)
     assert (workspace / saved[1][1]["concept"]).read_bytes() == b"png2"
     assert generator.estimate(game, asset) == {"image": 2, "3d": 2}
     assert [args["input"]["seed"] for args in meshes] == [1, 2]
@@ -395,3 +395,19 @@ def test_rig_without_a_skin_fails_the_attempt(tmp_path):
     with pytest.raises(GameToolError) as caught:
         Character3dGenerator().run(_ctx(workspace, game, asset, fake))
     assert caught.value.code == "rig_missing"
+
+
+def test_each_candidate_keeps_only_its_own_budget_warning(tmp_path):
+    from services.game_produce import _candidates
+
+    workspace = _workspace(tmp_path)
+    (workspace / "cofre-concept-2.png").write_bytes(b"png2")
+    _cube(workspace / "hy-mesh-2.glb")
+    game = {"id": "bosque", "style": _style(limit=3000), "assets": []}
+    asset = {**_chest(maxTriangles=6), "candidates": 2}
+    fake = _Tools(workspace, images=("cofre-concept.png", "cofre-concept-2.png"), meshes=("hy-mesh.glb", "hy-mesh-2.glb"))
+    result = Model3dGenerator().run(_ctx(workspace, game, asset, fake))
+    saved = _candidates(result, "a1")
+    assert [own for _id, _files, _metrics, own in saved] == [own for _id, _files, _metrics, own in saved[:1]] * 2
+    assert all(own for _id, _files, _metrics, own in saved)
+    assert result.warnings == []

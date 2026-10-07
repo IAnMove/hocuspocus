@@ -289,7 +289,7 @@ def test_music_jingle_and_voice_make_every_candidate_they_estimate(tmp_path, mon
         assert sorted(item["seed"] for item in fake.params(tool)) == list(range(5, 5 + len(intents)))
         stored = _candidates(result, "a1")
         assert [item[0] for item in stored] == ["a1-a1", "a1-a2"]
-        for attempt_id, files, _metrics in stored:
+        for attempt_id, files, _metrics, _own in stored:
             assert files and all(f"/a1/{attempt_id[-2:]}/" in value for value in files.values())
 
 

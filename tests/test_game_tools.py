@@ -130,3 +130,28 @@ def test_a_refused_submission_says_why(tmp_path):
     with pytest.raises(GameToolError) as caught:
         model3d(_ctx(tmp_path, fake), "mesh", image_path="a.png")
     assert caught.value.code == "rejected" and "workspace not found" in str(caught.value)
+
+
+def test_video_seed_and_candidate_seeds(tmp_path):
+    from services.game_generators.base import relative, seed_for_step
+    from services.game_tools import video_fl2va
+
+    asset = {"spec": {"seed": 0}}
+    assert [seed_for_step(asset, step) for step in ("clip", "clip-a1", "clip-a3", "mesh-a2")] == [0, 0, 2, 1]
+
+    class Video:
+        def __init__(self):
+            self.calls = []
+
+        def __call__(self, tool, args):
+            self.calls.append((tool, args))
+            if tool == "generation.video":
+                return {"job_id": "v1"}
+            return {"status": "completed", "output_files": ["clip.mp4"]}
+
+    fake = Video()
+    ctx = _ctx(tmp_path, fake)
+    video_fl2va(ctx, "clip-a2", prompt="run", start="a.png", frames=49, model="h3", resolution="832x480", seed=5)
+    assert fake.calls[0][1]["input"]["params"]["seed"] == 5
+    nested = tmp_path / "ws" / "game" / "bosque" / "heroe" / "a1" / "a2" / "sheet.png"
+    assert relative(ctx, nested) == "game/bosque/heroe/a1/a2/sheet.png"

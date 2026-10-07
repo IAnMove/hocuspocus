@@ -16,7 +16,7 @@ import shutil
 from pathlib import Path
 
 from services.game_generators.base import (
-    AttemptResult, GenContext, candidate_dirs, candidate_result, relative, spec_seed,
+    AttemptResult, GenContext, candidate_dirs, candidate_result, relative, seed_for_step, spec_seed,
 )
 from services.game_prompts import build
 from services.game_tools import GameToolError, image, model3d, orbit, resolve_path, rig
@@ -166,12 +166,6 @@ def _orbit_views(ctx: GenContext, concept: str, root: Path, suffix: str) -> tupl
     return found, []
 
 
-def _mesh_seed(ctx: GenContext, suffix: str) -> int:
-    """Candidate ``-aN`` meshes with ``spec_seed + N - 1``, so candidates from shared art differ."""
-    index = int(suffix[2:]) - 1 if suffix.startswith("-a") and suffix[2:].isdigit() else 0
-    return spec_seed(ctx.asset) + index
-
-
 def _mesh(ctx: GenContext, concept: str, folder: Path, suffix: str) -> tuple[str, list[str]]:
     spec = _spec(ctx.asset)
     warnings: list[str] = []
@@ -181,7 +175,7 @@ def _mesh(ctx: GenContext, concept: str, folder: Path, suffix: str) -> tuple[str
     name = model3d(
         ctx, f"mesh{suffix}", image_path=concept, images=views or None, preset=_preset(spec, ctx.game),
         reduce_face=True, target_face_num=_limit(ctx.asset),
-        texture_resolution=spec.get("texture"), seed=_mesh_seed(ctx, suffix),
+        texture_resolution=spec.get("texture"), seed=seed_for_step(ctx.asset, f"mesh{suffix}"),
     )
     return name, warnings
 
@@ -266,16 +260,14 @@ def _run(ctx: GenContext, make) -> AttemptResult:
     concepts = _concepts(ctx, _count(ctx.asset))
     slots = candidate_dirs(ctx, len(concepts))
     written: list[dict] = []
-    warnings: list[str] = []
     for (attempt_id, folder), (concept, generated) in zip(slots, concepts):
         suffix = f"-{folder.name}" if len(slots) > 1 else ""
         item, found = make(ctx, folder, suffix, concept)
         if generated:
             kept = _fetch(ctx, concept, folder / f"concept{Path(concept).suffix or '.png'}")
             item["files"]["concept"] = relative(ctx, kept)
-        written.append({"id": attempt_id, **item})
-        warnings.extend(found)
-    return candidate_result(written, list(dict.fromkeys(warnings)), ctx.steps)
+        written.append({"id": attempt_id, **item, "warnings": list(dict.fromkeys(found))})
+    return candidate_result(written, [], ctx.steps)
 
 
 class Model3dGenerator:

@@ -578,3 +578,19 @@ def test_replace_with_a_list_of_only_comments_keeps_every_asset(tmp_path):
     assert "empty_list" in response.text
     from services.game_library import read_library
     assert len(read_library(tmp_path)["games"][0]["assets"]) == before
+
+
+def test_a_candidate_never_gets_another_candidates_warning():
+    from types import SimpleNamespace
+
+    from services.game_produce import _candidates, _for_candidate
+
+    common = ["seam_visible", {"code": "over_budget", "candidate": "a1-a2"}, {"code": "dither"}]
+    assert _for_candidate(common, "a1-a1") == ["seam_visible", {"code": "dither"}]
+    result = SimpleNamespace(files={}, warnings=common, metrics={"candidates": [
+        {"id": "a1-a1", "files": {"main": "x"}, "metrics": {}, "warnings": ["orbit_empty"]},
+        {"id": "a1-a2", "files": {"main": "y"}, "metrics": {}},
+    ]})
+    assert [(attempt_id, own) for attempt_id, _files, _metrics, own in _candidates(result, "a1")] == [
+        ("a1-a1", ["orbit_empty"]), ("a1-a2", []),
+    ]
