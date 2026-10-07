@@ -83,7 +83,8 @@
     "directEdit": "Edita, cambia el estilo, rellena o sustituye un resultado.",
     "directTools": "Ejecuta herramientas de posprocesado sobre un recurso existente.",
     "lips": "Crea bocas y vincúlalas con sonidos.",
-    "agents": "Archivos que pidió un agente MCP o el Wizard, primero los más recientes. Ábrelos y edítalos como tu propio trabajo."
+    "agents": "Archivos que pidió un agente MCP o el Wizard, primero los más recientes. Ábrelos y edítalos como tu propio trabajo.",
+    "gameAssets": "Sprites, animación, audio y modelos de un juego."
   },
   "search": {
     "placeholder": "Buscar...",
@@ -123,7 +124,8 @@
     "auditDev": "Auditoría interna dev",
     "favorites": "Favoritos",
     "lips": "Lips Creator",
-    "agents": "Hecho por agentes"
+    "agents": "Hecho por agentes",
+    "gameAssets": "Recursos de juego"
   },
   "short": {
     "all": "Todo",
@@ -152,7 +154,8 @@
     "multiclip": "MC",
     "auditDev": "Audit",
     "lips": "Lips",
-    "agents": "Agentes"
+    "agents": "Agentes",
+    "gameAssets": "Juego"
   },
   "filters": {
     "allWorkspaces": "Todos los Workspaces"
@@ -172,7 +175,8 @@
     "world3d": "Editor vídeo 3D",
     "animate3d": "Rig y Animate",
     "auditDev": "Auditoría interna",
-    "lips": "Lips Creator"
+    "lips": "Lips Creator",
+    "gameAssets": "Recursos de juego"
   },
   "outputFolder": {
     "option": "Salida",

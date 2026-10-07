@@ -64,6 +64,8 @@ const StoryLabPanel = lazy(() => import('../../features/stories/StoryLabPanel')
   .then(module => ({ default: module.StoryLabPanel })))
 const SeriesLabPanel = lazy(() => import('../../features/series/SeriesLabPanel')
   .then(module => ({ default: module.SeriesLabPanel })))
+const GameAssetsPanel = lazy(() => import('../../features/game-assets/GameAssetsPanel')
+  .then(module => ({ default: module.GameAssetsPanel })))
 const StyleSheetPanel = lazy(() => import('../../features/styles/StyleSheetPanel')
   .then(module => ({ default: module.StyleSheetPanel })))
 const RunsPanel = lazy(() => import('../../features/workspaces/WorkspacesPanel')
@@ -821,6 +823,12 @@ export function MainContent() {
           <div className="flex-1 overflow-hidden p-2 md:p-4">
             <div className="max-w-[1900px] mx-auto h-full">
               <SeriesLabPanel />
+            </div>
+          </div>
+        ) : mediaFilter === 'gameAssets' ? (
+          <div className="flex-1 overflow-hidden p-2 md:p-4">
+            <div className="max-w-[1900px] mx-auto h-full">
+              <GameAssetsPanel />
             </div>
           </div>
         ) : mediaFilter === 'runs' ? (

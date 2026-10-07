@@ -3034,6 +3034,7 @@ const TAB_LABELS: Record<AgentTab, string> = {
   character_creator: 'Character Creator',
   character_kit: 'CharacterKit',
   lips_creator: 'Lips Creator',
+  game_assets: 'Game assets',
   workspaces: 'Workspaces',
   settings: 'Settings',
 }

@@ -2,7 +2,7 @@
 
 Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR contra `development`. No se mezcla desde aquí.
 
-El 2026-10-07, J0–J5 y J9 (#862–#868) se agruparon en #887 sobre `development` actual; los PR originales quedan sustituidos. J6–J8, J10 y J11 (#888–#893) se agruparon después en #894.
+El 2026-10-07, J0–J5 y J9 (#862–#868) se agruparon en #887 sobre `development` actual; los PR originales quedan sustituidos. J6–J8, J10 y J11 (#888–#893) y la UI J12–J14 (#895–#897) se agruparon después en #894.
 
 | Bloque | Rama | PR | Estado | Archivos (exclusivos) |
 |---|---|---|---|---|
@@ -18,9 +18,9 @@ El 2026-10-07, J0–J5 y J9 (#862–#868) se agruparon en #887 sobre `developmen
 | J9 Lista y lote | `feat/game-assets-combined` | #887 | mezclado | `app/services/game_list.py`, `app/services/game_produce.py`, `app/services/game_jobs.py`, `app/services/game_estimate.py`, `app/routers/game_produce.py` |
 | J10 Exportación | `feat/game-assets-6-11` | #894 | en revisión (agrupado) | `app/services/game_export.py`, `POST /api/v1/games/{id}/export`, `tests/test_game_export.py` |
 | J11 MCP | `feat/game-assets-6-11` | #894 | en revisión (agrupado) | `app/services/game_commands.py`, `app/services/game_guide.py`, `app/shared/game_agent_guide.md`, perfil `game`, `docs/agents/GAME_ASSETS_MCP.md` |
-| J12 UI juego | `feat/game-assets-12-ui-setup` | — | pendiente | `ui/src/features/game-assets/` (juego, estilo, reparto) |
-| J13 UI lista | `feat/game-assets-13-ui-list` | — | pendiente | `GameListPanel`, `GameProducePanel` |
-| J14 UI revisión | `feat/game-assets-14-ui-review` | — | pendiente | `GameReviewPanel`, `SpriteSheetPlayer`, `AudioLoopPlayer` |
+| J12 UI juego | `feat/game-assets-6-11` | #894 | en revisión (agrupado) | `ui/src/features/game-assets/` (juego, estilo, reparto) |
+| J13 UI lista | `feat/game-assets-6-11` | #894 | en revisión (agrupado) | `GameListPanel`, `GameProducePanel` |
+| J14 UI revisión | `feat/game-assets-6-11` | #894 | en revisión (agrupado) | `GameReviewPanel`, `SpriteSheetPlayer`, `AudioLoopPlayer` |
 | J15 UI prueba | `feat/game-assets-15-ui-playtest` | — | pendiente | `GamePlaytest`, `GameExportPanel` |
 | J16 Control de estilo | `feat/game-assets-16-qa` | — | pendiente | `app/services/game_qa.py` |
 | J17 Aceptación | `docs/game-assets-acceptance` | — | pendiente | `docs/development/GAME_ASSETS.md`, informe de aceptación |
