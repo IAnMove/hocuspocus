@@ -9,6 +9,8 @@ export interface GameAttempt {
   files: Record<string, string>
   decision?: string | null
   note?: string
+  metrics?: Record<string, unknown>
+  warnings?: string[]
 }
 
 export interface GameAsset {
@@ -149,4 +151,4 @@ export interface ExportResult {
 }
 
 export const GAME_SECTIONS: GameSection[] = ['setup', 'style', 'cast', 'list', 'produce', 'review', 'play', 'export']
-export const LATER_SECTIONS: GameSection[] = ['review', 'play', 'export']
+export const LATER_SECTIONS: GameSection[] = ['play', 'export']

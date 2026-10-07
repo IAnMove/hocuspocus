@@ -21,8 +21,15 @@
   "grid": "Grid",
   "tile": "Tile",
   "spriteHeight": "Sprite height",
-  "genres": { "platformer": "Platformer", "topdown": "Top-down", "other": "Other" },
-  "views": { "side": "Side view", "topdown": "Top-down" },
+  "genres": {
+    "platformer": "Platformer",
+    "topdown": "Top-down",
+    "other": "Other"
+  },
+  "views": {
+    "side": "Side view",
+    "topdown": "Top-down"
+  },
   "conflict": "The game changed on the server. Reloaded the latest revision.",
   "approveStyleFirst": "Approve the style before producing assets.",
   "waiting": "There are {{count}} assets waiting for you to approve {{name}}.",
@@ -95,5 +102,27 @@
   "currentStep": "Now: {{name}}",
   "waitingDependency": "Waiting for an approved dependency",
   "openReview": "Open review",
-  "interrupted": "Production was interrupted."
+  "interrupted": "Production was interrupted.",
+  "approveAttempt": "Approve",
+  "rejectAttempt": "Reject",
+  "rejectNote": "Note for the next prompt",
+  "regenerateOne": "Regenerate this",
+  "lockAsset": "Lock",
+  "unlockAsset": "Unlock",
+  "approveClean": "Approve all without warnings",
+  "confirmApproveClean": "Approve every asset that has no warnings?",
+  "mirror": "Mirror",
+  "repeat": "Repeat",
+  "scale": "Scale",
+  "backdrop": "Background",
+  "checker": "Checker",
+  "solid": "Color",
+  "tileBackdrop": "Tile",
+  "listenSeam": "Listen to the seam",
+  "loopTurns": "Loops: {{count}}",
+  "noWarnings": "No warnings",
+  "reviewEmpty": "Nothing is waiting for review.",
+  "warnLoopSeam": "The loop seam is audible.",
+  "warnDuplicate": "Looks like a duplicate of {{id}}.",
+  "clips": "Clips"
 }

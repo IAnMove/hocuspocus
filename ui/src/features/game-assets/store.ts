@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import * as api from '../../api/gameAssets'
 import { GameRevisionConflict } from '../../api/gameAssets'
+import { approvableClean } from './reviewModel'
 import type { Game, GameSection, GameStyle, ListReport, PaletteMode, ProduceJob, StylePreset, StyleReference } from './types'
 
 const SELECTION = 'hocuspocus.gameAssets.'
@@ -43,6 +44,11 @@ interface GameAssetsState {
   startProduce: (body: { assetIds?: string[]; rerender?: boolean }) => Promise<void>
   cancelProduce: () => Promise<void>
   resumeProduce: () => Promise<void>
+  approveAttempt: (assetId: string, attemptId: string) => Promise<void>
+  rejectAttempt: (assetId: string, attemptId: string, note: string) => Promise<void>
+  setLock: (assetId: string, locked: boolean) => Promise<void>
+  approveClean: () => Promise<void>
+  regenerateAsset: (assetId: string) => Promise<void>
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -375,6 +381,46 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
     const next = await api.resumeProduceJob(get().workspace, job.id)
     set({ produceJob: next, error: null })
     if (!TERMINAL.has(next.status)) armProducePoll(next.id)
+  },
+
+  approveAttempt: async (assetId, attemptId) => {
+    const game = get().game
+    if (!game) return
+    await get().saveNow()
+    await api.approveGameAttempt(get().workspace, game.id, assetId, attemptId, get().serverRevision)
+    await get().openGame(game.id)
+  },
+
+  rejectAttempt: async (assetId, attemptId, note) => {
+    const game = get().game
+    if (!game || !note.trim()) return
+    await get().saveNow()
+    await api.rejectGameAttempt(get().workspace, game.id, assetId, attemptId, note.trim(), get().serverRevision)
+    await get().openGame(game.id)
+  },
+
+  setLock: async (assetId, locked) => {
+    const game = get().game
+    if (!game) return
+    await get().saveNow()
+    await api.lockGameAsset(get().workspace, game.id, assetId, locked, get().serverRevision)
+    await get().openGame(game.id)
+  },
+
+  approveClean: async () => {
+    const game = get().game
+    if (!game) return
+    const picks = approvableClean(game.assets)
+    await get().saveNow()
+    for (const pick of picks) {
+      await api.approveGameAttempt(get().workspace, game.id, pick.assetId, pick.attemptId, get().serverRevision)
+      await get().openGame(game.id)
+    }
+  },
+
+  regenerateAsset: async assetId => {
+    await get().startProduce({ assetIds: [assetId], rerender: true })
+    get().setSection('produce')
   },
 }))
 

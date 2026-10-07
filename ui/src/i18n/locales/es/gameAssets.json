@@ -21,8 +21,15 @@
   "grid": "Rejilla",
   "tile": "Baldosa",
   "spriteHeight": "Altura del sprite",
-  "genres": { "platformer": "Plataformas", "topdown": "Vista cenital", "other": "Otro" },
-  "views": { "side": "De lado", "topdown": "Cenital" },
+  "genres": {
+    "platformer": "Plataformas",
+    "topdown": "Vista cenital",
+    "other": "Otro"
+  },
+  "views": {
+    "side": "De lado",
+    "topdown": "Cenital"
+  },
   "conflict": "El juego cambió en el servidor. Se recargó la última revisión.",
   "approveStyleFirst": "Aprueba el estilo antes de producir recursos.",
   "waiting": "Hay {{count}} recursos esperando a que apruebes a {{name}}.",
@@ -95,5 +102,27 @@
   "currentStep": "Ahora: {{name}}",
   "waitingDependency": "Esperan a que apruebes una dependencia",
   "openReview": "Abrir revisión",
-  "interrupted": "La producción se interrumpió."
+  "interrupted": "La producción se interrumpió.",
+  "approveAttempt": "Aprobar",
+  "rejectAttempt": "Rechazar",
+  "rejectNote": "Nota para el siguiente prompt",
+  "regenerateOne": "Regenerar este",
+  "lockAsset": "Bloquear",
+  "unlockAsset": "Desbloquear",
+  "approveClean": "Aprobar todos los que no tengan avisos",
+  "confirmApproveClean": "¿Aprobar cada recurso que no tenga avisos?",
+  "mirror": "Espejo",
+  "repeat": "Repetir",
+  "scale": "Escala",
+  "backdrop": "Fondo",
+  "checker": "Cuadros",
+  "solid": "Color",
+  "tileBackdrop": "Tile",
+  "listenSeam": "Escuchar la costura",
+  "loopTurns": "Vueltas: {{count}}",
+  "noWarnings": "Sin avisos",
+  "reviewEmpty": "No hay nada en revisión.",
+  "warnLoopSeam": "La costura del bucle se oye.",
+  "warnDuplicate": "Se parece a un duplicado de {{id}}.",
+  "clips": "Clips"
 }

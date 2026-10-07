@@ -4,6 +4,7 @@ import { useStore } from '../../stores/useStore'
 import { GameCastPanel } from './GameCastPanel'
 import { GameListPanel } from './GameListPanel'
 import { GameProducePanel } from './GameProducePanel'
+import { GameReviewPanel } from './GameReviewPanel'
 import { GameSetupPanel } from './GameSetupPanel'
 import { GameStylePanel } from './GameStylePanel'
 import { buttonClass, waitingApprovals } from './styles'
@@ -65,6 +66,7 @@ export function GameAssetsPanel() {
         {game && section === 'cast' && <GameCastPanel />}
         {game && section === 'list' && <GameListPanel />}
         {game && section === 'produce' && <GameProducePanel />}
+        {game && section === 'review' && <GameReviewPanel />}
         {game && LATER_SECTIONS.includes(section) && <p className="text-sm text-muted-foreground">{t('soon')}</p>}
       </section>
     </div>
