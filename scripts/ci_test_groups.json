@@ -148,6 +148,7 @@
         "tests/test_memory_trim.py",
         "tests/test_series_assembly.py",
         "tests/test_episode_finishing.py",
+        "tests/test_episode_av_sync.py",
         "tests/test_series_ambience.py",
         "tests/test_series_voice_rooms.py",
         "tests/test_series_score.py",
@@ -783,6 +784,14 @@
         "tests/test_series_shot_plan.py",
         "tests/test_series_native_render.py",
         "tests/test_series_score.py"
+      ]
+    },
+    {
+      "prefix": "app/services/episode_av_sync.py",
+      "paths": [
+        "tests/test_episode_av_sync.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_assembly_router.py"
       ]
     },
     {

@@ -35,6 +35,7 @@ from services import series_ambience, series_score
 from services.audio_levels import gain_to
 from services.audio_mix import track_source
 from services.media_dimensions import probe_video_size
+from services.episode_av_sync import check_sync, sync_note
 from services.mix_concat import (
     HOLD_TAIL_SEC,
     _run_ffmpeg_command,
@@ -485,12 +486,14 @@ def finish_episode(
             output_path, clip_paths, scene_filenames, score, workspace_dir=workspace_dir, ffmpeg=ffmpeg,
             abort_callback=abort_callback)))
     steps.append(("loudness", lambda: normalize_loudness(output_path, ffmpeg=ffmpeg, abort_callback=abort_callback)))
+    steps.append(("sync", lambda: check_episode_sync(output_path, clip_paths, ffmpeg=ffmpeg)))
     finished: dict[str, Any] = {}
     for key, step in steps:
         try:
             finished[key] = step()
         except Exception as error:  # A finishing step never costs the joined episode.
-            finished[key] = {"written" if key == "subtitles" else "applied": False, "reason": str(error)}
+            finished[key] = {"written" if key == "subtitles" else ("checked" if key == "sync" else "applied"): False,
+                             "reason": str(error)}
     subtitles = finished["subtitles"]
     if burn and subtitles.get("written"):
         try:
@@ -502,6 +505,15 @@ def finish_episode(
     except Exception as error:  # Nor does the thumbnail.
         finished["thumbnail"] = {"written": False, "reason": str(error)}
     return finished
+
+
+def check_episode_sync(output_path: str, clip_paths: Sequence[str], *, ffmpeg: str) -> dict[str, Any]:
+    """Every take's sound against where the join put its pictures in the finished episode (``episode_av_sync``)."""
+    timeline = _timeline(output_path, clip_paths, ffmpeg)
+    if timeline is None:
+        return {"checked": False, "reason": "The clip durations could not be read"}
+    _durations, _joined, spans, _join = timeline
+    return check_sync(output_path, clip_paths, [start for start, _end in spans], ffmpeg=ffmpeg)
 
 
 def finishing_note(finished: dict[str, Any]) -> str:
@@ -524,6 +536,8 @@ def finishing_note(finished: dict[str, Any]) -> str:
             notes.append(f"{count} {name}{'' if count == 1 else 's'}.")
         else:
             notes.append(f"No {name}s: {laid.get('reason', 'not laid')}.")
+    if finished.get("sync") is not None:
+        notes.append(sync_note(finished["sync"]))
     return " ".join(notes)
 
 
