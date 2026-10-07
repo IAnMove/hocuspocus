@@ -82,7 +82,7 @@ export const currentAgentInterfaceLanguage = detectUiLanguage
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
   'story_lab', 'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d',
-  'character_creator', 'character_kit', 'lips_creator', 'workspaces', 'settings',
+  'character_creator', 'character_kit', 'lips_creator', 'game_assets', 'workspaces', 'settings',
 ] as const
 
 export type AgentTab = typeof AGENT_TABS[number]

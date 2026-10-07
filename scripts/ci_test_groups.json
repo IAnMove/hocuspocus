@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 3061,
+      "weight": 3148,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -260,17 +260,24 @@
         "tests/test_game_image_ops.py",
         "tests/test_game_tiles.py",
         "tests/test_series_line_voice.py",
-        "tests/test_series_shot3d_editor.py"
+        "tests/test_series_shot3d_editor.py",
+        "tests/test_game_gen_animation.py",
+        "tests/test_game_gen_vfx.py",
+        "tests/test_game_gen_audio.py",
+        "tests/test_game_gen_3d.py",
+        "tests/test_game_export.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 3084,
+      "weight": 3112,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
+        "tests/test_game_commands.py",
+        "tests/test_game_profile.py",
         "tests/test_series_templates.py",
         "tests/test_series_shot_edit.py",
         "tests/test_media_compose.py",
@@ -1655,7 +1662,7 @@
     },
     {
       "prefix": "app/routers/game_library.py",
-      "paths": ["tests/test_game_library_router.py"]
+      "paths": ["tests/test_game_library_router.py", "tests/test_game_export.py"]
     },
     {
       "prefix": "app/shared/game_actions.json",
@@ -1679,7 +1686,7 @@
     },
     {
       "prefix": "app/services/game_tools.py",
-      "paths": ["tests/test_game_tools.py"]
+      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_3d.py"]
     },
     {
       "prefix": "app/services/game_prompts.py",
@@ -1703,7 +1710,7 @@
     },
     {
       "prefix": "app/services/game_generators/__init__.py",
-      "paths": ["tests/test_game_gen_still.py"]
+      "paths": ["tests/test_game_gen_still.py", "tests/test_game_gen_animation.py", "tests/test_game_gen_vfx.py", "tests/test_game_gen_audio.py", "tests/test_game_gen_3d.py"]
     },
     {
       "prefix": "app/services/game_list.py",
@@ -1731,7 +1738,47 @@
     },
     {
       "prefix": "app/services/game_sheet.py",
-      "paths": ["tests/test_game_sheet.py"]
+      "paths": ["tests/test_game_sheet.py", "tests/test_game_export.py"]
+    },
+    {
+      "prefix": "app/services/game_export.py",
+      "paths": ["tests/test_game_export.py"]
+    },
+    {
+      "prefix": "app/services/game_commands.py",
+      "paths": ["tests/test_game_commands.py", "tests/test_game_profile.py"]
+    },
+    {
+      "prefix": "app/services/game_guide.py",
+      "paths": ["tests/test_game_profile.py"]
+    },
+    {
+      "prefix": "app/shared/game_agent_guide.md",
+      "paths": ["tests/test_game_profile.py"]
+    },
+    {
+      "prefix": "app/services/mcp_profiles.py",
+      "paths": ["tests/test_game_profile.py", "tests/test_series_agent_fixes.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/animation.py",
+      "paths": ["tests/test_game_gen_animation.py", "tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/vfx.py",
+      "paths": ["tests/test_game_gen_vfx.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/audio.py",
+      "paths": ["tests/test_game_gen_audio.py", "tests/test_game_library.py"]
+    },
+    {
+      "prefix": "app/services/game_generators/three_d.py",
+      "paths": ["tests/test_game_gen_3d.py"]
+    },
+    {
+      "prefix": "app/services/procedural_3d/glb_inspector.py",
+      "paths": ["tests/test_procedural_glb_inspector.py", "tests/test_game_gen_3d.py"]
     },
     {
       "prefix": "app/services/game_audio.py",

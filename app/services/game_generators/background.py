@@ -7,6 +7,10 @@ inpaint size that completes), and scaled back. Layer 0 is the opaque sky. A
 later layer is keyed after the heal, scaled to the frame, cut to its visible
 rows and placed at the bottom of a transparent frame. Parallax factors are
 0.1, 0.3, 0.6 and 1.0, and the last layer is always 1.0.
+
+Several candidates are ``<attemptId>-a1``, ``-a2``... in the folders ``a1``,
+``a2``... of the attempt directory. Candidate ``i`` (from 0) starts at
+``spec.seed + i * 1000`` and adds ``-c<i+1>`` to its step names, as tiles do.
 """
 from __future__ import annotations
 
@@ -15,8 +19,10 @@ import json
 import numpy as np
 from PIL import Image
 
-from services.game_generators.base import AttemptResult, GenContext, attempt_dir, relative, spec_seed
-from services.game_generators.tiles import _HEAL_SIDE, _heal_until, _load, _post, _resize, _save, _square
+from services.game_generators.base import AttemptResult, GenContext, relative
+from services.game_generators.tiles import (
+    _HEAL_SIDE, _candidate_count, _each_candidate, _heal_until, _load, _post, _resize, _save, _square,
+)
 from services.game_image_ops import clean_alpha, despill
 from services.game_prompts import build, screen_for
 from services.game_tools import GameToolError, image, key
@@ -84,7 +90,7 @@ class BackgroundGenerator:
 
     def estimate(self, game: dict, asset: dict) -> dict[str, int]:
         layers = max(1, int(_spec(asset).get("layers") or 3))
-        return {"image": layers * (2 if _loops(asset) else 1)}
+        return {"image": layers * (2 if _loops(asset) else 1) * _candidate_count(asset)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
         method = str(_spec(ctx.asset).get("method") or "separate")
@@ -99,11 +105,12 @@ def _layer_prompt(ctx: GenContext, index: int, factor: float, screen: str) -> tu
     return build(ctx.game, ctx.asset, f"{_depth(factor)}, silhouette band on flat {screen} backdrop, aligned to the bottom")
 
 
-def _heal_frame(ctx, index, picture, prompt, negative, seed) -> tuple[np.ndarray, float, list]:
+def _heal_frame(ctx, frame, index, picture, prompt, negative, seed) -> tuple[np.ndarray, float, list]:
     """Heal the raw full frame at 1024 square, then scale it back to its own size."""
     height, width = picture.shape[:2]
     healed, error, warnings = _heal_until(
-        ctx, _square(picture, _HEAL_SIDE), prompt, negative, f"{_HEAL_SIDE}x{_HEAL_SIDE}", seed, (1,), step=f"seam-{index}",
+        ctx, _square(picture, _HEAL_SIDE), prompt, negative, f"{_HEAL_SIDE}x{_HEAL_SIDE}", seed, (1,),
+        step=f"seam-{index}{frame['suffix']}", folder=frame["folder"],
     )
     return _resize(healed, width, height), error, warnings
 
@@ -112,40 +119,46 @@ def _layer(ctx: GenContext, index: int, factor: float, frame: dict) -> tuple[np.
     """One layer at frame size: painted, healed when it loops, then keyed unless it is the sky."""
     prompt, negative = _layer_prompt(ctx, index, factor, frame["screen"])
     seed = frame["seed"] + index
-    raw = image(ctx, f"layer-{index}", prompt=prompt, negative=negative, resolution=frame["resolution"], seed=seed)
+    raw = image(ctx, f"layer-{index}{frame['suffix']}", prompt=prompt, negative=negative, resolution=frame["resolution"], seed=seed)
     source, picture, error, warnings = raw[0], None, None, []
     if frame["loop"]:
-        picture, error, warnings = _heal_frame(ctx, index, _load(ctx, raw[0]), prompt, negative, seed)
+        picture, error, warnings = _heal_frame(ctx, frame, index, _load(ctx, raw[0]), prompt, negative, seed)
         source = frame["folder"] / f"layer-{index}-healed.png"
         _save(source, picture)
     if index == 0:
         sky = picture if picture is not None else _load(ctx, source)
         return _post(frame["style"], _fit(sky, frame["width"], frame["height"], frame["style"]), "magenta"), error, warnings
-    keyed = _load(ctx, key(ctx, f"key-{index}", str(source), frame["screen"]))
+    keyed = _load(ctx, key(ctx, f"key-{index}{frame['suffix']}", str(source), frame["screen"]))
     fitted = despill(_fit(keyed, frame["width"], frame["height"], frame["style"]), frame["screen"])
     return _post(frame["style"], _to_bottom(fitted), "magenta"), error, warnings
 
 
-def _frame(ctx: GenContext) -> dict:
+def _frame(ctx: GenContext, slot: dict) -> dict:
+    """Frame settings for one candidate ``slot`` (its folder, first seed and step suffix)."""
     spec = _spec(ctx.asset)
     width = int(spec.get("widthPx") or 640)
     height = int(spec.get("heightPx") or 360)
-    folder = attempt_dir(ctx)
+    folder = slot["folder"]
     folder.mkdir(parents=True, exist_ok=True)
     return {
         "width": width,
         "height": height,
         "resolution": f"{_snap(width, 1024)}x{_snap(height, 512)}",
         "screen": screen_for(ctx.game, ctx.asset),
-        "seed": spec_seed(ctx.asset),
+        "seed": slot["seed"],
         "style": ctx.game.get("style") or {},
         "loop": _loops(ctx.asset),
         "folder": folder,
+        "suffix": slot["suffix"],
     }
 
 
 def _separate(ctx: GenContext) -> AttemptResult:
-    frame = _frame(ctx)
+    return _each_candidate(ctx, lambda slot: _separate_candidate(ctx, _frame(ctx, slot)))
+
+
+def _separate_candidate(ctx: GenContext, frame: dict) -> tuple[dict, list]:
+    """Every layer of one candidate and its ``parallax.json``."""
     folder = frame["folder"]
     layers = max(1, int(_spec(ctx.asset).get("layers") or 3))
     written = []
@@ -160,4 +173,4 @@ def _separate(ctx: GenContext) -> AttemptResult:
     (folder / "parallax.json").write_text(json.dumps({"layers": written}), encoding="utf-8")
     files = {item["file"]: relative(ctx, folder / item["file"]) for item in written}
     files["parallax"] = relative(ctx, folder / "parallax.json")
-    return AttemptResult(files=files, metrics={"layers": written}, warnings=warnings, provenance={"steps": list(ctx.steps)})
+    return {"files": files, "metrics": {"layers": written}}, warnings

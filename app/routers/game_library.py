@@ -1,14 +1,17 @@
 """HTTP API for the game-asset library (``.game-library-v1.json``)."""
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.game_export import export_game
 from services.game_library import (
     GameConflictError,
     GameNotFoundError,
@@ -83,6 +86,11 @@ class AssetLock(BaseModel):
     workspace: str = Field(min_length=1, max_length=200)
     locked: bool
     base_revision: int | None = None
+
+
+class ExportBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace: str = Field(min_length=1, max_length=200)
 
 
 def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: threading.RLock) -> APIRouter:
@@ -170,5 +178,36 @@ def create_game_library_router(*, workspace_dir: Callable[[str], str], lock: thr
             body.workspace,
             lambda library: lock_asset(library, game_id, asset_id, body.locked, now=_now(), base_revision=body.base_revision),
         )
+
+    def find_game(library: dict[str, Any], game_id: str) -> dict[str, Any]:
+        game = next((item for item in library.get("games") or [] if item.get("id") == game_id), None)
+        if game is None:
+            raise GameNotFoundError("game_not_found")
+        return game
+
+    @router.post("/api/v1/games/{game_id}/export")
+    def post_export(game_id: str, body: ExportBody):
+        # Packing reads every approved file. It runs outside the library lock so a produce job
+        # can keep saving attempts; only the export record is written under the lock.
+        directory = workspace_dir(body.workspace)
+        try:
+            packed = copy.deepcopy(find_game(load(body.workspace), game_id))
+            result = export_game(directory, packed, workspace=body.workspace, now=_now())
+        except _SERVICE_ERRORS as error:
+            raise fail(error) from error
+        entry = packed["exports"][-1]
+
+        def record(library: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+            stored = find_game(library, game_id)
+            exports = stored["exports"] if isinstance(stored.get("exports"), list) else []
+            stored["exports"] = [*exports, {**entry, "id": f"e{len(exports) + 1}"}]
+            return library, result
+
+        try:
+            return mutate(body.workspace, record)
+        except HTTPException:
+            if result.get("file"):  # an export without its record would be invisible; drop the zip
+                (Path(directory) / str(result["file"])).unlink(missing_ok=True)
+            raise
 
     return router

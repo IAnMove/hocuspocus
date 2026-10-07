@@ -23,17 +23,23 @@ def uniform_cell(all_frames, grid, pad) -> tuple[int, int]:
     return (_round_up(content_w + margin, grid), _round_up(content_h + margin, grid))
 
 
-def pack_rows(animations, cell) -> tuple[Image.Image, dict]:
+_ANCHORS = ("bottom", "center")
+
+def pack_rows(animations, cell, *, anchor: str = "bottom") -> tuple[Image.Image, dict]:
     """Place one row per animation in ``cell`` of ``(width, height)``.
 
-    Each frame is centered horizontally and its bottom row sits on the bottom
-    row of the cell, which is the atlas pivot. Frames of different heights
-    therefore share the same feet line. Names must be unique: a repeated name
+    Each frame is centered horizontally. With ``anchor="bottom"`` its bottom
+    row sits on the bottom row of the cell, which is the atlas pivot, so frames
+    of different heights share the same feet line. ``anchor="center"`` centers
+    it vertically too, with a center pivot, for effects that have no feet.
+    Names must be unique: a repeated name
     raises ``ValueError``. The atlas is a TexturePacker hash plus Aseprite
     ``frameTags``. ``duration`` is ``round(1000 / fps)`` milliseconds. Tag
     ``from`` / ``to`` are inclusive indices in row-major order across the
     whole sheet.
     """
+    if anchor not in _ANCHORS:
+        raise ValueError(f"anchor must be one of {_ANCHORS}")
     _check_unique_names(animations)
     cell_w, cell_h = int(cell[0]), int(cell[1])
     cols = _column_count(animations)
@@ -46,11 +52,11 @@ def pack_rows(animations, cell) -> tuple[Image.Image, dict]:
     loops: dict = {}
     cursor = 0
     for row, animation in enumerate(animations):
-        cursor = _pack_row(sheet, animation, row, cell_w, cell_h, cursor, frames_json, tags, loops)
+        cursor = _pack_row(sheet, animation, (row, cell_w, cell_h, anchor), cursor, frames_json, tags, loops)
     image = Image.fromarray(sheet)
     if width > 0 and height > 0:
         image = image.crop((0, 0, width, height))
-    return image, _atlas(frames_json, tags, cell_w, cell_h, width, height, loops)
+    return image, _atlas(frames_json, tags, (cell_w, cell_h, anchor), width, height, loops)
 
 
 def write_gif_preview(frames, fps, scale, path) -> None:
@@ -127,16 +133,16 @@ def _rgba_array(frame) -> np.ndarray:
     raise ValueError("expected an RGB or RGBA frame")
 
 
-def _paste_bottom_center(sheet: np.ndarray, frame, col: int, row: int, cell_w: int, cell_h: int) -> None:
-    """Center the frame horizontally and put its last row on the cell's last row.
+def _paste_in_cell(sheet: np.ndarray, frame, col: int, row: int, cell_w: int, cell_h: int, anchor: str) -> None:
+    """Center the frame horizontally; put its last row on the cell's last row, or center it.
 
-    A frame larger than the cell is clipped to the cell; the bottom rows stay.
+    A frame larger than the cell is clipped to the cell; with the bottom anchor the bottom rows stay.
     """
     image = _rgba_array(frame)
     src_h, src_w = image.shape[:2]
     cell_x, cell_y = col * cell_w, row * cell_h
     dst_x = cell_x + (cell_w - src_w) // 2
-    dst_y = cell_y + cell_h - src_h
+    dst_y = cell_y + (cell_h - src_h if anchor == "bottom" else (cell_h - src_h) // 2)
     src_x0 = max(0, cell_x - dst_x)
     src_y0 = max(0, cell_y - dst_y)
     dst_x0 = max(cell_x, dst_x)
@@ -161,7 +167,8 @@ def _record(x: int, y: int, cell_w: int, cell_h: int, duration: int) -> dict:
     }
 
 
-def _pack_row(sheet, animation, row, cell_w, cell_h, cursor, frames_json, tags, loops) -> int:
+def _pack_row(sheet, animation, place, cursor, frames_json, tags, loops) -> int:
+    row, cell_w, cell_h, anchor = place
     name = str(animation["name"])
     anim_frames = list(animation.get("frames") or [])
     duration = _duration_ms(animation.get("fps", 1))
@@ -174,13 +181,14 @@ def _pack_row(sheet, animation, row, cell_w, cell_h, cursor, frames_json, tags, 
             "direction": "forward",
         })
     for col, frame in enumerate(anim_frames):
-        _paste_bottom_center(sheet, frame, col, row, cell_w, cell_h)
+        _paste_in_cell(sheet, frame, col, row, cell_w, cell_h, anchor)
         frames_json[f"{name}_{col}"] = _record(col * cell_w, row * cell_h, cell_w, cell_h, duration)
         cursor += 1
     return cursor
 
 
-def _atlas(frames, tags, cell_w, cell_h, width, height, loops) -> dict:
+def _atlas(frames, tags, cell, width, height, loops) -> dict:
+    cell_w, cell_h, anchor = cell
     return {
         "frames": frames,
         "meta": {
@@ -191,7 +199,7 @@ def _atlas(frames, tags, cell_w, cell_h, width, height, loops) -> dict:
             "size": {"w": int(width), "h": int(height)},
             "scale": "1",
             "frameTags": tags,
-            "pivot": {"x": int(cell_w) // 2, "y": int(cell_h) - 1},
+            "pivot": {"x": int(cell_w) // 2, "y": int(cell_h) - 1 if anchor == "bottom" else int(cell_h) // 2},
             "mirror": True,
             "loop": loops,
         },

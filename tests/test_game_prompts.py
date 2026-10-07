@@ -81,6 +81,16 @@ def test_spec_fields_reach_the_prompt():
     assert "inside a" not in prompt
 
 
+
+def test_framed_assets_do_not_forbid_a_frame():
+    framed = [_asset("barra", "ui", spec={"element": "bar"}), _asset("moneda", "icon", spec={"frame": "square"})]
+    for asset in framed:
+        _prompt, negative = build(_game([asset], []), asset)
+        assert negative == "blur, photo, text, watermark", asset["kind"]
+    for asset in (_asset("gema", "icon", spec={"frame": "none"}), _asset("heroe", "character")):
+        _prompt, negative = build(_game([asset], []), asset)
+        assert negative == "blur, photo, text, watermark, frame, border", asset["kind"]
+
 def test_screen_auto_follows_the_description():
     asset = _asset("heroe", "character", description="a green cape")
     game = _game([asset], [])

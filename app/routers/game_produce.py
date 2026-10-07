@@ -71,6 +71,8 @@ def create_game_produce_router(service: GameProduce, *, call: Callable[[str, dic
             game = read_game(body.workspace, game_id)
             items, line_problems = _parse_body(body)
             problems = [*line_problems, *check(game, items, _installed(call), replace=body.replace)]
+            if body.replace and not items:  # a list of only comments would delete every asset
+                problems.append({"code": "empty_list", "message": "replace needs at least one asset"})
             from services.game_estimate import estimate
             report = {"items": items, "problems": problems, "estimate": estimate(service.deps.workspace_dir(body.workspace), game, items)}
             if body.check:

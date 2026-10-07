@@ -1,6 +1,8 @@
 """Shared types for one game-asset generation attempt."""
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Protocol
@@ -55,8 +57,8 @@ def attempt_dir(ctx: GenContext) -> Path:
 
 
 def relative(ctx: GenContext, path: Path) -> str:
-    """``path`` relative to the workspace, as the attempt ``files`` store it."""
-    return str(Path(path).relative_to(workspace_root(ctx)))
+    """``path`` relative to the workspace, as the attempt ``files`` store it (POSIX on every OS)."""
+    return Path(path).relative_to(workspace_root(ctx)).as_posix()
 
 
 def spec_seed(asset: dict) -> int:
@@ -65,6 +67,12 @@ def spec_seed(asset: dict) -> int:
     if value is None or isinstance(value, bool):
         return 1
     return int(value)
+
+
+def seed_for_step(asset: dict, step: str) -> int:
+    """``spec_seed``, plus ``N - 1`` for a candidate step that ends in ``-aN``."""
+    match = re.search(r"-a(\d+)$", str(step))
+    return spec_seed(asset) + (int(match.group(1)) - 1 if match else 0)
 
 
 def candidate_dirs(ctx: GenContext, count: int) -> list[tuple[str, Path]]:
@@ -85,12 +93,25 @@ def candidate_result(written: list[dict], warnings: list, steps: list) -> Attemp
     """Fold ``{"id", "files", "metrics"}`` candidates into one result.
 
     ``files`` and ``metrics`` describe the first candidate. Several candidates
-    also list every one under ``metrics["candidates"]``.
+    also list every one under ``metrics["candidates"]``. ``warnings`` apply to
+    every candidate; a candidate's own ``warnings`` stay with that candidate.
     """
     first = written[0]
     metrics = {**first["metrics"], "attemptIds": [item["id"] for item in written]}
-    if len(written) > 1:
-        metrics["candidates"] = [
-            {"id": item["id"], "files": dict(item["files"]), "metrics": dict(item["metrics"])} for item in written
-        ]
+    if len(written) == 1:
+        own = list(first.get("warnings") or [])
+        return AttemptResult(files=dict(first["files"]), metrics=metrics, warnings=_unique([*warnings, *own]), provenance={"steps": list(steps)})
+    metrics["candidates"] = [
+        {"id": item["id"], "files": dict(item["files"]), "metrics": dict(item["metrics"]), "warnings": list(item.get("warnings") or [])}
+        for item in written
+    ]
     return AttemptResult(files=dict(first["files"]), metrics=metrics, warnings=list(warnings), provenance={"steps": list(steps)})
+
+
+def _unique(items: list) -> list:
+    """Order-preserving de-duplication; dict warnings are compared by value."""
+    seen: list = []
+    for item in items:
+        if item not in seen:
+            seen.append(item)
+    return seen

@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import pytest
 
 from services.game_generators.base import GenContext
-from services.game_tools import GameToolError, file_ref, image
+from services.game_tools import GameToolError, file_ref, image, model3d
 
 
 class Fake:
@@ -104,3 +104,54 @@ def test_file_ref_encodes_the_path_and_the_workspace(tmp_path):
     assert unquote(parts.path[len("/api/v1/file/"):]) == "game/x y/main#1.png"
     assert parse_qs(parts.query) == {"workspace": ["a+b & c"]}
     assert file_ref(context, "/plain.png").startswith("/api/v1/file/plain.png?workspace=")
+
+
+class _Model3d:
+    def __init__(self, submitted, status):
+        self.submitted, self.status, self.calls = submitted, status, []
+
+    def __call__(self, tool, args):
+        self.calls.append((tool, args))
+        return self.submitted if tool == "model3d.generate" else self.status
+
+
+def test_model3d_sends_seed_and_texture_and_reports_the_real_error(tmp_path):
+    failed = {"status": "failed", "message": "Queued Hunyuan3D generation", "error": "Hunyuan3D is not installed"}
+    fake = _Model3d({"job_id": "m1"}, failed)
+    with pytest.raises(GameToolError) as caught:
+        model3d(_ctx(tmp_path, fake), "mesh", image_path="a.png", texture_resolution=512, seed=7)
+    sent = fake.calls[0][1]["input"]
+    assert (sent["texture_resolution"], sent["seed"]) == (512, 7)
+    assert str(caught.value).endswith("Hunyuan3D is not installed")
+
+
+def test_a_refused_submission_says_why(tmp_path):
+    fake = _Model3d({"status": "failed", "error": "workspace not found"}, {})
+    with pytest.raises(GameToolError) as caught:
+        model3d(_ctx(tmp_path, fake), "mesh", image_path="a.png")
+    assert caught.value.code == "rejected" and "workspace not found" in str(caught.value)
+
+
+def test_video_seed_and_candidate_seeds(tmp_path):
+    from services.game_generators.base import relative, seed_for_step
+    from services.game_tools import video_fl2va
+
+    asset = {"spec": {"seed": 0}}
+    assert [seed_for_step(asset, step) for step in ("clip", "clip-a1", "clip-a3", "mesh-a2")] == [0, 0, 2, 1]
+
+    class Video:
+        def __init__(self):
+            self.calls = []
+
+        def __call__(self, tool, args):
+            self.calls.append((tool, args))
+            if tool == "generation.video":
+                return {"job_id": "v1"}
+            return {"status": "completed", "output_files": ["clip.mp4"]}
+
+    fake = Video()
+    ctx = _ctx(tmp_path, fake)
+    video_fl2va(ctx, "clip-a2", prompt="run", start="a.png", frames=49, model="h3", resolution="832x480", seed=5)
+    assert fake.calls[0][1]["input"]["params"]["seed"] == 5
+    nested = tmp_path / "ws" / "game" / "bosque" / "heroe" / "a1" / "a2" / "sheet.png"
+    assert relative(ctx, nested) == "game/bosque/heroe/a1/a2/sheet.png"

@@ -92,6 +92,8 @@ def _status_payload(result: dict) -> dict:
 
 def _job_id(submitted: dict) -> str:
     _raise_tool(submitted)
+    if str(submitted.get("status") or "") == "failed":
+        raise GameToolError("rejected", str(submitted.get("error") or submitted.get("message") or "the tool refused the request")[:300])
     receipt = _mapping(submitted.get("receipt"))
     nested = _mapping(receipt.get("result")) or receipt
     task = _mapping(nested.get("task")) or _mapping(submitted.get("task")) or _mapping(_mapping(submitted.get("result")).get("task"))
@@ -247,9 +249,11 @@ def _video(ctx, step, params) -> str:
     return files[0]
 
 
-def video_fl2va(ctx, step, *, prompt, start, end=None, frames, model, resolution, steps=None) -> str:
+def video_fl2va(ctx, step, *, prompt, start, end=None, frames, model, resolution, steps=None, seed=None) -> str:
     """First-and-last-frame video. ``end`` is omitted when the action leaves the stance."""
     params = {"prompt": prompt, "model_type": model, "resolution": resolution, "video_length": int(frames), "image_start": start}
+    if seed is not None:
+        params["seed"] = int(seed)
     if end:
         params["image_end"] = end
     if steps is not None:
@@ -351,7 +355,8 @@ def _poll(ctx: GenContext, tool: str, job_id: str) -> dict:
         status = str(payload.get("status") or "")
         if status in _TERMINAL:
             if status != "completed":
-                raise GameToolError(status or "failed", str(payload.get("message") or payload.get("error") or status))
+                # ``message`` is often the last progress line ("Queued Hunyuan3D generation"); the error says why.
+                raise GameToolError(status or "failed", str(payload.get("error") or payload.get("message") or status))
             return payload
         time.sleep(2)
 
@@ -365,21 +370,35 @@ def _model_file(payload: dict) -> str:
     return files[0]
 
 
-def model3d(ctx, step, *, image_path, images=None) -> str:
-    """Hunyuan mesh. Waits on ``model3d.status`` and returns ``result.filename``."""
+def model3d(ctx, step, *, image_path, images=None, preset=None, reduce_face=None, target_face_num=None,
+            texture_resolution=None, seed=None) -> str:
+    """Hunyuan mesh. Waits on ``model3d.status`` and returns ``result.filename``.
+
+    ``texture_resolution`` is clamped by the service to 256–1024 px; ``seed`` makes candidates differ.
+    """
     _check(ctx)
     payload = {"workspace": ctx.workspace, "image_path": image_path}
+    if texture_resolution is not None:
+        payload["texture_resolution"] = int(texture_resolution)
+    if seed is not None:
+        payload["seed"] = int(seed)
     if images:
         payload["images"] = images
+    if preset:
+        payload["preset"] = preset
+    if reduce_face is not None:
+        payload["reduce_face"] = bool(reduce_face)
+    if target_face_num is not None:
+        payload["target_face_num"] = int(target_face_num)
     started = time.perf_counter()
     submitted = ctx.call("model3d.generate", {"version": 1, "intent_id": _intent(ctx, step), "input": payload})
     finished = _poll(ctx, "model3d.status", _job_id(submitted))
     name = _model_file(finished)
-    _finish(ctx, tool="model3d.generate", model="hunyuan3d", seed=None, prompt="", refs=[str(image_path)], job_id=_job_id(submitted), started=started)
+    _finish(ctx, tool="model3d.generate", model="hunyuan3d", seed=seed, prompt="", refs=[str(image_path)], job_id=_job_id(submitted), started=started)
     return name
 
 
-def rig(ctx, step, *, source, engine="humanoid", animations=None) -> str:
+def rig(ctx, step, *, source, engine="humanoid", animations=None, rig_profile=None) -> str:
     """Rig a GLB. Waits on ``model3d.rig.status``."""
     _check(ctx)
     payload = {
@@ -388,6 +407,8 @@ def rig(ctx, step, *, source, engine="humanoid", animations=None) -> str:
         "engine": engine,
         "animations": list(animations or ["idle", "walk"]),
     }
+    if rig_profile:
+        payload["rig_profile"] = rig_profile
     started = time.perf_counter()
     submitted = ctx.call("model3d.rig", {"version": 1, "intent_id": _intent(ctx, step), "input": payload})
     job_id = _job_id(submitted)

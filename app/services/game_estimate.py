@@ -118,9 +118,8 @@ def steps_for(game: dict[str, Any], asset: dict[str, Any]) -> dict[str, int]:
             counts = generator.estimate(game, asset)
         except Exception:  # a spec the generator cannot read still gets the fallback estimate
             counts = None
-        parsed = _counts(counts)
-        if parsed:
-            return parsed
+        if isinstance(counts, dict):  # {} is a valid answer: a CPU-only asset (retro sfx) costs no GPU step
+            return _counts(counts)
     return _fallback(asset)
 
 
@@ -144,7 +143,7 @@ def _fallback(asset: dict[str, Any]) -> dict[str, int]:
     if kind == "vfx":
         return {"h3_turbo": count}
     if kind == "sfx":
-        return {"sfx": _positive(spec.get("variants"), 1)}
+        return {} if spec.get("engine") == "retro" else {"sfx": _positive(spec.get("variants"), 1)}
     if kind in {"music", "jingle"}:
         return {"music": count}
     if kind == "voice":

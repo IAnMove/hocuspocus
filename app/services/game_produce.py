@@ -114,6 +114,7 @@ class GameProduce:
         job = {
             "jobId": f"game-produce-{uuid.uuid4().hex[:8]}", "workspace": workspace, "gameId": game_id,
             "status": "completed" if not steps else "queued", "rerender": bool(rerender), "candidates": candidates,
+            "assetIds": list(asset_ids) if asset_ids is not None else None,
             "steps": steps, "createdAt": time.time(), "message": "Nothing to produce" if not steps else "Queued",
         }
         with self._admit:
@@ -338,12 +339,11 @@ class GameProduce:
 
     def _succeed(self, job: dict, step: dict, game: dict, asset: dict, result: Any, elapsed: float) -> None:
         provenance = result.provenance if isinstance(getattr(result, "provenance", None), dict) else {"steps": []}
-        shared = {
-            "warnings": list(getattr(result, "warnings", None) or []),
-            "provenance": provenance, "inputs": asset_inputs(game, asset),
-        }
-        for attempt_id, files, metrics in _candidates(result, step["attemptId"]):
-            attempt = {"id": attempt_id, "status": "ok", "createdAt": iso_now(), "files": files, "metrics": metrics, **shared}
+        common = list(getattr(result, "warnings", None) or [])
+        shared = {"provenance": provenance, "inputs": asset_inputs(game, asset)}
+        for attempt_id, files, metrics, own in _candidates(result, step["attemptId"]):
+            warnings = [*_for_candidate(common, attempt_id), *own]
+            attempt = {"id": attempt_id, "status": "ok", "createdAt": iso_now(), "files": files, "metrics": metrics, "warnings": warnings, **shared}
             self.deps.write_attempt(job["workspace"], job["gameId"], asset["id"], attempt, "review")
         step.update(status="done", error=None, reason=None)
         self._save(job)
@@ -439,14 +439,19 @@ def _select(assets: list[dict], asset_ids: list[str] | None, kinds: list[str] | 
             continue
         if kind_set is not None and asset.get("kind") not in kind_set:
             continue
-        if _wanted(asset, rerender):
+        if _wanted(asset, rerender, explicit=ids is not None):
             found.append(asset)
     return found
 
 
-def _wanted(asset: dict, rerender: bool) -> bool:
+def _wanted(asset: dict, rerender: bool, *, explicit: bool = False) -> bool:
+    """Open assets always; with ``rerender`` stale ones too, and an asset in review the user named."""
     status = asset.get("status")
-    return status in _OPEN or (bool(rerender) and status == "stale" and not asset.get("locked"))
+    if status in _OPEN:
+        return True
+    if not rerender or asset.get("locked"):
+        return False
+    return status == "stale" or (explicit and status == "review")
 
 
 def _claimable(job: dict, step: dict, game: dict, asset: dict | None) -> bool:
@@ -454,7 +459,7 @@ def _claimable(job: dict, step: dict, game: dict, asset: dict | None) -> bool:
     if asset is None:
         step.update(status="failed", error="missing asset")
         return False
-    if not _wanted(asset, bool(job.get("rerender"))):
+    if not _wanted(asset, bool(job.get("rerender")), explicit=asset.get("id") in (job.get("assetIds") or [])):
         # A newer batch already produced it, or someone approved it. Do not run it twice.
         step.update(status="skipped", reason="not_open", error=None)
         return False
@@ -474,8 +479,11 @@ def _retry(step: dict, game: dict) -> bool:
 
 
 def _group_animation_steps(steps: list[dict]) -> list[dict]:
-    """J6 step 3 decides which actions share a clip. Until then each asset is its own step."""
-    return steps
+    """One step per action. J0 left ``groupActions`` false, so clips are not shared."""
+    from services.game_generators.animation import GAME_ANIMATION_DEFAULTS
+    if GAME_ANIMATION_DEFAULTS["groupActions"]:
+        return list(steps)
+    return list(steps)
 
 
 def _find_asset(game: dict, asset_id: str) -> dict | None:
@@ -502,8 +510,13 @@ def _error_text(error: BaseException) -> str:
     return f"{type(error).__name__}: {error}"[:500]
 
 
-def _candidates(result: Any, fallback: str) -> list[tuple[str, dict, dict]]:
-    """``(attemptId, files, metrics)`` per candidate.
+def _for_candidate(warnings: list, attempt_id: str) -> list:
+    """Warnings for every candidate, without those tagged for another one."""
+    return [item for item in warnings if not isinstance(item, dict) or item.get("candidate") in (None, attempt_id)]
+
+
+def _candidates(result: Any, fallback: str) -> list[tuple[str, dict, dict, list]]:
+    """``(attemptId, files, metrics, ownWarnings)`` per candidate.
 
     ``metrics["candidates"]`` gives each candidate its own files and metrics.
     Without it, only the first id in ``attemptIds`` gets the result's files.
@@ -514,18 +527,19 @@ def _candidates(result: Any, fallback: str) -> list[tuple[str, dict, dict]]:
         return listed
     files = _mapping(getattr(result, "files", None))
     return [
-        (attempt_id, files if index == 0 else {}, metrics if index == 0 else {})
+        (attempt_id, files if index == 0 else {}, metrics if index == 0 else {}, [])
         for index, attempt_id in enumerate(_attempt_ids(metrics, fallback))
     ]
 
 
-def _listed_candidates(raw: Any) -> list[tuple[str, dict, dict]]:
+def _listed_candidates(raw: Any) -> list[tuple[str, dict, dict, list]]:
     if not isinstance(raw, list):
         return []
     found = []
     for item in raw:
         if isinstance(item, dict) and str(item.get("id") or "").strip():
-            found.append((str(item["id"]), _mapping(item.get("files")), _mapping(item.get("metrics"))))
+            own = item.get("warnings") if isinstance(item.get("warnings"), list) else []
+            found.append((str(item["id"]), _mapping(item.get("files")), _mapping(item.get("metrics")), list(own)))
     return found
 
 

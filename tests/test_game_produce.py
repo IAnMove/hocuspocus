@@ -194,6 +194,18 @@ def test_order_dependency_failure_and_rerender(tmp_path, monkeypatch):
     assert "held" not in calls and "done" not in calls
 
 
+def test_regenerate_this_runs_an_asset_in_review_only_when_named(tmp_path, monkeypatch):
+    calls = []
+    def store():
+        return Store([_asset("waiting", "item", "review"), _asset("other", "item", "review"), _asset("held", "item", "review", locked=True)])
+    service = _service(tmp_path, store(), Generator(calls), monkeypatch)
+    assert _ids(service.start("lab", "bosque", rerender=True)) == []
+    service = _service(tmp_path, store(), Generator(calls), monkeypatch)
+    assert _ids(service.start("lab", "bosque", asset_ids=["waiting", "held"], rerender=True)) == ["waiting"]
+    assert calls == ["waiting"]
+    service = _service(tmp_path, store(), Generator(calls), monkeypatch)
+    assert _ids(service.start("lab", "bosque", asset_ids=["waiting"])) == []
+
 def test_cancel_between_steps(tmp_path, monkeypatch):
     calls = []
     store = Store([_asset("first", "item"), _asset("second", "item")])
@@ -561,4 +573,36 @@ def test_from_list_check_reports_a_bad_json_spec_instead_of_failing(tmp_path):
     assert response.status_code == 200
     assert [(item["line"], item["code"]) for item in response.json()["problems"]] == [
         (1, "invalid_spec"), (2, "invalid_spec"), (3, "invalid_spec"),
+    ]
+
+
+def test_replace_with_a_list_of_only_comments_keeps_every_asset(tmp_path):
+    library, _game = create_game({}, {"id": "bosque", "title": "Bosque"}, now=NOW)
+    write_library(tmp_path, library, now=NOW)
+    _service_unused, client = _client(tmp_path)
+    kept = client.post("/api/v1/games/bosque/assets/from-list", json={"workspace": "lab", "text": EXAMPLE_LIST})
+    assert kept.status_code == 200
+    before = len(kept.json()["assets"])
+    response = client.post("/api/v1/games/bosque/assets/from-list", json={
+        "workspace": "lab", "text": "# nothing yet\n", "replace": True,
+    })
+    assert response.status_code == 422
+    assert "empty_list" in response.text
+    from services.game_library import read_library
+    assert len(read_library(tmp_path)["games"][0]["assets"]) == before
+
+
+def test_a_candidate_never_gets_another_candidates_warning():
+    from types import SimpleNamespace
+
+    from services.game_produce import _candidates, _for_candidate
+
+    common = ["seam_visible", {"code": "over_budget", "candidate": "a1-a2"}, {"code": "dither"}]
+    assert _for_candidate(common, "a1-a1") == ["seam_visible", {"code": "dither"}]
+    result = SimpleNamespace(files={}, warnings=common, metrics={"candidates": [
+        {"id": "a1-a1", "files": {"main": "x"}, "metrics": {}, "warnings": ["orbit_empty"]},
+        {"id": "a1-a2", "files": {"main": "y"}, "metrics": {}},
+    ]})
+    assert [(attempt_id, own) for attempt_id, _files, _metrics, own in _candidates(result, "a1")] == [
+        ("a1-a1", ["orbit_empty"]), ("a1-a2", []),
     ]
