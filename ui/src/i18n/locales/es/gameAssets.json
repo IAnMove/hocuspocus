@@ -124,5 +124,13 @@
   "reviewEmpty": "No hay nada en revisión.",
   "warnLoopSeam": "La costura del bucle se oye.",
   "warnDuplicate": "Se parece a un duplicado de {{id}}.",
-  "clips": "Clips"
+  "clips": "Clips",
+  "playMissing": "Falta en la prueba",
+  "mute": "Silencio",
+  "unmute": "Con sonido",
+  "exportApproved": "Aprobados",
+  "exportMissing": "Sin aprobar",
+  "exportPack": "Exportar",
+  "exportHistory": "Historial de exportación",
+  "exportEmpty": "Todavía no hay exportaciones."
 }

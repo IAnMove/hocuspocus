@@ -3,6 +3,8 @@ import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { GameCastPanel } from './GameCastPanel'
 import { GameListPanel } from './GameListPanel'
+import { GameExportPanel } from './GameExportPanel'
+import { GamePlaytest } from './GamePlaytest'
 import { GameProducePanel } from './GameProducePanel'
 import { GameReviewPanel } from './GameReviewPanel'
 import { GameSetupPanel } from './GameSetupPanel'
@@ -67,6 +69,8 @@ export function GameAssetsPanel() {
         {game && section === 'list' && <GameListPanel />}
         {game && section === 'produce' && <GameProducePanel />}
         {game && section === 'review' && <GameReviewPanel />}
+        {game && section === 'play' && <GamePlaytest />}
+        {game && section === 'export' && <GameExportPanel />}
         {game && LATER_SECTIONS.includes(section) && <p className="text-sm text-muted-foreground">{t('soon')}</p>}
       </section>
     </div>

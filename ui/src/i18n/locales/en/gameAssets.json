@@ -124,5 +124,13 @@
   "reviewEmpty": "Nothing is waiting for review.",
   "warnLoopSeam": "The loop seam is audible.",
   "warnDuplicate": "Looks like a duplicate of {{id}}.",
-  "clips": "Clips"
+  "clips": "Clips",
+  "playMissing": "Missing from the playtest",
+  "mute": "Mute",
+  "unmute": "Unmute",
+  "exportApproved": "Approved",
+  "exportMissing": "Not approved",
+  "exportPack": "Export",
+  "exportHistory": "Export history",
+  "exportEmpty": "No exports yet."
 }
