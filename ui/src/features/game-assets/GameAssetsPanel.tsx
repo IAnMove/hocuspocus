@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { GameCastPanel } from './GameCastPanel'
+import { GameListPanel } from './GameListPanel'
+import { GameProducePanel } from './GameProducePanel'
 import { GameSetupPanel } from './GameSetupPanel'
 import { GameStylePanel } from './GameStylePanel'
 import { buttonClass, waitingApprovals } from './styles'
@@ -61,6 +63,8 @@ export function GameAssetsPanel() {
         {game && section === 'setup' && <GameSetupPanel />}
         {game && section === 'style' && <GameStylePanel />}
         {game && section === 'cast' && <GameCastPanel />}
+        {game && section === 'list' && <GameListPanel />}
+        {game && section === 'produce' && <GameProducePanel />}
         {game && LATER_SECTIONS.includes(section) && <p className="text-sm text-muted-foreground">{t('soon')}</p>}
       </section>
     </div>

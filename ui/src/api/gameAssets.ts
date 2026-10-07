@@ -109,26 +109,30 @@ export function gameAssetsFromList(workspace: string, gameId: string, body: { te
   return gameResponse(send(`/api/v1/games/${encodeURIComponent(gameId)}/assets/from-list`, 'POST', payload), 'Could not read the asset list')
 }
 
-export function produceGame(workspace: string, gameId: string, body: { assetIds?: string[]; kinds?: string[]; rerender?: boolean; candidates?: number } = {}): Promise<ProduceJob> {
+function asJob(job: ProduceJob & { jobId?: string }): ProduceJob {
+  return { ...job, id: job.id || job.jobId || '' }
+}
+
+export async function produceGame(workspace: string, gameId: string, body: { assetIds?: string[]; kinds?: string[]; rerender?: boolean; candidates?: number } = {}): Promise<ProduceJob> {
   const payload: Record<string, unknown> = { workspace, rerender: Boolean(body.rerender) }
   if (body.assetIds) payload.asset_ids = body.assetIds
   if (body.kinds) payload.kinds = body.kinds
   if (body.candidates) payload.candidates = body.candidates
-  return gameResponse(send(`/api/v1/games/${encodeURIComponent(gameId)}/produce`, 'POST', payload), 'Could not start production')
+  return asJob(await gameResponse(send(`/api/v1/games/${encodeURIComponent(gameId)}/produce`, 'POST', payload), 'Could not start production'))
 }
 
-export function fetchProduceJob(workspace: string, jobId: string): Promise<ProduceJob> {
-  return gameResponse(send(`/api/v1/games/produce/jobs/${encodeURIComponent(jobId)}?workspace=${encodeURIComponent(workspace)}`, 'GET'), 'Could not read the produce job')
+export async function fetchProduceJob(workspace: string, jobId: string): Promise<ProduceJob> {
+  return asJob(await gameResponse(send(`/api/v1/games/produce/jobs/${encodeURIComponent(jobId)}?workspace=${encodeURIComponent(workspace)}`, 'GET'), 'Could not read the produce job'))
 }
 
-export function cancelProduceJob(workspace: string, jobId: string): Promise<ProduceJob> {
-  return gameResponse(send(`/api/v1/games/produce/jobs/${encodeURIComponent(jobId)}/cancel`, 'POST', { workspace }), 'Could not cancel production')
+export async function cancelProduceJob(workspace: string, jobId: string): Promise<ProduceJob> {
+  return asJob(await gameResponse(send(`/api/v1/games/produce/jobs/${encodeURIComponent(jobId)}/cancel`, 'POST', { workspace }), 'Could not cancel production'))
 }
 
-export function resumeProduceJob(workspace: string, jobId: string): Promise<ProduceJob> {
-  return gameResponse(send(`/api/v1/games/produce/jobs/${encodeURIComponent(jobId)}/resume`, 'POST', { workspace }), 'Could not resume production')
+export async function resumeProduceJob(workspace: string, jobId: string): Promise<ProduceJob> {
+  return asJob(await gameResponse(send(`/api/v1/games/produce/jobs/${encodeURIComponent(jobId)}/resume`, 'POST', { workspace }), 'Could not resume production'))
 }
 
-export function startStyleSheet(workspace: string, gameId: string): Promise<ProduceJob> {
-  return gameResponse(send(`/api/v1/games/${encodeURIComponent(gameId)}/style/sheet`, 'POST', { workspace }), 'Could not start the style sheet')
+export async function startStyleSheet(workspace: string, gameId: string): Promise<ProduceJob> {
+  return asJob(await gameResponse(send(`/api/v1/games/${encodeURIComponent(gameId)}/style/sheet`, 'POST', { workspace }), 'Could not start the style sheet'))
 }

@@ -104,9 +104,28 @@ export interface StylePreset {
   audio: { genre: string; instruments: string; bpm: [number, number] }
 }
 
+export interface ProduceStep {
+  assetId: string
+  kind?: string
+  status: string
+  reason?: string | null
+  error?: string | null
+  attemptId?: string
+}
+
 export interface ProduceJob {
   id: string
+  jobId?: string
   status: string
+  message?: string
+  gameId?: string
+  steps?: ProduceStep[]
+}
+
+export interface GameEstimate {
+  minutes: number
+  source: string
+  byKind: Record<string, number>
 }
 
 export interface ListProblem {
@@ -118,7 +137,7 @@ export interface ListProblem {
 export interface ListReport {
   items: unknown[]
   problems: ListProblem[]
-  estimate: Record<string, unknown>
+  estimate: GameEstimate
   assets?: GameAsset[]
 }
 
@@ -130,4 +149,4 @@ export interface ExportResult {
 }
 
 export const GAME_SECTIONS: GameSection[] = ['setup', 'style', 'cast', 'list', 'produce', 'review', 'play', 'export']
-export const LATER_SECTIONS: GameSection[] = ['list', 'produce', 'review', 'play', 'export']
+export const LATER_SECTIONS: GameSection[] = ['review', 'play', 'export']

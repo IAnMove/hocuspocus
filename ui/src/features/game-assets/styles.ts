@@ -2,7 +2,7 @@ import type { Game, GameAsset } from './types'
 
 export const fieldClass = 'w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm'
 export const buttonClass = 'rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50'
-export const panelClass = 'rounded-lg border border-border bg-card p-3'
+export const panelClass = 'rounded-lg border border-border bg-bg-secondary p-3'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 

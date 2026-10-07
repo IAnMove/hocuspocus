@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import * as api from '../../api/gameAssets'
 import { GameRevisionConflict } from '../../api/gameAssets'
-import type { Game, GameSection, GameStyle, PaletteMode, ProduceJob, StylePreset, StyleReference } from './types'
+import type { Game, GameSection, GameStyle, ListReport, PaletteMode, ProduceJob, StylePreset, StyleReference } from './types'
 
 const SELECTION = 'hocuspocus.gameAssets.'
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'canceled', 'interrupted'])
@@ -20,6 +20,8 @@ interface GameAssetsState {
   section: GameSection
   presets: StylePreset[]
   styleJob: ProduceJob | null
+  produceJob: ProduceJob | null
+  selectedIds: string[]
   load: (workspace: string) => Promise<void>
   openGame: (gameId: string) => Promise<void>
   setSection: (section: GameSection) => void
@@ -34,13 +36,29 @@ interface GameAssetsState {
   discardSample: (assetId: string, attemptId: string, note: string) => Promise<void>
   addCharacter: (name: string) => Promise<void>
   linkKit: (assetId: string, kitId: string) => Promise<void>
+  toggleSelected: (assetId: string) => void
+  saveAsset: (assetId: string, patch: Record<string, unknown>) => Promise<void>
+  previewList: (body: { text?: string; csv?: string; items?: unknown[]; format?: string }) => Promise<ListReport>
+  commitList: (body: { text?: string; csv?: string; items?: unknown[]; format?: string; replace?: boolean }) => Promise<ListReport>
+  startProduce: (body: { assetIds?: string[]; rerender?: boolean }) => Promise<void>
+  cancelProduce: () => Promise<void>
+  resumeProduce: () => Promise<void>
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 let pollTimer: ReturnType<typeof setTimeout> | undefined
+let produceTimer: ReturnType<typeof setTimeout> | undefined
 
-function remember(workspace: string, gameId: string): void {
-  try { window.localStorage.setItem(SELECTION + workspace, JSON.stringify({ gameId })) } catch { /* selection is optional */ }
+function remember(workspace: string, gameId: string, produceJobId?: string): void {
+  try {
+    const previous = JSON.parse(window.localStorage.getItem(SELECTION + workspace) || '{}') as { produceJobId?: string }
+    const jobId = produceJobId === undefined ? previous.produceJobId || '' : produceJobId
+    window.localStorage.setItem(SELECTION + workspace, JSON.stringify({ gameId, produceJobId: jobId }))
+  } catch { /* selection is optional */ }
+}
+
+function rememberedJob(workspace: string): string {
+  try { return JSON.parse(window.localStorage.getItem(SELECTION + workspace) || '{}').produceJobId || '' } catch { return '' }
 }
 
 function remembered(workspace: string): string {
@@ -69,6 +87,28 @@ function mergeStyle(style: GameStyle, patch?: Partial<GameStyle>): GameStyle {
   }
 }
 
+function armProducePoll(jobId: string): void {
+  const tick = async () => {
+    const state = useGameAssetsStore.getState()
+    if (state.produceJob?.id !== jobId || TERMINAL.has(state.produceJob.status)) return
+    try {
+      const next = await api.fetchProduceJob(state.workspace, jobId)
+      if (useGameAssetsStore.getState().produceJob?.id !== jobId) return
+      useGameAssetsStore.setState({ produceJob: next })
+      if (!TERMINAL.has(next.status)) {
+        produceTimer = setTimeout(() => { void tick() }, 1000)
+        return
+      }
+      const gameId = useGameAssetsStore.getState().game?.id
+      if (gameId) await useGameAssetsStore.getState().openGame(gameId)
+    } catch (error) {
+      useGameAssetsStore.setState({ error: error instanceof Error ? error.message : 'Could not read production' })
+    }
+  }
+  clearTimeout(produceTimer)
+  produceTimer = setTimeout(() => { void tick() }, 1000)
+}
+
 export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   workspace: '',
   ready: false,
@@ -83,6 +123,8 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   section: 'setup',
   presets: [],
   styleJob: null,
+  produceJob: null,
+  selectedIds: [],
 
   load: async workspace => {
     set({ workspace, ready: false, error: null })
@@ -95,6 +137,15 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
       set({ games, presets: presets.presets || [], ready: true })
       if (id) await get().openGame(id)
       else set({ game: null, serverRevision: 0, dirty: false })
+      const jobId = rememberedJob(workspace)
+      if (jobId && get().workspace === workspace) {
+        try {
+          const job = await api.fetchProduceJob(workspace, jobId)
+          if (get().workspace !== workspace || (job.gameId && job.gameId !== get().game?.id)) return
+          set({ produceJob: job })
+          if (!TERMINAL.has(job.status)) armProducePoll(job.id)
+        } catch { /* an old job id is optional */ }
+      }
     } catch (error) {
       if (get().workspace === workspace) set({ ready: true, error: error instanceof Error ? error.message : 'Could not load games' })
     }
@@ -106,7 +157,7 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
     if (get().workspace !== workspace) return
     remember(workspace, game.id)
     set({
-      game, serverRevision: game.revision, dirty: false, error: null,
+      game, serverRevision: game.revision, dirty: false, error: null, selectedIds: [],
       games: get().games.some(item => item.id === game.id) ? get().games.map(item => item.id === game.id ? game : item) : [...get().games, game],
     })
   },
@@ -184,8 +235,8 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
   createGame: async () => {
     await get().saveNow()
     const created = await api.createGame(get().workspace, { title: 'Untitled game', genre: 'platformer', view: 'side' })
-    remember(get().workspace, created.id)
-    set({ games: [...get().games, created], game: created, serverRevision: created.revision, dirty: false, section: 'setup', error: null })
+    remember(get().workspace, created.id, '')
+    set({ games: [...get().games, created], game: created, serverRevision: created.revision, dirty: false, section: 'setup', error: null, produceJob: null, selectedIds: [] })
   },
 
   duplicateGame: async () => {
@@ -196,8 +247,8 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
       title: `${source.title} copy`, genre: source.genre, view: source.view,
       style: { ...source.style, approval: 'draft', approvedAt: null, references: [] },
     })
-    remember(get().workspace, created.id)
-    set({ games: [...get().games, created], game: created, serverRevision: created.revision, dirty: false, error: null })
+    remember(get().workspace, created.id, '')
+    set({ games: [...get().games, created], game: created, serverRevision: created.revision, dirty: false, error: null, produceJob: null, selectedIds: [] })
   },
 
   deleteGame: async () => {
@@ -267,6 +318,63 @@ export const useGameAssetsStore = create<GameAssetsState>((set, get) => ({
     await get().saveNow()
     await api.updateGameAsset(get().workspace, game.id, assetId, { spec: { ...asset.spec, kitId } }, get().serverRevision)
     await get().openGame(game.id)
+  },
+
+  toggleSelected: assetId => {
+    const selected = get().selectedIds
+    set({ selectedIds: selected.includes(assetId) ? selected.filter(item => item !== assetId) : [...selected, assetId] })
+  },
+
+  saveAsset: async (assetId, patch) => {
+    const game = get().game
+    if (!game) return
+    await get().saveNow()
+    await api.updateGameAsset(get().workspace, game.id, assetId, patch, get().serverRevision)
+    await get().openGame(game.id)
+  },
+
+  previewList: async body => {
+    const game = get().game
+    if (!game) throw new Error('No game')
+    return api.gameAssetsFromList(get().workspace, game.id, { ...body, check: true })
+  },
+
+  commitList: async body => {
+    const game = get().game
+    if (!game) throw new Error('No game')
+    await get().saveNow()
+    const report = await api.gameAssetsFromList(get().workspace, game.id, body)
+    if (report.problems?.length) {
+      set({ error: report.problems.map(item => item.message || item.code || 'invalid').join(' ') })
+      return report
+    }
+    await get().openGame(game.id)
+    return report
+  },
+
+  startProduce: async body => {
+    const game = get().game
+    if (!game) return
+    await get().saveNow()
+    const job = await api.produceGame(get().workspace, game.id, body)
+    remember(get().workspace, game.id, job.id)
+    set({ produceJob: job, error: null })
+    if (!TERMINAL.has(job.status)) armProducePoll(job.id)
+  },
+
+  cancelProduce: async () => {
+    const job = get().produceJob
+    if (!job) return
+    const next = await api.cancelProduceJob(get().workspace, job.id)
+    set({ produceJob: next })
+  },
+
+  resumeProduce: async () => {
+    const job = get().produceJob
+    if (!job) return
+    const next = await api.resumeProduceJob(get().workspace, job.id)
+    set({ produceJob: next, error: null })
+    if (!TERMINAL.has(next.status)) armProducePoll(next.id)
   },
 }))
 
