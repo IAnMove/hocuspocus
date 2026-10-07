@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from services.speech_language import speech_language_code
+from services.speech_language import spoken_language_code
 
 OPERATION = "qa.speech"
 CKPTS = Path(__file__).resolve().parents[1] / "ckpts"
@@ -125,7 +125,8 @@ def measure_speech(path: str, text: str, language: str = "", *, pitch_range: lis
                    load: Callable = _load, transcribe: Callable = _transcribe,
                    pitch: Callable = _median_pitch) -> dict[str, Any]:
     """Transcript, word error rate, median pitch, pace and edge silence for one take."""
-    code = str(speech_language_code(language or "") or "").split("-")[0].lower()
+    # No language: the expected text tells es/en, so numbers are spelled and heard in that language.
+    code = str(spoken_language_code(language or "", text) or "").split("-")[0].lower()
     audio, rate = load(path)
     duration = len(audio) / rate
     lead, trail = _edges(audio, rate)

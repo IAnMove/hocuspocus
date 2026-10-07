@@ -95,15 +95,17 @@ def _sources(root, state, extras):
     return files
 
 
-def _page(title: str, files: dict, *, preview: bool = False) -> str:
+def _page(title: str, files: dict, *, preview: bool = False, language: str = "") -> str:
+    """The page chrome is English; the title carries the production's own language when it is known."""
     title = html.escape(title)
+    lang = f' lang="{html.escape(language)}"' if language else ""
     links = "".join(f'<li><a href="{quote(name)}" download>{html.escape(name)}</a></li>' for name in files)
     contact = next((name for name in files if name.startswith("contact.")), None)
     image = f'<img src="{quote(contact)}" alt="Video contact sheet" loading="lazy">' if contact else ""
     notice = '<p role="status"><strong>Review preview · Not approved for release</strong></p>' if preview else ""
     return f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title><style>body{{margin:0;background:#111d2b;color:#f5e9ce;font:18px system-ui,sans-serif}}main{{max-width:1100px;margin:auto;padding:36px 20px}}h1{{font-size:clamp(32px,6vw,64px);color:#65d4ba}}video,img{{display:block;width:100%;border-radius:14px;background:#000;margin:24px 0}}a{{color:#ffcc73}}li{{margin:10px 0;overflow-wrap:anywhere}}footer{{margin:40px 0;font-size:15px;color:#b6c4cf}}</style>
-<main>{notice}<p>Original music · Original 3D models · A couch-night tribute</p><h1>{title}</h1>
+<title{lang}>{title}</title><style>body{{margin:0;background:#111d2b;color:#f5e9ce;font:18px system-ui,sans-serif}}main{{max-width:1100px;margin:auto;padding:36px 20px}}h1{{font-size:clamp(32px,6vw,64px);color:#65d4ba}}video,img{{display:block;width:100%;border-radius:14px;background:#000;margin:24px 0}}a{{color:#ffcc73}}li{{margin:10px 0;overflow-wrap:anywhere}}footer{{margin:40px 0;font-size:15px;color:#b6c4cf}}</style>
+<main>{notice}<p>Original music · Original 3D models · A couch-night tribute</p><h1{lang}>{title}</h1>
 <video controls playsinline preload="metadata" aria-label="{title}"><source src="video.mp4" type="video/mp4"></video>
 {image}<h2>Downloads</h2><ul>{links}</ul><footer>Fan-made homage, not affiliated with Nintendo</footer></main></html>'''
 
@@ -125,8 +127,10 @@ def publish_production(data: dict, workspace_dir) -> dict:
         assert_publishable(root, data["production_id"], state)
     files = _sources(root, state, data["extras"])
     hashes = {name: _digest(path) for name, path in files.items()}
-    title = str((state.get("spec") or {}).get("title") or data["production_id"])
-    page_content = _page(title, files, preview=preview)
+    spec = state.get("spec") or {}
+    title = str(spec.get("title") or data["production_id"])
+    from services.production_song import song_language
+    page_content = _page(title, files, preview=preview, language=song_language(spec.get("song")))
     page_digest = hashlib.sha256(page_content.encode()).hexdigest()
     identity = hashlib.sha256(json.dumps({"workspace": data["workspace"], "production": data["production_id"], "slug": data["slug"], "files": hashes, "page": page_digest}, sort_keys=True).encode()).hexdigest()[:16]
     destination_root = Path(configured).resolve()
