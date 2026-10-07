@@ -52,7 +52,7 @@ def test_window_move_of_0_3_seconds_keeps_the_clip():
 
 
 def test_song_keeps_every_candidate(tmp_path: Path, monkeypatch):
-    def analyze(path: str, lyrics: str, out_dir: str | None = None) -> dict:
+    def analyze(path: str, lyrics: str, out_dir: str | None = None, language: str | None = None) -> dict:
         stem = Path(path).stem
         recall = 0.9 if stem.endswith("11") else 0.4
         return {"recall": recall, "tail_rms": 0.01, "score_file": f"{stem}.score.json"}
@@ -93,7 +93,7 @@ def test_use_candidate_keeps_a_shot_whose_window_barely_moved(tmp_path: Path, mo
     (root / "s0.mp4").write_bytes(b"s0")
     (root / "s1.mp4").write_bytes(b"s1")
 
-    def analyze(path: str, lyrics: str, out_dir: str | None = None) -> dict:
+    def analyze(path: str, lyrics: str, out_dir: str | None = None, language: str | None = None) -> dict:
         Path(out_dir or ".").joinpath("score-b.json").write_text(json.dumps(score_b), encoding="utf-8")
         return {"score_file": "score-b.json", "recall": 0.4, "tail_rms": 0.01}
 
@@ -148,7 +148,7 @@ def test_use_candidate_refuses_when_a_locked_window_would_move(tmp_path: Path, m
     (root / "s1.mp4").write_bytes(b"s1")
     record_decision(root, "show", "s1", locked=True)
 
-    def analyze(path: str, lyrics: str, out_dir: str | None = None) -> dict:
+    def analyze(path: str, lyrics: str, out_dir: str | None = None, language: str | None = None) -> dict:
         raise AssertionError("locked switch must not re-analyse")
 
     monkeypatch.setattr("services.music_production.audio_analysis.analyze", analyze)
