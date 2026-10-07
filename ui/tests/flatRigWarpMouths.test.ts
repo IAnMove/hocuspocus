@@ -80,7 +80,7 @@ test('the mouth line editor reads the rigged original, the saved line and re-rig
   assert.equal(savedMouthLine(kit, 'busto'), undefined, 'a hint point without a width is no line yet')
   const request = mouthLineRigRequest(kit, 'busto', { mouth: [41.23456, 33.1], mouthWidth: 6.5 })
   assert.deepEqual(request, { poses: ['base', 'busto'], style: { mouthStyle: 'warp', smile: 0.15 },
-    hints: { busto: { eyes: [40, 20], mouth: [41.235, 33.1], mouthWidth: 6.5 } } })
+    hints: { busto: { eyes: [40, 20], mouth: [41.235, 33.1], mouthWidth: 6.5, exact: true } } })
   // A kit switching to warp mouths is rigged whole: a pose without mouths of its own would show none.
   const ink = { ...kit, provenance: [{ ...kit.provenance[0], style: { mouthStyle: 'ink' } }] }
   assert.equal(mouthLineRigRequest(ink, 'busto', { mouth: [41, 33], mouthWidth: 6 }).poses, undefined)

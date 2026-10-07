@@ -188,20 +188,24 @@ def _flat(cx: float, cy: float, width: float, source: str, slope: float = 0.0) -
     return MouthLine(np.array([slope, cy - slope * cx]), cx - width / 2, cx + width / 2, False, source)
 
 
-def mouth_line(rgba: np.ndarray, *, point=None, width=None, lips=None, painted=None, px: int = 1) -> MouthLine:
-    """Where the lips meet, in figure pixels. ``point`` (a hint on the line) wins and is only snapped a little;
-    ``width`` (a hint) sets the corners; ``lips`` are the landmarks' outer-lip points; ``painted`` is ``(cx, cy,
-    width)`` of the mouth the rig found or guessed, the last resort. ``px`` as for ``snap_line``."""
+def mouth_line(rgba: np.ndarray, *, point=None, width=None, lips=None, painted=None, px: int = 1,
+               exact: bool = False) -> MouthLine:
+    """Where the lips meet, in figure pixels. ``point`` (a hint on the line) wins; an ``exact`` one (a person placed
+    it on the image) is only snapped a little, any other onto the painted lips as far as the landmarks' line would be
+    (``flat_rig_hints``). ``width`` (a hint) sets the corners; ``lips`` are the landmarks' outer-lip points;
+    ``painted`` is ``(cx, cy, width)`` of the mouth the rig found or guessed, the last resort. ``px`` as for
+    ``snap_line``."""
     seeded = lips_line(lips) if lips is not None else None
     if point is not None:
         hx, hy = float(point[0]), float(point[1])
         span = float(width or (seeded.width if seeded else (painted[2] if painted else 40.0 * px)))
+        reach = (0.08, 0.08) if exact else (0.3, 0.25)
         if seeded:
             # The landmarks' bend and slant, moved to pass through the hint.
             shifted = MouthLine(seeded.poly.copy(), hx - span / 2, hx + span / 2, False, "hint")
             shifted.poly[-1] += hy - float(seeded.y(np.array([hx]))[0])
-            return snap_line(rgba, shifted, 0.08, 0.08, px=px)
-        return snap_line(rgba, _flat(hx, hy, span, "hint"), 0.08, 0.08, tilt=0.4, px=px)
+            return snap_line(rgba, shifted, *reach, tilt=0.0 if exact else 0.08, px=px)
+        return snap_line(rgba, _flat(hx, hy, span, "hint"), *reach, tilt=0.4, px=px)
     if seeded:
         if width:
             cx, _ = seeded.centre
@@ -468,7 +472,8 @@ def rig_line(rgba: np.ndarray, seeds: dict[str, Any], painted, k: int = 1) -> Mo
     snapped on the face enlarged ``k`` times when ``k`` > 1."""
     seed = _seed(seeds, painted) if k > 1 else None
     if seed is None:
-        return mouth_line(rgba, point=seeds.get("point"), width=seeds.get("width"), lips=seeds.get("lips"), painted=painted)
+        return mouth_line(rgba, point=seeds.get("point"), width=seeds.get("width"), lips=seeds.get("lips"), painted=painted,
+                          exact=bool(seeds.get("exact")))
     cx, cy, width = seed
     reach = int(math.ceil(width * 1.6)) + MARGIN
     origin = (int(round(cx)) - reach, int(round(cy)) - reach)
@@ -478,7 +483,7 @@ def rig_line(rgba: np.ndarray, seeds: dict[str, Any], painted, k: int = 1) -> Mo
         return None if points is None else face_enlarge.to_view(points, origin, k)
     painted_view = (*view(painted[:2]), painted[2] * k) if painted else None
     found = mouth_line(big, point=view(seeds.get("point")), width=seeds["width"] * k if seeds.get("width") else None,
-                       lips=view(seeds.get("lips")), painted=painted_view, px=k)
+                       lips=view(seeds.get("lips")), painted=painted_view, px=k, exact=bool(seeds.get("exact")))
     return found.affine(*face_enlarge.image_affine(origin, k))
 
 

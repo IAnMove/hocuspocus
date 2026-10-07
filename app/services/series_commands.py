@@ -76,7 +76,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
              "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
-                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH}}]}},
+                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"}}}]}},
          "poses": {"type": "array", "items": ID, "maxItems": 32}},
         ["workspace", "character_id", "base_revision"], True,
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
@@ -106,7 +106,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w}} in % of that pose image "
         "(before cropping; mouthWidth corner to corner in % of its width) search only there; a mouth hint with no mark "
         "there places the mouth at it, nothing wiped (with warp mouths it is a point on the line between the lips). "
-        "Hints are "
+        "A mouth hint is followed as given only with exact: true (you looked at the image, as the Face Rig editor does); "
+        "otherwise face landmarks sure of the lips place the mouth instead (warning mouth_hint_ignored when the hint was "
+        "far off them; poses.<id>.hintIgnored says where each was), and where they are unsure the hint is snapped onto "
+        "the painted lips. Hints are "
         "kept and reused by later rigs; null clears a pose's. Style keys left out keep the kit's look (its last rig's, "
         "else the rig of the style preset it was made in): a re-rig after adding a pose or placing a mouth line stays "
         "warp unless mouthStyle says otherwise; style in the result is the look used. Returns the saved kit, a review image URL (each pose, and "
@@ -127,7 +130,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "point is snapped a little onto the painted line. Returns sheet (an image URL: the face around the mouth in each "
         "state, by default closed, small, medium, wide, round, pucker = rest, i, e, a, o, u), the line used (mouth, "
         "mouthWidth, found, from: hint, landmarks, painted or guess; line points), view (the shown area), all in % "
-        "of the pose image, and warnings (mouth_line_guessed, mouth_line_unsure). When it looks right, rig with hints {<pose>: {mouth, mouthWidth}} and mouthStyle warp; "
+        "of the pose image, and warnings (mouth_line_guessed, mouth_line_unsure). When it looks right, rig with hints {<pose>: {mouth, mouthWidth, exact: true}} and mouthStyle warp; "
         "shots already rendered with that pose need rendering again.",
     ),
     "series.episode.render_native": (

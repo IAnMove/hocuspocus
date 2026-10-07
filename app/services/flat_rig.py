@@ -45,7 +45,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from services import face_landmarks, flat_rig_warp, pose_facing
+from services import face_landmarks, flat_rig_hints, flat_rig_warp, pose_facing
 from services.character_kit_library import patch_character_kit, read_character_kit_library
 from services.face_enlarge import face_caption
 from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _anchor, _paste_inside
@@ -73,11 +73,16 @@ SCREEN_CAVITY = (10, 22, 70, 255)
 MAX_PIXELS = 16_777_216
 
 
-HINT_KEYS = ("mouth", "eyes", "mouthWidth")
+HINT_KEYS = ("mouth", "eyes", "mouthWidth", "exact")
 
 
 def _hint_value(pose: str, key: str, value: Any):
-    """A hint point ``[x, y]`` in % of the pose image, or ``mouthWidth``: the mouth corner to corner in % of its width."""
+    """A hint point ``[x, y]`` in % of the pose image, ``mouthWidth``: the mouth corner to corner in % of its width, or
+    ``exact``: true when a person placed the mouth on the image (``flat_rig_hints``)."""
+    if key == "exact":
+        if not isinstance(value, bool):
+            raise FlatRigError("invalid_hints", f"hints.{pose}.exact must be true or false")
+        return value
     if key == "mouthWidth":
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0.5 <= value <= 100:
             raise FlatRigError("invalid_hints", f"hints.{pose}.mouthWidth must be a number from 0.5 to 100 (% of the pose image width)")
@@ -103,7 +108,7 @@ def rig_hints(value: Any) -> dict[str, dict[str, Any] | None]:
             hints[pose] = None
             continue
         if not isinstance(hint, dict) or any(key not in HINT_KEYS for key in hint):
-            raise FlatRigError("invalid_hints", f"hints.{pose} takes mouth and eyes points and a mouthWidth")
+            raise FlatRigError("invalid_hints", f"hints.{pose} takes mouth and eyes points, a mouthWidth and exact")
         hints[pose] = {key: _hint_value(pose, key, point) for key, point in hint.items()}
     return hints
 
@@ -718,7 +723,8 @@ def _pose_guides(image: Image.Image, crop, size, hint, landmarks) -> tuple[dict[
     """The pose's hints and what the landmarks give that no hint does, in pixels of the cropped figure."""
     def inside(x, y):
         return min(max(x - crop[0], 0), size[0] - 1), min(max(y - crop[1], 0), size[1] - 1)
-    points = {key: point for key, point in (hint or {}).items() if key != "mouthWidth"}
+    hint, ignored = flat_rig_hints.trusted(hint, landmarks, image.size)
+    points = {key: point for key, point in (hint or {}).items() if key not in ("mouthWidth", "exact")}
     near = {key: inside(point[0] / 100 * image.width, point[1] / 100 * image.height) for key, point in points.items()}
     guide = {key: value for key, value in face_landmarks.guides(landmarks).items() if key not in near}
     for key in ("eyes", "mouth"):
@@ -731,6 +737,8 @@ def _pose_guides(image: Image.Image, crop, size, hint, landmarks) -> tuple[dict[
     if (hint or {}).get("mouthWidth"):
         # A width hint is the mouth corner to corner, in % of the pose image's width.
         near["mouthWidth"] = guide["mouth_width"] = hint["mouthWidth"] / 100 * image.width
+    if ignored:
+        guide["hint_ignored"] = ignored
     return near, guide
 
 
@@ -797,6 +805,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     warnings = ["eyes_low"] if ey0 / height > 0.4 else []
     if not found:
         warnings.append("mouth_not_found")
+    if (guide.get("hint_ignored") or {}).get("far"):
+        warnings.append("mouth_hint_ignored")
     elif wiped and stray_marks(np.array(rigged)[..., :3], alpha, face_eyes, mouth_box):
         warnings.append("stray_mark")
     sprite_width = _ink_sprite_width(mouth_box, guide, eyes_box) if ink else (ex1 - ex0) * style["mouth_scale"]
@@ -820,7 +830,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
         # Where the figure was cut from the pose image and that image's size; the warp mouths' seeds in figure pixels.
         "frame": (crop[0], crop[1], image.width, image.height),
         "seeds": {"point": near.get("mouth"), "width": near.get("mouthWidth"), "lips": guide.get("mouth_points"),
-                  "lips_score": guide.get("mouth_score"), "face": face_size},
+                  "lips_score": guide.get("mouth_score"), "face": face_size, "exact": bool((hint or {}).get("exact")),
+                  "hint_ignored": guide.get("hint_ignored")},
         # The head's size class and the landmark pass (face_landmarks.detect); warp mouths add their enlargement.
         "face_size": face_size,
     }
@@ -1053,6 +1064,7 @@ def _pose_reports(rigs: dict[str, dict[str, Any]], placed: dict) -> dict[str, di
                    "landmarks": rig["guided"], **({"mouthLine": rig["line"]} if "line" in rig else {}),
                    **({"faceSize": rig["face_size"]} if rig.get("face_size") else {}),
                    **({"facing": rig["facing"]} if rig.get("facing") else {}),
+                   **({"hintIgnored": rig["seeds"]["hint_ignored"]} if (rig.get("seeds") or {}).get("hint_ignored") else {}),
                    **({"hints": placed[pose]} if pose in placed else {})}
             for pose, rig in rigs.items()}
 

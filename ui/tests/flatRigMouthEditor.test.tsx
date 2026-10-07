@@ -93,7 +93,7 @@ test('the mouth line editor previews a pose live, moves its line by hand and sav
   await waitFor(() => assert.equal(rigged.length, 1))
   const rig = posts.find(post => post.url.endsWith('/flat-rig'))!
   assert.deepEqual(rig.body, { workspace: 'cast', baseRevision: 7, style: { mouthStyle: 'warp' }, poses: ['base', 'busto'],
-    hints: { busto: { mouth: [61.6, 20.2], mouthWidth: 6.7 } } })
+    hints: { busto: { mouth: [61.6, 20.2], mouthWidth: 6.7, exact: true } } })
   assert.ok(view.getByRole('status').textContent?.includes('rendered again'), 'says which shots need rendering again')
 })
 
