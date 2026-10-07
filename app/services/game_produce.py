@@ -23,7 +23,7 @@ from services.game_generators import REGISTRY
 from services.game_generators.base import GenContext
 from services.game_inputs import asset_inputs
 from services.game_jobs import GameJobStore
-from services.game_library import add_attempt, read_library, write_library
+from services.game_library import add_attempt, read_library, stamp_attempt, write_library
 from services.game_tools import GameToolError
 
 ACTIVE = ("queued", "running", "cancelling")
@@ -55,6 +55,8 @@ class ProduceDeps:
     write_attempt: Callable[..., None]
     inline: bool = False
     lock: Any = None
+    # Updates a saved attempt's metrics and warnings; None skips the style note (test doubles).
+    stamp_attempt: Callable[..., None] | None = None
 
 
 def iso_now() -> str:
@@ -342,14 +344,17 @@ class GameProduce:
         provenance = result.provenance if isinstance(getattr(result, "provenance", None), dict) else {"steps": []}
         common = list(getattr(result, "warnings", None) or [])
         shared = {"provenance": provenance, "inputs": asset_inputs(game, asset)}
-        root = self.deps.workspace_dir(job["workspace"])
+        saved = []
         for attempt_id, files, metrics, own in _candidates(result, step["attemptId"]):
             warnings = [*_for_candidate(common, attempt_id), *own]
-            metrics, warnings = self._style_note(job, root, game, asset, files, metrics, warnings)
             attempt = {"id": attempt_id, "status": "ok", "createdAt": iso_now(), "files": files, "metrics": metrics, "warnings": warnings, **shared}
             self.deps.write_attempt(job["workspace"], job["gameId"], asset["id"], attempt, "review")
+            saved.append(attempt)
         step.update(status="done", error=None, reason=None)
         self._save(job)
+        # The vision check can take minutes; the candidates are saved first so a restart keeps them.
+        for attempt in saved:
+            self._stamp_style(job, game, asset, attempt)
         _record_elapsed(self.deps.workspace_dir(job["workspace"]), game, asset, job.get("candidates"), elapsed)
         try:
             archive_raw_outputs(self.deps.workspace_dir(job["workspace"]), game, asset["id"], step["attemptId"])
@@ -357,10 +362,25 @@ class GameProduce:
             step["archiveWarning"] = str(error)[:300]
             self._save(job)
 
-    def _style_note(self, job: dict, root: str, game: dict, asset: dict, files: dict, metrics: dict, warnings: list):
-        """Score one candidate against the style. A failed check never loses the candidate."""
+    def _stamp_style(self, job: dict, game: dict, asset: dict, attempt: dict) -> None:
+        if self.deps.stamp_attempt is None:
+            return
+        root = self.deps.workspace_dir(job["workspace"])
+        metrics, warnings = self._style_note(job, root, game, asset, attempt["id"], attempt["files"], attempt["metrics"], attempt["warnings"])
+        if metrics == attempt["metrics"] and warnings == attempt["warnings"]:
+            return
         try:
-            return note_style(self.deps.loopback, root, job["workspace"], game, asset, files, metrics, warnings)
+            self.deps.stamp_attempt(job["workspace"], job["gameId"], asset["id"], attempt["id"], metrics, warnings)
+        except Exception:  # the candidate is saved; only its advisory style note is lost
+            return
+
+    def _style_note(self, job: dict, root: str, game: dict, asset: dict, attempt_id: str, files: dict, metrics: dict, warnings: list):
+        """Score one candidate against the style. A failed check never loses the candidate; a cancel skips the wait."""
+        try:
+            return note_style(
+                self.deps.loopback, root, job["workspace"], game, asset, files, metrics, warnings,
+                attempt_id=attempt_id, cancelled=lambda: self._cancelled(job["jobId"]),
+            )
         except Exception as error:  # vision is advisory; the attempt is still saved for review
             return metrics, [*warnings, {"code": "style_check_failed", "message": _error_text(error)}]
 
@@ -426,9 +446,16 @@ def build_produce(call: Callable[[str, dict], dict], app_url: Callable[[], str],
             found["updatedAt"] = now
             write_library(directory, library, now=now)
 
+    def stamp(workspace: str, game_id: str, asset_id: str, attempt_id: str, metrics: dict, warnings: list) -> None:
+        directory = workspace_dir(workspace)
+        now = iso_now()
+        with lock:
+            library, _asset = stamp_attempt(read_library(directory), game_id, asset_id, attempt_id, metrics=metrics, warnings=warnings, now=now)
+            write_library(directory, library, now=now)
+
     deps = ProduceDeps(
         call=call, loopback=loopback, workspace_dir=workspace_dir, read_game=read_game,
-        write_attempt=write_attempt, inline=inline, lock=lock,
+        write_attempt=write_attempt, inline=inline, lock=lock, stamp_attempt=stamp,
     )
     return GameProduce(deps)
 

@@ -1,25 +1,59 @@
 """Style score and duplicate warnings for one image candidate.
 
-Vision stays on unless ``style.qa.vision`` is false. A missing analyzer adds
-``style_check_unavailable`` and does not fail the batch.
+Only stills are checked: character, sprite, item, icon, ui, tile and tileset.
+A frame sheet (animation, vfx, an animated item) or one parallax layer of a
+background would be judged by its layout, not by its look.
+
+Vision stays on unless ``style.qa.vision`` is false; the duplicate check always
+runs. ``analyze`` gets ``/api/v1/file`` URLs, a new ``request_id`` per call and
+at most ``_TIMEOUT_S`` seconds. A timeout or a transport error pauses vision for
+``_PAUSE_S`` seconds, so a hung analyzer costs one wait, not one per candidate.
+Without a reference image there is nothing to compare, so no call is made.
+A failed check adds ``style_check_unavailable`` and does not fail the batch.
 """
 from __future__ import annotations
 
+import functools
 import json
+import math
+import re
+import threading
+import time
+import uuid
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 import numpy as np
 from PIL import Image
 
-_IMAGE_KINDS = frozenset({
-    "character", "sprite", "item", "icon", "ui", "tile", "tileset", "background", "animation", "vfx",
-})
+from services.game_image_ops import dhash, hamming
+
+_STILL_KINDS = frozenset({"character", "sprite", "item", "icon", "ui", "tile", "tileset"})
+_SHEET_KEYS = ("atlas", "sheet")
 _PROMPT = (
     "Rate 1-5 how well the LAST image matches the art style of the others "
     "(palette, line weight, shading, proportions). "
     'Reply JSON {"score":n,"reason":"short"}'
 )
+_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "integer", "minimum": 1, "maximum": 5},
+        "reason": {"type": "string", "maxLength": 200},
+    },
+    "required": ["score", "reason"],
+    "additionalProperties": False,
+}
 _UNAVAILABLE = "style_check_unavailable"
+_MISMATCH = "style_mismatch"
+_MISMATCH_MAX = 2
+_DUPLICATE_BITS = 6
+_FLAT_LEVELS = 4.0
+_MAX_REFS = 3
+_TIMEOUT_S = 120.0
+_POLL_S = 0.5
+_PAUSE_S = 300.0
+_PAUSED = {"until": 0.0}
 
 
 class _Caller:
@@ -28,62 +62,94 @@ class _Caller:
         self.workspace = workspace
 
 
-def note_style(loopback, root: str, workspace: str, game: dict, asset: dict, files: dict, metrics: dict, warnings: list):
-    """Add ``styleScore`` and warnings. Returns the same pair when vision is off."""
-    if not _applies(game, asset, files):
+def note_style(loopback, root: str, workspace: str, game: dict, asset: dict, files: dict, metrics: dict, warnings: list,
+               *, attempt_id: str = "", cancelled=None):
+    """Add ``styleScore`` and warnings to one candidate. Returns new copies, or the inputs when it does not apply."""
+    png = _still(root, asset, files)
+    if png is None:
         return metrics, warnings
-    metrics = dict(metrics)
+    metrics = dict(metrics or {})
     warnings = list(warnings or [])
-    relative = candidate_png(files)
-    _stamp(metrics, warnings, _checked(loopback, workspace, game, asset, relative))
-    for code in _duplicate_codes(root, game, asset, _resolve(root, relative)):
+    refs = _sources(root, workspace, _refs(game, asset), png) if _vision(game) else []
+    if refs:
+        candidate = _file_url(candidate_png(files), workspace)
+        request_id = _request_id(game, asset, attempt_id)
+        _stamp(metrics, warnings, style_check(_Caller(loopback, workspace), candidate, refs, request_id, cancelled))
+    for code in _duplicate_codes(root, game, asset, png):
         _push(warnings, code)
     return metrics, warnings
 
 
-def style_check(ctx, candidate_png: str, refs) -> dict:
-    """Ask ``analyze`` how well the candidate matches up to three references."""
+def style_check(ctx, candidate_url: str, refs, request_id: str = "", cancelled=None) -> dict:
+    """Ask ``analyze`` how well the candidate matches up to three references (canonical media URLs)."""
+    if _paused() or (cancelled is not None and cancelled()):
+        return _unavailable()
     media = [{"source": ref, "kind": "image"} for ref in _three(refs)]
-    media.append({"source": candidate_png, "kind": "image"})
-    try:
-        result = ctx.loopback("analyze", {
-            "request_id": "game-style",
-            "params": {
-                "prompt": _PROMPT,
-                "workspace": getattr(ctx, "workspace", ""),
-                "media": media,
-                "max_new_tokens": 512,
-            },
-        })
-    except Exception:
-        return {"score": None, "reason": _UNAVAILABLE}
+    media.append({"source": candidate_url, "kind": "image"})
+    arguments = {
+        "request_id": request_id or f"game-style-{uuid.uuid4().hex}",
+        "params": {
+            "prompt": _PROMPT,
+            "workspace": getattr(ctx, "workspace", ""),
+            "media": media,
+            "max_new_tokens": 256,
+            "temperature": 0,
+            "json_schema": _SCHEMA,
+        },
+    }
+    state, result = _ask(lambda: ctx.loopback("analyze", arguments), cancelled)
+    if state == "down":
+        _PAUSED["until"] = time.monotonic() + _PAUSE_S
+    if state != "ok":
+        return _unavailable()
     return _checked_payload(result)
 
 
-def duplicates(game: dict, asset: dict, candidate_png: str, root: str = "") -> list[str]:
-    """dHash distance of 6 or less against an approved asset of the same kind."""
-    current = dhash(candidate_png)
+def duplicates(game: dict, asset: dict, candidate: Path, root: str) -> list[str]:
+    """``duplicate_of:<id>`` per other approved still of the same kind within ``_DUPLICATE_BITS``."""
+    current = file_dhash(candidate)
     if current is None:
         return []
     found = []
-    for other in game.get("assets") or []:
-        code = _duplicate_of(other, asset, current, root)
-        if code:
-            found.append(code)
+    for other in _approved_peers(game, asset):
+        other_hash = file_dhash(_inside(root, _approved_image(other)))
+        if other_hash is not None and hamming(current, other_hash) <= _DUPLICATE_BITS:
+            found.append(f"duplicate_of:{other.get('id')}")
     return found
 
 
-def dhash(path: str) -> int | None:
-    """64-bit difference hash. ``None`` when the file cannot be read."""
-    try:
-        image = Image.open(path).convert("L").resize((9, 8), Image.Resampling.BOX)
-    except (OSError, ValueError):
+def file_dhash(path: Path | None) -> int | None:
+    """``game_image_ops.dhash`` of a file (over black).
+
+    ``None`` when it cannot be read, or when it is flat: every flat image has
+    the same hash, so two plain tiles of different colours would match.
+    """
+    if path is None:
         return None
-    pixels = np.asarray(image, dtype=np.int16)
-    bits = 0
-    for value in (pixels[:, 1:] > pixels[:, :-1]).flatten():
-        bits = (bits << 1) | int(bool(value))
-    return bits
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return _cached_dhash(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=2048)
+def _cached_dhash(path: str, _mtime_ns: int, _size: int) -> int | None:
+    """One decode per file version, however many candidates compare against it."""
+    try:
+        with Image.open(path) as image:
+            rgba = np.asarray(image.convert("RGBA"))
+    except Exception:  # a truncated, unsupported or oversized image is skipped
+        return None
+    if rgba.size == 0 or _flat(rgba):
+        return None
+    return dhash(rgba)
+
+
+def _flat(rgba: np.ndarray) -> bool:
+    over_black = rgba[..., :3].astype(np.float32) * (rgba[..., 3:4] / 255.0)
+    gray = over_black.mean(axis=2)
+    return float(gray.max() - gray.min()) < _FLAT_LEVELS
 
 
 def candidate_png(files: dict) -> str:
@@ -99,12 +165,41 @@ def candidate_png(files: dict) -> str:
     return ""
 
 
-def _applies(game: dict, asset: dict, files: dict) -> bool:
-    if not isinstance(asset, dict) or asset.get("kind") not in _IMAGE_KINDS:
-        return False
-    if not _vision(game):
-        return False
-    return bool(candidate_png(files))
+def _still(root: str, asset: dict, files: dict) -> Path | None:
+    """The candidate's picture inside the workspace, or ``None`` when the check does not apply."""
+    if not isinstance(asset, dict) or asset.get("kind") not in _STILL_KINDS or _is_sheet(files):
+        return None
+    return _inside(root, candidate_png(files))
+
+
+def _is_sheet(files) -> bool:
+    return isinstance(files, dict) and any(key in files for key in _SHEET_KEYS)
+
+
+def _inside(root: str, relative: str) -> Path | None:
+    """An existing file under ``root`` for a workspace-relative POSIX path; never an absolute or ``..`` path."""
+    if not root or not isinstance(relative, str) or not relative:
+        return None
+    text = relative.replace("\\", "/")
+    if text.startswith("/") or re.match(r"^[A-Za-z]:", text) or ".." in text.split("/"):
+        return None
+    base = Path(root).resolve()
+    path = (base / text).resolve()
+    if not path.is_relative_to(base) or not path.is_file():
+        return None
+    return path
+
+
+def _file_url(relative: str, workspace: str) -> str:
+    """The canonical URL ``analyze`` accepts, as ``game_tools.file_ref`` builds it."""
+    rel = relative.replace("\\", "/").lstrip("/")
+    return f"/api/v1/file/{quote(rel)}?{urlencode({'workspace': workspace})}"
+
+
+def _request_id(game: dict, asset: dict, attempt_id: str) -> str:
+    """Readable in the journal and new per call: a reused id would replay or refuse an older answer."""
+    stem = f"game-{(game or {}).get('id')}-{asset.get('id')}-{attempt_id or 'candidate'}-style"
+    return f"{stem[:140]}-{uuid.uuid4().hex[:12]}"
 
 
 def _vision(game: dict) -> bool:
@@ -115,28 +210,64 @@ def _vision(game: dict) -> bool:
     return qa.get("vision") is not False
 
 
-def _checked(loopback, workspace: str, game: dict, asset: dict, relative: str) -> dict:
-    try:
-        return style_check(_Caller(loopback, workspace), relative, _refs(game, asset))
-    except Exception:
-        return {"score": None, "reason": _UNAVAILABLE}
-
-
 def _refs(game: dict, asset: dict) -> list[str]:
     from services.game_prompts import refs_for
     found = refs_for(game, asset)
     return [item for item in found if isinstance(item, str)]
 
 
+def _sources(root: str, workspace: str, refs: list[str], candidate: Path) -> list[str]:
+    """Up to three reference URLs whose files exist, never the candidate itself."""
+    found: list[str] = []
+    for ref in refs:
+        path = _inside(root, ref)
+        if path is None or path == candidate:
+            continue
+        url = _file_url(ref, workspace)
+        if url not in found:
+            found.append(url)
+    return found[:_MAX_REFS]
+
+
 def _three(refs) -> list[str]:
-    return [ref for ref in list(refs or []) if isinstance(ref, str) and ref][:3]
+    return [ref for ref in list(refs or []) if isinstance(ref, str) and ref][:_MAX_REFS]
+
+
+def _paused() -> bool:
+    return time.monotonic() < _PAUSED["until"]
+
+
+def _ask(call, cancelled) -> tuple[str, object]:
+    """``("ok", result)``, ``("down", None)`` on a timeout or an exception, ``("cancelled", None)``."""
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            box["result"] = call()
+        except Exception as error:  # reported as "down" below
+            box["error"] = error
+
+    worker = threading.Thread(target=run, name="game-style-check", daemon=True)
+    worker.start()
+    deadline = time.monotonic() + _TIMEOUT_S
+    while worker.is_alive() and time.monotonic() < deadline:
+        if cancelled is not None and cancelled():
+            return "cancelled", None
+        worker.join(min(_POLL_S, max(0.0, deadline - time.monotonic())))
+    if worker.is_alive() or "error" in box:
+        return "down", None
+    return "ok", box.get("result")
+
+
+def _unavailable() -> dict:
+    return {"score": None, "reason": _UNAVAILABLE}
 
 
 def _checked_payload(result) -> dict:
     payload = _payload(result)
     score = _score(payload)
-    if payload is None or score is None:
-        return {"score": None, "reason": _UNAVAILABLE}
+    if score is None:
+        return _unavailable()
     reason = payload.get("reason")
     return {"score": score, "reason": reason if isinstance(reason, str) and reason else "ok"}
 
@@ -149,31 +280,32 @@ def _payload(result) -> dict | None:
     text = result.get("text")
     if not isinstance(text, str):
         return None
-    return _json_object(text)
+    return _json_object(text[:8000])
 
 
 def _json_object(text: str) -> dict | None:
-    start = text.find("{")
-    end = text.rfind("}")
-    if start < 0 or end <= start:
-        return None
-    try:
-        found = json.loads(text[start:end + 1])
-    except json.JSONDecodeError:
-        return None
-    return found if isinstance(found, dict) else None
+    """The first JSON object in ``text`` that has a ``score``; prose or a second object around it is ignored."""
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
+        try:
+            found, _end = decoder.raw_decode(text, match.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(found, dict) and "score" in found:
+            return found
+    return None
 
 
 def _score(payload) -> int | None:
+    """A finite number from 1 to 5, rounded half up. Anything else is no score."""
     if not isinstance(payload, dict):
         return None
     raw = payload.get("score")
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw):
         return None
-    number = int(raw)
-    if number < 1 or number > 5:
+    if raw < 1 or raw > 5:
         return None
-    return number
+    return int(math.floor(raw + 0.5))
 
 
 def _stamp(metrics: dict, warnings: list, checked: dict) -> None:
@@ -182,49 +314,33 @@ def _stamp(metrics: dict, warnings: list, checked: dict) -> None:
         _push(warnings, _UNAVAILABLE)
         return
     metrics["styleScore"] = score
-    if score <= 2:
-        _push(warnings, "style_mismatch")
+    if score <= _MISMATCH_MAX:
+        _push(warnings, _MISMATCH)
 
 
-def _duplicate_codes(root: str, game: dict, asset: dict, png: str) -> list[str]:
+def _duplicate_codes(root: str, game: dict, asset: dict, png: Path) -> list[str]:
     try:
         return duplicates(game, asset, png, root)
-    except Exception:
+    except Exception:  # duplicates are advisory; the candidate is still saved
         return []
 
 
-def _duplicate_of(other: dict, asset: dict, current: int, root: str) -> str:
-    if not isinstance(other, dict) or other.get("id") == asset.get("id"):
-        return ""
-    if other.get("kind") != asset.get("kind") or other.get("status") != "approved":
-        return ""
-    path = _approved_image(other)
-    if not path:
-        return ""
-    other_hash = dhash(_resolve(root, path))
-    if other_hash is None or _distance(current, other_hash) > 6:
-        return ""
-    return f"duplicate_of:{other.get('id')}"
+def _approved_peers(game: dict, asset: dict) -> list[dict]:
+    """Other approved assets of the same kind. The asset itself and its own candidates never count."""
+    return [
+        other for other in (game or {}).get("assets") or []
+        if isinstance(other, dict) and other.get("id") != asset.get("id")
+        and other.get("kind") == asset.get("kind") and other.get("status") == "approved"
+    ]
 
 
 def _approved_image(asset: dict) -> str:
-    chosen = None
+    approved = asset.get("approvedAttemptId")
     for attempt in asset.get("attempts") or []:
-        if isinstance(attempt, dict) and attempt.get("id") == asset.get("approvedAttemptId"):
-            chosen = attempt
-    files = (chosen or {}).get("files") if isinstance(chosen, dict) else None
-    return candidate_png(files or {})
-
-
-def _resolve(root: str, relative: str) -> str:
-    path = Path(relative)
-    if path.is_absolute() or not root:
-        return str(path)
-    return str(Path(root) / relative)
-
-
-def _distance(left: int, right: int) -> int:
-    return (left ^ right).bit_count()
+        if approved and isinstance(attempt, dict) and attempt.get("id") == approved:
+            files = attempt.get("files")
+            return "" if _is_sheet(files) else candidate_png(files or {})
+    return ""
 
 
 def _push(warnings: list, code: str) -> None:

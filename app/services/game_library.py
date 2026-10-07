@@ -245,10 +245,13 @@ def normalize_style(raw: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _qa(raw: Any) -> dict[str, bool]:
-    """Vision stays on unless the style sets ``qa.vision`` to false."""
+    """Vision stays on unless the style sets ``qa.vision`` to false.
+
+    ``qa`` is left out of ``_style_signature`` and of ``game_inputs``: turning
+    vision off neither resets the style approval nor makes an asset stale.
+    """
     source = raw if isinstance(raw, dict) else {}
-    vision = source.get("vision")
-    return {"vision": vision if isinstance(vision, bool) else True}
+    return {"vision": _bool(source.get("vision"), True)}
 
 
 def _references(value: Any) -> list[dict[str, str]]:
@@ -899,6 +902,18 @@ def add_attempt(library: dict[str, Any], game_id: str, asset_id: str, attempt: d
     asset = _asset(game, asset_id)
     asset["attempts"] = _prune_attempts(_put_attempt(asset["attempts"], _attempt(attempt)), asset.get("approvedAttemptId"))
     asset["updatedAt"] = now
+    game = _bump(_store_asset(game, asset), now)
+    return _replace(library, game), _asset(game, asset_id)
+
+
+def stamp_attempt(library: dict[str, Any], game_id: str, asset_id: str, attempt_id: str, *, metrics: dict[str, Any],
+                  warnings: list[Any], now: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Replace one attempt's metrics and warnings. Its files, decision and the asset status stay."""
+    game = _game(library, game_id)
+    asset = _asset(game, asset_id)
+    attempt = _attempt_of(asset, attempt_id)
+    attempt["metrics"] = copy.deepcopy(metrics) if isinstance(metrics, dict) else {}
+    attempt["warnings"] = copy.deepcopy(warnings) if isinstance(warnings, list) else []
     game = _bump(_store_asset(game, asset), now)
     return _replace(library, game), _asset(game, asset_id)
 
