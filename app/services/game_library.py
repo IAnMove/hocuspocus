@@ -222,7 +222,15 @@ def normalize_style(raw: dict[str, Any] | None) -> dict[str, Any]:
         "references": _references(source.get("references")),
         "model3d": _model3d(model_raw, preset.get("model3d") or {}),
         "audio": _audio(audio_raw, {**(preset.get("audio") or {}), "musicLufs": -16, "sfxPeakDb": -1, "sampleRate": 48000}),
+        "qa": _qa(source.get("qa")),
     }
+
+
+def _qa(raw: Any) -> dict[str, bool]:
+    """Vision stays on unless the style sets ``qa.vision`` to false."""
+    source = raw if isinstance(raw, dict) else {}
+    vision = source.get("vision")
+    return {"vision": vision if isinstance(vision, bool) else True}
 
 
 def _references(value: Any) -> list[dict[str, str]]:

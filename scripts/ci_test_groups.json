@@ -246,7 +246,8 @@
         "tests/test_game_gen_vfx.py",
         "tests/test_game_gen_audio.py",
         "tests/test_game_gen_3d.py",
-        "tests/test_game_export.py"
+        "tests/test_game_export.py",
+        "tests/test_game_qa.py"
       ]
     },
     {
@@ -1385,7 +1386,7 @@
     },
     {
       "prefix": "app/services/game_library.py",
-      "paths": ["tests/test_game_library.py", "tests/test_game_library_router.py"]
+      "paths": ["tests/test_game_library.py", "tests/test_game_library_router.py", "tests/test_game_qa.py"]
     },
     {
       "prefix": "app/services/game_inputs.py",
@@ -1457,7 +1458,11 @@
     },
     {
       "prefix": "app/services/game_produce.py",
-      "paths": ["tests/test_game_produce.py"]
+      "paths": ["tests/test_game_produce.py", "tests/test_game_qa.py"]
+    },
+    {
+      "prefix": "app/services/game_qa.py",
+      "paths": ["tests/test_game_qa.py"]
     },
     {
       "prefix": "app/routers/game_produce.py",

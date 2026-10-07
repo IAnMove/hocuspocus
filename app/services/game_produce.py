@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from services.game_estimate import record, steps_for
+from services.game_qa import note_style
 from services.game_generators import REGISTRY
 from services.game_generators.base import GenContext
 from services.game_inputs import asset_inputs
@@ -262,6 +263,10 @@ class GameProduce:
         metrics = result.metrics if isinstance(getattr(result, "metrics", None), dict) else {}
         files = result.files if isinstance(getattr(result, "files", None), dict) else {}
         warnings = list(getattr(result, "warnings", None) or [])
+        metrics, warnings = note_style(
+            self.deps.loopback, self.deps.workspace_dir(job["workspace"]),
+            job["workspace"], game, asset, files, metrics, warnings,
+        )
         provenance = result.provenance if isinstance(getattr(result, "provenance", None), dict) else {"steps": []}
         for index, attempt_id in enumerate(_attempt_ids(metrics, step["attemptId"])):
             attempt = {
