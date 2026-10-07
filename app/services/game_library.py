@@ -525,6 +525,24 @@ def _depends_on(spec: dict[str, Any]) -> list[str]:
     return found
 
 
+_FILE_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _attempt_files(value: Any) -> dict[str, str]:
+    """Workspace-relative POSIX paths under plain keys. The export writes these names into a zip."""
+    if not isinstance(value, dict):
+        return {}
+    files: dict[str, str] = {}
+    for key, path in value.items():
+        text = path.replace("\\", "/") if isinstance(path, str) else ""
+        parts = text.split("/")
+        if (not _FILE_KEY.match(str(key)) or not text or text.startswith("/") or re.match(r"^[A-Za-z]:", text)
+                or any(part in ("", "..") for part in parts)):
+            raise _problem("invalid_attempt_file", key=str(key)[:80], path=str(path)[:200])
+        files[str(key)] = text
+    return files
+
+
 def _attempt(raw: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(raw, dict) or not _text(raw.get("id")):
         raise _problem("invalid_attempt")
@@ -533,7 +551,7 @@ def _attempt(raw: dict[str, Any]) -> dict[str, Any]:
         "createdAt": _text(raw.get("createdAt")),
         "status": _choice(raw.get("status"), ("ok", "failed"), "ok", "invalid_attempt"),
         "inputs": _text(raw.get("inputs")),
-        "files": copy.deepcopy(raw.get("files")) if isinstance(raw.get("files"), dict) else {},
+        "files": _attempt_files(raw.get("files")),
         "metrics": copy.deepcopy(raw.get("metrics")) if isinstance(raw.get("metrics"), dict) else {},
         "warnings": copy.deepcopy(raw.get("warnings")) if isinstance(raw.get("warnings"), list) else [],
         "provenance": copy.deepcopy(raw.get("provenance")) if isinstance(raw.get("provenance"), dict) else {"steps": []},

@@ -365,3 +365,19 @@ def test_attempt_with_the_same_id_replaces_in_place():
     assert [(item["id"], item["status"]) for item in asset["attempts"]] == [("aaa", "ok"), ("bbb", "ok"), ("ccc", "ok")]
     _library2, asset = approve_attempt(library, "bosque", "heroe", "bbb", now=NOW)
     assert asset["approvedAttemptId"] == "bbb"
+
+
+def test_attempt_files_are_relative_posix_paths_under_plain_keys():
+    library, _game = upsert_assets(_library(), "bosque", [{"id": "heroe", "kind": "character"}], False, now=NOW)
+    library, asset = add_attempt(library, "bosque", "heroe", {
+        "id": "a1", "status": "ok", "createdAt": NOW,
+        "files": {"main": "game\\bosque\\heroe\\a1\\main.png", "layer-0.png": "game/bosque/heroe/a1/layer-0.png"},
+    }, now=NOW)
+    assert asset["attempts"][0]["files"] == {
+        "main": "game/bosque/heroe/a1/main.png", "layer-0.png": "game/bosque/heroe/a1/layer-0.png",
+    }
+    for files in ({"../../escaped": "game/x.png"}, {"main": "../../outside.png"}, {"main": "/etc/passwd"},
+                  {"main": "C:/Windows/x.png"}, {"main": ""}):
+        with pytest.raises(GameValidationError) as caught:
+            add_attempt(library, "bosque", "heroe", {"id": "a2", "status": "ok", "createdAt": NOW, "files": files}, now=NOW)
+        assert caught.value.code == "invalid_attempt_file"
