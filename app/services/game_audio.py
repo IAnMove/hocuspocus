@@ -269,13 +269,13 @@ def best_loop(y, sr, beats, downbeats, target_s, xf_bars=1):
     Without usable downbeats or pairs the whole buffer comes back as
     ``(0, len, 0.0, 0)``: there is no audio outside it to crossfade with.
     """
-    import librosa
-
     mono = to_mono(np.asarray(y, dtype=np.float64))
     mean_bar = _mean_bar(beats, downbeats)
     downs = _downbeats(downbeats)
     if mean_bar <= 1.0 or len(downs) < 2 or mono.size < 2:
         return 0, int(mono.size), 0.0, 0
+    import librosa  # only the seam score needs it; the fallback above works without
+
     xf = max(1, int(round(float(xf_bars) * mean_bar)))
     chroma, mfcc, hop = _features(mono, int(sr), librosa)
     return _select_loop(

@@ -193,6 +193,7 @@ def test_unknown_retro_preset_is_a_tool_error(tmp_path):
 
 
 def test_music_writes_a_loop_with_smpl_metadata(tmp_path, monkeypatch):
+    pytest.importorskip("librosa")  # the downbeat path scores seams with chroma and MFCCs
     source = tmp_path / "song.wav"
     _tone(source, seconds=3.0, sr=44100)
     # best_loop is not replaced: a fake with the old three-value return hid a crash.
@@ -274,7 +275,7 @@ def test_a_missed_loudness_target_is_reported(tmp_path, monkeypatch):
 def test_music_jingle_and_voice_make_every_candidate_they_estimate(tmp_path, monkeypatch):
     source = tmp_path / "song.wav"
     _tone(source, seconds=20.0, sr=22050)
-    _analysis(monkeypatch, downbeats=[0.0, 2.0, 4.0, 6.0])
+    _analysis(monkeypatch)  # no downbeats: the real best_loop falls back without librosa, as on CI
     cases = [
         (MusicGenerator(), "generation.music", {"id": "tema", "kind": "music", "candidates": 2, "spec": {"loopSeconds": 8, "bpm": 120, "seed": 5}}),
         (JingleGenerator(), "generation.music", {"id": "fanfarria", "kind": "jingle", "candidates": 2, "spec": {"seconds": 4, "seed": 5}}),
