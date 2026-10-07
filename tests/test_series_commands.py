@@ -145,7 +145,7 @@ def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
     assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
     schema = OPERATIONS["characters.rig.flat"][0]
     assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink", "warp"]} and "hints" in schema
-    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth"}
+    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth", "exact"}
 
 
 def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
