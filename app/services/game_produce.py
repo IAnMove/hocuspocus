@@ -114,6 +114,7 @@ class GameProduce:
         job = {
             "jobId": f"game-produce-{uuid.uuid4().hex[:8]}", "workspace": workspace, "gameId": game_id,
             "status": "completed" if not steps else "queued", "rerender": bool(rerender), "candidates": candidates,
+            "assetIds": list(asset_ids) if asset_ids is not None else None,
             "steps": steps, "createdAt": time.time(), "message": "Nothing to produce" if not steps else "Queued",
         }
         with self._admit:
@@ -438,14 +439,19 @@ def _select(assets: list[dict], asset_ids: list[str] | None, kinds: list[str] | 
             continue
         if kind_set is not None and asset.get("kind") not in kind_set:
             continue
-        if _wanted(asset, rerender):
+        if _wanted(asset, rerender, explicit=ids is not None):
             found.append(asset)
     return found
 
 
-def _wanted(asset: dict, rerender: bool) -> bool:
+def _wanted(asset: dict, rerender: bool, *, explicit: bool = False) -> bool:
+    """Open assets always; with ``rerender`` stale ones too, and an asset in review the user named."""
     status = asset.get("status")
-    return status in _OPEN or (bool(rerender) and status == "stale" and not asset.get("locked"))
+    if status in _OPEN:
+        return True
+    if not rerender or asset.get("locked"):
+        return False
+    return status == "stale" or (explicit and status == "review")
 
 
 def _claimable(job: dict, step: dict, game: dict, asset: dict | None) -> bool:
@@ -453,7 +459,7 @@ def _claimable(job: dict, step: dict, game: dict, asset: dict | None) -> bool:
     if asset is None:
         step.update(status="failed", error="missing asset")
         return False
-    if not _wanted(asset, bool(job.get("rerender"))):
+    if not _wanted(asset, bool(job.get("rerender")), explicit=asset.get("id") in (job.get("assetIds") or [])):
         # A newer batch already produced it, or someone approved it. Do not run it twice.
         step.update(status="skipped", reason="not_open", error=None)
         return False

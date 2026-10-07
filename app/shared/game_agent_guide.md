@@ -17,7 +17,7 @@ Describe a look by traits: palette, outline, shading, pixel grid.
 6. `game.assets.from_list` without `check` — write the list when the check was clean.
 7. `game.produce` — pending, rejected and failed assets, in dependency order. Poll `game.produce.status` (`wait_s` at most 120).
 8. The user reviews. `game.asset.approve` or `game.asset.reject` (a note is required; it enters the next prompt).
-9. `game.produce` again for animations and anything still open. `rerender: true` only for stale assets.
+9. `game.produce` again for animations and anything still open. `rerender: true` only for stale assets, or for assets in review that the user wants redone, named in `asset_ids`.
 10. `game.export` — ZIP of approved assets only. Every other asset, stale ones too, is listed in `missing`.
 
 ## The asset list
@@ -64,7 +64,7 @@ A write with problems is refused with 422 `invalid_list` and the same list.
 - Never approve a style or an asset unless the user asked. No step approves itself.
 - Styles are traits. Do not name a brand, a console, a studio or an artist.
 - Measure one asset before a large batch. Read the estimate from the check.
-- `rerender` only for stale assets. A locked asset stays put when the style changes.
+- `rerender` only for stale assets, or for assets in review the user asked to redo (name them in `asset_ids`). A locked asset stays put when the style changes.
 - Characters face right. Left is the mirrored sprite. One scale for every frame of a character.
 - Walk and run default to a still strip. Other body actions default to one video clip. Do not group actions.
 - The pack is PNG plus atlas JSON, GLB, WAV/OGG with loop points, and `manifest.json`. No engine project files.

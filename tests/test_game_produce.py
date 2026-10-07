@@ -194,6 +194,18 @@ def test_order_dependency_failure_and_rerender(tmp_path, monkeypatch):
     assert "held" not in calls and "done" not in calls
 
 
+def test_regenerate_this_runs_an_asset_in_review_only_when_named(tmp_path, monkeypatch):
+    calls = []
+    def store():
+        return Store([_asset("waiting", "item", "review"), _asset("other", "item", "review"), _asset("held", "item", "review", locked=True)])
+    service = _service(tmp_path, store(), Generator(calls), monkeypatch)
+    assert _ids(service.start("lab", "bosque", rerender=True)) == []
+    service = _service(tmp_path, store(), Generator(calls), monkeypatch)
+    assert _ids(service.start("lab", "bosque", asset_ids=["waiting", "held"], rerender=True)) == ["waiting"]
+    assert calls == ["waiting"]
+    service = _service(tmp_path, store(), Generator(calls), monkeypatch)
+    assert _ids(service.start("lab", "bosque", asset_ids=["waiting"])) == []
+
 def test_cancel_between_steps(tmp_path, monkeypatch):
     calls = []
     store = Store([_asset("first", "item"), _asset("second", "item")])

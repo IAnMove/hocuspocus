@@ -117,7 +117,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "kinds": {"type": "array", "maxItems": 20, "items": KIND}, "rerender": BOOL,
          "candidates": {"type": "integer", "minimum": 1, "maximum": 8}},
         ["workspace", "game_id"], True,
-        "Render pending, rejected and failed assets in dependency order; rerender true adds stale unlocked assets. "
+        "Render pending, rejected and failed assets in dependency order; rerender true adds stale unlocked assets and the review assets named in asset_ids. "
         "Another active job for the game is 409 already_running. Returns the job; poll produce status afterwards.",
     ),
     "game.produce.status": (
