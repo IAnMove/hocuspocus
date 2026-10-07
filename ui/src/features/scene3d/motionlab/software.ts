@@ -7,6 +7,20 @@ import { buildMotionLab, motionLabSky } from './runtime'
 import { isMotionLab } from './types'
 
 type Vertex = { x: number; y: number; z: number }
+function clipDepth(polygon: Vector3[], z: number, keepLess: boolean): Vector3[] {
+  const result: Vector3[] = []
+  polygon.forEach((b, index) => {
+    const a = polygon[(index + polygon.length - 1) % polygon.length]
+    const aIn = keepLess ? a.z <= z : a.z >= z, bIn = keepLess ? b.z <= z : b.z >= z
+    if (aIn !== bIn) result.push(a.clone().lerp(b, (z - a.z) / (b.z - a.z)))
+    if (bIn) result.push(b)
+  })
+  return result
+}
+function project(point: Vector3, camera: PerspectiveCamera, frame: SoftwareFrame): Vertex {
+  const ndc = point.clone().applyMatrix4(camera.projectionMatrix)
+  return { x: (ndc.x * .5 + .5) * frame.width, y: (-ndc.y * .5 + .5) * frame.height, z: ndc.z }
+}
 function edge(a: Vertex, b: Vertex, x: number, y: number) { return (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x) }
 function put(frame: SoftwareFrame, depth: Float32Array, x: number, y: number, z: number, color: Color) {
   const index = y * frame.width + x
@@ -18,7 +32,7 @@ function put(frame: SoftwareFrame, depth: Float32Array, x: number, y: number, z:
 }
 function triangle(frame: SoftwareFrame, depth: Float32Array, vertices: Vertex[], color: Color) {
   const [a, b, c] = vertices, area = edge(a, b, c.x, c.y)
-  if (Math.abs(area) < .00001 || vertices.some(vertex => vertex.z < -1 || vertex.z > 1)) return
+  if (Math.abs(area) < .00001 || vertices.some(vertex => vertex.z < -1.000001 || vertex.z > 1.000001)) return
   const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x))), x1 = Math.min(frame.width - 1, Math.ceil(Math.max(a.x, b.x, c.x)))
   const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y))), y1 = Math.min(frame.height - 1, Math.ceil(Math.max(a.y, b.y, c.y)))
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -52,11 +66,11 @@ export function renderMotionLabSoftware(document: Scene3DDocument, seconds: numb
       if ((! (object instanceof Mesh) && !(object instanceof Points)) || !visible(object)) return
       const attribute = object.geometry.getAttribute('position')
       if (!attribute) return
-      const projected: Vertex[] = [], world: Vector3[] = []
+      const projected: Vertex[] = [], world: Vector3[] = [], view: Vector3[] = []
       for (let index = 0; index < attribute.count; index++) {
         position.fromBufferAttribute(attribute, index).applyMatrix4(object.matrixWorld)
-        world.push(position.clone()); position.project(camera)
-        projected.push({ x: (position.x * .5 + .5) * width, y: (-position.y * .5 + .5) * height, z: position.z })
+        world.push(position.clone()); position.applyMatrix4(camera.matrixWorldInverse); view.push(position.clone())
+        projected.push(project(position, camera, frame))
       }
       const materials = Array.isArray(object.material) ? object.material : [object.material]
       // Diagnostic rasterization has no alpha pass. Do not turn glass/soft beams into opaque walls.
@@ -78,7 +92,10 @@ export function renderMotionLabSoftware(document: Scene3DDocument, seconds: numb
         const ids = [0, 1, 2].map(offset => indices ? indices.getX(index + offset) : index + offset)
         const normal = new Vector3().subVectors(world[ids[1]], world[ids[0]]).cross(new Vector3().subVectors(world[ids[2]], world[ids[0]])).normalize()
         const color = base.clone().multiplyScalar(.45 + .55 * Math.abs(normal.dot(light))).convertLinearToSRGB()
-        triangle(frame, depth, ids.map(id => projected[id]), color)
+        // Clip in camera space before projection: a sea crossing the near plane must stay visible.
+        const clipped = clipDepth(clipDepth(ids.map(id => view[id]), -camera.near, true), -camera.far, false)
+        const vertices = clipped.map(point => project(point, camera, frame))
+        for (let fan = 1; fan < vertices.length - 1; fan++) triangle(frame, depth, [vertices[0], vertices[fan], vertices[fan + 1]], color)
       }
     })
     return frame

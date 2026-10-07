@@ -78,3 +78,13 @@ test('complete native meshes receive environment fill and do not leak it into le
   assert.equal(scene.environment, null)
   lighting.dispose()
 })
+
+test('sparse typography distributes points across a long title instead of truncating its end', () => {
+  const handle = buildMotionLab('motion-particle-morph', { ...DEFAULT_MOTION_LAB, title: 'W'.repeat(24), density: 200 })!
+  try {
+    handle.update(18)
+    const positions = (handle.root.getObjectByName('morph-cloud') as Points).geometry.getAttribute('position')
+    const xs = Array.from({ length: positions.count }, (_, index) => positions.getX(index))
+    assert.ok(Math.max(...xs) > 2.7); assert.ok(Math.min(...xs) < -2.7)
+  } finally { handle.dispose() }
+})

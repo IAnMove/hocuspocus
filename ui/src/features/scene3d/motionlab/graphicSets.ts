@@ -58,7 +58,8 @@ export function buildParticleMorph(settings: MotionLabSettings): MotionLabHandle
     targets[1].set([(1.7 + .55 * Math.cos(b)) * Math.cos(a), .55 * Math.sin(b), (1.7 + .55 * Math.cos(b)) * Math.sin(a)], index * 3)
     const h = index / count * Math.PI * 2
     targets[2].set([Math.pow(Math.sin(h), 3) * 2.1, (13 * Math.cos(h) - 5 * Math.cos(2 * h) - 2 * Math.cos(3 * h) - Math.cos(4 * h)) * .13, (seeded(settings.seed + 1, index) - .5) * .75], index * 3)
-    const point = glyph[index % Math.max(1, glyph.length)] ?? [0, 0]
+    // Spread sparse clouds over the entire title instead of losing the last letters at low density.
+    const point = glyph[Math.floor(index * glyph.length / count)] ?? [0, 0]
     targets[3].set([point[0], point[1], (seeded(settings.seed + 2, index) - .5) * .32], index * 3)
   }
   const positions = new Float32Array(count * 3), colors = new Float32Array(count * 3)

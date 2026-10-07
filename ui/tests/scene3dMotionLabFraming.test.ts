@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { Mesh, PerspectiveCamera, Points, Vector3 } from 'three'
+import { Color, Mesh, PerspectiveCamera, Points, Vector3 } from 'three'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates'
-import { buildMotionLab } from '../src/features/scene3d/motionlab/runtime'
+import { buildMotionLab, motionLabSky } from '../src/features/scene3d/motionlab/runtime'
 import { ScenicBuilder } from '../src/features/scene3d/motionlab/scenicShared'
 import { DEFAULT_MOTION_LAB } from '../src/features/scene3d/motionlab/types'
 import { hashSoftwareFrame, renderScene3DSoftware } from '../src/features/scene3d/softwareRender'
@@ -51,4 +51,20 @@ test('CPU carriage preview sees the seasonal scenery through its transparent gla
       'removing barely visible glass must not reveal a landscape that the CPU preview previously hid')
     assert.equal(hiddenWindows, seasons.length)
   } finally { ScenicBuilder.prototype.box = box }
+})
+
+test('CPU previews retain foreground water when the large sea crosses the camera near plane', () => {
+  for (const id of ['motion-sunset-flight', 'motion-lighthouse-story'] as const) {
+    const document = applyScene3DTemplate(id)
+    const sky = new Color(motionLabSky(id)).convertLinearToSRGB().toArray().map(value => Math.floor(value * 255))
+    for (const time of [0, 8, 28]) {
+      const frame = renderScene3DSoftware(document, time)
+      for (const fraction of [.03, .5, .97]) {
+        const x = Math.floor(frame.width * fraction), y = frame.height - 5
+        const offset = (y * frame.width + x) * 4
+        assert.notDeepEqual([...frame.pixels.slice(offset, offset + 3)], sky,
+          `${id}: t=${time} foreground water disappeared at x=${x}`)
+      }
+    }
+  }
 })
