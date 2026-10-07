@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { codeLabel } from './gameErrors'
-import { approvableClean, attemptWarnings, metricLines, reviewAssets, type ReviewWarning } from './reviewModel'
+import { approvableClean, attemptWarnings, informationalWarning, metricEntries, reviewAssets, type ReviewWarning } from './reviewModel'
 import { AttemptPreview } from './reviewViews'
 import { useGameAssetsStore } from './store'
 import { buttonClass, fieldClass, panelClass } from './styles'
@@ -95,9 +95,11 @@ function AttemptCard({ asset, attempt, pixel, workspace }: { asset: GameAsset; a
       <p className="text-sm"><span className="font-mono">{attempt.id}</span> · {t(decisionLabel(attempt))}</p>
       {attempt.note && <p className="text-sm text-muted-foreground">{t('decisionNote', { note: attempt.note })}</p>}
       <AttemptPreview asset={asset} attempt={attempt} pixel={pixel} workspace={workspace} />
-      {metricLines(attempt.metrics).map(line => <p key={line} className="text-sm">{line}</p>)}
+      {metricEntries(attempt.metrics).map(([key, value]) => <p key={key} className="text-sm">{codeLabel('metrics', key)}: {value}</p>)}
       {warnings.length === 0 && <p className="text-sm">{t('noWarnings')}</p>}
-      {warnings.map(warning => <p key={warning.key} className="text-sm text-amber-500">{warningLabel(warning)}</p>)}
+      {warnings.map(warning => (
+        <p key={warning.key} className={`text-sm ${informationalWarning(warning) ? 'text-muted-foreground' : 'text-amber-500'}`}>{warningLabel(warning)}</p>
+      ))}
       <textarea aria-label={t('rejectNoteFor', { id: attempt.id })} className={fieldClass} value={note} onChange={event => setNote(event.target.value)} placeholder={t('rejectNote')} />
       <div className="flex flex-wrap gap-2">
         <button type="button" className={buttonClass} disabled={busy || !approvable} aria-label={t('approveCandidate', { id: attempt.id })}

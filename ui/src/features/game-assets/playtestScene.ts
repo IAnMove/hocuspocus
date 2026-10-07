@@ -1,18 +1,28 @@
 import type { Game, GameAsset } from './types'
-import { chosenAttempt, playbackSources, stillFile } from './reviewModel'
+import { approvedAttempt, loopSamples, musicFile, playbackSources } from './reviewModel'
 
+/** Spanish and English words for the actions the hero plays; the server stores the English id. */
 const ACTIONS: Record<string, string> = {
-  idle: 'idle', walk: 'walk', run: 'run', jump: 'jump', attack: 'attack',
-  andar: 'walk', correr: 'run', saltar: 'jump', atacar: 'attack',
+  idle: 'idle', walk: 'walk', run: 'run', jump: 'jump', fall: 'fall', attack: 'attack',
+  reposo: 'idle', andar: 'walk', caminar: 'walk', correr: 'run', saltar: 'jump', caer: 'fall', atacar: 'attack',
 }
 
-const SFX: Record<string, string> = {
-  jump: 'jump', salto: 'jump', coin: 'coin', moneda: 'coin', hit: 'hit', golpe: 'hit',
+const SFX: Record<string, SfxTrigger> = {
+  jump: 'jump', salto: 'jump', saltar: 'jump',
+  coin: 'coin', moneda: 'coin', pickup: 'coin', recoger: 'coin',
+  hit: 'hit', golpe: 'hit', attack: 'hit', ataque: 'hit', atacar: 'hit',
 }
 
 export const PLAY_WIDTH = 640
 export const PLAY_HEIGHT = 360
 export const GROUND_Y = 300
+/** The level is three screens wide; the camera follows the hero. */
+export const WORLD_WIDTH = PLAY_WIDTH * 3
+
+/** The hero clips the playtest needs; ``fall`` is optional and falls back to ``jump``. */
+export const HERO_ACTIONS = ['idle', 'walk', 'run', 'jump', 'attack'] as const
+export const SFX_TRIGGERS = ['jump', 'coin', 'hit'] as const
+export type SfxTrigger = typeof SFX_TRIGGERS[number]
 
 export interface Body {
   x: number
@@ -29,39 +39,111 @@ export interface PlayInput {
   jump: boolean
 }
 
+/** Where a sprite's pivot sits when its atlas gives none: feet for characters and items, centre for effects. */
+export type Anchor = 'bottom' | 'center'
+
+/** One approved image: a sheet with its atlas, or a still (``atlas`` empty). */
+export interface PlaySprite {
+  file: string
+  atlas: string
+  /** The frame tag to play; the first tag when the atlas has no such tag. */
+  tag: string
+  /** ``spec.loop`` (else the attempt metric); the atlas ``meta.loop`` wins when it has one. */
+  loop: boolean
+  anchor: Anchor
+}
+
 export interface PlayActor {
   id: string
   name: string
+  sprite: PlaySprite | null
+}
+
+export interface PlayHero extends PlayActor {
+  clips: Partial<Record<string, PlaySprite>>
+}
+
+export interface PlayLayer {
   file: string
+  factor: number
+}
+
+/** A single tile, or a 3×3 tileset with its ``tiles.json``. */
+export interface PlayGround {
+  name: string
+  file: string
+  tiles: string
+}
+
+export interface PlayMusic {
+  file: string
+  loop: { start: number; end: number } | null
+}
+
+export type MissingCode = 'hero' | 'animation' | 'tile' | 'background' | 'music' | 'sfx'
+
+export interface PlayMissing {
+  code: MissingCode
+  name: string
 }
 
 export interface PlayScene {
-  hero: { id: string; name: string; still: string; sheets: Record<string, string> } | null
+  hero: PlayHero | null
   enemies: PlayActor[]
-  tiles: PlayActor[]
-  layers: { file: string; factor: number }[]
   items: PlayActor[]
-  music: string | null
-  sfxByTrigger: Record<string, string>
-  missing: string[]
+  ground: PlayGround | null
+  layers: PlayLayer[]
+  /** ``spec.loopX``: false means the layers were not seam-healed and must not wrap. */
+  loopX: boolean
+  vfx: (PlaySprite & { additive: boolean }) | null
+  music: PlayMusic | null
+  sfx: Record<SfxTrigger, string[]>
+  missing: PlayMissing[]
 }
 
-function approved(game: Game): GameAsset[] {
-  return game.assets.filter(asset => asset.status === 'approved')
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : ''
 }
 
-function fileOf(asset: GameAsset): string {
-  const attempt = chosenAttempt(asset)
-  return attempt ? stillFile(attempt.files || {}) : ''
+/** Approved assets that still have a usable approved attempt: exactly what the export packs. */
+function approvedAssets(game: Game): GameAsset[] {
+  return game.assets.filter(asset => asset.status === 'approved' && approvedAttempt(asset) !== null)
+}
+
+function filesOf(asset: GameAsset): Record<string, string> {
+  return approvedAttempt(asset)?.files || {}
+}
+
+function loopOf(asset: GameAsset): boolean {
+  const spec = asset.spec.loop
+  if (typeof spec === 'boolean') return spec
+  return approvedAttempt(asset)?.metrics?.loop === true
+}
+
+/** The approved sheet (with its atlas) or the approved ``main`` still; the 4× ``preview`` is a last resort. */
+export function spriteOf(asset: GameAsset, anchor: Anchor, tag = ''): PlaySprite | null {
+  const files = filesOf(asset)
+  const sheet = files.sheet || files.main || ''
+  if (files.atlas && sheet) return { file: sheet, atlas: files.atlas, tag, loop: loopOf(asset), anchor }
+  const still = files.main || files.preview || ''
+  return still ? { file: still, atlas: '', tag: '', loop: false, anchor } : null
+}
+
+function actor(asset: GameAsset, anchor: Anchor): PlayActor {
+  return { id: asset.id, name: asset.name || asset.id, sprite: spriteOf(asset, anchor) }
 }
 
 function actionName(asset: GameAsset): string {
-  const raw = String(asset.spec.action || asset.name || asset.id || '').toLowerCase()
+  const raw = String(asset.spec.action || '').toLowerCase()
   return ACTIONS[raw] || raw
 }
 
 function ownedBy(asset: GameAsset, id: string): boolean {
-  return asset.dependsOn.includes(id) || String(asset.spec.character || '') === id
+  return String(asset.spec.character || '') === id || asset.dependsOn.includes(id)
+}
+
+function role(asset: GameAsset): string {
+  return text(asset.spec.role) || 'player' // the server defaults a character's role to player
 }
 
 export function integerScale(viewWidth: number): number {
@@ -88,97 +170,113 @@ export function stepBody(body: Body, input: PlayInput, dt: number): Body {
     vy = 0
     onGround = true
   }
-  return { x: body.x + vx * step, y, vx, vy, onGround }
+  const x = Math.max(16, Math.min(WORLD_WIDTH - 16, body.x + vx * step))
+  return { x, y, vx, vy, onGround }
+}
+
+function heroOf(assets: GameAsset[], missing: PlayMissing[]): PlayHero | null {
+  const asset = assets.find(item => item.kind === 'character' && role(item) === 'player')
+  if (!asset) {
+    missing.push({ code: 'hero', name: '' })
+    return null
+  }
+  const clips: Partial<Record<string, PlaySprite>> = {}
+  for (const clip of assets) {
+    if (clip.kind !== 'animation' || !ownedBy(clip, asset.id)) continue
+    const action = actionName(clip)
+    if (action && !clips[action]) clips[action] = spriteOf(clip, 'bottom', text(clip.spec.action)) || undefined
+  }
+  for (const action of HERO_ACTIONS) {
+    if (!clips[action]) missing.push({ code: 'animation', name: action })
+  }
+  return { ...actor(asset, 'bottom'), clips }
+}
+
+function groundOf(assets: GameAsset[]): PlayGround | null {
+  const tileset = assets.find(asset => asset.kind === 'tileset' && filesOf(asset).main && filesOf(asset).tiles)
+  if (tileset) return { name: tileset.name || tileset.id, file: filesOf(tileset).main, tiles: filesOf(tileset).tiles }
+  const tile = assets.find(asset => asset.kind === 'tile' && filesOf(asset).main)
+  return tile ? { name: tile.name || tile.id, file: filesOf(tile).main, tiles: '' } : null
+}
+
+function layerRows(metrics: Record<string, unknown> | undefined): { file: string; factor: number }[] {
+  const rows = metrics?.layers
+  if (!Array.isArray(rows)) return []
+  const found: { file: string; factor: number }[] = []
+  for (const row of rows) {
+    const entry = row && typeof row === 'object' ? row as { file?: unknown; factor?: unknown } : {}
+    if (typeof entry.file === 'string' && typeof entry.factor === 'number') found.push({ file: entry.file, factor: entry.factor })
+  }
+  return found
+}
+
+/** Layers of the approved candidate, far (small factor) first; ``metrics.layers`` maps each file key to its factor. */
+export function backgroundLayers(asset: GameAsset | undefined): PlayLayer[] {
+  if (!asset) return []
+  const attempt = approvedAttempt(asset)
+  const files = attempt?.files || {}
+  const factors = new Map(layerRows(attempt?.metrics).map(row => [row.file, row.factor]))
+  const keys = Object.keys(files).filter(key => key.startsWith('layer')).sort((left, right) => left.localeCompare(right, 'en', { numeric: true }))
+  const layers = keys.map((key, index) => ({ file: files[key], factor: factors.get(key) ?? (index === keys.length - 1 ? 1 : 0.1 + index * 0.25) }))
+  if (!layers.length && files.main) layers.push({ file: files.main, factor: 0.1 })
+  return layers.sort((left, right) => left.factor - right.factor)
+}
+
+function triggerOf(asset: GameAsset): SfxTrigger | null {
+  const raw = `${text(asset.spec.trigger)} ${asset.name} ${asset.id}`.toLowerCase()
+  for (const word of raw.split(/[^a-zñ]+/)) {
+    if (SFX[word]) return SFX[word]
+  }
+  return null
+}
+
+function sfxMap(assets: GameAsset[]): Record<SfxTrigger, string[]> {
+  const map: Record<SfxTrigger, string[]> = { jump: [], coin: [], hit: [] }
+  for (const asset of assets) {
+    const trigger = asset.kind === 'sfx' ? triggerOf(asset) : null
+    if (!trigger || map[trigger].length) continue
+    map[trigger] = playbackSources(filesOf(asset)).map(item => item.file)
+  }
+  return map
+}
+
+function musicOf(assets: GameAsset[]): PlayMusic | null {
+  const asset = assets.find(item => item.kind === 'music' && musicFile(filesOf(item)))
+  if (!asset) return null
+  return { file: musicFile(filesOf(asset)), loop: loopSamples(approvedAttempt(asset)?.metrics) }
+}
+
+function vfxOf(assets: GameAsset[]): PlayScene['vfx'] {
+  const asset = assets.find(item => item.kind === 'vfx')
+  const sprite = asset ? spriteOf(asset, 'center') : null
+  return asset && sprite ? { ...sprite, additive: asset.spec.blend !== 'alpha' } : null
 }
 
 export function playtestScene(game: Game): PlayScene {
-  const assets = approved(game)
-  const missing: string[] = []
-  const heroAsset = assets.find(asset => asset.kind === 'character' && String(asset.spec.role || '') === 'player') || null
-  if (!heroAsset) missing.push('hero')
-  const sheets: Record<string, string> = {}
-  if (heroAsset) {
-    for (const name of ['idle', 'walk', 'run', 'jump', 'attack']) {
-      const clip = assets.find(asset => asset.kind === 'animation' && ownedBy(asset, heroAsset.id) && actionName(asset) === name)
-      if (clip) sheets[name] = fileOf(clip)
-      else missing.push(name)
-    }
-  }
-  const enemies = assets
-    .filter(asset => asset.kind === 'character' && asset !== heroAsset)
-    .map(asset => ({ id: asset.id, name: asset.name || asset.id, file: fileOf(asset) }))
-  const tileset = assets.find(asset => asset.kind === 'tileset')
-  const tiles = (tileset ? [tileset] : assets.filter(asset => asset.kind === 'tile'))
-    .map(asset => ({ id: asset.id, name: asset.name || asset.id, file: fileOf(asset) }))
-  if (!tiles.length) missing.push('tile')
+  const assets = approvedAssets(game)
+  const missing: PlayMissing[] = []
+  const hero = heroOf(assets, missing)
+  const ground = groundOf(assets)
+  if (!ground) missing.push({ code: 'tile', name: '' })
   const background = assets.find(asset => asset.kind === 'background')
   const layers = backgroundLayers(background)
-  if (!layers.length) missing.push('background')
-  const musicAsset = assets.find(asset => asset.kind === 'music')
-  if (!musicAsset) missing.push('music')
-  const sfxByTrigger = sfxMap(assets)
-  for (const trigger of ['jump', 'coin', 'hit']) {
-    if (!sfxByTrigger[trigger]) missing.push(`sfx:${trigger}`)
+  if (!layers.length) missing.push({ code: 'background', name: '' })
+  const music = musicOf(assets)
+  if (!music) missing.push({ code: 'music', name: '' })
+  const sfx = sfxMap(assets)
+  for (const trigger of SFX_TRIGGERS) {
+    if (!sfx[trigger].length) missing.push({ code: 'sfx', name: trigger })
   }
-  const items = assets.filter(asset => asset.kind === 'item').map(asset => ({ id: asset.id, name: asset.name || asset.id, file: fileOf(asset) }))
   return {
-    hero: heroAsset ? { id: heroAsset.id, name: heroAsset.name || heroAsset.id, still: fileOf(heroAsset), sheets } : null,
-    enemies,
-    tiles,
+    hero,
+    enemies: assets.filter(asset => asset.kind === 'character' && ['enemy', 'boss'].includes(role(asset))).map(asset => actor(asset, 'bottom')),
+    items: assets.filter(asset => asset.kind === 'item').map(asset => actor(asset, 'bottom')),
+    ground,
     layers,
-    items,
-    music: musicAsset ? audioFile(musicAsset) : null,
-    sfxByTrigger,
+    loopX: background?.spec.loopX !== false,
+    vfx: vfxOf(assets),
+    music,
+    sfx,
     missing,
   }
-}
-
-function backgroundLayers(asset: GameAsset | undefined): { file: string; factor: number }[] {
-  if (!asset) return []
-  const attempt = chosenAttempt(asset)
-  const files = attempt?.files || {}
-  const factors = layerFactors(attempt?.metrics)
-  const layers = Object.entries(files).filter(([key]) => key.startsWith('layer'))
-  if (layers.length) {
-    return layers.map(([key, file], index) => ({ file, factor: factors[key] ?? fallbackFactor(index) }))
-  }
-  const still = fileOf(asset)
-  return still ? [{ file: still, factor: fallbackFactor(0) }] : []
-}
-
-function fallbackFactor(index: number): number {
-  return 0.15 + index * 0.2
-}
-
-function layerFactors(metrics: Record<string, unknown> | undefined): Record<string, number> {
-  const layers = metrics?.layers
-  const factors: Record<string, number> = {}
-  if (!Array.isArray(layers)) return factors
-  for (const layer of layers) {
-    if (!layer || typeof layer !== 'object') continue
-    const row = layer as { file?: unknown; factor?: unknown }
-    if (typeof row.file === 'string' && typeof row.factor === 'number') factors[row.file] = row.factor
-  }
-  return factors
-}
-
-function audioFile(asset: GameAsset): string {
-  const attempt = chosenAttempt(asset)
-  return playbackSources(attempt?.files || {})[0]?.file || ''
-}
-
-function sfxMap(assets: GameAsset[]): Record<string, string> {
-  const map: Record<string, string> = {}
-  for (const asset of assets) {
-    if (asset.kind !== 'sfx') continue
-    const raw = String(asset.spec.trigger || asset.name || asset.id || '').toLowerCase()
-    const trigger = SFX[raw]
-    if (!trigger || map[trigger]) continue
-    const file = audioFile(asset)
-    if (file) map[trigger] = file
-  }
-  for (const trigger of ['jump', 'coin', 'hit']) {
-    if (!map[trigger]) map[trigger] = ''
-  }
-  return map
 }

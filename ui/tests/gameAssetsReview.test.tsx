@@ -95,6 +95,38 @@ test('review lists open candidates, explains decisions and bulk-approves only si
   }
 })
 
+test('style-check warnings and the style score read as text in English and Spanish', { concurrency: false }, async () => {
+  const { render, screen, cleanup, within } = await import('@testing-library/react')
+  const { GameReviewPanel } = await import('../src/features/game-assets/GameReviewPanel.tsx')
+  const { setUiLanguage } = await import('../src/i18n/index.ts')
+  const current = game()
+  current.assets = [{
+    id: 'heroe', kind: 'character', name: 'Hero', description: '', status: 'review', tags: [], spec: {}, dependsOn: [], candidates: 1, locked: false, approvedAttemptId: null,
+    attempts: [attempt('h-a1', ['style_mismatch', 'style_check_unavailable', { code: 'style_check_failed', message: 'analyze timed out' }, 'duplicate_of:slime'], { metrics: { styleScore: 2 } })],
+  }]
+  useGameAssetsStore.setState({ workspace: 'lab', ready: true, games: [current], game: current, serverRevision: 3, error: null, notice: null, produceJob: null, selectedIds: [], section: 'review' })
+  try {
+    const view = render(<GameReviewPanel />)
+    const card = screen.getByRole('region', { name: 'Candidate h-a1' })
+    for (const text of [
+      'The style does not match the references.', 'The style check could not run.', 'The style check failed.',
+      'Looks like a duplicate of slime.', 'Style match (1–5): 2',
+    ]) assert.ok(within(card).getByText(text), text)
+    for (const raw of ['style_mismatch', 'style_check', 'styleScore', 'duplicate_of']) assert.ok(!card.textContent?.includes(raw), raw)
+    view.unmount()
+    await setUiLanguage('es')
+    render(<GameReviewPanel />)
+    const spanish = screen.getByRole('region', { name: 'Candidato h-a1' })
+    for (const text of ['El estilo no encaja con las referencias.', 'No se pudo comprobar el estilo.', 'La comprobación de estilo falló.', 'Encaje con el estilo (1–5): 2']) {
+      assert.ok(within(spanish).getByText(text), text)
+    }
+  } finally {
+    await setUiLanguage('en')
+    cleanup()
+    reset()
+  }
+})
+
 test('the sprite sheet steps frames on their duration', { concurrency: false }, async () => {
   const { render, cleanup, act } = await import('@testing-library/react')
   const { SpriteSheetPlayer } = await import('../src/features/game-assets/SpriteSheetPlayer.tsx')

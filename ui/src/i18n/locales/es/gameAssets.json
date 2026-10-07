@@ -261,7 +261,10 @@
     "over_budget": "El modelo supera el presupuesto de triángulos.",
     "triangles_unknown": "No se conoce el número de triángulos.",
     "clip_missing": "Faltan clips de animación.",
-    "seam_visible": "La costura de la baldosa se ve."
+    "seam_visible": "La costura de la baldosa se ve.",
+    "style_mismatch": "El estilo no encaja con las referencias.",
+    "style_check_unavailable": "No se pudo comprobar el estilo.",
+    "style_check_failed": "La comprobación de estilo falló."
   },
   "actions": {
     "load": "No se pudieron cargar los juegos.",
@@ -287,7 +290,8 @@
     "approve": "No se pudo aprobar el intento.",
     "reject": "No se pudo rechazar el intento.",
     "lock": "No se pudo cambiar el bloqueo.",
-    "approveClean": "No se pudieron aprobar todos los recursos sin avisos."
+    "approveClean": "No se pudieron aprobar todos los recursos sin avisos.",
+    "export": "No se pudo exportar el paquete."
   },
   "errors": {
     "revision_conflict": "El juego cambió en el servidor. Se recargó la última revisión.",
@@ -326,17 +330,54 @@
     "invalid_request": "La petición no era válida.",
     "invalid_json": "El JSON tiene que ser una lista de recursos.",
     "missing_kit": "Falta el kit del personaje.",
-    "editor_busy": "Termina o guarda primero el personaje que está abierto en el Creador de personajes."
+    "editor_busy": "Termina o guarda primero el personaje que está abierto en el Creador de personajes.",
+    "nothing_to_export": "No hay nada que exportar: aprueba al menos un recurso cuyos archivos existan."
   },
   "example": "Ejemplo",
   "warnLoopSeam": "La costura del bucle se oye.",
   "warnDuplicate": "Se parece a un duplicado de {{id}}.",
   "playMissing": "Falta en la prueba",
   "mute": "Silencio",
-  "unmute": "Con sonido",
-  "exportApproved": "Aprobados",
-  "exportMissing": "Sin aprobar",
+  "exportApproved": "Aprobados: {{count}}",
+  "exportMissing": "Sin aprobar: {{count}}",
   "exportPack": "Exportar",
   "exportHistory": "Historial de exportación",
-  "exportEmpty": "Todavía no hay exportaciones."
+  "exportEmpty": "Todavía no hay exportaciones.",
+  "playControls": "Haz clic en el juego o llega con Tab. Las flechas mueven, Mayús corre, Espacio o Arriba salta, X ataca. La música empieza con la primera tecla.",
+  "playCanvas": "Prueba en vista lateral",
+  "playMissingItems": {
+    "hero": "Un personaje jugador aprobado",
+    "animation": "Animación del protagonista: {{name}}",
+    "tile": "Una baldosa o un tileset de suelo",
+    "background": "Un fondo",
+    "music": "Música",
+    "sfx": "Efecto de sonido: {{name}}"
+  },
+  "playActions": {
+    "idle": "reposo",
+    "walk": "andar",
+    "run": "correr",
+    "jump": "saltar",
+    "fall": "caer",
+    "attack": "atacar"
+  },
+  "playTriggers": {
+    "jump": "salto",
+    "coin": "moneda",
+    "hit": "golpe"
+  },
+  "exporting": "Exportando…",
+  "exportDone": "Paquete escrito:",
+  "exportLost": "Aprobados que no se empaquetaron enteros",
+  "exportTotal": "Total: {{count}}",
+  "exportRevision": "Revisión {{revision}}",
+  "exportNeedsApproval": "Aprueba al menos un recurso para exportar un paquete.",
+  "exportProblems": {
+    "no_approved_attempt": "falta su intento aprobado, falló o se rechazó",
+    "not_packed": "no se pudo empaquetar ningún archivo",
+    "files_missing": "faltan archivos"
+  },
+  "metrics": {
+    "styleScore": "Encaje con el estilo (1–5)"
+  }
 }
