@@ -482,7 +482,7 @@ def create_series_assembly_router(
                         ],
                         "loudness": finishing["loudness"],
                         "subtitles": {**finishing["subtitles"], "language": job.get("language") or series.get("spokenLanguage") or series.get("language")},
-                        **{key: finishing[key] for key in ("ambience", "score") if key in finishing},
+                        **{key: finishing[key] for key in ("ambience", "score", "sync") if key in finishing},
                         **prepared_metadata(prepared),
                         **({"language": job["language"]} if job.get("language") else {}),
                         "createdAt": completed_at,
@@ -506,6 +506,7 @@ def create_series_assembly_router(
                 assetId=asset_id,
                 filename=os.path.basename(output_path),
                 finishedAt=time.time(),
+                sync=finishing.get("sync"),
                 message=" ".join(filter(None, (f"Joined {len(clip_paths)} approved clips in episode order.",
                                                prepared_note(prepared), finishing_note(finishing)))),
             )

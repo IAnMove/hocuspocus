@@ -388,6 +388,10 @@ and its scenes `e3_<scene id>`. Only `file` and the shots are required; the numb
 - A cue naming a shot the episode does not have is refused; one left behind when a rewrite removed its shots is
   skipped by the assembly, which says so in the cut's `score.skipped`.
 
+Every assembly checks that each take's sound plays where its pictures do: `series.assembly.status` returns `sync`
+(`inSync`, `maxLagMs`, `late` with each off clip's `index` and `lagMs`, `unsure` for takes too quiet to place). A cut
+with `inSync: false` has lips visibly off from the first clip in `late`: report it, do not deliver it as finished.
+
 `roomByLocation` (`{"<locationId>": "<preset>"}`) makes the voice sound like the place. Lines are recorded dry, so a
 monk in a stone cathedral and a captain on an open deck would sound the same; with a room the render plays a processed
 copy of each line (the dry recording is kept, and lip-sync and timing stay the dry line's):
