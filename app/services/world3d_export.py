@@ -449,6 +449,8 @@ def _cue_sounds(cue) -> bool:
 
 
 def _has_sound(document: dict) -> bool:
+    if _motion_lab_has_sound(document):
+        return True
     if any(_cue_sounds(cue) for cue in document.get("sfx") or []):
         return True
     if any(_cue_sounds(cue) for cue in document.get("worldSfx") or []):
@@ -465,6 +467,16 @@ def _has_sound(document: dict) -> bool:
                for clip in clips or []):
             return True
     return False
+
+
+def _motion_lab_has_sound(document: dict) -> bool:
+    if document.get("dressing") not in {"motion-bouncing-ball", "motion-music-machine"}:
+        return False
+    settings = document.get("motionLab", {})
+    if not isinstance(settings, dict) or settings.get("sound", True) is not True:
+        return False
+    volume = settings.get("volume", 0.35)
+    return type(volume) in (int, float) and 0 < volume <= 1
 
 
 def _audio_url(holder) -> str:

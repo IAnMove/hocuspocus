@@ -510,6 +510,7 @@
         "tests/test_lips_creator.py",
         "tests/test_lips_creator_commands.py",
         "tests/test_world3d_templates.py",
+        "tests/test_world3d_motionlab.py",
         "tests/test_series_episode_replace.py",
         "tests/test_owned_browser_watchdog.py",
         "tests/test_h3_frame_lattice.py",
@@ -576,6 +577,10 @@
     {
       "prefix": "app/services/series_canon_snapshot.py",
       "paths": ["tests/test_series_library.py", "tests/test_series_production.py"]
+    },
+    {
+      "prefix": "app/services/world3d_export.py",
+      "paths": ["tests/test_world3d_export.py", "tests/test_world3d_motionlab.py"]
     },
     {
       "prefix": "app/services/world3d_frame_encoder.py",
@@ -886,6 +891,7 @@
     {
       "prefix": "app/services/world3d_template_commands.py",
       "paths": [
+        "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py",
         "tests/test_mcp_coverage.py"
       ]
@@ -893,6 +899,7 @@
     {
       "prefix": "app/services/world3d_scenes.py",
       "paths": [
+        "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py"
       ]
     },
@@ -922,6 +929,7 @@
     {
       "prefix": "app/shared/world3d_templates.json",
       "paths": [
+        "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py",
         "tests/test_mcp_coverage.py"
       ]

@@ -11,6 +11,7 @@ import { actionTemplateDocument, ACTION_TEMPLATES, ACTION_CATEGORIES } from './a
 import { atmosTemplateDocument, ATMOS_TEMPLATES, ATMOS_CATEGORIES } from './atmos/templates.ts'
 import { techniqueDocument, TECHNIQUE_TEMPLATES, TECHNIQUE_CATEGORIES } from './techniqueTemplates'
 import { animeTemplateDocument, ANIME_TEMPLATES, ANIME_CATEGORIES } from './animeTemplates'
+import { motionLabTemplateDocument, MOTION_LAB_TEMPLATES, MOTION_LAB_CATEGORIES } from './motionlab/templates'
 import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
 import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
 import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
@@ -44,6 +45,7 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   ...ATMOS_CATEGORIES,
   ...TECHNIQUE_CATEGORIES,
   ...ANIME_CATEGORIES,
+  ...MOTION_LAB_CATEGORIES,
   'reflective-stage': 'cinema',
   'character-materialization': 'cinema',
   'blast-stage': 'cinema',
@@ -190,6 +192,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...ATMOS_TEMPLATES,
   ...TECHNIQUE_TEMPLATES,
   ...ANIME_TEMPLATES,
+  ...MOTION_LAB_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -386,6 +389,7 @@ const FAMILY_BUILDERS: ReadonlyArray<(id: string) => Scene3DDocument | null | un
   creativeTemplateDocument, pixelTemplateDocument, darkFantasyTemplateDocument, actionTemplateDocument, animeTemplateDocument,
   campaignTemplateDocument, effectsTemplateDocument, speechTemplateDocument, mediaTemplateDocument, cinematicDocument,
   atmosTemplateDocument, techniqueDocument,
+  motionLabTemplateDocument,
 ]
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {

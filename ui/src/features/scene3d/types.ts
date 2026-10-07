@@ -8,6 +8,7 @@ import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
 import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
 import { ANIME_TEMPLATE_IDS } from './animeTemplateIds'
+import { MOTION_LAB_IDS, type MotionLabId } from './motionlab/types'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -130,6 +131,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...ATMOS_TEMPLATE_IDS,
   ...TECHNIQUE_TEMPLATE_IDS,
   ...ANIME_TEMPLATE_IDS,
+  ...MOTION_LAB_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -166,7 +168,7 @@ export type Scene3DLoop = {
   speed: number
 }
 
-export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza' | AtmosSetId
+export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza' | AtmosSetId | MotionLabId
 
 export type Scene3DSourceRef = {
   workspaceId: string
@@ -266,6 +268,8 @@ export type Scene3DToon = {
 }
 
 export type Scene3DDocument = {
+  /** Native procedural sets: shared by editor, MCP, Wizard and both export paths. */
+  motionLab?: import('./motionlab/types').MotionLabSettings
   rhythm?: import('./rhythm').Scene3DRhythm
   renderLook?: Scene3DRenderLook
   /** Used while `renderLook` is `toon`; kept when another look is chosen. */

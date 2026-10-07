@@ -12,6 +12,7 @@ import {
 } from './gpu.ts'
 import { createPixelWorldCache, isPixelDressing } from './pixel/pixelWorldSet'
 import type { Scene3DDressing, Scene3DLight, Scene3DSlot, Scene3DTemplateId } from './types.ts'
+import type { MotionLabSettings } from './motionlab/types'
 
 const WIDTH = 320
 const HEIGHT = 180
@@ -31,8 +32,8 @@ function visibleSlots(slots: readonly Scene3DSlot[]) {
   return slots.filter(slot => !(slot.media === 'image' && !slot.sourceUrl)).slice(0, PREVIEW_SLOT_CAP)
 }
 
-function attachPreviewDressing(pack: GpuWorld, kind: Scene3DDressing | undefined) {
-  const key = kind ?? 'none'
+function attachPreviewDressing(pack: GpuWorld, kind: Scene3DDressing | undefined, motionLab?: MotionLabSettings) {
+  const key = `${kind ?? 'none'}:${JSON.stringify(motionLab)}`
   if (lastDressing === key) return
   if (pack.dressing?.userData.pixelWorld) {
     pack.scene.remove(pack.dressing)
@@ -48,7 +49,7 @@ function attachPreviewDressing(pack: GpuWorld, kind: Scene3DDressing | undefined
     pack.floor.position.y = -80
     return
   }
-  syncDressing(pack, kind)
+  syncDressing(pack, kind, undefined, undefined, motionLab)
 }
 
 function ensure(): GpuWorld | null {
@@ -96,7 +97,7 @@ function tick(now: number) {
     return
   }
   const slots = visibleSlots(doc.slots)
-  attachPreviewDressing(pack, doc.dressing)
+  attachPreviewDressing(pack, doc.dressing, doc.motionLab)
   applyLight(pack.dir, doc.light)
   pruneSlots(pack, slots)
   for (const slot of slots) {

@@ -53,6 +53,7 @@ import { applyTypingPose, resetTypingPose } from './typingPose.ts'
 import { paintWorkshop } from './workshopSet.ts'
 import { paintCitadel } from './citadelSet.ts'
 import { paintActionSet } from './actionSets.ts'
+import { paintMotionLab } from './motionlab/runtime'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLight, Scene3DSlot, Vec3 } from './types.ts'
 import { syncWorldSfx, type WorldSfxGpu } from '../sceneFx/worldRuntime'
 import { paintPixelWorld } from './pixel/pixelWorldSet'
@@ -568,6 +569,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   paintCitadel(world.dressing, sceneSeconds)
   paintWorkshop(world.dressing, sceneSeconds, document.workshopScreen)
   paintActionSet(world.dressing, sceneSeconds)
+  paintMotionLab(world.dressing, sceneSeconds)
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)

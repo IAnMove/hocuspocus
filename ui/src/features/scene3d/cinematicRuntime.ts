@@ -19,6 +19,8 @@ import type { Pass } from 'three/addons/postprocessing/Pass.js'
 import { bindAtmosPasses, ensureComposerDepth, publishAtmosStats } from './atmos/composerBind.ts'
 import { atmosHandle, isAtmosDressing } from './atmos/index.ts'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality.ts'
+import { isMotionLab } from './motionlab/types'
+import { motionLabSky } from './motionlab/runtime'
 
 /** A resolved multisample can turn a very bright sample into NaN or Inf; the bloom blur
  * would then spread it over the whole frame. Exports above draft clear those values first. */
@@ -128,7 +130,8 @@ export class CinematicRuntime {
       const painted = this.screenBackdrop.paint(doc.screenBackdrop, seconds, frame.x, frame.y, this.source)
       if (painted) return painted
     }
-    return this.background ?? new Color(this.world.pixelPalette?.sky[0] ?? 0x10141c)
+    const fallback = isMotionLab(doc.dressing) ? motionLabSky(doc.dressing) : 0x10141c
+    return this.background ?? new Color(this.world.pixelPalette?.sky[0] ?? fallback)
   }
   private fitBackground() {
     const { world } = this

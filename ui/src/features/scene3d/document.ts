@@ -7,6 +7,7 @@ import { validScene3DShape } from './documentValidation.ts'
 import { scene3dPlaybackSpeed } from './clock.ts'
 import { reviewClipNumber } from './performance.ts'
 import { parseRhythm } from './rhythm'
+import { parseMotionLab } from './motionlab/types'
 import { normalizeScene3DSlot, parseDressing } from './documentSlot.ts'
 import { parsePixelWorld } from './pixel/pixelWorld'
 import { parseAtmosSettings } from './atmos/params.ts'
@@ -119,7 +120,8 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   let slots: Scene3DSlot[]
   let soundtrack: Scene3DDocument['soundtrack']
   let rhythm: Scene3DDocument['rhythm']
-  try { slots = value.slots.map(normalizeScene3DSlot); soundtrack = parseSoundtrack(value.soundtrack); rhythm = parseRhythm(value.rhythm) } catch { return null }
+  let motionLab: Scene3DDocument['motionLab']
+  try { slots = value.slots.map(normalizeScene3DSlot); soundtrack = parseSoundtrack(value.soundtrack); rhythm = parseRhythm(value.rhythm); motionLab = parseMotionLab(value.motionLab) } catch { return null }
   if (!validProduction(value.production)) return null
   const templateId = knownTemplateId(value.templateId)
   const dressing = parseDressing(value.dressing)
@@ -127,5 +129,6 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const worldSfx = parseWorldSfx(value.worldSfx)
   const { pixelWorld, atmos: rawAtmos, lighting, look, toon, screenBackdrop, ...fields } = value
   fields.rhythm = rhythm
+  fields.motionLab = motionLab
   return { ...fields, ...pixelWorldField(pixelWorld), ...screenBackdropField(screenBackdrop), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), ...toonField(toon), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }
