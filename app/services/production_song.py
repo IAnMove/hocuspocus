@@ -10,8 +10,10 @@ from services.music_production import ProductionError, pick_song
 from services.production_song_switch import remember_candidates
 
 
-def song_language(song: dict) -> str:
+def song_language(song: Any) -> str:
     """The sung language code: ``song.language`` when set, else what the lyrics show, else ``""`` (unknown)."""
+    if not isinstance(song, dict):
+        return ""
     if song.get("language"):
         return canonical_lyrics_language(str(song["language"]))
     lyrics = str(song.get("lyrics") or "")

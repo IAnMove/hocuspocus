@@ -3,7 +3,7 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07. Language detection fallbacks add +8 (python-b, test_language_detection_fallbacks), 2026-10-07.",
   "groups": [
     {
       "id": "python-a",
@@ -274,7 +274,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 3150,
+      "weight": 3158,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -531,7 +531,8 @@
         "tests/test_game_sfxr.py",
         "tests/test_pose_facing.py",
         "tests/test_series_look_room.py",
-        "tests/test_production_song_language.py"
+        "tests/test_production_song_language.py",
+        "tests/test_language_detection_fallbacks.py"
       ]
     }
   ],
@@ -782,7 +783,7 @@
     },
     {
       "prefix": "app/services/speech_alignment.py",
-      "paths": ["tests/test_speech_alignment_parity.py"]
+      "paths": ["tests/test_speech_alignment_parity.py", "tests/test_language_detection_fallbacks.py"]
     },
     {
       "prefix": "app/services/series_ambience.py",
@@ -1587,7 +1588,8 @@
       "paths": [
         "tests/test_lyrics_language.py",
         "tests/test_production_song_language.py",
-        "tests/test_studio_music_preparation.py"
+        "tests/test_studio_music_preparation.py",
+        "tests/test_language_detection_fallbacks.py"
       ]
     },
     {
@@ -1611,7 +1613,8 @@
       "prefix": "app/services/production_publication.py",
       "paths": [
         "tests/test_production_publication.py",
-        "tests/test_production_phase.py"
+        "tests/test_production_phase.py",
+        "tests/test_language_detection_fallbacks.py"
       ]
     },
     {
@@ -1740,7 +1743,7 @@
     },
     {
       "prefix": "app/services/game_tools.py",
-      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_3d.py"]
+      "paths": ["tests/test_game_tools.py", "tests/test_game_gen_3d.py", "tests/test_language_detection_fallbacks.py"]
     },
     {
       "prefix": "app/services/game_prompts.py",
@@ -1828,7 +1831,7 @@
     },
     {
       "prefix": "app/services/game_generators/audio.py",
-      "paths": ["tests/test_game_gen_audio.py", "tests/test_game_library.py"]
+      "paths": ["tests/test_game_gen_audio.py", "tests/test_game_library.py", "tests/test_language_detection_fallbacks.py"]
     },
     {
       "prefix": "app/services/game_generators/three_d.py",

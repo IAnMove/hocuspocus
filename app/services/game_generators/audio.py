@@ -430,38 +430,48 @@ def _character(game: dict, slug: str) -> dict | None:
     return None
 
 
-def _kit_voice(ctx: GenContext, kit_id: str):
+def _kit(ctx: GenContext, kit_id: str) -> dict | None:
+    """The character kit when it has any voice."""
     from services.character_kit_library import read_character_kit_library
-    from services.series_shot_plan import voice_for
 
     library = read_character_kit_library(ctx.workspace_dir(ctx.workspace))
     kit = (library.get("kits") or {}).get(kit_id)
-    if not isinstance(kit, dict):
-        return None
-    return voice_for(kit, "english")
+    return kit if isinstance(kit, dict) and (kit.get("voice") or kit.get("voicesByLanguage")) else None
+
+
+def line_voice(kit: dict, line: str) -> tuple[dict | None, str]:
+    """The kit voice and voice key for one line: the line's own language when its words tell it,
+    else the kit's only (or first) ``voicesByLanguage`` language, else ``english``."""
+    from services.lyrics_language import detect_language
+    from services.series_shot_plan import LANGUAGE_KEYS, voice_for
+
+    voices = kit.get("voicesByLanguage") if isinstance(kit.get("voicesByLanguage"), dict) else {}
+    key = LANGUAGE_KEYS.get(detect_language(line)) or next(iter(voices), "english")
+    voice = voice_for(kit, key) or next(iter(voices.values()), None)
+    return (voice if isinstance(voice, dict) else None), key
 
 
 def _speaker(ctx: GenContext) -> tuple[dict | None, str]:
-    """The character kit's voice, else ``None``, and the ``traits`` for voice design."""
+    """The character kit (when it has a voice), else ``None``, and the ``traits`` for voice design."""
     spec = _spec(ctx.asset)
     character = _character(ctx.game, str(spec.get("character") or ""))
     kit_id = str(((character or {}).get("spec") or {}).get("kitId") or "")
-    voice = _kit_voice(ctx, kit_id) if kit_id else None
-    return (voice if isinstance(voice, dict) else None), str(spec.get("traits") or "")
+    return (_kit(ctx, kit_id) if kit_id else None), str(spec.get("traits") or "")
 
 
-def _speech_extra(voice: dict, line: str, seed: int) -> tuple[str, dict]:
+def _speech_extra(voice: dict, line: str, seed: int, language: str) -> tuple[str, dict]:
     from services.series_native_render import speech_params
 
-    params = speech_params(voice, line, "english", seed)
+    params = speech_params(voice, line, language, seed)
     extra = {key: value for key, value in params.items() if key not in {"prompt", "model_type", "seed", "priority"}}
     return str(params.get("model_type") or voice.get("model") or ""), extra
 
 
 def _speak(ctx: GenContext, step: str, name: str, seed: int, line: str, speaker: tuple[dict | None, str]) -> str:
-    voice, traits = speaker
+    kit, traits = speaker
+    voice, language = line_voice(kit, line) if kit else (None, "")
     if voice:
-        model, extra = _speech_extra(voice, line, seed)
+        model, extra = _speech_extra(voice, line, seed, language)
         return speech(ctx, step, prompt=line, model=model, seed=seed, output_name=name, extra=extra)
     extra = {"alt_prompt": traits} if traits else None
     return speech(ctx, step, prompt=line, model="qwen3_tts_voicedesign", seed=seed, output_name=name, extra=extra)

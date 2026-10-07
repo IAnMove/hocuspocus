@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from services.game_generators.base import GenContext
+from services.lyrics_language import detect_language
 
 
 class GameToolError(Exception):
@@ -326,15 +327,19 @@ def sfx(ctx, step, *, prompt, seconds, seed, output_name=None) -> str:
 
 
 def music(ctx, step, *, prompt, alt_prompt, seconds, seed, bpm=120, output_name=None) -> str:
-    """ACE-Step instrumental. ``prompt`` is the lyrics field, usually ``[Instrumental]``."""
+    """ACE-Step instrumental. ``prompt`` is the lyrics field, usually ``[Instrumental]``.
+
+    Sung lyrics go in their own language (es/en told from the words); English only when nothing tells.
+    """
+    sung = detect_language(prompt)
     params = {
         "prompt": prompt,
         "alt_prompt": alt_prompt,
         "model_type": "ace_step_v1_5_xl_sft_lm_4b",
         "seed": int(seed),
         "duration_seconds": float(seconds),
-        "lyrics_language": "en",
-        "custom_settings": {"bpm": int(bpm), "keyscale": "C major", "timesignature": 4},
+        "lyrics_language": sung or "en",
+        "custom_settings": {"bpm": int(bpm), "keyscale": "C major", "timesignature": 4, **({"language": sung} if sung else {})},
         "priority": 10,
     }
     return _audio(ctx, "generation.music", step, params, output_name or f"{ctx.asset['id']}-{step}")
