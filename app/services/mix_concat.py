@@ -240,21 +240,20 @@ def probe_audio_flags(
     return [probe_has_audio(path, ffmpeg_bin) for path in paths]
 
 
-def _audio_pad_filter(index: int, padded_duration: float, hold: float, has_stream: bool) -> str:
-    """Keep acrossfade legal when some clips are video-only.
+def _audio_pad_filter(index: int, padded_duration: float, has_stream: bool) -> str:
+    """One clip's sound, exactly ``padded_duration`` long (its clip plus the hold), as stereo 48 kHz.
 
-    Missing streams get synthesized stereo silence at 48 kHz so later
-    dialogue is not discarded and ffmpeg does not fail on ``[n:a]``.
+    The cut is what keeps lips in sync: a decoded AAC track runs up to a frame (21 ms) past its container duration,
+    and silence is made in whole 1024-sample frames, so chaining untrimmed audio through ``acrossfade`` drifted about
+    10 ms a join against the pictures, whose dissolves are placed by the probed durations (2.7 s late over a 268-shot
+    episode). Missing streams get stereo silence, so later dialogue is not discarded and ``[n:a]`` never fails.
     """
+    end = f"atrim=end={padded_duration:.6f}"
+    fmt = "aformat=sample_fmts=fltp:channel_layouts=stereo"
     if has_stream:
-        return (
-            f"[{index}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
-            f"apad=pad_dur={hold:.3f}[a{index}]"
-        )
-    return (
-        f"anullsrc=channel_layout=stereo:sample_rate=48000:d={padded_duration:.3f},"
-        f"aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
-    )
+        return (f"[{index}:a]aresample=48000,{fmt},asetpts=PTS-STARTPTS,"
+                f"apad=whole_dur={padded_duration:.6f},{end}[a{index}]")
+    return f"anullsrc=channel_layout=stereo:sample_rate=48000,{end},{fmt}[a{index}]"
 
 
 def build_hold_crossfade_filter(
@@ -281,25 +280,17 @@ def build_hold_crossfade_filter(
     if audio_flags is not None and not any(audio_flags):
         audio_flags = None
     mix_audio = audio_flags is not None
-    use_silence_pads = bool(
-        audio_flags is not None
-        and has_audio is not None
-        and not all(audio_flags)
-    )
     for index in range(count):
         # xfade rejects mismatched timebases (1/30 vs 1/15360 at the same fps,
         # or encoder tbn vs AV_TIME_BASE). Force a common TB before the hold.
+        # The frozen tail runs past the hold and is cut at the clip's exact length, as its sound is, so pictures and
+        # sound advance by the same amount at every join.
         parts.append(
             f"[{index}:v]settb=AVTB,setpts=PTS-STARTPTS,"
-            f"tpad=stop_mode=clone:stop_duration={hold:.3f}[v{index}]"
+            f"tpad=stop_mode=clone:stop_duration={hold + 1:.3f},trim=end={padded[index]:.6f}[v{index}]"
         )
-        if mix_audio:
-            if use_silence_pads and audio_flags is not None:
-                parts.append(
-                    _audio_pad_filter(index, padded[index], hold, audio_flags[index])
-                )
-            else:
-                parts.append(f"[{index}:a]apad=pad_dur={hold:.3f}[a{index}]")
+        if mix_audio and audio_flags is not None:
+            parts.append(_audio_pad_filter(index, padded[index], audio_flags[index]))
 
     video_label = "v0"
     audio_label = "a0" if mix_audio else None
@@ -316,7 +307,7 @@ def build_hold_crossfade_filter(
         if mix_audio:
             next_audio = f"ax{index}"
             parts.append(
-                f"[{audio_label}][a{index}]acrossfade=d={pair_fade:.3f}[{next_audio}]"
+                f"[{audio_label}][a{index}]acrossfade=d={pair_fade:.6f}[{next_audio}]"
             )
             audio_label = next_audio
         elapsed = elapsed + padded[index] - pair_fade
