@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import pytest
 
 from services.game_generators.base import GenContext
-from services.game_tools import GameToolError, file_ref, image
+from services.game_tools import GameToolError, file_ref, image, model3d
 
 
 class Fake:
@@ -104,3 +104,29 @@ def test_file_ref_encodes_the_path_and_the_workspace(tmp_path):
     assert unquote(parts.path[len("/api/v1/file/"):]) == "game/x y/main#1.png"
     assert parse_qs(parts.query) == {"workspace": ["a+b & c"]}
     assert file_ref(context, "/plain.png").startswith("/api/v1/file/plain.png?workspace=")
+
+
+class _Model3d:
+    def __init__(self, submitted, status):
+        self.submitted, self.status, self.calls = submitted, status, []
+
+    def __call__(self, tool, args):
+        self.calls.append((tool, args))
+        return self.submitted if tool == "model3d.generate" else self.status
+
+
+def test_model3d_sends_seed_and_texture_and_reports_the_real_error(tmp_path):
+    failed = {"status": "failed", "message": "Queued Hunyuan3D generation", "error": "Hunyuan3D is not installed"}
+    fake = _Model3d({"job_id": "m1"}, failed)
+    with pytest.raises(GameToolError) as caught:
+        model3d(_ctx(tmp_path, fake), "mesh", image_path="a.png", texture_resolution=512, seed=7)
+    sent = fake.calls[0][1]["input"]
+    assert (sent["texture_resolution"], sent["seed"]) == (512, 7)
+    assert str(caught.value).endswith("Hunyuan3D is not installed")
+
+
+def test_a_refused_submission_says_why(tmp_path):
+    fake = _Model3d({"status": "failed", "error": "workspace not found"}, {})
+    with pytest.raises(GameToolError) as caught:
+        model3d(_ctx(tmp_path, fake), "mesh", image_path="a.png")
+    assert caught.value.code == "rejected" and "workspace not found" in str(caught.value)

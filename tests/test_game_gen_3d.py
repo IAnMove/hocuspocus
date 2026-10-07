@@ -229,6 +229,16 @@ def test_model_candidates_get_their_own_ids_folders_and_jobs(tmp_path):
     assert all(metrics["triangles"] == 12 for _id, _files, metrics in saved)
     assert (workspace / saved[1][1]["concept"]).read_bytes() == b"png2"
     assert generator.estimate(game, asset) == {"image": 2, "3d": 2}
+    assert [args["input"]["seed"] for args in meshes] == [1, 2]
+    assert all("texture_resolution" not in args["input"] for args in meshes)
+
+
+def test_the_texture_budget_reaches_the_mesh_step(tmp_path):
+    workspace = _workspace(tmp_path)
+    game = {"id": "bosque", "style": _style(), "assets": []}
+    fake = _Tools(workspace)
+    Model3dGenerator().run(_ctx(workspace, game, _chest(texture=256), fake))
+    assert fake.named("model3d.generate")[0]["input"]["texture_resolution"] == 256
 
 
 def test_seed_zero_reaches_the_concept_image(tmp_path):

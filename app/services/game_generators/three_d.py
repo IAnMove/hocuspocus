@@ -166,6 +166,12 @@ def _orbit_views(ctx: GenContext, concept: str, root: Path, suffix: str) -> tupl
     return found, []
 
 
+def _mesh_seed(ctx: GenContext, suffix: str) -> int:
+    """Candidate ``-aN`` meshes with ``spec_seed + N - 1``, so candidates from shared art differ."""
+    index = int(suffix[2:]) - 1 if suffix.startswith("-a") and suffix[2:].isdigit() else 0
+    return spec_seed(ctx.asset) + index
+
+
 def _mesh(ctx: GenContext, concept: str, folder: Path, suffix: str) -> tuple[str, list[str]]:
     spec = _spec(ctx.asset)
     warnings: list[str] = []
@@ -175,6 +181,7 @@ def _mesh(ctx: GenContext, concept: str, folder: Path, suffix: str) -> tuple[str
     name = model3d(
         ctx, f"mesh{suffix}", image_path=concept, images=views or None, preset=_preset(spec, ctx.game),
         reduce_face=True, target_face_num=_limit(ctx.asset),
+        texture_resolution=spec.get("texture"), seed=_mesh_seed(ctx, suffix),
     )
     return name, warnings
 
