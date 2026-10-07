@@ -125,3 +125,6 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 ## Recursos para videojuegos
 
 - [GAME_ASSETS_BOARD.md](GAME_ASSETS_BOARD.md) — plan · tablero de la pestaña Recursos para videojuegos (J0–J17).
+- [GAME_ASSETS.md](GAME_ASSETS.md) — contrato · biblioteca, tipos, algoritmos y límites tal como están implementados.
+- [GAME_ASSETS_ACEPTACION_2026-10-07.md](GAME_ASSETS_ACEPTACION_2026-10-07.md) — histórico · la prueba completa por MCP no se ha ejecutado.
+- [../agents/GAME_ASSETS_MCP.md](../agents/GAME_ASSETS_MCP.md) — guía · perfil `game` y el orden de llamadas.

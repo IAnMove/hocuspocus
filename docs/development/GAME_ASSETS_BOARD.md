@@ -21,6 +21,6 @@ Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR co
 | J14 UI revisión | `feat/game-assets-14-ui-review` | #897 | en curso (borrador) | `GameReviewPanel`, `SpriteSheetPlayer`, `AudioLoopPlayer` |
 | J15 UI prueba | `feat/game-assets-15-ui-playtest` | #898 | en curso (borrador) | `GamePlaytest`, `GameExportPanel` |
 | J16 Control de estilo | `feat/game-assets-16-qa` | #899 | en curso (borrador) | `app/services/game_qa.py` |
-| J17 Aceptación | `docs/game-assets-acceptance` | — | pendiente | `docs/development/GAME_ASSETS.md`, informe de aceptación |
+| J17 Aceptación | `docs/game-assets-acceptance` | — | en curso (borrador) | `docs/development/GAME_ASSETS.md`, informe de aceptación |
 
 Orden: J0 y J1 en paralelo; después J2, J3 y J4 en paralelo; luego J5 → J9 → J6 → J7 → J8 → J10 → J11 → J12 → J13 → J14 → J15 → J16 → J17. La UI (J12) puede empezar cuando J1 tenga la API.
