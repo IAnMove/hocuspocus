@@ -2,7 +2,7 @@
 
 Base: `origin/development` (`b7d9962d`, incluye `415e4602`). Un bloque, un PR contra `development`. No se mezcla desde aquí.
 
-El 2026-10-07, J0–J5 y J9 (#862–#868) se agruparon en #887 sobre `development` actual; los PR originales quedan sustituidos. J6–J8, J10 y J11 (#888–#893) y la UI J12–J14 (#895–#897) se agruparon después en #894.
+El 2026-10-07, J0–J5 y J9 (#862–#868) se agruparon en #887 sobre `development` actual; los PR originales quedan sustituidos. J6–J8, J10 y J11 (#888–#893) y la UI J12–J14 (#895–#897) se agruparon después en #894. J15–J17 (#898–#900) se agruparon en #901.
 
 | Bloque | Rama | PR | Estado | Archivos (exclusivos) |
 |---|---|---|---|---|
@@ -21,8 +21,8 @@ El 2026-10-07, J0–J5 y J9 (#862–#868) se agruparon en #887 sobre `developmen
 | J12 UI juego | `feat/game-assets-6-11` | #894 | mezclado | `ui/src/features/game-assets/` (juego, estilo, reparto) |
 | J13 UI lista | `feat/game-assets-6-11` | #894 | mezclado | `GameListPanel`, `GameProducePanel` |
 | J14 UI revisión | `feat/game-assets-6-11` | #894 | mezclado | `GameReviewPanel`, `SpriteSheetPlayer`, `AudioLoopPlayer` |
-| J15 UI prueba | `feat/game-assets-15-ui-playtest` | — | pendiente | `GamePlaytest`, `GameExportPanel` |
-| J16 Control de estilo | `feat/game-assets-16-qa` | — | pendiente | `app/services/game_qa.py` |
-| J17 Aceptación | `docs/game-assets-acceptance` | — | pendiente | `docs/development/GAME_ASSETS.md`, informe de aceptación |
+| J15 UI prueba | `feat/game-assets-15-17` | #901 | en revisión (agrupado) | `GamePlaytest`, `GameExportPanel` |
+| J16 Control de estilo | `feat/game-assets-15-17` | #901 | en revisión (agrupado) | `app/services/game_qa.py` |
+| J17 Aceptación | `feat/game-assets-15-17` | #901 | en revisión (agrupado) | `docs/development/GAME_ASSETS.md`, informe de aceptación |
 
 Orden: J0 y J1 en paralelo; después J2, J3 y J4 en paralelo; luego J5 → J9 → J6 → J7 → J8 → J10 → J11 → J12 → J13 → J14 → J15 → J16 → J17. La UI (J12) puede empezar cuando J1 tenga la API.
