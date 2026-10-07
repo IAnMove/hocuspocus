@@ -14,7 +14,7 @@ clear message instead of halfway through a render::
      "scenes": [{"id": "cold_open", "location": "street", "variant": "day", "purpose": "..."}],
      "shots": [{"scene": "cold_open", "framing": "wide", "camera": "push",
                 "cast": [["kevin", "base", 58], {"characterId": "mark", "poseId": "wave", "x": 30, "enterFrom": "left"},
-                         ["boss", "bust", 80, {"edgeSnap": false}]],
+                         ["boss", "bust", 80, {"edgeSnap": false, "lookRoom": false}]],
                 "lines": [{"who": "kevin", "es": "...", "en": "...", "pauseBefore": 0.6},
                           {"who": "narrator", "es": "...", "voiceRoom": "radio"}],
                 "card": {"kind": "title", "es": ["TITLE", "Episode 3"], "en": [...]},
@@ -35,6 +35,7 @@ from typing import Any, Callable
 
 from services.series_entrances import GAITS
 from services.series_layers import layout_layers
+from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
@@ -268,7 +269,7 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit"):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
         layout.update(layout_layers(shot, "layout2d"))
@@ -354,13 +355,16 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
                  root: str | None = None) -> dict[str, Any]:
     """Check, then create (or rewrite) the episode and its language versions through the series tools.
 
-    ``root`` is the workspace folder: 3D objects' models and clip names are checked in it."""
+    ``root`` is the workspace folder: 3D objects' models and clip names are checked in it, and the poses' images are
+    read there for which way they look. A 2D shot's cast is moved so nobody looks out of the frame
+    (``series_look_room``): ``lookRoom`` lists the moves, ``lookRoomKept`` who still looks out and why."""
     series = read_series()
     number = _episode_number(series.get("episodesById") or {}, episode_id)
     built = EpisodeScript(series, script, number, kits, files, root)
     built.check()
     shots = built.shots()
-    summary = {"number": number, "shots": [shot["id"] for shot in shots], "original": built.original, "languages": built.languages}
+    summary = {"number": number, "shots": [shot["id"] for shot in shots], "original": built.original, "languages": built.languages,
+               **keep_look_room(series, kits, shots, root)}
     if check_only:
         return {"checked": True, **summary}
     tool = _tool_caller(call, workspace, series["id"])

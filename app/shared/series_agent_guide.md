@@ -162,6 +162,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
   takes a whole number of steps, so its feet land on the entrance's start, every step after it and its end, and
   the step is stretched a little to fit. `poseId` must be one of the kit's poses.
+- **look room:** stand a character on the side away from where they look (the bible's `facing` per pose): facing
+  `left` right of centre, facing `right` left of it; two people face each other. `from_script` moves a 2D cast member
+  who looks out of the frame (`lookRoom` in the reply); `"lookRoom": false` on a cast entry or a shot keeps your `x`.
 - **cut poses (edge snap):** a pose whose figure is cut by its image border (a bust cut at the chest and on one
   side) never shows that cut in the frame. The render reads the pose's alpha: a cut is a run of opaque pixels along
   the left or right border at least 8 % of the image height long, or along the bottom at least 15 % of its width (a

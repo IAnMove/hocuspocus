@@ -52,7 +52,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "character": OBJECT, "base_revision": REVISION}, ["workspace", "character", "base_revision"], True,
         "Create or update one Character Kit with the library revision from characters.list/get. Assets must be "
         "durable workspace URLs. voice is the default voice; voicesByLanguage {english, spanish, ...} gives a "
-        "language its own voice. The server drops fields it does not know and lists their paths in ignoredFields.",
+        "language its own voice. A pose (or base) may say which way it looks, facing left | right | front (the flat "
+        "rig detects and stores it; set it when that is wrong): from_script stands it on the other side (look room). "
+        "The server drops fields it does not know and lists their paths in ignoredFields.",
     ),
     "characters.styles": (
         {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
@@ -96,7 +98,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "models are installed "
         "(ckpts/pose) face landmarks find the eyes and mouth on each pose (busts and full figures, faces the mark "
         "search misses or where it takes a nose or a socket shadow for the mouth); per pose landmarks lists what they "
-        "placed. A face with "
+        "placed, and facing {facing left|right|front, confidence, source} which way the pose looks, stored on the pose "
+        "(a facing set by hand since the last rig is kept). A face with "
         "realistic proportions (small eyes in a wide head) is detected and its mouth taken lower down, past eye bags and "
         "spectacles. Closed lids cover each eye's whole white in the face colour under the eyes, or in the shadow's "
         "colour when the eye sits in a flat black shadow. "
@@ -165,8 +168,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
-        "[[character, pose, x, {edgeSnap: false}]] (a pose cut by its image border is otherwise moved so the cut never "
-        "shows; an entrance: enterFrom left/right, enterAt and enterDuration seconds, enterGait walk with enterStep seconds), "
+        "[[character, pose, x, {edgeSnap: false, lookRoom: false}]] (a pose cut by its image border is otherwise moved so "
+        "the cut never shows; an entrance: enterFrom left/right, enterAt and enterDuration seconds, enterGait walk with "
+        "enterStep seconds; look room: a 2D cast member looking out of the frame is moved, one facing left stands right of "
+        "centre and one facing right left of it (x becomes 100 - x), two who look away from each other swap x, three or "
+        "more are only reported; the reply's lookRoom lists each move, lookRoomKept who still looks out and why; lookRoom "
+        "false on the entry or the shot, an entrance or a transform keeps x), "
         "lines {who, es, en, pauseBefore, voiceRoom}, cards, music, video shots (kind video = an imported take, generated "
         "= a MiniMax H3 take: their sfx, music, foley and clipAudio keep | drop, clipVolume, clipFit are laid at the cut), "
         "timed sfx (in and length play only that part of the file) and fx at a line, a "
@@ -232,7 +239,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.guide": (
         {"workspace": WORKSPACE, "series_id": ID}, ["workspace"], False,
         "Start here. How to make an episode with these tools (steps, shot format, conventions, pitfalls) and, with "
-        "series_id, the series bible: characters with their kit, poses and voices, locations with variants and anchors, "
+        "series_id, the series bible: characters with their kit, poses (facing: which way each looks) and voices, "
+        "locations with variants and anchors, "
         "the music and sound files in the workspace, the episodes so far and the id prefix for the next one.",
     ),
     "series.episode.get": (
@@ -416,7 +424,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "clipAudio, clipVolume, clipFit, foley). Lines in other languages update those versions (missingLines lists the "
         "lines a version still lacks). check true only checks and returns the patch. render true renders just that shot "
         "in the series language (series.episode.render_native, approve default true); produce true runs "
-        "series.episode.produce (renders what changed in every language and recuts). Returns the shot as series.shot.get.",
+        "series.episode.produce (renders what changed in every language and recuts). Returns the shot as series.shot.get. "
+        "A cast change that leaves someone looking out of the frame is kept as sent and named in warnings (look room).",
     ),
     "series.shot.voices": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT, "language": LANGUAGE},

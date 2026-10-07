@@ -125,7 +125,7 @@ class _Fake:
         self.head, self.whole_score, self.head_score, self.views = head, whole_score, head_score, []
 
     def whole(self, model, bgr):
-        return _head_points(150.0, 220.0, self.head), np.full(68, self.whole_score)
+        return _head_points(150.0, 220.0, self.head), np.full(68, self.whole_score), np.zeros((18, 3))
 
     def pose(self, model, box, view):
         self.views.append((view.shape, box))
