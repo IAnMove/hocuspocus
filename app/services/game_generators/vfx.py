@@ -1,42 +1,27 @@
 """Visual effects: a MiniMax clip on black, keyed by the brightest channel.
 
-The sheet is one row. ``blend: add`` keeps the color on black and records
-``blend`` on the atlas. A pad around the effect leaves the cell border clear.
+The sheet is one row named after the asset id. ``blend: add`` keeps the color
+on black and records ``blend`` on the atlas. Every frame is cut from one square
+around the effect, so it keeps its proportions, and box-filtered down to
+``sizePx``. A pad around the effect leaves the cell border clear.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from services.game_frames import extract_frames, sample_frames, vfx_alpha
-from services.game_generators.animation import GAME_ANIMATION_DEFAULTS
-from services.game_generators.base import AttemptResult, GenContext, attempt_dir
-from services.game_sheet import pack_rows, uniform_cell, write_gif_preview
-from services.game_tools import GameToolError, file_ref, video_fl2va
+from services.game_frames import sample_frames, vfx_alpha
+from services.game_generators.animation import (
+    candidate_count, candidate_step, clip_frames, clip_size, fold_candidates, render_clip, write_sheet,
+)
+from services.game_generators.base import AttemptResult, GenContext, attempt_dir, candidate_dirs, relative
+from services.game_sheet import pack_rows, uniform_cell
+from services.game_tools import GameToolError, file_ref
 
-
-def _canvas(resolution: str) -> tuple[int, int]:
-    width, height = str(resolution).lower().split("x", 1)
-    return int(width), int(height)
-
-
-def _relative(ctx: GenContext, path: Path) -> str:
-    root = Path(ctx.workspace_dir(ctx.workspace))
-    return str(path.relative_to(root))
-
-
-def _remove_frames(folder: Path) -> None:
-    if not folder.is_dir():
-        return
-    for path in folder.glob("[0-9][0-9][0-9][0-9].png"):
-        path.unlink()
-    try:
-        folder.rmdir()
-    except OSError:
-        return
+# Alpha below this is compression noise on the black backdrop, not the effect.
+_VISIBLE = 8
 
 
 def _spec(asset: dict) -> dict:
@@ -81,112 +66,89 @@ def _prompt(asset: dict) -> str:
 
 
 def _black_ref(ctx: GenContext) -> str:
-    width, height = _canvas(str(GAME_ANIMATION_DEFAULTS["resolution"]))
+    width, height = clip_size()
     folder = attempt_dir(ctx)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "black.png"
     Image.fromarray(np.zeros((height, width, 3), dtype=np.uint8)).save(path)
-    return file_ref(ctx, _relative(ctx, path))
+    return file_ref(ctx, relative(ctx, path))
+
+
+def _open_rgb(path) -> np.ndarray:
+    with Image.open(path) as opened:
+        return np.asarray(opened.convert("RGB"))
 
 
 def _content_box(frames) -> tuple[int, int, int, int] | None:
-    x0 = y0 = None
-    x1 = y1 = 0
+    """Union box of the visible effect over ``frames``; ``None`` when nothing is visible."""
+    visible = np.zeros(np.asarray(frames[0]).shape[:2], dtype=bool)
     for frame in frames:
-        ys, xs = np.nonzero(np.asarray(frame)[..., 3] > 0)
-        if len(xs) == 0:
-            continue
-        left, top, right, bottom = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
-        x0 = left if x0 is None else min(x0, left)
-        y0 = top if y0 is None else min(y0, top)
-        x1, y1 = max(x1, right), max(y1, bottom)
-    if x0 is None or y0 is None:
+        visible |= np.asarray(frame)[..., 3] >= _VISIBLE
+    ys, xs = np.nonzero(visible)
+    if len(xs) == 0:
         return None
-    return (x0, y0, x1, y1)
+    return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
 
 
-def _crop_all(frames, box):
+def _square(box: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    """``box`` grown to a square around its center."""
     x0, y0, x1, y1 = box
-    return [np.asarray(frame)[y0:y1, x0:x1] for frame in frames]
+    side = max(x1 - x0, y1 - y0)
+    left = x0 - (side - (x1 - x0)) // 2
+    top = y0 - (side - (y1 - y0)) // 2
+    return (left, top, left + side, top + side)
 
 
-def _square(frame, size: int) -> np.ndarray:
-    image = Image.fromarray(np.asarray(frame, dtype=np.uint8))
-    return np.asarray(image.resize((size, size), Image.Resampling.NEAREST))
+def _fit(frame, square: tuple[int, int, int, int], size: int) -> np.ndarray:
+    """Cut ``square`` (transparent outside the frame) and box-filter it to ``size``."""
+    cut = Image.fromarray(np.asarray(frame, dtype=np.uint8)).crop(square)
+    return np.asarray(cut.resize((size, size), Image.Resampling.BOX))
 
 
-def _store(ctx: GenContext, sheet, atlas: dict, frames, metrics: dict) -> AttemptResult:
-    folder = attempt_dir(ctx)
-    folder.mkdir(parents=True, exist_ok=True)
-    sheet_path = folder / "sheet.png"
-    atlas_path = folder / "sheet.json"
-    gif_path = folder / "preview.gif"
-    sheet.save(sheet_path)
-    atlas_path.write_text(json.dumps(atlas), encoding="utf-8")
-    write_gif_preview(frames, _fps(ctx.asset), 1, gif_path)
-    root = folder.parents[3]
-    files = {
-        "main": str(sheet_path.relative_to(root)),
-        "sheet": str(sheet_path.relative_to(root)),
-        "atlas": str(atlas_path.relative_to(root)),
-        "preview": str(gif_path.relative_to(root)),
-    }
-    _remove_frames(folder / "frames")
-    return AttemptResult(files=files, metrics=metrics, warnings=[], provenance={"steps": list(ctx.steps)})
+def _candidate(ctx: GenContext, black: str, slot: tuple[str, Path], step: str) -> dict:
+    attempt_id, folder = slot
+    video = render_clip(ctx, step, prompt=_prompt(ctx.asset), start=black, end=black)
+    keyed = vfx_alpha([_open_rgb(path) for path in clip_frames(video, folder)])
+    if not keyed:
+        raise GameToolError("empty_vfx", "the effect clip is empty")
+    chosen = sample_frames(keyed, 0, len(keyed), _count(ctx.asset))
+    box = _content_box(chosen)
+    if box is None:
+        raise GameToolError("empty_vfx", "the effect clip is empty")
+    size = _size(ctx.asset)
+    fitted = [_fit(frame, _square(box), size) for frame in chosen]
+    sheet, atlas = pack_rows([{
+        "name": str(ctx.asset.get("id") or "effect"),
+        "frames": fitted,
+        "fps": _fps(ctx.asset),
+        "loop": True,
+    }], uniform_cell(fitted, 1, 2), anchor="center")
+    atlas["meta"]["blend"] = _blend(ctx.asset)
+    files = write_sheet(ctx, folder, sheet, atlas, fitted, _fps(ctx.asset))
+    metrics = {"frames": len(fitted), "blend": _blend(ctx.asset), "sizePx": size}
+    return {"id": attempt_id, "files": files, "metrics": metrics, "warnings": []}
 
 
 def _run(ctx: GenContext) -> AttemptResult:
+    slots = candidate_dirs(ctx, candidate_count(ctx.asset))
     black = _black_ref(ctx)
-    video = video_fl2va(
-        ctx, "vfx", prompt=_prompt(ctx.asset), start=black, end=black,
-        frames=int(GAME_ANIMATION_DEFAULTS["frames"]),
-        model=str(GAME_ANIMATION_DEFAULTS["model"]),
-        resolution=str(GAME_ANIMATION_DEFAULTS["resolution"]),
-        steps=int(GAME_ANIMATION_DEFAULTS["steps"]),
-    )
-    black_path = attempt_dir(ctx) / "black.png"
-    if black_path.is_file():
-        black_path.unlink()
-    extracted = extract_frames(video, 0, 60, attempt_dir(ctx) / "frames")
-    if not extracted:
-        raise GameToolError("empty_clip", "the effect clip has no frames")
-    rgb = []
-    for path in extracted:
-        with Image.open(path) as opened:
-            rgb.append(np.asarray(opened.convert("RGB")))
-    keyed = vfx_alpha(rgb)
-    if not keyed:
-        raise GameToolError("empty_vfx", "the effect clip is empty")
-    box = _content_box(keyed)
-    cropped = _crop_all(keyed, box) if box else keyed
-    size = _size(ctx.asset)
-    fitted = [_square(frame, size) for frame in cropped]
-    chosen = sample_frames(fitted, 0, len(fitted), _count(ctx.asset))
-    if not chosen:
-        raise GameToolError("empty_vfx", "no effect frames were sampled")
-    cell = uniform_cell(chosen, 1, 2)
-    sheet, atlas = pack_rows([{
-        "name": _effect(ctx.asset),
-        "frames": chosen,
-        "fps": _fps(ctx.asset),
-        "loop": True,
-    }], cell, anchor="center")
-    atlas["meta"]["image"] = "sheet.png"
-    atlas["meta"]["blend"] = _blend(ctx.asset)
-    return _store(ctx, sheet, atlas, chosen, {
-        "frames": len(chosen),
-        "blend": _blend(ctx.asset),
-        "sizePx": size,
-    })
+    try:
+        written = [
+            _candidate(ctx, black, slot, candidate_step("vfx", index, len(slots)))
+            for index, slot in enumerate(slots, start=1)
+        ]
+    finally:
+        (attempt_dir(ctx) / "black.png").unlink(missing_ok=True)
+    return fold_candidates(ctx, written)
 
 
 class VfxGenerator:
-    """One effect clip on black, packed as an additive or alpha sheet."""
+    """One effect clip on black per candidate, packed as an additive or alpha sheet."""
 
     kind = "vfx"
 
-    def estimate(self, _game: dict, _asset: dict) -> dict[str, int]:
-        return {"h3": 1}
+    def estimate(self, _game: dict, asset: dict) -> dict[str, int]:
+        return {"h3": candidate_count(asset)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
         return _run(ctx)
