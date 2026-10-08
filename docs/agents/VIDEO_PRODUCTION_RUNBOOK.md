@@ -58,6 +58,13 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 `production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check. Each window includes `hold_after_clip`: how many seconds that H3 shot would sit still after its clip (the longest H3 bucket is 345 frames, 14.375 s), or 0 when the shot is not H3 or a moving fill (`h3`, `clip`, `scene3d`, `screen`) covers the tail. A hand-written `title-card` on an `h3` or `still` shot is `title_card_on_image` and still validates; the planner rewrites that template to `lower-third-date` on those kinds. The same check compiles every scene document in-process, so a style the editor would reject (`scene_invalid`, for example a text field out of range) shows up here. Before the scenes stage the run measures the busiest caption against its start frame and stops with `caption_unreadable` (the scene and the ratio) when contrast is under 3:1. An opaque caption box is measured against the box; text with no box is measured against the picture.
 
+**One at a time.** Productions on one instance take the GPU in the order they
+were sent: a `production.run` sent while another production runs answers
+`running: true` and waits with status `queued` (`production.status` shows it;
+a cancel still stops it). Plan and dry-run every piece of a batch first, then
+send them all: the GPU works through them without gaps, and no two pieces
+interleave their jobs (that made each job reload a model and one piece take 7 h).
+
 **Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
 `quality_gate` (and `problems`) when one still picture fills three or more shots
 that are not marked deliberate (`allow: ["still"]`), or when still pictures take

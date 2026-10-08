@@ -504,7 +504,8 @@ class Production:
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         from services.production_stage_run import execute_run
-        execute_run(self, spec, retake, through)
+        from services.production_turn import run_in_turn
+        run_in_turn(self, lambda: execute_run(self, spec, retake, through))
 
 
 
