@@ -540,3 +540,89 @@ def test_without_the_phoneme_engine_lines_are_drawn_by_rhubarb_and_say_so(tmp_pa
     line = next(iter(public_job(done)["items"][0]["lines"].values()))
     assert line["driver"] == "rhubarb" and line["engine"] == "rhubarb" and line["fallbackReason"] == "phoneme_not_installed"
     assert line["cueCount"] == 1 and compiled[0]["shot"]["lines"][0]["cues"]
+
+
+def _silent(seconds):
+    return {"id": "s1", "order": 0, "productionMethod": "animation_2d", "durationSeconds": seconds,
+            "dialogueBeats": [], "layout2d": {}}
+
+
+def _approve(series, shot, digest, version=None):
+    metadata = {"renderInputs": digest}
+    if version is not None:
+        metadata["renderInputsVersion"] = version
+    series["assets"] = {"take": {"metadata": metadata}}
+    shot["attempts"] = [{"id": "a", "outputAssetIds": ["take"]}]
+    shot["approvedAttemptId"] = "a"
+
+
+def test_a_silent_shot_stays_fresh_after_the_render_writes_its_length_back():
+    """The planner turns 4.2 s into one extra frame (4.208 s). Both sit on the same 0.05 s step, so the take is current."""
+    from services.series_shot_extras import timing_args
+    from services.series_shot_plan import plan_timing
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series = {"spokenLanguage": "Español de España", "characters": [], "locations": [], "assets": {}}
+    shot = _silent(4.2)
+    _, planned = plan_timing([], **timing_args({}), at_least=4.2)
+    written = round(planned, 3)
+    assert written != 4.2
+    asked = render_inputs(series, shot, {})
+    shot["durationSeconds"] = written
+    assert render_inputs(series, shot, {}) == asked
+    assert render_inputs(series, _silent(4.2), {}, version=1) == asked
+    _approve(series, shot, asked, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    legacy = render_inputs(series, shot, {}, version=1)
+    assert legacy != asked
+    _approve(series, shot, legacy)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["durationSeconds"] = 5.0
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+def test_a_legacy_silent_take_is_promoted_instead_of_rendered_again():
+    from services.series_review_gate import shot_pass
+    from services.series_shot_extras import timing_args
+    from services.series_shot_plan import plan_timing
+    from services.series_take_inputs import accepted_inputs, render_inputs
+    series = {"spokenLanguage": "es", "characters": [], "locations": [], "assets": {}}
+    _, planned = plan_timing([], **timing_args({}), at_least=4.2)
+    shot = _silent(round(planned, 3))
+    shot["attempts"] = [{"id": "a", "status": "completed", "reviewStage": "preview", "outputAssetIds": ["take"]}]
+    legacy = render_inputs(series, shot, {}, version=1)
+    assert legacy != render_inputs(series, shot, {})
+    series["assets"] = {"take": {"metadata": {"renderInputs": legacy}}}
+    episode = {"review": {"mode": "preview", "shots": {"s1": {
+        "plan": "approved", "preview": "approved", "previewAttemptId": "a", "notes": []}}}}
+    assert shot_pass(series, episode, shot, lambda item: accepted_inputs(series, item, {}), explicit=False) == ("promote", "a")
+    shot["attempts"].insert(0, {"id": "old", "status": "completed", "reviewStage": "preview", "outputAssetIds": ["old"]})
+    series["assets"]["old"] = {"metadata": {"renderInputs": render_inputs(series, shot, {})}}
+    shot["approvedAttemptId"] = "a"
+    assert shot_pass(series, episode, shot, lambda item: accepted_inputs(series, item, {}), explicit=False) == ("skip", None)
+    shot["durationSeconds"] = 5.0
+    assert shot_pass(series, episode, shot, lambda item: accepted_inputs(series, item, {}), explicit=False) == ("final", None)
+
+
+def test_a_spoken_shot_leaves_its_length_out_of_the_fingerprint():
+    from services.series_take_inputs import render_inputs
+    series = {"spokenLanguage": "es", "characters": [{"id": "kevin"}], "locations": []}
+    shot = {"id": "s1", "productionMethod": "animation_2d", "durationSeconds": 4.2,
+            "dialogueBeats": [{"id": "b", "characterId": "kevin", "text": "Hola."}],
+            "visibleCharacterIds": ["kevin"], "layout2d": {}}
+    assert render_inputs(series, shot, {}) == render_inputs(series, {**shot, "durationSeconds": 9}, {})
+    assert render_inputs(series, shot, {}, version=1) == render_inputs(series, shot, {})
+
+
+def test_a_series_3d_export_uses_the_episode_frame():
+    from services.series_shot3d import series_frame_document
+    from services.series_take_sound import episode_frame, needs_conform
+    source = {"width": 1280, "height": 720, "fps": 30, "name": "keep"}
+    portrait = series_frame_document({"provider": {"videoSettings": {"orientation": "portrait"}}}, source)
+    assert source == {"width": 1280, "height": 720, "fps": 30, "name": "keep"}
+    assert (portrait["width"], portrait["height"], portrait["fps"], portrait["name"]) == (1080, 1920, 24, "keep")
+    landscape = series_frame_document({}, source)
+    assert (landscape["width"], landscape["height"], landscape["fps"]) == (1920, 1080, 24)
+    frame = episode_frame({})
+    clip = {"width": landscape["width"], "height": landscape["height"], "fps": landscape["fps"], "sar": 1}
+    assert not needs_conform(clip, frame)
+    assert needs_conform({"width": 1920, "height": 1080, "fps": 30, "sar": 1}, frame)

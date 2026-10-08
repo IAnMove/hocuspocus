@@ -192,7 +192,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
         "warnings lists speaker_not_on_screen and location_differs_from_scene and does not block, even with check: true. "
         "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice. "
-        "A kit with lines and no voice for the episode language fails the check.",
+        "A kit with lines and no voice for the episode language fails the check. "
+        "estimate is the planned length in seconds: each speaker's approved-take pace, else 2.6 Spanish or 2.8 English words per second.",
     ),
     "series.episode.script.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "revision": {"type": "integer", "minimum": 1}},
@@ -252,7 +253,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
         "Read one episode compactly: script, shots with their layout2d and lines, the last takes (id, language, seconds, "
-        "editable scene file), its language versions and score. Use it instead of series.get to copy an episode's style.",
+        "editable scene file), its language versions, score and estimate (planned seconds). Use it instead of series.get to copy an episode's style.",
     ),
     "series.episode.review.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
@@ -660,7 +661,9 @@ def _guide(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 
 def _episode_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/compact"
-    return {"episode": request("GET", path, query={"workspace": data["workspace"]})}
+    episode = request("GET", path, query={"workspace": data["workspace"]})
+    estimate = episode.get("estimate") if isinstance(episode, dict) else None
+    return {"episode": episode, **({"estimate": estimate} if estimate else {})}
 
 
 def _review_path(data: dict[str, Any]) -> str:

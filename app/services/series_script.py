@@ -39,6 +39,7 @@ from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
+from services.series_duration_estimate import estimate_episode
 from services.series_script_warnings import finish_check
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
 from services.series_voice_rooms import PRESETS
@@ -367,7 +368,8 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     built.check()
     shots = built.shots()
     summary = {"number": number, "shots": [shot["id"] for shot in shots], "original": built.original, "languages": built.languages,
-               "warnings": built.warnings, **keep_look_room(series, kits, shots, root)}
+               "warnings": built.warnings, "estimate": estimate_episode(series, shots),
+               **keep_look_room(series, kits, shots, root)}
     if check_only:
         return {"checked": True, **summary}
     tool = _tool_caller(call, workspace, series["id"])

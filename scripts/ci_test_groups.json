@@ -1874,6 +1874,18 @@
       "paths": ["tests/test_series_script_produce.py"]
     },
     {
+      "prefix": "app/services/series_duration_estimate.py",
+      "paths": ["tests/test_series_script_produce.py"]
+    },
+    {
+      "prefix": "app/services/series_take_inputs.py",
+      "paths": ["tests/test_series_native_render.py", "tests/test_series_voice_rooms.py"]
+    },
+    {
+      "prefix": "app/services/series_native_render.py",
+      "paths": ["tests/test_series_native_render.py"]
+    },
+    {
       "prefix": "app/routers/series_produce.py",
       "paths": ["tests/test_mcp_error_messages.py", "tests/test_series_script_produce.py"]
     },
