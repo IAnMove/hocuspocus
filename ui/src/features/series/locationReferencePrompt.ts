@@ -1,8 +1,8 @@
 import { generateLlmText } from '../../api/llm'
 import type { SeriesLocation, SeriesProject } from './types'
 
-export const EMPTY_LOCATION_RULE = 'Empty, unoccupied environment. Zero people or characters; no faces, bodies, silhouettes, crowds, animals or figures in reflections or on screens. No text or lettering.'
-export const EMPTY_LOCATION_NEGATIVE = 'people, characters, humans, faces, bodies, silhouettes, crowds, animals, portraits, reflections of people, figures on screens, text, labels, contact sheet'
+export const EMPTY_LOCATION_RULE = 'Empty, unoccupied environment. empty, no people. Zero people or characters; no faces, bodies, silhouettes, crowds, animals or figures in reflections or on screens. No text or lettering.'
+export const EMPTY_LOCATION_NEGATIVE = 'people, characters, humans, faces, bodies, silhouettes, crowds, animals, portraits, reflections of people, figures on screens, text, labels, contact sheet, person, people, figure, silhouette, crowd'
 
 const prompts = new Map<string, Promise<string>>()
 function remember(key: string, prompt: Promise<string>) {

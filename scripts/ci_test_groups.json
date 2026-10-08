@@ -1874,6 +1874,14 @@
       "paths": ["tests/test_series_script_produce.py"]
     },
     {
+      "prefix": "app/services/series_plate_checks.py",
+      "paths": [
+        "tests/test_series_commands.py",
+        "tests/test_series_shot_extras.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
       "prefix": "app/services/series_duration_estimate.py",
       "paths": ["tests/test_series_script_produce.py"]
     },

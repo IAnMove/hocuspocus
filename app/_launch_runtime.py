@@ -28635,6 +28635,7 @@ def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: s
 def import_series_asset_endpoint(series_id: str, body: dict):
     """Copy a Maestro upload into the authoritative workspace asset tree."""
     import shutil
+    from services.series_plate_checks import with_plate_warning
     from services.series_production import attach_series_import, existing_generated_reference
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -28705,7 +28706,9 @@ def import_series_asset_endpoint(series_id: str, body: dict):
         series["updatedAt"] = now
         library["seriesById"][series_id] = series
         stored = _write_series_workspace(workspace, library)
-    return {"asset": stored["seriesById"][series_id]["assets"][asset_id], "series": stored["seriesById"][series_id]}
+    stored_series = stored["seriesById"][series_id]
+    return with_plate_warning(
+        {"asset": stored_series["assets"][asset_id], "series": stored_series}, source, body, stored_series)
 
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")

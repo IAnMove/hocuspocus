@@ -507,3 +507,27 @@ def test_the_estimate_uses_an_approved_pace_and_counts_a_card():
     english = estimate_episode({"spokenLanguage": "English"}, [
         {"id": "s", "dialogueBeats": [{"characterId": "gary", "text": "one two three four five six seven"}]}])
     assert english["method"] == "default_rate" and english["perShot"][0]["seconds"] == 3.292 and english["seconds"] == 3.3
+
+
+def test_a_template_backdrop_from_another_location_warns(tmp_path):
+    import json
+    (tmp_path / "world3d-user-templates.json").write_text(json.dumps({"version": 1, "templates": [{"id": "user-street", "document": {"slots": [
+        {"id": "background", "slot": "background", "surface": "environment", "sourceUrl": "/api/v1/file/assets/uv/madrid.png?workspace=cast",
+         "sourceRef": {"assetId": "asset_madrid"}}]}}]}), encoding="utf-8")
+    tools = Series()
+    tools.series["locations"].extend([{"id": "plaza", "variants": []}, {"id": "madrid", "variants": []}])
+    tools.series["assets"] = {"asset_madrid": {"id": "asset_madrid", "ownerType": "location", "ownerId": "madrid",
+                                               "kind": "image", "uri": "assets/uv/madrid.png"}}
+    script = {"scenes": [{"id": "yard", "location": "plaza"}], "shots": [
+        {"scene": "yard", "kind": "3d", "duration": 4, "scene3d": {"template": "user-street", "cast": []}}]}
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True, root=str(tmp_path))
+    groups = [item for item in checked["warnings"] if item["code"] == "template_backdrop_other_location"]
+    assert groups == [{"code": "template_backdrop_other_location", "subject": "madrid", "shots": ["e2s00"],
+                       "message": "madrid: the template backdrop is this location's image (shots e2s00)"}]
+    assert tools.calls == []
+    home = {"scenes": [{"id": "yard", "location": "madrid"}], "shots": script["shots"]}
+    same = apply_script(tools, tools.read, KITS, FILES, "cast", home, check_only=True, root=str(tmp_path))
+    assert not any(item["code"] == "template_backdrop_other_location" for item in same["warnings"])
+    chosen = {"scenes": script["scenes"], "shots": [{**script["shots"][0], "scene3d": {**script["shots"][0]["scene3d"], "backdrop": "location"}}]}
+    picked = apply_script(tools, tools.read, KITS, FILES, "cast", chosen, check_only=True, root=str(tmp_path))
+    assert not any(item["code"] == "template_backdrop_other_location" for item in picked["warnings"])

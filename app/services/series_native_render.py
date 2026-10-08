@@ -48,6 +48,7 @@ from services.series_review_gate import actionable_shots, assembly_blockers, ren
 from services.series_scene_inputs import audio_content
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
+from services.series_plate_checks import location_plate_url
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_sound_cuts import materialize_cuts
 from services.series_video_foley import VIDEO_METHODS, pending_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
@@ -747,7 +748,8 @@ class SeriesNativeRender:
         self._balance(self.deps.workspace_dir(workspace), sound)
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
                                           tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace),
-                                          screen_fx=fx_cues(layout, timing, duration))
+                                          screen_fx=fx_cues(layout, timing, duration),
+                                          plate=location_plate_url(series, shot, workspace))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['renderDigest']}-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         # A staged review's preview is the cheap faithful look: draft quality, whatever the shot's own.

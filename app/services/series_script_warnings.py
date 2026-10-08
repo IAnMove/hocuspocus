@@ -3,8 +3,9 @@
 ``from_script`` returns ``warnings`` in the same grouped shape as a script error:
 ``code``, ``subject``, ``shots`` and ``message``. A speaker who is not in the
 shot is ``speaker_not_on_screen``. A place used by several scenes, or a shot
-location that is not its scene's, is ``location_differs_from_scene``. Neither
-one stops ``check``. A line in the episode language whose kit has no voice
+location that is not its scene's, is ``location_differs_from_scene``. A 3D
+template whose backdrop is another location's image is
+``template_backdrop_other_location``. None of them stops ``check``. A line in the episode language whose kit has no voice
 (``voicesByLanguage`` or ``kit.voice``) is an error, because the render would
 fail. ``castIndex`` must point at the shot's cast.
 """
@@ -31,7 +32,8 @@ def finish_check(episode: Any) -> None:
 
 def script_warnings(episode: Any) -> list[dict[str, Any]]:
     """Grouped warnings for one checked script. Order is first appearance."""
-    return [*_speaker_warnings(episode), *_location_warnings(episode)]
+    from services.series_plate_checks import backdrop_warnings
+    return [*_speaker_warnings(episode), *_location_warnings(episode), *backdrop_warnings(episode)]
 
 
 def _cast_ids(shot: dict[str, Any]) -> list[str]:
