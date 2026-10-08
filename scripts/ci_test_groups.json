@@ -1862,6 +1862,22 @@
       "paths": ["tests/test_series_script_produce.py", "tests/test_series_look_room.py"]
     },
     {
+      "prefix": "app/services/series_produce.py",
+      "paths": ["tests/test_series_script_produce.py"]
+    },
+    {
+      "prefix": "app/routers/series_produce.py",
+      "paths": ["tests/test_series_script_produce.py"]
+    },
+    {
+      "prefix": "app/services/series_library.py",
+      "paths": ["tests/test_series_library.py", "tests/test_series_episode_replace.py", "tests/test_series_review.py", "tests/test_series_review_gate.py"]
+    },
+    {
+      "prefix": "app/routers/series_episode.py",
+      "paths": ["tests/test_series_library.py"]
+    },
+    {
       "prefix": "app/services/series_shot_plan.py",
       "paths": ["tests/test_series_shot_plan.py", "tests/test_series_look_room.py"]
     },

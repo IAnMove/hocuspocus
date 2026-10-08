@@ -75,7 +75,7 @@ def test_appending_an_effect_writes_only_the_effects_and_resets_the_approvals():
     assert {key: value for key, value in shot["layout2d"].items() if key != "fx"} == \
         {key: value for key, value in before["layout2d"].items() if key != "fx"}
     assert shot["dialogueBeats"] == before["dialogueBeats"] and shot["attempts"][0]["id"] == "att-1", "the take is kept"
-    assert "approvedAttemptId" not in shot and info["approvalReset"] is True
+    assert "approvedAttemptId" not in shot and info["approvalReset"] is True and info["reset"] == ["take"]
     assert "e2s01" not in episode["languageVersions"]["english"]["approvedAttemptIds"]
     assert episode["languageVersions"]["english"]["approvedAttemptIds"]["e2s03"] == "att-v", "other shots keep theirs"
 
@@ -108,12 +108,25 @@ def test_a_video_take_keeps_its_approval_when_only_its_cut_sound_changes():
     series = library()
     _episode, shot, info, changed = edit(series, 4, changes={"clipAudio": "drop", "foley": {"prompt": "waves", "volume": 0.4}},
                                          append={"sfx": [{"file": "sfx-boom.wav", "at": 2.0, "in": 0.5, "length": 0.4}]})
-    assert sorted(changed) == ["clipAudio", "foley", "sfx"] and info["approvalReset"] is False
+    assert sorted(changed) == ["clipAudio", "foley", "sfx"] and info["approvalReset"] is False and info["reset"] == []
     assert shot["approvedAttemptId"] == "att-v" and shot["layout2d"]["clipAudio"] == "drop"
     assert shot["layout2d"]["sfx"][1] == {"file": "sfx-boom.wav", "at": 2.0, "in": 0.5, "length": 0.4}
     assert shot["foley"] == {"prompt": "waves", "volume": 0.4} and shot["productionMethod"] == "imported_video"
     _episode, moved, info, _ = edit(series, 4, changes={"kind": None})
     assert moved["productionMethod"] == "animation_2d" and info["approvalReset"] is True
+
+
+def test_an_sfx_volume_change_keeps_the_take():
+    series = library()
+    _episode, shot, info, changed = edit(series, 2, changes={"sfx": [{"file": "sfx-pen.wav", "line": 1, "anchor": "end", "volume": 0.3}]})
+    assert changed == ["sfx"] and info["approvalReset"] is False and info["reset"] == []
+    assert shot["approvedAttemptId"] == "att-1" and shot["layout2d"]["sfx"][0]["volume"] == 0.3
+
+
+def test_foley_on_a_2d_shot_still_clears_the_take():
+    series = library()
+    _episode, shot, info, changed = edit(series, 2, changes={"foley": {"prompt": "wind", "volume": 0.4}})
+    assert changed == ["foley"] and info["reset"] == ["take"] and "approvedAttemptId" not in shot
 
 
 class Library:
@@ -154,7 +167,7 @@ def test_the_route_edits_the_fifth_shot_and_renders_just_that_shot(tmp_path):
     assert store.series["episodesById"]["ep2"]["shots"][1]["layout2d"]["camera"] == "push", "check writes nothing"
     reply = asyncio.run(post("uv", "ep2", ShotEdit(workspace="cast", shot=2, append={"fx": [{"kind": "confetti", "at": 0.5}]},
                                                    render=True)))
-    assert reply["shotId"] == "e2s01" and reply["number"] == 2 and reply["approvalReset"] is True
+    assert reply["shotId"] == "e2s01" and reply["number"] == 2 and reply["approvalReset"] is True and reply["reset"] == ["take"]
     assert reply["shot"]["script"]["fx"][-1] == {"kind": "confetti", "at": 0.5, "duration": 1.0}
     assert store.calls == [("series.episode.render_native", {"workspace": "cast", "series_id": "uv", "episode_id": "ep2",
                                                              "shot_ids": ["e2s01"], "approve": True})]

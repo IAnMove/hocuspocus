@@ -28556,7 +28556,7 @@ def import_story_as_series_endpoint(body: dict):
 
 @api.post("/api/v1/series/{series_id}/episodes")
 def create_series_episode_endpoint(series_id: str, body: dict):
-    from services.series_library import create_series_episode
+    from routers.series_episode import create_checked_episode
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -28564,10 +28564,7 @@ def create_series_episode_endpoint(series_id: str, body: dict):
         series = copy.deepcopy(_series_project_or_404(library, series_id))
         if series.get("canon", {}).get("approval") != "approved":
             raise HTTPException(status_code=400, detail="Approve the reviewed Series canon before creating an episode")
-        episode = create_series_episode(
-            series, str(body.get("seasonId") or "") or None,
-            **(body.get("episode") if isinstance(body.get("episode"), dict) else {}),
-        )
+        episode = create_checked_episode(series, body)
         series["episodesById"][episode["id"]] = episode
         season = next(item for item in series["seasons"] if item["id"] == episode["seasonId"])
         season["episodeOrder"].append(episode["id"])

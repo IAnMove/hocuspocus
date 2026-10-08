@@ -168,7 +168,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
     ),
     "series.episode.from_script": (
-        {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
+        {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"},
+         "number": {"type": "integer", "minimum": 1}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
         "[[character, pose, x, {edgeSnap: false, lookRoom: false}]] (a pose cut by its image border is otherwise moved so "
@@ -189,7 +190,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id; its review "
         "mode and notes too, and a shot whose content changed goes back to pending review). The script written is kept "
-        "as the episode's next script revision (scriptRevision; read it with series.episode.script.get).",
+        "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
+        "Optional number (integer >= 1), only when there is no episode_id: a taken number is 409 episode_number_taken "
+        "with the holder's id.",
     ),
     "series.episode.script.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "revision": {"type": "integer", "minimum": 1}},
@@ -327,7 +330,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.create": (
         {"workspace": WORKSPACE, "series_id": ID, "season_id": {"type": "string", "maxLength": 160}, "episode": OBJECT},
         ["workspace", "series_id"], True,
-        "Create an episode (chapter) in an approved series. It freezes the approved canon and references.",
+        "Create an episode (chapter) in an approved series. It freezes the approved canon and references. "
+        "Optional episode.number (integer >= 1) is honored; a taken number is 409 episode_number_taken with the holder's id.",
     ),
     "series.episode.update": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "episode": OBJECT, "base_revision": REVISION,
@@ -350,7 +354,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "To edit one shot use series.shot.update. scene3d.objects[] also take clips (a clip sequence: [{clip name, start, duration?, "
         "fade?, speed?, offset?, loop?}]), hold {carrier (a 3D model object that does not speak in the shot), hand left|right, "
         "offset? [x,y,z] m, rotation? [x,y,z] radians, Euler XYZ in the hand bone's frame} and appearance {start, "
-        "duration?, color?}; a model is 1.7 m x scale tall.",
+        "duration?, color?}; a model is 1.7 m x scale tall. Optional episode.number (integer >= 1) renumbers it; "
+        "a taken number is 409 episode_number_taken with the holder's id.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},
@@ -428,7 +433,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "lines a version still lacks). check true only checks and returns the patch. render true renders just that shot "
         "in the series language (series.episode.render_native, approve default true); produce true runs "
         "series.episode.produce (renders what changed in every language and recuts). Returns the shot as series.shot.get. "
-        "A cast change that leaves someone looking out of the frame is kept as sent and named in warnings (look room).",
+        "A cast change that leaves someone looking out of the frame is kept as sent and named in warnings (look room). "
+        "approvalReset is true when plan, preview or take approval was cleared; reset lists those, in that order. "
+        "A note is not this edit and never clears approval. Changing only an sfx volume does not; changing its file, "
+        "its timing or adding a cue does.",
     ),
     "series.shot.voices": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT, "language": LANGUAGE},
@@ -603,7 +611,8 @@ def _native_job(action: str) -> Callable[..., dict[str, Any]]:
 
 def _from_script(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body = {"workspace": data["workspace"], "script": data["script"], "check": bool(data.get("check")),
-            **({"episodeId": data["episode_id"]} if data.get("episode_id") else {})}
+            **({"episodeId": data["episode_id"]} if data.get("episode_id") else {}),
+            **({"number": data["number"]} if data.get("number") is not None else {})}
     return request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/from-script", body=body)
 
 

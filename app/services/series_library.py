@@ -56,6 +56,57 @@ class SeriesConflictError(ValueError):
     """Raised when an optimistic revision no longer matches stored state."""
 
 
+class EpisodeNumberTaken(ValueError):
+    """The series already has an episode with this number."""
+
+    def __init__(self, number: int, holder_id: str) -> None:
+        self.number = number
+        self.holder_id = holder_id
+        self.code = "episode_number_taken"
+        super().__init__(f"Episode number {number} is already used by {holder_id}")
+
+
+def require_episode_number(value: Any) -> int:
+    """An explicit episode number: a real integer of 1 or more (a bool is not an integer)."""
+    if type(value) is not int or value < 1:
+        raise ValueError("Episode number must be an integer of 1 or more")
+    return value
+
+
+def episode_number_holder(episodes: Any, number: int, except_id: str | None = None) -> str | None:
+    """Id of the episode that already uses ``number``, anywhere in the series, except ``except_id``."""
+    if not isinstance(episodes, dict):
+        return None
+    for episode_id, episode in episodes.items():
+        if str(episode_id) == except_id or not isinstance(episode, dict):
+            continue
+        if episode.get("number") == number:
+            return str(episode.get("id") or episode_id)
+    return None
+
+
+def assign_episode_number(episodes: Any, requested: int | None) -> int:
+    """The next number, or ``requested`` when that integer is free across the series."""
+    if requested is None:
+        values = episodes.values() if isinstance(episodes, dict) else []
+        return max([item.get("number") or 0 for item in values] + [0]) + 1
+    number = require_episode_number(requested)
+    holder = episode_number_holder(episodes, number)
+    if holder:
+        raise EpisodeNumberTaken(number, holder)
+    return number
+
+
+def _guard_episode_number(episodes: Any, episode_id: str | None, patch: dict) -> None:
+    """Refuse an explicit number another episode already holds. Omitting it leaves the caller to assign one."""
+    if "number" not in patch:
+        return
+    number = require_episode_number(patch["number"])
+    holder = episode_number_holder(episodes, number, except_id=episode_id)
+    if holder:
+        raise EpisodeNumberTaken(number, holder)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -1102,6 +1153,7 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
         raise ValueError("Create a season before adding an episode")
     season = next((item for item in seasons if item.get("id") == season_id), seasons[0])
     episodes = series.get("episodesById") if isinstance(series.get("episodesById"), dict) else {}
+    _guard_episode_number(episodes, None, overrides)
     season_episodes = [
         item for item in episodes.values()
         if isinstance(item, dict) and item.get("seasonId") == season.get("id")
@@ -1325,11 +1377,24 @@ CUT_APPLIED_LAYOUT = frozenset({"sfx", "music", "clipAudio", "clipVolume", "clip
 VIDEO_TAKE_METHODS = frozenset({"generated_video", "imported_video"})
 
 
+def _without_sfx_volume(layout: Any) -> Any:
+    """An sfx volume is a mix level, not a change of picture, for every production method."""
+    if not isinstance(layout, dict) or not isinstance(layout.get("sfx"), list):
+        return layout
+    cues = []
+    for cue in layout["sfx"]:
+        if isinstance(cue, dict) and "volume" in cue:
+            cues.append({key: value for key, value in cue.items() if key != "volume"})
+        else:
+            cues.append(cue)
+    return {**layout, "sfx": cues}
+
+
 def _take_layout(shot: dict) -> Any:
     layout = shot.get("layout2d")
-    if shot.get("productionMethod") not in VIDEO_TAKE_METHODS or not isinstance(layout, dict):
-        return layout
-    return {key: value for key, value in layout.items() if key not in CUT_APPLIED_LAYOUT} or None
+    if shot.get("productionMethod") in VIDEO_TAKE_METHODS and isinstance(layout, dict):
+        layout = {key: value for key, value in layout.items() if key not in CUT_APPLIED_LAYOUT} or None
+    return _without_sfx_volume(layout)
 
 
 def same_shot_content(stored: dict, incoming: dict) -> bool:
@@ -1450,6 +1515,7 @@ def update_series_episode(
     current = episodes.get(episode_id) if isinstance(episodes, dict) else None
     if not isinstance(current, dict):
         raise ValueError("Series episode not found")
+    _guard_episode_number(episodes, episode_id, patch)
     current_revision = _integer(updated.get("revision"), 1, 1)
     if base_series_revision is not None:
         try:

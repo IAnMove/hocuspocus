@@ -218,7 +218,8 @@ def test_producing_again_renders_only_out_of_date_shots_and_rerender_renders_the
     assert done["status"] == "completed", done
     renders = [data for tool, data in tools.calls if tool == "series.episode.render_native"]
     assert renders == [{"workspace": "cast", "series_id": "uv", "episode_id": "ep2", "approve": True, "shot_ids": ["e2s03"]}]
-    assert done["steps"][1]["progress"].startswith("Every shot already has"), "nothing to render in English: straight to the cut"
+    assert done["steps"][1]["progress"]["label"].startswith("Every shot already has"), "nothing to render in English: straight to the cut"
+    assert done["steps"][1]["progress"]["done"] == 0 and done["steps"][1]["progress"]["total"] == 0
     assert sorted(done["chapters"]) == ["english", "spanish"]
     tools.calls.clear()
     again = finished(service, service.start("cast", "uv", "ep2", rerender=True)["jobId"])
@@ -285,6 +286,80 @@ def test_a_finished_production_is_not_overwritten_by_a_stale_running_read(tmp_pa
 
     assert service._reconcile("cast", stale) == finished_job
     assert store.load("produce-race") == finished_job
+
+
+def test_produce_counts_finished_shots_then_clips(tmp_path):
+    """A 5-shot render reports 0/5 while the first shot runs, then 1/5 … 5/5. The label stays the child's message."""
+    seen = []
+    polls = {"render": 0, "cut": 0}
+
+    def call(tool, arguments):
+        if tool == "series.episode.render_native":
+            return {"result": {"job": {"jobId": "native-spanish", "status": "queued"}}}
+        if tool == "series.episode.render_native.status":
+            polls["render"] += 1
+            index = polls["render"]
+            if index <= 5:
+                return {"result": {"job": {"status": "running", "current": index - 1, "total": 5, "message": f"Shot e1s0{index - 1}"}}}
+            return {"result": {"job": {"status": "completed", "current": 5, "total": 5, "message": "5 of 5 shots rendered"}}}
+        if tool == "series.assembly.start":
+            return {"result": {"job": {"jobId": "cut-spanish", "status": "queued"}}}
+        if tool == "series.assembly.status":
+            polls["cut"] += 1
+            if polls["cut"] == 1:
+                return {"result": {"job": {"status": "running", "current": 2, "total": 5, "message": "Cutting 2 of 5"}}}
+            return {"result": {"job": {"status": "completed", "current": 5, "total": 5, "message": "Cut",
+                                      "assetId": "asset-spanish", "filename": "es.mp4"}}}
+        raise AssertionError(tool)
+
+    box = {}
+
+    def sleep(_seconds):
+        job = box["service"].jobs("cast")[0]
+        seen.append(dict(job["progress"]))
+
+    base = producer(tmp_path, call)
+    service = SeriesProduce(ProduceDeps(call=call, workspace_dir=base.deps.workspace_dir, read_library=base.deps.read_library,
+                                        sleep=sleep, poll_seconds=0))
+    box["service"] = service
+    done = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
+    assert done["status"] == "completed" and done["message"].startswith("Rendered and cut")
+    assert done["steps"][0]["progress"] == {"done": 5, "total": 5, "label": "5 of 5 shots rendered"}
+    assert done["steps"][1]["progress"] == {"done": 5, "total": 5, "label": "Cut"}
+    assert [item["done"] for item in seen if item["label"].startswith("Shot")] == [0, 1, 2, 3, 4]
+    assert {"done": 2, "total": 5, "label": "Cutting 2 of 5"} in seen
+    assert done["progress"] == {"done": 5, "total": 5, "label": "Cut"}
+
+
+def test_from_script_uses_a_free_number_and_refuses_a_taken_one(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from services.series_library import EpisodeNumberTaken
+    from routers.series_produce import create_series_produce_router
+
+    tools = Series()
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, number=3, check_only=True)
+    assert checked["number"] == 3 and checked["shots"] == ["e3s00", "e3s01", "e3s02"] and tools.calls == []
+    written = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, number=3)
+    assert written["shots"][0] == "e3s00" and tools.calls[0][1]["episode"]["number"] == 3
+    rewrite = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, episode_id="ep1", number=3)
+    assert rewrite["number"] == 1 and rewrite["shots"][0] == "e1s00"
+    assert [name for name, _data in tools.calls].count("series.episode.create") == 1
+    with pytest.raises(EpisodeNumberTaken) as taken:
+        apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, number=1, check_only=True)
+    assert taken.value.holder_id == "ep1" and taken.value.code == "episode_number_taken"
+
+    app = FastAPI()
+    app.include_router(create_series_produce_router(
+        SeriesProduce(ProduceDeps(call=lambda *_args: {}, workspace_dir=lambda _name: str(tmp_path), read_library=lambda _name: {})),
+        call=lambda *_args: {}, bind_loop=lambda _loop: None, read_library=lambda _name: {"seriesById": {"uv": project()}},
+        read_kits=lambda _name: KITS, workspace_dir=lambda _name: str(tmp_path)))
+    client = TestClient(app)
+    response = client.post("/api/v1/series/uv/episodes/from-script",
+                           json={"workspace": "cast", "script": SCRIPT, "number": 1, "check": True})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "episode_number_taken"
+    assert response.json()["detail"]["episodeId"] == "ep1"
 
 
 def test_a_failed_cut_is_made_again_on_resume(tmp_path):

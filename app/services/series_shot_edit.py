@@ -8,11 +8,14 @@ list (``fx``, ``sfx``, ``props``, ``layers``, ``cast``, ``lines``) without
 knowing what is there. The shot is checked like a script shot (characters,
 poses, files, effects, 3D objects), and only the fields that changed are
 written: the rest of the shot, its takes and the other shots stay as they are.
-A shot whose take no longer shows what it says loses its approval (in every
-language version); a generated or imported take keeps it when only the sound
-laid at the cut changed (``sfx``, ``music``, ``clipAudio``, ``clipVolume``,
-``clipFit``, ``foley``). Lines in other languages update that language
-version's text.
+A change of what the shot shows clears plan, preview and take approval.
+``approvalReset`` is true when any of those was set, and ``reset`` lists them
+in that order (``plan``, ``preview``, ``take``). A note is not this edit: it
+never clears an approval. Changing only the volume of an sfx does not clear
+approval; changing its file, its timing or adding a cue does. A generated or
+imported take also keeps its approval when only the sound laid at the cut
+changed (``sfx``, ``music``, ``clipAudio``, ``clipVolume``, ``clipFit``,
+``foley``). Lines in other languages update that language version's text.
 """
 from __future__ import annotations
 
@@ -281,6 +284,29 @@ def _write_versions(episode: dict[str, Any], shot_id: str, old_beats: list[str],
     return missing
 
 
+def _approved_stages(episode: dict[str, Any], shot_id: str, before: str, after: str) -> list[str]:
+    """Plan and preview approvals this edit drops. ``changes`` is not an approval, and a same digest keeps both."""
+    if before == after:
+        return []
+    review = episode.get("review") if isinstance(episode.get("review"), dict) else {}
+    shots = review.get("shots") if isinstance(review.get("shots"), dict) else {}
+    entry = shots.get(shot_id) if isinstance(shots.get(shot_id), dict) else {}
+    return [stage for stage in ("plan", "preview") if entry.get(stage) == "approved"]
+
+
+def _approval_report(episode: dict[str, Any], shot_id: str, stored: dict[str, Any], changed: list[str],
+                     keep_approval: bool) -> dict[str, Any]:
+    """What this edit cleared. Volume-only sfx keeps the take; other digest-stable edits (foley) still drop it."""
+    from services.series_review import content_digest
+    shot = next(item for item in episode.get("shots") or [] if item.get("id") == shot_id)
+    before, after = content_digest(stored), content_digest(shot)
+    cleared = _approved_stages(episode, shot_id, before, after)
+    volume_only = set(changed) <= {"sfx"} and before == after
+    if not keep_approval and not volume_only and reset_approvals(episode, shot_id):
+        cleared.append("take")
+    return {"approvalReset": bool(cleared), "reset": cleared}
+
+
 def reset_approvals(episode: dict[str, Any], shot_id: str) -> bool:
     """The shot's approved take and every language version's approval of it are cleared; True when one was set."""
     shot = next(item for item in episode.get("shots") or [] if item.get("id") == shot_id)
@@ -304,8 +330,8 @@ def apply_edit(series: dict[str, Any], episode_id: str, shot_id: str, patch: dic
                                     updated_at=updated_at)
     episode = updated["episodesById"][episode_id]
     missing = _write_versions(episode, shot_id, old_beats, texts, changed)
-    reset = False if keep_approval else reset_approvals(episode, shot_id)
-    return updated, {"approvalReset": reset, "missingLines": {key: value for key, value in missing.items() if value}}
+    report = _approval_report(episode, shot_id, stored, changed, keep_approval)
+    return updated, {**report, "missingLines": {key: value for key, value in missing.items() if value}}
 
 
 __all__ = ["CUT_KEYS", "LIST_KEYS", "SCRIPT_KEYS", "ShotEditError", "apply_edit", "build_patch", "find_shot", "merge_changes",

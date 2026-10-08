@@ -407,3 +407,42 @@ def test_bulk_attempt_approval_is_atomic_and_rejects_duplicate_shots():
             {"shotId": "shot-a", "attemptId": "attempt-a"},
             {"shotId": "shot-a", "attemptId": "attempt-a"},
         ])
+
+
+def test_an_episode_number_is_optional_and_unique_across_the_series():
+    from fastapi import HTTPException
+    from routers.series_episode import apply_series_episode_update, create_checked_episode
+    from services.series_library import EpisodeNumberTaken
+
+    series = create_series_project("default")
+    first = create_series_episode(series)
+    assert first["number"] == 1
+    series["episodesById"][first["id"]] = first
+    series["revision"] = 1
+    with pytest.raises(EpisodeNumberTaken) as taken:
+        create_series_episode(series, number=1)
+    assert taken.value.code == "episode_number_taken" and taken.value.holder_id == first["id"]
+    for bad in (0, -1, True, 1.5, "2"):
+        with pytest.raises(ValueError):
+            create_series_episode(series, number=bad)
+    second = create_series_episode(series, number=3)
+    assert second["number"] == 3
+    series["episodesById"][second["id"]] = second
+    kept = update_series_episode(series, second["id"], {"number": 3}, base_series_revision=1)
+    assert kept["episodesById"][second["id"]]["number"] == 3
+    with pytest.raises(EpisodeNumberTaken) as again:
+        update_series_episode(kept, second["id"], {"number": 1}, base_series_revision=kept["revision"])
+    assert again.value.holder_id == first["id"]
+
+    with pytest.raises(HTTPException) as http_taken:
+        create_checked_episode(series, {"episode": {"number": 1}})
+    assert http_taken.value.status_code == 409
+    assert http_taken.value.detail["code"] == "episode_number_taken" and http_taken.value.detail["episodeId"] == first["id"]
+    with pytest.raises(HTTPException) as http_bad:
+        create_checked_episode(series, {"episode": {"number": True}})
+    assert http_bad.value.status_code == 400
+    with pytest.raises(HTTPException) as http_move:
+        apply_series_episode_update("show", second["id"], {"episode": {"number": 1}, "baseSeriesRevision": 1}, series, updated_at="t")
+    assert http_move.value.status_code == 409 and http_move.value.detail["episodeId"] == first["id"]
+    renamed = apply_series_episode_update("show", second["id"], {"episode": {"number": 4}, "baseSeriesRevision": 1}, series, updated_at="t")
+    assert renamed["episodesById"][second["id"]]["number"] == 4
