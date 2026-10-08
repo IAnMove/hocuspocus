@@ -222,17 +222,19 @@ def _url_owner(series: dict[str, Any], url: str, asset_id: str) -> str | None:
     if not url and not asset_id:
         return None
     path = _workspace_path(_file_path(url))
-    name = PurePosixPath(path).stem
     for asset in (series.get("assets") or {}).values():
-        if not isinstance(asset, dict):
-            continue
-        uri = _workspace_path(str(asset.get("uri") or ""))
-        ident = str(asset.get("id") or "")
-        if (uri and uri == path) or (ident and ident == name) or (asset_id and ident == asset_id):
-            owner = _asset_owner(asset) or _location_pointing_at(series, ident)
+        if isinstance(asset, dict) and _names_asset(asset, path, asset_id):
+            owner = _asset_owner(asset) or _location_pointing_at(series, str(asset.get("id") or ""))
             if owner:
                 return owner
     return _location_pointing_at(series, asset_id) if asset_id else None
+
+
+def _names_asset(asset: dict[str, Any], path: str, asset_id: str) -> bool:
+    """The slot names this asset: the same file, a file named after its id, or its id."""
+    uri = _workspace_path(str(asset.get("uri") or ""))
+    ident = str(asset.get("id") or "")
+    return bool((uri and uri == path) or (ident and ident in (PurePosixPath(path).stem, asset_id)))
 
 
 def _file_path(url: str) -> str:

@@ -124,40 +124,37 @@ def _variant(scene_id: str, place: str) -> bool:
     return place == scene_id or place.startswith(scene_id) or scene_id.startswith(place)
 
 
-def _location_warnings(episode: Any) -> list[dict[str, Any]]:
+def _location_rows(episode: Any) -> list[tuple[str, str, str, str | None]]:
+    """(scene, place, shot id, the scene's own place when the shot moved elsewhere) for each placed shot."""
     rows: list[tuple[str, str, str, str | None]] = []
-    # The scenes shown in their own location. A shot that moves elsewhere warns on its own and shares nothing.
-    users: dict[str, dict[str, None]] = {}
     for index, shot in enumerate(episode.script.get("shots") or []):
-        if not isinstance(shot, dict):
-            continue
-        scene = episode.scenes.get(str(shot.get("scene")))
+        scene = episode.scenes.get(str(shot.get("scene"))) if isinstance(shot, dict) else None
         if not isinstance(scene, dict):
             continue
-        scene_id = str(shot.get("scene"))
         scene_place = str(scene.get("location") or "")
-        own = shot.get("location")
-        own_place = str(own) if own not in (None, "") else ""
+        own_place = str(shot["location"]) if shot.get("location") not in (None, "") else ""
         place = own_place or scene_place
-        if not place:
-            continue
-        # None: the shot inherits the scene. A shot location equal to the scene is the same.
-        instead = scene_place if own_place and own_place != scene_place else None
+        if place:
+            # None: the shot inherits the scene. A shot location equal to the scene is the same.
+            rows.append((str(shot.get("scene")), place, episode.shot_id(index),
+                         scene_place if own_place and own_place != scene_place else None))
+    return rows
+
+
+def _location_warnings(episode: Any) -> list[dict[str, Any]]:
+    rows = _location_rows(episode)
+    # The scenes shown in their own location. A shot that moves elsewhere warns on its own and shares nothing.
+    users: dict[str, dict[str, None]] = {}
+    for scene_id, place, _shot, instead in rows:
         if instead is None:
             users.setdefault(place, {})[scene_id] = None
-        rows.append((scene_id, place, episode.shot_id(index), instead))
     grouped: dict[tuple[str, str, str | None], list[str]] = {}
-    order: list[tuple[str, str, str | None]] = []
     for scene_id, place, shot_id, instead in rows:
         shared = len(users.get(place, ())) > 1 and not _variant(scene_id, place)
-        if instead is None and not shared:
-            continue
-        key = (scene_id, place, instead)
-        if key not in grouped:
-            grouped[key] = []
-            order.append(key)
-        grouped[key].append(shot_id)
-    return [_location_group(key, grouped[key], [other for other in users.get(key[1], {}) if other != key[0]]) for key in order]
+        if instead is not None or shared:
+            grouped.setdefault((scene_id, place, instead), []).append(shot_id)
+    return [_location_group(key, shots, [other for other in users.get(key[1], {}) if other != key[0]])
+            for key, shots in grouped.items()]
 
 
 def _location_group(key: tuple[str, str, str | None], shots: list[str], others: list[str]) -> dict[str, Any]:
@@ -199,19 +196,24 @@ def _missing_voices(episode: Any) -> None:
         if not isinstance(shot, dict) or METHODS.get(shot.get("kind")) in VIDEO_METHODS:
             continue
         where = f"shot {index} ({episode.shot_id(index)})"
-        for line in shot.get("lines") or []:
-            if not isinstance(line, dict):
-                continue
-            who = str(line.get("who") or "")
-            if not who or who not in episode.checker.characters or not _line_text(line, language):
-                continue
-            kit_id = _kit_id(episode, who)
-            kit = episode.checker.kits.get(kit_id) if kit_id else None
-            if not kit or voice_for(kit, language):
-                continue
+        for who in _voiceless_speakers(episode, shot, language, _line_text):
             problem = f"{where}: {who} has no {language} voice"
             if problem not in problems:
                 problems.append(problem)
+
+
+def _voiceless_speakers(episode: Any, shot: dict, language: str, line_text: Any) -> list[str]:
+    """Speakers of this shot's lines whose kit has no voice in the episode language."""
+    found = []
+    for line in shot.get("lines") or []:
+        who = str(line.get("who") or "") if isinstance(line, dict) else ""
+        if not who or who not in episode.checker.characters or not line_text(line, language):
+            continue
+        kit_id = _kit_id(episode, who)
+        kit = episode.checker.kits.get(kit_id) if kit_id else None
+        if kit and not voice_for(kit, language):
+            found.append(who)
+    return found
 
 
 def _cast_indexes(episode: Any) -> None:

@@ -17,6 +17,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from services.command_input_errors import field_error as _field_error, reject_input as _reject_input  # noqa: F401 (tests)
+
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
@@ -1010,30 +1012,6 @@ def _error_detail(error: SeriesCommandError) -> dict[str, Any]:
     route = error.detail if isinstance(error.detail, dict) and isinstance(error.detail.get("message"), str) else {}
     return {**route, "code": route.get("code") or fallback, "message": route.get("message") or str(error.detail),
             "retryable": error.status in (409, 503)}
-
-
-def _field_error(unexpected: list[str], allowed: list[str]) -> dict[str, Any]:
-    """Say which fields arrived and which ones the tool accepts."""
-    names = sorted(unexpected)
-    known = sorted(allowed)
-    if not known:
-        message = "This tool takes no input fields"
-    else:
-        message = f"Unexpected field(s): {', '.join(names)}. Allowed: {', '.join(known)}"
-    return {"code": "invalid_command", "message": message, "unexpected": names, "allowed": known, "retryable": False}
-
-
-def _reject_input(data: Any, properties: dict[str, Any], required: list[str]) -> None:
-    from fastapi import HTTPException
-    if not isinstance(data, dict):
-        raise HTTPException(422, {"code": "invalid_command",
-                                  "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
-    unexpected = sorted(set(data) - set(properties))
-    if unexpected:
-        raise HTTPException(422, _field_error(unexpected, list(properties)))
-    if any(key not in data for key in required):
-        raise HTTPException(422, {"code": "invalid_command",
-                                  "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
 
 
 def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], str],

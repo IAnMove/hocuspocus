@@ -69,10 +69,14 @@ def _measured_rates(series: dict[str, Any]) -> dict[str, float]:
     return {who: words[who] / seconds[who] for who in words if words[who] >= _MIN_WORDS and seconds.get(who, 0) >= _MIN_SPEECH}
 
 
+def _spoken_beats(shot: dict[str, Any]) -> list[dict[str, Any]]:
+    return [beat for beat in shot.get("dialogueBeats") or [] if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+
+
 def _add_shot_rate(shot: Any, words: dict[str, int], seconds: dict[str, float]) -> None:
     if not isinstance(shot, dict) or not shot.get("approvedAttemptId"):
         return
-    beats = [beat for beat in shot.get("dialogueBeats") or [] if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+    beats = _spoken_beats(shot)
     speech = _speech_seconds(shot, beats) if beats else 0.0
     total = sum(_words(beat.get("text")) for beat in beats)
     if speech <= 0.3 or total <= 0:
@@ -88,7 +92,7 @@ def _add_shot_rate(shot: Any, words: dict[str, int], seconds: dict[str, float]) 
 
 def _shot_seconds(shot: dict[str, Any], rates: dict[str, float], language: str) -> tuple[float, str | None]:
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
-    beats = [beat for beat in shot.get("dialogueBeats") or [] if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+    beats = _spoken_beats(shot)
     if not beats:
         _, duration = plan_timing([], **timing_args(layout), at_least=_number(shot.get("durationSeconds")))
         return duration, None

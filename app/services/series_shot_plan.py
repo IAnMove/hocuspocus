@@ -483,6 +483,10 @@ def _speaker_index(series: dict[str, Any], shot: dict[str, Any], cast: list[dict
     return next((number for number, item in enumerate(cast) if item["characterId"] == beat.get("characterId")), None)
 
 
+def _copies(series: dict[str, Any], cast: list[dict[str, Any]], kit_id: str) -> list[int]:
+    return [number for number, item in enumerate(cast) if (kit_ref(series, item["characterId"]) or {}).get("id", item["characterId"]) == kit_id]
+
+
 def _shot_lines(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], beats: list[dict],
                 timing: list[tuple[float, float]], recorded: dict[str, dict[str, Any]], cast: list[dict[str, Any]]) -> list[dict[str, Any]]:
     lines, visible = [], {item["characterId"] for item in cast}
@@ -493,9 +497,11 @@ def _shot_lines(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
                 "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
                 "cues": heard.get("cues") or None, "driver": heard.get("driver"),
                 "visible": beat.get("characterId") in visible, "name": beat.get("characterId")}
-        # The compiler moves the mouth of the planned cast member at castIndex (seriesShot.ts lineOwnsAppearance).
+        # The compiler moves the mouth of the planned cast member at castIndex (seriesShot.ts lineOwnsAppearance),
+        # else the first copy of the line's kit. castIndex is written only when the kit is on screen more than once,
+        # so a shot whose speakers each have their own kit plans the spec it always did.
         speaker = _speaker_index(series, shot, cast, beat)
-        if speaker is not None:
+        if speaker is not None and len(_copies(series, cast, line["kitId"])) > 1:
             line["castIndex"] = speaker
         lines.append(line)
     return lines
