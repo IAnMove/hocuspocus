@@ -115,10 +115,17 @@ def _task_for_intent(spec: dict, registry_for: Callable[[str], Any], sync_tasks:
     return task
 
 
+def _workspace_name(item: object) -> str:
+    """``_list_workspaces`` yields ``{"name": ..., "path": ...}``; a plain name also works."""
+    if isinstance(item, dict):
+        item = item.get("name")
+    return str(item or "").strip()
+
+
 def _scan_job(
     job_id: str,
     registry_for: Callable[[str], Any],
-    workspaces: Callable[[], Iterable[str]],
+    workspaces: Callable[[], Iterable[dict | str]],
     sync_tasks: Callable[[str], None] | None,
 ) -> dict | None:
     try:
@@ -126,7 +133,7 @@ def _scan_job(
     except Exception:
         return None
     for workspace in names:
-        text = str(workspace or "").strip()
+        text = _workspace_name(workspace)
         if not text:
             continue
         try:
@@ -172,7 +179,7 @@ def _status_after(result: object, task: dict, registry_for: Callable[[str], Any]
 def command_handlers(
     control_task: Callable[[dict, str], Any],
     registry_for: Callable[[str], Any],
-    workspaces: Callable[[], Iterable[str]],
+    workspaces: Callable[[], Iterable[dict | str]],
     job_record: Callable[[str], Any],
     sync_tasks: Callable[[str], None] | None = None,
 ) -> dict[str, Callable[[Any], dict]]:

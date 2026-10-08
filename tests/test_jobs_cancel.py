@@ -24,7 +24,12 @@ class _Registry:
         return self.admissions.get(intent_id)
 
 
-def _handlers(job=None, registry=None, workspaces=(), control=None, calls=None):
+def _workspace_rows(names):
+    """The shape ``_list_workspaces`` in ``_launch_runtime.py`` returns."""
+    return [{"name": name, "path": f"/outputs/{name}", "file_count": 0} for name in names]
+
+
+def _handlers(job=None, registry=None, workspaces=(), control=None, calls=None, looked_up=None):
     def control_task(task, action):
         if calls is not None:
             calls.append((task, action))
@@ -38,10 +43,17 @@ def _handlers(job=None, registry=None, workspaces=(), control=None, calls=None):
         return None
 
     registries = registry or _Registry([])
+
+    def registry_for(workspace):
+        assert isinstance(workspace, str)
+        if looked_up is not None:
+            looked_up.append(workspace)
+        return registries
+
     return command_handlers(
         control_task,
-        lambda _workspace: registries,
-        lambda: list(workspaces),
+        registry_for,
+        lambda: _workspace_rows(workspaces),
         job_record,
     )["jobs.cancel"]
 
@@ -100,6 +112,17 @@ def test_a_missing_job_is_404():
         cancel({"version": 1, "input": {"job_id": "missing"}})
     assert caught.value.status_code == 404
     assert caught.value.detail["code"] == "job_not_found"
+
+
+def test_a_job_outside_the_memory_table_is_found_in_its_workspace():
+    registry = _Registry([{"id": "task-7", "workspace": "lab", "backend_job_id": "job-7", "status": "queued"}])
+    calls = []
+    looked_up = []
+    cancel = _handlers(registry=registry, workspaces=["default", "lab"], calls=calls, looked_up=looked_up)
+    result = cancel({"version": 1, "input": {"job_id": "job-7"}})
+    assert result == {"status": "cancelled", "previous_status": "queued", "job_id": "job-7"}
+    assert calls[0][0]["id"] == "task-7"
+    assert looked_up[0] == "default"
 
 
 def test_job_id_and_intent_together_are_rejected():

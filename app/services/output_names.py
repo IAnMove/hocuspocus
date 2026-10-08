@@ -33,12 +33,16 @@ def reserve(directory: str, name: str) -> tuple[str, bool]:
 
 
 def _taken_rename(requested: str, final: str) -> bool:
-    """True when ``final`` is the ``(2)`` form of ``requested``."""
+    """True when ``final`` is the ``(2)`` form of ``requested``.
+
+    Stems only: WanGP drops a requested extension, so ``shot-01`` or
+    ``shot-01.png`` saved as ``shot-01(2).mp4`` is still a rename.
+    """
     if not requested or not final or requested == final:
         return False
-    requested_stem, requested_ext = os.path.splitext(os.path.basename(requested))
-    final_stem, final_ext = os.path.splitext(os.path.basename(final))
-    if requested_ext != final_ext or not final_stem.startswith(requested_stem + "(") or not final_stem.endswith(")"):
+    requested_stem = os.path.splitext(os.path.basename(requested))[0]
+    final_stem = os.path.splitext(os.path.basename(final))[0]
+    if not requested_stem or not final_stem.startswith(requested_stem + "(") or not final_stem.endswith(")"):
         return False
     number = final_stem[len(requested_stem) + 1:-1]
     return number.isdigit() and int(number) >= 2

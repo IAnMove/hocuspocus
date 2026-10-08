@@ -69,6 +69,21 @@ def test_a_real_rename_reports_output_name_taken():
     assert "still(2).jpg" in view["warnings"][0]["message"]
 
 
+def test_a_wangp_rename_without_the_requested_extension_reports_output_name_taken():
+    for requested in ("shot-01", "shot-01.png"):
+        view = annotate_generation_view(
+            {"path": "shot-01(2).mp4", "status": "completed"},
+            {"params": {"output_filename": requested}, "output_files": ["outputs/lab/shot-01(2).mp4"]},
+        )
+        assert view["outputName"] == {"requested": requested, "final": "shot-01(2).mp4", "taken": True}
+        assert view["warnings"][0]["code"] == "output_name_taken"
+    free = annotate_generation_view(
+        {"path": "shot-01.mp4", "status": "completed"},
+        {"params": {"output_filename": "shot-01"}, "output_files": ["outputs/lab/shot-01.mp4"]},
+    )
+    assert "outputName" not in free
+
+
 def test_zero_token_counters_are_not_a_measurement_and_a_real_call_is():
     silent = annotate_generation_view(
         {"status": "completed", "task": {"token_usage": {"prompt": 0, "completion": 0, "total": 0, "calls": 0}}},
