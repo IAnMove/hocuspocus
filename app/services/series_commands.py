@@ -202,7 +202,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
         "Optional number (integer >= 1), only when there is no episode_id: a taken number is 409 episode_number_taken "
         "with the holder's id. "
-        "warnings lists speaker_not_on_screen and location_differs_from_scene and does not block, even with check: true. "
+        "warnings lists speaker_not_on_screen, location_differs_from_scene and template_backdrop_other_location "
+        "and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
+        "location (the shot location's plate) or {asset: id}. "
         "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice. "
         "A kit with lines and no voice for the episode language fails the check. "
         "estimate is the planned length in seconds: each speaker's approved-take pace, else 2.6 Spanish or 2.8 English words per second.",
@@ -380,7 +382,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "reference_role": {"type": "string", "maxLength": 100}, "metadata": OBJECT},
         ["workspace", "series_id", "file", "owner_type", "owner_id", "kind"], True,
         "Import a workspace file as a reference image of a character/location, or as_take a finished shot video "
-        "(metadata.sceneFilename lets Series Lab reopen its editable scene). A take is appended unapproved. Import a "
+        "(metadata.sceneFilename lets Series Lab reopen its editable scene). A location plate (reference_role "
+        "environment, plate or location_reference) warns people_in_plate unless layout2d.allowPeople is true. A take is appended unapproved. Import a "
         "generated or outside clip as it is: its shot's sfx, music and foley are laid at the cut and it is conformed "
         "to the episode's frame and frame rate there, so do not mux or re-encode it first.",
     ),
@@ -819,7 +822,18 @@ def _import_asset(data: dict[str, Any], request: Callable[..., Any], *, workspac
     attempt = None
     if data.get("as_take"):
         attempt = _matching_take(series, data["owner_id"], imported["asset"]["id"])
-    return {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
+    result = {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
+    warnings = imported.get("warnings") if isinstance(imported.get("warnings"), list) else None
+    if warnings is None:
+        from services.series_plate_checks import location_of, plate_people_warning
+        found = plate_people_warning(
+            str(source), role=str(data.get("reference_role") or ""),
+            location=location_of(series, str(data.get("owner_type") or ""), str(data.get("owner_id") or "")),
+        )
+        warnings = [found] if found else []
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def _approve_take(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:

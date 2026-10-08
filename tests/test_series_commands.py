@@ -226,3 +226,52 @@ def test_a_shot_is_read_and_edited_by_its_number_over_mcp(tmp_path):
     assert edited["result"]["changed"] == ["fx"]
     schema = next(item for item in command_catalog() if item["name"] == "series.shot.update")["inputSchema"]["properties"]["input"]
     assert schema["required"] == ["workspace", "series_id", "episode_id", "shot"] and "append" in schema["properties"]
+
+
+def test_a_location_plate_with_people_warns_and_still_imports(tmp_path, monkeypatch):
+    series = {"revision": 3, "locations": [{"id": "plaza"}], "assets": {}}
+    handlers, _, workspace, _ = harness(tmp_path, [{"asset": {"id": "asset_plate"}, "series": series}])
+    (workspace / "plate.png").write_bytes(b"png")
+    monkeypatch.setattr("services.series_plate_checks.detect_people", lambda _path: [[1, 2, 3, 4]])
+    result = call(handlers, "series.asset.import", {"workspace": "series", "series_id": "uv", "file": "plate.png",
+                                                    "owner_type": "location", "owner_id": "plaza", "kind": "image",
+                                                    "reference_role": "environment"})
+    assert result["result"]["asset"]["id"] == "asset_plate"
+    assert result["result"]["warnings"] == [{"code": "people_in_plate", "count": 1, "boxes": [[1, 2, 3, 4]]}]
+
+
+def test_an_import_that_already_warned_is_not_detected_again(tmp_path, monkeypatch):
+    warning = {"code": "people_in_plate", "count": 1, "boxes": [[1, 2, 3, 4]]}
+    series = {"revision": 3, "locations": [{"id": "plaza"}], "assets": {}}
+    handlers, _, workspace, _ = harness(tmp_path, [{"asset": {"id": "asset_plate"}, "series": series, "warnings": [warning]}])
+    (workspace / "plate.png").write_bytes(b"png")
+    def fail(_path):
+        raise AssertionError("detected twice")
+    monkeypatch.setattr("services.series_plate_checks.detect_people", fail)
+    result = call(handlers, "series.asset.import", {"workspace": "series", "series_id": "uv", "file": "plate.png",
+                                                    "owner_type": "location", "owner_id": "plaza", "kind": "image",
+                                                    "reference_role": "environment"})
+    assert result["result"]["warnings"] == [warning]
+
+
+def test_plate_people_and_the_location_picture():
+    from services.series_plate_checks import location_plate_url, plate_people_warning
+    found = lambda _path: [[1, 2, 3, 4]]
+    assert plate_people_warning("p.png", role="environment", location={}, detect=found)["count"] == 1
+    assert plate_people_warning("p.png", role="environment", location={"layout2d": {"allowPeople": True}}, detect=found) is None
+    assert plate_people_warning("p.png", role="primary_portrait", location={}, detect=found) is None
+    assert plate_people_warning("p.png", role="environment", location={}, detect=lambda _path: []) is None
+    assert plate_people_warning("p.png", role="location_reference", location=None, detect=found)["code"] == "people_in_plate"
+    assets = {"plate": {"kind": "image", "uri": "assets/plate.png"}, "bg": {"kind": "image", "uri": "assets/bg.png"},
+              "ref": {"kind": "video", "uri": "assets/ref.mp4"}, "picked": {"kind": "image", "uri": "assets/picked.png"}}
+    place = {"id": "plaza", "layout2d": {"plateAssetId": "plate", "backgroundAssetId": "bg"}, "referenceAssetIds": ["ref"]}
+    library = {"locations": [place], "assets": assets}
+    shot = {"locationId": "plaza", "scene3d": {"template": "user-mars", "backdrop": "location"}}
+    assert location_plate_url(library, shot, "cast") == "/api/v1/file/assets/plate.png?workspace=cast"
+    place["layout2d"].pop("plateAssetId")
+    assert location_plate_url(library, shot, "cast") == "/api/v1/file/assets/bg.png?workspace=cast"
+    place["layout2d"].pop("backgroundAssetId")
+    assert location_plate_url(library, shot, "cast") == "/api/v1/file/assets/ref.mp4?workspace=cast"
+    picked = {"locationId": "plaza", "scene3d": {"template": "user-mars", "backdrop": {"asset": "picked"}}}
+    assert location_plate_url(library, picked, "cast") == "/api/v1/file/assets/picked.png?workspace=cast"
+    assert location_plate_url(library, {"locationId": "plaza", "scene3d": {"template": "user-mars"}}, "cast") is None

@@ -395,6 +395,7 @@ def create_core_labs_router() -> APIRouter:
     @router.post("/api/v1/series/{series_id}/assets/import")
     def import_asset(series_id: str, body: dict):
         import shutil
+        from services.series_plate_checks import with_plate_warning
         from services.series_production import attach_series_import, existing_generated_reference
 
         workspace = _series_workspace(body.get("workspace"))
@@ -437,6 +438,8 @@ def create_core_labs_router() -> APIRouter:
             series["updatedAt"] = _iso_now()
             library["seriesById"][series_id] = series
             stored = _write_series(workspace, library)
-        return {"asset": stored["seriesById"][series_id]["assets"][asset_id], "series": stored["seriesById"][series_id]}
+        stored_series = stored["seriesById"][series_id]
+        return with_plate_warning(
+            {"asset": stored_series["assets"][asset_id], "series": stored_series}, source, body, stored_series)
 
     return router
