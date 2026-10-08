@@ -17,7 +17,8 @@ def project():
             "episodesById": {"ep1": {"id": "ep1", "number": 1, "shots": [{"id": "e1s00"}]}}}
 
 
-EN = {"voicesByLanguage": {"english": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}
+VOICE = {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}
+EN = {"voice": VOICE, "voicesByLanguage": {"english": VOICE}}
 KITS = {"kit-kevin": {"poses": {"panic": {}}, **EN}, "kit-gary": {"poses": {}, **EN}, "kit-elon": {"poses": {"phone": {}}, **EN}}
 
 SCRIPT = {
@@ -113,7 +114,7 @@ def test_check_only_and_rewriting_an_existing_episode():
     tools = Series()
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, check_only=True)
     assert checked == {"checked": True, "number": 2, "shots": ["e2s00", "e2s01", "e2s02"], "original": "spanish",
-                       "languages": ["spanish", "english"]} and tools.calls == []
+                       "languages": ["spanish", "english"], "warnings": []} and tools.calls == []
     rewritten = apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": SCRIPT["shots"][:1]}, episode_id="ep1")
     assert rewritten["shots"] == ["e1s00"] and [tool for tool, _ in tools.calls][0] == "series.episode.update"
     with pytest.raises(ScriptError):
@@ -334,7 +335,7 @@ def test_rewriting_an_episode_replaces_its_shots():
 def test_a_language_version_needs_a_voice_designed_for_that_language():
     """The default voice has the series' accent; an English line spoken with it is wrong, so the check says so first."""
     tools = Series()
-    kits = {**KITS, "kit-gary": {"poses": {}}}
+    kits = {**KITS, "kit-gary": {"poses": {}, "voice": VOICE}}
     with pytest.raises(ScriptError) as raised:
         apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
     assert raised.value.problems == ["gary has no english voice (voicesByLanguage); design one in the Character Kit"]
@@ -396,3 +397,93 @@ def test_video_shots_keep_their_kind_clip_sound_and_cue_parts():
     assert generated["layout2d"]["clipVolume"] == 0.5 and generated["durationSeconds"] == 5.0
     with pytest.raises(ScriptError, match="kind must be 2d"):
         apply_script(Series(), Series().read, KITS, FILES, "cast", {**script, "shots": [{"scene": "a", "kind": "movie"}]})
+
+
+def test_a_speaker_off_the_shot_names_the_body_kit_and_a_shared_place_warns():
+    """Warnings do not block. A body kit of the same character is suggested; a place used by one scene is not."""
+    tools = Series()
+    tools.series["characters"].extend([
+        {"id": "bolivar", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar"}}},
+        {"id": "bolivar-c", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar-c"}}},
+        {"id": "ana", "name": "Ana", "voiceProfile": {"characterKitRef": {"id": "mp-ana"}}},
+        {"id": "cuerpo", "name": "Ana", "voiceProfile": {"characterKitRef": {"id": "mp-ana-c"}}},
+    ])
+    tools.series["locations"].extend([
+        {"id": "sky", "variants": []}, {"id": "bridge", "variants": []},
+        {"id": "town1787", "variants": []}, {"id": "dock", "variants": []}, {"id": "plaza", "variants": []},
+    ])
+    kits = {**KITS, "kit-bolivar": {**EN}, "kit-bolivar-c": {**EN}, "mp-ana": {**EN}, "mp-ana-c": {**EN}}
+    script = {"scenes": [
+        {"id": "street", "location": "plaza"}, {"id": "battle", "location": "sky"}, {"id": "prayer", "location": "sky"},
+        {"id": "course", "location": "bridge"}, {"id": "town", "location": "town1787"}, {"id": "yard", "location": "garage"},
+    ], "shots": [
+        {"scene": "street", "cast": [["bolivar-c", "base", 40]], "lines": [{"who": "bolivar", "es": "Norte."}]},
+        {"scene": "street", "cast": [["cuerpo", "base", 40]], "lines": [{"who": "ana", "es": "Sur."}]},
+        {"scene": "battle", "duration": 2}, {"scene": "battle", "duration": 2}, {"scene": "prayer", "duration": 2},
+        {"scene": "course", "duration": 2}, {"scene": "town", "duration": 2},
+        {"scene": "yard", "location": "garage", "duration": 2}, {"scene": "yard", "location": "dock", "duration": 2},
+    ]}
+    checked = apply_script(tools, tools.read, kits, FILES, "cast", script, check_only=True)
+    speakers = [item for item in checked["warnings"] if item["code"] == "speaker_not_on_screen"]
+    places = [item for item in checked["warnings"] if item["code"] == "location_differs_from_scene"]
+    assert speakers[0]["subject"] == "bolivar" and speakers[0]["shots"] == ["e2s00"]
+    assert "did you mean bolivar-c? The line is voice-over and the cutout won't move its mouth" in speakers[0]["message"]
+    assert speakers[1]["subject"] == "ana" and "did you mean cuerpo?" in speakers[1]["message"]
+    assert [(item["subject"], item["shots"]) for item in places] == [
+        ("battle", ["e2s02", "e2s03"]), ("prayer", ["e2s04"]), ("yard", ["e2s08"])]
+    assert "2 shots use sky instead of the scene" in places[0]["message"]
+    assert "use dock instead of garage" in places[2]["message"]
+    assert tools.calls == []
+
+
+def test_a_kit_without_a_voice_fails_the_check():
+    tools = Series()
+    kits = {**KITS, "kit-kevin": {"poses": {"panic": {}}}}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
+    assert any(problem.endswith("kevin has no spanish voice") for problem in raised.value.problems)
+    assert any(group["code"] == "no_voice" and group["subject"] == "kevin" for group in raised.value.groups)
+    assert tools.calls == []
+
+
+def test_cast_index_is_stored_on_the_beat_and_must_point_at_the_cast():
+    from services.series_script import EpisodeScript
+    tools = Series()
+    base = {"scene": "cold_open", "cast": [["kevin", "base", 30], ["kevin", "panic", 70]]}
+    scenes = [{"id": "cold_open", "location": "garage"}]
+    bad = {"scenes": scenes, "shots": [{**base, "lines": [{"who": "kevin", "es": "Uno.", "castIndex": True}]}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, KITS, FILES, "cast", bad, check_only=True)
+    assert any("castIndex is not in the cast" in problem for problem in raised.value.problems)
+    good = {"scenes": scenes, "shots": [{**base, "lines": [
+        {"who": "kevin", "es": "Uno.", "castIndex": 1}, {"who": "kevin", "es": "Dos."}]}]}
+    built = EpisodeScript(tools.series, good, 2, KITS, FILES)
+    built.check()
+    first, second = built.shots()[0]["dialogueBeats"]
+    assert first["castIndex"] == 1 and "castIndex" not in second
+
+
+def test_a_failing_check_still_returns_the_warnings(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.series_produce import create_series_produce_router
+    from services.series_produce import ProduceDeps, SeriesProduce
+    tools = Series()
+    tools.series["characters"].append({"id": "bolivar", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar"}}})
+    tools.series["characters"].append({"id": "bolivar-c", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar-c"}}})
+    kits = {**KITS, "kit-bolivar": {**EN}, "kit-bolivar-c": {**EN}}
+    script = {"scenes": [{"id": "street", "location": "garage"}], "shots": [{
+        "scene": "street", "framing": "dutch", "cast": [["bolivar-c", "base", 40]],
+        "lines": [{"who": "bolivar", "es": "Norte."}]}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", script, check_only=True)
+    assert raised.value.warnings[0]["code"] == "speaker_not_on_screen"
+    app = FastAPI()
+    app.include_router(create_series_produce_router(
+        SeriesProduce(ProduceDeps(call=tools, workspace_dir=lambda _name: str(tmp_path), read_library=lambda _w: {})),
+        call=tools, bind_loop=lambda _loop: None, read_library=lambda _w: {"seriesById": {"uv": tools.series}},
+        read_kits=lambda _w: kits, workspace_dir=lambda _name: str(tmp_path)))
+    reply = TestClient(app).post("/api/v1/series/uv/episodes/from-script", json={"workspace": "cast", "script": script, "check": True})
+    assert reply.status_code == 400
+    assert reply.json()["detail"]["warnings"][0]["subject"] == "bolivar"
+    assert any("framing must be" in problem for problem in reply.json()["detail"]["problems"])

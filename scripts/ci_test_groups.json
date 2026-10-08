@@ -1870,6 +1870,10 @@
       "paths": ["tests/test_mcp_error_messages.py", "tests/test_series_script_produce.py"]
     },
     {
+      "prefix": "app/services/series_script_warnings.py",
+      "paths": ["tests/test_series_script_produce.py"]
+    },
+    {
       "prefix": "app/routers/series_produce.py",
       "paths": ["tests/test_mcp_error_messages.py", "tests/test_series_script_produce.py"]
     },

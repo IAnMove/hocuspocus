@@ -150,7 +150,8 @@ def _script_client(tmp_path):
     app.add_middleware(ActorHeaderMiddleware)
     app.include_router(create_series_produce_router(
         service, call=tools, bind_loop=lambda _loop: None, read_library=lambda _w: {"seriesById": {"uv": tools.series}},
-        read_kits=lambda _w: {"kit-kevin": {"poses": {}}}, workspace_dir=workspace_dir))
+        read_kits=lambda _w: {"kit-kevin": {"poses": {}, "voice": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}},
+        workspace_dir=workspace_dir))
     return TestClient(app)
 
 

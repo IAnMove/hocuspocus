@@ -350,6 +350,11 @@ export function characterKitPoseHasOwnMouths(kit: CharacterKit, poseId: string):
   return Boolean(kit.anchors[poseId]?.mouthSources && Object.keys(kit.anchors[poseId]!.mouthSources!).length)
 }
 
+/** Layer id. An instance key is added only when the same kit is mounted more than once in one shot. */
+export function characterKitLayerId(kitId: string, part: string, instanceKey?: number | string): string {
+  return instanceKey === undefined ? `kit-${kitId}-${part}` : `kit-${kitId}-${instanceKey}-${part}`
+}
+
 export function mountCharacterKitLayers(
   kit: CharacterKit,
   poseId = 'base',
@@ -357,11 +362,13 @@ export function mountCharacterKitLayers(
   duration = 10,
   viewport = { width: 1280, height: 720 },
   reviewPolicy: CharacterKitReviewPolicy = 'approved',
+  instanceKey?: number | string,
 ): SceneLayer[] {
   const poseAsset = poseId === 'base' ? kit.base : kit.poses[poseId]
   if (!poseAsset) throw new Error(`Character Kit “${kit.name}” has no ${poseId} pose.`)
   if (!usableCharacterAsset(poseAsset, reviewPolicy)) throw new Error(`Review and approve ${poseAsset.name} before mounting it.`)
-  const poseLayerId = `kit-${kit.id}-pose-${cleanId(poseId) || 'base'}`
+  const layerId = (part: string) => characterKitLayerId(kit.id, part, instanceKey)
+  const poseLayerId = layerId(`pose-${cleanId(poseId) || 'base'}`)
   const animation = { start: { ...transform }, end: { ...transform }, duration, curve: 'hold' as const }
   const pose: SceneLayer = {
     id: poseLayerId, name: `${kit.name} · ${poseId}`, type: 'image', source: poseAsset.source,
@@ -384,7 +391,7 @@ export function mountCharacterKitLayers(
     const placed = asset.facePatch ? facePatchSceneTransform(transform, anchor, asset.facePatch, viewport) : faceTransform(anchor)
     const mouthTransform = { ...placed, opacity: state === restState ? 1 : 0 }
     layers.push({
-      id: `kit-${kit.id}-mouth-${state}`, name: `${kit.name} Mouth ${state}`, type: 'overlay', source,
+      id: layerId(`mouth-${state}`), name: `${kit.name} Mouth ${state}`, type: 'overlay', source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: mouthTransform,
       animation: { start: { ...mouthTransform }, end: { ...mouthTransform }, duration, curve: 'hold' },
       faceBinding: { poseLayerId, role: 'mouth', state: stateForBinding(state), ...(kit.mouthMapping ? { mouthMapping: { ...kit.mouthMapping } } : {}) },
@@ -395,7 +402,7 @@ export function mountCharacterKitLayers(
   if (openEyes?.reviewState === 'approved') {
     const openTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 1 }
     layers.push({
-      id: `kit-${kit.id}-eyes-open`, name: `${kit.name} Eyes open`, type: 'overlay', source: openEyes.source,
+      id: layerId('eyes-open'), name: `${kit.name} Eyes open`, type: 'overlay', source: openEyes.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: openTransform,
       animation: { start: { ...openTransform, opacity: 1 }, end: { ...openTransform, opacity: 1 }, duration, curve: 'hold' },
       faceBinding: { poseLayerId, role: 'eyes', state: 'open' },
@@ -406,7 +413,7 @@ export function mountCharacterKitLayers(
   if (blink?.reviewState === 'approved' && anchors?.blink !== false) {
     const eyeTransform = { ...faceTransform(anchors?.eyes ?? DEFAULT_CHARACTER_BLINK_ANCHOR), opacity: 0 }
     layers.push({
-      id: `kit-${kit.id}-eyes-blink`, name: `${kit.name} Eyes blink`, type: 'overlay', source: anchors?.blinkSource ?? blink.source,
+      id: layerId('eyes-blink'), name: `${kit.name} Eyes blink`, type: 'overlay', source: anchors?.blinkSource ?? blink.source,
       visible: true, locked: false, z: z++, fill: false, parallax: 1, transform: eyeTransform,
       animation: { start: { ...eyeTransform, opacity: 0 }, end: { ...eyeTransform, opacity: 0 }, duration, curve: 'hold' },
       faceBinding: { poseLayerId, role: 'blink', state: 'blink' },
@@ -422,8 +429,9 @@ export function syncMountedCharacterKitLayers(
   kit: CharacterKit,
   poseId = 'base',
   viewport = { width: 1280, height: 720 },
+  instanceKey?: number | string,
 ): SceneLayer[] {
-  const poseLayerId = `kit-${kit.id}-pose-${cleanId(poseId) || 'base'}`
+  const poseLayerId = characterKitLayerId(kit.id, `pose-${cleanId(poseId) || 'base'}`, instanceKey)
   const pose = layers.find(layer => layer.id === poseLayerId)
   if (!pose) return layers
   const sourcePose = poseId === 'base' ? kit.base : kit.poses[poseId]
@@ -432,7 +440,7 @@ export function syncMountedCharacterKitLayers(
   if (!sourcePose || sourcePose.reviewState !== 'approved') return layers
   if (Object.values(kit.mouth).some(asset => asset?.reviewState === 'approved'
     && !isFacePatchCompatible(asset, poseId, sourcePose.source))) return layers
-  const mounted = mountCharacterKitLayers(kit, poseId, pose.transform, pose.animation?.duration ?? 10, viewport)
+  const mounted = mountCharacterKitLayers(kit, poseId, pose.transform, pose.animation?.duration ?? 10, viewport, 'approved', instanceKey)
   const byId = new Map(mounted.map(layer => [layer.id, layer]))
   const next = layers.map(layer => {
     const replacement = byId.get(layer.id)
@@ -465,26 +473,35 @@ export function syncMountedCharacterKitLayers(
   return [...next, ...extras.map((layer, index) => ({ ...layer, z: top + index + 1 }))]
 }
 
-export function parseCharacterKitPoseLayerId(layerId: string): { kitId: string, poseId: string } | null {
-  const match = /^kit-(.+)-pose-(.+)$/.exec(layerId)
+export function parseCharacterKitPoseLayerId(layerId: string, knownKitIds?: readonly string[]): { kitId: string, poseId: string, instanceKey?: number } | null {
+  const match = layerId.match(/^kit-(.+)-pose-(.+)$/)
   if (!match) return null
-  return { kitId: match[1], poseId: match[2] }
+  const head = match[1]
+  const poseId = match[2]
+  const known = knownKitIds ? new Set(knownKitIds) : null
+  if (!known || known.has(head)) return { kitId: head, poseId }
+  const numbered = head.match(/^(.*)-(\d+)$/)
+  if (numbered && known.has(numbered[1]) && !known.has(head)) {
+    return { kitId: numbered[1], poseId, instanceKey: Number(numbered[2]) }
+  }
+  return { kitId: head, poseId }
 }
 
 /** Re-apply the live Character Kit library onto any kit puppets already in a scene. */
 export function syncSceneCharacterKits(layers: SceneLayer[], library: CharacterKitLibrary, viewport = { width: 1280, height: 720 }): SceneLayer[] {
+  const known = Object.keys(library.kits)
   const poseLayerIds = new Set<string>()
   for (const layer of layers) {
-    if (parseCharacterKitPoseLayerId(layer.id)) poseLayerIds.add(layer.id)
+    if (parseCharacterKitPoseLayerId(layer.id, known)) poseLayerIds.add(layer.id)
     const bound = layer.faceBinding?.poseLayerId
-    if (bound && parseCharacterKitPoseLayerId(bound)) poseLayerIds.add(bound)
+    if (bound && parseCharacterKitPoseLayerId(bound, known)) poseLayerIds.add(bound)
   }
   let next = layers
   for (const poseLayerId of poseLayerIds) {
-    const parsed = parseCharacterKitPoseLayerId(poseLayerId)
+    const parsed = parseCharacterKitPoseLayerId(poseLayerId, known)
     const kit = parsed ? library.kits[parsed.kitId] : undefined
     if (!parsed || !kit) continue
-    next = syncMountedCharacterKitLayers(next, kit, parsed.poseId, viewport)
+    next = syncMountedCharacterKitLayers(next, kit, parsed.poseId, viewport, parsed.instanceKey)
   }
   return next
 }

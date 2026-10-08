@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
+import { createCharacterKit, parseCharacterKitPoseLayerId, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
 import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
 import { blinkTimes, bodyKeyframes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
 
@@ -85,6 +85,26 @@ test('a planned shot compiles to an editable scene with mounted kits, phonetic m
   assert.ok(scene.layers.some(layer => layer.faceBinding?.role === 'blink' && layer.animation.keyframes?.length))
   assert.ok(scene.layers.some(layer => layer.type === 'camera'))
   assert.deepEqual(scene.audioTracks!.map(track => [track.id, track.kind, track.startTime]), [['s01-l1', 'speech', 0.35], ['s01-l2', 'speech', 1.8]])
+  assert.equal(scene.layers.find(layer => layer.type === 'image' && layer.id.includes('kevin'))!.id, 'kit-kevin-pose-base')
+  assert.ok(scene.layers.some(layer => layer.id === 'kit-gary-pose-base'))
+  assert.ok(scene.layers.some(layer => layer.id === 'kit-kevin-mouth-wide'))
+})
+
+test('the same kit twice gets its own ids and the line moves the copy castIndex names', () => {
+  const scene = compileSeriesShot(kits, shot({
+    cast: [{ kitId: 'kevin', x: 30 }, { kitId: 'kevin', x: 70 }],
+    lines: [
+      { id: 'a', kitId: 'kevin', text: 'Left.', start: 0.2, end: 1.0, filename: 'a.wav' },
+      { id: 'b', kitId: 'kevin', text: 'Right.', start: 1.2, end: 2.0, filename: 'b.wav', castIndex: 1 },
+    ],
+  }))
+  const poses = scene.layers.filter(layer => layer.type === 'image' && layer.id.includes('pose'))
+  assert.deepEqual(poses.map(layer => layer.id), ['kit-kevin-0-pose-base', 'kit-kevin-1-pose-base'])
+  assert.ok(scene.dialogueBeats![0].mouthLayerIds.every(id => id.includes('kevin-0-')))
+  assert.ok(scene.dialogueBeats![1].mouthLayerIds.every(id => id.includes('kevin-1-')))
+  assert.deepEqual(parseCharacterKitPoseLayerId('kit-kevin-0-pose-base', ['kevin']), { kitId: 'kevin', poseId: 'base', instanceKey: 0 })
+  assert.deepEqual(parseCharacterKitPoseLayerId('kit-kevin-pose-base', ['kevin']), { kitId: 'kevin', poseId: 'base' })
+  assert.deepEqual(parseCharacterKitPoseLayerId('kit-wolf-12-pose-base', ['wolf-12']), { kitId: 'wolf-12', poseId: 'base' })
 })
 
 test('entering characters hop in; panic shakes; off-screen lines do not move mouths', () => {

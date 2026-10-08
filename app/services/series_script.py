@@ -39,6 +39,7 @@ from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
+from services.series_script_warnings import finish_check
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
 from services.series_voice_rooms import PRESETS
 
@@ -160,8 +161,7 @@ class EpisodeScript:
             self.checker.location(scene.get("location"), scene.get("variant"), f"scene {key}")
         for index, shot in enumerate(self.script.get("shots") or []):
             self._check_shot(index, shot if isinstance(shot, dict) else {})
-        if self.checker.problems:
-            raise ScriptError(self.checker.problems)
+        finish_check(self)
 
     def _check_shot(self, index: int, shot: dict[str, Any]) -> None:
         where, check = f"shot {index} ({self.shot_id(index)})", self.checker
@@ -287,7 +287,8 @@ class EpisodeScript:
         return [{"id": f"{sid}_b{n}", "characterId": line["who"], "emotion": line.get("emotion", ""), "delivery": line.get("delivery", ""),
                  "text": _line_text(line, self.original),
                  **({"pauseBefore": line["pauseBefore"]} if isinstance(line.get("pauseBefore"), (int, float)) else {}),
-                 **({"voiceRoom": line["voiceRoom"]} if line.get("voiceRoom") is not None else {})}
+                 **({"voiceRoom": line["voiceRoom"]} if line.get("voiceRoom") is not None else {}),
+                 **({"castIndex": line["castIndex"]} if type(line.get("castIndex")) is int else {})}
                 for n, line in enumerate(lines)]
 
     def _shot(self, index: int, shot: dict[str, Any]) -> dict[str, Any]:
@@ -366,7 +367,7 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     built.check()
     shots = built.shots()
     summary = {"number": number, "shots": [shot["id"] for shot in shots], "original": built.original, "languages": built.languages,
-               **keep_look_room(series, kits, shots, root)}
+               "warnings": built.warnings, **keep_look_room(series, kits, shots, root)}
     if check_only:
         return {"checked": True, **summary}
     tool = _tool_caller(call, workspace, series["id"])

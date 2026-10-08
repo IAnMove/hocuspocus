@@ -1,0 +1,204 @@
+"""Script warnings that do not block, plus the voice and castIndex errors that do.
+
+``from_script`` returns ``warnings`` in the same grouped shape as a script error:
+``code``, ``subject``, ``shots`` and ``message``. A speaker who is not in the
+shot is ``speaker_not_on_screen``. A place used by several scenes, or a shot
+location that is not its scene's, is ``location_differs_from_scene``. Neither
+one stops ``check``. A line in the episode language whose kit has no voice
+(``voicesByLanguage`` or ``kit.voice``) is an error, because the render would
+fail. ``castIndex`` must point at the shot's cast.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from services.series_shot_plan import language_key, voice_for
+
+_LISTED = 2
+
+
+def finish_check(episode: Any) -> None:
+    """Store grouped warnings, then raise when the check found errors."""
+    episode.warnings = script_warnings(episode)
+    _missing_voices(episode)
+    _cast_indexes(episode)
+    if episode.checker.problems:
+        from services.series_script import ScriptError
+        error = ScriptError(episode.checker.problems)
+        error.warnings = episode.warnings
+        raise error
+
+
+def script_warnings(episode: Any) -> list[dict[str, Any]]:
+    """Grouped warnings for one checked script. Order is first appearance."""
+    return [*_speaker_warnings(episode), *_location_warnings(episode)]
+
+
+def _cast_ids(shot: dict[str, Any]) -> list[str]:
+    from services.series_script import _cast_entry
+    found = []
+    for raw in shot.get("cast") or []:
+        entry = _cast_entry(raw)
+        cid = str(entry.get("characterId") or "")
+        if cid:
+            found.append(cid)
+    return found
+
+
+def _screen_ids(shot: dict[str, Any]) -> list[str]:
+    """Who is on screen: the 2D cast, plus a 3D shot's own cast."""
+    found = _cast_ids(shot)
+    scene3d = shot.get("scene3d")
+    if not isinstance(scene3d, dict):
+        return found
+    for raw in scene3d.get("cast") or []:
+        cid = str(raw.get("characterId") or "") if isinstance(raw, dict) else raw if isinstance(raw, str) else ""
+        if cid and cid not in found:
+            found.append(cid)
+    return found
+
+
+def _kit_id(episode: Any, character_id: str) -> str:
+    character = episode.checker.characters.get(character_id) or {}
+    ref = (character.get("voiceProfile") or {}).get("characterKitRef") or {}
+    return str(ref.get("id") or "")
+
+
+def _suggestion(who: str, cast: list[str], episode: Any) -> str:
+    """A cast member of the same character: an id prefixed by ``who``, or a kit of that base."""
+    prefixed = [cid for cid in cast if cid.startswith(f"{who}-")]
+    if prefixed:
+        return prefixed[0]
+    base = _kit_id(episode, who)
+    if not base:
+        return ""
+    for cid in cast:
+        other = _kit_id(episode, cid)
+        if other and (other.startswith(f"{base}-") or base.startswith(f"{other}-")):
+            return cid
+    return ""
+
+
+def _speaker_warnings(episode: Any) -> list[dict[str, Any]]:
+    buckets: dict[tuple[str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str]] = []
+    for index, shot in enumerate(episode.script.get("shots") or []):
+        if not isinstance(shot, dict):
+            continue
+        cast = _screen_ids(shot)
+        shot_id = episode.shot_id(index)
+        for line in shot.get("lines") or []:
+            who = str(line.get("who") or "") if isinstance(line, dict) else ""
+            if not who or who in cast or who not in episode.checker.characters:
+                continue
+            hint = _suggestion(who, cast, episode)
+            key = (who, hint)
+            bucket = buckets.get(key)
+            if bucket is None:
+                bucket = {"who": who, "hint": hint, "shots": []}
+                buckets[key] = bucket
+                order.append(key)
+            if shot_id not in bucket["shots"]:
+                bucket["shots"].append(shot_id)
+    return [_speaker_group(buckets[key]) for key in order]
+
+
+def _speaker_group(bucket: dict[str, Any]) -> dict[str, Any]:
+    who, hint, shots = bucket["who"], bucket["hint"], bucket["shots"]
+    if hint:
+        text = f"{who}: did you mean {hint}? The line is voice-over and the cutout won't move its mouth"
+    else:
+        text = f"{who}: not on screen"
+    return {"code": "speaker_not_on_screen", "subject": who, "shots": shots,
+            "message": f"{text} {_listed(shots)}"}
+
+
+def _variant(scene_id: str, place: str) -> bool:
+    return place == scene_id or place.startswith(scene_id) or scene_id.startswith(place)
+
+
+def _location_warnings(episode: Any) -> list[dict[str, Any]]:
+    rows: list[tuple[str, str, str, str | None]] = []
+    users: dict[str, set[str]] = {}
+    for index, shot in enumerate(episode.script.get("shots") or []):
+        if not isinstance(shot, dict):
+            continue
+        scene = episode.scenes.get(str(shot.get("scene")))
+        if not isinstance(scene, dict):
+            continue
+        scene_id = str(shot.get("scene"))
+        scene_place = str(scene.get("location") or "")
+        own = shot.get("location")
+        own_place = str(own) if own not in (None, "") else ""
+        place = own_place or scene_place
+        if not place:
+            continue
+        users.setdefault(place, set()).add(scene_id)
+        # None: the shot inherits the scene. A shot location equal to the scene is the same.
+        instead = scene_place if own_place and own_place != scene_place else None
+        rows.append((scene_id, place, episode.shot_id(index), instead))
+    grouped: dict[tuple[str, str, str | None], list[str]] = {}
+    order: list[tuple[str, str, str | None]] = []
+    for scene_id, place, shot_id, instead in rows:
+        shared = len(users.get(place, ())) > 1 and not _variant(scene_id, place)
+        if instead is None and not shared:
+            continue
+        key = (scene_id, place, instead)
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(shot_id)
+    return [_location_group(key, grouped[key]) for key in order]
+
+
+def _location_group(key: tuple[str, str, str | None], shots: list[str]) -> dict[str, Any]:
+    scene_id, place, explicit = key
+    instead = f"instead of {explicit}" if explicit else "instead of the scene"
+    return {"code": "location_differs_from_scene", "subject": scene_id, "shots": shots,
+            "message": f"{scene_id}: {len(shots)} shots use {place} {instead} {_listed(shots)}"}
+
+
+def _listed(shots: list[str]) -> str:
+    if len(shots) <= 6:
+        listed = ", ".join(shots)
+    else:
+        listed = f"{', '.join(shots[:_LISTED])} … {len(shots)} shots"
+    return f"(shots {listed})"
+
+
+def _missing_voices(episode: Any) -> None:
+    from services.series_script import _line_text
+    language = language_key(episode.series)
+    problems = episode.checker.problems
+    for index, shot in enumerate(episode.script.get("shots") or []):
+        if not isinstance(shot, dict):
+            continue
+        where = f"shot {index} ({episode.shot_id(index)})"
+        for line in shot.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            who = str(line.get("who") or "")
+            if not who or who not in episode.checker.characters or not _line_text(line, language):
+                continue
+            kit_id = _kit_id(episode, who)
+            kit = episode.checker.kits.get(kit_id) if kit_id else None
+            if not kit or voice_for(kit, language):
+                continue
+            problem = f"{where}: {who} has no {language} voice"
+            if problem not in problems:
+                problems.append(problem)
+
+
+def _cast_indexes(episode: Any) -> None:
+    problems = episode.checker.problems
+    for index, shot in enumerate(episode.script.get("shots") or []):
+        if not isinstance(shot, dict):
+            continue
+        cast = _cast_ids(shot)
+        where = f"shot {index} ({episode.shot_id(index)})"
+        for line_index, line in enumerate(shot.get("lines") or []):
+            if not isinstance(line, dict) or "castIndex" not in line:
+                continue
+            value = line.get("castIndex")
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < len(cast):
+                problems.append(f"{where}: line {line_index} castIndex is not in the cast")

@@ -208,7 +208,7 @@ def test_an_instruction_without_an_llm_and_a_render_without_changes(tmp_path):
 
 def test_a_missing_version_voice_blocks_new_lines_but_not_an_effect():
     series = library()
-    kits = {**KITS, "kit-gary": {"poses": {}}}  # gary has no English voice now
+    kits = {**KITS, "kit-gary": {"poses": {}, "voice": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}  # episode voice, no English one
 
     def edit_with(changes=None, append=None):
         episode = series["episodesById"]["ep2"]
