@@ -24,6 +24,6 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | G2 Cartela de documento | `feat/series-document-cards` | [#925](https://github.com/IAnMove/hocuspocus/pull/925) | borrador abierto: la página cabe o avisa, y no bloquea | `card.kind: document` |
 | G3 Oído | `feat/series-hearing` | [#926](https://github.com/IAnMove/hocuspocus/pull/926) | borrador abierto: el oído normal no toca el archivo; el sordo hay que volver a renderizarlo | `shot.hearing` |
 | G4 Grabado y stop-motion | `feat/looks-etching-stopmotion` | [#927](https://github.com/IAnMove/hocuspocus/pull/927) | borrador abierto: el grabado es estable y el stop-motion no toca el audio | efecto `etching`, `motionStep` |
-| G5 Planos de vídeo | `feat/series-video-shots` | — | pendiente | `app/services/series_video_shots.py` |
+| G5 Planos de vídeo | `feat/series-video-shots` | [#928](https://github.com/IAnMove/hocuspocus/pull/928) | borrador abierto: el paso de vídeo va antes del render; las dos tomas reales esperan GPU libre | `video` en el plano |
 | G6 Versiones de kit | `feat/kit-revisions-pinning` | — | pendiente | `kit.revision`, `episode.kitPins` |
 | H1 Recuperabilidad | `feat/recoverability-rest` | — | pendiente, solo si sobra tiempo | puntos abiertos de `docs/development/MCP_RECOVERABILITY.md` |

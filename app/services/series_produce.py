@@ -67,6 +67,10 @@ class ProduceDeps:
     review_blockers: Callable[[str, str, str, str], list[dict]] | None = None
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 5.0
+    # Optional: a scripted H3 shot reads kits for its start frame, writes the take, or lets a test import it.
+    read_kits: Callable[[str], dict] | None = None
+    import_take: Callable[[dict], Any] | None = None
+    write_library: Callable[[str, dict], Any] | None = None
 
 
 def _result(reply: dict, label: str) -> dict:
@@ -105,6 +109,8 @@ class SeriesProduce:
         if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in self.jobs(workspace)):
             raise ProduceError("already_running", "This episode is already being produced")
         steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
+        if self._has_video(workspace, series_id, episode_id):
+            steps.insert(0, {"kind": "video", "language": original, "status": "queued"})
         job = {"jobId": f"produce-{uuid.uuid4().hex[:12]}", "workspace": workspace, "seriesId": series_id, "episodeId": episode_id,
                "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "rerender": bool(rerender),
                "status": "queued",
@@ -201,6 +207,10 @@ class SeriesProduce:
                 return
             if step["kind"] == "assemble" and self._waits_for_review(job, step):
                 return
+            if step["kind"] == "video":
+                if self._spend_video(job, step):
+                    return
+                continue
             self._save(job, message=f"{step['kind'].capitalize()} {step['language']}")
             step["status"] = "running"
             try:
@@ -214,6 +224,32 @@ class SeriesProduce:
             self._save(job)
         self._save(job, status="completed", finishedAt=time.time(),
                    message=f"Rendered and cut in {', '.join(job['languages'])}")
+
+    def _has_video(self, workspace: str, series_id: str, episode_id: str) -> bool:
+        """True when a shot stores a ``video`` object. A plain imported take does not."""
+        from services.series_video_shots import needs_video_step
+        series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id) or {}
+        episode = (series.get("episodesById") or {}).get(episode_id) or {}
+        return needs_video_step(episode)
+
+    def _spend_video(self, job: dict, step: dict) -> bool:
+        """Generate the scripted clips. True when this run stops (waiting on a plan, or the step failed)."""
+        from services.series_video_shots import produce_videos
+        step["status"] = "running"
+        self._save(job, message=f"Video {step['language']}")
+        try:
+            held = produce_videos(job, step, self.deps, cancelled=lambda: self._cancelled(job["jobId"]))
+        except Exception as error:
+            step.update(status="failed", error=f"{type(error).__name__}: {error}"[:500])
+            self._save(job, status="cancelled" if self._cancelled(job["jobId"]) else "failed", finishedAt=time.time(),
+                       message="Video failed; resume to retry")
+            return True
+        if held:
+            self._save(job)
+            return True
+        step.update(status="done", error=None)
+        self._save(job)
+        return False
 
     def _waits_for_review(self, job: dict, step: dict) -> bool:
         """A staged episode is cut once every shot passed its review. Until then the production stops as ``waiting``
