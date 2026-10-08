@@ -232,6 +232,7 @@ def scene_compile_errors(spec: dict, score: dict, windows: list) -> list[dict]:
     if not windows:
         return []
     host = _Host()
+    host.state["spec"] = spec      # lyric looks read the song's sections from it
     for shot in windows:
         if isinstance(shot, dict) and shot.get("kind") == "h3" and isinstance(shot.get("key"), str):
             host.state["frames"][shot["key"]] = "preview.png"

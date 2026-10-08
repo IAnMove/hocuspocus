@@ -36,14 +36,18 @@ def title_ops(shot: dict, dur: float, style: dict) -> tuple[list[dict], int]:
     return ops, title_cue_count(template, fields, *span)
 
 
-def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int) -> list[dict]:
+def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int,
+              sections: list[str] | None = None) -> list[dict]:
+    """Title cues for the sung lines in this scene. ``sections`` is each score line's song section, for lyric_looks."""
+    from services.production_lyric_looks import look_for, synced_enter
     ops: list[dict] = []
-    template = style.get("lyric_template", "social-caption")
     limit = MAX_TEXTS - bool(style.get("footer"))
     for index, line in enumerate(score.get("lines") or []):
         span = lyric_span(line, a, b, dur)
         if span is None:
             continue
+        designed = look_for(style, (sections or [])[index] if index < len(sections or []) else "verse")
+        template = designed["template"] if designed else style.get("lyric_template", "social-caption")
         fields = {"line": line["text"]} if template in ("ransom", "dymo") else {"caption": line["text"]}
         cues = title_cue_count(template, fields, *span)
         if used + cues > limit:
@@ -53,7 +57,9 @@ def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: f
         ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                     "start": span[0], "duration": span[1]})
         own = style.get("lyric_style") or {}
-        look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own, **seam_look(line, a, b)}
+        base = {**designed["look"], **({"enter": synced} if (synced := synced_enter(designed, line)) else {})} if designed \
+            else {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {})}
+        look = {**base, **own, **seam_look(line, a, b)}
         if look:
             for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
                 ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})

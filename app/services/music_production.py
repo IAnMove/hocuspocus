@@ -86,6 +86,8 @@ SPEC_SCHEMA: dict[str, Any] = {
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                    "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
+                                                   "lyric_look": {"type": "string", "description": "a designed lyric look (app/shared/lyric_looks.json): cinema, storybook, marker-pop, neon, big-word, typewriter, paper-strip, comic-caption, riso-offset, quiet-left, engraved, arcade, wave-chant"},
+                                                   "lyric_looks": {"type": "object", "description": "song section (default, intro, verse, pre-chorus, chorus, bridge, outro) -> lyric look, so sections differ"},
                                                    "theme": {"type": "string", "description": "Omarchy colour theme id (app/shared/omarchy_themes.json): screen shots, lyric and footer colours"},
                                                    "content": {"enum": ["screen"], "description": "what auto-planned non-sung shots are: the native desktop (default: a short H3 clip, or stills when given)"},
                                                    "singer": {"type": "boolean", "description": "false: nobody sings on screen (auto-planned shots have no sung H3 shots)"},
@@ -187,10 +189,12 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
+    from services.production_lyric_looks import LyricLookError, check_lyric_looks
     from services.production_models import ModelError, check_models
     try:
         check_models(spec)
-    except ModelError as error:
+        check_lyric_looks(spec["style"])
+    except (ModelError, LyricLookError) as error:
         raise ProductionError("invalid_spec", str(error)) from error
     from services.production_resolution import check_resolution
     return require_direction(check_resolution(spec))
@@ -486,8 +490,10 @@ class Production:
         return title_ops(shot, dur, style)
 
     def _lyric_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int) -> list[dict]:
+        from services.production_lyric_looks import line_sections
         from services.production_scene_ops import lyric_ops
-        return lyric_ops(self.log, shot, a, b, dur, score, style, used)
+        sections = line_sections(((getattr(self, "state", {}).get("spec") or {}).get("song") or {}).get("lyrics") or "")
+        return lyric_ops(self.log, shot, a, b, dur, score, style, used, sections)
 
     @staticmethod
     def _footer_ops(dur: float, style: dict) -> list[dict]:

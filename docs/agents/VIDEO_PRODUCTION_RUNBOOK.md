@@ -280,6 +280,16 @@ Style fields beyond the example:
   steps a preset set for another model. Do not run Qwen next to H3 on one GPU: `production.run` already makes every cast
   sheet, portrait and start frame before it submits the first H3 clip. `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
 - `lyric_template`: any text template; the lyric goes in its `caption`/`line` field (`ransom`, `dymo`, `social-caption`, ...).
+- `lyric_look` / `lyric_looks`: designed lyric type instead of a template's stock box. A look sets font, weight,
+  colour, outline or shadow, a box only where it belongs to the design, entrance, loop and place
+  (`app/shared/lyric_looks.json`): `cinema`, `storybook`, `marker-pop`, `neon`, `big-word`, `typewriter`,
+  `paper-strip`, `comic-caption`, `riso-offset`, `quiet-left`, `engraved`, `arcade`, `wave-chant`.
+  `lyric_looks` maps song sections (`default`, `intro`, `verse`, `pre-chorus`, `chorus`, `bridge`, `outro`, read
+  from the lyric tags) to looks, so a chorus can land big while verses stay quiet:
+  `{"verse": "quiet-left", "chorus": "big-word"}`. Word, letter and typewriter entrances last until the line's
+  last sung word. `lyric_style` still overrides single fields. With no lyric template, style, theme or look, a
+  finish preset picks its look (warmCinema cinema, oldDoc typewriter, nightNeon neon, paperComic comic-caption,
+  risoPress riso-offset). Give each piece its own treatment (`same_lyric_look` warns).
 - `theme`: an Omarchy colour theme (`tokyo-night`, `catppuccin`, `gruvbox`, `nord`, `rose-pine`, `kanagawa`): lyrics become
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
