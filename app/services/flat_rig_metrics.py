@@ -12,10 +12,13 @@ and busts. Their wide openings sat between about 0.12 and 0.19, so 0.08 warns
 when a mouth barely opens and stays quiet on a full-figure mouth that still
 reads. Showing the number is what the review is for.
 
-``check_image`` looks at one keyed pose and saves nothing. It reuses the rig's
-eye and mouth search. Face landmarks, when the models are installed, add the
-face box and a low-confidence warning; a missing model does not fail a pose
-the pixel search already accepts.
+``check_image`` looks at one keyed pose and saves nothing. It runs the rig's
+own search (``rig_pose`` with the face landmarks and the kit look of a new kit),
+so a pose the rig takes is ready, and a rig error becomes a reason. Landmarks,
+when the models are installed, guide that search as they guide the rig, and add
+the face box and a low-confidence warning; a missing model does not fail a pose
+the pixel search already accepts. An image with no transparent background, or
+with nothing left after the key, is ``not_keyed``.
 """
 from __future__ import annotations
 
@@ -26,7 +29,7 @@ import numpy as np
 from PIL import Image
 
 from services import face_landmarks
-from services.flat_rig_eyes import _components, find_eyes, light_sclera
+from services.flat_rig_eyes import _components, light_sclera
 from services.flat_rig_warp import drop_pixels
 
 # Wide opening height over the eye-pair width. See the module note.
@@ -69,25 +72,26 @@ def check_pose(workspace_dir: str, workspace: str, source: str) -> dict[str, Any
 
 def check_image(image: Image.Image) -> dict[str, Any]:
     """Whether the flat rig can find eyes and a mouth on one keyed pose. Nothing is painted or saved."""
-    from services.flat_rig import FlatRigError, _figure_box, find_mouth
+    from services.flat_rig import FlatRigError, _figure_box, rig_pose
+    from services.flat_rig_look import kit_look
 
     rgba = image.convert("RGBA")
+    # A frame opaque all over still has its background, which the rig would take for the figure.
+    if not (np.asarray(rgba.getchannel("A")) <= 128).any():
+        return _report(False, ["not_keyed"], None, 0.0)
     try:
         cleaned, crop = _figure_box(rgba)
     except FlatRigError as error:
         if error.code == "not_keyed":
-            return _report(False, ["eyes_not_found"], None, 0.0)
+            return _report(False, ["not_keyed"], None, 0.0)
         raise
-    figure = cleaned.crop(crop)
-    pixels = np.asarray(figure)
-    rgb, alpha = pixels[..., :3], pixels[..., 3]
     landmarks = face_landmarks.detect(rgba)
-    reason, eyes_box = _eye_reason(rgb, alpha)
-    reasons = [reason] if reason else []
-    if eyes_box is None:
-        eyes_box = _landmark_eyes_box(landmarks, crop, figure.size)
-    if eyes_box is not None and _mouth_missing(find_mouth, rgb, alpha, eyes_box):
-        reasons.append("mouth_not_found")
+    try:
+        # The rig's own search: the landmarks place the eyes and the mouth when the pixels alone do not.
+        rig = rig_pose(rgba, kit_look({}, None), None, landmarks)
+        reasons = [] if rig["found"] else ["mouth_not_found"]
+    except FlatRigError as error:
+        reasons = [_rig_reason(error, cleaned.crop(crop))]
     confidence = _confidence(landmarks)
     if landmarks and reasons and confidence < face_landmarks.MIN_SCORE:
         reasons.append("face_low_confidence")
@@ -151,56 +155,24 @@ def _warn(rig: dict[str, Any], code: str) -> None:
         warnings.append(code)
 
 
-def _eye_reason(rgb: np.ndarray, alpha: np.ndarray) -> tuple[str | None, tuple[int, int, int, int] | None]:
-    from services.flat_rig import FlatRigError
-
-    try:
-        box, _mask = find_eyes(rgb, alpha)
-    except FlatRigError as error:
-        if error.code != "eyes_not_found":
-            raise
-        if _light_specks(rgb, alpha):
-            return "eyes_small", None
-        if int((alpha > 200).sum()) >= _SUBSTANTIAL:
-            return "sclera_dark", None
-        return "eyes_not_found", None
-    return None, box
+def _rig_reason(error: Exception, figure: Image.Image) -> str:
+    """A rig error as a reason. Missing eyes say why: light sclera that is no usable pair, or no light sclera at all."""
+    code = str(getattr(error, "code", "") or "rig_failed")
+    if code != "eyes_not_found":
+        return code
+    pixels = np.asarray(figure)
+    rgb, alpha = pixels[..., :3], pixels[..., 3]
+    if _light_specks(rgb, alpha):
+        return "eyes_small"
+    if int((alpha > 200).sum()) >= _SUBSTANTIAL:
+        return "sclera_dark"
+    return "eyes_not_found"
 
 
 def _light_specks(rgb: np.ndarray, alpha: np.ndarray) -> bool:
     """Light sclera anywhere on the figure. The eye search only looks at the top, and only for a pair."""
     _labels, parts = _components(light_sclera(rgb, alpha))
     return any(part["size"] >= _SPECK for part in parts)
-
-
-def _landmark_eyes_box(landmarks: dict[str, Any] | None, crop, size) -> tuple[int, int, int, int] | None:
-    if not landmarks:
-        return None
-    scores = landmarks.get("scores") or {}
-    if float(scores.get("eyes") or 0) < face_landmarks.MIN_SCORE:
-        return None
-    points = [point for eye in landmarks.get("eyes") or [] for point in eye]
-    if len(points) < 2:
-        return None
-    xs = [float(point[0]) - crop[0] for point in points]
-    ys = [float(point[1]) - crop[1] for point in points]
-    x0, y0 = max(0, math.floor(min(xs))), max(0, math.floor(min(ys)))
-    x1, y1 = min(size[0], math.ceil(max(xs))), min(size[1], math.ceil(max(ys)))
-    if x1 <= x0 or y1 <= y0:
-        return None
-    return int(x0), int(y0), int(x1), int(y1)
-
-
-def _mouth_missing(find_mouth, rgb, alpha, eyes_box) -> bool:
-    from services.flat_rig import FlatRigError
-
-    try:
-        find_mouth(rgb, alpha, eyes_box)
-    except FlatRigError as error:
-        if error.code == "mouth_not_found":
-            return True
-        raise
-    return False
 
 
 def _confidence(landmarks: dict[str, Any] | None) -> float:

@@ -137,10 +137,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "characters.rig.check": (
         {"workspace": WORKSPACE, "source": {"type": "string", "minLength": 1, "maxLength": 2000}},
         ["workspace", "source"], False,
-        "Check one keyed pose before saving it: whether the flat rig can find the eyes and a mouth. "
-        "Saves nothing and paints nothing. Returns ready, reasons (eyes_small, eyes_not_found, sclera_dark, "
-        "mouth_not_found, face_low_confidence) and face {box, confidence}. eyes_small means some light sclera "
-        "is there but not a pair the rig can use on its own.",
+        "Check one keyed pose before saving it: whether the flat rig can find the eyes and a mouth, with the rig's "
+        "own search (face landmarks guide it, as in characters.rig.flat). "
+        "Saves nothing and paints nothing. Returns ready, reasons (not_keyed, eyes_small, eyes_not_found, sclera_dark, "
+        "mouth_not_found, face_low_confidence, or another rig error code such as face_too_light) and face {box, confidence}. "
+        "eyes_small means some light sclera is there but not a pair the rig can use on its own; not_keyed means the "
+        "background is still there (no transparent pixel) or nothing is left after the key.",
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},

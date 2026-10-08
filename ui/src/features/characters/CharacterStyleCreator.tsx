@@ -35,6 +35,9 @@ function Candidates({ candidates, picked, onPick, disabled }: {
     sclera_dark: t('styleCreator.rigReasons.sclera_dark'),
     mouth_not_found: t('styleCreator.rigReasons.mouth_not_found'),
     face_low_confidence: t('styleCreator.rigReasons.face_low_confidence'),
+    not_keyed: t('styleCreator.rigReasons.not_keyed'),
+    face_too_light: t('styleCreator.rigReasons.face_too_light'),
+    face_keyed_out: t('styleCreator.rigReasons.face_keyed_out'),
   }
   return <div className="grid grid-cols-3 gap-2" data-testid="character-candidates">
     {candidates.map((candidate, index) => <button key={candidate.id} type="button" disabled={disabled || candidate.status !== 'ready'}

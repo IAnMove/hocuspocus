@@ -581,7 +581,40 @@ def test_rig_check_accepts_a_paper_face_and_rejects_dark_eyes_without_landmarks(
     dark = check_image(_dark_eyes())
     assert dark["ready"] is False and dark["reasons"] == ["sclera_dark"]
     blank = check_image(Image.new("RGBA", (80, 80), (0, 0, 0, 0)))
-    assert blank == {"ready": False, "reasons": ["eyes_not_found"], "face": {"box": None, "confidence": 0.0}}
+    assert blank == {"ready": False, "reasons": ["not_keyed"], "face": {"box": None, "confidence": 0.0}}
+
+
+def test_an_unkeyed_pose_is_not_keyed_rather_than_eyeless():
+    """A pose still on its screen (opaque all over) would be rigged background and all: the check says to key it."""
+    from services.flat_rig_metrics import check_image
+
+    screen = Image.new("RGB", _cutout().size, (40, 200, 60))
+    screen.paste(_cutout(), (0, 0), _cutout())
+    assert check_image(screen) == {"ready": False, "reasons": ["not_keyed"], "face": {"box": None, "confidence": 0.0}}
+    assert check_image(screen.convert("RGBA"))["reasons"] == ["not_keyed"]
+
+
+def _ring(cx: float, cy: float, rx: float, ry: float, count: int) -> list[list[float]]:
+    return [[round(cx + rx * np.cos(2 * np.pi * k / count), 1), round(cy + ry * np.sin(2 * np.pi * k / count), 1)] for k in range(count)]
+
+
+def _face_points(mouth_y: float, score: float) -> dict:
+    """Landmarks where ``_cutout`` and ``_dark_eyes`` draw the eyes and the mouth, as ``face_landmarks.detect`` returns them."""
+    return {"eyes": [_ring(160, 170, 40, 50, 6), _ring(260, 170, 40, 50, 6)], "mouth": _ring(210, mouth_y, 52, 9, 12),
+            "contour": [[0, 0], [40, 50]], "scores": {"eyes": score, "mouth": score, "contour": score}}
+
+
+def test_with_sure_landmarks_the_check_takes_the_dark_eyes_the_rig_takes(monkeypatch):
+    """The rig places dark eyes from the landmarks' outlines; the check runs that same search instead of failing them."""
+    from services import face_landmarks
+    from services.flat_rig_look import kit_look
+    from services.flat_rig_metrics import check_image
+
+    sure = _face_points(292, 0.9)
+    rig = rig_pose(_dark_eyes(), kit_look({}, None), None, sure)
+    assert rig["found"] and rig["guided"] == ["eyes", "mouth"]
+    monkeypatch.setattr(face_landmarks, "detect", lambda _image: sure)
+    assert check_image(_dark_eyes()) == {"ready": True, "reasons": [], "face": {"box": [0, 0, 40, 50], "confidence": 0.9}}
 
 
 def test_low_face_confidence_is_reported_only_beside_another_reason(monkeypatch):
@@ -595,7 +628,8 @@ def test_low_face_confidence_is_reported_only_beside_another_reason(monkeypatch)
     monkeypatch.setattr(face_landmarks, "detect", lambda _image: payload)
     dark = check_image(_dark_eyes())
     assert dark["reasons"] == ["sclera_dark", "face_low_confidence"] and dark["face"]["confidence"] == 0.2
-    payload["scores"] = {"eyes": 0.8, "mouth": 0.9, "contour": 0.8}
+    # Sure landmarks guide the rig's search, so they must sit on the face they were read from.
+    payload.update(_face_points(285, 0.8), scores={"eyes": 0.8, "mouth": 0.9, "contour": 0.8})
     good = check_image(_cutout())
     assert good["ready"] is True and good["reasons"] == []
     assert good["face"]["confidence"] == 0.8 and good["face"]["box"] == [0, 0, 40, 50]
@@ -633,7 +667,7 @@ def test_rig_check_route_reports_a_pose_and_does_not_save(tmp_path):
     dark = post("dark.png")
     assert dark.status_code == 200 and dark.json()["reasons"] == ["sclera_dark"]
     empty = post("empty.png")
-    assert empty.status_code == 200 and empty.json()["reasons"] == ["eyes_not_found"]
+    assert empty.status_code == 200 and empty.json()["reasons"] == ["not_keyed"]
     missing = post("missing.png")
     assert missing.status_code == 409 and missing.json()["detail"]["code"] == "missing_source"
     assert not (folder / ".character-kit-library-v1.json").exists()

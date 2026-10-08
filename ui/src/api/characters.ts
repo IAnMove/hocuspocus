@@ -167,6 +167,7 @@ export async function previewFlatRigMouth(details: { workspace: string; kitId: s
 }
 
 export type RigCheckReason = 'eyes_small' | 'eyes_not_found' | 'sclera_dark' | 'mouth_not_found' | 'face_low_confidence'
+  | 'not_keyed' | 'face_too_light' | 'face_keyed_out'
 
 /** Whether one keyed pose can be rigged (characters.rig.check). Nothing is painted or saved. */
 export type RigCheck = {
