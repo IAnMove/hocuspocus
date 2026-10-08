@@ -3,7 +3,9 @@ import { ArrowDown, ArrowUp, BookOpen, FileText, Loader2, Play, Square } from 'l
 import * as api from '../../api/client'
 import { useJobAction } from './useJobAction'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
+import { useCharacterKitLibrary } from '../characters/useCharacterKitLibrary'
 import { Pill, SectionCard, SeriesField, seriesStatusLabel } from './components'
+import { KitPinNoticeList } from './KitPinNoticeList'
 import { SeriesEpisodeProposalReview } from './SeriesEpisodeProposalReview'
 import { SeriesEpisodeScripts } from './SeriesEpisodeScripts'
 import { inputClass, primaryButton, secondaryButton, textareaClass } from './styles'
@@ -24,6 +26,8 @@ export function SeriesEpisodePanel({
   onAdaptToComic?: () => Promise<void>
 }) {
   const { t } = useUiTranslation('seriesLab')
+  const hasKitPins = Boolean(episode.kitPins && Object.keys(episode.kitPins).length)
+  const { kits: kitLibrary } = useCharacterKitLibrary(workspace, false, hasKitPins)
   const [instruction, setInstruction] = useState('')
   const [job, setJob] = useState<SeriesJobStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -122,6 +126,7 @@ export function SeriesEpisodePanel({
   return <div className="space-y-4 pb-10">
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
     <SectionCard title={t('episode.heading', { number: episode.number, title: episode.title })} description={t('episode.frozen', { revision: episode.canonRevisionAtCreation })}>
+      <KitPinNoticeList series={series} episode={episode} kits={kitLibrary} />
       <div className="mb-3 space-y-1">
         <button type="button" className={secondaryButton} disabled={busy || jobBusy || series.canon?.approval !== 'approved'} onClick={() => void refreshReferences()}>{t('references.refresh')}</button>
         <p className="text-[11px] text-text-muted">{t(series.canon?.approval === 'approved' ? 'references.refreshHint' : 'references.approveFirst')}</p>

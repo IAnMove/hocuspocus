@@ -28,7 +28,9 @@ from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
 
 # What a shot's picture and sound depend on, besides the render code itself.
 _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId", "visibleCharacterIds", "scene3d")
-_KIT_VOLATILE = ("createdAt", "updatedAt", "provenance")
+# ``revision`` is the per-kit counter. Pins choose which document is hashed; the
+# number itself is not a picture or a voice, so adding it does not stale a take.
+_KIT_VOLATILE = ("createdAt", "updatedAt", "provenance", "revision")
 # Version 2 snaps a silent shot's length to 0.05 s of the length the planner will render.
 # Version 1 stored the raw ``durationSeconds``, which the render then rewrote, so the next pass looked stale.
 INPUTS_VERSION = 2

@@ -29,6 +29,7 @@ EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
     "continuityIssues", "proposedCanonDelta", "languageVersions", "score", "videoBudget",
+    "kitPins",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -631,6 +632,12 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
     # The staged review (series_review): mode, per-shot decisions on the current content, notes.
     from .series_review import normalize_episode_review
     normalize_episode_review(episode)
+    from .series_kit_pins import normalize_kit_pins
+    pins = normalize_kit_pins(episode.get("kitPins"))
+    if pins:
+        episode["kitPins"] = pins
+    else:
+        episode.pop("kitPins", None)
     from .series_shot_dialogue import annotate_episode_shot_dialogue
     return annotate_episode_shot_dialogue(episode)
 

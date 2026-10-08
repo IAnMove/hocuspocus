@@ -273,6 +273,11 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
             raise ValueError("Character rest pose must be an object")
         result["restPose"] = {"asset": _asset(rest.get("asset"), "Character rest pose"),
                               "fingerprint": _text(rest.get("fingerprint"), "Rest pose fingerprint", 8000, required=True)}
+    # Per-kit counter (series_kit_pins). Absent on kits saved before pinning; readers treat that as 0.
+    # A client cannot choose it: patch_character_kit overwrites it after normalize.
+    revision = value.get("revision")
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision >= 0:
+        result["revision"] = revision
     for key in ("identityReference", "base"):
         if value.get(key) is not None:
             result[key] = _asset(value[key], f"Character Kit {key}")
@@ -319,6 +324,66 @@ def _revision(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("baseRevision must be a non-negative integer")
     return value
+
+
+def kit_revision(kit: Any) -> int:
+    """The kit's own revision. A kit saved before per-kit history has none, which is revision 0."""
+    if not isinstance(kit, dict):
+        return 0
+    value = kit.get("revision", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
+
+
+def kit_revision_path(workspace_dir: str, kit_id: str, revision: int) -> str:
+    return os.path.join(workspace_dir, ".character-kit-revisions", f"{kit_id}.v{revision}.json")
+
+
+def read_kit_revision(workspace_dir: str, kit_id: str, revision: int) -> dict[str, Any] | None:
+    """One stored kit document. Missing history is absence, not the live kit."""
+    path = kit_revision_path(workspace_dir, kit_id, revision)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        document = json.load(handle)
+    return document if isinstance(document, dict) else None
+
+
+def _remember_kit(workspace_dir: str, kit: dict[str, Any]) -> None:
+    """Store this kit document before a newer one replaces it.
+
+    The write is a temp file plus replace. Image files named by the kit stay
+    where they are: a revision points at them, and this function never deletes
+    a pose, a mouth or a blink.
+    """
+    path = kit_revision_path(workspace_dir, str(kit.get("id") or ""), kit_revision(kit))
+    if os.path.exists(path):
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(kit, handle, ensure_ascii=False, allow_nan=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            if os.path.isfile(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+
+
+def _stamp_kit_revision(workspace_dir: str, current: dict[str, Any], token: str, candidate: dict[str, Any]) -> None:
+    """Bump this kit only. characters.save, a re-rig and a voice edit all arrive here."""
+    previous = (current.get("kits") or {}).get(token)
+    if isinstance(previous, dict):
+        _remember_kit(workspace_dir, previous)
+        candidate["revision"] = kit_revision(previous) + 1
+        return
+    candidate["revision"] = 1
 
 
 def _prune_history(path: str, keep: int = HISTORY_REVISIONS) -> None:
@@ -383,6 +448,7 @@ def patch_character_kit(workspace_dir: str, kit_id: str, kit: Any, *, base_revis
         expected = _revision(base_revision)
         if expected != current["revision"]:
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
+        _stamp_kit_revision(workspace_dir, current, token, candidate)
         next_library = {**current, "kits": {**current["kits"], token: candidate}}
         if make_active or not current.get("activeId"):
             next_library["activeId"] = token

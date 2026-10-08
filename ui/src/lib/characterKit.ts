@@ -46,6 +46,8 @@ export interface CharacterKit {
   voicesByLanguage?: import('./characterVoice').CharacterVoicesByLanguage
   version: 1
   id: string
+  /** Per-kit save counter. An episode pin names one. A kit saved before pinning has none. */
+  revision?: number
   name: string
   style: CharacterKitStyle
   identityReference?: CharacterKitAsset
