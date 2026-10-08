@@ -58,8 +58,16 @@ def _environ(pid: int) -> dict[str, str]:
     return found
 
 
-def _is_instance(command: str, folder: str) -> bool:
-    if "launch.py" not in command:
+def _comm(pid: int) -> str:
+    try:
+        return Path(f"/proc/{pid}/comm").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _is_instance(command: str, folder: str, comm: str) -> bool:
+    """Return whether this process is a HocusPocus server, not a wrapper shell."""
+    if "launch.py" not in command or not comm.startswith("python"):
         return False
     blob = f"{command} {folder}".lower()
     return "hocuspocus" in blob or "pinokio" in blob
@@ -148,7 +156,7 @@ def _vram_cell(vram: dict[int, int] | None, pid: int) -> str:
 def _instance_row(pid: int, vram: dict[int, int] | None) -> dict[str, str] | None:
     command = _cmdline(pid)
     folder = _cwd(pid)
-    if not _is_instance(command, folder):
+    if not _is_instance(command, folder, _comm(pid)):
         return None
     env = _environ(pid)
     root = _repo_root(folder)

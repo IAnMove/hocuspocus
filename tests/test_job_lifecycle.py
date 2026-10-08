@@ -973,6 +973,8 @@ class TestGpuMachineLock(unittest.TestCase):
         }])
         self.assertIn("42021", text)
         self.assertIn("abcdef", text)
+        self.assertFalse(module._is_instance("bash -c python launch.py", "/tmp/hocuspocus", "bash"))
+        self.assertTrue(module._is_instance("python launch.py", "/tmp/hocuspocus", "python"))
         self.assertEqual(module.format_lock(), "lock: free")
         rows = module.collect_instances(vram={})
         self.assertIsInstance(rows, list)
