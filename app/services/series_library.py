@@ -28,7 +28,7 @@ _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
-    "continuityIssues", "proposedCanonDelta", "languageVersions", "score",
+    "continuityIssues", "proposedCanonDelta", "languageVersions", "score", "videoBudget",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -36,13 +36,13 @@ SHOT_EDITOR_FIELDS = frozenset({
     "primarySpeakerId", "locationId", "locationVariantId",
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
-    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley",
+    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley", "video",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 # A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
 SHOT_CONTENT_FIELDS = frozenset({
     "dialogueBeats", "visibleCharacterIds", "locationId", "locationVariantId", "productionMethod",
-    "framing", "camera", "layout2d", "scene3d", "wardrobeByCharacterId", "propIds",
+    "framing", "camera", "layout2d", "scene3d", "wardrobeByCharacterId", "propIds", "video",
 })
 SERIES_CANON_INPUT_FIELDS = (
     "title", "premise", "logline", "format", "language", "spokenLanguage",

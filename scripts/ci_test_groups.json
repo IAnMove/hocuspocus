@@ -426,6 +426,7 @@
         "tests/test_series_cutouts.py",
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
+        "tests/test_series_video_shots.py",
         "tests/test_audio_levels.py",
         "tests/test_workspace_cleanup.py",
         "tests/test_series_native_render_router.py",
@@ -1859,7 +1860,19 @@
     },
     {
       "prefix": "app/services/series_script.py",
-      "paths": ["tests/test_series_script_produce.py", "tests/test_series_look_room.py"]
+      "paths": ["tests/test_series_script_produce.py", "tests/test_series_look_room.py", "tests/test_series_video_shots.py"]
+    },
+    {
+      "prefix": "app/services/series_video_shots.py",
+      "paths": ["tests/test_series_video_shots.py"]
+    },
+    {
+      "prefix": "app/services/series_produce.py",
+      "paths": ["tests/test_series_script_produce.py", "tests/test_series_review_gate.py", "tests/test_series_video_produce.py", "tests/test_series_video_shots.py"]
+    },
+    {
+      "prefix": "app/services/series_library.py",
+      "paths": ["tests/test_series_library.py", "tests/test_series_video_shots.py"]
     },
     {
       "prefix": "app/services/series_shot_plan.py",
