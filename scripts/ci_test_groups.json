@@ -538,6 +538,14 @@
   ],
   "path_rules": [
     {
+      "prefix": "app/services/gpu_machine_lock.py",
+      "paths": ["tests/test_job_lifecycle.py", "tests/test_job_lifecycle_wiring.py"]
+    },
+    {
+      "prefix": "app/services/job_lifecycle.py",
+      "paths": ["tests/test_job_lifecycle.py", "tests/test_job_lifecycle_wiring.py"]
+    },
+    {
       "prefix": "app/services/flat_rig.py",
       "paths": [
         "tests/test_flat_rig.py",
