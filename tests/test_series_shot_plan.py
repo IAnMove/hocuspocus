@@ -175,3 +175,44 @@ def test_a_volume_of_zero_means_silent_not_the_default():
     layout = normalize_layout2d({"music": {"file": "music/theme.wav", "volume": 0, "start": 0}})
     assert layout["music"] == {"file": "music/theme.wav", "volume": 0, "start": 0}
     assert normalize_layout2d({"music": {"file": "theme.wav"}})["music"]["volume"] == 0.5
+
+
+def test_a_document_card_keeps_its_fields_and_old_cards_stay_kinetic():
+    stored = normalize_layout2d({"card": {"kind": "document", "style": "file", "reveal": "pan", "title": "Exp",
+                                          "body": "Nota", "date": "1888", "signature": "Ana"}})
+    assert stored["card"] == {"kind": "document", "style": "file", "reveal": "pan", "title": "Exp", "body": "Nota",
+                              "date": "1888", "signature": "Ana"}
+    assert normalize_layout2d({"card": {"kind": "document", "style": "poster"}}) is None
+    assert card_texts({"kind": "document", "title": "Carta", "body": "Hola"}, 5) == []
+    titles = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
+    end = card_texts({"kind": "end", "title": "FIN", "body": "Gracias"}, 5)
+    disclaimer = card_texts({"kind": "disclaimer", "title": "Aviso", "body": "Parodia."}, 5)
+    assert titles[0]["font"] == "marker" and titles[1]["font"] == "hand"
+    assert end[0]["font"] == "marker" and end[1]["font"] == "sans" and disclaimer[0]["font"] == "condensed"
+
+
+def test_document_text_fits_down_to_the_1080p_minimum_and_the_reveal_is_exact():
+    from services.series_document_card import layout_document, minimum_body_px, pan_offset, render_frame, revealed_characters
+    assert minimum_body_px(1080) == 28
+    short = layout_document({"style": "letter", "title": "Carta", "body": "Hoy el río iba alto.", "signature": "Ana"},
+                            width=1920, height=1080)
+    assert short["fits"] and short["bodyPx"] >= 28
+    long = layout_document({"style": "letter", "title": "Carta", "body": ("palabra " * 200)[:1200],
+                            "date": "1888", "signature": "Ana"}, width=1920, height=1080)
+    assert not long["fits"] and long["bodyPx"] == 28
+    assert [revealed_characters(10, frame, 10) for frame in range(10)] == list(range(1, 11))
+    assert [pan_offset(80, frame, 5) for frame in range(5)] == [0, 20, 40, 60, 80]
+    frame = render_frame({"style": "letter", "title": "Carta", "body": "Hola.", "reveal": "static"}, 0, 1, width=320, height=180)
+    assert frame.size == (320, 180) and len(frame.getcolors(maxcolors=200000)) > 20
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required")
+def test_a_document_shot_hides_the_set_and_can_attach_its_plate(tmp_path):
+    from services.series_document_card import document_plate
+    shot = {"id": "s0", "durationSeconds": 2, "locationId": "garage", "visibleCharacterIds": ["kevin"],
+            "layout2d": {"card": {"kind": "document", "style": "typed", "reveal": "static", "title": "Nota", "body": "Puente."}}}
+    spec = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded={})
+    assert spec["framing"] == "title" and spec["cast"] == [] and spec["texts"] == [] and "background" not in spec
+    plate = document_plate(str(tmp_path), shot, {**spec, "duration": 0.5, "width": 320, "height": 180, "fps": 8, "workspace": "cast"})
+    assert plate["kind"] == "video" and plate["source"].startswith("/api/v1/file/series-documents/")
+    assert list((tmp_path / "series-documents").glob("*.mp4"))

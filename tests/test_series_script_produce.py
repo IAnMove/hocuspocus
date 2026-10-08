@@ -110,6 +110,38 @@ def test_every_problem_is_listed_before_anything_is_written():
     assert tools.calls == [], "nothing is written while the script has problems"
 
 
+def test_a_document_card_is_stored_and_a_long_one_warns_without_blocking():
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "duration": 4, "lines": [{"who": "kevin", "es": "Leo.", "en": "I read."}],
+         "card": {"kind": "document", "style": "letter", "reveal": "typewriter",
+                  "date": "8 de octubre", "signature": "Ana",
+                  "es": ["Carta", "Hoy el río iba alto."], "en": ["Letter", "The river was high."]}},
+        {"scene": "a", "duration": 4, "card": {"kind": "document", "style": "file",
+                                               "es": ["Expediente", ("palabra " * 200)[:1200]]}},
+    ]}
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True)
+    assert checked["warnings"] == [{"code": "document_text_too_long", "shot": "e2s01",
+                                    "message": "The document does not fit at the minimum readable size."}]
+    assert tools.calls == []
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    card = tools.calls[1][1]["episode"]["shots"][0]["layout2d"]["card"]
+    assert card == {"kind": "document", "style": "letter", "reveal": "typewriter", "title": "Carta",
+                    "body": "Hoy el río iba alto.", "date": "8 de octubre", "signature": "Ana"}
+    english = tools.calls[2][1]["cards"]["e2s00"]
+    assert english == {"title": "Letter", "body": "The river was high."}
+
+
+def test_a_document_style_must_be_one_of_the_five():
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "card": {"kind": "document", "style": "poster", "es": ["A", "B"]}}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    assert any("card style must be letter, typed, newspaper, telegram or file" in problem for problem in raised.value.problems)
+    assert tools.calls == []
+
+
 def test_check_only_and_rewriting_an_existing_episode():
     tools = Series()
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, check_only=True)

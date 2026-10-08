@@ -32,6 +32,7 @@ from urllib.parse import quote
 from services import series_entrances as entrances
 from services import series_shot_extras as extras
 from services.series_ambience import ambience_mode
+from services.series_document_card import stored_document
 from services.series_layers import PLAYBACK, layer_kind, layout_layers, shot_layers
 from services.series_voice_rooms import check_room
 from services.speech_language import speech_language_code
@@ -104,7 +105,14 @@ def _prop_entry(value: Any) -> dict[str, Any] | None:
 
 
 def _layout_card(card: Any) -> dict[str, Any]:
-    if not isinstance(card, dict) or card.get("kind") not in ("title", "disclaimer", "end"):
+    if not isinstance(card, dict):
+        return {}
+    if card.get("kind") == "document":
+        try:
+            return {"card": stored_document(card)}
+        except ValueError:
+            return {}
+    if card.get("kind") not in ("title", "disclaimer", "end"):
         return {}
     return {"card": {"kind": card["kind"], "title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}}
 
@@ -410,6 +418,8 @@ def card_texts(card: dict[str, Any], duration: float, portrait: bool = False) ->
     """Title, disclaimer and end cards in the production's lettering. Sizes are % of the frame height, so a
     vertical frame (0.56 as wide) draws them smaller and wider to keep the same line length."""
     kind, title, body = card.get("kind"), str(card.get("title") or ""), str(card.get("body") or "")
+    if kind == "document":
+        return []
     if kind == "disclaimer":
         texts = _disclaimer_texts(title, body, duration)
     else:
@@ -496,10 +506,11 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     """The compiler input for one shot. ``recorded`` maps beat id to {filename, duration, cues, driver}."""
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     card = layout.get("card") if isinstance(layout.get("card"), dict) else None
+    document = bool(card and card.get("kind") == "document")
     beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
     timing, duration = plan_timing([float(recorded[beat["id"]]["duration"]) for beat in beats], **extras.timing_args(layout),
                                    at_least=0.0 if beats else float(shot.get("durationSeconds") or 0), pauses=extras.pauses(beats))
-    framing = _shot_framing(layout, shot, card)
+    framing = "title" if document else _shot_framing(layout, shot, card)
     size = size or frame_size(series)
     portrait = size[1] > size[0]
     cast = [] if framing == "title" else plan_cast(series, shot, framing, duration, workspace, portrait)
@@ -512,6 +523,8 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
         "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
     }
+    if document:
+        return spec
     return _with_set(spec, series, shot, _focus(cast, framing), workspace)
 
 

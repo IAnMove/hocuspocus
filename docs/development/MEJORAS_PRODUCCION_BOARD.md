@@ -21,7 +21,7 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | E1 Videojuegos, defectos | `fix/game-assets-followups` | [#923](https://github.com/IAnMove/hocuspocus/pull/923) | borrador abierto | identidad por color, avisos `game_*`, T-pose, nine-slice, órbita |
 | E2 Videojuegos, prueba real | `docs/game-assets-acceptance-run` | — | pendiente | informe de aceptación y entrega fuera del repo |
 | G1 Transiciones | `feat/series-transitions` | [#924](https://github.com/IAnMove/hocuspocus/pull/924) | borrador abierto | `shot.transitionIn` |
-| G2 Cartela de documento | `feat/series-document-cards` | — | pendiente | `card.kind: document` |
+| G2 Cartela de documento | `feat/series-document-cards` | [#925](https://github.com/IAnMove/hocuspocus/pull/925) | borrador abierto: la página cabe o avisa, y no bloquea | `card.kind: document` |
 | G3 Oído | `feat/series-hearing` | — | pendiente | `shot.hearing` |
 | G4 Grabado y stop-motion | `feat/looks-etching-stopmotion` | — | pendiente | efecto `etching`, `motionStep` |
 | G5 Planos de vídeo | `feat/series-video-shots` | — | pendiente | `app/services/series_video_shots.py` |

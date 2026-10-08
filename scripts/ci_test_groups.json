@@ -2314,6 +2314,13 @@
         "tests/test_series_episode_replace.py",
         "tests/test_series_agent_fixes.py"
       ]
+    },
+    {
+      "prefix": "app/services/series_document_card.py",
+      "paths": [
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_script_produce.py"
+      ]
     }
   ]
 }
