@@ -46,23 +46,24 @@ def builtin_cards() -> tuple[dict, ...]:
 
 
 def search_templates(query: str = "", *, category: str | None = None, language: str | None = None,
-                     limit: int | None = None, workspace_dir=None, workspace: str | None = None) -> list[dict]:
+                     limit: int | None = None, workspace_dir=None, workspace: str | None = None,
+                     roles: list[str] | None = None, setting: str | None = None) -> list[dict]:
     """Return at most ``limit`` short cards. Both languages are always searched."""
     _require_language(language)
     bounded = _limit(limit)
-    ranked = _ranked(query, _cards(workspace_dir, workspace), category)
+    ranked = _ranked(query, _fitting(_cards(workspace_dir, workspace), roles, setting), category)
     return [_public_card(card, score) for score, _index, card in ranked[:bounded]]
 
 
 def page_templates(query: str = "", *, category: str | None = None, language: str | None = None,
                    limit: int | None = None, offset: int | None = None, workspace_dir=None,
-                   workspace: str | None = None) -> dict:
+                   workspace: str | None = None, roles: list[str] | None = None, setting: str | None = None) -> dict:
     """One page of ``world3d.templates.list``. No query keeps id order."""
     _require_language(language)
     queried = bool(str(query or "").strip())
     bounded = _limit(limit) if queried else _list_limit(limit)
     start = _offset(offset)
-    cards = _cards(workspace_dir, workspace)
+    cards = _fitting(_cards(workspace_dir, workspace), roles, setting)
     if queried:
         chosen = [(score, card) for score, _index, card in _ranked(query, cards, category)]
     else:
@@ -71,6 +72,16 @@ def page_templates(query: str = "", *, category: str | None = None, language: st
         chosen = [(0, card) for card in filtered]
     page = chosen[start:start + bounded]
     return {"templates": [_public_card(card, score) for score, card in page], "total": len(chosen)}
+
+
+def _fitting(cards: list[dict], roles: list[str] | None, setting: str | None) -> list[dict]:
+    """Templates that have every asked role (subject_1, subject_2, background, prop) and the asked setting."""
+    if roles is not None and (not isinstance(roles, list) or not all(isinstance(role, str) for role in roles)):
+        raise World3DTemplateError("invalid_roles", "roles must be a list of role names")
+    wanted = set(roles or ())
+    place = _fold(setting or "")
+    return [card for card in cards if wanted <= set(card.get("roles") or ())
+            and (not place or _fold(str(card.get("setting") or "")) == place)]
 
 
 def _cards(workspace_dir, workspace: str | None) -> list[dict]:

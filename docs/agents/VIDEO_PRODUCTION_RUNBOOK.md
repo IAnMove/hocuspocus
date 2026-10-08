@@ -380,7 +380,8 @@ turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radia
 no H3 lip-sync is implied.
 
 **Template + cast + painted set.** Prefer this over writing a `document`: pick a
-template whose roles fit (`world3d.templates.list`) and assign only what changes.
+template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
+and a `setting` such as `sea` or `city`) and assign only what changes.
 `cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
 picture; `background` puts a picture in the template's background slot. The
 template keeps its camera, props, lights and moves. With a painted background on
