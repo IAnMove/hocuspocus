@@ -458,3 +458,17 @@ def test_drift_is_measured_on_later_frames_not_the_first(tmp_path):
     assert done["status"] == "completed", done
     warning = done["steps"][0]["warnings"][0]
     assert warning["code"] == "style_drift" and warning["distance"] > STYLE_DRIFT_THRESHOLD
+
+
+def test_a_resume_right_after_a_failure_starts_a_new_run_once_the_old_thread_ends(tmp_path):
+    """The failed run saves its status a moment before its thread returns; a resume in that moment must not be lost."""
+    import threading
+    service = SeriesProduce(ProduceDeps(call=lambda *_: {}, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: {}))
+    ran = []
+    service._run = lambda workspace, job_id: ran.append(job_id)
+    closing = threading.Thread(target=time.sleep, args=(0.3,))
+    closing.start()
+    service._threads["job-1"] = closing
+    service._launch("ws", {"jobId": "job-1", "workspace": "ws", "status": "queued", "steps": []})
+    service._threads["job-1"].join(5)
+    assert ran == ["job-1"] and not closing.is_alive()

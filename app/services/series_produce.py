@@ -181,8 +181,14 @@ class SeriesProduce:
         return job
 
     def _launch(self, workspace: str, job: dict) -> None:
-        """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
+        """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan.
+
+        A resume can arrive while the run that just saved "failed" is still returning: wait for that thread to end,
+        or the resume would see it alive and start nothing."""
         job_id = job["jobId"]
+        closing = self._threads.get(job_id)
+        if closing is not None and closing.is_alive() and closing is not threading.current_thread():
+            closing.join(timeout=10)
         with self._lock:
             running = self._threads.get(job_id)
             if running and running.is_alive():
