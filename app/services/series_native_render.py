@@ -598,8 +598,9 @@ class SeriesNativeRender:
                     # The voice stopped before speaking (only silence, or a click the trim kept): another seed.
                     _discard(final)
                     continue
-                wer, limit = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
-                take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
+                wer, limit, notes = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
+                take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer,
+                        "attempt": attempt, **notes}
                 if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
                     best = take
                     _replace_with_sidecar(final, best_path)
@@ -670,9 +671,9 @@ class SeriesNativeRender:
             if deadline is not None and self.deps.clock() >= deadline:
                 raise NativeRenderError("timeout", f"{label} was still {state or 'waiting'} when its time ran out", 504)
 
-    def _wer(self, workspace: str, filename: str, text: str, language: str, voice: dict | None = None) -> tuple[float | None, float]:
+    def _wer(self, workspace: str, filename: str, text: str, language: str, voice: dict | None = None) -> tuple[float | None, float, dict]:
         if not self.deps.check_speech:
-            return None, MAX_WER
+            return None, MAX_WER, {}
         return qa_verdict(self.deps.call, workspace, filename, text, language, voice, MAX_WER)
 
     def _cues(self, workspace: str, filename: str, duration: float, text: str, language: str) -> dict[str, Any]:

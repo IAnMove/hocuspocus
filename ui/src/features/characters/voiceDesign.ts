@@ -1,5 +1,5 @@
 import { cancelJob, fetchJobStatus, getFileUrl, submitGeneration } from '../../api/client'
-import { checkSpeech, type SpeechCheck } from '../../api/characters'
+import { checkAccent, checkSpeech, type AccentCheck, type SpeechCheck } from '../../api/characters'
 import { awaitSpeechOutput } from '../../lib/sceneSpeech'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
@@ -25,14 +25,19 @@ export type DesignedVoice = {
   filename?: string
   url?: string
   check?: SpeechCheck
+  accent?: AccentCheck
   error?: string
 }
 
-/** A description that says male or female sets the pitch range qa.speech warns about. */
+/** A description sets the pitch range qa.speech warns about.
+
+Child words win, so boy, girl, niño and niña are 220–400 Hz. chico and chica stay
+adult. No matching word means the take is not checked. */
 export function expectedPitch(description: string): [number, number] | undefined {
   const text = description.toLowerCase()
-  if (/\b(female|woman|girl|mujer|femenina|chica|niña)\b/u.test(text)) return [150, 320]
-  if (/\b(male|man|boy|hombre|masculina|masculino|chico|niño)\b/u.test(text)) return [75, 175]
+  if (/\b(child|children|boy|girl|niño|niña|nino|nina)\b/u.test(text)) return [220, 400]
+  if (/\b(female|woman|mujer|femenina|chica)\b/u.test(text)) return [165, 255]
+  if (/\b(male|man|hombre|masculina|masculino|chico)\b/u.test(text)) return [85, 155]
   return undefined
 }
 
@@ -41,18 +46,20 @@ export type VoiceDesignDependencies = {
   fetchJobStatus: typeof fetchJobStatus
   cancelJob: typeof cancelJob
   checkSpeech: typeof checkSpeech
+  checkAccent: typeof checkAccent
   fileUrl: typeof getFileUrl
   seed: () => number
 }
 
 const defaults: VoiceDesignDependencies = {
-  submitGeneration, fetchJobStatus, cancelJob, checkSpeech, fileUrl: getFileUrl,
+  submitGeneration, fetchJobStatus, cancelJob, checkSpeech, checkAccent, fileUrl: getFileUrl,
   seed: () => Math.floor(Math.random() * 2_000_000_000),
 }
 
 /** Three voices from one description, each transcribed and measured as soon as it is ready. */
 export async function designVoiceCandidates(request: {
   workspace: string; description: string; text: string; language: SpokenLanguage; signal: AbortSignal
+  accent?: 'castilian'
   onUpdate: (voices: DesignedVoice[]) => void
 }, dependencies: Partial<VoiceDesignDependencies> = {}): Promise<DesignedVoice[]> {
   const deps = { ...defaults, ...dependencies }
@@ -79,7 +86,15 @@ export async function designVoiceCandidates(request: {
       update(voice.id, { status: 'checking', filename: clip.filename, url: deps.fileUrl(clip.filename, request.workspace) })
       const check = await deps.checkSpeech({ workspace: request.workspace, file: clip.filename, text: request.text,
         language: request.language, ...(pitchRange ? { pitchRange } : {}) })
-      update(voice.id, { status: 'ready', check })
+      let accent: AccentCheck | undefined
+      if (request.accent === 'castilian') {
+        try {
+          accent = await deps.checkAccent({ workspace: request.workspace, file: clip.filename, text: request.text })
+        } catch (error) {
+          check.warnings = [...(check.warnings ?? []), (error as Error).message]
+        }
+      }
+      update(voice.id, { status: 'ready', check, accent })
     } catch (error) {
       if (request.signal.aborted) return
       update(voice.id, { status: 'failed', error: (error as Error).message })

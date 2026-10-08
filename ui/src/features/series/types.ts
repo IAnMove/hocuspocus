@@ -56,6 +56,9 @@ export interface SeriesVoiceProfile {
   pronunciationDictionary?: Record<string, string>
   pace?: number
   pitch?: number
+  gender?: string
+  pitchRange?: [number, number] | null
+  accent?: 'castilian'
   emotionalDefaults?: string
   approvedSampleAssetId?: string
   consentSourceNote?: string

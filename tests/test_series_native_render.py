@@ -97,6 +97,7 @@ class Tools:
         self.bad_first_take, self.fail_export_once = bad_first_take, fail_export_once
         self.exports, self.wait_errors, self.fail_speech_at = {}, list(wait_errors), fail_speech_at
         self.reported_wer = None
+        self.reported_pitch = None
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
@@ -119,8 +120,12 @@ class Tools:
             takes = [name for name, _ in self.calls if name == "qa.speech"]
             if self.reported_wer is not None:
                 wer, threshold = self.reported_wer
-                return {"result": {"wer": wer, "wer_threshold": threshold}}
-            return {"result": {"wer": 0.6 if self.bad_first_take and len(takes) == 1 else 0.05}}
+                result = {"wer": wer, "wer_threshold": threshold}
+            else:
+                result = {"wer": 0.6 if self.bad_first_take and len(takes) == 1 else 0.05}
+            if self.reported_pitch is not None:
+                result["medianPitchHz"] = self.reported_pitch
+            return {"result": result}
         if tool == "audio.mouth_cues":
             return {"result": {"mouthCues": [{"start": 0, "end": 0.4, "value": "D"}], "recognizer": "wav2vec2-phoneme"}}
         if tool == "scenes.document.save":
@@ -578,3 +583,31 @@ def test_a_one_word_miss_within_the_spanish_threshold_is_not_spoken_again(tmp_pa
     line = done["items"][0]["lines"]["s03_d0"]
     assert (line["attempt"], line["wer"]) == (0, 1.0)
     assert [tool for tool, _ in tools.calls].count("generation.speech") == 1
+
+
+def test_a_high_male_voice_and_a_seseo_warn_without_another_take(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_pitch = 200.0
+    project = library()
+    gary = project["seriesById"]["uv"]["characters"][1]
+    gary["voiceProfile"]["pitchRange"] = [85, 155]
+    gary["voiceProfile"]["accent"] = "castilian"
+    gary["voiceAndDialogue"] = "hombre adulto"
+
+    def call(name, arguments):
+        if name == "qa.accent":
+            tools.calls.append((name, arguments))
+            return {"result": {"thetaRate": 0.0, "positions": 3, "verdict": "seseo"}}
+        return tools(name, arguments)
+
+    render = service(tmp_path, tools, compiled)
+    render.deps.call = call
+    render.deps.read_library = lambda _ws: project
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and line["pitch_out_of_range"] == {"medianHz": 200.0, "range": [85.0, 155.0]}
+    assert line["accent_seseo"] == {"thetaRate": 0.0, "positions": 3, "verdict": "seseo"}
+    speech = [args["input"] for name, args in tools.calls if name == "qa.speech"]
+    assert speech[0]["pitch_range"] == [85.0, 155.0]
+    assert [name for name, _args in tools.calls].count("generation.speech") == 1
+    assert [name for name, _args in tools.calls].count("qa.accent") == 1

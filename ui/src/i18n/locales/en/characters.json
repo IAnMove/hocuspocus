@@ -645,11 +645,15 @@
     }
   },
   "voiceDesigner": {
-    "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice.",
+    "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice. The pitch check is 85–155 Hz for a man, 165–255 for a woman and 220–400 for a child.",
     "missing": "Voice design needs these models: {{models}}.",
     "download": "Download",
     "downloading": "Download started. Try again when it finishes.",
     "language": "Language",
+    "accent": "Accent check",
+    "accentNone": "None",
+    "accentCastilian": "Castilian (θ)",
+    "accentSeseo": "Castilian θ on {{rate}}% of {{positions}} positions. The voice is kept.",
     "description": "Voice description",
     "placeholder": "Male voice. Late twenties, a bit nasal, fast and nervous, friendly.",
     "text": "Sample line (kept as the reference transcript)",

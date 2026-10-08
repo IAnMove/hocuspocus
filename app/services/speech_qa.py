@@ -24,6 +24,7 @@ import numpy as np
 
 from services.speech_language import spoken_language_code
 from services.speech_text_es import merge_names, token_error_rate, wer_threshold
+from services.voice_pitch import pitch_notice
 
 OPERATION = "qa.speech"
 CKPTS = Path(__file__).resolve().parents[1] / "ckpts"
@@ -154,6 +155,9 @@ def measure_speech(path: str, text: str, language: str = "", *, pitch_range: lis
         "leadSilence": lead, "trailSilence": trail,
     }
     result["warnings"] = _warnings(result, pitch_range)
+    notice = pitch_notice(result["medianPitchHz"], pitch_range)
+    if notice:
+        result["pitch_out_of_range"] = notice
     return result
 
 

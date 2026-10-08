@@ -9,6 +9,8 @@ import re
 import unicodedata
 from typing import Any
 
+from services.voice_pitch import pitch_notice, voice_checks
+
 _VOWELS = "aeiou"
 
 
@@ -106,21 +108,47 @@ def line_notes(series: dict, beat: dict, voice: dict) -> dict:
     dictionary = dictionary_map(_profile(series, beat.get("characterId")).get("pronunciationDictionary"))
     names = _speech_names(series, dictionary)
     if not dictionary and not names:
-        return voice
+        return voice_checks(series, beat, voice)
     noted = dict(voice)
     if dictionary:
         noted["pronunciationDictionary"] = dictionary
     if names:
         noted["speechNames"] = names
-    return noted
+    return voice_checks(series, beat, noted if dictionary or names else voice)
+
+
+def _accent_warning(call, workspace: str, filename: str, text: str) -> dict[str, Any] | None:
+    """The seseo warning, or None when the take is Castilian, unknown, or the tool did not answer."""
+    checked = call("qa.accent", {"version": 1, "input": {
+        "workspace": workspace, "file": filename, "text": text, "accent": "castilian"}})
+    if not isinstance(checked, dict) or checked.get("_is_error"):
+        return None
+    found = checked.get("result") if isinstance(checked.get("result"), dict) else {}
+    if found.get("verdict") != "seseo":
+        return None
+    return {"thetaRate": found.get("thetaRate"), "positions": found.get("positions"), "verdict": "seseo"}
+
+
+def _take_notes(call, workspace: str, filename: str, said: str, voice: dict, result: dict) -> dict[str, Any]:
+    """Pitch and accent warnings for the stored take. Neither one changes the accept limit."""
+    notes: dict[str, Any] = {}
+    notice = pitch_notice(result.get("medianPitchHz"), voice.get("pitchRange"))
+    if notice:
+        notes["pitch_out_of_range"] = notice
+    if voice.get("accent") == "castilian":
+        warning = _accent_warning(call, workspace, filename, said)
+        if warning:
+            notes["accent_seseo"] = warning
+    return notes
 
 
 def qa_verdict(call, workspace: str, filename: str, text: str, language: str,
-               voice: dict | None, ceiling: float) -> tuple[float | None, float]:
-    """``(wer, accept_at)`` for one take. A missing check accepts, as before.
+               voice: dict | None, ceiling: float) -> tuple[float | None, float, dict]:
+    """``(wer, accept_at, notes)`` for one take. A missing check accepts, as before.
 
     ``accept_at`` is the render ceiling unless the Spanish length threshold is higher,
     so a one-word line can miss and a long line is not judged more strictly.
+    ``notes`` may carry ``pitch_out_of_range`` or ``accent_seseo``. They do not retry.
     """
     voice = voice or {}
     said = pronounce(text, voice.get("pronunciationDictionary"))
@@ -128,15 +156,19 @@ def qa_verdict(call, workspace: str, filename: str, text: str, language: str,
     names = [str(item) for item in voice.get("speechNames") or [] if str(item).strip()]
     if names:
         payload["names"] = names
+    bounds = voice.get("pitchRange")
+    if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+        payload["pitch_range"] = [bounds[0], bounds[1]]
     checked = call("qa.speech", {"version": 1, "input": payload})
     if not isinstance(checked, dict) or checked.get("_is_error"):
-        return None, ceiling
+        return None, ceiling, {}
     result = checked.get("result") if isinstance(checked.get("result"), dict) else {}
+    notes = _take_notes(call, workspace, filename, said, voice, result)
     limit = _accept_at(result.get("wer_threshold"), ceiling)
     wer = result.get("wer")
     if isinstance(wer, bool) or not isinstance(wer, (int, float)):
-        return None, limit
-    return float(wer), limit
+        return None, limit, notes
+    return float(wer), limit, notes
 
 
 def _letters(word: str) -> str:

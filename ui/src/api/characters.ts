@@ -173,6 +173,13 @@ export type SpeechCheck = {
   wordsPerSecond: number
   duration: number
   warnings: string[]
+  pitch_out_of_range?: { medianHz: number; range: [number, number] }
+}
+
+export type AccentCheck = {
+  thetaRate: number | null
+  positions: number
+  verdict: 'castilian' | 'seseo' | 'unknown'
 }
 
 /** Transcript, word error rate, pitch and pace of a workspace take (qa.speech). */
@@ -182,5 +189,13 @@ export async function checkSpeech(details: { workspace: string; file: string; te
     workspace: details.workspace, file: details.file, text: details.text, language: details.language,
     ...(details.pitchRange ? { pitch_range: details.pitchRange } : {}),
   }, 'Could not check the voice')
+  return reply.result
+}
+
+/** Castilian θ against s on the words that should have it (qa.accent). A warning, not a block. */
+export async function checkAccent(details: { workspace: string; file: string; text: string }): Promise<AccentCheck> {
+  const reply = await postJson<{ result: AccentCheck }>('/api/v1/qa/accent', {
+    workspace: details.workspace, file: details.file, text: details.text, accent: 'castilian',
+  }, 'Could not check the accent')
   return reply.result
 }
