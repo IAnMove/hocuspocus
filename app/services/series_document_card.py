@@ -13,8 +13,10 @@ disclaimer and end cards do not come through here.
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -123,42 +125,54 @@ def layout_document(card: dict[str, Any], *, width: int, height: int) -> dict[st
 
 def render_frame(card: dict[str, Any], frame: int, frame_count: int, *, width: int, height: int) -> Image.Image:
     """One frame of the card. The type size is the full text's, so a typewriter does not resize as it types."""
-    full = layout_document(card, width=width, height=height)
+    laid = layout_document(card, width=width, height=height)
+    return _frame(card, laid, _paper(laid["style"], laid["width"], laid["height"]), frame, frame_count)
+
+
+def _frame(card: dict[str, Any], laid: dict[str, Any], paper: Image.Image, frame: int, frame_count: int) -> Image.Image:
+    """The text of one frame on a copy of ``paper``. The paper and the layout are the same on every frame of a clip."""
     frames = max(1, int(frame_count))
     index = min(max(int(frame), 0), frames - 1)
     reveal = card.get("reveal") if card.get("reveal") in REVEALS else "static"
-    body = full["body"]
+    body = laid["body"]
     if reveal == "typewriter":
         body = body[:revealed_characters(len(body), index, frames)]
-    image = _paper(full["style"], width, height)
-    _draw(image, full, body, index, frames, reveal)
+    image = paper.copy()
+    _draw(image, laid, body, index, frames, reveal)
     return image
 
 
 def write_clip(card: dict[str, Any], path: Path, *, width: int, height: int, duration: float, fps: int = 24) -> None:
-    """An h264 clip of the card. A static reveal is one painted frame repeated."""
+    """An h264 clip of the card. The paper and the layout are made once; each frame only draws its text, and a static
+    reveal is one painted frame repeated. ffmpeg writes a hidden file beside ``path``, which replaces ``path`` only
+    when the clip is complete: a write that fails halfway leaves nothing the cache would take."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise DocumentCardError("ffmpeg is not available")
     frames = max(1, int(round(float(duration) * int(fps))))
     reveal = card.get("reveal") if card.get("reveal") in REVEALS else "static"
-    command = [ffmpeg, "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{int(width)}x{int(height)}",
-               "-r", str(int(fps)), "-i", "pipe:0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", str(path)]
+    laid = layout_document(card, width=width, height=height)
+    paper = _paper(laid["style"], laid["width"], laid["height"])
+    temporary = path.with_name(f".{path.stem}-{uuid.uuid4().hex[:8]}{path.suffix}")
+    command = [ffmpeg, "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{laid['width']}x{laid['height']}",
+               "-r", str(int(fps)), "-i", "pipe:0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", str(temporary)]
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     painted = None
     try:
         for frame in range(frames):
             if painted is None or reveal != "static":
-                painted = render_frame(card, frame, frames, width=width, height=height)
-            process.stdin.write(painted.tobytes())
+                painted = _frame(card, laid, paper, frame, frames).tobytes()
+            process.stdin.write(painted)
         process.stdin.close()
         _stderr = process.stderr.read()
-        code = process.wait(timeout=180)
+        if process.wait(timeout=180) != 0:
+            raise DocumentCardError("ffmpeg could not write the document")
+        os.replace(temporary, path)
     except Exception:
         process.kill()
         raise
-    if code != 0:
-        raise DocumentCardError("ffmpeg could not write the document")
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def document_plate(root: str, shot: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any] | None:

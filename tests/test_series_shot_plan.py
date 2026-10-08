@@ -266,3 +266,53 @@ def test_a_document_shot_hides_the_set_and_can_attach_its_plate(tmp_path):
     plate = document_plate(str(tmp_path), shot, {**spec, "duration": 0.5, "width": 320, "height": 180, "fps": 8, "workspace": "cast"})
     assert plate["kind"] == "video" and plate["source"].startswith("/api/v1/file/series-documents/")
     assert list((tmp_path / "series-documents").glob("*.mp4"))
+
+
+def _fake_ffmpeg(folder, code):
+    """A stand-in ffmpeg: keeps the raw frames it is sent in ``frames.raw``, writes a partial file and exits with ``code``."""
+    fake = folder / "ffmpeg"
+    fake.write_text(f'#!/bin/sh\nfor last; do :; done\ncat > "{folder}/frames.raw"\nprintf partial > "$last"\nexit {code}\n')
+    fake.chmod(0o755)
+    return str(fake)
+
+
+def test_a_failed_document_write_leaves_nothing_the_cache_would_reuse(tmp_path, monkeypatch):
+    from services import series_document_card as cards
+    shot = {"id": "s0", "layout2d": {"card": {"kind": "document", "style": "typed", "reveal": "static", "title": "Nota", "body": "Puente."}}}
+    spec = {"duration": 0.5, "width": 64, "height": 36, "fps": 4, "workspace": "cast"}
+    monkeypatch.setattr(cards.shutil, "which", lambda _name: _fake_ffmpeg(tmp_path, 1))
+    with pytest.raises(cards.DocumentCardError):
+        cards.document_plate(str(tmp_path / "ws"), shot, spec)
+    assert not list((tmp_path / "ws" / "series-documents").glob("*.mp4")), "neither the clip nor its partial file is left"
+    monkeypatch.undo()
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg is required for the retry")
+    plate = cards.document_plate(str(tmp_path / "ws"), shot, spec)
+    written = [path.name for path in (tmp_path / "ws" / "series-documents").iterdir()]
+    assert plate["source"].split("?")[0].endswith(written[0]) and written == [written[0]] and not written[0].startswith(".")
+
+
+def test_a_document_clip_paints_its_paper_and_layout_once_and_the_same_frames(tmp_path, monkeypatch):
+    from services import series_document_card as cards
+    card = {"kind": "document", "style": "letter", "reveal": "typewriter", "title": "Carta", "body": "Hoy el río iba alto, muy alto.",
+            "date": "1888", "signature": "Ana"}
+    counted = {"paper": 0, "layout": 0}
+    paper, layout = cards._paper, cards.layout_document
+
+    def counting(name, real):
+        def call(*args, **kwargs):
+            counted[name] += 1
+            return real(*args, **kwargs)
+        return call
+
+    monkeypatch.setattr(cards.shutil, "which", lambda _name: _fake_ffmpeg(tmp_path, 0))
+    monkeypatch.setattr(cards, "_paper", counting("paper", paper))
+    monkeypatch.setattr(cards, "layout_document", counting("layout", layout))
+    cards.write_clip(card, tmp_path / "card.mp4", width=96, height=54, duration=1.0, fps=6)
+    assert counted == {"paper": 1, "layout": 1}
+    assert (tmp_path / "card.mp4").read_text() == "partial", "the finished file replaced the target"
+    assert not list(tmp_path.glob(".card-*")), "the hidden file was moved onto the target"
+    raw = (tmp_path / "frames.raw").read_bytes()
+    monkeypatch.undo()
+    expected = b"".join(cards.render_frame(card, frame, 6, width=96, height=54).tobytes() for frame in range(6))
+    assert raw == expected
