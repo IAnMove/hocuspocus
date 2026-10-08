@@ -929,11 +929,12 @@ class World3DExportService:
         geometry = read_geometry_report(staging)
         if geometry is not None:
             metadata["geometry"] = geometry
-        self._finish(registry, task_id, "completed", phase="completed",
-                     message=f"Published {self.title} MP4", result_refs=[published["name"]], metadata=metadata)
-        # The frames and audio mix served their purpose; the MP4 is published and the snapshot says what was rendered.
+        # Drop frames before the task says completed. A waiter that sees completed
+        # otherwise still finds the frames directory.
         if not keep_export_staging():
             release_export_staging(staging)
+        self._finish(registry, task_id, "completed", phase="completed",
+                     message=f"Published {self.title} MP4", result_refs=[published["name"]], metadata=metadata)
 
     def _owned_browser(self, snapshot, staging, progress, cancelled) -> list[Path]:
         module = playwright_module()
