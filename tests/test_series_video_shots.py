@@ -69,7 +69,10 @@ def test_a_bad_video_is_a_script_error_and_a_budget_only_warns():
     assert any("H3 length" in item for item in raised.value.problems)
     over = {**_script(), "videoBudget": {"maxShots": 0}}
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", over, check_only=True)
-    assert checked["warnings"] == [{"code": "video_budget", "maxShots": 0, "shots": 1}] and tools.calls == []
+    # The grouped shape of the other script warnings; it survives finish_check beside them.
+    assert checked["warnings"] == [{"code": "video_budget", "subject": "videoBudget", "shots": ["e2s00"], "maxShots": 0,
+                                    "message": "videoBudget: 1 video shot is over maxShots 0 and not generated (shots e2s00)"}]
+    assert tools.calls == []
     written = apply_script(tools, tools.read, KITS, FILES, "cast", {**_script(), "videoBudget": {"maxShots": 2}})
     assert not written.get("warnings") and tools.calls[1][1]["episode"]["videoBudget"] == {"maxShots": 2}
 
@@ -207,7 +210,8 @@ def test_produce_stops_at_the_shot_budget(tmp_path):
     done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
     assert done["status"] == "completed", done
     assert [item["shotId"] for item in tools.imports] == ["s00"]
-    assert done["steps"][0]["warnings"] == [{"code": "video_budget", "maxShots": 1, "shots": 2}]
+    assert done["steps"][0]["warnings"] == [{"code": "video_budget", "subject": "videoBudget", "shots": ["s01"], "maxShots": 1,
+                                             "message": "videoBudget: 1 video shot is over maxShots 1 and not generated (shots s01)"}]
 
 
 def test_a_different_palette_warns_and_the_same_plate_stays_under_the_threshold(tmp_path):

@@ -5,15 +5,19 @@
 shot is ``speaker_not_on_screen``. A place used by several scenes, or a shot
 location that is not its scene's, is ``location_differs_from_scene``. A 3D
 template whose backdrop is another location's image is
-``template_backdrop_other_location``. None of them stops ``check``. A line in the episode language whose kit has no voice
+``template_backdrop_other_location``. The shot checks group theirs the same way
+(``group_warning``): a document too long to read is ``document_text_too_long``
+by its title, and video shots past ``videoBudget.maxShots`` are ``video_budget``.
+None of them stops ``check``. A line in the episode language whose kit has no voice
 (``voicesByLanguage`` or ``kit.voice``) is an error, because the render would
-fail. ``castIndex`` must point at the shot's cast.
+fail; a video or generated shot is not voiced, so it is not checked. ``castIndex`` must point at the shot's cast.
 """
 from __future__ import annotations
 
 from typing import Any
 
 from services.series_shot_plan import language_key, voice_for
+from services.series_video_foley import VIDEO_METHODS
 
 _LISTED = 2
 
@@ -113,7 +117,7 @@ def _speaker_group(bucket: dict[str, Any]) -> dict[str, Any]:
     else:
         text = f"{who}: not on screen"
     return {"code": "speaker_not_on_screen", "subject": who, "shots": shots,
-            "message": f"{text} {_listed(shots)}"}
+            "message": f"{text} {listed_shots(shots)}"}
 
 
 def _variant(scene_id: str, place: str) -> bool:
@@ -122,7 +126,8 @@ def _variant(scene_id: str, place: str) -> bool:
 
 def _location_warnings(episode: Any) -> list[dict[str, Any]]:
     rows: list[tuple[str, str, str, str | None]] = []
-    users: dict[str, set[str]] = {}
+    # The scenes shown in their own location. A shot that moves elsewhere warns on its own and shares nothing.
+    users: dict[str, dict[str, None]] = {}
     for index, shot in enumerate(episode.script.get("shots") or []):
         if not isinstance(shot, dict):
             continue
@@ -136,9 +141,10 @@ def _location_warnings(episode: Any) -> list[dict[str, Any]]:
         place = own_place or scene_place
         if not place:
             continue
-        users.setdefault(place, set()).add(scene_id)
         # None: the shot inherits the scene. A shot location equal to the scene is the same.
         instead = scene_place if own_place and own_place != scene_place else None
+        if instead is None:
+            users.setdefault(place, {})[scene_id] = None
         rows.append((scene_id, place, episode.shot_id(index), instead))
     grouped: dict[tuple[str, str, str | None], list[str]] = {}
     order: list[tuple[str, str, str | None]] = []
@@ -151,17 +157,21 @@ def _location_warnings(episode: Any) -> list[dict[str, Any]]:
             grouped[key] = []
             order.append(key)
         grouped[key].append(shot_id)
-    return [_location_group(key, grouped[key]) for key in order]
+    return [_location_group(key, grouped[key], [other for other in users.get(key[1], {}) if other != key[0]]) for key in order]
 
 
-def _location_group(key: tuple[str, str, str | None], shots: list[str]) -> dict[str, Any]:
+def _location_group(key: tuple[str, str, str | None], shots: list[str], others: list[str]) -> dict[str, Any]:
+    """A shot moved to another place than its scene's, or a scene whose place other scenes show too."""
     scene_id, place, explicit = key
-    instead = f"instead of {explicit}" if explicit else "instead of the scene"
-    return {"code": "location_differs_from_scene", "subject": scene_id, "shots": shots,
-            "message": f"{scene_id}: {len(shots)} shots use {place} {instead} {_listed(shots)}"}
+    if explicit:
+        count = f"{len(shots)} shot uses" if len(shots) == 1 else f"{len(shots)} shots use"
+        text = f"{scene_id}: {count} {place} instead of {explicit}"
+    else:
+        text = f"{scene_id}: {place} is also the location of {', '.join(others)}"
+    return {"code": "location_differs_from_scene", "subject": scene_id, "shots": shots, "message": f"{text} {listed_shots(shots)}"}
 
 
-def _listed(shots: list[str]) -> str:
+def listed_shots(shots: list[str]) -> str:
     if len(shots) <= 6:
         listed = ", ".join(shots)
     else:
@@ -169,12 +179,24 @@ def _listed(shots: list[str]) -> str:
     return f"(shots {listed})"
 
 
+def group_warning(warnings: list[dict[str, Any]], code: str, subject: str, shot_id: str, text: str) -> None:
+    """Add a shot to the warning with this code and subject, or start that warning, in the grouped shape."""
+    found = next((item for item in warnings if item.get("code") == code and item.get("subject") == subject), None)
+    if found is None:
+        found = {"code": code, "subject": subject, "shots": []}
+        warnings.append(found)
+    if shot_id not in found["shots"]:
+        found["shots"].append(shot_id)
+    found["message"] = f"{subject}: {text} {listed_shots(found['shots'])}"
+
+
 def _missing_voices(episode: Any) -> None:
-    from services.series_script import _line_text
+    """A video or generated take carries its lines in the clip: the render voices none of them (``_drawn``)."""
+    from services.series_script import METHODS, _line_text
     language = language_key(episode.series)
     problems = episode.checker.problems
     for index, shot in enumerate(episode.script.get("shots") or []):
-        if not isinstance(shot, dict):
+        if not isinstance(shot, dict) or METHODS.get(shot.get("kind")) in VIDEO_METHODS:
             continue
         where = f"shot {index} ({episode.shot_id(index)})"
         for line in shot.get("lines") or []:

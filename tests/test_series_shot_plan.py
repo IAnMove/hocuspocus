@@ -117,7 +117,57 @@ def test_a_line_keeps_cast_index_only_when_the_beat_has_a_real_one():
         {"id": "b2", "characterId": "kevin", "text": "Otra.", "castIndex": True}]}
     recorded = {"b1": {"filename": "l1.wav", "duration": 1.0}, "b2": {"filename": "l2.wav", "duration": 1.0}}
     lines = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded=recorded)["lines"]
-    assert lines[0]["castIndex"] == 1 and "castIndex" not in lines[1]
+    assert lines[0]["castIndex"] == 1 and lines[1]["castIndex"] == 0, "a bool is no index: the first kevin speaks"
+
+
+def _two_speakers(cast, beats):
+    """A shot planned from ``layout2d.cast`` as from_script writes it. ``twin`` is another character on Kevin's kit."""
+    shared = series(characters=[*series()["characters"], {"id": "twin", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}}])
+    shot = {"id": "s1", "framing": "two-shot", "locationId": "garage", "layout2d": {"cast": cast}, "dialogueBeats": beats}
+    recorded = {beat["id"]: {"filename": f"{beat['id']}.wav", "duration": 1.0} for beat in beats}
+    return shared, shot, build_shot_spec(shared, {"id": "ep1"}, shot, workspace="cast", recorded=recorded)
+
+
+def test_cast_index_counts_in_the_planned_cast_and_a_name_picks_its_own_copy():
+    """castIndex is a position in the script's cast; the plan drops a member without a kit, so it moves with it."""
+    _series, _shot, spec = _two_speakers([{"characterId": "nokit"}, {"characterId": "kevin", "x": 30}, {"characterId": "kevin", "x": 70}], [
+        {"id": "b1", "characterId": "kevin", "text": "Uno.", "castIndex": 2},
+        {"id": "b2", "characterId": "kevin", "text": "Dos."},
+        {"id": "b3", "characterId": "kevin", "text": "Tres.", "castIndex": 0}])
+    assert [item["x"] for item in spec["cast"]] == [30.0, 70.0]
+    assert [line["castIndex"] for line in spec["lines"]] == [1, 0, 0], "the nokit entry is no copy: its index falls back to the name"
+    _series, _shot, shared = _two_speakers([{"characterId": "kevin"}, {"characterId": "twin"}], [
+        {"id": "b1", "characterId": "twin", "text": "Soy el otro."}, {"id": "b2", "characterId": "kevin", "text": "Y yo."},
+        {"id": "b3", "characterId": "gary", "text": "(off)"}])
+    assert [item["kitId"] for item in shared["cast"]] == ["kit-kevin", "kit-kevin"]
+    assert [line.get("castIndex") for line in shared["lines"]] == [1, 0, None]
+    assert [line["visible"] for line in shared["lines"]] == [True, True, False]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node required")
+def test_two_characters_on_one_kit_each_move_their_own_mouth(tmp_path):
+    from PIL import Image
+    from services.series_shot_bridge import run_series_shot, with_pose_sizes
+    from services.video2d_compile import TSX
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    Image.new("RGBA", (300, 600), (255, 0, 0, 255)).save(tmp_path / "k.png")
+    asset = lambda aid, kind="overlay": {"id": aid, "name": aid, "kind": kind, "alphaStatus": "transparent", "reviewState": "approved",
+                                         "source": "/api/v1/file/k.png?workspace=cast" if kind == "image" else f"/api/v1/file/{aid}.png?workspace=cast"}
+    states = ["closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue"]
+    kit = {"version": 1, "id": "kit-kevin", "name": "Kevin", "style": "cutout", "base": asset("base", "image"), "poses": {},
+           "mouth": {state: asset(f"m-{state}") for state in states}, "eyes": {}, "provenance": [],
+           "mouthMapping": {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small", "O": "round", "U": "pucker", "F": "bite", "L": "tongue"},
+           "anchors": {"base": {"mouth": {"offsetX": 0, "offsetY": -10, "scale": 0.1, "rotation": 0}}}}
+    cues = [{"start": 0, "end": 0.6, "value": "D"}]
+    _series, _shot, spec = _two_speakers([{"characterId": "kevin"}, {"characterId": "twin"}], [
+        {"id": "b1", "characterId": "twin", "text": "Soy el otro."}, {"id": "b2", "characterId": "kevin", "text": "Y yo."}])
+    for line in spec["lines"]:
+        line["cues"] = cues
+    document = run_series_shot({"mode": "shot", "kits": {"kit-kevin": with_pose_sizes(kit, str(tmp_path))}, "shot": spec})
+    twin, kevin = (beat["mouthLayerIds"] for beat in document["dialogueBeats"])
+    assert twin and all(layer.startswith("kit-kit-kevin-1-") for layer in twin), twin
+    assert kevin and all(layer.startswith("kit-kit-kevin-0-") for layer in kevin), kevin
 
 
 def test_a_vertical_series_plans_1080x1920_with_wider_spacing_and_smaller_cards():

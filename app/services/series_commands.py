@@ -202,11 +202,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
         "Optional number (integer >= 1), only when there is no episode_id: a number taken in the first season (where "
         "the episode goes) is 409 episode_number_taken with the holder's id. "
-        "warnings lists speaker_not_on_screen, location_differs_from_scene and template_backdrop_other_location "
-        "and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
+        "warnings ({code, subject, shots, message}) lists speaker_not_on_screen, location_differs_from_scene, "
+        "template_backdrop_other_location, document_text_too_long and video_budget and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
         "location (the shot location's plate) or {asset: id}. "
-        "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice. "
-        "A kit with lines and no voice for the episode language fails the check. "
+        "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice; without it the "
+        "first cast member who is that character speaks. "
+        "A kit with lines and no voice for the episode language fails the check (lines of kind video or generated shots are not voiced). "
         "estimate is the planned length in seconds: each speaker's approved-take pace, else 2.6 Spanish or 2.8 English words per second.",
     ),
     "series.episode.script.get": (

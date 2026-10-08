@@ -303,11 +303,16 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
     return item
 
 
-def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float, workspace: str = "",
-              portrait: bool = False) -> list[dict[str, Any]]:
+def _cast_entries(shot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The shot's ``layout2d.cast`` (the script's cast, in its order), else its visible characters."""
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     explicit = [item for item in layout.get("cast") or [] if isinstance(item, dict) and item.get("characterId")]
-    entries = explicit or [{"characterId": cid} for cid in shot.get("visibleCharacterIds") or []]
+    return explicit or [{"characterId": cid} for cid in shot.get("visibleCharacterIds") or []]
+
+
+def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float, workspace: str = "",
+              portrait: bool = False) -> list[dict[str, Any]]:
+    entries = _cast_entries(shot)
     homes, defaults = _homes(series, shot), spread(len(entries), portrait)
     items = (_cast_item(series, entry, _cast_x(entry, framing, len(entries), homes, defaults[index]), duration, workspace)
              for index, entry in enumerate(entries))
@@ -466,9 +471,21 @@ def _shot_framing(layout: dict[str, Any], shot: dict[str, Any], card: dict[str, 
     return classify_framing(shot.get("framing", ""), 0 if card else len(entries))
 
 
-def _shot_lines(series: dict[str, Any], episode: dict[str, Any], beats: list[dict], timing: list[tuple[float, float]],
-                recorded: dict[str, dict[str, Any]], visible: set[str]) -> list[dict[str, Any]]:
-    lines = []
+def _speaker_index(series: dict[str, Any], shot: dict[str, Any], cast: list[dict[str, Any]], beat: dict[str, Any]) -> int | None:
+    """The planned cast member who says ``beat``. ``castIndex`` counts in ``layout2d.cast``; the plan leaves out members
+    without a kit, so it is moved to the planned cast. Without it the speaker is the first member who is that
+    character, not the first copy of its kit (two characters can share one kit)."""
+    index = beat.get("castIndex")
+    if type(index) is int and cast:
+        entries = _cast_entries(shot)
+        if 0 <= index < len(entries) and kit_ref(series, entries[index]["characterId"]):
+            return sum(1 for entry in entries[:index] if kit_ref(series, entry["characterId"]))
+    return next((number for number, item in enumerate(cast) if item["characterId"] == beat.get("characterId")), None)
+
+
+def _shot_lines(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], beats: list[dict],
+                timing: list[tuple[float, float]], recorded: dict[str, dict[str, Any]], cast: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    lines, visible = [], {item["characterId"] for item in cast}
     for beat, (start, end) in zip(beats, timing):
         ref = kit_ref(series, beat.get("characterId", ""))
         heard = recorded[beat["id"]]
@@ -476,8 +493,10 @@ def _shot_lines(series: dict[str, Any], episode: dict[str, Any], beats: list[dic
                 "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
                 "cues": heard.get("cues") or None, "driver": heard.get("driver"),
                 "visible": beat.get("characterId") in visible, "name": beat.get("characterId")}
-        if type(beat.get("castIndex")) is int:
-            line["castIndex"] = beat["castIndex"]
+        # The compiler moves the mouth of the planned cast member at castIndex (seriesShot.ts lineOwnsAppearance).
+        speaker = _speaker_index(series, shot, cast, beat)
+        if speaker is not None:
+            line["castIndex"] = speaker
         lines.append(line)
     return lines
 
@@ -525,7 +544,7 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     title = f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"
     spec = {
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
-        "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, beats, timing, recorded, {item["characterId"] for item in cast}),
+        "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, shot, beats, timing, recorded, cast),
         "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
         "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),

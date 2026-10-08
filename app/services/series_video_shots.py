@@ -27,6 +27,7 @@ from PIL import Image
 
 from services.pose_facing import pose_asset, workspace_path
 from services.series_review import episode_mode, shot_entry
+from services.series_script_warnings import listed_shots
 
 # H3 publishes 24 fps and lengths 124, then +17, through 345 (minimax_h3_handler).
 FRAME_RATE = 24
@@ -57,19 +58,29 @@ def parse_budget(value: Any) -> dict[str, int] | None:
     return {"maxShots": count}
 
 
-def video_shot_count(script: dict[str, Any]) -> int:
+def _video_indexes(script: dict[str, Any]) -> list[int]:
     shots = script.get("shots") if isinstance(script.get("shots"), list) else []
-    return sum(1 for shot in shots if isinstance(shot, dict) and shot.get("kind") == "video" and isinstance(shot.get("video"), dict))
+    return [index for index, shot in enumerate(shots)
+            if isinstance(shot, dict) and shot.get("kind") == "video" and isinstance(shot.get("video"), dict)]
 
 
-def budget_warning(script: dict[str, Any], budget: dict[str, int] | None) -> dict[str, Any] | None:
-    """The script asks for more video shots than its budget. It does not block."""
+def video_shot_count(script: dict[str, Any]) -> int:
+    return len(_video_indexes(script))
+
+
+def budget_warning(script: dict[str, Any], budget: dict[str, int] | None, shot_id: Callable[[int], str]) -> dict[str, Any] | None:
+    """The script asks for more video shots than its budget. It does not block. ``shots`` are the ones past it."""
     if not budget:
         return None
-    count = video_shot_count(script)
-    if count <= budget["maxShots"]:
-        return None
-    return {"code": "video_budget", "maxShots": budget["maxShots"], "shots": count}
+    over = [shot_id(index) for index in _video_indexes(script)][budget["maxShots"]:]
+    return budget_group(budget["maxShots"], over) if over else None
+
+
+def budget_group(limit: Any, over: list[str]) -> dict[str, Any]:
+    """``video_budget`` in the grouped warning shape of a script (``series_script_warnings``): the shots the cap skips."""
+    count = "1 video shot is" if len(over) == 1 else f"{len(over)} video shots are"
+    return {"code": "video_budget", "subject": "videoBudget", "shots": over, "maxShots": limit,
+            "message": f"videoBudget: {count} over maxShots {limit} and not generated {listed_shots(over)}"}
 
 
 def normalize_video(raw: Any) -> dict[str, Any]:
@@ -131,7 +142,7 @@ def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, canc
     """Generate the episode's scripted video shots. True when the job is now waiting on a plan."""
     series, episode = _episode_of(deps, job)
     allowed, overflow = _cap(episode, _scripted(episode))
-    warnings = [_overflow_warning(episode, _scripted(episode))] if overflow else []
+    warnings = [_overflow_warning(episode, overflow)] if overflow else []
     waiting: list[dict[str, str]] = []
     done = set(step.get("doneShots") or [])
     for shot in allowed:
@@ -274,9 +285,9 @@ def _cap(episode: dict[str, Any], shots: list[dict[str, Any]]) -> tuple[list[dic
     return shots[:limit], shots[limit:]
 
 
-def _overflow_warning(episode: dict[str, Any], shots: list[dict[str, Any]]) -> dict[str, Any]:
+def _overflow_warning(episode: dict[str, Any], overflow: list[dict[str, Any]]) -> dict[str, Any]:
     limit = (episode.get("videoBudget") or {}).get("maxShots")
-    return {"code": "video_budget", "maxShots": limit, "shots": len(shots)}
+    return budget_group(limit, [str(shot.get("id")) for shot in overflow])
 
 
 def _request_digest(request: dict[str, Any]) -> str:

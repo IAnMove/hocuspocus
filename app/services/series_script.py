@@ -46,7 +46,7 @@ from services.series_shot_foley import normalize_foley
 from services import series_hearing
 from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
-from services.series_script_warnings import finish_check
+from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
 from services.series_video_shots import budget_warning, normalize_video, parse_budget, reference_problems
 from services.series_voice_rooms import PRESETS
@@ -186,7 +186,7 @@ class EpisodeScript:
             self.video_budget = None
             self.checker.problems.append(str(error))
             return
-        warning = budget_warning(self.script, self.video_budget)
+        warning = budget_warning(self.script, self.video_budget, self.shot_id)
         if warning:
             self.warnings.append(warning)
 
@@ -289,7 +289,7 @@ class EpisodeScript:
 
     def _check_document(self, index: int, shot: dict[str, Any], where: str) -> None:
         """A document card's style and reveal are refused when they are unknown. Text that cannot fit at the
-        readable minimum is a warning (``document_text_too_long``) and still writes."""
+        readable minimum is a warning (``document_text_too_long``, one per document title) and still writes."""
         card = shot.get("card")
         if not isinstance(card, dict) or card.get("kind") != "document":
             return
@@ -300,8 +300,8 @@ class EpisodeScript:
             return
         width, height = frame_size(self.series)
         if not layout_document(stored, width=width, height=height)["fits"]:
-            self.warnings.append({"code": "document_text_too_long", "shot": self.shot_id(index),
-                                  "message": "The document does not fit at the minimum readable size."})
+            group_warning(self.warnings, "document_text_too_long", stored["title"] or stored["style"], self.shot_id(index),
+                          "the document does not fit at the minimum readable size")
 
     def _check_layers(self, shot: dict[str, Any], where: str) -> None:
         """Set layers (a shot's own list replaces its location's; [] turns them off) and the cast's depth among them."""

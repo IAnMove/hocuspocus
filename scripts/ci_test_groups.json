@@ -2204,7 +2204,9 @@
     {
       "prefix": "app/services/series_script_warnings.py",
       "paths": [
-        "tests/test_series_script_produce.py"
+        "tests/test_series_script_produce.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_series_video_shots.py"
       ]
     },
     {

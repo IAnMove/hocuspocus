@@ -129,6 +129,21 @@ def test_foley_on_a_2d_shot_still_clears_the_take():
     assert changed == ["foley"] and info["reset"] == ["take"] and "approvedAttemptId" not in shot
 
 
+def test_a_cast_index_survives_an_edit_of_the_lines():
+    """The stored beat's castIndex reads back into its script line, so appending a line keeps which copy says the first."""
+    series = library()
+    episode = series["episodesById"]["ep2"]
+    shot, _number = find_shot(episode, 2)
+    twins = {"cast": [["kevin", "base", 30], ["kevin", "panic", 70]],
+             "lines": [{"who": "kevin", "es": "Uno.", "castIndex": 1}, {"who": "kevin", "es": "Dos."}]}
+    merged, changed = merge_changes(to_script(series, episode, shot), twins, None)
+    patch, texts = build_patch(series, episode, shot, merged, changed, KITS, FILES, None)
+    series, _info = apply_edit(series, "ep2", shot["id"], patch, texts, changed, take_still_fits(shot, changed))
+    _episode, edited, _info, changed = edit(series, 2, append={"lines": [{"who": "kevin", "es": "Tres."}]})
+    assert changed == ["lines"]
+    assert [(beat["text"], beat.get("castIndex")) for beat in edited["dialogueBeats"]] == [("Uno.", 1), ("Dos.", None), ("Tres.", None)]
+
+
 class Library:
     def __init__(self):
         self.series, self.calls = library(), []

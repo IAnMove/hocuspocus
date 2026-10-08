@@ -120,11 +120,15 @@ def test_a_document_card_is_stored_and_a_long_one_warns_without_blocking():
                   "es": ["Carta", "Hoy el río iba alto."], "en": ["Letter", "The river was high."]}},
         {"scene": "a", "duration": 4, "card": {"kind": "document", "style": "file",
                                                "es": ["Expediente", ("palabra " * 200)[:1200]]}},
+        {"scene": "a", "duration": 3, "card": {"kind": "document", "style": "file", "reveal": "pan",
+                                               "es": ["Expediente", ("palabra " * 200)[:1200]]}},
     ]}
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True)
     # Other script warnings (a speaker not on screen) may sit beside it: the long document is the one this checks.
-    assert {"code": "document_text_too_long", "shot": "e2s01",
-            "message": "The document does not fit at the minimum readable size."} in checked["warnings"]
+    # The grouped shape of every script warning: one per document title, with its shots.
+    assert {"code": "document_text_too_long", "subject": "Expediente", "shots": ["e2s01", "e2s02"],
+            "message": "Expediente: the document does not fit at the minimum readable size (shots e2s01, e2s02)"} in checked["warnings"]
+    assert all({"code", "subject", "shots", "message"} <= set(item) and isinstance(item["shots"], list) for item in checked["warnings"])
     assert tools.calls == []
     apply_script(tools, tools.read, KITS, FILES, "cast", script)
     card = tools.calls[1][1]["episode"]["shots"][0]["layout2d"]["card"]
@@ -585,9 +589,39 @@ def test_a_speaker_off_the_shot_names_the_body_kit_and_a_shared_place_warns():
     assert speakers[1]["subject"] == "ana" and "did you mean cuerpo?" in speakers[1]["message"]
     assert [(item["subject"], item["shots"]) for item in places] == [
         ("battle", ["e2s02", "e2s03"]), ("prayer", ["e2s04"]), ("yard", ["e2s08"])]
-    assert "2 shots use sky instead of the scene" in places[0]["message"]
-    assert "use dock instead of garage" in places[2]["message"]
+    # sky is battle's own location: the warning says who else shows it, not that battle left it.
+    assert places[0]["message"] == "battle: sky is also the location of prayer (shots e2s02, e2s03)"
+    assert places[1]["message"] == "prayer: sky is also the location of battle (shots e2s04)"
+    assert places[2]["message"] == "yard: 1 shot uses dock instead of garage (shots e2s08)"
     assert tools.calls == []
+
+
+def test_a_shot_moved_to_another_scene_place_warns_alone():
+    """A shot set in another scene's place says so; that scene does not share its place because of it."""
+    tools = Series()
+    tools.series["locations"].extend([{"id": "bridge", "variants": []}, {"id": "plaza", "variants": []}])
+    script = {"scenes": [{"id": "street", "location": "plaza"}, {"id": "course", "location": "bridge"}], "shots": [
+        {"scene": "street", "duration": 2}, {"scene": "street", "location": "bridge", "duration": 2},
+        {"scene": "course", "duration": 2}, {"scene": "course", "location": "bridge", "duration": 2}]}
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True)
+    places = [item for item in checked["warnings"] if item["code"] == "location_differs_from_scene"]
+    assert places == [{"code": "location_differs_from_scene", "subject": "street", "shots": ["e2s01"],
+                       "message": "street: 1 shot uses bridge instead of plaza (shots e2s01)"}]
+
+
+def test_a_video_shot_line_needs_no_voice():
+    """The render voices no line of a video or generated take (its lines are in the clip), so the check does not ask."""
+    tools = Series()
+    kits = {**KITS, "kit-kevin": {"poses": {"panic": {}}}}
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "kind": "video", "duration": 5, "cast": [["kevin", "base", 40]], "lines": [{"who": "kevin", "es": "Hola."}]},
+        {"scene": "a", "kind": "generated", "duration": 5, "cast": [["kevin", "base", 40]], "lines": [{"who": "kevin", "es": "Adiós."}]}]}
+    checked = apply_script(tools, tools.read, kits, FILES, "cast", script, check_only=True)
+    assert checked["checked"] is True and checked["shots"] == ["e2s00", "e2s01"]
+    drawn = {**script, "shots": [*script["shots"], {"scene": "a", "cast": [["kevin", "base", 40]], "lines": [{"who": "kevin", "es": "Yo sí."}]}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", drawn, check_only=True)
+    assert [problem for problem in raised.value.problems if "voice" in problem] == ["shot 2 (e2s02): kevin has no spanish voice"]
 
 
 def test_a_kit_without_a_voice_fails_the_check():

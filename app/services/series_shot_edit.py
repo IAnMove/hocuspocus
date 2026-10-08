@@ -98,7 +98,7 @@ def _line(beat: dict[str, Any], original: str, versions: dict[str, dict[str, Any
         text = (version.get("dialogue") or {}).get(beat.get("id"))
         if text:
             line[language] = text
-    for key in ("pauseBefore", "voiceRoom", "emotion", "delivery"):
+    for key in ("pauseBefore", "voiceRoom", "emotion", "delivery", "castIndex"):
         if beat.get(key) not in (None, ""):
             line[key] = beat[key]
     return line
