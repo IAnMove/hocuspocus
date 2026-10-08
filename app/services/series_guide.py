@@ -18,7 +18,8 @@ from services.pose_facing import kit_facings
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SHOT_FIELDS = ("id", "order", "sceneId", "locationId", "locationVariantId", "productionMethod", "durationSeconds",
-               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "foley", "approvedAttemptId")
+               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "foley", "approvedAttemptId",
+               "transitionIn")
 # Detecting the facing of poses not read before stops after this many seconds; the rest are read by later calls.
 FACING_BUDGET = 20.0
 

@@ -144,11 +144,14 @@ def test_the_bible_lists_what_an_agent_may_use():
 
 def test_a_compact_episode_keeps_layout_lines_and_takes():
     ep = episode()
+    ep["shots"][0]["transitionIn"] = {"kind": "fade_black", "seconds": 0.8}
     compact = compact_episode(series(ep), ep)
     shot = compact["shots"][0]
     assert shot["layout2d"]["framing"] == "close" and shot["dialogueBeats"][0]["text"].startswith("¡¿CIEN")
+    assert shot["transitionIn"] == {"kind": "fade_black", "seconds": 0.8}
     assert shot["takes"][0] == {"id": "a1", "status": "completed", "language": "spanish", "seconds": 1.71, "sceneFilename": "e2s06.scene.json"}
     assert "attempts" not in shot and compact["languageVersions"]["english"]["dialogue"]
+    assert "transitionIn" in guide_text() and "fade_black" in guide_text() and "dip_white" in guide_text()
 
 
 def test_the_guide_routes(tmp_path):

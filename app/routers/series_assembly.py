@@ -30,6 +30,7 @@ from services.series_review_gate import assembly_blockers, blocker_message
 from services.series_jobs import SeriesJobStore
 from services.series_score import clip_score
 from services.series_take_sound import plan_take_sound, prepare_clips, prepared_metadata, prepared_note
+from services.series_transitions import join_arguments
 from services.task_manager import get_cancellation_token, get_task_registry
 
 
@@ -411,10 +412,10 @@ def create_series_assembly_router(
                 )
             except (TypeError, ValueError):
                 supports_abort = False
-            joined = (
-                concatenate_clips(clip_paths, output_path, abort_callback=token.is_cancelled)
-                if supports_abort else concatenate_clips(clip_paths, output_path)
-            )
+            transitions = [item.get("transitionIn") for item in job.get("clips", [])]
+            joined = concatenate_clips(clip_paths, output_path, **join_arguments(
+                transitions, abort_callback=token.is_cancelled, supports_abort=supports_abort,
+            ))
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
                 update(
@@ -436,6 +437,7 @@ def create_series_assembly_router(
                 output_path, clip_paths, [item.get("dialogueBeats") or item.get("sceneFilename") for item in job.get("clips", [])],
                 workspace_dir=output_directory, abort_callback=token.is_cancelled,
                 burn=bool(job.get("burnSubtitles")), ambience=ambience, score=score,
+                transitions=transitions,
             )
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)

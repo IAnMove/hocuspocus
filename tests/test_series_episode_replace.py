@@ -71,3 +71,20 @@ def test_a_video_take_survives_a_rewrite_that_only_changes_its_sound():
     assert not same_shot_content(video, {**louder, "productionMethod": "animation_2d"}), "a 2D shot renders its sound"
     assert not same_shot_content({**video, "productionMethod": "animation_2d"},
                                  {**louder, "productionMethod": "animation_2d"})
+
+
+def test_a_transition_is_not_shot_content_and_a_cut_is_dropped():
+    from services.series_library import _normalize_shot
+
+    before = stored("e1s00", "Hola")
+    body = {key: value for key, value in before.items() if key not in TAKE}
+    after = {**body, "transitionIn": {"kind": "dissolve", "seconds": 0.5}}
+    assert same_shot_content(before, after)
+    merged = _merge_episode_shot_patch([before], [after], replace=True)
+    assert merged[0]["approvedAttemptId"] == "att-1" and merged[0]["transitionIn"]["kind"] == "dissolve"
+    cleared = _merge_episode_shot_patch(merged, [{**body, "transitionIn": None}], replace=True)
+    assert cleared[0].get("transitionIn") is None and cleared[0]["approvedAttemptId"] == "att-1"
+    base = {**stored("e1s00", "Hola"), "productionMethod": "animation_2d"}
+    assert "transitionIn" not in _normalize_shot({**base, "transitionIn": {"kind": "cut", "seconds": 0.4}}, 0)
+    kept = _normalize_shot({**base, "transitionIn": {"kind": "dip_white", "seconds": 1}}, 0)
+    assert kept["transitionIn"] == {"kind": "dip_white", "seconds": 1.0}

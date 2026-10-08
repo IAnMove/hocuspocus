@@ -1868,6 +1868,20 @@
     {
       "prefix": "app/services/series_guide.py",
       "paths": ["tests/test_series_agent_fixes.py", "tests/test_series_look_room.py"]
+    },
+    {
+      "prefix": "app/services/series_transitions.py",
+      "paths": [
+        "tests/test_mix_concat.py",
+        "tests/test_core_series_assembly.py",
+        "tests/test_episode_av_sync.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_series_assembly.py",
+        "tests/test_series_episode_replace.py",
+        "tests/test_series_agent_fixes.py"
+      ]
     }
   ]
 }

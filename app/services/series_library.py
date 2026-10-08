@@ -37,6 +37,7 @@ SHOT_EDITOR_FIELDS = frozenset({
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
     "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley",
+    "transitionIn",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 # A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
@@ -410,6 +411,13 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         shot["foley"] = foley
     else:
         shot.pop("foley", None)
+    from .series_transitions import normalize_transition
+    if "transitionIn" in shot:
+        transition = normalize_transition(shot.get("transitionIn"))
+        if transition:
+            shot["transitionIn"] = transition
+        else:
+            shot.pop("transitionIn", None)
     policy = shot["referencePolicy"]
     policy["mode"] = "manual" if policy.get("mode") == "manual" else "automatic"
     policy["manualIncludeAssetIds"] = _unique_ids(policy.get("manualIncludeAssetIds"))

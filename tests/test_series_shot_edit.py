@@ -237,3 +237,17 @@ def test_series_lab_asks_for_the_stored_shot_to_merge_the_edit_into_its_open_cop
     assert stored["languageVersions"]["english"]["dialogue"]["e2s01_b0"] == "And the hat?"
     assert stored["shot"] == next(item for item in store.series["episodesById"]["ep2"]["shots"] if item["id"] == "e2s01")
     assert reply["revision"] == store.series["revision"]
+
+
+def test_a_transition_keeps_the_approved_take_on_a_2d_shot_and_on_a_video_take():
+    series = library()
+    _episode, shot, info, changed = edit(series, 2, changes={"transitionIn": {"kind": "dip_white", "seconds": 0.8}})
+    assert changed == ["transitionIn"] and info["approvalReset"] is False
+    assert shot["transitionIn"] == {"kind": "dip_white", "seconds": 0.8} and shot["approvedAttemptId"] == "att-1"
+    _episode, video, info, changed = edit(series, "e2s03", changes={"transitionIn": {"kind": "fade_black", "seconds": 1.2}})
+    assert changed == ["transitionIn"] and info["approvalReset"] is False and video["approvedAttemptId"] == "att-v"
+    find_shot(series["episodesById"]["ep2"], 2)[0]["transitionIn"] = {"kind": "dissolve", "seconds": 0.5}
+    _episode, cleared, info, changed = edit(series, 2, changes={"transitionIn": None})
+    assert changed == ["transitionIn"] and info["approvalReset"] is False and cleared.get("transitionIn") is None
+    with pytest.raises(ShotEditError, match="transitionIn.kind"):
+        edit(series, 2, changes={"transitionIn": {"kind": "wipe", "seconds": 0.5}})

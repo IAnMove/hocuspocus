@@ -396,3 +396,19 @@ def test_video_shots_keep_their_kind_clip_sound_and_cue_parts():
     assert generated["layout2d"]["clipVolume"] == 0.5 and generated["durationSeconds"] == 5.0
     with pytest.raises(ScriptError, match="kind must be 2d"):
         apply_script(Series(), Series().read, KITS, FILES, "cast", {**script, "shots": [{"scene": "a", "kind": "movie"}]})
+
+
+def test_transition_in_is_checked_and_a_missing_one_is_sent_as_null():
+    tools = Series()
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "dissolve", "seconds": 0.6}},
+                                  *SCRIPT["shots"][1:]]}
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    shots = tools.calls[1][1]["episode"]["shots"]
+    assert shots[0]["transitionIn"] == {"kind": "dissolve", "seconds": 0.6}
+    assert shots[1]["transitionIn"] is None and shots[2]["transitionIn"] is None
+    bad = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "wipe", "seconds": 0.5}}]}
+    with pytest.raises(ScriptError, match="transitionIn.kind"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", bad)
+    short = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "fade_black", "seconds": 0.1}}]}
+    with pytest.raises(ScriptError, match="transitionIn.seconds"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", short)

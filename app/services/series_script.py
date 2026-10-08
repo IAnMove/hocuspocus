@@ -27,6 +27,7 @@ clear message instead of halfway through a render::
                 "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8},
                            {"file": "bg-crowd.mp4", "depth": 0.2, "start": 2.5, "loop": "pingpong", "speed": 0.5}], "castDepth": 0.6,
                 "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
+                "transitionIn": {"kind": "dissolve", "seconds": 0.6},
                 "foley": {"prompt": "wooden airship creaking, wind", "volume": 0.5}}]}
 """
 from __future__ import annotations
@@ -38,6 +39,7 @@ from services.series_layers import layout_layers
 from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
+from services.series_transitions import normalize_transition
 from services.series_shot_foley import normalize_foley
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
 from services.series_voice_rooms import PRESETS
@@ -178,6 +180,7 @@ class EpisodeScript:
         self._check_files(shot, where)
         self._check_effects(shot, where)
         self._check_layers(shot, where)
+        self._check_transition(shot, where)
 
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
@@ -244,6 +247,15 @@ class EpisodeScript:
             self.checker.file(config["scene"], f"{where} scene3d")
         problems += [f"{where}: {problem}" for problem in scene3d_problems(shot.get("scene3d"), self.checker.root)]
 
+    def _check_transition(self, shot: dict[str, Any], where: str) -> None:
+        raw = shot.get("transitionIn")
+        if raw is None:
+            return
+        try:
+            normalize_transition(raw)
+        except ValueError as error:
+            self.checker.problems.append(f"{where}: {error}")
+
     def _check_layers(self, shot: dict[str, Any], where: str) -> None:
         """Set layers (a shot's own list replaces its location's; [] turns them off) and the cast's depth among them."""
         try:
@@ -306,6 +318,8 @@ class EpisodeScript:
             body["scene3d"] = shot["scene3d"]
         if shot.get("foley") is not None:
             body["foley"] = normalize_foley(shot["foley"])
+        # Always present, so a rewritten script clears a transition the new script omits.
+        body["transitionIn"] = normalize_transition(shot.get("transitionIn"))
         return body
 
     def shots(self) -> list[dict[str, Any]]:

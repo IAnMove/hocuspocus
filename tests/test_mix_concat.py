@@ -446,6 +446,59 @@ def test_ffprobe_is_found_beside_ffmpeg_even_in_a_folder_named_after_ffmpeg():
     assert ffprobe_for("/usr/bin/ffmpeg7") == "/usr/bin/ffprobe7"
 
 
+def test_without_a_transition_the_filter_list_matches_the_hold_crossfade():
+    import hashlib
+
+    from services.series_transitions import filter_for, output_seconds, placed_offsets
+
+    durations = [2.0, 3.5, 1.25, 4.0]
+    flags = [True, False, True, True]
+    plain, video, audio = build_hold_crossfade_filter(durations, has_audio=flags)
+    same, same_video, same_audio = filter_for(durations, transitions=None, has_audio=flags)
+    cuts = [{"kind": "cut", "seconds": 0.4}] * len(durations)
+    cut_filter, cut_video, cut_audio = filter_for(durations, transitions=cuts, has_audio=flags)
+    digest = hashlib.sha256(plain.encode()).hexdigest()
+    assert hashlib.sha256(same.encode()).hexdigest() == digest
+    assert hashlib.sha256(cut_filter.encode()).hexdigest() == digest
+    assert (video, audio) == (same_video, same_audio) == (cut_video, cut_audio)
+    assert output_seconds(durations, None) == hold_crossfade_output_seconds(durations)
+    assert output_seconds(durations, cuts) == hold_crossfade_output_seconds(durations)
+
+
+def test_transition_duration_arithmetic_for_dissolve_and_the_two_fades():
+    from services.series_transitions import output_seconds, placed_offsets
+
+    durations = [2.0, 2.0, 2.0, 2.0, 2.0]
+    dissolve = [None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.5},
+                {"kind": "dissolve", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.5}]
+    assert output_seconds(durations, dissolve) == 8.0
+    assert placed_offsets(durations, dissolve) == [0.0, 1.5, 3.0, 4.5, 6.0]
+    fades = [None, {"kind": "fade_black", "seconds": 1.0}, {"kind": "dip_white", "seconds": 0.2},
+             {"kind": "cut"}, {"kind": "fade_black", "seconds": 2.0}]
+    assert output_seconds(durations, fades) == 10.0
+    assert placed_offsets(durations, fades) == [0.0, 2.0, 4.0, 6.0, 8.0]
+    mixed = [None, {"kind": "fade_black", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.4},
+             {"kind": "dip_white", "seconds": 0.3}, {"kind": "cut"}]
+    assert output_seconds(durations, mixed) == pytest.approx(9.6)
+    # The first shot's transition has nothing to join from, so it does not change the length.
+    assert output_seconds(durations, [{"kind": "dissolve", "seconds": 1.0}]) == hold_crossfade_output_seconds(durations)
+
+
+def test_an_active_transition_does_not_reuse_the_freeze_tail():
+    from services.series_transitions import filter_for
+
+    graph, _video, _audio = filter_for(
+        [2.0, 2.0, 2.0],
+        transitions=[None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "fade_black", "seconds": 0.4}],
+    )
+    assert "tpad=" not in graph
+    assert "xfade=transition=fade:duration=0.500" in graph
+    assert "acrossfade=d=0.500000" in graph
+    assert "fade=t=out" in graph and "color=black" in graph
+    white, _video, _audio = filter_for([2.0, 2.0], transitions=[None, {"kind": "dip_white", "seconds": 0.3}])
+    assert "color=white" in white and "xfade=" not in white and "tpad=" not in white
+
+
 def _decoded_seconds(path: Path, stream: str) -> float:
     """Length of a stream as decoded (frames at 24 fps, or samples at 48 kHz), not as the container states it."""
     if stream == "v":
