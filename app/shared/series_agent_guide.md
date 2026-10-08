@@ -15,7 +15,7 @@ use only those ids and file names, never invent one.
      language (`generation.speech` with `qwen3_tts_voicedesign`, check with `qa.speech`) → `characters.save` with
      `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`.
      Check the pitch with `qa.speech` and `pitch_range`: an adult man sits at 85–155 Hz, an adult woman at 165–255 Hz.
-     The series render does not apply that range on its own yet;
+     The series render only notes a line outside the character's range (`pitch_out_of_range`) and keeps the take;
    - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
      eyes in a wide head: graphic-novel or tenebrist art, eye bags, spectacles, moustaches) is detected, and its mouth
      is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "warp"}`
@@ -30,10 +30,8 @@ use only those ids and file names, never invent one.
      (owner_type location, reference_role environment); for depth, also make its planes as separate keyed images (a
      pillar or a bed frame in front, columns behind the cast) and list them in its `layout2d.layers` (below).
      Paint the plate empty of anything that must move (boats, waves, crowds, rain): a frozen wave reads as broken.
-     Animate that motion afterwards, as an H3 loop or a Video 3D scene;
+     Animate that motion afterwards, as an H3 loop (`image_start` and `image_end` the same image) or a Video 3D scene;
    - 3D background: `world3d.templates.list` → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
-     An H3 loop sets `image_start` and `image_end` to the same image. If the seam is about three times one normal
-     step, blend the last 14 frames;
    After changing characters or locations, `series.canon.approve` (episodes freeze the approved canon).
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
    same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect at
@@ -374,13 +372,13 @@ it can be found, reused and redone.
   copying the export. A file changed under the same name is not seen as a change: render the shots that show it
   again (`series.shot.update` with `render`, or `series.episode.render_native` with their `shot_ids`).
 - **A new name per variant:** every `generation.image`, `generation.speech` and `generation.video` variant gets its
-  own `output_name`. Reusing a name replaces the previous file.
+  own `output_name`. A name in use keeps the old file and saves the new one as `name(2)` (warning
+  `output_name_taken`): use the path the result returns.
 
 ## Sound design
 
-`soundDesign` on the series (`series.update`) is replaced as one object. Sending only `ambienceByLocation` drops
-`stinger`, `roomByLocation`, `ambienceMode` and `ambienceDuckDb`. It is the sound every shot gets without the script
-naming it:
+`soundDesign` on the series (`series.update`, replaced as one object: see Known pitfalls) is the sound every shot gets
+without the script naming it:
 `stinger` (`{file, volume}`) under the first shot of each scene, `ambienceByLocation`
 (`{"<locationId>": {"file": "sfx-rain.wav", "volume": 0.22}}`, volume 0–2 relative to the dialogue, default 0.22) and
 `roomByLocation` (below).
@@ -460,8 +458,6 @@ ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let
   traits become defaults, not the stored ones). The same is true of `canon`, `locations` and `assets`. Send `[]` or
   `{}` to clear a field. Each episode's review stays the stored one. Read with `series.get` (it returns the whole
   project, assets included), edit a copy, send it with `base_revision`, and keep a JSON copy before a large change.
-- Before queueing image, speech or video while another instance is running, check `nvidia-smi`. If another process
-  holds more than 2 GB, wait. Do not restart that instance.
 - A language version keeps its own takes, lengths and music; approve its takes with `series.take.approve` + `language`.
 - Effects and sounds placed by hand in a take's scene are lost when the shot renders again: declare them in the
   script (`sfx`, `fx`) instead.

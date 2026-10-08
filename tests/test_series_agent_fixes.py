@@ -166,7 +166,6 @@ def test_the_guide_names_the_production_lessons():
         "boats, waves, crowds, rain",
         "image_start",
         "image_end",
-        "last 14 frames",
         "10–13 key shots",
         "shot_ids",
         "One kit per character",
@@ -177,10 +176,15 @@ def test_the_guide_names_the_production_lessons():
         "pitch_range",
         "magenta",
         "output_name",
-        "nvidia-smi",
+        "output_name_taken",
+        "pitch_out_of_range",
         "assets included",
     ):
         assert phrase in guide, phrase
+    # An existing name is kept (the new file is name(2)); agents with only MCP tools have no shell; no tool blends
+    # frames; the render checks the pitch range (#916).
+    for wrong in ("Reusing a name replaces", "nvidia-smi", "last 14 frames", "does not apply that range"):
+        assert wrong not in guide, wrong
 
 
 def test_the_guide_routes(tmp_path):
