@@ -151,6 +151,35 @@ def test_a_compact_episode_keeps_layout_lines_and_takes():
     assert "attempts" not in shot and compact["languageVersions"]["english"]["dialogue"]
 
 
+def test_the_guide_names_the_production_lessons():
+    """Lessons that cost hours, and the real series.update merge. Growth stays within 15% of 40364 bytes."""
+    guide = guide_text()
+    assert len(guide.encode()) <= int(40364 * 1.15)
+    for phrase in (
+        "keeps every top-level field you omit",
+        "ambienceByLocation",
+        "base_revision",
+        "JSON copy",
+        "boats, waves, crowds, rain",
+        "image_start",
+        "image_end",
+        "last 14 frames",
+        "10–13 key shots",
+        "shot_ids",
+        "One kit per character",
+        "voice-over",
+        "12 frames",
+        "85–155 Hz",
+        "165–255 Hz",
+        "pitch_range",
+        "magenta",
+        "output_name",
+        "nvidia-smi",
+        "assets included",
+    ):
+        assert phrase in guide, phrase
+
+
 def test_the_guide_routes(tmp_path):
     (tmp_path / "mus-theme-es.wav").write_bytes(b"x")
     app = FastAPI()

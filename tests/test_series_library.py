@@ -13,6 +13,8 @@ from services.series_library import (
     commit_canon_delta,
     create_series_episode,
     create_series_project,
+    normalize_series_project,
+    series_put_payload,
     duplicate_series_project,
     import_story_project,
     normalize_series_library,
@@ -446,3 +448,67 @@ def test_an_episode_number_is_optional_and_unique_across_the_series():
     assert http_move.value.status_code == 409 and http_move.value.detail["episodeId"] == first["id"]
     renamed = apply_series_episode_update("show", second["id"], {"episode": {"number": 4}, "baseSeriesRevision": 1}, series, updated_at="t")
     assert renamed["episodesById"][second["id"]]["number"] == 4
+
+
+def test_a_series_put_keeps_omitted_fields_and_replaces_a_nested_object_whole():
+    """series.update keeps top-level keys that were not sent and replaces a nested object in one piece."""
+    current = create_series_project("default", title="Harbour Lights")
+    current["characters"] = [
+        {"id": "mara", "name": "Mara", "personality": "steady"},
+        {"id": "leo", "name": "Leo", "personality": "loud"},
+    ]
+    current["locations"] = [{"id": "harbour", "name": "Harbour"}]
+    current["assets"] = {
+        "plate": {
+            "id": "plate", "kind": "image", "uri": "assets/series/harbour.png",
+            "ownerType": "series", "ownerId": current["id"],
+        },
+    }
+    current["soundDesign"] = {
+        "stinger": {"file": "sting.wav", "volume": 0.7},
+        "ambienceByLocation": {"harbour": {"file": "gulls.wav", "volume": 0.2}},
+        "ambienceMode": "episode",
+        "ambienceDuckDb": 6,
+        "roomByLocation": {"harbour": "outdoor"},
+    }
+    current["canon"]["worldSummary"] = "A harbour."
+    current["canon"]["immutableRules"] = [{"id": "rule_tide", "description": "The lantern stays lit."}]
+    episode = create_series_episode(current)
+    episode["review"] = {"mode": "plan", "shots": {}}
+    current["episodesById"] = {episode["id"]: episode}
+    current["seasons"][0]["episodeOrder"] = [episode["id"]]
+
+    def saved(sent):
+        return normalize_series_project(series_put_payload(current, sent), current["id"], "default")
+
+    omitted = saved({"allowedProductionMethods": ["animation_2d"]})
+    assert omitted["title"] == "Harbour Lights"
+    assert [item["id"] for item in omitted["characters"]] == ["mara", "leo"]
+    assert omitted["characters"][0]["personality"] == "steady"
+    assert omitted["soundDesign"]["stinger"]["file"] == "sting.wav"
+    assert omitted["soundDesign"]["roomByLocation"] == {"harbour": "outdoor"}
+    assert omitted["soundDesign"]["ambienceMode"] == "episode"
+    assert omitted["canon"]["immutableRules"][0]["id"] == "rule_tide"
+    assert omitted["episodesById"][episode["id"]]["review"]["mode"] == "plan"
+    assert omitted["assets"]["plate"]["uri"] == "assets/series/harbour.png"
+
+    partial = saved({"soundDesign": {"ambienceByLocation": {"harbour": {"file": "rain.wav", "volume": 0.3}}}})
+    assert partial["soundDesign"] == {"ambienceByLocation": {"harbour": {"file": "rain.wav", "volume": 0.3}}}
+    assert [item["id"] for item in partial["characters"]] == ["mara", "leo"]
+
+    one_character = saved({"characters": [{"id": "mara", "name": "Mara"}]})
+    assert [item["id"] for item in one_character["characters"]] == ["mara"]
+    assert one_character["characters"][0]["personality"] == ""
+
+    cleared = saved({"locations": []})
+    assert cleared["locations"] == []
+    assert [item["id"] for item in cleared["characters"]] == ["mara", "leo"]
+
+    canon_only = saved({"canon": {"worldSummary": "A darker harbour."}})
+    assert canon_only["canon"]["worldSummary"] == "A darker harbour."
+    assert canon_only["canon"]["immutableRules"] == []
+
+    sent_episodes = copy.deepcopy(current["episodesById"])
+    sent_episodes[episode["id"]]["review"] = {"mode": "direct", "shots": {}}
+    kept = saved({"episodesById": sent_episodes})
+    assert kept["episodesById"][episode["id"]]["review"]["mode"] == "plan"
