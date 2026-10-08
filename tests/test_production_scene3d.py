@@ -434,7 +434,7 @@ def test_names_become_urls_and_clip_names_their_index(tmp_path):
 
 def test_unknown_names_and_clips_fail_before_any_export(tmp_path):
     glb(tmp_path / "hero.glb", ["idle"])
-    with pytest.raises(ValueError, match="not a URL, a stills name or a file"):
+    with pytest.raises(ValueError, match="is not a URL, a model, a stills name or a file"):
         resolve_media({"template": "dance-stage", "background": "nowhere"}, stills={}, root=tmp_path, workspace="w")
     with pytest.raises(ValueError, match=r"no clip 'dance' in its model \(clips: idle\)"):
         resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "hero.glb", "clip": "dance"}}},

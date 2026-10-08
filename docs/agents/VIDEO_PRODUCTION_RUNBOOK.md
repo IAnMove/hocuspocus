@@ -372,6 +372,30 @@ A role that more than one object has must be bound by object id
 unless the entry sets `add: true`, which adds it as a prop. A template without a
 background slot fails with `background_slot_missing`: choose another template.
 
+**Models.** Do not build characters or objects from boxes. `spec.models` makes
+textured Hunyuan3D models once, in one batch after the cast sheets, and rigs them
+with clips on the song's tempo:
+
+```json
+"models": {
+  "hero": {"from": "hero", "animations": ["idle", "walk", "dance_bounce", "wave"]},
+  "boat": {"from": "boat-picture", "rig": "vehicle"},
+  "kite": {"prompt": "a red paper kite with a long tail"}
+}
+```
+
+`from` is a cast id (its plain portrait), a `stills` name or a picture URL; an
+object without a picture gives a `prompt`. A cast id defaults to `rig: "humanoid"`:
+the portrait is redrawn in a T-pose first, because the humanoid rig needs one.
+Humanoid clips: idle, breathe, walk, run, jump, wave, cheer, dance_bounce,
+dance_side, dance_arms, clap, punch, sit_down, victory, talk, nod, look_around,
+bow, point, shrug, kneel_pray, crouch. Procedural profiles (`prop`, `vehicle`,
+`quadruped`, `flying`, `serpentine`) take their own clips (hover, bounce, spin,
+wobble, strafe…); `none` keeps a rigid model that moves along `motion` paths.
+A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dance_bounce"}`.
+`production.status` times the stage as `models`; a failed model stops the run
+and a resume retries it with a new picture.
+
 For a musical performance, set the document's `rhythm` to
 `{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
 `"rhythm":{"beats":1,"phase":0,"bounce":0.12,"sway":0.06,"yaw":0.12,"pulse":0.025}`

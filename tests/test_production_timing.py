@@ -46,17 +46,17 @@ def _production(tmp_path, clock):
     return production
 
 
-def test_fake_run_records_seven_stages_and_a_shot(tmp_path, monkeypatch):
+def test_fake_run_records_every_stage_and_a_shot(tmp_path, monkeypatch):
     clock = _clock(monkeypatch)
     production = _production(tmp_path, clock)
     clip_job = production.clip_job
     production.run(_spec())
     timing = production.state["timing"]
-    assert [timing[name] for name in STAGES] == [4, 1, 2, 3, 32, 5, 6]
+    assert [timing[name] for name in STAGES] == [4, 1, 2, 0, 3, 32, 5, 6]
     assert timing["shots"] == [{"key": "s0", "seconds": 32, "takes": 1}]
     assert production.clip_job is clip_job
     status = status_summary(production.state, "ws")
-    assert [status["timing"][name] for name in STAGES] == [4, 1, 2, 3, 32, 5, 6]
+    assert [status["timing"][name] for name in STAGES] == [4, 1, 2, 0, 3, 32, 5, 6]
     assert status["timing"]["shots"] == [{"key": "s0", "seconds": 32, "takes": 1}]
     assert len(json.dumps(status).encode()) < 1500
     assert "/" not in json.dumps(status["timing"])
@@ -77,7 +77,7 @@ def test_stages_that_did_not_run_are_zero(tmp_path, monkeypatch):
     production = _production(tmp_path, _clock(monkeypatch))
     production.run(_spec(), through="frames")
     timing = status_summary(production.state, "ws")["timing"]
-    assert [timing[name] for name in STAGES] == [4, 1, 2, 3, 0, 0, 0]
+    assert [timing[name] for name in STAGES] == [4, 1, 2, 0, 3, 0, 0, 0]
     assert timing["shots"] == []
     assert production.state["status"] == "frames_ready"
 
@@ -100,7 +100,7 @@ def test_a_failed_stage_keeps_its_seconds(tmp_path, monkeypatch):
 
 def test_status_without_a_run_is_zeros_and_a_normal_one_stays_small():
     blank = status_summary({"status": "running"}, "ws")["timing"]
-    assert [blank[name] for name in STAGES] == [0, 0, 0, 0, 0, 0, 0]
+    assert [blank[name] for name in STAGES] == [0] * len(STAGES)
     assert blank["shots"] == []
     shots = [{"key": f"s{i}", "seconds": 80 + i, "takes": 1 + (i % 3), "file": "f.png", "prompt": "x" * 400} for i in range(8)]
     state = {"status": "completed", "error": None, "song": {"file": "song.wav"},

@@ -98,6 +98,7 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                         "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
                                                                   "description": "ids of other cast entries: one reference image with their portraits side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
+        "models": {"type": "object", "description": "name -> {from (cast id, stills name or picture URL) or prompt, rig (humanoid, prop, vehicle, quadruped, flying, serpentine, none; humanoid for a cast id), animations [clip names], seed}: textured Hunyuan3D GLBs, rigged with clips on the song's tempo, made in one batch after cast. A scene3d cast entry uses the name."},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
@@ -186,6 +187,11 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
+    from services.production_models import ModelError, check_models
+    try:
+        check_models(spec)
+    except ModelError as error:
+        raise ProductionError("invalid_spec", str(error)) from error
     from services.production_resolution import check_resolution
     return require_direction(check_resolution(spec))
 
