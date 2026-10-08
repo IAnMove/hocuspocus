@@ -33561,10 +33561,14 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         sidecar_cache: dict[str, dict] = {}
         clip_groups: dict[str, dict] = {}
         try:
-            from services.output_result_kind import classify_output_result_kind
+            from services.output_result_kind import classify_output_result_kind, production_cuts, production_result_kind
+            cuts = production_cuts(out_dir)
         except Exception:
             def classify_output_result_kind(name, params=None, metadata=None):
                 return None
+            def production_result_kind(name, params, cuts):
+                return None
+            cuts = {}
         from services.output_origin import output_origin
         for name, filepath, ext, mtime in raw_entries:
             meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
@@ -33582,7 +33586,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
                 "resolution": params.get("resolution"),
-                "result_kind": classify_output_result_kind(name, params, meta),
+                "result_kind": classify_output_result_kind(name, params, meta) or production_result_kind(name, params, cuts),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
                 # Output sidecars are written only after the generated asset
                 # has been published.  Their historical ``created_at`` field
