@@ -65,17 +65,21 @@ def check_models(spec: dict) -> None:
         return
     if not isinstance(models, dict) or len(models) > 12:
         raise ModelError("spec.models maps up to 12 names to {from or prompt, rig, animations}")
-    cast = {entry.get("id") for entry in spec.get("cast") or [] if isinstance(entry, dict)}
+    cast = _cast_ids(spec)
     for name, entry in models.items():
-        if not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) or set(entry) - FIELDS:
-            raise ModelError(f"models.{name}: a lower-case name and only {', '.join(sorted(FIELDS))}")
-        if not (_text(entry.get("from")) or _text(entry.get("prompt"))):
-            raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL) or a prompt")
-        if rig_of(entry, cast) not in RIGS:
-            raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
-        clips = entry.get("animations")
-        if clips is not None and (not isinstance(clips, list) or not 0 < len(clips) <= 8 or not all(_text(c) for c in clips)):
-            raise ModelError(f"models.{name}.animations is a list of 1-8 clip names")
+        _check_model(name, entry, cast)
+
+
+def _check_model(name: Any, entry: Any, cast: set) -> None:
+    if not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) or set(entry) - FIELDS:
+        raise ModelError(f"models.{name}: a lower-case name and only {', '.join(sorted(FIELDS))}")
+    if not (_text(entry.get("from")) or _text(entry.get("prompt"))):
+        raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL) or a prompt")
+    if rig_of(entry, cast) not in RIGS:
+        raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
+    clips = entry.get("animations")
+    if clips is not None and (not isinstance(clips, list) or not 0 < len(clips) <= 8 or not all(_text(c) for c in clips)):
+        raise ModelError(f"models.{name}.animations is a list of 1-8 clip names")
 
 
 def rig_of(entry: dict, cast: set) -> str:
@@ -168,18 +172,10 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     return jobs
 
 
-def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
-    from services.production_image_defaults import image_choice
-    from services.series_shot3d import glb_clip_names
-
-    entries = spec.get("models") or {}
-    set_jobs = _set_jobs(production, spec)
-    if not entries and not set_jobs:
-        return
-    cast, style = _cast_ids(spec), spec.get("style") or {}
-    made = production.state.setdefault("models", {})
-    todo = {}
-    for name, entry in entries.items():
+def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[dict, str | None, str]]:
+    """(entry, source picture, rig) for each model that is new or changed; a resume skips the rest."""
+    cast, todo = _cast_ids(spec), {}
+    for name, entry in (spec.get("models") or {}).items():
         source = _source(production, spec, entry)
         fingerprint = _fingerprint(entry, source, spec)
         kept = made.get(name) or {}
@@ -187,21 +183,25 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
             continue
         made[name] = {"fingerprint": fingerprint}
         todo[name] = (entry, source, rig_of(entry, cast))
-    look = style.get("image", "")
-    pictures, jobs = {}, {}
+    return todo
+
+
+def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, str], dict[str, str | None]]:
+    """Pictures already there, and image jobs for the rest: a T-pose from the portrait, or the object's prompt."""
+    from services.production_image_defaults import image_choice
+    look, pictures, jobs = style.get("image", ""), {}, {}
     for name, (entry, source, rig) in todo.items():
-        if rig == "humanoid":
-            prompt = f"{look}. The same character as the reference, {CHARACTER_STAGING}".lstrip(". ")
-        elif source:
+        if rig != "humanoid" and source:
             pictures[name] = source
             continue
-        else:
-            prompt = f"{look}. {entry['prompt']}, {OBJECT_STAGING}".lstrip(". ")
-        attempt = production._attempt("model_picture_attempts", name)
-        jobs[name] = production.image(f"model-{name}", prompt, [source] if source else None, PICTURE_SIZE,
-                                      entry.get("seed", 7), *image_choice(entry, style), attempt)
-    sets = production.state.setdefault("sets", {})
-    for name, file in production.wait({**jobs, **set_jobs}).items():
+        staged = f"The same character as the reference, {CHARACTER_STAGING}" if rig == "humanoid" else f"{entry['prompt']}, {OBJECT_STAGING}"
+        jobs[name] = production.image(f"model-{name}", f"{look}. {staged}".lstrip(". "), [source] if source else None, PICTURE_SIZE,
+                                      entry.get("seed", 7), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
+    return pictures, jobs
+
+
+def _collect_pictures(production: Any, jobs: dict, made: dict, sets: dict, pictures: dict) -> None:
+    for name, file in production.wait(jobs).items():
         is_set = name.startswith("set:")
         record = sets[name[4:]] if is_set else made[name]
         if not file:
@@ -212,6 +212,14 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
             pictures[name] = production.upload(file)[1]
     production.save()
 
+
+def _rig_request(entry: dict, rig: str, mesh: str, bpm: int) -> dict:
+    engine = "humanoid" if rig == "humanoid" else "procedural"
+    return {"source": mesh, "engine": engine, "animations": _clips(entry, rig), "animation_bpm": bpm,
+            **({} if engine == "humanoid" else {"rig_profile": rig})}
+
+
+def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, made: dict, sleep) -> None:
     meshes = _await(production, "model3d.status", sleep=sleep, jobs={
         name: _submit(production, "model3d.generate", f"{production.id}-mesh-{name}-{_digest(picture)}",
                       {"image_path": picture, "preset": MESH_PRESET})
@@ -226,10 +234,8 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
         made[name].update(mesh=record["filename"], file=record["filename"])
         entry, _source_url, rig = todo[name]
         if rig != "none":
-            engine = "humanoid" if rig == "humanoid" else "procedural"
             rigs[name] = _submit(production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(record['filename'])}",
-                                 {"source": record["filename"], "engine": engine, "animations": _clips(entry, rig),
-                                  "animation_bpm": bpm, **({} if engine == "humanoid" else {"rig_profile": rig})})
+                                 _rig_request(entry, rig, record["filename"], bpm))
     production.save()
     for name, record in _await(production, "model3d.rig.status", rigs, sleep=sleep).items():
         if record.get("status") == "completed" and record.get("filename"):
@@ -237,6 +243,20 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
         else:
             # The textured mesh still plays as a rigid model; a named clip on it fails at its 3D shot.
             made[name]["rig_error"] = f"{record.get('status')}: {str(record.get('error') or '')[:160]}"
+
+
+def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
+    from services.series_shot3d import glb_clip_names
+
+    set_jobs = _set_jobs(production, spec)
+    if not spec.get("models") and not set_jobs:
+        return
+    made = production.state.setdefault("models", {})
+    sets = production.state.setdefault("sets", {})
+    todo = _models_to_make(production, spec, made)
+    pictures, jobs = _picture_jobs(production, todo, spec.get("style") or {})
+    _collect_pictures(production, {**jobs, **set_jobs}, made, sets, pictures)
+    _meshes_and_rigs(production, spec, todo, pictures, made, sleep)
     for name in todo:
         file = made[name].get("file")
         made[name]["clips"] = glb_clip_names(production.root / file) if file else []

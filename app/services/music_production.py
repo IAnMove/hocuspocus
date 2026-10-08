@@ -668,13 +668,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
-            if spec != production.state.get("spec"):
-                from services.production_quality_gate import blocking_problems
-                problems = blocking_problems(spec)
-                if problems:
-                    raise HTTPException(422, {"code": "quality_gate", "message": "The plan would look thin: " + "; ".join(
-                        f"{item['code']} ({item.get('still') or item.get('ratio')})" for item in problems) + ". See problems.",
-                        "problems": problems, "retryable": False})
+            from services.production_quality_gate import refuse_thin_plan
+            refuse_thin_plan(spec, production.state.get("spec"))
             through = data.get("through", "all")
             if through not in ("all", "frames", "animatic"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})

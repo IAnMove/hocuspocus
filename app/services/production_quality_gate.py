@@ -40,6 +40,18 @@ def _still_runtime(spec: dict, shots: list[dict]) -> float:
     return still / duration
 
 
+def refuse_thin_plan(spec: dict, stored: Any) -> None:
+    """production.run: a new or changed spec that would look thin is HTTP 422 quality_gate; a resume never is."""
+    if spec == stored:
+        return
+    problems = blocking_problems(spec)
+    if problems:
+        from fastapi import HTTPException
+        summary = "; ".join(f"{item['code']} ({item.get('still') or item.get('ratio')})" for item in problems)
+        raise HTTPException(422, {"code": "quality_gate", "message": f"The plan would look thin: {summary}. See problems.",
+                                  "problems": problems, "retryable": False})
+
+
 def blocking_problems(spec: dict) -> list[dict]:
     shots = _shots(spec)
     problems = []
@@ -122,34 +134,40 @@ def _procedural(root: Path, name: str) -> bool:
     return ((data.get("generation") or {}).get("model") or {}).get("id") == "procedural-compose"
 
 
-def _scene3d_warnings(spec: dict, shots: list[dict], root: Any) -> list[dict]:
+def _rigged_models(spec: dict) -> set[str]:
     from services.production_models import rig_of
-    models = spec.get("models") or {}
     cast = {entry.get("id") for entry in spec.get("cast") or [] if isinstance(entry, dict)}
+    return {name for name, entry in (spec.get("models") or {}).items() if isinstance(entry, dict) and rig_of(entry, cast) != "none"}
+
+
+def _scene3d_warnings(spec: dict, shots: list[dict], root: Any) -> list[dict]:
+    rigged = _rigged_models(spec)
     templates: dict[str, list[str]] = {}
     boxes: dict[str, list[str]] = {}
     still: list[str] = []
     for shot in shots:
         config = shot.get("scene3d") if shot.get("kind") == "scene3d" and isinstance(shot.get("scene3d"), dict) else None
-        if config is None:
-            continue
-        template = config.get("template") or (config.get("document") or {}).get("templateId")
-        if template:
-            templates.setdefault(str(template), []).append(str(shot.get("key")))
-        for role, entry in _sources(config):
-            source = str(entry.get("source") or "")
-            name = _workspace_file(source)
-            if root and name and _procedural(Path(root), name):
-                boxes.setdefault(name, []).append(str(shot.get("key")))
-            rigged = isinstance(models.get(source), dict) and rig_of(models[source], cast) != "none"
-            if rigged and not entry.get("clip") and not entry.get("clips"):
-                still.append(f"{shot.get('key')}:{role}")
+        if config is not None:
+            _scan_scene3d(str(shot.get("key")), config, root, rigged, templates, boxes, still)
     found = [{"code": "procedural_model", "model": name, "shots": keys,
               "hint": "built from boxes; make it with spec.models (textured Hunyuan3D, rigged)"} for name, keys in boxes.items()]
     if still:
         found.append({"code": "model_not_animated", "objects": still, "hint": "give rigged models a clip or clips"})
     found += [{"code": "template_reused", "template": name, "shots": keys} for name, keys in templates.items() if len(keys) > REUSED_TEMPLATE]
     return found
+
+
+def _scan_scene3d(key: str, config: dict, root: Any, rigged: set, templates: dict, boxes: dict, still: list) -> None:
+    template = config.get("template") or (config.get("document") or {}).get("templateId")
+    if template:
+        templates.setdefault(str(template), []).append(key)
+    for role, entry in _sources(config):
+        source = str(entry.get("source") or "")
+        name = _workspace_file(source)
+        if root and name and _procedural(Path(root), name):
+            boxes.setdefault(name, []).append(key)
+        if source in rigged and not entry.get("clip") and not entry.get("clips"):
+            still.append(f"{key}:{role}")
 
 
 def _pattern(shots: list[dict]) -> list[str]:
