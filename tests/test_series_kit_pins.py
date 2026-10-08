@@ -1,6 +1,7 @@
 """An episode can pin Character Kit revisions, and a later save keeps the old drawing."""
 import asyncio
 import json
+import threading
 
 import pytest
 from fastapi import HTTPException
@@ -225,6 +226,17 @@ def test_the_pin_tools_run_in_process_and_belong_to_the_series_profile(tmp_path)
         "version": 1, "input": {"workspace": "default", "series_id": series["id"], "episode_id": episode["id"]},
     }))
     assert result["result"]["kitPins"] == {"luma": 1}
+    # The same pin, while a bound server reader points at another root.
+    import routers.series_library as routes
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(routes, "_library_lock", threading.Lock(), raising=False)
+    monkeypatch.setattr(routes, "_read_library", lambda _workspace: {}, raising=False)
+    monkeypatch.setattr(routes, "_write_library", lambda _workspace, _library: {}, raising=False)
+    try:
+        pinned = pin_episode_kits(str(tmp_path), series["id"], episode["id"], workspace_name="default")
+    finally:
+        monkeypatch.undo()
+    assert pinned["kitPins"] == {"luma": 1}
     with pytest.raises(HTTPException) as caught:
         asyncio.run(handlers["series.episode.kits.pin"]({
             "version": 1, "input": {"workspace": "default", "series_id": series["id"], "episode_id": empty["id"]},

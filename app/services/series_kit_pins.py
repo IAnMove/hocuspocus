@@ -155,22 +155,30 @@ def _episode_of(library: dict, series_id: str, episode_id: str) -> tuple[dict, d
     return series, episode
 
 
-def _read(workspace_name: str | None, folder: str) -> dict:
+def _with_library_lock(action: Callable[[], Any]) -> Any:
+    """The server lock, when launch has bound one. The folder stays the caller's."""
     from routers import series_library as routes
-    from services.series_library import read_series_library
 
     lock = getattr(routes, "_library_lock", None)
-    read = getattr(routes, "_read_library", None)
-    if workspace_name and lock is not None and read is not None:
-        with lock:
-            return read(workspace_name)
-    return read_series_library(folder)
+    if lock is None:
+        return action()
+    with lock:
+        return action()
+
+
+def _read(workspace_name: str | None, folder: str) -> dict:
+    from services.series_library import read_series_library
+
+    # ``folder`` is already ``workspace_dir(workspace)``. The bound reader resolves
+    # the name through the process-global root, which a test can point elsewhere.
+    return _with_library_lock(lambda: read_series_library(folder, workspace_name or "default"))
 
 
 def _save_pins(workspace_name: str | None, folder: str, series_id: str, episode_id: str, pins: dict[str, int]) -> dict:
-    """Read, set the pins and write under one lock when the server has bound one."""
-    from routers import series_library as routes
+    """Read, set the pins and write the workspace folder under the server lock."""
     from services.series_library import read_series_library, update_series_episode, write_series_library
+
+    workspace_id = workspace_name or "default"
 
     def change(library: dict) -> dict:
         series, _episode = _episode_of(library, series_id, episode_id)
@@ -179,14 +187,10 @@ def _save_pins(workspace_name: str | None, folder: str, series_id: str, episode_
         stored.setdefault("seriesById", {})[series_id] = updated
         return stored
 
-    lock = getattr(routes, "_library_lock", None)
-    read = getattr(routes, "_read_library", None)
-    write = getattr(routes, "_write_library", None)
-    if workspace_name and lock is not None and read is not None and write is not None:
-        with lock:
-            saved = write(workspace_name, change(read(workspace_name)))
-    else:
-        saved = write_series_library(folder, change(read_series_library(folder)))
+    def store() -> dict:
+        return write_series_library(folder, change(read_series_library(folder, workspace_id)), workspace_id)
+
+    saved = _with_library_lock(store)
     episode = saved["seriesById"][series_id]["episodesById"][episode_id]
     return {"kitPins": episode.get("kitPins") or {}, "revision": saved["seriesById"][series_id]["revision"]}
 
