@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from services.qa_accent import command_catalog as accent_catalog, command_handlers as accent_handlers, score_accent, tag_sites
 from services.speech_qa import command_catalog, command_handlers, measure_speech, word_error_rate, words
-from services.speech_text_es import dictionary_map, merge_names, phonetic_es, pronounce, token_error_rate
+from services.speech_text_es import dictionary_map, merge_names, phonetic_es, pronounce, token_error_rate, wer_threshold
 from services.voice_pitch import inferred_range, pitch_notice
 
 
@@ -85,6 +85,32 @@ def test_spanish_phonetics_names_short_lines_and_the_spoken_dictionary():
     assert pronounce("El Peugeot espera.", "Peugeot: Pejó") == "El Pejó espera."
     assert pronounce("Peugeots", {"Peugeot": "Pejó"}) == "Peugeots"
     assert dictionary_map("Peugeot=Pejó") == {"Peugeot": "Pejó"}
+
+
+def _heard_es(text: str, transcript: str, names: list[str] | None = None) -> dict:
+    seconds = 0.2 + len(words(text, "es")) / 2.5  # a normal pace, so only the words can warn
+    return measure_speech("take.wav", text, "es", names=names, load=lambda _path: _stub_audio(seconds=seconds, lead=0.1, trail=0.1),
+                          transcribe=lambda _audio, _code: transcript, pitch=lambda _audio, _rate: 120.0)
+
+
+def test_a_short_name_is_not_matched_to_an_ordinary_word():
+    names = ["Ana", "Sol", "San Sebastián"]
+    misheard = _heard_es("Ana viene con Sol", "una viene con son", names)
+    assert misheard["wer"] == 0.5 > misheard["wer_threshold"] and misheard["warnings"]
+    assert _heard_es("Ana viene con Sol", "ana viene con sol", names)["wer"] == 0
+    # A longer name still takes a near miss, and a short one still joins split words.
+    assert merge_names(words("San Sebas Tián", "es"), names) == merge_names(words("San Sebastián", "es"), names)
+    assert merge_names(["a", "na"], names) == ["ana"]
+    assert merge_names(words("vilbao", "es"), ["Bilbao"]) == ["bilbao"]
+
+
+def test_a_wrong_one_word_line_is_never_accepted():
+    assert [wer_threshold(count, spanish=True) for count in (1, 2, 3, 4, 5)] == [0.5, 0.5, pytest.approx(1 / 3), 0.25, 0.15]
+    wrong = _heard_es("Adiós.", "hola")
+    assert (wrong["wer"], wrong["wer_threshold"]) == (1.0, 0.5) and wrong["warnings"]
+    assert _heard_es("Adiós.", "adios")["warnings"] == []
+    half = _heard_es("Buenas noticias.", "buenas novicias")
+    assert (half["wer"], half["wer_threshold"], half["warnings"]) == (0.5, 0.5, [])
 
 
 def test_pitch_ranges_follow_the_description_and_a_high_male_voice_warns():

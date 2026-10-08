@@ -568,21 +568,54 @@ def test_a_pronunciation_dictionary_is_spoken_and_the_subtitle_keeps_the_script(
     assert speech[0]["params"]["prompt"] == "El Pejó espera."
     assert cues[0]["dialogue"] == "El Peugeot espera."
     assert checked[0]["text"] == "El Pejó espera." and "Peugeot" in checked[0]["names"]
-    assert done["items"][0]["lines"]["s03_d0"]["key"] == recording_key("El Peugeot espera.", GARY)
+    assert done["items"][0]["lines"]["s03_d0"]["key"] == recording_key("El Pejó espera.", GARY)
     spoken = [tool for tool, _ in tools.calls].count("generation.speech")
     again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
     assert again["items"][0]["lines"]["s03_d0"]["reused"]
     assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken
 
 
-def test_a_one_word_miss_within_the_spanish_threshold_is_not_spoken_again(tmp_path):
+def test_a_dictionary_entry_added_after_the_recording_records_that_line_again(tmp_path):
     tools, compiled = Tools(tmp_path), []
-    tools.reported_wer = (1.0, 1.0)
+    project = library()
+    series = project["seriesById"]["uv"]
+    series["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "El Peugeot espera."},
+        {"id": "s03_d1", "characterId": "gary", "text": "Adiós."}]
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_library = lambda _ws: project
+    before = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)["items"][0]["lines"]
+    # Without a dictionary the key is the one every earlier render named its recording by.
+    assert [before[beat]["key"] for beat in ("s03_d0", "s03_d1")] == [
+        recording_key("El Peugeot espera.", GARY), recording_key("Adiós.", GARY)]
+    spoken = len(tools.calls)
+    series["characters"][1]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    after = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)["items"][0]["lines"]
+    retold = [args["input"]["params"]["prompt"] for tool, args in tools.calls[spoken:] if tool == "generation.speech"]
+    assert retold == ["El Pejó espera."], "only the line the dictionary changes is spoken again"
+    assert after["s03_d0"]["key"] == recording_key("El Pejó espera.", GARY) and not after["s03_d0"].get("reused")
+    assert after["s03_d1"]["key"] == before["s03_d1"]["key"] and after["s03_d1"]["reused"]
+
+
+def test_a_spanish_short_line_may_miss_one_word_but_a_one_word_line_may_not(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    project["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "Adiós, Gary."}]
+    tools.reported_wer = (0.5, 0.5)  # what qa.speech reports for one of two Spanish words missed
     render = service(tmp_path, tools, compiled)
+    render.deps.read_library = lambda _ws: project
     done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
-    line = done["items"][0]["lines"]["s03_d0"]
-    assert (line["attempt"], line["wer"]) == (0, 1.0)
+    assert (done["items"][0]["lines"]["s03_d0"]["attempt"], done["items"][0]["lines"]["s03_d0"]["wer"]) == (0, 0.5)
     assert [tool for tool, _ in tools.calls].count("generation.speech") == 1
+
+    tools, compiled = Tools(tmp_path / "one"), []
+    (tmp_path / "one").mkdir()
+    tools.reported_wer = (1.0, 0.5)  # «Adiós.» heard as another word
+    render = service(tmp_path / "one", tools, compiled)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path / "one")
+    assert done["items"][0]["lines"]["s03_d0"]["wer"] == 1.0
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == 3, "every take is tried"
 
 
 def test_a_high_male_voice_and_a_seseo_warn_without_another_take(tmp_path):

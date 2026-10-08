@@ -1,7 +1,8 @@
 """Spanish phonetic comparison and pronunciation substitutions.
 
-Used only to judge a take and to build the string sent to speech. The script,
-the subtitle and the recording key stay on the written line.
+Used only to judge a take and to build the string sent to speech. The script
+and the subtitle stay on the written line. The recording key follows the spoken
+string, which is the written line unless the dictionary changes it.
 """
 from __future__ import annotations
 
@@ -12,6 +13,10 @@ from typing import Any
 from services.voice_pitch import pitch_notice, voice_checks
 
 _VOWELS = "aeiou"
+# A short line may miss one word, up to this share of it.
+_MOST_MISSED = 0.5
+# Names shorter than this (in compare spelling) match only exactly: «Ana» and «Sol» are one letter from «una» and «son».
+_FUZZY_NAME = 5
 
 
 def phonetic_es(word: str) -> str:
@@ -58,9 +63,12 @@ def token_error_rate(reference: list[str], hypothesis: list[str]) -> float:
 
 
 def wer_threshold(word_count: int, *, spanish: bool, floor: float = 0.15) -> float:
-    """Up to four Spanish words may miss one word; longer lines keep the floor."""
+    """Up to four Spanish words may miss one word, but never more than half the line.
+
+    So a one-word line must be heard right. Longer lines keep the floor.
+    """
     if spanish and 0 < word_count <= 4:
-        return max(floor, 1 / word_count)
+        return max(floor, min(_MOST_MISSED, 1 / word_count))
     return floor
 
 
@@ -103,7 +111,7 @@ def pronounce(text: str, dictionary: Any) -> str:
 def line_notes(series: dict, beat: dict, voice: dict) -> dict:
     """A copy of the kit voice plus the series dictionary and names.
 
-    The caller hashes the original voice for the recording key before this copy exists.
+    The recording key hashes the original kit voice, not this copy, with the line as it is spoken.
     """
     dictionary = dictionary_map(_profile(series, beat.get("characterId")).get("pronunciationDictionary"))
     names = _speech_names(series, dictionary)
@@ -147,7 +155,7 @@ def qa_verdict(call, workspace: str, filename: str, text: str, language: str,
     """``(wer, accept_at, notes)`` for one take. A missing check accepts, as before.
 
     ``accept_at`` is the render ceiling unless the Spanish length threshold is higher,
-    so a one-word line can miss and a long line is not judged more strictly.
+    so a two-word line can miss one word and a long line is not judged more strictly.
     ``notes`` may carry ``pitch_out_of_range`` or ``accent_seseo``. They do not retry.
     """
     voice = voice or {}
@@ -245,8 +253,11 @@ def _matching_window(tokens: list[str], index: int, targets: list[str]) -> tuple
 
 
 def _close(window: str, targets: list[str]) -> str:
+    """The name the window sounds like. A short name must be spelled the same; a longer one may differ by one letter."""
+    if window in targets:
+        return window
     for target in targets:
-        if abs(len(window) - len(target)) <= 1 and _distance(window, target) <= 1:
+        if len(target) >= _FUZZY_NAME and abs(len(window) - len(target)) <= 1 and _distance(window, target) <= 1:
             return target
     return ""
 

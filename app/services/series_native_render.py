@@ -534,7 +534,10 @@ class SeriesNativeRender:
         voice = voice_for(kit, language) if kit else None
         if not voice:
             raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {language}")
-        return text, line_notes(series, beat, voice), recording_key(text, voice)
+        noted = line_notes(series, beat, voice)
+        # The key follows the spoken words: a dictionary entry that changes the line records it again. A line the
+        # dictionary leaves alone keeps the key of the written text, so its recording is still reused.
+        return text, noted, recording_key(pronounce(text, noted.get("pronunciationDictionary")), voice)
 
     def record_line(self, workspace: str, job: dict, series: dict, beat: dict, kits: dict, *, retake: bool = False) -> dict[str, Any]:
         """One line as ``_voices`` records it (``series_line_voice``): its recording when there is one, else a new one.
