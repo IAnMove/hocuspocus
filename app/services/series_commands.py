@@ -116,7 +116,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "its face enlarged before and after the wipe; poses with warnings framed in red), unwipedPoses (no painted "
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
-        "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found. A pose whose eyes are covered (sunglasses) "
+        "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
+        "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
         "is saved with anchors.<pose>.blink false and never blinks.",
     ),
     "characters.rig.flat.preview": (
@@ -132,6 +133,14 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "mouthWidth, found, from: hint, landmarks, painted or guess; line points), view (the shown area), all in % "
         "of the pose image, and warnings (mouth_line_guessed, mouth_line_unsure). When it looks right, rig with hints {<pose>: {mouth, mouthWidth, exact: true}} and mouthStyle warp; "
         "shots already rendered with that pose need rendering again.",
+    ),
+    "characters.rig.check": (
+        {"workspace": WORKSPACE, "source": {"type": "string", "minLength": 1, "maxLength": 2000}},
+        ["workspace", "source"], False,
+        "Check one keyed pose before saving it: whether the flat rig can find the eyes and a mouth. "
+        "Saves nothing and paints nothing. Returns ready, reasons (eyes_small, eyes_not_found, sclera_dark, "
+        "mouth_not_found, face_low_confidence) and face {box, confidence}. eyes_small means some light sclera "
+        "is there but not a pair the rig can use on its own.",
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
@@ -594,6 +603,10 @@ def _preview_flat_rig(data: dict[str, Any], request: Callable[..., Any], **_extr
     return request("POST", f"/api/v1/character-kits/library/kits/{_quote(data['character_id'])}/flat-rig/preview", body=body)
 
 
+def _check_flat_rig(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("POST", "/api/v1/character-kits/rig-check", body={"workspace": data["workspace"], "source": data["source"]})
+
+
 def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "approve": bool(data.get("approve"))}
     if data.get("language"):
@@ -886,6 +899,7 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.styles": _character_styles,
     "characters.rig.flat": _rig_flat_character,
     "characters.rig.flat.preview": _preview_flat_rig,
+    "characters.rig.check": _check_flat_rig,
     "series.episode.render_native": _render_native,
     "series.episode.render_native.status": _native_job("status"),
     "series.episode.render_native.cancel": _native_job("cancel"),

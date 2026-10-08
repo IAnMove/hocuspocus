@@ -21,7 +21,7 @@ SERIES_TOOLS = frozenset({
     "series.episode.review.get", "series.episode.review.set", "series.shot.review.set",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
-    "characters.rig.flat.preview",
+    "characters.rig.flat.preview", "characters.rig.check",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "jobs.cancel",
@@ -44,7 +44,7 @@ GAME_TOOLS = frozenset({
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
     "studio.key", "qa.accent",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
-    "characters.list", "characters.get", "characters.save",
+    "characters.list", "characters.get", "characters.save", "characters.rig.check",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
     "media.options", "scenes.assets.inspect",
 })

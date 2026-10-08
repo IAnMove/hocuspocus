@@ -39,6 +39,7 @@ test('three candidates are generated with distinct seeds and keyed as they arriv
       return { source: `/api/v1/file/raw-${options?.seed}.png?workspace=cast` } as never
     },
     key: async details => { keyed.push(details); return { file: 'k.png', url: `/api/v1/file/keyed-${String(details.source).slice(17, 23)}?workspace=cast`, sha256: 'x' } },
+    check: async () => ({ ready: true, reasons: [], face: { box: null, confidence: 0 } }),
   })
   assert.equal(call, 3)
   assert.deepEqual(found.map(item => [item.seed, item.status]), [[10, 'ready'], [11, 'failed'], [12, 'ready']])
@@ -56,8 +57,32 @@ test('a candidate whose key left a haze says so', async () => {
     generate: async () => ({ source: '/api/v1/file/raw-7.png?workspace=cast' }) as never,
     key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x',
                         report: { semiTransparentShare: 0.42, transparentShare: 0.1, haze: true } }),
+    check: async () => ({}) as never,
   })
-  assert.ok(found.every(item => item.status === 'ready' && item.haze === 0.42))
+  assert.ok(found.every(item => item.status === 'ready' && item.haze === 0.42 && item.rig === undefined))
+})
+
+test('a keyed candidate records a rig check that says the eyes are small, and a failed check still leaves it ready', async () => {
+  const small = await generateKeyedCandidates({
+    workspace: 'cast', style, kind: 'character', description: 'Ines', model: 'qwen_image_21',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 4,
+    generate: async () => ({ source: '/api/v1/file/raw.png?workspace=cast' }) as never,
+    key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x' }),
+    check: async () => ({ ready: false, reasons: ['eyes_small'], face: { box: [1, 2, 3, 4], confidence: 0.2 } }),
+  })
+  assert.ok(small.every(item => item.status === 'ready' && item.rig?.ready === false && item.rig.reasons.join() === 'eyes_small'))
+  const failed = await generateKeyedCandidates({
+    workspace: 'cast', style, kind: 'character', description: 'Ines', model: 'qwen_image_21',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 5,
+    generate: async () => ({ source: '/api/v1/file/raw.png?workspace=cast' }) as never,
+    key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x' }),
+    check: async () => { throw new Error('down') },
+  })
+  assert.ok(failed.every(item => item.status === 'ready' && item.rig === undefined))
 })
 
 test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
@@ -110,6 +135,9 @@ function creatorServer(t: TestContext, rig: (kit: Record<string, unknown>) => Re
     if (url.endsWith('/api/v1/studio/key')) return reply({ result: { file: 'k.png', url: `/api/v1/file/keyed-${String(body?.source).split('/').pop()}`, sha256: 'x' } })
     if (url.includes('/api/v1/character-kits/library?')) return reply({ version: 1, revision: 4, activeKitId: null, kits: {} })
     if (method === 'PATCH') return reply({ version: 1, revision: 5, kits: { [String((body?.kit as { id: string }).id)]: body?.kit } })
+    if (url.endsWith('/api/v1/character-kits/rig-check')) {
+      return reply({ ready: true, reasons: [], face: { box: [0, 0, 10, 10], confidence: 0.9 } })
+    }
     if (url.endsWith('/flat-rig')) {
       const kit = requests.find(item => item.method === 'PATCH')!.body!.kit as Record<string, unknown>
       const extra = rig(kit)
@@ -132,6 +160,7 @@ async function createAndRig(creatorStyle: typeof style) {
   const second = await waitFor(() => {
     const option = view.getByRole('button', { name: 'Option 2' }) as HTMLButtonElement
     assert.equal(option.disabled, false)
+    assert.match(option.textContent ?? '', /Ready for the rig/)
     return option
   }, { timeout: 8000 })
   fireEvent.click(second)

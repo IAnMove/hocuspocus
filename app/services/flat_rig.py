@@ -53,6 +53,7 @@ from services.flat_rig_ink import _ink_sprite_width, draw_ink_mouth, ink_colour
 # The rig's look lives in flat_rig_look; rig_style stays importable from here.
 from services.flat_rig_look import kit_look, rig_style
 # Keep existing eye and mask imports available to callers.
+from services.flat_rig_metrics import attach_openings, opening_caption
 from services.flat_rig_eyes import (
     SCREEN_INK, _CROSS, LUMA, MAX_SPRITE_RATIO,
     _mask, _open, _close, _dilate,
@@ -900,6 +901,8 @@ def review_sheet(poses: dict[str, dict[str, Any]], mouths: dict[str, Image.Image
         if rig.get("before") is not None and rig.get("eyes_box"):
             after = talk if rig.get("sprites") else rig["image"]
             rows[1] += [_tile(_face_crop(rig["before"], rig), height // 2, warn), _tile(_face_crop(after, rig), height // 2, warn)]
+            if "openRatio" in (rig.get("mouth") or {}):
+                _caption(rows[1][-1], opening_caption(rig["mouth"]))
         if rig.get("face_size"):
             # How the face was read and warped (a small face's on it enlarged), on the rest tile's corner.
             _caption(rows[0][-2], face_caption(rig["face_size"]))
@@ -1082,6 +1085,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     placed = _kit_hints(kit, hints)
     rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids, placed)
     mouths = _kit_mouths(rigs, look)
+    attach_openings(rigs, mouths)
     name = kit.get("name") or kit_id
     shared, own_mouths = _mouth_files(rigs, mouths, kit_id, workspace_dir)
     kit["mouth"] = {state: _overlay(kit_id, name, f"mouth-{state}", shared[state], workspace) for state in STATES}

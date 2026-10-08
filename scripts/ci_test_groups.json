@@ -553,6 +553,20 @@
       ]
     },
     {
+      "prefix": "app/services/flat_rig_metrics.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_series_commands.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/character_kit_library.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_character_kit_library_router.py"
+      ]
+    },
+    {
       "prefix": "app/services/flat_rig_base.py",
       "paths": [
         "tests/test_flat_rig.py",

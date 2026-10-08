@@ -619,6 +619,14 @@
     "generating": "Creando…",
     "keying": "Quitando el fondo…",
     "option": "Opción {{number}}",
+    "rigReady": "Lista para el rig",
+    "rigReasons": {
+      "eyes_small": "Los ojos son demasiado pequeños para el rig",
+      "eyes_not_found": "No se encontraron los ojos",
+      "sclera_dark": "Los ojos no tienen esclerótica clara",
+      "mouth_not_found": "No se encontró la boca",
+      "face_low_confidence": "La cara no se leyó con claridad"
+    },
     "failed": "Esta opción falló: {{error}}",
     "haze": "Queda un velo en el {{percent}} % de la imagen: el fondo no se quitó limpio. Elige otra opción o genérala de nuevo.",
     "pick": "Elige la opción que más te guste.",
