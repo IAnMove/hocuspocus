@@ -471,17 +471,48 @@ def test_transition_duration_arithmetic_for_dissolve_and_the_two_fades():
     durations = [2.0, 2.0, 2.0, 2.0, 2.0]
     dissolve = [None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.5},
                 {"kind": "dissolve", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.5}]
-    assert output_seconds(durations, dissolve) == 8.0
-    assert placed_offsets(durations, dissolve) == [0.0, 1.5, 3.0, 4.5, 6.0]
+    # The episode still ends on the last clip's held frame, as every joined episode does.
+    assert output_seconds(durations, dissolve) == pytest.approx(8.5)
+    assert placed_offsets(durations, dissolve) == pytest.approx([0.0, 1.5, 3.0, 4.5, 6.0])
     fades = [None, {"kind": "fade_black", "seconds": 1.0}, {"kind": "dip_white", "seconds": 0.2},
              {"kind": "cut"}, {"kind": "fade_black", "seconds": 2.0}]
-    assert output_seconds(durations, fades) == 10.0
-    assert placed_offsets(durations, fades) == [0.0, 2.0, 4.0, 6.0, 8.0]
+    # The cut holds shot 3's last frame 0.5 s and dissolves 0.4 s into shot 4; the fades add nothing.
+    assert output_seconds(durations, fades) == pytest.approx(10.6)
+    assert placed_offsets(durations, fades) == pytest.approx([0.0, 2.0, 4.0, 6.1, 8.1])
     mixed = [None, {"kind": "fade_black", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.4},
              {"kind": "dip_white", "seconds": 0.3}, {"kind": "cut"}]
-    assert output_seconds(durations, mixed) == pytest.approx(9.6)
+    assert output_seconds(durations, mixed) == pytest.approx(10.2)
     # The first shot's transition has nothing to join from, so it does not change the length.
     assert output_seconds(durations, [{"kind": "dissolve", "seconds": 1.0}]) == hold_crossfade_output_seconds(durations)
+
+
+def test_a_cut_is_the_same_soft_join_beside_a_transition():
+    from app.services.mix_concat import hold_crossfade_offsets
+    from services.series_transitions import filter_for, output_seconds, placed_offsets, placed_spans
+
+    durations = [2.0, 2.0, 2.0]
+    one_dissolve = [None, None, {"kind": "dissolve", "seconds": 0.5}]
+    # Shot 2 starts where it starts without transitions; only the dissolve into shot 3 is new.
+    assert placed_offsets(durations, one_dissolve)[:2] == pytest.approx(hold_crossfade_offsets(durations)[:2])
+    assert placed_offsets(durations, one_dissolve) == pytest.approx([0.0, 2.1, 3.6])
+    assert output_seconds(durations, one_dissolve) == pytest.approx(6.1)
+    spans = placed_spans(durations, one_dissolve)
+    assert [value for span in spans for value in span] == pytest.approx([0.0, 2.5, 2.1, 4.1, 3.6, 6.1])
+    graph, _video, _audio = filter_for(durations, transitions=one_dissolve)
+    plain, _plain_video, _plain_audio = build_hold_crossfade_filter(durations)
+    plain_parts = plain.split(";")
+    # The clip before the cut and the join are the freeze-tail dissolve's own pieces.
+    for piece in ("[0:v]", "[0:a]"):
+        assert next(part for part in plain_parts if part.startswith(piece)) in graph.split(";")
+    assert "xfade=transition=fade:duration=0.400:offset=2.100[vx1]" in graph
+    assert "[a0][a1]acrossfade=d=0.400000[ax1]" in graph
+    # Shot 2 dissolves on its own last frame: no held tail before the dissolve, which starts 0.5 s early.
+    assert "[1:v]settb=AVTB,setpts=PTS-STARTPTS,trim=end=2.000000" in graph and "whole_dur=2.000000" in graph
+    assert "xfade=transition=fade:duration=0.500:offset=3.600[vx2]" in graph
+    # Many cuts with tiny clips: the same arithmetic as mix_concat.
+    uneven = [0.3, 1.2, 0.08, 2.5, 0.9]
+    with_one = [None, None, None, None, {"kind": "fade_black", "seconds": 0.4}]
+    assert placed_offsets(uneven, with_one)[:4] == pytest.approx(hold_crossfade_offsets(uneven)[:4])
 
 
 def test_an_active_transition_does_not_reuse_the_freeze_tail():
@@ -491,12 +522,16 @@ def test_an_active_transition_does_not_reuse_the_freeze_tail():
         [2.0, 2.0, 2.0],
         transitions=[None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "fade_black", "seconds": 0.4}],
     )
-    assert "tpad=" not in graph
+    parts = graph.split(";")
+    assert not any(part.startswith(("[0:v]", "[1:v]")) and "tpad=" in part for part in parts)
+    # The episode's last clip keeps the held frame every joined episode ends on.
+    assert any(part.startswith("[2:v]") and "tpad=" in part for part in parts)
     assert "xfade=transition=fade:duration=0.500" in graph
     assert "acrossfade=d=0.500000" in graph
     assert "fade=t=out" in graph and "color=black" in graph
     white, _video, _audio = filter_for([2.0, 2.0], transitions=[None, {"kind": "dip_white", "seconds": 0.3}])
-    assert "color=white" in white and "xfade=" not in white and "tpad=" not in white
+    assert "color=white" in white and "xfade=" not in white
+    assert not any(part.startswith("[0:v]") and "tpad=" in part for part in white.split(";"))
 
 
 def _decoded_seconds(path: Path, stream: str) -> float:

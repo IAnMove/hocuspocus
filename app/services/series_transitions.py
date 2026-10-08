@@ -1,22 +1,25 @@
 """Per-shot joins for a Series episode (``shot.transitionIn``).
 
-``cut`` and a missing field leave the montage on the freeze-tail dissolve
-(``mix_concat``): the filter list is that helper's, so an episode that never
-names a transition is unchanged. ``dissolve`` overlaps picture and sound and
-shortens the cut. ``fade_black`` and ``dip_white`` fade the outgoing end and
-the incoming start and do not overlap, so the episode keeps the sum of the
-shot lengths (#903). The first shot's ``transitionIn`` has nothing to join
-from and is ignored.
+``cut`` and a missing field are the freeze-tail dissolve (``mix_concat``): the
+outgoing clip holds its last frame and dissolves into the next. That stays so
+beside a join that names a transition, and an episode that never names one gets
+that helper's filter list. ``dissolve`` overlaps picture and sound and shortens
+the cut. ``fade_black`` and ``dip_white`` fade the outgoing end and the incoming
+start and do not overlap. A clip that one of these three follows ends on its own
+last frame, without the held tail; the episode's last clip keeps it, as in a
+join without transitions (#903). The first shot's ``transitionIn`` has nothing
+to join from and is ignored.
 """
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, NamedTuple, Sequence
 
 from services.mix_concat import (
     FADE_SEC,
     HOLD_TAIL_SEC,
     _audio_pad_filter,
     build_hold_crossfade_filter,
+    held_video_filter,
     hold_crossfade_output_seconds,
 )
 
@@ -74,20 +77,52 @@ def _fit(seconds: float, left: float, right: float) -> float:
     return min(float(seconds), room)
 
 
-def _walk(durations: Sequence[float], transitions: Sequence[Any] | None):
-    """Each clip as ``(length, kind, overlap)``. Overlap is how early a dissolve starts."""
-    previous = 0.0
-    for index, duration in enumerate(durations):
-        length = float(duration)
-        kind, overlap = "cut", 0.0
-        if index:
-            kind = _kind(_at(transitions, index))
-            if kind == "dissolve":
-                overlap = _fit(_seconds_of(_at(transitions, index)), previous, length)
-                if overlap <= 0:
-                    kind = "cut"
-        yield length, kind, overlap
-        previous = length
+class _Clip(NamedTuple):
+    length: float   # the clip's own pictures
+    played: float   # with its held tail, when a cut follows it or it ends the episode
+    kind: str       # how it joins from the clip before
+    seconds: float  # that join's dissolve (a cut's is mix_concat's) or fade
+    start: float    # where its first frame is on the joined timeline
+
+
+def _kinds(lengths: Sequence[float], transitions: Sequence[Any] | None) -> list[tuple[str, float]]:
+    """Each clip's join from the one before as ``(kind, seconds asked)``. A dissolve with no room is a cut."""
+    kinds = [("cut", 0.0)]
+    for index in range(1, len(lengths)):
+        item = _at(transitions, index)
+        kind = _kind(item)
+        if kind == "dissolve":
+            overlap = _fit(_seconds_of(item), lengths[index - 1], lengths[index])
+            kinds.append(("dissolve", overlap) if overlap > 0 else ("cut", 0.0))
+        else:
+            kinds.append((kind, _seconds_of(item)))
+    return kinds
+
+
+def _plan(durations: Sequence[float], transitions: Sequence[Any] | None,
+          hold_sec: float = HOLD_TAIL_SEC, fade_sec: float = FADE_SEC) -> tuple[list[_Clip], float]:
+    """Every clip on the joined timeline, and its length. The filter and the finishing steps both read this."""
+    lengths = [max(0.1, float(duration)) for duration in durations]
+    kinds = _kinds(lengths, transitions)
+    count = len(lengths)
+    played = [length + (float(hold_sec) if count > 1 and (index + 1 == count or kinds[index + 1][0] == "cut") else 0.0)
+              for index, length in enumerate(lengths)]
+    clips, elapsed = [], played[0] if count else 0.0
+    for index, (length, (kind, seconds)) in enumerate(zip(lengths, kinds)):
+        if not index:
+            clips.append(_Clip(length, played[0], kind, 0.0, 0.0))
+            continue
+        if kind == "cut":
+            # mix_concat's pair fade and offset, so a cut is the join an episode without transitions has.
+            seconds = min(float(fade_sec), float(hold_sec), played[index - 1] * 0.4, played[index] * 0.4)
+            start = max(0.05, elapsed - seconds)
+        elif kind == "dissolve":
+            start = elapsed - seconds
+        else:
+            seconds, start = _fit(seconds, elapsed, length), elapsed
+        clips.append(_Clip(length, played[index], kind, seconds, start))
+        elapsed += played[index] - (seconds if kind in ("cut", "dissolve") else 0.0)
+    return clips, elapsed
 
 
 def _seconds_of(item: Any) -> float:
@@ -103,26 +138,18 @@ def output_seconds(durations: Sequence[float], transitions: Sequence[Any] | None
         return 0.0
     if not any_active(transitions):
         return hold_crossfade_output_seconds(durations)
-    total = 0.0
-    for length, kind, overlap in _walk(durations, transitions):
-        total += length - (overlap if kind == "dissolve" else 0.0)
-    return total
+    return _plan(durations, transitions)[1]
 
 
 def placed_offsets(durations: Sequence[float], transitions: Sequence[Any] | None = None) -> list[float]:
     """Where each clip's first frame starts once a fade or dissolve is in the join."""
-    offsets, elapsed = [], 0.0
-    for length, kind, overlap in _walk(durations, transitions):
-        start = elapsed - overlap
-        offsets.append(start)
-        elapsed = start + length
-    return offsets
+    return [clip.start for clip in _plan(durations, transitions)[0]]
 
 
 def placed_spans(durations: Sequence[float], transitions: Sequence[Any] | None = None) -> list[tuple[float, float]]:
-    """``(start, end)`` of each clip on that timeline. A dissolve overlaps the next clip."""
-    offsets = placed_offsets(durations, transitions)
-    return [(start, start + float(duration)) for start, duration in zip(offsets, durations)]
+    """``(start, end)`` of each clip on that timeline, with its held tail. A cut or a dissolve overlaps the next
+    clip."""
+    return [(clip.start, clip.start + clip.played) for clip in _plan(durations, transitions)[0]]
 
 
 def join_arguments(transitions: Sequence[Any] | None, *, abort_callback=None, supports_abort: bool = False) -> dict[str, Any]:
@@ -169,68 +196,64 @@ def filter_for(
         return build_hold_crossfade_filter(
             durations, hold_sec=hold_sec, fade_sec=fade_sec, with_audio=with_audio, has_audio=has_audio,
         )
-    return _active_filter(durations, transitions, with_audio=with_audio, has_audio=has_audio)
+    return _active_filter(durations, transitions, hold_sec=hold_sec, fade_sec=fade_sec,
+                          with_audio=with_audio, has_audio=has_audio)
 
 
-def _active_filter(durations, transitions, *, with_audio: bool, has_audio) -> tuple[str, str, str | None]:
+def _active_filter(durations, transitions, *, hold_sec: float, fade_sec: float, with_audio: bool,
+                   has_audio) -> tuple[str, str, str | None]:
     count = len(durations)
     if count < 2:
         raise ValueError("need at least two clip durations")
     flags = _flags(count, with_audio, has_audio)
-    lengths = [max(0.1, float(duration)) for duration in durations]
-    plan = list(_walk(lengths, transitions))
-    parts = [_prepared(index, length, flags) for index, length in enumerate(lengths)]
-    video, audio, elapsed = "v0", ("a0" if flags is not None else None), lengths[0]
+    clips, _length = _plan(durations, transitions, hold_sec, fade_sec)
+    parts = [_prepared(index, clip, hold_sec, flags) for index, clip in enumerate(clips)]
+    video, audio = "v0", ("a0" if flags is not None else None)
     for index in range(1, count):
-        _length, kind, overlap = plan[index]
-        video, audio, elapsed, extra = _join(
-            video, audio, elapsed, index, lengths[index], kind, overlap, _at(transitions, index), flags is not None,
-        )
+        video, audio, extra = _join(video, audio, index, clips[index], flags is not None)
         parts.append(extra)
     return ";".join(parts), video, audio
 
 
-def _prepared(index: int, length: float, flags: list[bool] | None) -> str:
-    video = _video(index, length)
+def _prepared(index: int, clip: _Clip, hold_sec: float, flags: list[bool] | None) -> str:
+    video = held_video_filter(index, clip.played, hold_sec) if clip.played > clip.length else _video(index, clip.length)
     if flags is None:
         return video
-    return video + ";" + _audio_pad_filter(index, length, flags[index])
+    return video + ";" + _audio_pad_filter(index, clip.played, flags[index])
 
 
-def _join(video, audio, elapsed, index, length, kind, overlap, item, mix: bool):
-    if kind == "dissolve" and overlap > 0:
-        return _dissolve(video, audio, elapsed, index, length, overlap, mix)
-    if kind in ("fade_black", "dip_white"):
-        seconds = _fit(_seconds_of(item), elapsed, length)
-        if seconds > 0:
-            color = "white" if kind == "dip_white" else "black"
-            return _dip(video, audio, elapsed, index, length, seconds, color, mix)
-    return _cut(video, audio, elapsed, index, length, mix)
+def _join(video, audio, index: int, clip: _Clip, mix: bool):
+    if clip.kind in ("cut", "dissolve"):
+        return _dissolve(video, audio, index, clip.start, clip.seconds, mix)
+    if clip.seconds > 0:
+        color = "white" if clip.kind == "dip_white" else "black"
+        return _dip(video, audio, index, clip.start, clip.seconds, color, mix)
+    return _concat(video, audio, index, mix)
 
 
-def _cut(video, audio, elapsed, index, length, mix: bool):
+def _concat(video, audio, index, mix: bool):
     video_label, audio_label = f"vx{index}", f"ax{index}"
     if mix:
-        return video_label, audio_label, elapsed + length, (
+        return video_label, audio_label, (
             f"[{video}][{audio}][v{index}][a{index}]concat=n=2:v=1:a=1[{video_label}][{audio_label}]"
         )
-    return video_label, None, elapsed + length, f"[{video}][v{index}]concat=n=2:v=1:a=0[{video_label}]"
+    return video_label, None, f"[{video}][v{index}]concat=n=2:v=1:a=0[{video_label}]"
 
 
-def _dissolve(video, audio, elapsed, index, length, seconds, mix: bool):
+def _dissolve(video, audio, index, offset, seconds, mix: bool):
+    """The incoming clip from ``offset``, over the last ``seconds`` of the outgoing one (its held tail for a cut)."""
     video_label, audio_label = f"vx{index}", f"ax{index}"
-    offset = max(0.0, elapsed - seconds)
     parts = [
         f"[{video}]settb=AVTB,setpts=PTS-STARTPTS[vb{index}]",
         f"[vb{index}][v{index}]xfade=transition=fade:duration={seconds:.3f}:offset={offset:.3f}[{video_label}]",
     ]
     if mix:
         parts.append(f"[{audio}][a{index}]acrossfade=d={seconds:.6f}[{audio_label}]")
-        return video_label, audio_label, elapsed + length - seconds, ";".join(parts)
-    return video_label, None, elapsed + length - seconds, ";".join(parts)
+        return video_label, audio_label, ";".join(parts)
+    return video_label, None, ";".join(parts)
 
 
-def _dip(video, audio, elapsed, index, length, seconds, color: str, mix: bool):
+def _dip(video, audio, index, elapsed, seconds, color: str, mix: bool):
     video_label, audio_label = f"vx{index}", f"ax{index}"
     start = max(0.0, elapsed - seconds)
     parts = [
@@ -243,6 +266,6 @@ def _dip(video, audio, elapsed, index, length, seconds, color: str, mix: bool):
         parts.append(
             f"[vf{index}][af{index}][vi{index}][ai{index}]concat=n=2:v=1:a=1[{video_label}][{audio_label}]"
         )
-        return video_label, audio_label, elapsed + length, ";".join(parts)
+        return video_label, audio_label, ";".join(parts)
     parts.append(f"[vf{index}][vi{index}]concat=n=2:v=1:a=0[{video_label}]")
-    return video_label, None, elapsed + length, ";".join(parts)
+    return video_label, None, ";".join(parts)

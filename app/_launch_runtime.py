@@ -30718,6 +30718,7 @@ def approve_series_episode_attempts_endpoint(
 
 
 from routers.series_assembly import control_series_assembly_job, create_series_assembly_router
+from services.core_series_assembly import with_transitions as _series_join_with_transitions
 
 api.include_router(create_series_assembly_router(
     resolve_workspace=_series_library_workspace,
@@ -30729,7 +30730,7 @@ api.include_router(create_series_assembly_router(
     find_series=_series_project_or_404,
     asset_local_path=_series_asset_local_path,
     available_filename=wgp.get_available_filename,
-    concatenate_clips=wgp.concatenate_multi_clip_videos,
+    concatenate_clips=_series_join_with_transitions(wgp.concatenate_multi_clip_videos),
     iso_now=_series_iso_now,
 ))
 

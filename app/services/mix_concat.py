@@ -256,6 +256,17 @@ def _audio_pad_filter(index: int, padded_duration: float, has_stream: bool) -> s
     return f"anullsrc=channel_layout=stereo:sample_rate=48000,{end},{fmt}[a{index}]"
 
 
+def held_video_filter(index: int, padded_duration: float, hold_sec: float) -> str:
+    """One clip's pictures with its last frame held, exactly ``padded_duration`` long (its clip plus the hold).
+
+    xfade rejects mismatched timebases (1/30 vs 1/15360 at the same fps, or encoder tbn vs AV_TIME_BASE): force a
+    common TB before the hold. The frozen tail runs past the hold and is cut at the clip's exact length, as its sound
+    is, so pictures and sound advance by the same amount at every join.
+    """
+    return (f"[{index}:v]settb=AVTB,setpts=PTS-STARTPTS,"
+            f"tpad=stop_mode=clone:stop_duration={float(hold_sec) + 1:.3f},trim=end={padded_duration:.6f}[v{index}]")
+
+
 def build_hold_crossfade_filter(
     durations: Sequence[float],
     *,
@@ -281,14 +292,7 @@ def build_hold_crossfade_filter(
         audio_flags = None
     mix_audio = audio_flags is not None
     for index in range(count):
-        # xfade rejects mismatched timebases (1/30 vs 1/15360 at the same fps,
-        # or encoder tbn vs AV_TIME_BASE). Force a common TB before the hold.
-        # The frozen tail runs past the hold and is cut at the clip's exact length, as its sound is, so pictures and
-        # sound advance by the same amount at every join.
-        parts.append(
-            f"[{index}:v]settb=AVTB,setpts=PTS-STARTPTS,"
-            f"tpad=stop_mode=clone:stop_duration={hold + 1:.3f},trim=end={padded[index]:.6f}[v{index}]"
-        )
+        parts.append(held_video_filter(index, padded[index], hold))
         if mix_audio and audio_flags is not None:
             parts.append(_audio_pad_filter(index, padded[index], audio_flags[index]))
 

@@ -63,8 +63,12 @@ def ffmpeg_binary() -> str | None:
 
 # Timeline -------------------------------------------------------------------
 
-def join_offsets(durations: Sequence[float], joined_duration: float | None) -> tuple[list[float], str]:
-    """Clip starts for the join that produced ``joined_duration``: ``dissolve`` or ``cut``."""
+def join_offsets(durations: Sequence[float], joined_duration: float | None,
+                 transitions: Sequence[Any] | None = None) -> tuple[list[float], str]:
+    """Clip starts for the join that produced ``joined_duration``: ``dissolve`` or ``cut``, or ``transition`` when a
+    shot fades or dissolves in (``series_transitions``, whose cuts are that same dissolve)."""
+    if any_active(transitions):
+        return placed_offsets(durations, transitions), "transition"
     cut, elapsed = [], 0.0
     for duration in durations:
         cut.append(elapsed)
@@ -77,9 +81,12 @@ def join_offsets(durations: Sequence[float], joined_duration: float | None) -> t
     return cut, "cut"
 
 
-def join_spans(durations: Sequence[float], joined_duration: float | None) -> tuple[list[tuple[float, float]], str]:
+def join_spans(durations: Sequence[float], joined_duration: float | None,
+               transitions: Sequence[Any] | None = None) -> tuple[list[tuple[float, float]], str]:
     """Where each clip plays on the joined timeline, ``(start, end)``: a dissolve overlaps a clip's held tail with
     the next clip's start."""
+    if any_active(transitions):
+        return placed_spans(durations, transitions), "transition"
     offsets, join = join_offsets(durations, joined_duration)
     lengths = [max(0.1, float(duration)) + HOLD_TAIL_SEC if join == "dissolve" else float(duration) for duration in durations]
     return [(offset, offset + length) for offset, length in zip(offsets, lengths)], join
@@ -210,10 +217,7 @@ def write_episode_subtitles(
     durations = [probe_duration_seconds(path, ffmpeg) for path in clip_paths]
     if any(duration is None for duration in durations):
         return {"written": False, "reason": "A clip duration could not be read"}
-    if any_active(transitions):
-        offsets, join = placed_offsets(durations, transitions), "transition"
-    else:
-        offsets, join = join_offsets(durations, probe_duration_seconds(output_path, ffmpeg))
+    offsets, join = join_offsets(durations, probe_duration_seconds(output_path, ffmpeg), transitions)
     clips = [{"offset": offset, "duration": duration, "beats": scene_beats(workspace_dir, name)}
              for offset, duration, name in zip(offsets, durations, scene_filenames)]
     cues = episode_cues(clips)
@@ -237,9 +241,7 @@ def _timeline(output_path: str, clip_paths: Sequence[str], ffmpeg: str,
     joined = probe_duration_seconds(output_path, ffmpeg)
     if any(duration is None for duration in durations) or not joined:
         return None
-    if any_active(transitions):
-        return durations, joined, placed_spans(durations, transitions), "transition"
-    spans, join = join_spans(durations, joined)
+    spans, join = join_spans(durations, joined, transitions)
     return durations, joined, spans, join
 
 
@@ -451,10 +453,7 @@ def burn_subtitles(output_path: str, srt_name: str, *, ffmpeg: str,
 def thumbnail_time(durations: Sequence[float], joined: float, transitions: Sequence[Any] | None = None) -> float:
     """Into the second shot when the first is a short opening, else a third of the way in."""
     if len(durations) >= 2 and durations[0] < joined / 2:
-        if any_active(transitions):
-            offsets = placed_offsets(durations, transitions)
-        else:
-            offsets, _join = join_offsets(durations, joined)
+        offsets, _join = join_offsets(durations, joined, transitions)
         return round(min(joined - 0.05, offsets[1] + min(1.0, durations[1] / 2)), 3)
     return round(joined / 3, 3)
 

@@ -95,11 +95,12 @@ def test_a_joined_episode_is_in_sync_and_a_drifting_one_is_caught(tmp_path):
     assert 7 in late and late[7] == pytest.approx(-280, abs=20)
 
 
-def _flash_clip(path, seconds: float, index: int) -> None:
+def _flash_clip(path, seconds: float, index: int, flash: bool = True) -> None:
     """A coloured shot with a white flash at the first frames and a beep pattern of its own."""
-    colors = ("0x2244aa", "0xaa4422", "0x228844", "0x442288", "0x888822")
+    colors = ("0x2244aa", "0xaa4422", "0x228844", "0x442288", "0x888822", "0x228888")
     gate = f"gt(sin(2*PI*{1.3 + 0.37 * index}*t)+sin(2*PI*{2.9 + 0.21 * index}*t),0.4)"
-    graph = f"color=c={colors[index]}:s=160x120:r=24:d={seconds},fade=t=in:st=0:d=0.08:color=white"
+    graph = f"color=c={colors[index]}:s=160x120:r=24:d={seconds}"
+    graph += ",fade=t=in:st=0:d=0.08:color=white" if flash else ""
     cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", graph,
            "-f", "lavfi", "-i", f"aevalsrc=exprs='0.6*sin(2*PI*{440 + 70 * index}*t)*{gate}':s=48000:d={seconds}",
            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(path)]
@@ -128,3 +129,66 @@ def test_a_dissolve_keeps_each_beep_with_its_flash(tmp_path):
     report = check_episode_sync(str(joined), clips, ffmpeg="ffmpeg", transitions=transitions)
     assert report["checked"] and report["inSync"], report
     assert report["placed"] == 5 and report["maxLagMs"] <= 45
+
+
+FRAME = 1 / 24
+
+
+def _frame_colors(path) -> np.ndarray:
+    """Each frame's mean colour (24 fps)."""
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vf", "scale=4:4", "-f", "rawvideo",
+                          "-pix_fmt", "rgb24", "-"], capture_output=True, timeout=60).stdout
+    return np.frombuffer(raw, dtype=np.uint8).reshape(-1, 16, 3).mean(axis=1)
+
+
+def _seen_dissolves(colors: np.ndarray, spans) -> list[tuple[float, float]]:
+    """Where each join's dissolve really runs in the pictures (seconds): the line through the frames that mix the
+    outgoing clip's colour with the incoming one's, from where it leaves 0 to where it reaches 1."""
+    pure = [colors[int((start + end) / 2 / FRAME)] for start, end in spans]
+    seen = []
+    for index in range(1, len(spans)):
+        axis = pure[index] - pure[index - 1]
+        mix = (colors - pure[index - 1]) @ axis / (axis @ axis)
+        frames = [i for i in range(int((spans[index][0] - 0.3) / FRAME), int((spans[index - 1][1] + 0.3) / FRAME))
+                  if 0.05 < mix[i] < 0.95]
+        slope, start = np.polyfit(mix[frames], np.array(frames) * FRAME, 1)
+        seen.append((start, start + slope))
+    return seen
+
+
+def _decoded_audio_seconds(path) -> float:
+    return len(sync.decode(str(path), "ffmpeg")) / sync.RATE
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg is required")
+def test_cuts_stay_soft_joins_beside_a_dissolve(tmp_path):
+    """A cut, a dissolve and a cut: the pictures and the sound are where the finishing timeline puts them."""
+    from services.core_series_assembly import concatenate_clips
+    from services.episode_finishing import check_episode_sync, join_spans
+    from services.series_transitions import output_seconds
+
+    lengths = [2.0, 1.6, 2.4, 1.8]
+    transitions = [None, None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "cut"}]
+    clips = []
+    for index, seconds in enumerate(lengths):
+        path = tmp_path / f"take{index}.mp4"
+        _flash_clip(path, seconds, index, flash=False)
+        clips.append(str(path))
+    joined = tmp_path / "episode.mp4"
+    assert concatenate_clips(clips, str(joined), transitions=transitions) is True
+    probed = [probe_duration_seconds(clip) for clip in clips]
+    spans, join = join_spans(probed, probe_duration_seconds(str(joined)), transitions)
+    assert join == "transition"
+    # Each cut holds the outgoing frame 0.5 s and dissolves 0.4 s, as without transitions; the dissolve overlaps 0.5 s.
+    assert [value for span in spans for value in span] == pytest.approx(
+        [0.0, 2.5, 2.1, 3.7, 3.2, 6.1, 5.7, 8.0], abs=0.03)
+    colors = _frame_colors(joined)
+    assert len(colors) * FRAME == pytest.approx(output_seconds(probed, transitions), abs=FRAME)
+    assert _decoded_audio_seconds(joined) == pytest.approx(len(colors) * FRAME, abs=FRAME)
+    for (start, end), (planned_start, _planned_end), (_before_start, before_end) in zip(
+            _seen_dissolves(colors, spans), spans[1:], spans):
+        assert start == pytest.approx(planned_start, abs=FRAME + 1e-6)
+        assert end == pytest.approx(before_end, abs=FRAME + 1e-6)
+    report = check_episode_sync(str(joined), clips, ffmpeg="ffmpeg", transitions=transitions)
+    assert report["checked"] and report["inSync"], report
+    assert report["placed"] == 4 and report["maxLagMs"] <= 42

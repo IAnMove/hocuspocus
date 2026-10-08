@@ -430,3 +430,45 @@ def test_the_episode_score_is_kept_on_the_job_and_laid_while_finishing(tmp_path,
     request = SeriesAssemblyStartRequest(workspace="default", language="spanish")
     status = _wait_for_terminal(get_status, start("series-1", "episode-1", request)["jobId"])
     assert status["status"] == "completed" and seen[-1] == seen[-2], "a language version lies on the same score"
+
+
+def test_the_live_runtimes_join_keeps_wangps_concat_and_takes_transitions(tmp_path, monkeypatch):
+    """_launch_runtime hands the router WanGP's concatenate_multi_clip_videos, which takes no ``transitions``."""
+    import ast
+    from pathlib import Path
+
+    from services import core_series_assembly
+
+    tree = ast.parse((Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    wired = [keyword.value for node in ast.walk(tree) if isinstance(node, ast.Call)
+             and getattr(node.func, "id", None) == "create_series_assembly_router"
+             for keyword in node.keywords if keyword.arg == "concatenate_clips"]
+    assert [ast.unparse(value) for value in wired] == [
+        "_series_join_with_transitions(wgp.concatenate_multi_clip_videos)"]
+    legacy, core = [], []
+
+    def concatenate_multi_clip_videos(clip_paths, output_path, audio_path=None, audio_start_sec=0.0,
+                                      abort_callback=None, pad_audio=False, audio_duration_sec=None):
+        legacy.append(([os.path.basename(path) for path in clip_paths], audio_path, abort_callback is not None))
+        shutil.copyfile(clip_paths[0], output_path)
+        return True
+
+    def core_join(paths, output_path, *, abort_callback=None, transitions=None):
+        core.append(transitions)
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    monkeypatch.setattr(core_series_assembly, "concatenate_clips", core_join)
+    endpoints, library = _client(tmp_path, core_series_assembly.with_transitions(concatenate_multi_clip_videos))
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert legacy == [(["one.mp4", "two.mp4"], None, True)], "no transition: WanGP's join, called as before"
+    assert core == []
+
+    shots = {shot["id"]: shot for shot in library["seriesById"]["series-1"]["episodesById"]["episode-1"]["shots"]}
+    shots["shot-2"]["transitionIn"] = {"kind": "dissolve", "seconds": 0.5}
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert len(legacy) == 1 and core == [[None, {"kind": "dissolve", "seconds": 0.5}]]
