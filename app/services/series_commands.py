@@ -282,8 +282,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Optional envelope intent_id replays the first result.",
     ),
     "series.templates": (
-        {"language": {"enum": ["es", "en"]}}, [], False,
-        "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot.",
+        {"language": {"enum": ["es", "en"]}, "workspace": WORKSPACE}, [], False,
+        "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot. "
+        "Optional workspace is ignored.",
     ),
     "series.create_from_template": (
         {"workspace": WORKSPACE, "template_id": ID, "title": {"type": "string", "maxLength": 300}, "language": {"enum": ["es", "en"]}},
@@ -944,6 +945,30 @@ def _error_detail(error: SeriesCommandError) -> dict[str, Any]:
             "retryable": error.status in (409, 503)}
 
 
+def _field_error(unexpected: list[str], allowed: list[str]) -> dict[str, Any]:
+    """Say which fields arrived and which ones the tool accepts."""
+    names = sorted(unexpected)
+    known = sorted(allowed)
+    if not known:
+        message = "This tool takes no input fields"
+    else:
+        message = f"Unexpected field(s): {', '.join(names)}. Allowed: {', '.join(known)}"
+    return {"code": "invalid_command", "message": message, "unexpected": names, "allowed": known, "retryable": False}
+
+
+def _reject_input(data: Any, properties: dict[str, Any], required: list[str]) -> None:
+    from fastapi import HTTPException
+    if not isinstance(data, dict):
+        raise HTTPException(422, {"code": "invalid_command",
+                                  "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
+    unexpected = sorted(set(data) - set(properties))
+    if unexpected:
+        raise HTTPException(422, _field_error(unexpected, list(properties)))
+    if any(key not in data for key in required):
+        raise HTTPException(422, {"code": "invalid_command",
+                                  "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
+
+
 def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], str],
                      uploads_dir: Callable[[], str], *, opener: Callable[..., Any] = urllib.request.urlopen) -> dict[str, Callable[[Any], Any]]:
     def request(method: str, path: str, *, query: dict[str, str] | None = None, body: dict[str, Any] | None = None) -> Any:
@@ -987,8 +1012,7 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
             from fastapi import HTTPException
             from starlette.concurrency import run_in_threadpool
             data = arguments.get("input") if isinstance(arguments, dict) and arguments.get("version") == 1 else None
-            if not isinstance(data, dict) or set(data) - set(properties) or any(key not in data for key in required):
-                raise HTTPException(422, {"code": "invalid_command", "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
+            _reject_input(data, properties, required)
             try:
                 result = await run_in_threadpool(run, name, data, arguments.get("intent_id"))
             except SeriesCommandError as error:

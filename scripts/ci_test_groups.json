@@ -426,6 +426,7 @@
         "tests/test_series_cutouts.py",
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
+        "tests/test_mcp_error_messages.py",
         "tests/test_audio_levels.py",
         "tests/test_workspace_cleanup.py",
         "tests/test_series_native_render_router.py",
@@ -906,7 +907,8 @@
       "prefix": "app/services/world3d_template_catalog.py",
       "paths": [
         "tests/test_world3d_templates.py",
-        "tests/test_mcp_coverage.py"
+        "tests/test_mcp_coverage.py",
+        "tests/test_mcp_error_messages.py"
       ]
     },
     {
@@ -914,7 +916,8 @@
       "paths": [
         "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py",
-        "tests/test_mcp_coverage.py"
+        "tests/test_mcp_coverage.py",
+        "tests/test_mcp_error_messages.py"
       ]
     },
     {
@@ -992,7 +995,8 @@
       "prefix": "app/services/series_commands.py",
       "paths": [
         "tests/test_series_commands.py",
-        "tests/test_series_line_voice.py"
+        "tests/test_series_line_voice.py",
+        "tests/test_mcp_error_messages.py"
       ]
     },
     {
@@ -1859,7 +1863,19 @@
     },
     {
       "prefix": "app/services/series_script.py",
-      "paths": ["tests/test_series_script_produce.py", "tests/test_series_look_room.py"]
+      "paths": ["tests/test_series_script_produce.py", "tests/test_series_look_room.py", "tests/test_mcp_error_messages.py"]
+    },
+    {
+      "prefix": "app/services/series_script_problems.py",
+      "paths": ["tests/test_mcp_error_messages.py", "tests/test_series_script_produce.py"]
+    },
+    {
+      "prefix": "app/routers/series_produce.py",
+      "paths": ["tests/test_mcp_error_messages.py", "tests/test_series_script_produce.py"]
+    },
+    {
+      "prefix": "app/services/job_leftovers.py",
+      "paths": ["tests/test_job_leftovers.py", "tests/test_mcp_error_messages.py"]
     },
     {
       "prefix": "app/services/series_shot_plan.py",
