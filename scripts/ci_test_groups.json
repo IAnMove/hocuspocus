@@ -60,6 +60,7 @@
         "tests/test_flat_rig.py",
         "tests/test_generation_memory.py",
         "tests/test_generation_output_name.py",
+        "tests/test_output_names.py",
         "tests/test_generation_provenance_submission.py",
         "tests/test_generation_queue_priority.py",
         "tests/test_generation_record.py",
@@ -82,6 +83,7 @@
         "tests/test_h3_studio_policy_request.py",
         "tests/test_h3_extended_duration.py",
         "tests/test_image_generation_commands.py",
+        "tests/test_generation_contract.py",
         "tests/test_image_edit_workflow.py",
         "tests/test_qwen_image_21.py",
         "tests/test_qwen_viggle_turbo.py",
@@ -92,6 +94,7 @@
         "tests/test_job_lifecycle_wiring.py",
         "tests/test_job_leftovers.py",
         "tests/test_jobs_wait.py",
+        "tests/test_jobs_cancel.py",
         "tests/test_labs_wizard_action_matrix.py",
         "tests/test_lan_auth.py",
         "tests/test_audio_mix.py",
@@ -1868,6 +1871,18 @@
     {
       "prefix": "app/services/series_guide.py",
       "paths": ["tests/test_series_agent_fixes.py", "tests/test_series_look_room.py"]
+    },
+    {
+      "prefix": "app/services/jobs_cancel.py",
+      "paths": ["tests/test_jobs_cancel.py"]
+    },
+    {
+      "prefix": "app/services/output_names.py",
+      "paths": ["tests/test_output_names.py"]
+    },
+    {
+      "prefix": "app/routers/image_generation_commands.py",
+      "paths": ["tests/test_image_generation_commands.py", "tests/test_generation_contract.py"]
     }
   ]
 }

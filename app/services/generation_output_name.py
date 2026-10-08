@@ -255,4 +255,5 @@ def generation_receipt_view(
         refs = task.get("result_refs") or []
     view = {"receipt": include_performance(receipt, task), "task": task}
     view.update(status_output_fields(refs, workspace=workspace, workspace_dir=workspace_dir))
-    return view
+    from services.output_names import annotate_generation_view
+    return annotate_generation_view(view, task)

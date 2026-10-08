@@ -240,7 +240,8 @@ def command_catalog() -> list[dict]:
         ),
         _operation(
             "jobs.discard", True,
-            "Discard one leftover by input.intent_id. Does not cancel a job that is already running.",
+            "Discard one leftover by input.intent_id. Does not cancel a job that is already running. "
+            "To cancel a queued or running job use jobs.cancel.",
             {"version": version, "input": _input({"intent_id": intent}, ["intent_id"]), "intent_id": intent}, ["version"],
         ),
     ]
