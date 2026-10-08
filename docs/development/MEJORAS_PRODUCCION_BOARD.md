@@ -10,7 +10,7 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | M2 Mensajes de error | `fix/mcp-error-messages` | [#912](https://github.com/IAnMove/hocuspocus/pull/912) | borrador abierto | `app/services/series_script_problems.py`, control de campos en `series_commands.py` y `job_leftovers.py`, paginación de `world3d.templates.list` |
 | M3 Informe de produce | `fix/series-produce-reporting` | [#913](https://github.com/IAnMove/hocuspocus/pull/913) | borrador abierto | avance de `series.episode.produce`, `approvalReset` de `series.shot.update`, número de episodio |
 | F1 Guía de agentes | `docs/agent-guide-lessons` | [#914](https://github.com/IAnMove/hocuspocus/pull/914) | borrador abierto | `app/shared/series_agent_guide.md`, documentos de desarrollo desfasados |
-| V1 Voz en español | `feat/speech-qa-spanish` | — | pendiente | `app/services/speech_text_es.py`, diccionario de pronunciación |
+| V1 Voz en español | `feat/speech-qa-spanish` | [#915](https://github.com/IAnMove/hocuspocus/pull/915) | borrador abierto | `app/services/speech_text_es.py`, diccionario de pronunciación |
 | V2 Tono y acento | `feat/voice-pitch-accent` | — | pendiente | `voiceProfile.pitchRange`, `app/services/qa_accent.py` |
 | S1 Avisos del guion | `feat/series-script-warnings` | — | pendiente | avisos de `from_script`, `instanceKey` si el kit se repite |
 | S2 Huella y cuadro | `fix/series-render-fingerprint-frame` | — | pendiente | huella de planos mudos, cuadro 3D, `estimate` |
