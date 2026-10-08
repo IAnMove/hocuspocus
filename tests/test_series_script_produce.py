@@ -606,3 +606,19 @@ def test_a_template_backdrop_from_another_location_warns(tmp_path):
     chosen = {"scenes": script["scenes"], "shots": [{**script["shots"][0], "scene3d": {**script["shots"][0]["scene3d"], "backdrop": "location"}}]}
     picked = apply_script(tools, tools.read, KITS, FILES, "cast", chosen, check_only=True, root=str(tmp_path))
     assert not any(item["code"] == "template_backdrop_other_location" for item in picked["warnings"])
+
+
+def test_transition_in_is_checked_and_a_missing_one_is_sent_as_null():
+    tools = Series()
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "dissolve", "seconds": 0.6}},
+                                  *SCRIPT["shots"][1:]]}
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    shots = tools.calls[1][1]["episode"]["shots"]
+    assert shots[0]["transitionIn"] == {"kind": "dissolve", "seconds": 0.6}
+    assert shots[1]["transitionIn"] is None and shots[2]["transitionIn"] is None
+    bad = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "wipe", "seconds": 0.5}}]}
+    with pytest.raises(ScriptError, match="transitionIn.kind"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", bad)
+    short = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "fade_black", "seconds": 0.1}}]}
+    with pytest.raises(ScriptError, match="transitionIn.seconds"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", short)

@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from services.series_transitions import normalize_transition
+
 
 def _scene_filename(asset: dict[str, Any]) -> str:
     """A 2D take's scene document, which holds the exact line timing for subtitles."""
@@ -67,5 +69,8 @@ def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> li
         elif not scene_filename and _shot_beats(shot):
             # An H3 or imported take has no line timing: its shot's lines are spread over the clip at finishing.
             item["dialogueBeats"] = _shot_beats(shot)
+        transition = normalize_transition(shot.get("transitionIn"))
+        if transition:
+            item["transitionIn"] = transition
         plan.append(item)
     return copy.deepcopy(plan)

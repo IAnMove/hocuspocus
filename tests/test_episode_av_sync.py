@@ -93,3 +93,38 @@ def test_a_joined_episode_is_in_sync_and_a_drifting_one_is_caught(tmp_path):
     assert not caught["inSync"]
     late = {item["index"]: item["lagMs"] for item in caught["late"]}
     assert 7 in late and late[7] == pytest.approx(-280, abs=20)
+
+
+def _flash_clip(path, seconds: float, index: int) -> None:
+    """A coloured shot with a white flash at the first frames and a beep pattern of its own."""
+    colors = ("0x2244aa", "0xaa4422", "0x228844", "0x442288", "0x888822")
+    gate = f"gt(sin(2*PI*{1.3 + 0.37 * index}*t)+sin(2*PI*{2.9 + 0.21 * index}*t),0.4)"
+    graph = f"color=c={colors[index]}:s=160x120:r=24:d={seconds},fade=t=in:st=0:d=0.08:color=white"
+    cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", graph,
+           "-f", "lavfi", "-i", f"aevalsrc=exprs='0.6*sin(2*PI*{440 + 70 * index}*t)*{gate}':s=48000:d={seconds}",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(path)]
+    assert subprocess.run(cmd, capture_output=True, timeout=30).returncode == 0, path
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg is required")
+def test_a_dissolve_keeps_each_beep_with_its_flash(tmp_path):
+    """Five shots, one of each join: the fades do not overlap and each dissolve shortens the cut, and the sound stays."""
+    from services.core_series_assembly import concatenate_clips
+    from services.episode_finishing import check_episode_sync
+    from services.series_transitions import output_seconds
+
+    lengths = [2.0, 2.0, 2.0, 2.0, 2.0]
+    transitions = [None, {"kind": "fade_black", "seconds": 0.4}, {"kind": "dissolve", "seconds": 0.5},
+                   {"kind": "dip_white", "seconds": 0.4}, {"kind": "dissolve", "seconds": 0.5}]
+    clips = []
+    for index, seconds in enumerate(lengths):
+        path = tmp_path / f"take{index}.mp4"
+        _flash_clip(path, seconds, index)
+        clips.append(str(path))
+    joined = tmp_path / "episode.mp4"
+    assert concatenate_clips(clips, str(joined), transitions=transitions) is True
+    probed = [probe_duration_seconds(clip) for clip in clips]
+    assert probe_duration_seconds(str(joined)) == pytest.approx(output_seconds(probed, transitions), abs=0.15)
+    report = check_episode_sync(str(joined), clips, ffmpeg="ffmpeg", transitions=transitions)
+    assert report["checked"] and report["inSync"], report
+    assert report["placed"] == 5 and report["maxLagMs"] <= 45

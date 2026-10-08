@@ -28,7 +28,7 @@ from services.series_video_foley import VIDEO_METHODS
 
 SCRIPT_KEYS = ("scene", "location", "variant", "framing", "camera", "cast", "lines", "card", "music", "sfx", "fx",
                "props", "timing", "voiceRoom", "layers", "castDepth", "clipAudio", "clipVolume", "clipFit", "kind",
-               "scene3d", "foley", "duration", "lookRoom")
+               "scene3d", "foley", "duration", "lookRoom", "transitionIn")
 LIST_KEYS = ("cast", "lines", "sfx", "fx", "props", "layers")
 LAYOUT_KEYS = ("framing", "camera", "cast", "card", "music", "sfx", "fx", "props", "timing", "voiceRoom", "layers",
                "castDepth", "clipAudio", "clipVolume", "clipFit", "lookRoom")
@@ -150,6 +150,8 @@ def to_script(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, A
                 "kind": KIND_OF.get(shot.get("productionMethod")), "scene3d": copy.deepcopy(shot.get("scene3d")),
                 "foley": copy.deepcopy(shot.get("foley")), "duration": None if lines else shot.get("durationSeconds")}
     script.update({key: value for key, value in optional.items() if value is not None})
+    if shot.get("transitionIn"):
+        script["transitionIn"] = copy.deepcopy(shot["transitionIn"])
     return script
 
 
@@ -237,6 +239,8 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
     for key, field in (("kind", "productionMethod"), ("scene3d", "scene3d"), ("foley", "foley")):
         if key in changed:
             patch[field] = built.get(field)
+    if "transitionIn" in changed:
+        patch["transitionIn"] = built.get("transitionIn")
     # A shot with lines takes its take's length; one without says it (duration, 5 s when it has none).
     if set(changed) & {"duration", "lines"} and "durationSeconds" in built:
         patch["durationSeconds"] = built["durationSeconds"]
@@ -245,8 +249,16 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
 
 
 def take_still_fits(shot: dict[str, Any], changed: list[str]) -> bool:
-    """A generated or imported take gets its sound at the cut: changing only that keeps its approval."""
-    return shot.get("productionMethod") in VIDEO_METHODS and set(changed) <= CUT_KEYS
+    """A generated or imported take gets its sound at the cut: changing only that keeps its approval.
+
+    ``transitionIn`` is applied at the join, so it keeps the take on every production method."""
+    if not changed:
+        return shot.get("productionMethod") in VIDEO_METHODS
+    if set(changed) <= {"transitionIn"}:
+        return True
+    if shot.get("productionMethod") in VIDEO_METHODS and set(changed) <= CUT_KEYS | {"transitionIn"}:
+        return True
+    return False
 
 
 def _spoken_beats(episode: dict[str, Any], shot_id: str) -> list[str]:
