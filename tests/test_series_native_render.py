@@ -732,7 +732,8 @@ def _approve(series, shot, digest, version=None):
 
 
 def test_a_silent_shot_stays_fresh_after_the_render_writes_its_length_back():
-    """The planner turns 4.2 s into one extra frame (4.208 s). Both sit on the same 0.05 s step, so the take is current."""
+    """The planner turns 4.2 s into one extra frame (4.208 s). Version 2 hashes that frame count, so the take is
+    current. A version-1 take hashed the 4.2 s that was asked, or the raw value written back, and stays current too."""
     from services.series_shot_extras import timing_args
     from services.series_shot_plan import plan_timing
     from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
@@ -744,14 +745,30 @@ def test_a_silent_shot_stays_fresh_after_the_render_writes_its_length_back():
     asked = render_inputs(series, shot, {})
     shot["durationSeconds"] = written
     assert render_inputs(series, shot, {}) == asked
-    assert render_inputs(series, _silent(4.2), {}, version=1) == asked
     _approve(series, shot, asked, INPUTS_VERSION)
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
-    legacy = render_inputs(series, shot, {}, version=1)
+    legacy = render_inputs(series, _silent(4.2), {}, version=1)
     assert legacy != asked
     _approve(series, shot, legacy)
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    _approve(series, shot, render_inputs(series, shot, {}, version=1))
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    _approve(series, shot, legacy, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    _approve(series, shot, legacy)
     shot["durationSeconds"] = 5.0
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+def test_a_silent_shot_one_frame_longer_renders_again():
+    """0.05 s is wider than a frame at 24 fps: 98 and 99 frames once shared a digest."""
+    from services.series_shot_plan import FPS
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series = {"spokenLanguage": "es", "characters": [], "locations": [], "assets": {}}
+    shot = _silent(round(98 / FPS, 3))
+    _approve(series, shot, render_inputs(series, shot, {}), INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["durationSeconds"] = round(99 / FPS, 3)
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
 
 

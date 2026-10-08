@@ -343,21 +343,24 @@ DESIGN = {"stinger": {"file": "sfx-s.wav", "volume": 0.6}, "ambienceByLocation":
 
 
 def test_a_series_without_rooms_keeps_the_digests_its_takes_were_rendered_with():
-    # Talk and deck were computed before rooms existed. The card is silent, so its digest
-    # uses the 0.05 s grid of the length the planner renders. Five seconds stays five seconds.
+    # Talk and deck were computed before rooms existed. The card is silent, so version 2 hashes the frames the planner
+    # renders (five seconds is 120 frames). Version 1, which older takes carry, hashed the five seconds as written.
     golden = {
-        "none": ("26ba124fa2ad4168", "e4abf0454c0cdc82", "c58ca4383e385ee5", _bare()),
-        "empty": ("edf4104106d3dd77", "ca183ad0311f49c8", "6abe8a02e2b260b9", _series()),
-        "design": ("026426c8d5189725", "c15bd0ec6e2ae96c", "ae9e31571f0323e7", _series(**DESIGN)),
-        "shot mode": ("026426c8d5189725", "c15bd0ec6e2ae96c", "ae9e31571f0323e7", _series(**DESIGN, ambienceMode="shot")),
-        "episode mode": ("0014231dd234edae", "f6fccada07049bb7", "01b4663bbb4cb53e", _series(**DESIGN, ambienceMode="episode")),
+        "none": ("26ba124fa2ad4168", "8a1684735dac9b30", "c58ca4383e385ee5", "058d6bd5b5b8c606", _bare()),
+        "empty": ("edf4104106d3dd77", "e80755cea50461b0", "6abe8a02e2b260b9", "6d896d24c9dd124b", _series()),
+        "design": ("026426c8d5189725", "4af6a3125e2cc597", "ae9e31571f0323e7", "cb73f8aaba45eaa4", _series(**DESIGN)),
+        "shot mode": ("026426c8d5189725", "4af6a3125e2cc597", "ae9e31571f0323e7", "cb73f8aaba45eaa4",
+                      _series(**DESIGN, ambienceMode="shot")),
+        "episode mode": ("0014231dd234edae", "82eb9df1b829f6d2", "01b4663bbb4cb53e", "6e2f560b8ccd8f30",
+                         _series(**DESIGN, ambienceMode="episode")),
     }
-    for name, (talk, card, deck, series) in golden.items():
+    for name, (talk, card, deck, legacy_card, series) in golden.items():
         assert [render_inputs(series, shot, KITS) for shot in (TALK, CARD, DECK)] == [talk, card, deck], name
+        assert render_inputs(series, CARD, KITS, version=1) == legacy_card, name
     # Nothing a room adds shows while no shot hears one.
     for series in (_series(**DESIGN, roomByLocation={}), _series(**DESIGN, roomByLocation={"nave": "none", "attic": "hall"})):
         assert [render_inputs(series, shot, KITS) for shot in (TALK, CARD, DECK)] == [
-            "026426c8d5189725", "c15bd0ec6e2ae96c", "ae9e31571f0323e7"]
+            "026426c8d5189725", "4af6a3125e2cc597", "ae9e31571f0323e7"]
 
 
 def _bare():

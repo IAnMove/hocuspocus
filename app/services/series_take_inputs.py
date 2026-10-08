@@ -26,7 +26,7 @@ from services.series_hearing import hearing_of
 from services.series_layers import digest_location
 from services.series_shot_extras import pauses, timing_args
 from services.series_scene_inputs import scene_source_digest
-from services.series_shot_plan import kit_ref, plan_timing
+from services.series_shot_plan import FPS, kit_ref, plan_timing
 from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
 
 # What a shot's picture and sound depend on, besides the render code itself.
@@ -34,9 +34,10 @@ _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId
 # ``revision`` is the per-kit counter. Pins choose which document is hashed; the
 # number itself is not a picture or a voice, so adding it does not stale a take.
 _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance", "revision")
-# Version 2 snaps a silent shot's length to 0.05 s of the length the planner will render.
+# Version 2 hashes the number of frames the planner will render for a silent shot.
 # Version 1 stored the raw ``durationSeconds``, which the render then rewrote, so the next pass looked stale.
 INPUTS_VERSION = 2
+# A version-1 take asked for a length on this step; the planner moves it by under one frame.
 _DURATION_STEP = 0.05
 
 
@@ -46,8 +47,8 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     sound design, its foley and the kits of the people seen or heard. It is kept on the take, so a production renders again only
     the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint.
 
-    A silent shot's length is the planner's length snapped to 0.05 s (version 2), not the value the render writes
-    back into ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches."""
+    A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
+    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches."""
     beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
              for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
@@ -107,18 +108,33 @@ def _snap_duration(seconds: float) -> float:
     return round(round(float(seconds) / _DURATION_STEP) * _DURATION_STEP, 2)
 
 
+def _planned_length(shot: dict[str, Any]) -> float | None:
+    """The length the planner renders a silent shot at. None for a spoken shot or a length that is not a number."""
+    raw = shot.get("durationSeconds")
+    if shot.get("dialogueBeats") or isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    return plan_timing([], **timing_args(layout), at_least=float(raw))[1]
+
+
 def _duration_input(shot: dict[str, Any], beats: list[list[Any]], version: int) -> Any:
     """Silent shots only. Lines already time themselves, so their duration is left out of the fingerprint."""
     if beats:
         return None
     if version < INPUTS_VERSION:
         return shot.get("durationSeconds")
-    raw = shot.get("durationSeconds")
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        return raw
-    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
-    _, planned = plan_timing([], **timing_args(layout), at_least=float(raw))
-    return _snap_duration(planned)
+    planned = _planned_length(shot)
+    return shot.get("durationSeconds") if planned is None else round(planned * FPS)
+
+
+def _legacy_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None) -> list[str]:
+    """Digests a version-1 take can carry: the raw length, or the length that was asked before the render wrote the
+    planner's length back. That asked length is the planned one snapped to 0.05 s."""
+    found = [render_inputs(series, shot, kits, root, version=1)]
+    planned = _planned_length(shot)
+    if planned is not None:
+        found.append(render_inputs(series, {**shot, "durationSeconds": _snap_duration(planned)}, kits, root, version=1))
+    return found
 
 
 def _kept_take(shot: dict[str, Any], assets: dict[str, Any]) -> tuple[Any, Any]:
@@ -132,15 +148,15 @@ def _kept_take(shot: dict[str, Any], assets: dict[str, Any]) -> tuple[Any, Any]:
 
 def _fresh(kept: Any, version: Any, series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any],
            root: str | None) -> bool:
-    """A version-2 take matches the snapped length. An older take still matches the raw length it was saved with,
-    and also the snapped one, so the render's write-back of that length does not make it stale."""
+    """A version-2 take matches the planned frame count. An older take still matches the raw length it was saved with,
+    and also the planned length snapped to 0.05 s, so the render's write-back of that length does not make it stale."""
     if not isinstance(kept, str):
         return False
     if kept == render_inputs(series, shot, kits, root):
         return True
     if version == INPUTS_VERSION:
         return False
-    return kept == render_inputs(series, shot, kits, root, version=1)
+    return kept in _legacy_inputs(series, shot, kits, root)
 
 
 def _attempt_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> list[tuple[Any, str, Any]]:
@@ -158,7 +174,7 @@ def _attempt_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> list[tuple[
 def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> str:
     """Fingerprint a review compares with a take.
 
-    A take from before the silent-length snap still carries that older digest. The approved take wins: an earlier
+    A take from before version 2 still carries that older digest. The approved take wins: an earlier
     pass can share the new digest by accident while the approved one still has the old one. A changed shot returns
     the current digest."""
     current = render_inputs(series, shot, kits, root)
@@ -174,7 +190,7 @@ def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str
 
 def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> list[str]:
     """Rendered shots of a (localized) episode with no approved take, or one made from other inputs. Takes from before
-    the inputs were kept count as out of date. A take saved before the silent-length snap stays current."""
+    the inputs were kept count as out of date. A take saved before version 2 stays current."""
     assets = series.get("assets") or {}
     shots = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
     return [shot["id"] for shot in shots if series_shot3d.wants_render(shot)
