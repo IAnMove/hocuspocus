@@ -798,6 +798,18 @@
       "paths": ["tests/test_speech_qa.py", "tests/test_series_native_render.py"]
     },
     {
+      "prefix": "app/services/voice_pitch.py",
+      "paths": ["tests/test_speech_qa.py", "tests/test_series_native_render.py"]
+    },
+    {
+      "prefix": "app/services/qa_accent.py",
+      "paths": ["tests/test_speech_qa.py", "tests/test_series_native_render.py"]
+    },
+    {
+      "prefix": "app/routers/character_tools.py",
+      "paths": ["tests/test_character_tools.py"]
+    },
+    {
       "prefix": "app/services/series_native_render.py",
       "paths": ["tests/test_series_native_render.py"]
     },

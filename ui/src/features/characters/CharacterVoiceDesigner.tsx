@@ -13,9 +13,11 @@ function Metrics({ voice }: { voice: DesignedVoice }) {
   const { t } = useUiTranslation('characters')
   if (!voice.check) return null
   const { medianPitchHz, wordsPerSecond, wer, warnings } = voice.check
+  const rate = voice.accent?.thetaRate == null ? 0 : Math.round(voice.accent.thetaRate * 100)
   return <div className="text-xs text-text-secondary">
     <p>{t('voiceDesigner.metrics', { pitch: medianPitchHz ? Math.round(medianPitchHz) : '—', pace: wordsPerSecond.toFixed(1), errors: Math.round(wer * 100) })}</p>
     {warnings.map(warning => <p key={warning} className="text-amber-200">{warning}</p>)}
+    {voice.accent?.verdict === 'seseo' && <p className="text-amber-200">{t('voiceDesigner.accentSeseo', { rate, positions: voice.accent.positions })}</p>}
   </div>
 }
 
@@ -27,6 +29,7 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
   const { t } = useUiTranslation('characters')
   const models = useStore(state => state.models)
   const [language, setLanguage] = useState<SpokenLanguage>(initialLanguage)
+  const [accent, setAccent] = useState<'' | 'castilian'>('')
   const [description, setDescription] = useState(''), [text, setText] = useState(SAMPLE_TEXT[initialLanguage] ?? '')
   const [voices, setVoices] = useState<DesignedVoice[]>([]), [busy, setBusy] = useState(''), [error, setError] = useState(''), [message, setMessage] = useState('')
   const operation = useRef<AbortController | null>(null)
@@ -45,7 +48,7 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
     finally { if (!controller.signal.aborted) { operation.current = null; setBusy('') } }
   }
   const design = () => run('design', async signal => {
-    const found = await designVoiceCandidates({ workspace, description: description.trim(), text: text.trim(), language, signal, onUpdate: setVoices })
+    const found = await designVoiceCandidates({ workspace, description: description.trim(), text: text.trim(), language, signal, onUpdate: setVoices, ...(accent ? { accent } : {}) })
     setMessage(t(found.some(voice => voice.status === 'ready') ? 'voiceDesigner.pick' : 'voiceDesigner.noneReady'))
   })
   const use = (voice: DesignedVoice) => run('use', async () => {
@@ -64,10 +67,15 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
       <span>{t('voiceDesigner.missing', { models: missing.join(', ') })}</span>
       <button type="button" disabled={blocked} onClick={() => void download()} className={`${control} inline-flex items-center gap-1`}><Download size={14} />{t('voiceDesigner.download')}</button>
     </div>}
-    <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+    <div className="grid gap-3 md:grid-cols-[12rem_12rem_minmax(0,1fr)]">
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.language')}
         <select value={language} disabled={blocked} onChange={event => changeLanguage(event.target.value as SpokenLanguage)} className={`${control} mt-1 w-full`}>
           {SPOKEN_LANGUAGES.map(code => <option key={code} value={code}>{t(`voiceDesigner.languages.${code}`)}</option>)}
+        </select></label>
+      <label className="block text-xs text-text-secondary">{t('voiceDesigner.accent')}
+        <select value={accent} disabled={blocked} onChange={event => setAccent(event.target.value as '' | 'castilian')} className={`${control} mt-1 w-full`}>
+          <option value="">{t('voiceDesigner.accentNone')}</option>
+          <option value="castilian">{t('voiceDesigner.accentCastilian')}</option>
         </select></label>
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.description')}
         <textarea value={description} maxLength={600} rows={2} disabled={blocked} onChange={event => setDescription(event.target.value)} placeholder={t('voiceDesigner.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>

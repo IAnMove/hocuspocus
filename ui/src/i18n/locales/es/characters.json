@@ -645,11 +645,15 @@
     }
   },
   "voiceDesigner": {
-    "hint": "Describe la voz por sus rasgos. Empieza con «Male voice.» o «Female voice.» y sigue con edad, tono, ritmo y carácter. Una frase de muestra tranquila da una voz más estable.",
+    "hint": "Describe la voz por sus rasgos. Empieza con «Male voice.» o «Female voice.» y sigue con edad, tono, ritmo y carácter. Una frase de muestra tranquila da una voz más estable. La comprobación de tono es 85–155 Hz para un hombre, 165–255 para una mujer y 220–400 para un niño.",
     "missing": "El diseño de voz necesita estos modelos: {{models}}.",
     "download": "Descargar",
     "downloading": "Descarga iniciada. Vuelve a intentarlo cuando termine.",
     "language": "Idioma",
+    "accent": "Comprobación de acento",
+    "accentNone": "Ninguna",
+    "accentCastilian": "Castellano (θ)",
+    "accentSeseo": "θ castellana en el {{rate}}% de {{positions}} posiciones. La voz se conserva.",
     "description": "Descripción de la voz",
     "placeholder": "Male voice. Unos 28 años, algo nasal, rápido y nervioso, simpático.",
     "text": "Frase de muestra (se guarda como transcripción de referencia)",

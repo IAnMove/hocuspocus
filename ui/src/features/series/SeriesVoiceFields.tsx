@@ -8,6 +8,19 @@ import { useCharacterKitLibrary } from '../characters/useCharacterKitLibrary'
 import { useStore } from '../../stores/useStore'
 import { resolvedCharacterTts } from '../../lib/characterKit'
 
+function editedRange(current: unknown, side: 0 | 1, raw: string): [number | null, number | null] | null {
+  const pair: [number | null, number | null] = Array.isArray(current)
+    ? [typeof current[0] === 'number' ? current[0] : null, typeof current[1] === 'number' ? current[1] : null]
+    : [null, null]
+  pair[side] = raw.trim() === '' ? null : Number(raw)
+  return pair[0] == null && pair[1] == null ? null : pair
+}
+
+function rangeValue(range: unknown, side: 0 | 1): number | '' {
+  const value = Array.isArray(range) ? range[side] : undefined
+  return typeof value === 'number' && Number.isFinite(value) ? value : ''
+}
+
 export function SeriesVoiceFields({
   series, onPatchVoice, onConfigureCharacter,
 }: {
@@ -58,6 +71,21 @@ export function SeriesVoiceFields({
             </SeriesField>
             <SeriesField label={t('canon.pitch')}>
               <input className={inputClass} type="number" step="0.05" value={Number(profile.pitch ?? 0)} onChange={event => onPatchVoice(index, { pitch: Number(event.target.value) })} />
+            </SeriesField>
+            <SeriesField label={t('canon.gender')} hint={t('canon.genderHint')}>
+              <input className={inputClass} value={String(profile.gender || '')} onChange={event => onPatchVoice(index, { gender: event.target.value })} />
+            </SeriesField>
+            <SeriesField label={t('canon.pitchRange')} hint={t('canon.pitchRangeHint')}>
+              <span className="flex gap-2">
+                <input className={inputClass} type="number" min={40} max={600} placeholder={t('canon.pitchMin')} value={rangeValue(profile.pitchRange, 0)} onChange={event => onPatchVoice(index, { pitchRange: editedRange(profile.pitchRange, 0, event.target.value) })} />
+                <input className={inputClass} type="number" min={40} max={600} placeholder={t('canon.pitchMax')} value={rangeValue(profile.pitchRange, 1)} onChange={event => onPatchVoice(index, { pitchRange: editedRange(profile.pitchRange, 1, event.target.value) })} />
+              </span>
+            </SeriesField>
+            <SeriesField label={t('canon.accent')}>
+              <select className={inputClass} value={profile.accent === 'castilian' ? 'castilian' : ''} onChange={event => onPatchVoice(index, { accent: event.target.value === 'castilian' ? 'castilian' : null })}>
+                <option value="">{t('canon.accentNone')}</option>
+                <option value="castilian">{t('canon.accentCastilian')}</option>
+              </select>
             </SeriesField>
             <SeriesField label={t('canon.emotion')}>
               <input className={inputClass} value={String(profile.emotionalDefaults || '')} onChange={event => onPatchVoice(index, { emotionalDefaults: event.target.value })} />

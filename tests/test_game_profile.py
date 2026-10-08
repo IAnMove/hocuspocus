@@ -7,7 +7,7 @@ from services.mcp_profiles import GAME_TOOLS, PROFILES
 
 _EXTERNAL = {
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
-    "studio.key",
+    "studio.key", "qa.accent",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
     "characters.list", "characters.get", "characters.save",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",

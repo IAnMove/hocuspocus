@@ -61,8 +61,10 @@ test('a candidate whose key left a haze says so', async () => {
 })
 
 test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
-  assert.deepEqual(expectedPitch('Male voice. Calm.'), [75, 175])
-  assert.deepEqual(expectedPitch('Voz de mujer joven'), [150, 320])
+  assert.deepEqual(expectedPitch('Male voice. Calm.'), [85, 155])
+  assert.deepEqual(expectedPitch('Voz de mujer joven'), [165, 255])
+  assert.deepEqual(expectedPitch('A small boy'), [220, 400])
+  assert.deepEqual(expectedPitch('chica joven'), [165, 255])
   assert.equal(expectedPitch('A robot'), undefined)
   const submitted: Record<string, unknown>[] = [], checked: unknown[] = []
   let seed = 1
@@ -80,7 +82,7 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   assert.deepEqual(submitted.map(params => params.seed), [1, 2, 3])
   assert.ok(submitted.every(params => params.model_type === VOICE_DESIGN_MODEL && params.alt_prompt === 'Male voice. Low and slow.'
     && params.model_mode === 'spanish' && params.prompt === 'Hola. Esta es mi voz.'))
-  assert.deepEqual((checked[0] as { pitchRange: number[] }).pitchRange, [75, 175])
+  assert.deepEqual((checked[0] as { pitchRange: number[] }).pitchRange, [85, 155])
   assert.ok(voices.every(voice => voice.status === 'ready'))
   assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }), {
     provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: 'Kevin (spanish)',

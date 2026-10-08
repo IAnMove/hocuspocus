@@ -25,7 +25,7 @@ SERIES_TOOLS = frozenset({
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "jobs.cancel",
-    "studio.key", "qa.speech", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
+    "studio.key", "qa.speech", "qa.accent", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
     # One shot by its number or id, and the media steps that used to need scripts outside the app.
     "series.shot.get", "series.shot.update", "series.shot.voices", "series.shot.voice", "series.shot.voice.status", "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
     # Editing a take's scene and Video 3D.
@@ -42,7 +42,7 @@ GAME_TOOLS = frozenset({
     "game.asset.approve", "game.asset.reject", "game.asset.lock",
     "game.produce", "game.produce.status", "game.produce.cancel", "game.produce.resume", "game.export",
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
-    "studio.key",
+    "studio.key", "qa.accent",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
     "characters.list", "characters.get", "characters.save",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
