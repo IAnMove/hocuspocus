@@ -2,13 +2,17 @@
 
 ``motionStep`` is 2, 3 or 4. ``stopMotionJitter`` is a deterministic shake of
 0–2 px per hold. Absent, both are omitted and the shot is unchanged. The
-exporters quantize animation time; they do not touch the audio.
+exporters quantize animation time; they do not touch the audio. The shot keeps
+them on ``layout2d`` (``normalize_layout2d``); a Video 3D shot also saves them
+at the top of its scene document (``world3d.scene.patch``), so the scene file
+opens with them.
 """
 from __future__ import annotations
 
 from typing import Any
 
 STEPS = (2, 3, 4)
+KEYS = ("motionStep", "stopMotionJitter")
 
 
 def motion_step(value: Any) -> int | None:
@@ -39,6 +43,19 @@ def layout_fields(shot: dict[str, Any]) -> dict[str, Any]:
         found["motionStep"] = step
     if shake:
         found["stopMotionJitter"] = shake
+    return found
+
+
+def stored_fields(layout: dict[str, Any]) -> dict[str, Any]:
+    """What ``normalize_layout2d`` keeps: each field in its range; a bad one is dropped like the layout's other values."""
+    found: dict[str, Any] = {}
+    for key, read in zip(KEYS, (motion_step, jitter_px)):
+        try:
+            value = read(layout.get(key))
+        except ValueError:
+            continue
+        if value:
+            found[key] = value
     return found
 
 

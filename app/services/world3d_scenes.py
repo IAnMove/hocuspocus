@@ -183,6 +183,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         document["camera"] = {**document["camera"], **{key: deepcopy(value) for key, value in changes["camera"].items() if key in _CAMERA_FIELDS}}
     if "playbackSpeed" in changes or "playback_speed" in changes:
         document["playbackSpeed"] = _speed(changes.get("playbackSpeed", changes.get("playback_speed")))
+    _set_stop_motion(document, changes)
     if "soundtrack" in changes:
         _set_soundtrack(document, changes["soundtrack"], workspace)
     if "screenFx" in changes:
@@ -632,7 +633,8 @@ def _view(scene_id: str, record: dict) -> dict:
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "position", "rotationY", "scale",
-                     "motion", "grounded", "camera", "playbackSpeed", "duration", "dressing", "light", "renderLook", "toon", "motionLab"],
+                     "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
+                     "renderLook", "toon", "motionLab"],
     }
 
 
@@ -686,6 +688,23 @@ def _set_render_look(document: dict, changes: dict) -> None:
             document["toon"] = {**(document.get("toon") or {}), **normalize_toon(changes["toon"])}
     except ValueError as error:
         raise World3DSceneError("invalid_render_look", str(error)) from error
+
+
+def _set_stop_motion(document: dict, changes: dict) -> None:
+    """``motionStep`` (2, 3 or 4) and ``stopMotionJitter`` (0-2 px) sit at the top of the document like
+    ``playbackSpeed``; the exporters hold the picture by them (``series_stop_motion``). 0 removes one."""
+    from services.series_stop_motion import jitter_px, motion_step
+    for key, read in (("motionStep", motion_step), ("stopMotionJitter", jitter_px)):
+        if key not in changes:
+            continue
+        try:
+            value = read(changes[key]) if changes[key] != 0 else None
+        except ValueError as error:
+            raise World3DSceneError("invalid_stop_motion", str(error)) from error
+        if value:
+            document[key] = value
+        else:
+            document.pop(key, None)
 
 
 def _speed(value) -> float:

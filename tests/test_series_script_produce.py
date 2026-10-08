@@ -526,6 +526,10 @@ def test_stop_motion_is_optional_and_a_bad_step_writes_nothing():
     assert "stopMotionJitter" not in episode["shots"][0]["layout2d"]
     assert episode["shots"][1]["layout2d"]["motionStep"] == 2
     assert episode["shots"][1]["layout2d"]["stopMotionJitter"] == 1.25
+    # series.episode.update stores the shot through the library's normalization, which keeps both.
+    from services.series_library import _normalize_shot
+    stored = _normalize_shot(episode["shots"][1], 1)["layout2d"]
+    assert (stored["motionStep"], stored["stopMotionJitter"]) == (2, 1.25)
     quiet = Series()
     apply_script(quiet, quiet.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "stopMotionJitter": 0}]})
     assert "stopMotionJitter" not in quiet.calls[1][1]["episode"]["shots"][0]["layout2d"]

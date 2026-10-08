@@ -112,6 +112,33 @@ def test_a_3d_shot_instantiates_sets_the_length_makes_each_speaker_talk_and_publ
     assert talk["lines"] == [{"start": 0.8, "cues": lines[0]["cues"], "audio": "/api/v1/file/ln%201.wav?workspace=cast"}]
 
 
+class HeldWorld3D(World3D):
+    """A template whose document already has a stop-motion step (a scene saved from the editor)."""
+
+    def __call__(self, tool, arguments):
+        if tool == "world3d.scene.instantiate":
+            self.calls.append((tool, arguments))
+            return {"result": {"scene": {"sceneId": "w3d-1", "revision": 1, "document": {"motionStep": 2, "slots": []}}}}
+        return super().__call__(tool, arguments)
+
+
+def test_a_3d_shot_saves_its_stop_motion_in_the_scene_and_a_plain_shot_asks_as_before():
+    def length(tools):
+        return next(args["input"] for tool, args in tools.calls if tool == "world3d.scene.patch" and "duration" in args["input"])
+
+    held = {"id": "s20", "layout2d": {"motionStep": 3, "stopMotionJitter": 1.5}, "scene3d": {"template": "user-mars", "cast": []}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", held, [], 4.0, {}, {}, NativeRenderError)
+    assert (length(tools)["motionStep"], length(tools)["stopMotionJitter"]) == (3, 1.5)
+    plain = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", plain, [], 4.0, {}, {}, NativeRenderError)
+    assert not {"motionStep", "stopMotionJitter"} & set(length(tools)), "the patch earlier renders asked for"
+    tools = HeldWorld3D()
+    series_shot3d.build_scene(tools, "cast", "job", plain, [], 4.0, {}, {}, NativeRenderError)
+    assert length(tools)["motionStep"] == 0 and "stopMotionJitter" not in length(tools), "the shot took it off"
+
+
 def test_a_speaker_without_an_object_is_heard_over_the_shot_and_a_failing_tool_stops_it():
     shot = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
     lines = [{"characterId": "elon", "start": 0.3, "filename": "a b.wav"}]

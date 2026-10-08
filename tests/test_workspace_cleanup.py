@@ -33,6 +33,22 @@ def test_releasing_a_staging_folder_keeps_its_text_and_drops_frames_and_media(tm
     assert cleanup.release_export_staging(tmp_path / "missing") == 0
 
 
+def test_what_a_release_cannot_delete_is_logged_and_left(tmp_path, caplog):
+    """A release never fails the export that asked for it, but a file it cannot delete is no longer a silent leak."""
+    folder = _staging(tmp_path, "locked")
+    (folder / "frames").chmod(0o500)
+    try:
+        with caplog.at_level("WARNING", logger="services.workspace_cleanup"):
+            cleanup.release_export_staging(folder)
+    finally:
+        (folder / "frames").chmod(0o700)
+    assert (folder / "frames" / "frame_000000.png").is_file() and not (folder / "encoded.mp4").exists()
+    assert any("could not remove" in record.getMessage() and "frame_000000.png" in record.getMessage() for record in caplog.records)
+    caplog.clear()
+    assert cleanup.release_export_staging(folder) == 3 * 1000
+    assert not caplog.records, "a file already gone is no failure"
+
+
 class Registry:
     def __init__(self, tasks):
         self.tasks = tasks

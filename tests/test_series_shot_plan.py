@@ -96,6 +96,16 @@ def test_the_series_library_keeps_a_shot_layout():
     assert "layout2d" not in _normalize_shot({"id": "s2", "productionMethod": "animation_2d", "layout2d": {}}, 1)
 
 
+def test_the_series_library_keeps_stop_motion_in_its_ranges():
+    from services.series_library import _normalize_shot
+    held = _normalize_shot({"id": "s1", "productionMethod": "animation_3d",
+                            "layout2d": {"framing": "wide", "motionStep": 3, "stopMotionJitter": 1.5}}, 0)
+    assert held["layout2d"] == {"framing": "wide", "motionStep": 3, "stopMotionJitter": 1.5}
+    assert normalize_layout2d({"motionStep": 2.0, "stopMotionJitter": 0}) == {"motionStep": 2}, "0 px is no shake"
+    assert normalize_layout2d({"framing": "wide", "motionStep": 5, "stopMotionJitter": 2.5}) == {"framing": "wide"}
+    assert normalize_layout2d({"motionStep": True, "stopMotionJitter": "1"}) is None
+
+
 def test_a_full_shot_spec_with_lines_card_and_focus():
     shot = {"id": "s1", "sceneId": "a", "framing": "two-shot", "camera": "static", "locationId": "garage", "visibleCharacterIds": ["kevin", "gary"],
             "dialogueBeats": [{"id": "b1", "characterId": "kevin", "text": "Hola."}, {"id": "b2", "characterId": "boss", "text": "(off)"},

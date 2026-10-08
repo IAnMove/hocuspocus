@@ -144,6 +144,28 @@ def test_a_cast_index_survives_an_edit_of_the_lines():
     assert [(beat["text"], beat.get("castIndex")) for beat in edited["dialogueBeats"]] == [("Uno.", 1), ("Dos.", None), ("Tres.", None)]
 
 
+def test_stop_motion_is_kept_by_a_shot_edit_and_null_takes_it_off():
+    """Through the library's write (normalized), as series.shot.update stores it."""
+    def stored(changes):
+        episode = series["episodesById"]["ep2"]
+        shot, _number = find_shot(episode, 2)
+        merged, changed = merge_changes(to_script(series, episode, shot), changes, None)
+        patch, texts = build_patch(series, episode, shot, merged, changed, KITS, FILES, None)
+        updated, info = apply_edit(series, "ep2", shot["id"], patch, texts, changed, take_still_fits(shot, changed))
+        saved = normalize_series_library({"seriesById": {"uv": updated}}, "cast")["seriesById"]["uv"]
+        return saved, find_shot(saved["episodesById"]["ep2"], 2)[0], info, changed
+
+    series = library()
+    series, shot, info, changed = stored({"motionStep": 3, "stopMotionJitter": 1.5})
+    assert changed == ["motionStep", "stopMotionJitter"] and info["reset"] == ["take"]
+    assert (shot["layout2d"]["motionStep"], shot["layout2d"]["stopMotionJitter"]) == (3, 1.5)
+    assert to_script(series, series["episodesById"]["ep2"], shot)["motionStep"] == 3
+    with pytest.raises(ShotEditError, match="motionStep must be 2, 3 or 4"):
+        stored({"motionStep": 5})
+    series, cleared, _info, changed = stored({"motionStep": None})
+    assert changed == ["motionStep"] and "motionStep" not in cleared["layout2d"] and cleared["layout2d"]["stopMotionJitter"] == 1.5
+
+
 class Library:
     def __init__(self):
         self.series, self.calls = library(), []

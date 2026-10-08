@@ -35,7 +35,7 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 from services.series_scene_inputs import audio_content, document_digest, scene_source_digest
-from services.series_stop_motion import read_fields
+from services.series_stop_motion import KEYS as STOP_MOTION_KEYS, read_fields
 
 QUALITIES = ("draft", "final")
 OBJECT_MEDIA = ("model3d", "image")
@@ -454,8 +454,17 @@ def open_shot_scene(call: Callable, workspace: str, stem: str, shot: dict[str, A
         setup["bindings"] = [*added, *(setup.get("bindings") or [])]
     return _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
         "workspace": workspace, "scene_id": scene["sceneId"], "base_revision": scene["revision"], "duration": round(duration, 3),
-        **setup, **_voice_over(workspace, lines or [], config)}}),
+        **setup, **_voice_over(workspace, lines or [], config), **_held(shot, scene.get("document"))}}),
         "set 3D length", error)["scene"]
+
+
+def _held(shot: dict[str, Any], document: Any) -> dict[str, Any]:
+    """The shot's stop-motion (``layout2d.motionStep``, ``stopMotionJitter``), saved in the scene so its file keeps it.
+    One the source scene has and the shot does not is removed (0). A shot and a scene without any send nothing, so
+    their patch stays the one earlier renders asked for."""
+    held = read_fields(shot)
+    stale = [key for key in STOP_MOTION_KEYS if key not in held and isinstance(document, dict) and document.get(key)]
+    return {**held, **dict.fromkeys(stale, 0)}
 
 
 def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any], lines: list[dict[str, Any]], duration: float,
@@ -492,9 +501,6 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
             revision = _talk(call, workspace, stem, scene_id, revision, entry, kit_id, spoken, error)
     published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
-    document = published.get("document")
-    if held and isinstance(document, dict):
-        published = {**published, "document": {**document, **held}}
     return {**published, "renderDigest": digest}
 
 

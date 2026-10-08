@@ -664,3 +664,29 @@ def test_a_patch_binds_a_clip_sequence_a_hand_hold_and_an_appearance_and_refuses
             patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [binding]}, 4)
         assert raised.value.code == code and text in str(raised.value), (binding, raised.value.code, str(raised.value))
     assert inspect_scene("studio", "w3d-0000abcd9999", workspace_dir)["revision"] == 4, "a refused patch writes nothing"
+
+
+def test_stop_motion_is_saved_in_the_published_scene_file_and_zero_takes_it_off(tmp_path):
+    """motionStep and stopMotionJitter sit at the top of the document like playbackSpeed, so the scene file opens with them."""
+    import jsonschema
+    from services.scene_documents import get_document
+    from services.world3d_scenes import World3DSceneError, publish_scene
+    workspace_dir = lambda name: str(tmp_path / name)
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"version": 1, "units": "meters", "up": "y", "duration": 4, "width": 1280, "height": 720, "fps": 24, "templateId": "two-shot",
+                "slots": [], "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]}, "light": {"preset": "studio"}}
+    (folder / "w3d-00000000700f.json").write_text(json.dumps({"revision": 1, "templateId": "two-shot", "document": document, "warnings": []}), encoding="utf-8")
+    patch = {"motionStep": 3, "stopMotionJitter": 1.5}
+    schema = next(item for item in command_catalog() if item["name"] == "world3d.scene.patch")["inputSchema"]
+    jsonschema.validate({"version": 1, "intent_id": "held", "input": {"workspace": "studio", "scene_id": "w3d-00000000700f", "base_revision": 1, **patch}}, schema)
+    viewed = patch_scene("studio", "w3d-00000000700f", workspace_dir, patch, 1)
+    assert {"motionStep", "stopMotionJitter"} <= set(viewed["editable"])
+    published = publish_scene("studio", "w3d-00000000700f", workspace_dir)
+    opened = get_document("studio", published["file"], workspace_dir=workspace_dir)["document"]
+    assert (opened["motionStep"], opened["stopMotionJitter"]) == (3, 1.5)
+    cleared = patch_scene("studio", "w3d-00000000700f", workspace_dir, {"motionStep": 0, "stopMotionJitter": 0}, 2)["document"]
+    assert "motionStep" not in cleared and "stopMotionJitter" not in cleared
+    for bad in ({"motionStep": 5}, {"stopMotionJitter": 3}, {"motionStep": True}):
+        with pytest.raises(World3DSceneError, match="motionStep must be 2, 3 or 4|stopMotionJitter must be from 0 to 2"):
+            patch_scene("studio", "w3d-00000000700f", workspace_dir, bad, 3)

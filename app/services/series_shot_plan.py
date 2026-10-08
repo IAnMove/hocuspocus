@@ -151,7 +151,7 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
               **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
               **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {}),
-              **series_hearing.layout_field(value)}
+              **series_hearing.layout_field(value), **series_stop_motion.stored_fields(value)}
     return layout or None
 
 
