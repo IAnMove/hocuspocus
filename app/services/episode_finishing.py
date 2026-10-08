@@ -31,7 +31,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from services import series_ambience, series_score
+from services import series_ambience, series_hearing, series_score
 from services.audio_levels import gain_to
 from services.audio_mix import track_source
 from services.media_dimensions import probe_video_size
@@ -462,10 +462,20 @@ def write_episode_thumbnail(output_path: str, clip_paths: Sequence[str], *, ffmp
     return {"written": True, "file": os.path.basename(target), "time": at}
 
 
+def _color_hearing(output_path: str, clip_paths: Sequence[str], hearing: Sequence[str], ffmpeg: str,
+                   abort_callback: Callable[[], bool] | None) -> dict[str, Any]:
+    """Subjective hearing on the joined timeline, after the ambience and the score and before the loudness."""
+    timeline = _timeline(output_path, clip_paths, ffmpeg)
+    if timeline is None:
+        return {"applied": False, "reason": "The clip durations could not be read"}
+    return series_hearing.color_episode(output_path, timeline[2], hearing, ffmpeg=ffmpeg, abort_callback=abort_callback)
+
+
 def finish_episode(
     output_path: str, clip_paths: Sequence[str], scene_filenames: Sequence[Any], *, workspace_dir: str,
     abort_callback: Callable[[], bool] | None = None, burn: bool = False,
     ambience: Sequence[dict[str, Any]] | None = None, score: dict[str, Any] | None = None,
+    hearing: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """``ambience`` (``series_ambience.clip_ambience``) lays episode-mode beds and ``score``
     (``series_score.clip_score``) the episode's music, both before the loudness pass."""
@@ -485,6 +495,8 @@ def finish_episode(
         steps.append(("score", lambda: lay_score(
             output_path, clip_paths, scene_filenames, score, workspace_dir=workspace_dir, ffmpeg=ffmpeg,
             abort_callback=abort_callback)))
+    if series_hearing.active(hearing):
+        steps.append(("hearing", lambda: _color_hearing(output_path, clip_paths, hearing, ffmpeg, abort_callback)))
     steps.append(("loudness", lambda: normalize_loudness(output_path, ffmpeg=ffmpeg, abort_callback=abort_callback)))
     steps.append(("sync", lambda: check_episode_sync(output_path, clip_paths, ffmpeg=ffmpeg)))
     finished: dict[str, Any] = {}

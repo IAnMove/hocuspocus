@@ -108,7 +108,10 @@ def check_voice_rooms(design: Any) -> None:
 
 def shot_room(series: dict[str, Any], shot: dict[str, Any]) -> str | None:
     """The room a shot's voices are heard in: its own ``layout2d.voiceRoom`` (``none`` keeps them dry), else its
-    location's entry of ``soundDesign.roomByLocation``. None for dry."""
+    location's entry of ``soundDesign.roomByLocation``. None for dry. ``muffled`` hearing skips the room."""
+    from services.series_hearing import dries
+    if dries(series, shot):
+        return None
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     design = series.get("soundDesign") if isinstance(series.get("soundDesign"), dict) else {}
     rooms = design.get("roomByLocation") if isinstance(design.get("roomByLocation"), dict) else {}

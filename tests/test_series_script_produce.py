@@ -109,6 +109,26 @@ def test_every_problem_is_listed_before_anything_is_written():
     assert tools.calls == [], "nothing is written while the script has problems"
 
 
+def test_a_shot_hears_and_a_bad_hearing_writes_nothing():
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "duration": 3, "hearing": "muffled", "lines": [{"who": "kevin", "es": "Leo.", "en": "I read."}]},
+        {"scene": "a", "duration": 3, "hearing": "deaf", "sfx": [{"file": "sfx-pen.wav", "keepInDeaf": True}]},
+        {"scene": "a", "duration": 3, "hearing": "normal"},
+    ]}
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    stored = tools.calls[1][1]["episode"]["shots"]
+    assert stored[0]["layout2d"]["hearing"] == "muffled"
+    assert stored[1]["layout2d"]["hearing"] == "deaf" and stored[1]["layout2d"]["sfx"][0]["keepInDeaf"] is True
+    assert "hearing" not in stored[2]["layout2d"]
+    refused = Series()
+    bad = {"scenes": [{"id": "a", "location": "garage"}], "shots": [{"scene": "a", "hearing": "loud"}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(refused, refused.read, KITS, FILES, "cast", bad)
+    assert any("hearing must be one of" in problem for problem in raised.value.problems)
+    assert refused.calls == []
+
+
 def test_check_only_and_rewriting_an_existing_episode():
     tools = Series()
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, check_only=True)

@@ -1868,6 +1868,10 @@
     {
       "prefix": "app/services/series_guide.py",
       "paths": ["tests/test_series_agent_fixes.py", "tests/test_series_look_room.py"]
+    },
+    {
+      "prefix": "app/services/series_hearing.py",
+      "paths": ["tests/test_series_voice_rooms.py", "tests/test_series_script_produce.py"]
     }
   ]
 }

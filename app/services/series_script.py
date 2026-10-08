@@ -39,6 +39,7 @@ from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
+from services import series_hearing
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
 from services.series_voice_rooms import PRESETS
 
@@ -177,6 +178,7 @@ class EpisodeScript:
         self._check_lines(shot, where)
         self._check_files(shot, where)
         self._check_effects(shot, where)
+        series_hearing.check_shot(shot, where, check.problems)
         self._check_layers(shot, where)
 
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
@@ -272,6 +274,7 @@ class EpisodeScript:
         for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
+        layout.update(series_hearing.layout_hearing(shot))
         layout.update(layout_layers(shot, "layout2d"))
         if isinstance(shot.get("card"), dict):
             layout["card"] = {"kind": shot["card"].get("kind"), **self._card(shot["card"], self.original)}

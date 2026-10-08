@@ -28,6 +28,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, NamedTuple
 
+from services import series_hearing
 from services.audio_mix import AUDIO_FILTER_TAIL
 from services.mix_concat import _run_ffmpeg_command
 
@@ -75,6 +76,7 @@ def check_sound_design(design: Any) -> None:
     if isinstance(design, dict) and "ambienceDuckDb" in design and not (
             _is_number(design["ambienceDuckDb"]) and 0 <= design["ambienceDuckDb"] <= MAX_DUCK_DB):
         raise ValueError(f"soundDesign.ambienceDuckDb must be a number of dB from 0 to {MAX_DUCK_DB:.0f}")
+    series_hearing.check_default(design)
 
 
 def ambience_duck_db(design: Any) -> float:
@@ -93,6 +95,9 @@ def shot_sound_design(design: Any) -> Any:
     left_out = {"roomByLocation", "ambienceMode", "ambienceDuckDb"} & design.keys()
     if ambience_mode(design) == "episode":
         left_out.add("ambienceByLocation")
+    # A default of normal is the absence of a default: takes from before the field keep their digest.
+    if design.get("hearingDefault") == "normal":
+        left_out.add("hearingDefault")
     return {key: value for key, value in design.items() if key not in left_out} if left_out else design
 
 
@@ -115,8 +120,9 @@ def clip_ambience(series: dict[str, Any], episode: dict[str, Any],
     shots = {str(shot.get("id")): shot for shot in episode.get("shots") or [] if isinstance(shot, dict)}
     result = []
     for clip in clips:
-        location = str((shots.get(str(clip.get("shotId"))) or {}).get("locationId") or "")
-        entry = entries.get(location) if location else None
+        shot = shots.get(str(clip.get("shotId"))) or {}
+        location = str(shot.get("locationId") or "")
+        entry = series_hearing.heard_bed(series, shot, entries.get(location) if location else None)
         item: dict[str, Any] = {"locationId": location}
         if isinstance(entry, dict) and isinstance(entry.get("file"), str) and entry["file"].strip():
             item.update(file=entry["file"].strip(), volume=_volume(entry), **({"duckDb": duck} if duck else {}))
