@@ -121,8 +121,9 @@ def test_a_document_card_is_stored_and_a_long_one_warns_without_blocking():
                                                "es": ["Expediente", ("palabra " * 200)[:1200]]}},
     ]}
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True)
-    assert checked["warnings"] == [{"code": "document_text_too_long", "shot": "e2s01",
-                                    "message": "The document does not fit at the minimum readable size."}]
+    # Other script warnings (a speaker not on screen) may sit beside it: the long document is the one this checks.
+    assert {"code": "document_text_too_long", "shot": "e2s01",
+            "message": "The document does not fit at the minimum readable size."} in checked["warnings"]
     assert tools.calls == []
     apply_script(tools, tools.read, KITS, FILES, "cast", script)
     card = tools.calls[1][1]["episode"]["shots"][0]["layout2d"]["card"]
