@@ -31,6 +31,7 @@ from urllib.parse import quote
 
 from services import series_entrances as entrances
 from services import series_shot_extras as extras
+from services import series_hearing
 from services.series_ambience import ambience_mode
 from services.series_document_card import stored_document
 from services.series_layers import PLAYBACK, layer_kind, layout_layers, shot_layers
@@ -148,7 +149,8 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
               **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
-              **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {})}
+              **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {}),
+              **series_hearing.layout_field(value)}
     return layout or None
 
 
@@ -523,6 +525,7 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
         "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
     }
+    spec["lines"], spec["audioTracks"] = series_hearing.shape(series, shot, spec["lines"], spec["audioTracks"])
     if document:
         return spec
     return _with_set(spec, series, shot, _focus(cast, framing), workspace)

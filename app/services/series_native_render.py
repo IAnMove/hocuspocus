@@ -54,6 +54,7 @@ from services.series_sound_cuts import materialize_cuts
 from services.series_video_foley import VIDEO_METHODS, pending_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_document_card import DocumentCardError, document_plate
+from services import series_hearing
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.speech_text_es import line_notes, pronounce, qa_verdict
 from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
@@ -756,6 +757,7 @@ class SeriesNativeRender:
         # Its sound effects and screen effects too, at a second or on a line, like in a 2D shot.
         sound = {"audioTracks": [*sound_tracks(series, shot, first), *sfx_tracks(layout, timing, duration)]}
         self._balance(self.deps.workspace_dir(workspace), sound)
+        lines, sound["audioTracks"] = series_hearing.shape(series, shot, lines, sound["audioTracks"])
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
                                           tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace),
                                           screen_fx=fx_cues(layout, timing, duration),

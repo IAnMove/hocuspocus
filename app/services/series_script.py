@@ -42,6 +42,7 @@ from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_transitions import normalize_transition
 from services.series_shot_foley import normalize_foley
+from services import series_hearing
 from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
 from services.series_script_warnings import finish_check
@@ -186,6 +187,7 @@ class EpisodeScript:
         self._check_files(shot, where)
         self._check_effects(shot, where)
         self._check_document(index, shot, where)
+        series_hearing.check_shot(shot, where, check.problems)
         self._check_layers(shot, where)
         self._check_transition(shot, where)
 
@@ -313,6 +315,7 @@ class EpisodeScript:
         for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
+        layout.update(series_hearing.layout_hearing(shot))
         layout.update(layout_layers(shot, "layout2d"))
         if isinstance(shot.get("card"), dict):
             layout["card"] = self._stored_card(shot["card"])
