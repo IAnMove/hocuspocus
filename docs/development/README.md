@@ -121,6 +121,7 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 
 ## Series
 
+- [GOLDEN_SHOTS.md](GOLDEN_SHOTS.md) — guía · conjunto dorado de planos para detectar regresiones (fuera de la CI).
 - [SERIES_ANIMADAS_PLAN_2026-10-04.md](SERIES_ANIMADAS_PLAN_2026-10-04.md) — plan · series de animación fáciles en tres fases (1A–3 en #802–#805).
 - [SERIE_ANIMADA_MCP_PROBLEMAS_2026-10-04.md](SERIE_ANIMADA_MCP_PROBLEMAS_2026-10-04.md) — histórico · problemas del 1x02 hecho por MCP y sus arreglos.
 
