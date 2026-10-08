@@ -10,6 +10,7 @@ import { rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
 import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
+import { holdFields } from '../src/features/stopMotion.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
@@ -63,6 +64,10 @@ export type ShotSpec = {
   layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
   camera?: 'static' | 'push'; narrative?: Scene['narrative']
+  /** Picture holds every 2, 3 or 4 frames. Absent, the scene clock is unchanged. */
+  motionStep?: 2 | 3 | 4
+  /** Deterministic shake of one hold, in pixels, from 0 to 2. */
+  stopMotionJitter?: number
 }
 type Beat = NonNullable<Scene['dialogueBeats']>[number]
 
@@ -480,6 +485,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     ...(sfx?.length ? { sfx } : {}),
     ...(shot.finish ? { finish: shot.finish } : {}),
     ...(shot.narrative ? { narrative: shot.narrative } : {}),
+    ...holdFields(shot.motionStep, shot.stopMotionJitter),
   } as Scene
 }
 

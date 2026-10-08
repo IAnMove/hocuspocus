@@ -23,8 +23,8 @@ def showcase(service, dimension='3d'):
 def test_both_templates_use_all_catalog_effects_and_are_replayable(service):
     for dimension in ('2d', '3d'):
         doc = showcase(service, dimension)
-        assert doc['duration'] == 165
-        assert len(doc['sfx']) == 55
+        assert doc['duration'] == 168
+        assert len(doc['sfx']) == 56
         assert all(cue['sound'] and cue['label'] for cue in doc['sfx'])
         assert doc == showcase(service, dimension)
         assert ('slots' in doc) == (dimension == '3d')
@@ -39,7 +39,7 @@ def test_apply_replaces_exact_cue_preserving_scene_and_caller(service):
     assert original == before
     assert first == service.execute(command)
     actual = first['result']['document']
-    assert len(actual['sfx']) == 55
+    assert len(actual['sfx']) == 56
     assert actual['sfx'][3] == cue
     assert actual['slots'] == original['slots']
     assert not first['result']['saved'] and not first['result']['exported']
@@ -138,7 +138,7 @@ def test_speech_rejects_paths_and_unknown_character_before_analysis(service):
 
 def test_shared_catalog_remains_a_packaged_resource():
     path = Path(__file__).parents[1] / 'app/shared/scene_effects.json'
-    assert len(json.loads(path.read_text())) == 55
+    assert len(json.loads(path.read_text())) == 56
 
 
 def test_code_rain_takes_its_own_default_size_and_keeps_a_given_one(service):
@@ -205,7 +205,7 @@ def test_anime_showcase_uses_42_seconds_and_preserves_longer_authored_scenes(ser
     assert service.execute(command)['result']['document']['duration'] == 72
 
 
-@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 165)])
+@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 168)])
 def test_default_2d_showcase_has_no_longer_background_tail(service, collection, seconds):
     scene = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
                              'input': {'dimension': '2d', 'collection': collection}})['result']['document']

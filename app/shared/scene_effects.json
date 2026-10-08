@@ -97,6 +97,12 @@
     "collection": "classic"
   },
   {
+    "id": "etching",
+    "color": "#5c3a1e",
+    "sound": "scan",
+    "collection": "classic"
+  },
+  {
     "id": "aurora",
     "color": "#66ffcc",
     "sound": "rise",

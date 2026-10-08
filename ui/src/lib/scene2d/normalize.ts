@@ -1,6 +1,7 @@
 // Pure Video 2D document normalization shared by the Scene Animator import and
 // the headless scene2d renderer. Character-kit synchronization stays in the editor.
 import { canonicalSceneFps } from '../sceneFps'
+import { holdFields } from '../../features/stopMotion'
 import { normalizeFaceBinding } from '../cutoutDialogue'
 import { parseFinish } from './finish'
 import { parseSceneFx } from '../../features/sceneFx/types'
@@ -276,5 +277,9 @@ export function normalizeScene2D(raw: unknown): AnimatorScene {
   // Same cue parser as the editor: catalog colour and bounded fields. Painters
   // call addColorStop(cue.color) and failed on cues saved without a colour.
   const sfx = parseSceneFx(incoming.sfx)
-  return { ...incoming, sfx: sfx.length ? sfx : undefined, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  const hold = holdFields(incoming.motionStep, incoming.stopMotionJitter)
+  const scene: AnimatorScene = { ...incoming, sfx: sfx.length ? sfx : undefined, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), ...hold, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  if (!hold.motionStep) delete scene.motionStep
+  if (!hold.stopMotionJitter) delete scene.stopMotionJitter
+  return scene
 }

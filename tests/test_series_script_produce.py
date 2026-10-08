@@ -5,6 +5,7 @@ import pytest
 
 from services.series_produce import ProduceDeps, ProduceError, SeriesProduce
 from services.series_script import ScriptError, apply_script
+from services.series_stop_motion import read_fields
 
 FILES = {"mus-theme-es.wav", "mus-theme-en.wav", "sfx-pen.wav", "prop-key.png", "mars.world3d.scene.json"}
 
@@ -377,6 +378,27 @@ def test_a_3d_shot_names_its_objects_models_clips_and_carriers_before_any_render
     for text in expected:
         assert any(text in problem for problem in problems), (text, problems)
     assert tools.calls == []
+
+
+def test_stop_motion_is_optional_and_a_bad_step_writes_nothing():
+    tools = Series()
+    shots = [dict(SCRIPT["shots"][0]), {**SCRIPT["shots"][1], "motionStep": 2, "stopMotionJitter": 1.25}, dict(SCRIPT["shots"][2])]
+    apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": shots})
+    episode = tools.calls[1][1]["episode"]
+    assert "motionStep" not in episode["shots"][0]["layout2d"]
+    assert "stopMotionJitter" not in episode["shots"][0]["layout2d"]
+    assert episode["shots"][1]["layout2d"]["motionStep"] == 2
+    assert episode["shots"][1]["layout2d"]["stopMotionJitter"] == 1.25
+    quiet = Series()
+    apply_script(quiet, quiet.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "stopMotionJitter": 0}]})
+    assert "stopMotionJitter" not in quiet.calls[1][1]["episode"]["shots"][0]["layout2d"]
+    assert read_fields({"layout2d": {"motionStep": 2}}) == {"motionStep": 2}
+    assert read_fields({"layout2d": {"motionStep": 9}}) == {}
+    assert read_fields({}) == {}
+    refused = Series()
+    with pytest.raises(ScriptError, match="motionStep must be 2, 3 or 4"):
+        apply_script(refused, refused.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "motionStep": 5}]})
+    assert refused.calls == []
 
 
 def test_video_shots_keep_their_kind_clip_sound_and_cue_parts():

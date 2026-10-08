@@ -582,6 +582,8 @@ export function applyKeptSlotAssets(slot: Scene3DSlot, old: Scene3DSlot | undefi
 export function remountScene3DTemplate(id: Scene3DTemplateId, previous: Scene3DDocument, keepAssets = true): Scene3DDocument {
   const next = applyScene3DTemplate(id)
   next.playbackSpeed = previous.playbackSpeed
+  if (previous.motionStep) next.motionStep = previous.motionStep
+  if (previous.stopMotionJitter) next.stopMotionJitter = previous.stopMotionJitter
   next.clipNumber = previous.clipNumber
   next.production = previous.production ? structuredClone(previous.production) : undefined
   next.soundtrack = previous.soundtrack ? structuredClone(previous.soundtrack) : undefined

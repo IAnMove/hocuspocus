@@ -5,6 +5,7 @@ import { paintExplosion } from './explosionPaint'
 import { isWorldSfxKind } from './world'
 import { rasterizeWorldFx, SPRITE_RECT } from './explosionSprite'
 import { applyRetroLook, isRetroLook } from './retroPaint'
+import { applyEtchingLook, isEtching } from './etchingPaint'
 import { aimedPainters, stormPainters } from './stormPaint'
 import { glow } from './energyBrush'
 import { isFrameFx, paintFrameFx } from './impactPaint'
@@ -125,7 +126,7 @@ function framePainter(kind: string): FramePainter | undefined {
 
 /** Effects that work on the picture under them: an overlay canvas copies the stage first. */
 export function needsFrameSource(kind: string) {
-  return isRetroLook(kind) || kind === 'impact_invert' || blendsWithFrame(kind)
+  return isRetroLook(kind) || isEtching(kind) || kind === 'impact_invert' || blendsWithFrame(kind)
 }
 
 /** The showcase label in the cue colour, or white when that colour is too dark to read. */
@@ -192,8 +193,9 @@ export function paintSceneFx(
   const live = cues.filter(cue => seconds >= cue.start && seconds < cue.end)
   if (source && typeof ctx.drawImage === 'function' && live.some(cue => needsFrameSource(cue.kind))) ctx.drawImage(source, 0, 0, width, height)
   for (const cue of live) if (isRetroLook(cue.kind)) applyRetroLook(ctx, width, height, cue, seconds)
+  for (const cue of live) if (isEtching(cue.kind)) applyEtchingLook(ctx, width, height)
   for (const cue of live) {
-    if (isRetroLook(cue.kind)) continue
+    if (isRetroLook(cue.kind) || isEtching(cue.kind)) continue
     const time = seconds - cue.start
     const frame = framePainter(cue.kind), origin = fxOrigin(cue, layerPoint)
     if (frame) frame(ctx, cue, time, width, height)

@@ -12,6 +12,7 @@ import { paintClipNumber } from './performance'
 import { mixSceneSpeech } from './speech/audio'
 import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { FrameAccumulator, motionBlurOf, renderQualityOf, subframeTimes, type MotionBlur } from './exportQuality'
+import { heldFrameTime, holdBlock, motionStepOf, shiftHeldFrame, stopMotionJitterOf, stopMotionOffset } from '../stopMotion'
 import { checkGeometry, geometrySampleTimes, type GeometryReport, type GeometrySample } from './geometryChecks'
 import type { Scene3DDocument } from './types'
 
@@ -70,11 +71,14 @@ window.__world3dExport = {
   async frame(seconds) {
     if (!stage || !snapshot) throw new Error('Load a World3D snapshot first')
     const speed = scene3dPlaybackSpeed(snapshot.playbackSpeed)
-    const time = seconds * speed
+    const played = seconds * speed
+    const step = motionStepOf(snapshot.motionStep)
+    const time = step ? heldFrameTime(played, fps, step) : played
     const context = canvas.getContext('2d')!
     // A supersampled stage is larger than the output; scale it down with the high-quality filter.
     context.imageSmoothingQuality = 'high'
-    if (blur.subframes > 1) {
+    // A hold is one picture. Blur would smear it, so it stays on the sharp path.
+    if (blur.subframes > 1 && !step) {
       await paintBlurred(context, subframeTimes(time, blur, speed / fps, snapshot.duration))
     } else {
       await stage.prepareFrame?.(time, snapshot)
@@ -84,6 +88,8 @@ window.__world3dExport = {
     paintKineticTexts(context, canvas.width, canvas.height, time, snapshot.texts)
     paintSceneLyrics(context, canvas.width, canvas.height, time, snapshot.lyrics)
     paintClipNumber(context, canvas.width, canvas.height, snapshot.clipNumber)
+    const jitter = stopMotionJitterOf(snapshot.stopMotionJitter)
+    if (step && jitter > 0) shiftHeldFrame(context, canvas.width, canvas.height, stopMotionOffset(holdBlock(time, fps, step), jitter))
     return canvas.toDataURL('image/png')
   },
   /** The same mix as the browser export (voices, soundtrack, sound effects), as a WAV data URL; '' when silent. */

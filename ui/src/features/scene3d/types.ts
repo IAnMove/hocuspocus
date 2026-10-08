@@ -296,6 +296,10 @@ export type Scene3DDocument = {
   lyrics?: import('../../lib/kineticText').SceneLyrics
   /** Timeline rate; exported duration is duration / playbackSpeed. */
   playbackSpeed?: number
+  /** Stop-motion hold: the picture changes every 2, 3 or 4 frames. Absent, export time is unchanged. */
+  motionStep?: 2 | 3 | 4
+  /** Deterministic shake of one hold, in pixels, from 0 to 2. */
+  stopMotionJitter?: number
   templateId: Scene3DTemplateId
   camera: Scene3DCamera
   light: Scene3DLight

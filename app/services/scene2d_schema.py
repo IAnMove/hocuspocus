@@ -364,6 +364,8 @@ def _document_properties() -> dict:
         "height": _number(0, exclusive_low=True),
         "fps": _enum([24, 30, 60]),
         "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 600},
+        "motionStep": _enum([2, 3, 4]),
+        "stopMotionJitter": _number(0, 2),
         "layers": _array(_layer(), max_items=500),
         "audioTracks": _array(_object({
             "id": _string(), "filename": _string(), "name": _string(),

@@ -35,6 +35,7 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 from services.series_scene_inputs import audio_content, document_digest, scene_source_digest
+from services.series_stop_motion import read_fields
 
 QUALITIES = ("draft", "final")
 OBJECT_MEDIA = ("model3d", "image")
@@ -459,8 +460,9 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     template_id = _template(call, workspace, config, error)
     source = scene_source_digest(config, root)
     audio = audio_content(root, (line["filename"] for line in [*lines, *(tracks or [])]))
-    digest = hashlib.sha1(repr((config, template_id, source, round(duration, 3),
-                               lines, audio, sound, effects)).encode()).hexdigest()[:10]
+    held = read_fields(shot)
+    base = (config, template_id, source, round(duration, 3), lines, audio, sound, effects)
+    digest = hashlib.sha1(repr((*base, tuple(sorted(held.items()))) if held else base).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
                             talking=_talking(config, lines, series_characters), template_id=template_id)
@@ -472,4 +474,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
             revision = _talk(call, workspace, stem, scene_id, revision, entry, kit_id, spoken, error)
     published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
+    document = published.get("document")
+    if held and isinstance(document, dict):
+        published = {**published, "document": {**document, **held}}
     return {**published, "renderDigest": digest}
