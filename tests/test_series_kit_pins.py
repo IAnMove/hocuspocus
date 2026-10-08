@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 from services.character_kit_library import (
     HISTORY_REVISIONS,
+    LIPS_CREATOR_LIBRARY_FILENAME,
+    delete_character_kit,
     kit_revision_path,
     patch_character_kit,
     read_character_kit_library,
@@ -23,7 +25,7 @@ from services.series_library import (
     read_series_library,
     write_series_library,
 )
-from services.series_native_render import NativeRenderDeps, SeriesNativeRender
+from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender
 from services.series_take_inputs import render_inputs
 
 VOICE = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"}
@@ -242,3 +244,76 @@ def test_the_pin_tools_run_in_process_and_belong_to_the_series_profile(tmp_path)
             "version": 1, "input": {"workspace": "default", "series_id": series["id"], "episode_id": empty["id"]},
         }))
     assert caught.value.status_code == 422
+
+
+def _source(kits, kit_id="luma"):
+    return kits[kit_id]["poses"]["point"]["source"]
+
+
+def test_a_kit_made_again_after_a_delete_never_takes_a_pinned_number(tmp_path):
+    library = patch_character_kit(tmp_path, "luma", kit(source="first.png"), base_revision=0)
+    library = patch_character_kit(tmp_path, "luma", kit(source="second.png"), base_revision=library["revision"])
+    library = delete_character_kit(tmp_path, "luma", base_revision=library["revision"])
+    assert _source({"luma": read_kit_revision(str(tmp_path), "luma", 2)}) == "second.png", "the deleted kit is kept"
+    library = patch_character_kit(tmp_path, "luma", kit(source="again.png"), base_revision=library["revision"])
+    assert library["kits"]["luma"]["revision"] == 3
+    library = patch_character_kit(tmp_path, "luma", kit(source="later.png"), base_revision=library["revision"])
+    assert library["kits"]["luma"]["revision"] == 4
+    latest = library["kits"]
+    assert [_source(kits_for_episode(latest, {"kitPins": {"luma": revision}}, str(tmp_path))) for revision in (1, 2, 3, 4)] == [
+        "first.png", "second.png", "again.png", "later.png"]
+
+
+def test_a_kept_revision_is_never_replaced_by_another_document(tmp_path):
+    library = patch_character_kit(tmp_path, "luma", kit(source="first.png"), base_revision=0)
+    kept = tmp_path / ".character-kit-revisions" / "luma.v1.json"
+    kept.parent.mkdir()
+    kept.write_text(json.dumps(kit(source="other.png", revision=1)), encoding="utf-8")
+    with pytest.raises(ValueError, match="already kept"):
+        patch_character_kit(tmp_path, "luma", kit(source="second.png"), base_revision=library["revision"])
+    assert _source({"luma": read_kit_revision(str(tmp_path), "luma", 1)}) == "other.png"
+    assert _source(read_character_kit_library(str(tmp_path))["kits"]) == "first.png"
+
+
+def test_a_lips_pack_keeps_its_history_apart_from_a_kit_with_the_same_id(tmp_path):
+    lips = {"library_filename": LIPS_CREATOR_LIBRARY_FILENAME}
+    pack = patch_character_kit(tmp_path, "luma", kit(source="pack-1.png"), base_revision=0, **lips)
+    patch_character_kit(tmp_path, "luma", kit(source="pack-2.png"), base_revision=pack["revision"], **lips)
+    library = patch_character_kit(tmp_path, "luma", kit(source="kit-1.png"), base_revision=0)
+    library = patch_character_kit(tmp_path, "luma", kit(source="kit-2.png"), base_revision=library["revision"])
+    assert library["kits"]["luma"]["revision"] == 2
+    assert _source({"luma": read_kit_revision(str(tmp_path), "luma", 1)}) == "kit-1.png"
+    lips_history = json.loads(open(kit_revision_path(str(tmp_path), "luma", 1, LIPS_CREATOR_LIBRARY_FILENAME)).read())
+    assert _source({"luma": lips_history}) == "pack-1.png"
+
+
+def _pinned_project(tmp_path):
+    library = patch_character_kit(tmp_path, "luma", kit(source="luma-old.png", voice=VOICE), base_revision=0)
+    library = patch_character_kit(tmp_path, "luma", kit(source="luma-new.png", voice=VOICE), base_revision=library["revision"])
+    series = create_series_project("default", title="Pins")
+    series["allowedProductionMethods"] = ["animation_2d"]
+    series["characters"] = [character("ana", "luma", "Ana")]
+    held = add_episode(series, [shot("held", "ana")], "Held")
+    loose = add_episode(series, [shot("loose", "ana")], "Loose")
+    write_project(tmp_path, series)
+    pin_episode_kits(str(tmp_path), series["id"], held["id"], {"luma": 1}, workspace_name="default")
+    return library, series["id"], held["id"], loose["id"]
+
+
+def test_a_render_refuses_a_pin_whose_revision_is_gone_before_it_starts(tmp_path):
+    _library, series_id, held, _loose = _pinned_project(tmp_path)
+    (tmp_path / ".character-kit-revisions" / "luma.v1.json").unlink()
+    with pytest.raises(NativeRenderError) as refused:
+        renderer(tmp_path).start("default", series_id, held)
+    assert refused.value.code == "kit_revision_missing" and refused.value.status == 409
+    assert "luma revision 1" in str(refused.value)
+
+
+def test_a_pinned_kit_deleted_from_the_library_still_renders(tmp_path):
+    library, series_id, held, loose = _pinned_project(tmp_path)
+    delete_character_kit(tmp_path, "luma", base_revision=library["revision"])
+    render = renderer(tmp_path)
+    assert render._preflight("default", series_id, held, None, None)[2][0]["shot"]["id"] == "held"
+    with pytest.raises(NativeRenderError) as refused:
+        render._preflight("default", series_id, loose, None, None)
+    assert refused.value.code == "missing_kits"

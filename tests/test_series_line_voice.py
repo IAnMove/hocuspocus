@@ -207,3 +207,23 @@ def test_a_job_cut_by_a_restart_reads_as_interrupted(tmp_path):
     voices._store("cast").save({"jobId": "voice-old", "status": "running", "episodeId": "ep1", "beatId": "s03_d0"})
     fresh = SeriesLineVoice(render, voices.read_library, voices.read_kits)
     assert fresh.status("cast", "voice-old")["status"] == "interrupted"
+
+
+def test_a_pinned_episode_records_and_retakes_its_lines_with_the_pinned_voice(tmp_path):
+    """Kit pins (series_kit_pins) choose the kit document; a line's recording uses the same one as the render."""
+    import json
+    pinned = {"id": "kit-gary", "name": "gary", "base": {"source": "/api/v1/file/k.png", "width": 400, "height": 800},
+              "poses": {}, "voice": {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "pinned"}, "revision": 1}
+    (tmp_path / ".character-kit-revisions").mkdir()
+    (tmp_path / ".character-kit-revisions" / "kit-gary.v1.json").write_text(json.dumps(pinned), encoding="utf-8")
+    tools, render, voices = setup(tmp_path)
+    latest = voices.voices("cast", "uv", "ep1", "s03")["lines"][0]["filename"]
+    project = library()
+    project["seriesById"]["uv"]["episodesById"]["ep1"]["kitPins"] = {"kit-gary": 1}
+    voices.read_library = render.deps.read_library = lambda _workspace: project
+    listed = voices.voices("cast", "uv", "ep1", "s03")["lines"][0]
+    assert listed["filename"] != latest, "the recording is named by the pinned voice"
+    done = wait(voices, voices.start("cast", "uv", "ep1", "s03", 1)["jobId"])
+    retake = wait(voices, voices.start("cast", "uv", "ep1", "s03", 1, retake=True)["jobId"])
+    assert done["result"]["filename"] == retake["result"]["filename"] == listed["filename"]
+    assert [args["input"]["params"]["model_mode"] for args in speech_calls(tools)] == ["pinned", "pinned"]

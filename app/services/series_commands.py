@@ -382,8 +382,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "kits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}},
         ["workspace", "series_id", "episode_id"], True,
         "Pin this episode to Character Kit revisions. Without kits, pin every kit of the cast at its current "
-        "revision. With kits {kitId: revision}, pin those. The render and the shot fingerprint then use that "
-        "revision. An episode with no pins keeps using the latest kit, as it did before.",
+        "revision. With kits {kitId: revision}, pin those. The render, a line's recording and the shot fingerprint "
+        "then use that revision; a render refuses a pin whose revision is no longer kept (kit_revision_missing). "
+        "An episode with no pins keeps using the latest kit, as it did before.",
     ),
     "series.episode.kits.update": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "kit_id": ID},

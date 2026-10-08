@@ -14,8 +14,10 @@ never deletes them.
 
 An episode without ``kitPins`` renders and fingerprints the latest kit, the
 same document it used before pinning existed. With pins, both use the stored
-revision. ``series.episode.kits.update`` moves pins forward and reports the
-shots of that character that become stale.
+revision, and so do a line's recording and retake (``series_line_voice``). A
+render refuses a pin whose revision is no longer kept (``lost_pins``,
+``kit_revision_missing``) before it starts. ``series.episode.kits.update``
+moves pins forward and reports the shots of that character that become stale.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from typing import Any, Callable
 
 from services.character_kit_library import kit_revision, read_character_kit_library, read_kit_revision
 from services.series_shot_plan import kit_ref
-from services.series_take_inputs import render_inputs, stale_shot_ids
+from services.series_take_inputs import stale_shot_ids
 
 
 class KitPinError(ValueError):
@@ -55,19 +57,28 @@ def kits_for_episode(kits: dict[str, Any], episode: dict[str, Any] | None, works
         return kits
     resolved = dict(kits)
     for kit_id, revision in pins.items():
-        _use_pinned(resolved, kit_id, revision, workspace_dir)
+        found = _pinned(kits, kit_id, revision, workspace_dir)
+        if found is None:
+            # A render refuses this before it starts (``lost_pins``); a listing just has no kit for it.
+            resolved.pop(kit_id, None)
+        else:
+            resolved[kit_id] = found
     return resolved
 
 
-def _use_pinned(resolved: dict[str, Any], kit_id: str, revision: int, workspace_dir: str | None) -> None:
-    current = resolved.get(kit_id)
+def lost_pins(kits: dict[str, Any], episode: dict[str, Any] | None, workspace_dir: str | None,
+              kit_ids: set[str] | None = None) -> dict[str, int]:
+    """The pins (of ``kit_ids``, or all) whose revision is neither the live kit nor kept in the history."""
+    pins = normalize_kit_pins((episode or {}).get("kitPins")) or {}
+    return {kit_id: revision for kit_id, revision in pins.items()
+            if (kit_ids is None or kit_id in kit_ids) and _pinned(kits, kit_id, revision, workspace_dir) is None}
+
+
+def _pinned(kits: dict[str, Any], kit_id: str, revision: int, workspace_dir: str | None) -> dict[str, Any] | None:
+    current = kits.get(kit_id)
     if isinstance(current, dict) and kit_revision(current) == revision:
-        return
-    stored = read_kit_revision(workspace_dir, kit_id, revision) if workspace_dir else None
-    if stored is None:
-        resolved.pop(kit_id, None)
-        return
-    resolved[kit_id] = stored
+        return current
+    return read_kit_revision(workspace_dir, kit_id, revision) if workspace_dir else None
 
 
 def _people(shot: dict[str, Any]) -> list[str]:
@@ -92,10 +103,7 @@ def cast_kit_ids(series: dict[str, Any], episode: dict[str, Any]) -> list[str]:
 
 
 def _require_revision(kits: dict[str, Any], workspace_dir: str, kit_id: str, revision: int) -> None:
-    current = kits.get(kit_id)
-    if isinstance(current, dict) and kit_revision(current) == revision:
-        return
-    if read_kit_revision(workspace_dir, kit_id, revision) is None:
+    if _pinned(kits, kit_id, revision, workspace_dir) is None:
         raise KitPinError(f"Character kit {kit_id} has no revision {revision}", status=404)
 
 
@@ -238,7 +246,3 @@ def run_episode_kits(name: str, data: dict[str, Any], workspace_dir: Callable[[s
         return update_episode_kits(folder, data["series_id"], data["episode_id"], data.get("kit_id"), workspace_name=data["workspace"])
     raise KitPinError("Unknown kit pin operation")
 
-
-def pinned_fingerprint(series: dict, shot: dict, kits: dict, episode: dict | None, workspace_dir: str | None) -> str:
-    """The render fingerprint. With no pins this is ``render_inputs`` of the latest kits."""
-    return render_inputs(series, shot, kits_for_episode(kits, episode, workspace_dir), workspace_dir)

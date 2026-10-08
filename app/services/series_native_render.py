@@ -303,7 +303,11 @@ class SeriesNativeRender:
         series, episode = self._episode(workspace, series_id, episode_id, language)
         planned, review = self._review_passes(workspace, series, episode, wanted, explicit, language == language_key(raw_series))
         shots = [item["shot"] for item in planned if item.get("pass") != "promote"]
-        missing = self._missing_kits(workspace, series, shots)
+        lost = self._lost_pins(workspace, series, episode, shots)
+        if lost:
+            raise NativeRenderError("kit_revision_missing", f"This episode pins {lost}, which is no longer kept; pin the "
+                                    "kits again (series.episode.kits.pin or series.episode.kits.update)", 409)
+        missing = self._missing_kits(workspace, series, episode, shots)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
         voiceless = self._missing_voices(workspace, series, raw_episode, shots, language, language_key(raw_series))
@@ -348,14 +352,22 @@ class SeriesNativeRender:
         return [str(names.get(cid, cid)) for cid in speakers
                 if not ((kits.get((kit_ref(series, cid) or {}).get("id") or "") or {}).get("voicesByLanguage") or {}).get(language)]
 
-    def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
-        """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""
+    def _missing_kits(self, workspace: str, series: dict[str, Any], episode: dict, shots: list[dict[str, Any]]) -> list[str]:
+        """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast),
+        or without the revision the episode pins."""
         shots = _drawn(shots)
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         ids = dict.fromkeys(cid for shot in shots for cid in [*(shot.get("visibleCharacterIds") or []),
                                                               *(beat.get("characterId") for beat in shot.get("dialogueBeats") or [])] if cid)
         return [str(names.get(cid, cid)) for cid in ids if (kit_ref(series, cid) or {}).get("id") not in kits]
+
+    def _lost_pins(self, workspace: str, series: dict[str, Any], episode: dict, shots: list[dict[str, Any]]) -> str:
+        """The pins of the kits in ``shots`` whose revision is no longer kept, as ``kit revision N``; empty when none."""
+        from services.series_kit_pins import cast_kit_ids, lost_pins
+        kit_ids = set(cast_kit_ids(series, {"shots": _drawn(shots)}))
+        lost = lost_pins(self.deps.read_kits(workspace), episode, self.deps.workspace_dir(workspace), kit_ids)
+        return ", ".join(f"{kit_id} revision {revision}" for kit_id, revision in lost.items())
 
     def _launch(self, workspace: str, job: dict) -> None:
         """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
