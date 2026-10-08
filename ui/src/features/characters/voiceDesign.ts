@@ -31,14 +31,14 @@ export type DesignedVoice = {
 
 /** A description sets the pitch range qa.speech warns about.
 
-Child words win, so boy, girl, niño and niña are 220–400 Hz. chico and chica stay
+The first word that names a man, a woman or a child decides, as the hint asks the
+description to start with the voice: a later «casado con una mujer» or «de niño»
+names someone else. boy, girl, niño and niña are 220–400 Hz; chico and chica stay
 adult. No matching word means the take is not checked. */
 export function expectedPitch(description: string): [number, number] | undefined {
-  const text = description.toLowerCase()
-  if (/\b(child|children|boy|girl|niño|niña|nino|nina)\b/u.test(text)) return [220, 400]
-  if (/\b(female|woman|mujer|femenina|chica)\b/u.test(text)) return [165, 255]
-  if (/\b(male|man|hombre|masculina|masculino|chico)\b/u.test(text)) return [85, 155]
-  return undefined
+  const found = /\b(?:(child|children|boy|girl|niño|niña|nino|nina)|(female|woman|mujer|femenina|chica)|(male|man|hombre|masculina|masculino|chico))\b/iu.exec(description)
+  if (!found) return undefined
+  return found[1] ? [220, 400] : found[2] ? [150, 320] : [75, 175]
 }
 
 export type VoiceDesignDependencies = {

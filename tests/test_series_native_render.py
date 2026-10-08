@@ -646,6 +646,77 @@ def test_a_high_male_voice_and_a_seseo_warn_without_another_take(tmp_path):
     assert [name for name, _args in tools.calls].count("qa.accent") == 1
 
 
+def _castilian_render(tmp_path, monkeypatch, wav2vec2):
+    """A Castilian line rendered with the real ``qa.accent`` on a 44.1 kHz stereo take; ``wav2vec2`` stands in
+    for the phoneme model's process, the only part replaced."""
+    from services import phoneme_analysis, speech_analysis_cache
+    from services.local_mcp import LocalMcp
+    from services.qa_accent import command_handlers as accent_handlers
+    from tests.test_speech_qa import spoken, write_wav
+    monkeypatch.setenv("SPEECH_ANALYSIS_CACHE_DIR", str(tmp_path / "speech-cache"))
+    speech_analysis_cache.reset_runtime_state()
+    monkeypatch.setattr(phoneme_analysis, "_worker", lambda pcm, dialogue, language: wav2vec2(pcm, dialogue, spoken))
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    project["seriesById"]["uv"]["characters"][1]["voiceProfile"]["accent"] = "castilian"
+    project["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "Zaragoza, cerca y zapato."}]
+    accent = LocalMcp(lambda: accent_handlers(lambda _ws: str(tmp_path)))
+
+    def call(name, arguments):
+        if name == "qa.accent":
+            return accent.call(name, arguments)
+        answer = tools(name, arguments)
+        if name == "generation.speech" and not answer.get("_is_error"):
+            write_wav(tmp_path / answer["_name"], rate=44100, channels=2, seconds=1.25)
+        return answer
+
+    render = service(tmp_path, tools, compiled)
+    render.deps.call = call
+    render.deps.read_library = lambda _ws: project
+    return finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+
+
+def test_a_castilian_line_recorded_at_44_1_khz_stereo_is_checked_for_seseo(tmp_path, monkeypatch):
+    import io
+    import json
+    import wave
+    decoded = []
+
+    def wav2vec2(pcm, dialogue, spoken):
+        with wave.open(io.BytesIO(pcm)) as audio:
+            decoded.append((audio.getnchannels(), audio.getframerate()))
+        aligned, heard = spoken("Zaragoza cerca y zapato", theta="s")
+        return json.dumps({"phonemes": aligned if dialogue else heard}).encode()
+
+    done = _castilian_render(tmp_path, monkeypatch, wav2vec2)
+    assert done["status"] == "completed", done
+    assert done["items"][0]["lines"]["s03_d0"]["accent_seseo"] == {"thetaRate": 0.0, "positions": 4, "verdict": "seseo"}
+    assert decoded == [(1, 16000), (1, 16000)], "recognized and forced passes both read mono 16 kHz"
+
+
+def test_an_accent_check_that_cannot_run_leaves_the_line_without_a_note(tmp_path, monkeypatch):
+    from services.scene3d_speech import SpeechAnalysisUnavailable
+
+    def wav2vec2(_pcm, _dialogue, _spoken):
+        raise SpeechAnalysisUnavailable("CPU phoneme alignment failed; check the local runtime and transcript.")
+
+    done = _castilian_render(tmp_path, monkeypatch, wav2vec2)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert done["status"] == "completed" and line["attempt"] == 0 and "accent_seseo" not in line
+
+
+def test_an_accent_check_that_raises_does_not_fail_the_take(tmp_path):
+    from services.speech_text_es import qa_verdict
+
+    def call(name, _arguments):
+        if name == "qa.accent":
+            raise RuntimeError("the phoneme worker crashed")
+        return {"result": {"wer": 0.0, "wer_threshold": 0.15}}
+
+    assert qa_verdict(call, "cast", "take.wav", "Zaragoza.", "es", {"accent": "castilian"}, 0.34) == (0.0, 0.34, {})
+
+
 def _silent(seconds):
     return {"id": "s1", "order": 0, "productionMethod": "animation_2d", "durationSeconds": seconds,
             "dialogueBeats": [], "layout2d": {}}

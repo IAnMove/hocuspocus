@@ -6,6 +6,7 @@ string, which is the written line unless the dictionary changes it.
 """
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from typing import Any
@@ -126,9 +127,16 @@ def line_notes(series: dict, beat: dict, voice: dict) -> dict:
 
 
 def _accent_warning(call, workspace: str, filename: str, text: str) -> dict[str, Any] | None:
-    """The seseo warning, or None when the take is Castilian, unknown, or the tool did not answer."""
-    checked = call("qa.accent", {"version": 1, "input": {
-        "workspace": workspace, "file": filename, "text": text, "accent": "castilian"}})
+    """The seseo warning, or None when the take is Castilian, unknown, or the check failed.
+
+    The check only warns, so its failure never fails the take.
+    """
+    try:
+        checked = call("qa.accent", {"version": 1, "input": {
+            "workspace": workspace, "file": filename, "text": text, "accent": "castilian"}})
+    except Exception as error:  # the take is kept without the accent note
+        logging.getLogger(__name__).warning("Accent check skipped for %s: %s", filename, error)
+        return None
     if not isinstance(checked, dict) or checked.get("_is_error"):
         return None
     found = checked.get("result") if isinstance(checked.get("result"), dict) else {}

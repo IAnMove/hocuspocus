@@ -3,9 +3,9 @@
 Phonemes come from the wav2vec2 model in ``phoneme_runtime`` (the same weights
 the lip-sync uses). Recognition is free, not forced onto the script: a forced
 alignment would label the expected phonemes and hide a seseo. The transcript
-pass is used only for word times. θ and s heard inside each word are what count.
-θ is in that model's vocabulary. Words with ``z`` or ``c`` before e/i are the
-positions.
+pass is used only for times: each θ letter is timed by its own phone there, and
+the θ or s heard at that time is what counts. θ is in that model's vocabulary.
+Words with ``z`` or ``c`` before e/i are the positions.
 """
 from __future__ import annotations
 
@@ -82,63 +82,77 @@ def _seconds(value: Any, default: float = 0.0) -> float:
     return float(value)
 
 
-def _word_spans(aligned: list) -> list[tuple[str, float, float]]:
-    """One ``(word, start, end)`` for each run of forced-alignment phones."""
-    spans: list[tuple[str, float, float]] = []
-    phones = [item for item in aligned or [] if isinstance(item, dict)]
-    index = 0
-    while index < len(phones):
-        word = phones[index].get("word")
+def _word_runs(aligned: list) -> list[tuple[str, list[dict]]]:
+    """``(word, phones)`` for each run of forced-alignment phones of one word."""
+    runs: list[tuple[str, list[dict]]] = []
+    previous = None
+    for phone in aligned or []:
+        word = phone.get("word") if isinstance(phone, dict) else None
         if not isinstance(word, str) or not word.strip():
-            index += 1
+            previous = None
             continue
-        start = _seconds(phones[index].get("start"))
-        end = _seconds(phones[index].get("end"), start)
-        index += 1
-        while index < len(phones) and phones[index].get("word") == word:
-            end = _seconds(phones[index].get("end"), end)
-            index += 1
-        spans.append((word, start, end))
-    return spans
+        if word != previous:
+            runs.append((word, []))
+        runs[-1][1].append(phone)
+        previous = word
+    return runs
 
 
-def _sibilants_between(heard: list, start: float, end: float) -> list[str]:
-    found: list[str] = []
+def _sibilant_letters(word: str) -> list[bool]:
+    """Each s, x, z and c before e/i of a word in reading order; True where it spells θ.
+
+    Castilian eSpeak says each of them with one s or θ phone (x is k s), so these
+    line up one to one with the word's sibilant phones in the forced alignment.
+    """
+    folded = _fold(word)
+    letters: list[bool] = []
+    for index, char in enumerate(folded):
+        nxt = folded[index + 1] if index + 1 < len(folded) else ""
+        theta = char == "z" or (char == "c" and nxt in "ei")
+        if theta or char in "sx":
+            letters.append(theta)
+    return letters
+
+
+def _heard_over(heard: list, start: float, end: float) -> str:
+    """The θ or s heard longest between ``start`` and ``end``, or "" when none overlaps."""
+    found, longest = "", 0.0
     for phone in heard or []:
         if not isinstance(phone, dict):
             continue
         kind = _kind(phone.get("phoneme"))
-        if not kind:
-            continue
         begin = _seconds(phone.get("start"))
-        finish = _seconds(phone.get("end"), begin)
-        if finish > start and begin < end:
-            found.append(kind)
+        overlap = min(_seconds(phone.get("end"), begin), end) - max(begin, start)
+        if kind and overlap > longest:
+            found, longest = kind, overlap
     return found
 
 
-def tag_sites(text: str, heard: list | None, aligned: list | None) -> list[dict[str, str]]:
-    """One heard θ or s per orthographic site, timed by the forced word span.
+def _theta_phones(word: str, phones: list[dict]) -> list[dict]:
+    """The forced phones of the word's θ letters, or [] when its sibilant phones do not line up with its letters."""
+    letters = _sibilant_letters(word)
+    sibilants = [phone for phone in phones if _kind(phone.get("phoneme"))]
+    if [_kind(phone.get("phoneme")) == "theta" for phone in sibilants] != letters:
+        return []
+    return [phone for phone, theta in zip(sibilants, letters) if theta]
 
-    An ``s`` in a word that has no ``z`` or ``c`` + e/i is ignored. A second ``z``
-    in the same word takes the next sibilant inside that word.
+
+def tag_sites(text: str, heard: list | None, aligned: list | None) -> list[dict[str, str]]:
+    """One heard θ or s per θ letter, timed by that letter's own phone in the forced alignment.
+
+    The s of «es» in «estación» is not taken for the θ of «ción». A word whose
+    sibilant phones do not line up with its letters is left out, so it is not counted.
     """
-    sites = theta_sites(text)
+    wanted = {_fold(site) for site in theta_sites(text)}
     tagged: list[dict[str, str]] = []
-    cursor = 0
-    for word, start, end in _word_spans(aligned or []):
-        folded = _fold(word)
-        count = 0
-        while cursor + count < len(sites) and _fold(sites[cursor + count]) == folded:
-            count += 1
-        if not count:
+    for word, phones in _word_runs(aligned or []):
+        if _fold(word) not in wanted:
             continue
-        kinds = _sibilants_between(heard or [], start, end)
-        for offset, site in enumerate(sites[cursor:cursor + count]):
-            if offset >= len(kinds):
-                break
-            tagged.append({"phoneme": "θ" if kinds[offset] == "theta" else "s", "word": site})
-        cursor += count
+        for phone in _theta_phones(word, phones):
+            start = _seconds(phone.get("start"))
+            kind = _heard_over(heard or [], start, _seconds(phone.get("end"), start))
+            if kind:
+                tagged.append({"phoneme": "θ" if kind == "theta" else "s", "word": word})
     return tagged
 
 
@@ -157,8 +171,13 @@ def score_accent(text: str, phonemes: list | None) -> dict[str, Any]:
 
 
 def measure_accent(path: str, text: str, *, decode: Callable[[bytes, str], list]) -> dict[str, Any]:
-    """Read a workspace take and score it. ``decode`` is injected in tests so the model stays unloaded."""
-    return score_accent(text, decode(Path(path).read_bytes(), text))
+    """Score a workspace take. ``decode`` is injected in tests so the model stays unloaded.
+
+    The phoneme model reads only mono 16 kHz PCM WAV and render takes are 44.1 kHz,
+    so the take is converted first, as ``audio.mouth_cues`` does.
+    """
+    from services.speech_file_commands import _probe_duration, _window_wav
+    return score_accent(text, decode(_window_wav(path, 0, _probe_duration(path)), text))
 
 
 def _phones(payload: Any) -> list:
@@ -200,10 +219,12 @@ def command_handlers(workspace_dir: Callable[[str], str], decode: Callable[[byte
     recognize = decode or _recognize
 
     async def handle(arguments: Any) -> dict[str, Any]:
+        import subprocess
         import uuid
         from fastapi import HTTPException
         from starlette.concurrency import run_in_threadpool
         from services import resource_scheduler
+        from services.scene3d_speech import SpeechAnalysisUnavailable
         from services.speech_qa import _workspace_file
         data = (arguments or {}).get("input") if isinstance(arguments, dict) else None
         if not isinstance(data, dict) or not all(isinstance(data.get(key), str) and data.get(key) for key in ("workspace", "file", "text")):
@@ -216,6 +237,14 @@ def command_handlers(workspace_dir: Callable[[str], str], decode: Callable[[byte
             with resource_scheduler.coordinator.acquire(resource_scheduler.cpu_lane("audio-analysis"),
                                                         task_id=f"accent-qa-{uuid.uuid4().hex}", description="Accent check"):
                 return measure_accent(str(path), data["text"], decode=recognize)
-        return {"version": 1, "status": "completed", "operation": OPERATION, "result": await run_in_threadpool(run)}
+        # A take that cannot be decoded or analyzed is a tool error, which a render reads as no warning.
+        try:
+            result = await run_in_threadpool(run)
+        except SpeechAnalysisUnavailable as exc:
+            raise HTTPException(503, {"code": "speech_unavailable", "message": str(exc), "retryable": True}) from exc
+        except (ValueError, KeyError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            raise HTTPException(422, {"code": "accent_analysis_failed", "message": f"The take could not be analyzed: {exc}"[:300],
+                                      "retryable": False}) from exc
+        return {"version": 1, "status": "completed", "operation": OPERATION, "result": result}
 
     return {OPERATION: handle}

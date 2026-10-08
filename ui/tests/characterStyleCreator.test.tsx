@@ -86,11 +86,15 @@ test('a keyed candidate records a rig check that says the eyes are small, and a 
 })
 
 test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
-  assert.deepEqual(expectedPitch('Male voice. Calm.'), [85, 155])
-  assert.deepEqual(expectedPitch('Voz de mujer joven'), [165, 255])
+  assert.deepEqual(expectedPitch('Male voice. Calm.'), [75, 175])
+  assert.deepEqual(expectedPitch('Voz de mujer joven'), [150, 320])
   assert.deepEqual(expectedPitch('A small boy'), [220, 400])
-  assert.deepEqual(expectedPitch('chica joven'), [165, 255])
+  assert.deepEqual(expectedPitch('chica joven'), [150, 320])
   assert.equal(expectedPitch('A robot'), undefined)
+  // The first word names the voice; a later one names someone else.
+  assert.deepEqual(expectedPitch('Voz de hombre maduro, casado con una mujer'), [75, 175])
+  assert.deepEqual(expectedPitch('Male voice. Hoarse; he has smoked since he was a boy.'), [75, 175])
+  assert.deepEqual(expectedPitch('Voz de niña. Imita a su madre, una mujer seria.'), [220, 400])
   const submitted: Record<string, unknown>[] = [], checked: unknown[] = []
   let seed = 1
   const voices = await designVoiceCandidates({
@@ -107,7 +111,7 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   assert.deepEqual(submitted.map(params => params.seed), [1, 2, 3])
   assert.ok(submitted.every(params => params.model_type === VOICE_DESIGN_MODEL && params.alt_prompt === 'Male voice. Low and slow.'
     && params.model_mode === 'spanish' && params.prompt === 'Hola. Esta es mi voz.'))
-  assert.deepEqual((checked[0] as { pitchRange: number[] }).pitchRange, [85, 155])
+  assert.deepEqual((checked[0] as { pitchRange: number[] }).pitchRange, [75, 175])
   assert.ok(voices.every(voice => voice.status === 'ready'))
   assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }), {
     provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: 'Kevin (spanish)',

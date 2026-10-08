@@ -1,5 +1,8 @@
 """A spoken take is measured against its text: transcript, error rate, pitch, pace and silence."""
 import asyncio
+import io
+import re
+import wave
 
 import numpy as np
 import pytest
@@ -8,7 +11,7 @@ from fastapi import HTTPException
 from services.qa_accent import command_catalog as accent_catalog, command_handlers as accent_handlers, score_accent, tag_sites
 from services.speech_qa import command_catalog, command_handlers, measure_speech, word_error_rate, words
 from services.speech_text_es import dictionary_map, merge_names, phonetic_es, pronounce, token_error_rate, wer_threshold
-from services.voice_pitch import inferred_range, pitch_notice
+from services.voice_pitch import inferred_range, pitch_notice, range_for, voice_checks
 
 
 def test_numbers_accents_and_punctuation_do_not_count_as_errors():
@@ -113,11 +116,11 @@ def test_a_wrong_one_word_line_is_never_accepted():
     assert (half["wer"], half["wer_threshold"], half["warnings"]) == (0.5, 0.5, [])
 
 
-def test_pitch_ranges_follow_the_description_and_a_high_male_voice_warns():
-    assert inferred_range("A calm male voice") == (85.0, 155.0)
-    assert inferred_range("Voz de mujer joven") == (165.0, 255.0)
+def test_pitch_ranges_follow_the_gender_field_and_a_high_male_voice_warns():
+    assert inferred_range("male") == (75.0, 175.0)
+    assert inferred_range("Mujer") == (150.0, 320.0)
     assert inferred_range("A small boy") == (220.0, 400.0)
-    assert inferred_range("chica joven") == (165.0, 255.0)
+    assert inferred_range("chica joven") == (150.0, 320.0)
     assert inferred_range("a robot") is None
     # Bolívar was measured at 184 Hz and read as a man: that is outside 85–155 and only warns.
     assert pitch_notice(184, (85, 155)) == {"medianHz": 184.0, "range": [85.0, 155.0]}
@@ -128,6 +131,19 @@ def test_pitch_ranges_follow_the_description_and_a_high_male_voice_warns():
     assert high["wer"] == 0
     assert high["pitch_out_of_range"] == {"medianHz": 200.0, "range": [85.0, 155.0]}
     assert any("200 Hz" in warning for warning in high["warnings"])
+
+
+def test_the_character_description_does_not_choose_the_pitch_range():
+    def checked(**character):
+        series = {"characters": [{"id": "blas", **character}]}
+        return voice_checks(series, {"characterId": "blas"}, {"voiceId": "ryan"}).get("pitchRange")
+
+    # These words name someone else: a wife, a childhood.
+    assert checked(voiceAndDialogue="Habla despacio", personality="Viudo, casado con una mujer de Cádiz") is None
+    assert checked(personality="De niño rezaba.", voiceProfile={"accent": "castilian"}) is None
+    assert checked(voiceProfile={"gender": "hombre"}, personality="casado con una mujer") == [75.0, 175.0]
+    assert checked(voiceProfile={"gender": "mujer", "pitchRange": [140, 200]}) == [140.0, 200.0]
+    assert range_for({"gender": "niña"}) == (220.0, 400.0) and range_for({}) is None
 
 
 def test_a_200_hz_sine_is_outside_an_adult_mans_range(tmp_path):
@@ -160,31 +176,79 @@ def test_accent_counts_theta_and_is_unknown_below_three_positions(tmp_path):
     assert score_accent("El zapato.", [_heard("zapato", "θ")])["verdict"] == "unknown"
     assert score_accent("El zapato.", [_heard("zapato", "θ")])["positions"] == 1
     (tmp_path / "ws").mkdir()
-    (tmp_path / "ws" / "take.wav").write_bytes(b"RIFFxxxx")
-    handle = accent_handlers(lambda name: str(tmp_path / name), decode=lambda _data, _text: seseo)["qa.accent"]
+    write_wav(tmp_path / "ws" / "take.wav", rate=44100, channels=2)  # a render take is 44.1 kHz
+    decoded = []
+
+    def decode(data, _text):
+        with wave.open(io.BytesIO(data)) as audio:
+            decoded.append((audio.getnchannels(), audio.getframerate(), audio.getsampwidth()))
+        return seseo
+
+    handle = accent_handlers(lambda name: str(tmp_path / name), decode=decode)["qa.accent"]
     result = asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "take.wav", "text": text, "accent": "castilian"}}))
     assert result["result"]["verdict"] == "seseo" and accent_catalog()[0]["mutation"] is False
+    assert decoded == [(1, 16000, 2)], "the phoneme model reads mono 16 kHz PCM only"
     with pytest.raises(HTTPException) as rejected:
         asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "take.wav", "text": text, "accent": "other"}}))
     assert rejected.value.status_code == 422
+    (tmp_path / "ws" / "broken.wav").write_bytes(b"RIFFxxxx")
+    with pytest.raises(HTTPException) as broken:
+        asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "broken.wav", "text": text, "accent": "castilian"}}))
+    assert broken.value.status_code == 422 and broken.value.detail["code"] == "accent_analysis_failed"
+
+
+def write_wav(path, *, rate: int, channels: int, seconds: float = 1.0) -> None:
+    tone = (0.2 * np.sin(2 * np.pi * 180 * np.arange(int(rate * seconds)) / rate) * 32767).astype(np.int16)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(channels)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(np.repeat(tone, channels).tobytes())
+
+
+# Castilian eSpeak for each word, as the forced alignment labels it.
+ESPEAK_ES = {"Zaragoza": "θ a ɾ a ɣ o θ a", "cerca": "θ e ɾ k a", "y": "i", "zapato": "θ a p a t o",
+             "estación": "e s t a θ j o n", "sucesos": "s u θ e s o s", "presidencia": "p ɾ e s i ð ɛ n θ j a",
+             "excepción": "e k s θ e p θ j o n"}
+
+
+def spoken(text: str, theta: str = "θ", lag: float = 0.02) -> tuple[list, list]:
+    """The forced phones of ``text`` (with words) and the phones heard (no words, a little later).
+
+    Each phone lasts 0.1 s. The speaker says ``theta`` where eSpeak has θ: «s» for a seseo.
+    """
+    aligned, heard, clock = [], [], 0.0
+    for word in re.findall(r"\w+", text):
+        for phone in ESPEAK_ES[word].split():
+            aligned.append({"phoneme": phone, "word": word, "start": round(clock, 2), "end": round(clock + 0.1, 2)})
+            heard.append({"phoneme": theta if phone == "θ" else phone, "start": round(clock + lag, 2), "end": round(clock + 0.1 + lag, 2)})
+            clock += 0.1
+    return aligned, heard
+
+
+def test_theta_is_taken_from_its_own_letter_not_from_an_s_in_the_same_word():
+    text = "estación, sucesos, presidencia"
+    aligned, heard = spoken(text)
+    assert score_accent(text, tag_sites(text, heard, aligned)) == {"thetaRate": 1.0, "positions": 3, "verdict": "castilian"}
+    aligned, heard = spoken(text, theta="s")
+    assert score_accent(text, tag_sites(text, heard, aligned)) == {"thetaRate": 0.0, "positions": 3, "verdict": "seseo"}
+    # x is k s, so «excepción» has an s before its two θ.
+    aligned, heard = spoken("excepción")
+    assert [site["phoneme"] for site in tag_sites("excepción", heard, aligned)] == ["θ", "θ"]
 
 
 def test_theta_is_taken_from_the_word_that_spells_it_not_from_a_nearby_s():
     text = "Zaragoza, cerca y zapato."
-    aligned = [
-        {"phoneme": "s", "word": "Zaragoza", "start": 0.0, "end": 0.3},
-        {"phoneme": "a", "word": "Zaragoza", "start": 0.3, "end": 1.0},
-        {"phoneme": "s", "word": "cerca", "start": 1.2, "end": 1.5},
-        {"phoneme": "a", "word": "cerca", "start": 1.5, "end": 2.0},
-        {"phoneme": "i", "word": "y", "start": 2.0, "end": 2.3},
-        {"phoneme": "s", "word": "zapato", "start": 2.4, "end": 2.7},
-    ]
-    heard = [
-        {"phoneme": "θ", "start": 0.05, "end": 0.2},
-        {"phoneme": "θ", "start": 0.6, "end": 0.8},
-        {"phoneme": "s", "start": 1.3, "end": 1.45},
-        {"phoneme": "s", "start": 2.05, "end": 2.2},
-        {"phoneme": "θ", "start": 2.5, "end": 2.65},
-    ]
+    aligned, heard = spoken(text)
+    cerca = next(index for index, phone in enumerate(aligned) if phone["word"] == "cerca")
+    heard[cerca] = {**heard[cerca], "phoneme": "s"}  # «cerca» said with s
+    y = next(phone for phone in aligned if phone["word"] == "y")
+    heard.append({"phoneme": "s", "start": y["start"], "end": y["end"]})  # an s over «y», which spells no θ
     scored = score_accent(text, tag_sites(text, heard, aligned))
     assert scored == {"thetaRate": 0.75, "positions": 4, "verdict": "castilian"}
+
+
+def test_a_word_whose_phones_do_not_line_up_with_its_letters_is_left_out():
+    aligned, heard = spoken("estación sucesos zapato")
+    without_s = [phone for phone in aligned if not (phone["word"] == "estación" and phone["phoneme"] == "s")]
+    assert [site["word"] for site in tag_sites("estación sucesos zapato", heard, without_s)] == ["sucesos", "zapato"]

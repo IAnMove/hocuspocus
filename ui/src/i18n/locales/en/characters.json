@@ -653,7 +653,7 @@
     }
   },
   "voiceDesigner": {
-    "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice. The pitch check is 85–155 Hz for a man, 165–255 for a woman and 220–400 for a child.",
+    "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice. The pitch check follows the first word that names a man, a woman or a child: 75–175 Hz for a man, 150–320 for a woman and 220–400 for a child.",
     "missing": "Voice design needs these models: {{models}}.",
     "download": "Download",
     "downloading": "Download started. Try again when it finishes.",
