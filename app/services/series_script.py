@@ -39,11 +39,12 @@ from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
 from services.series_shot_foley import normalize_foley
-from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, language_key
+from services.series_document_card import layout_document, stored_document
+from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
 from services.series_voice_rooms import PRESETS
 
 CODES = {key: code for code, key in LANGUAGE_KEYS.items()}
-CARD_KINDS = ("title", "disclaimer", "end")
+CARD_KINDS = ("title", "disclaimer", "end", "document")
 # kind "video": a take imported with series.asset.import as_take; "generated": a MiniMax H3 take. Both get the shot's
 # sfx and music at the cut (services/series_take_sound.py).
 METHODS = {"3d": "animation_3d", "video": "imported_video", "generated": "generated_video"}
@@ -140,6 +141,7 @@ class EpisodeScript:
         self.series, self.script, self.number = series, script, number
         self.original = language_key(series)
         self.checker = Checker(series, kits, files, root)
+        self.warnings: list[dict[str, str]] = []
         self.scenes = {str(scene.get("id")): scene for scene in script.get("scenes") or [] if isinstance(scene, dict)}
         self.languages = self._languages()
 
@@ -177,6 +179,7 @@ class EpisodeScript:
         self._check_lines(shot, where)
         self._check_files(shot, where)
         self._check_effects(shot, where)
+        self._check_document(index, shot, where)
         self._check_layers(shot, where)
 
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
@@ -244,6 +247,22 @@ class EpisodeScript:
             self.checker.file(config["scene"], f"{where} scene3d")
         problems += [f"{where}: {problem}" for problem in scene3d_problems(shot.get("scene3d"), self.checker.root)]
 
+    def _check_document(self, index: int, shot: dict[str, Any], where: str) -> None:
+        """A document card's style and reveal are refused when they are unknown. Text that cannot fit at the
+        readable minimum is a warning (``document_text_too_long``) and still writes."""
+        card = shot.get("card")
+        if not isinstance(card, dict) or card.get("kind") != "document":
+            return
+        try:
+            stored = stored_document({**card, **self._card(card, self.original)})
+        except ValueError as error:
+            self.checker.problems.append(f"{where}: {error}")
+            return
+        width, height = frame_size(self.series)
+        if not layout_document(stored, width=width, height=height)["fits"]:
+            self.warnings.append({"code": "document_text_too_long", "shot": self.shot_id(index),
+                                  "message": "The document does not fit at the minimum readable size."})
+
     def _check_layers(self, shot: dict[str, Any], where: str) -> None:
         """Set layers (a shot's own list replaces its location's; [] turns them off) and the cast's depth among them."""
         try:
@@ -264,6 +283,12 @@ class EpisodeScript:
         title, body = (list(_pick(texts, language) or ["", ""]) + ["", ""])[:2]
         return {"title": str(title), "body": str(body)}
 
+    def _stored_card(self, card: dict[str, Any]) -> dict[str, Any]:
+        texts = self._card(card, self.original)
+        if card.get("kind") != "document":
+            return {"kind": card.get("kind"), **texts}
+        return stored_document({**card, **texts})
+
     def _layout(self, shot: dict[str, Any]) -> dict[str, Any]:
         layout: dict[str, Any] = {"framing": shot.get("framing", "wide"), "camera": shot.get("camera", "static")}
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
@@ -274,7 +299,7 @@ class EpisodeScript:
                 layout[key] = shot[key]
         layout.update(layout_layers(shot, "layout2d"))
         if isinstance(shot.get("card"), dict):
-            layout["card"] = {"kind": shot["card"].get("kind"), **self._card(shot["card"], self.original)}
+            layout["card"] = self._stored_card(shot["card"])
         music = shot.get("music") if isinstance(shot.get("music"), dict) else None
         if music:
             original = music.get(CODES.get(self.original, "")) or music.get(self.original) or music.get("file")
@@ -364,7 +389,8 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     built.check()
     shots = built.shots()
     summary = {"number": number, "shots": [shot["id"] for shot in shots], "original": built.original, "languages": built.languages,
-               **keep_look_room(series, kits, shots, root)}
+               **keep_look_room(series, kits, shots, root),
+               **({"warnings": built.warnings} if built.warnings else {})}
     if check_only:
         return {"checked": True, **summary}
     tool = _tool_caller(call, workspace, series["id"])

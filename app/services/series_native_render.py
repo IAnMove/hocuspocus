@@ -52,6 +52,7 @@ from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_sound_cuts import materialize_cuts
 from services.series_video_foley import VIDEO_METHODS, pending_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
+from services.series_document_card import DocumentCardError, document_plate
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.series_take_inputs import render_inputs, stale_shot_ids
 from services.series_voice_rooms import RoomError, apply_room, roomed
@@ -695,6 +696,13 @@ class SeriesNativeRender:
         first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
         spec = build_shot_spec(series, episode, shot, workspace=workspace, recorded=self._heard(workspace, series, shot, item["lines"]),
                                first_of_scene=first)
+        try:
+            plate = document_plate(self.deps.workspace_dir(workspace), shot, spec)
+        except DocumentCardError as error:
+            raise NativeRenderError("document_card", str(error), 502) from error
+        if plate:
+            spec["background"] = plate
+            spec["texts"] = []
         root = self.deps.workspace_dir(workspace)
         self._balance(root, spec)
         measure_props(spec, root)
