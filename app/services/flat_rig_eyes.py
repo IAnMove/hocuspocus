@@ -122,9 +122,14 @@ def _small_face_eyes(rgb: np.ndarray, alpha: np.ndarray):
     return None
 
 
+def light_sclera(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    """Pixels light enough to be sclera: every channel above 218, and nearly opaque."""
+    return (rgb.min(axis=2) > 218) & (alpha > 200)
+
+
 def _eye_components(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float):
     height, width = alpha.shape
-    white = (rgb.min(axis=2) > 218) & (alpha > 200)
+    white = light_sclera(rgb, alpha)
     white[int(height * top_fraction):] = False
     labels, parts = _components(_open(white, 2))
     parts = _split_touching(labels, parts)

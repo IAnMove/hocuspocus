@@ -166,6 +166,21 @@ export async function previewFlatRigMouth(details: { workspace: string; kitId: s
   }, 'Could not preview the mouths', details.signal)
 }
 
+export type RigCheckReason = 'eyes_small' | 'eyes_not_found' | 'sclera_dark' | 'mouth_not_found' | 'face_low_confidence'
+
+/** Whether one keyed pose can be rigged (characters.rig.check). Nothing is painted or saved. */
+export type RigCheck = {
+  ready: boolean
+  reasons: RigCheckReason[]
+  face: { box: [number, number, number, number] | null; confidence: number }
+}
+
+export async function checkRigPose(details: { workspace: string; source: string; signal?: AbortSignal }): Promise<RigCheck> {
+  return postJson('/api/v1/character-kits/rig-check', {
+    workspace: details.workspace, source: details.source,
+  }, 'Could not check the pose', details.signal)
+}
+
 export type SpeechCheck = {
   transcript: string
   wer: number

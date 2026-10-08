@@ -172,6 +172,19 @@ def test_the_agent_trail_names_the_rigged_kit_and_leaves_previews_out():
     assert _operation_schema("characters.rig.flat.preview", *preview)["mutation"] is False
 
 
+def test_checking_a_pose_posts_the_rig_check_and_saves_nothing(tmp_path):
+    from services.series_commands import _operation_schema
+    report = {"ready": False, "reasons": ["eyes_small"], "face": {"box": [1, 2, 30, 40], "confidence": 0.4}}
+    handlers, calls, _, _ = harness(tmp_path, [report])
+    result = call(handlers, "characters.rig.check", {"workspace": "series", "source": "/api/v1/file/pose.png?workspace=series"})
+    method, url, body = calls[0]
+    assert (method, url) == ("POST", "http://127.0.0.1:9/api/v1/character-kits/rig-check")
+    assert body == {"workspace": "series", "source": "/api/v1/file/pose.png?workspace=series"}
+    assert result["result"] == report
+    assert OPERATIONS["characters.rig.check"][2] is False
+    assert _operation_schema("characters.rig.check", *OPERATIONS["characters.rig.check"])["mutation"] is False
+
+
 def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [])
     listed = call(handlers, "characters.styles", {})["result"]

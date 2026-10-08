@@ -9,7 +9,7 @@ _EXTERNAL = {
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
     "studio.key",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard",
-    "characters.list", "characters.get", "characters.save",
+    "characters.list", "characters.get", "characters.save", "characters.rig.check",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
     "media.options", "scenes.assets.inspect",
 }

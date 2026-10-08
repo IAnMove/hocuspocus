@@ -29,6 +29,13 @@ function Candidates({ candidates, picked, onPick, disabled }: {
   candidates: KeyedCandidate[]; picked?: string; onPick: (candidate: KeyedCandidate) => void; disabled: boolean
 }) {
   const { t } = useUiTranslation('characters')
+  const rigReasons: Record<string, string> = {
+    eyes_small: t('styleCreator.rigReasons.eyes_small'),
+    eyes_not_found: t('styleCreator.rigReasons.eyes_not_found'),
+    sclera_dark: t('styleCreator.rigReasons.sclera_dark'),
+    mouth_not_found: t('styleCreator.rigReasons.mouth_not_found'),
+    face_low_confidence: t('styleCreator.rigReasons.face_low_confidence'),
+  }
   return <div className="grid grid-cols-3 gap-2" data-testid="character-candidates">
     {candidates.map((candidate, index) => <button key={candidate.id} type="button" disabled={disabled || candidate.status !== 'ready'}
       onClick={() => onPick(candidate)} aria-pressed={picked === candidate.id} aria-label={t('styleCreator.option', { number: index + 1 })}
@@ -42,6 +49,8 @@ function Candidates({ candidates, picked, onPick, disabled }: {
         : null}
       {candidate.status === 'failed' && <span role="alert" className="absolute inset-x-1 bottom-1 rounded bg-red-950/80 p-1 text-[11px] text-red-100">
         {t('styleCreator.failed', { error: candidate.error })}</span>}
+      {candidate.status === 'ready' && candidate.rig && <span className="absolute inset-x-1 top-1 rounded bg-slate-950/80 p-1 text-[11px] text-white">
+        {candidate.rig.ready ? t('styleCreator.rigReady') : candidate.rig.reasons.map(code => rigReasons[code] ?? code).join(', ')}</span>}
       {candidate.status === 'ready' && candidate.haze !== undefined && <span className="absolute inset-x-1 bottom-1 rounded bg-amber-950/80 p-1 text-[11px] text-amber-100">
         {t('styleCreator.haze', { percent: Math.round(candidate.haze * 100) })}</span>}
     </button>)}
