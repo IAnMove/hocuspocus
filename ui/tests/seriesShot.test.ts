@@ -211,3 +211,12 @@ test('a beam from a cast member starts on that cutout\'s pose layer; one from th
   assert.equal(missing.ok, false)
   assert.match(missing.ok ? '' : missing.message, /fx-0 starts on cast 4, who is not in this shot/)
 })
+
+test('stop-motion is copied onto the scene only when the shot sets it', () => {
+  const held = compileSeriesShot(kits, shot({ motionStep: 2, stopMotionJitter: 1 }))
+  assert.equal(held.motionStep, 2)
+  assert.equal(held.stopMotionJitter, 1)
+  const plain = compileSeriesShot(kits, shot())
+  assert.equal('motionStep' in plain, false)
+  assert.equal('stopMotionJitter' in plain, false)
+})

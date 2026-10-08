@@ -3,6 +3,7 @@ import { sceneAudioWav, supportsSceneAac } from '../sceneFx/audioExport'
 import { ensureTextFonts, paintKineticTexts, paintSceneLyrics } from '../../lib/kineticText.ts'
 import { mixSceneSpeech } from './speech/audio'
 import { scene3dOutputDuration, scene3dPlaybackSpeed } from './clock.ts'
+import { heldFrameTime, holdBlock, motionStepOf, shiftHeldFrame, stopMotionJitterOf, stopMotionOffset } from '../stopMotion.ts'
 import { scene3dCopy } from './copy.ts'
 import { paintClipNumber } from './performance.ts'
 import { finishWorld3DExport, paintWorld3DExportFrame, startWorld3DExport } from './exportLock.ts'
@@ -46,6 +47,13 @@ export async function exportWorld3DDocument(
     const audio = await mixSceneSpeech(snapshot)
     throwIfAborted(signal)
     const serverAudio = audio && !(await supportsSceneAac(audio.numberOfChannels >= 2 ? 2 : 1)) ? sceneAudioWav(audio) : undefined
+    const speed = scene3dPlaybackSpeed(snapshot.playbackSpeed)
+    const step = motionStepOf(snapshot.motionStep)
+    const picture = (seconds: number) => {
+      const played = seconds * speed
+      return step ? heldFrameTime(played, snapshot.fps, step) : played
+    }
+    const jitter = stopMotionJitterOf(snapshot.stopMotionJitter)
     const blob = await encodeWorld3DFrames({
       audio: serverAudio ? undefined : audio,
       width: size.width,
@@ -54,16 +62,22 @@ export async function exportWorld3DDocument(
       duration: scene3dOutputDuration(snapshot),
       paint: async seconds => {
         throwIfAborted(signal)
-        const time = seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed)
+        const time = picture(seconds)
         await handle.prepareFrame?.(time, snapshot)
         return paintWorld3DExportFrame(handle, snapshot, time)
       },
       overlay: (context, width, height, seconds) => {
-        paintSceneFx(context, width, height, seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed), snapshot.sfx)
-        paintKineticTexts(context, width, height, seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed), snapshot.texts)
-        paintSceneLyrics(context, width, height, seconds * scene3dPlaybackSpeed(snapshot.playbackSpeed), snapshot.lyrics)
+        const time = picture(seconds)
+        paintSceneFx(context, width, height, time, snapshot.sfx)
+        paintKineticTexts(context, width, height, time, snapshot.texts)
+        paintSceneLyrics(context, width, height, time, snapshot.lyrics)
         paintClipNumber(context, width, height, snapshot.clipNumber)
       },
+      ...(step && jitter > 0 ? {
+        decorate: (context: CanvasRenderingContext2D, width: number, height: number, seconds: number) => {
+          shiftHeldFrame(context, width, height, stopMotionOffset(holdBlock(picture(seconds), snapshot.fps, step), jitter))
+        },
+      } : {}),
       onProgress,
       signal,
     })

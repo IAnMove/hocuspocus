@@ -40,6 +40,7 @@ from services.series_layers import layout_layers
 from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
 from services.series_shot_extras import EFFECT_KINDS
+from services import series_stop_motion
 from services.series_transitions import normalize_transition
 from services.series_shot_foley import normalize_foley
 from services import series_hearing
@@ -190,6 +191,7 @@ class EpisodeScript:
         series_hearing.check_shot(shot, where, check.problems)
         self._check_layers(shot, where)
         self._check_transition(shot, where)
+        series_stop_motion.check_shot(shot, where, check.problems)
 
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
@@ -323,6 +325,7 @@ class EpisodeScript:
         if music:
             original = music.get(CODES.get(self.original, "")) or music.get(self.original) or music.get("file")
             layout["music"] = {"file": original, "volume": music.get("volume", 0.6), "start": music.get("start", 0)}
+        layout.update(series_stop_motion.layout_fields(shot))
         return layout
 
     def _beats(self, sid: str, lines: list[dict[str, Any]]) -> list[dict[str, Any]]:

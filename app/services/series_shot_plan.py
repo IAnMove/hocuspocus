@@ -36,6 +36,7 @@ from services.series_ambience import ambience_mode
 from services.series_document_card import stored_document
 from services.series_layers import PLAYBACK, layer_kind, layout_layers, shot_layers
 from services.series_voice_rooms import check_room
+from services import series_stop_motion
 from services.speech_language import speech_language_code
 
 FRAMINGS = ("wide", "two", "medium", "close", "insert", "title")
@@ -524,6 +525,7 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
         "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
         "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
+        **series_stop_motion.read_fields(shot),
     }
     spec["lines"], spec["audioTracks"] = series_hearing.shape(series, shot, spec["lines"], spec["audioTracks"])
     if document:

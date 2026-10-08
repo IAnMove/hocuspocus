@@ -5,6 +5,7 @@ import { lyricFields, parseKineticTexts } from '../../lib/kineticText.ts'
 import { parseSoundtrack } from './speech/track'
 import { validScene3DShape } from './documentValidation.ts'
 import { scene3dPlaybackSpeed } from './clock.ts'
+import { motionStepOf, stopMotionJitterOf } from '../stopMotion.ts'
 import { reviewClipNumber } from './performance.ts'
 import { parseRhythm } from './rhythm'
 import { parseMotionLab } from './motionlab/types'
@@ -110,6 +111,12 @@ function atmosField(raw: unknown, dressing?: string): Pick<Scene3DDocument, 'atm
   return atmos ? { atmos } : {}
 }
 
+function holdField(step: unknown, jitter: unknown): Pick<Scene3DDocument, 'motionStep' | 'stopMotionJitter'> {
+  const motionStep = motionStepOf(step)
+  const stopMotionJitter = stopMotionJitterOf(jitter)
+  return { ...(motionStep ? { motionStep } : {}), ...(stopMotionJitter ? { stopMotionJitter } : {}) }
+}
+
 export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<Scene3DDocument>
@@ -127,8 +134,8 @@ export function parseScene3DDocument(raw: unknown): Scene3DDocument | null {
   const dressing = parseDressing(value.dressing)
   const workshopScreen = parseWorkshopScreen(value.workshopScreen)
   const worldSfx = parseWorldSfx(value.worldSfx)
-  const { pixelWorld, atmos: rawAtmos, lighting, look, toon, screenBackdrop, ...fields } = value
+  const { pixelWorld, atmos: rawAtmos, lighting, look, toon, screenBackdrop, motionStep, stopMotionJitter, ...fields } = value
   fields.rhythm = rhythm
   fields.motionLab = motionLab
-  return { ...fields, ...pixelWorldField(pixelWorld), ...screenBackdropField(screenBackdrop), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), ...toonField(toon), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
+  return { ...fields, ...holdField(motionStep, stopMotionJitter), ...pixelWorldField(pixelWorld), ...screenBackdropField(screenBackdrop), ...atmosField(rawAtmos, dressing), ...lightingField(lighting), ...lookField(look), ...toonField(toon), environment: parseEnvironment(value.environment), ...(soundtrack !== undefined ? { soundtrack } : {}), workshopScreen, sfx: parseSceneFx(value.sfx), ...(worldSfx.length ? { worldSfx } : {}), texts: parseKineticTexts(value.texts), ...lyricFields(value.lyrics), slots, templateId, dressing, clipNumber: reviewClipNumber(value.clipNumber), playbackSpeed: scene3dPlaybackSpeed(value.playbackSpeed) } as Scene3DDocument
 }
