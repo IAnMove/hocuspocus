@@ -698,3 +698,24 @@ def test_transition_in_is_checked_and_a_missing_one_is_sent_as_null():
     short = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "fade_black", "seconds": 0.1}}]}
     with pytest.raises(ScriptError, match="transitionIn.seconds"):
         apply_script(Series(), Series().read, KITS, FILES, "cast", short)
+
+
+def test_a_template_backdrop_belongs_to_the_asset_at_that_exact_path(tmp_path):
+    """An asset id inside another file's name is not that file; an ``outputs/`` asset is served without the prefix."""
+    import json
+    def warned(url):
+        (tmp_path / "world3d-user-templates.json").write_text(json.dumps({"version": 1, "templates": [{"id": "user-street", "document": {
+            "slots": [{"id": "background", "slot": "background", "surface": "environment", "sourceUrl": url}]}}]}), encoding="utf-8")
+        script = {"scenes": [{"id": "yard", "location": "plaza"}], "shots": [
+            {"scene": "yard", "kind": "3d", "duration": 4, "scene3d": {"template": "user-street", "cast": []}}]}
+        checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True, root=str(tmp_path))
+        return [item["subject"] for item in checked["warnings"] if item["code"] == "template_backdrop_other_location"]
+    tools = Series()
+    tools.series["locations"].extend([{"id": "plaza", "variants": []}, {"id": "madrid", "variants": []}])
+    tools.series["assets"] = {
+        "asset_ma": {"id": "asset_ma", "ownerType": "location", "ownerId": "madrid", "kind": "image", "uri": "assets/uv/asset_ma.png"},
+        "asset_old": {"id": "asset_old", "ownerType": "location", "ownerId": "madrid", "kind": "image", "uri": "outputs/uv/old.png"}}
+    assert warned("/api/v1/file/assets/uv/asset_ma2.png?workspace=cast") == []
+    assert warned("/api/v1/file/assets/uv/asset_ma.png?workspace=cast") == ["madrid"]
+    assert warned("/api/v1/file/uv/old.png?workspace=cast") == ["madrid"]
+    assert warned("/api/v1/file/uv/old.png.bak?workspace=cast") == []

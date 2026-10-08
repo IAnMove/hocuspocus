@@ -6,17 +6,18 @@ in the picture are a warning, ``people_in_plate``, unless the location says
 ``layout2d.allowPeople: true``. A detector that cannot run invents no count.
 
 A 3D shot keeps its template's backdrop unless ``scene3d.backdrop`` is
-``location`` (the shot location's plate, background or reference) or
-``{asset}``. ``from_script`` warns ``template_backdrop_other_location`` when
+``location`` (the shot location's first image, as ``background_for`` picks
+it) or ``{asset}``. The backdrop slots draw a still, so a video plate is
+skipped. ``from_script`` warns ``template_backdrop_other_location`` when
 the template backdrop is another location's image.
 """
 from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
-from urllib.parse import quote
+from urllib.parse import unquote, urlsplit
 
 PLATE_ROLES = frozenset({"environment", "plate", "location_reference"})
 _ASSET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
@@ -36,14 +37,15 @@ def plate_people_warning(path: str, *, role: str, location: dict[str, Any] | Non
 
 
 def with_plate_warning(response: dict[str, Any], source: str, body: dict[str, Any], series: dict[str, Any]) -> dict[str, Any]:
-    """The import reply, plus the plate warning when this picture has people."""
+    """The import reply. A plate's reply always has ``warnings`` (empty when it is clean), so no caller detects again."""
+    role = str(body.get("referenceRole") or "")
+    if role not in PLATE_ROLES:
+        return response
     warning = plate_people_warning(
-        source, role=str(body.get("referenceRole") or ""),
+        source, role=role,
         location=location_of(series, str(body.get("ownerType") or ""), str(body.get("ownerId") or "")),
     )
-    if warning is None:
-        return response
-    return {**response, "warnings": [*(response.get("warnings") or []), warning]}
+    return {**response, "warnings": [*(response.get("warnings") or []), *([warning] if warning else [])]}
 
 
 def location_of(series: dict[str, Any], owner_type: str, owner_id: str) -> dict[str, Any] | None:
@@ -90,17 +92,19 @@ def backdrop_problem(value: Any) -> str | None:
 
 
 def location_plate_url(series: dict[str, Any], shot: dict[str, Any], workspace: str) -> str | None:
-    """The file URL a ``location`` or ``{asset}`` backdrop paints. ``template`` (the default) paints nothing new."""
+    """The image URL a ``location`` or ``{asset}`` backdrop paints. ``template`` (the default) paints nothing new.
+
+    A backdrop slot is an image texture, so a video (a ``plate3d`` loop) is never bound: ``location`` goes on to the
+    location's next image and an ``{asset}`` video keeps the template's backdrop."""
     try:
         from services.series_shot3d import normalize_scene3d
+        from services.series_shot_plan import _asset_url, background_for
         backdrop = (normalize_scene3d(shot.get("scene3d")) or {}).get("backdrop")
         if backdrop == "location":
-            asset = _place_asset(series, shot.get("locationId") or shot.get("location"))
-        elif isinstance(backdrop, dict):
-            asset = (series.get("assets") or {}).get(backdrop.get("asset"))
-        else:
-            return None
-        return _file_url(asset, workspace)
+            return (background_for(series, shot, workspace, kinds=("image",)) or {}).get("source")
+        if isinstance(backdrop, dict) and isinstance(backdrop.get("asset"), str):
+            return (_asset_url(series, backdrop["asset"], workspace, kinds=("image",)) or (None,))[0]
+        return None
     except Exception:
         return None
 
@@ -141,30 +145,6 @@ def _still(path: str):
     if image is None or getattr(image, "size", 0) == 0:
         return None
     return image
-
-
-def _place_asset(series: dict[str, Any], location_id: Any) -> dict[str, Any] | None:
-    location = next((item for item in series.get("locations") or []
-                     if isinstance(item, dict) and item.get("id") == location_id), None)
-    if not isinstance(location, dict):
-        return None
-    assets = series.get("assets") or {}
-    layout = location.get("layout2d") if isinstance(location.get("layout2d"), dict) else {}
-    names = [layout.get("plateAssetId"), layout.get("backgroundAssetId"), *(location.get("referenceAssetIds") or [])]
-    for name in names:
-        asset = assets.get(name) if isinstance(name, str) else None
-        if isinstance(asset, dict) and asset.get("kind") in ("image", "video") and asset.get("uri"):
-            return asset
-    return None
-
-
-def _file_url(asset: Any, workspace: str) -> str | None:
-    if not isinstance(asset, dict):
-        return None
-    uri = str(asset.get("uri") or "").replace("\\", "/").lstrip("/")
-    if not uri or any(part in ("", ".", "..") for part in uri.split("/")):
-        return None
-    return f"/api/v1/file/{quote(uri)}?workspace={quote(str(workspace))}"
 
 
 def _backdrop_slots(document: dict[str, Any]) -> list[dict[str, Any]]:
@@ -241,16 +221,28 @@ def _asset_owner(asset: Any) -> str | None:
 def _url_owner(series: dict[str, Any], url: str, asset_id: str) -> str | None:
     if not url and not asset_id:
         return None
+    path = _workspace_path(_file_path(url))
+    name = PurePosixPath(path).stem
     for asset in (series.get("assets") or {}).values():
         if not isinstance(asset, dict):
             continue
-        uri = str(asset.get("uri") or "")
+        uri = _workspace_path(str(asset.get("uri") or ""))
         ident = str(asset.get("id") or "")
-        if (uri and uri in url) or (ident and ident in url) or (asset_id and ident == asset_id):
+        if (uri and uri == path) or (ident and ident == name) or (asset_id and ident == asset_id):
             owner = _asset_owner(asset) or _location_pointing_at(series, ident)
             if owner:
                 return owner
     return _location_pointing_at(series, asset_id) if asset_id else None
+
+
+def _file_path(url: str) -> str:
+    """The workspace path a slot URL names: ``/api/v1/file/<path>?workspace=...`` or a bare relative path."""
+    path = unquote(urlsplit(url).path).replace("\\", "/")
+    return path[len("/api/v1/file/"):] if path.startswith("/api/v1/file/") else path.lstrip("/")
+
+
+def _workspace_path(uri: str) -> str:
+    return uri[len("outputs/"):] if uri.startswith("outputs/") else uri
 
 
 def _location_pointing_at(series: dict[str, Any], asset_id: str) -> str | None:

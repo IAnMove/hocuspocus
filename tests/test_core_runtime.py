@@ -189,6 +189,30 @@ class CoreRuntimeTests(unittest.TestCase):
         finally:
             self._leave_temp_workspace(folder, previous)
 
+    def test_a_location_plate_import_is_scanned_once_and_always_answers_its_warnings(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post('/api/v1/series', json={'workspace':'default', 'title':'Plate test'}).json()
+            series['locations'] = [{'id':'loc_a', 'name':'Lab', 'referenceAssetIds':[]}]
+            path = f"/api/v1/series/{series['id']}"
+            saved = self.client.put(path, json={'workspace':'default', 'series':series, 'baseRevision':series['revision']})
+            self.assertEqual(saved.status_code, 200, saved.text)
+            Path('uploads').mkdir(exist_ok=True)
+            Path('uploads/plate.png').write_bytes(b'plate fixture')
+            scans = []
+            with patch('services.series_plate_checks.detect_people', side_effect=lambda found: scans.append(found) or []):
+                clean = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'plate.png',
+                    'ownerType':'location', 'ownerId':'loc_a', 'kind':'image', 'referenceRole':'environment'})
+                self.assertEqual(clean.status_code, 200, clean.text)
+                self.assertEqual(clean.json()['warnings'], [])
+                other = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'plate.png',
+                    'ownerType':'location', 'ownerId':'loc_a', 'kind':'image', 'referenceRole':'reference'})
+                self.assertEqual(other.status_code, 200, other.text)
+                self.assertNotIn('warnings', other.json())
+            self.assertEqual(len(scans), 1)
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
     def test_mcp_settings_status_on_the_core_profile(self):
         listed = self.client.get("/api/v1/settings/mcp")
         self.assertEqual(listed.status_code, 200, listed.text)

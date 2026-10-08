@@ -840,14 +840,8 @@ def _import_asset(data: dict[str, Any], request: Callable[..., Any], *, workspac
     if data.get("as_take"):
         attempt = _matching_take(series, data["owner_id"], imported["asset"]["id"])
     result = {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
-    warnings = imported.get("warnings") if isinstance(imported.get("warnings"), list) else None
-    if warnings is None:
-        from services.series_plate_checks import location_of, plate_people_warning
-        found = plate_people_warning(
-            str(source), role=str(data.get("reference_role") or ""),
-            location=location_of(series, str(data.get("owner_type") or ""), str(data.get("owner_id") or "")),
-        )
-        warnings = [found] if found else []
+    # The server checks a plate for people (``series_plate_checks.with_plate_warning``); it is not scanned again here.
+    warnings = imported.get("warnings") if isinstance(imported.get("warnings"), list) else []
     if warnings:
         result["warnings"] = warnings
     return result

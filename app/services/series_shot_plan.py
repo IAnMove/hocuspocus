@@ -219,16 +219,20 @@ def plan_timing(durations: list[float], *, intro: float = 0.35, gap: float = 0.2
     return timing, round(round(duration * FPS) / FPS, 4)
 
 
-def _asset_url(series: dict[str, Any], asset_id: str, workspace: str) -> tuple[str, str] | None:
+def _asset_url(series: dict[str, Any], asset_id: str, workspace: str,
+               kinds: tuple[str, ...] = ("image", "video")) -> tuple[str, str] | None:
+    """The file URL and kind of a series asset of one of ``kinds``."""
     asset = (series.get("assets") or {}).get(asset_id)
-    if not isinstance(asset, dict) or asset.get("kind") not in ("image", "video") or not asset.get("uri"):
+    if not isinstance(asset, dict) or asset.get("kind") not in kinds or not asset.get("uri"):
         return None
     uri = str(asset["uri"])
     uri = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
     return f"/api/v1/file/{quote(uri)}?workspace={quote(workspace)}", asset["kind"]
 
 
-def background_for(series: dict[str, Any], shot: dict[str, Any], workspace: str) -> dict[str, Any] | None:
+def background_for(series: dict[str, Any], shot: dict[str, Any], workspace: str,
+                   kinds: tuple[str, ...] = ("image", "video")) -> dict[str, Any] | None:
+    """The shot location's first picture of one of ``kinds``: its plate, its background, the variant's references, then its own."""
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
     if not location:
         return None
@@ -237,7 +241,7 @@ def background_for(series: dict[str, Any], shot: dict[str, Any], workspace: str)
     candidates = [layout.get("plateAssetId"), layout.get("backgroundAssetId"), *(variant.get("referenceAssetIds") or []),
                   *(location.get("referenceAssetIds") or [])]
     for asset_id in candidates:
-        found = _asset_url(series, asset_id, workspace) if asset_id else None
+        found = _asset_url(series, asset_id, workspace, kinds) if asset_id else None
         if found:
             return {"source": found[0], "kind": found[1]}
     return None
