@@ -102,12 +102,12 @@ After a success, tool outputs named `<assetId>-*` in the workspace root move int
 
 ### Warnings
 
-Warnings never block an attempt. Most are string codes. Two are objects: `seam_visible` is `{code, message, file}`, plus `candidate` when there are several. `style_check_failed` is `{code, message}`. A failed Ogg loop encode adds free text (`ffmpeg … wrote WAV instead`). Readers accept both shapes.
+Warnings never block an attempt. Each new warning is `{code, message}`, plus `file`, `candidate` or `ref` when those apply. `seam_visible` carries `file`. `duplicate_of` carries `ref` (the other asset id). A failed Ogg loop encode is `{code: "ogg_fallback", message}` and the message is the ffmpeg sentence. Readers still accept a legacy string.
 
 | Code | When |
 |---|---|
 | `loop_not_closed` | H3 loop error above 0.05. The J0 trial table wins over the brief's 0.5. |
-| `identity_drift` | Mean colour change from the first to the middle frame above 0.20. It includes pose change, so it does not by itself separate a good cycle from a bad one. |
+| `identity_drift` | OKLab color-histogram distance of opaque pixels, first frame to the middle frame, above 0.20. Pose change is `metrics.poseChange` and does not warn. |
 | `foot_drift` | H3 only. The feet move more than 20% of the frame width. |
 | `halo` | Halo above 2% **and** the raw frame corners are still the screen colour. Otherwise `haloPct` is `None` and there is no warning. |
 | `strip_count_mismatch` | A strip yielded a different number of figures than requested. |
@@ -123,7 +123,8 @@ Warnings never block an attempt. Most are string codes. Two are objects: `seam_v
 | `style_mismatch` | Stills only. Style score 1 or 2. |
 | `style_check_unavailable` | `analyze` failed, timed out, is paused, or gave no score from 1 to 5. |
 | `style_check_failed` | The style check raised. Object. |
-| `duplicate_of:<id>` | Stills only. dHash distance 6 or less to another **approved** asset of the same kind. |
+| `duplicate_of` | Stills only. dHash distance 6 or less to another **approved** asset of the same kind. `ref` is that id. |
+| `ogg_fallback` | Music or jingle. ffmpeg could not write the Ogg loop, so the WAV remains. |
 
 ### Limits
 
@@ -223,7 +224,7 @@ A jingle is cut on the downbeat nearest `seconds` and faded out over 300 ms. Sfx
 
 ### Meshes
 
-Hunyuan3D gets `reduce_face` and `target_face_num` = `maxTriangles` (default 3000), `texture_resolution` = `spec.texture` (the service clamps it to 256–1024), and the candidate's seed. Its preset is `multiview` with `multiview`, `quality` for a `painted` look, else `balanced`. A `character3d` uses the approved character's art as its concept when there is one.
+Hunyuan3D gets `reduce_face: true` and `target_face_num` from `spec.maxTriangles`, else `style.model3d.maxTriangles`, else 3000. `texture_resolution` is `spec.texture` (the service clamps it to 256–1024), and the candidate's seed. Its preset is `multiview` with `multiview`, `quality` for a `painted` look, else `balanced`. A `model3d` reuses the approved character plate when there is one. A `character3d` always generates its own concept: "T-pose, front view, arms horizontal, plain light grey background". The orbit sends that image as `image_refs`, which is what the character-sheet engine requires.
 
 Rig clips are `spec.clips`, else the role's clips. A clip takes the engine's nearest name (humanoid `attack` → `punch`, procedural `punch` → `attack`). Only clips the engine accepts are sent, else `idle`. The others come back as `clip_missing`.
 
@@ -239,7 +240,7 @@ A score from 1 to 5 is rounded and stored as `metrics.styleScore`. 1 or 2 also a
 
 The producer saves every candidate and marks the step done before it runs the check. `stamp_attempt` then writes each candidate's score and warnings; it keeps the files, the decision and the asset status. A restart during the check keeps the candidates without a score.
 
-The duplicate check always runs. It hashes the image over black with `game_image_ops.dhash` (64 bits). A flat image has no hash. A distance of 6 or less to the approved still of another asset of the same kind adds `duplicate_of:<id>`.
+The duplicate check always runs. It hashes the image over black with `game_image_ops.dhash` (64 bits). A flat image has no hash. A distance of 6 or less to the approved still of another asset of the same kind adds `{code: "duplicate_of", ref: id}`.
 
 ### Fingerprint
 

@@ -65,7 +65,7 @@ J16 is still being finished; details may change. Still attempts (character, spri
 
 Set `style.qa.vision` to false to skip scoring. The default is true. Changing it does not reset style approval.
 
-The duplicate check always runs on stills. A dHash within distance 6 of another approved asset of the same kind adds `duplicate_of:<id>`.
+The duplicate check always runs on stills. A dHash within distance 6 of another approved asset of the same kind adds `{code: "duplicate_of", message, ref: id}`.
 
 ## Limits
 
@@ -73,7 +73,7 @@ The duplicate check always runs on stills. A dHash within distance 6 of another 
 
 ## Warnings
 
-Warnings do not block. Most codes are strings: `loop_not_closed` (loop error above 0.05), `identity_drift`, `foot_drift`, `halo`, `strip_count_mismatch`, `loop_seam` (music), `loop_no_downbeats`, `loudness_off_target`, `sfx_silent`, `over_budget`, `triangles_unknown`, `clip_missing`, `orbit_empty`, `style_mismatch`, `style_check_unavailable`, `duplicate_of:<id>`. Two are objects: `{code: "seam_visible", message, file}` from tiles, tilesets and backgrounds, and `{code: "style_check_failed", message}`. Read both shapes.
+Warnings do not block. Each warning is `{code, message}`. Optional fields are `file`, `candidate` and `ref`. Codes: `loop_not_closed` (loop error above 0.05), `identity_drift` (OKLab palette distance above 0.20; pose change is `metrics.poseChange` and does not warn), `foot_drift`, `halo`, `strip_count_mismatch`, `loop_seam` (music), `loop_no_downbeats`, `loudness_off_target`, `sfx_silent`, `ogg_fallback`, `over_budget`, `triangles_unknown`, `clip_missing`, `orbit_empty`, `style_mismatch`, `style_check_unavailable`, `duplicate_of` (`ref` is the other id), `seam_visible` (`file`), `style_check_failed`. A legacy string is still readable.
 
 An asset whose dependency is not approved is skipped with `waiting_dependency`. Do not approve it to unblock the batch unless the user asked.
 

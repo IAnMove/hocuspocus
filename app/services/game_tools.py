@@ -59,16 +59,49 @@ def _check(ctx: GenContext) -> None:
         raise GameToolError("cancelled", "the attempt was cancelled")
 
 
-def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds) -> None:
-    ctx.steps.append({
+def _number(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _split_clocks(payload) -> dict:
+    """Queue time and GPU time from a job status. Missing clocks are omitted."""
+    if not isinstance(payload, dict):
+        return {}
+    created = _number(payload.get("created_at"))
+    started = _number(payload.get("started_at"))
+    clocks = {}
+    if created is not None and started is not None and started >= created:
+        clocks["queued_seconds"] = round(started - created, 3)
+    gpu = _number(payload.get("processing_time_sec"))
+    if gpu is None and started is not None:
+        finished = _number(payload.get("finished_at"))
+        if finished is not None and finished >= started:
+            gpu = finished - started
+    if gpu is not None:
+        clocks["gpu_seconds"] = round(gpu, 3)
+    return clocks
+
+
+def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None, steps=None, resolution=None) -> None:
+    listed = list(refs or [])
+    row = {
         "tool": tool,
         "model": model,
         "seed": seed,
         "prompt": prompt,
-        "refs": list(refs or []),
+        "refs": listed,
+        "refCount": len(listed),
         "jobId": job_id,
         "seconds": round(float(seconds), 3),
-    })
+    }
+    if steps is not None:
+        row["num_inference_steps"] = int(steps)
+    if resolution:
+        row["resolution"] = str(resolution)
+    row.update(_split_clocks(payload))
+    ctx.steps.append(row)
 
 
 def _mapping(value) -> dict:
@@ -177,8 +210,11 @@ def _source_name(ctx: GenContext, path) -> str:
     return text
 
 
-def _finish(ctx, *, tool, model, seed, prompt, refs, job_id, started) -> None:
-    _note(ctx, tool=tool, model=model, seed=seed, prompt=prompt, refs=refs, job_id=job_id, seconds=time.perf_counter() - started)
+def _finish(ctx, *, tool, model, seed, prompt, refs, job_id, started, payload=None, steps=None, resolution=None) -> None:
+    _note(
+        ctx, tool=tool, model=model, seed=seed, prompt=prompt, refs=refs, job_id=job_id,
+        seconds=time.perf_counter() - started, payload=payload, steps=steps, resolution=resolution,
+    )
     ctx.log(f"{tool} {job_id}")
 
 
@@ -214,8 +250,12 @@ def image(ctx, step, *, prompt, negative, resolution, refs=(), seed, batch=1, gu
         "input": {"workspace": ctx.workspace, "output_name": f"{ctx.asset['id']}-{step}", "params": params},
     })
     job_id = _job_id(submitted)
-    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
-    _finish(ctx, tool="generation.image", model="qwen_image_21", seed=int(seed), prompt=prompt, refs=prepared, job_id=job_id, started=started)
+    payload = _wait_job(ctx, job_id, _intent(ctx, step))
+    files = _require_files(payload)
+    _finish(
+        ctx, tool="generation.image", model="qwen_image_21", seed=int(seed), prompt=prompt, refs=prepared,
+        job_id=job_id, started=started, payload=payload, steps=40, resolution=snapped,
+    )
     return files
 
 
@@ -245,8 +285,15 @@ def _video(ctx, step, params) -> str:
         "input": {"workspace": ctx.workspace, "params": params},
     })
     job_id = _job_id(submitted)
-    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
-    _finish(ctx, tool="generation.video", model=str(params.get("model_type") or ""), seed=params.get("seed"), prompt=str(params.get("prompt") or ""), refs=[], job_id=job_id, started=started)
+    payload = _wait_job(ctx, job_id, _intent(ctx, step))
+    files = _require_files(payload)
+    visual = [params[key] for key in ("image_start", "image_end") if params.get(key)]
+    visual.extend(params.get("references") or params.get("image_refs") or [])
+    _finish(
+        ctx, tool="generation.video", model=str(params.get("model_type") or ""), seed=params.get("seed"),
+        prompt=str(params.get("prompt") or ""), refs=visual, job_id=job_id, started=started, payload=payload,
+        steps=params.get("num_inference_steps"), resolution=params.get("resolution"),
+    )
     return files[0]
 
 
@@ -287,15 +334,19 @@ def orbit(ctx, step, ref) -> str:
         "resolution": "768x1344",
         "video_length": 124,
         "num_inference_steps": 25,
-        "image_start": image_ref,
+        "image_refs": [image_ref],
         "workspace": ctx.workspace,
         "prompt": "character turnaround, front, side, back and other side, neutral pose, feet visible",
     }
     started = time.perf_counter()
     submitted = ctx.loopback("generate", {"request_id": _intent(ctx, step), "params": params})
     job_id = _job_id(submitted if isinstance(submitted, dict) else {})
-    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
-    _finish(ctx, tool="generate", model="minimax_h3_legacy", seed=None, prompt=params["prompt"], refs=[image_ref], job_id=job_id, started=started)
+    payload = _wait_job(ctx, job_id, _intent(ctx, step))
+    files = _require_files(payload)
+    _finish(
+        ctx, tool="generate", model="minimax_h3_legacy", seed=None, prompt=params["prompt"], refs=[image_ref],
+        job_id=job_id, started=started, payload=payload, steps=25, resolution="768x1344",
+    )
     return files[0]
 
 
@@ -308,8 +359,13 @@ def _audio(ctx, tool, step, params, output_name) -> str:
         "input": {"workspace": ctx.workspace, "output_name": output_name, "params": params},
     })
     job_id = _job_id(submitted)
-    files = _require_files(_wait_job(ctx, job_id, _intent(ctx, step)))
-    _finish(ctx, tool=tool, model=str(params.get("model_type") or ""), seed=params.get("seed"), prompt=str(params.get("prompt") or ""), refs=[], job_id=job_id, started=started)
+    payload = _wait_job(ctx, job_id, _intent(ctx, step))
+    files = _require_files(payload)
+    _finish(
+        ctx, tool=tool, model=str(params.get("model_type") or ""), seed=params.get("seed"),
+        prompt=str(params.get("prompt") or ""), refs=[], job_id=job_id, started=started, payload=payload,
+        steps=params.get("num_inference_steps"),
+    )
     return files[0]
 
 
@@ -399,7 +455,10 @@ def model3d(ctx, step, *, image_path, images=None, preset=None, reduce_face=None
     submitted = ctx.call("model3d.generate", {"version": 1, "intent_id": _intent(ctx, step), "input": payload})
     finished = _poll(ctx, "model3d.status", _job_id(submitted))
     name = _model_file(finished)
-    _finish(ctx, tool="model3d.generate", model="hunyuan3d", seed=seed, prompt="", refs=[str(image_path)], job_id=_job_id(submitted), started=started)
+    _finish(
+        ctx, tool="model3d.generate", model="hunyuan3d", seed=seed, prompt="", refs=[str(image_path)],
+        job_id=_job_id(submitted), started=started, payload=finished,
+    )
     return name
 
 
@@ -419,5 +478,8 @@ def rig(ctx, step, *, source, engine="humanoid", animations=None, rig_profile=No
     job_id = _job_id(submitted)
     finished = _poll(ctx, "model3d.rig.status", job_id)
     name = _model_file(finished)
-    _finish(ctx, tool="model3d.rig", model=engine, seed=None, prompt="", refs=[str(source)], job_id=job_id, started=started)
+    _finish(
+        ctx, tool="model3d.rig", model=engine, seed=None, prompt="", refs=[str(source)],
+        job_id=job_id, started=started, payload=finished,
+    )
     return name

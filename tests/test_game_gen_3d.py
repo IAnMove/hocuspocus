@@ -20,6 +20,7 @@ from services.game_generators.three_d import (
     clips_for,
 )
 from services.game_produce import _candidates
+from services.game_library import warning_codes
 from services.game_tools import GameToolError
 
 GLB_MAGIC = 0x46546C67
@@ -178,9 +179,10 @@ def test_clip_map_and_budget_thresholds():
     assert clips_for("boss") == clips_for("enemy")
     assert clips_for("npc") == ("idle", "talk", "wave")
     assert budget_warning(11, 10) == []
-    assert budget_warning(12, 10) == ["over_budget"]
-    assert budget_warning(None, 10) == ["triangles_unknown"]
+    assert warning_codes(budget_warning(12, 10)) == ["over_budget"]
+    assert warning_codes(budget_warning(None, 10)) == ["triangles_unknown"]
     assert budget_warning(12, None) == []
+    assert budget_warning(12, 10)[0]["message"]
 
 
 def test_model_calls_image_then_mesh_and_warns_over_budget(tmp_path):
@@ -201,7 +203,7 @@ def test_model_calls_image_then_mesh_and_warns_over_budget(tmp_path):
     assert mesh["target_face_num"] == 10
     assert "images" not in mesh
     assert result.metrics["triangles"] == 12
-    assert "over_budget" in result.warnings
+    assert "over_budget" in warning_codes(result.warnings)
     assert result.files["model"] == "game/bosque/cofre/a1/model.glb"
     assert result.files["concept"] == "game/bosque/cofre/a1/concept.png"
     assert (workspace / result.files["model"]).is_file()
@@ -231,6 +233,17 @@ def test_model_candidates_get_their_own_ids_folders_and_jobs(tmp_path):
     assert generator.estimate(game, asset) == {"image": 2, "3d": 2}
     assert [args["input"]["seed"] for args in meshes] == [1, 2]
     assert all("texture_resolution" not in args["input"] for args in meshes)
+
+
+def test_mesh_uses_the_style_triangle_limit_when_the_spec_omits_it(tmp_path):
+    workspace = _workspace(tmp_path)
+    game = {"id": "bosque", "style": _style(1500), "assets": []}
+    asset = {"id": "cofre", "kind": "model3d", "description": "a chest", "candidates": 1, "spec": {}}
+    fake = _Tools(workspace)
+    Model3dGenerator().run(_ctx(workspace, game, asset, fake))
+    mesh = fake.named("model3d.generate")[0]["input"]
+    assert mesh["reduce_face"] is True
+    assert mesh["target_face_num"] == 1500
 
 
 def test_the_texture_budget_reaches_the_mesh_step(tmp_path):
@@ -272,10 +285,13 @@ def test_multiview_sends_four_views_from_the_workspace_video(tmp_path, monkeypat
     tools = [name for name, _args in fake.calls]
     assert tools[:4] == ["generation.image", "jobs.wait", "jobs.wait", "model3d.generate"]
     assert fake.loopbacks[0][0] == "generate"
+    orbit_params = fake.loopbacks[0][1]["params"]
+    assert orbit_params["image_refs"]
+    assert "image_start" not in orbit_params
     mesh = fake.named("model3d.generate")[0]["input"]
     assert mesh["preset"] == "multiview"
     assert list(mesh["images"]) == ["front", "left", "back", "right"]
-    assert "orbit_empty" not in result.warnings
+    assert "orbit_empty" not in warning_codes(result.warnings)
     assert generator.estimate(game, asset) == {"image": 1, "3d": 1, "h3": 1}
 
 
@@ -309,7 +325,7 @@ def test_uncountable_mesh_is_flagged(tmp_path):
     fake = _Tools(workspace, meshes=("odd.glb",))
     result = Model3dGenerator().run(_ctx(workspace, game, _chest(), fake))
     assert result.metrics["triangles"] is None
-    assert "triangles_unknown" in result.warnings
+    assert "triangles_unknown" in warning_codes(result.warnings)
 
 
 def test_character_uses_approved_art_and_reports_missing_clips(tmp_path):
@@ -320,18 +336,20 @@ def test_character_uses_approved_art_and_reports_missing_clips(tmp_path):
     generator = Character3dGenerator()
     result = generator.run(_ctx(workspace, game, asset, fake))
     tools = [name for name, _args in fake.calls]
-    assert tools == ["model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status"]
-    assert fake.named("model3d.generate")[0]["input"]["image_path"].endswith("hero.png")
+    assert tools == ["generation.image", "jobs.wait", "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status"]
+    prompt = fake.named("generation.image")[0]["input"]["params"]["prompt"]
+    assert "T-pose, front view, arms horizontal, plain light grey background" in prompt
+    assert "side view" not in prompt.lower()
     rig_call = fake.named("model3d.rig")[0]["input"]
     assert rig_call["engine"] == "humanoid"
     assert rig_call["source"] == "hy-mesh.glb"
     assert "rig_profile" not in rig_call
     assert result.metrics["missingClips"] == ["walk", "punch", "hit"]
-    assert "clip_missing" in result.warnings
-    assert "over_budget" not in result.warnings
-    assert "concept" not in result.files
+    assert "clip_missing" in warning_codes(result.warnings)
+    assert "over_budget" not in warning_codes(result.warnings)
+    assert "concept" in result.files
     assert (workspace / result.files["rig"]).is_file()
-    assert generator.estimate(game, asset) == {"3d": 1, "rig": 1}
+    assert generator.estimate(game, asset) == {"image": 1, "3d": 1, "rig": 1}
 
 
 def test_enemy_humanoid_asks_only_for_clips_the_humanoid_rig_has(tmp_path):
@@ -355,7 +373,7 @@ def test_spec_clips_replace_the_role_clips(tmp_path):
     result = Character3dGenerator().run(_ctx(workspace, game, asset, fake))
     assert fake.named("model3d.rig")[0]["input"]["animations"] == ["idle", "wave", "look_around"]
     assert result.metrics["missingClips"] == []
-    assert "clip_missing" not in result.warnings
+    assert "clip_missing" not in warning_codes(result.warnings)
 
 
 def test_non_humanoid_profile_sends_only_clips_its_profile_allows(tmp_path):
@@ -384,7 +402,7 @@ def test_procedural_clip_labels_count_as_present(tmp_path):
     result = Character3dGenerator().run(_ctx(workspace, game, asset, fake))
     assert result.metrics["clips"] == list(labels)
     assert result.metrics["missingClips"] == []
-    assert "clip_missing" not in result.warnings
+    assert "clip_missing" not in warning_codes(result.warnings)
 
 
 def test_rig_without_a_skin_fails_the_attempt(tmp_path):

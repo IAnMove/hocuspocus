@@ -177,6 +177,16 @@ def test_schema_refuses_static_route_ids_unknown_kinds_and_envelope_extras():
     assert calls == []
 
 
+def test_nothing_to_export_is_not_retryable():
+    import urllib.error
+
+    body = json.dumps({"detail": {"code": "nothing_to_export", "message": "no approved asset has a file to export"}}).encode()
+    rejected = urllib.error.HTTPError("http://x", 409, "error", {}, io.BytesIO(body))
+    handlers, _calls = harness([rejected])
+    status, detail = failure(handlers, "game.export", {"workspace": "lab", "game_id": "bosque"})
+    assert (status, detail["code"], detail["retryable"]) == (409, "nothing_to_export", False)
+
+
 def test_errors_keep_the_route_code_problems_and_retry_hint(tmp_path):
     import urllib.error
 

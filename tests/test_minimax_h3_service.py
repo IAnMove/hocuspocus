@@ -299,6 +299,39 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             h3.MODEL_PROFILES["quality"]["ref2va"],
         )
 
+    def test_int8_text_encoder_uses_the_official_comfy_file(self):
+        quality = h3._profile_files("quality", "ref2va")
+        encoder = next(item for item in quality if item[1].endswith("qwen3vl_32b_minimax_h3_int8_convrot.safetensors"))
+        relative = "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        self.assertEqual(encoder[0], h3.HF_REPO)
+        self.assertEqual(encoder[1], relative)
+        self.assertEqual(
+            h3.PINNED_SHA256[relative],
+            "bc2ced0fbea64757fa9acddccfc0b3f4819d1dcf1da6c124d690d368be283923",
+        )
+        low = next(item for item in h3._profile_files("low_memory", "fl2va") if item[1].startswith("text_encoders/"))
+        self.assertEqual(low[0], h3.COMMUNITY_HF_REPO)
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(h3, "COMFY_DIR", Path(tmp) / "ComfyUI"), \
+                patch("huggingface_hub.hf_hub_download") as download:
+            h3._ensure_models("ref2va", "quality", lambda _message: None)
+        text_call = next(call for call in download.call_args_list if str(call.kwargs["filename"]).startswith("text_encoders/"))
+        self.assertEqual(text_call.kwargs["repo_id"], h3.HF_REPO)
+        self.assertEqual(text_call.kwargs["filename"], relative)
+        bad = Path(tmp) / "bad.safetensors"
+        # The directory above is removed when the with-block ends.
+        with tempfile.TemporaryDirectory() as kept:
+            bad = Path(kept) / "bad.safetensors"
+            bad.write_bytes(b"not-the-weight")
+            with self.assertRaises(RuntimeError):
+                h3._reject_bad_download(bad, relative)
+            self.assertFalse(bad.exists())
+            good = Path(kept) / "good.safetensors"
+            good.write_bytes(b"official-bytes")
+            with patch.object(h3, "_sha256_file", return_value=h3.PINNED_SHA256[relative]):
+                h3._reject_bad_download(good, relative)
+            self.assertTrue(good.is_file())
+
     def test_community_dit_download_uses_hub_root_and_comfy_diffusion_folder(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(h3, "COMFY_DIR", Path(tmp) / "ComfyUI"), \

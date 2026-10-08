@@ -31,7 +31,7 @@ BOOL = {"type": "boolean"}
 _TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
 _FALLBACK_CODES = {404: "not_found", 409: "conflict", 503: "server_unavailable"}
 # A 409 with these codes fails the same way on every retry.
-_FINAL_CONFLICTS = {"game_exists"}
+_FINAL_CONFLICTS = {"game_exists", "nothing_to_export"}
 _MAX_PROBLEMS = 20
 
 # name: (properties, required, mutation, description)
