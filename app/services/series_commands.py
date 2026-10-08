@@ -308,7 +308,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "series": OBJECT, "base_revision": REVISION},
         ["workspace", "series_id", "series", "base_revision"], True,
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
-        "value (send an empty list to clear one). Changing canon inputs returns the canon to draft. soundDesign: stinger, "
+        "value (send an empty list or object to clear one). A nested object or list is replaced whole, so send the whole "
+        "soundDesign, not one key inside it. Changing canon inputs returns the canon to draft. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
         "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
         "lowers episode-mode beds under the lines; roomByLocation "

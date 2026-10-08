@@ -13,7 +13,7 @@ J15, J16 y J17 (#898, #899 y #900) se agruparon en #901, revisados contra el có
 - La CI de #887 y #894 pasó: tests de Python A y B, tests, lint, tipos y build de la UI, y arranque E2E de la UI con API simulada.
 - En esta rama, los 25 archivos `tests/test_game_*.py` dieron 255 tests en verde en una pasada local del 2026-10-07. J16 seguía cambiando, así que la cifra no cubre su versión final.
 - Esos tests usan herramientas falsas. Ningún test llama a la GPU. El control de estilo usa un `analyze` falso.
-- #901 pasa el CI cuando se fusiona; la prueba completa por MCP y GPU sigue sin hacerse.
+- #901 se fusionó en `development` el 2026-10-07. La prueba completa por MCP y GPU sigue sin hacerse.
 - Cada dato de `GAME_ASSETS.md` y de la guía MCP se comparó con el código. No con una ejecución real.
 
 ## Qué no se verificó
@@ -55,11 +55,11 @@ Ese lote corrió con el borrador de J9, antes de #887 y #894. T9, el bucle de m�
 | J12 UI juego | #895 | #894, fusionado |
 | J13 UI lista | #896 | #894, fusionado |
 | J14 UI revisión | #897 | #894, fusionado |
-| J15 UI prueba | #901 | en revisión |
-| J16 Control de estilo | #901 | en revisión |
-| J17 Aceptación | #901 | en revisión |
+| J15 UI prueba | #901 | fusionado (2026-10-07) |
+| J16 Control de estilo | #901 | fusionado (2026-10-07) |
+| J17 Aceptación | #901 | fusionado (2026-10-07) |
 
-J17 describe `game_qa.py`. No debe fusionarse antes que J16.
+J15, J16 y J17 se fusionaron juntos en #901. J17 describe `game_qa.py`.
 
 ## Problemas
 

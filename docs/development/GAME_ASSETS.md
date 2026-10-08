@@ -8,7 +8,7 @@ Approving a style and approving or rejecting an asset are human decisions. No fl
 
 Generated PNG, WAV and GLB files stay in the workspace under `app/outputs/` (gitignored). They are not committed and installers do not download them.
 
-J0–J14 are in `development` (#887, #894). J15 (play and export UI), J16 (style check) and J17 (this document) are in #901. The board is [GAME_ASSETS_BOARD.md](GAME_ASSETS_BOARD.md). The agent guide is [../agents/GAME_ASSETS_MCP.md](../agents/GAME_ASSETS_MCP.md).
+J0–J17 are in `development` (#887, #894, #901, merged 2026-10-07). The board is [GAME_ASSETS_BOARD.md](GAME_ASSETS_BOARD.md). The agent guide is [../agents/GAME_ASSETS_MCP.md](../agents/GAME_ASSETS_MCP.md).
 
 ## Names
 
@@ -278,8 +278,8 @@ The reply is `{file, url, counts, missing}`. `counts` tallies packed assets per 
 
 ## UI
 
-J15 is in #901. The panel sections are setup, style, cast, list, produce, review, play and export. Play draws approved assets on a 640×360 canvas (integer scale, pixelated). Missing sprites are named rectangles and listed. It uses only approved attempts and plays sheets by their frameTags, durations, loop, pivot and mirror. Keys reach it only while the canvas has focus. Export lists approved and not-approved assets and writes the zip. Play has no MCP tool. Export is `game.export`.
+J15 landed with #901. The panel sections are setup, style, cast, list, produce, review, play and export. Play draws approved assets on a 640×360 canvas (integer scale, pixelated). Missing sprites are named rectangles and listed. It uses only approved attempts and plays sheets by their frameTags, durations, loop, pivot and mirror. Keys reach it only while the canvas has focus. Export lists approved and not-approved assets and writes the zip. Play has no MCP tool. Export is `game.export`.
 
 ## Release notes
 
-`ui/src/whatsNew.ts` is one short line per **merged** PR. Bumping the first `pr` shows the welcome again. The newest entry is PR 813. #887 and #894 are merged without a line. The root `README.md` has no What’s new section (`## What you can do` is the feature list). Add one line when J15–J17 merge.
+`ui/src/whatsNew.ts` is one short line per **merged** PR. Bumping the first `pr` shows the welcome again. The newest entry is PR 813. #887, #894 and #901 are merged without a welcome line. The root `README.md` has no What’s new section (`## What you can do` is the feature list).
