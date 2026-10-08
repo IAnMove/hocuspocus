@@ -58,6 +58,19 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 `production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check. Each window includes `hold_after_clip`: how many seconds that H3 shot would sit still after its clip (the longest H3 bucket is 345 frames, 14.375 s), or 0 when the shot is not H3 or a moving fill (`h3`, `clip`, `scene3d`, `screen`) covers the tail. A hand-written `title-card` on an `h3` or `still` shot is `title_card_on_image` and still validates; the planner rewrites that template to `lower-third-date` on those kinds. The same check compiles every scene document in-process, so a style the editor would reject (`scene_invalid`, for example a text field out of range) shows up here. Before the scenes stage the run measures the busiest caption against its start frame and stops with `caption_unreadable` (the scene and the ratio) when contrast is under 3:1. An opaque caption box is measured against the box; text with no box is measured against the picture.
 
+**Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
+`quality_gate` (and `problems`) when one still picture fills three or more shots
+that are not marked deliberate (`allow: ["still"]`), or when still pictures take
+more of the runtime than the `quality` bar. A resume of an unchanged spec is never
+refused. `dry_run` lists the same items under `blocking`, and warns about shot
+fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
+puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
+H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
+(`procedural_model`: use `spec.models`), rigged models that never play a clip
+(`model_not_animated`), one 3D template in more than four shots
+(`template_reused`), and the same sequence of shot kinds or the same lyric look as
+another production in the workspace (`same_shot_pattern`, `same_lyric_look`).
+
 ## Edit it by hand, shot by shot
 
 A finished production is not a black box. At the end of every run the studio packages it (`package` in the log):
@@ -377,11 +390,11 @@ textured Hunyuan3D models once, in one batch after the cast sheets, and rigs the
 with clips on the song's tempo:
 
 ```json
-"models": {
+{"models": {
   "hero": {"from": "hero", "animations": ["idle", "walk", "dance_bounce", "wave"]},
   "boat": {"from": "boat-picture", "rig": "vehicle"},
   "kite": {"prompt": "a red paper kite with a long tail"}
-}
+}}
 ```
 
 `from` is a cast id (its plain portrait), a `stills` name or a picture URL; an

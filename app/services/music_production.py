@@ -632,7 +632,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         data = _input(arguments)
         if data.get("dry_run") is True:
             from services.production_dry_run import dry_run
-            return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]))}
+            return {"version": 1, "status": "completed", "operation": RUN,
+                    "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]), production_id=data["production_id"])}
         if mcp is None and (not token() or not app_url()):
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"
@@ -659,6 +660,13 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+            if spec != production.state.get("spec"):
+                from services.production_quality_gate import blocking_problems
+                problems = blocking_problems(spec)
+                if problems:
+                    raise HTTPException(422, {"code": "quality_gate", "message": "The plan would look thin: " + "; ".join(
+                        f"{item['code']} ({item.get('still') or item.get('ratio')})" for item in problems) + ". See problems.",
+                        "problems": problems, "retryable": False})
             through = data.get("through", "all")
             if through not in ("all", "frames", "animatic"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})
