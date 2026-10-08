@@ -387,7 +387,7 @@
     "when": "When",
     "whatHappened": "What happened",
     "voicesTitle": "Voice bible · metadata",
-    "voicesDescription": "TTS comes from the linked library character. Pace, pitch and pronunciation here are series notes; they do not control MiniMax H3. Spoken audio follows the shot dialogue.",
+    "voicesDescription": "TTS comes from the linked library character. Pace and pitch here are series notes and do not control MiniMax H3. The pronunciation dictionary is spoken: each whole word is replaced before speech, and subtitles keep the script.",
     "kitTtsHint": "TTS preset comes from the linked library character.",
     "unlinkedTtsHint": "Link a library character to use its TTS. Provider and voice ID below are fallbacks only.",
     "provider": "Provider",

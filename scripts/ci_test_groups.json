@@ -786,6 +786,18 @@
       "paths": ["tests/test_speech_alignment_parity.py", "tests/test_language_detection_fallbacks.py"]
     },
     {
+      "prefix": "app/services/speech_qa.py",
+      "paths": ["tests/test_speech_qa.py", "tests/test_language_detection_fallbacks.py"]
+    },
+    {
+      "prefix": "app/services/speech_text_es.py",
+      "paths": ["tests/test_speech_qa.py", "tests/test_series_native_render.py"]
+    },
+    {
+      "prefix": "app/services/series_native_render.py",
+      "paths": ["tests/test_series_native_render.py"]
+    },
+    {
       "prefix": "app/services/series_ambience.py",
       "paths": [
         "tests/test_series_ambience.py",

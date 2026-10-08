@@ -53,6 +53,7 @@ from services.series_sound_cuts import materialize_cuts
 from services.series_video_foley import VIDEO_METHODS, pending_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
+from services.speech_text_es import line_notes, pronounce, qa_verdict
 from services.series_take_inputs import render_inputs, stale_shot_ids
 from services.series_voice_rooms import RoomError, apply_room, roomed
 
@@ -525,7 +526,7 @@ class SeriesNativeRender:
         voice = voice_for(kit, language) if kit else None
         if not voice:
             raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {language}")
-        return text, voice, recording_key(text, voice)
+        return text, line_notes(series, beat, voice), recording_key(text, voice)
 
     def record_line(self, workspace: str, job: dict, series: dict, beat: dict, kits: dict, *, retake: bool = False) -> dict[str, Any]:
         """One line as ``_voices`` records it (``series_line_voice``): its recording when there is one, else a new one.
@@ -597,12 +598,12 @@ class SeriesNativeRender:
                     # The voice stopped before speaking (only silence, or a click the trim kept): another seed.
                     _discard(final)
                     continue
-                wer = self._wer(workspace, f"{stem}.wav", text, job["language"])
+                wer, limit = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
                 take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
                 if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
                     best = take
                     _replace_with_sidecar(final, best_path)
-                if wer is None or wer <= MAX_WER:
+                if wer is None or wer <= limit:
                     break
         finally:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
@@ -624,6 +625,7 @@ class SeriesNativeRender:
 
     def _speak(self, workspace: str, job: dict, stem: str, text: str, voice: dict, attempt: int) -> str:
         seed = int(hashlib.sha1(f"{stem}-{attempt}".encode()).hexdigest()[:6], 16)
+        text = pronounce(text, voice.get("pronunciationDictionary"))
         intent = f"{stem}-a{attempt}"
         for _ in range(2):
             submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": intent[:160], "input": {
@@ -668,11 +670,10 @@ class SeriesNativeRender:
             if deadline is not None and self.deps.clock() >= deadline:
                 raise NativeRenderError("timeout", f"{label} was still {state or 'waiting'} when its time ran out", 504)
 
-    def _wer(self, workspace: str, filename: str, text: str, language: str) -> float | None:
+    def _wer(self, workspace: str, filename: str, text: str, language: str, voice: dict | None = None) -> tuple[float | None, float]:
         if not self.deps.check_speech:
-            return None
-        checked = self.deps.call("qa.speech", {"version": 1, "input": {"workspace": workspace, "file": filename, "text": text, "language": language}})
-        return None if checked.get("_is_error") else (checked.get("result") or {}).get("wer")
+            return None, MAX_WER
+        return qa_verdict(self.deps.call, workspace, filename, text, language, voice, MAX_WER)
 
     def _cues(self, workspace: str, filename: str, duration: float, text: str, language: str) -> dict[str, Any]:
         # "auto" uses the optional phoneme engine when it is installed and Rhubarb otherwise, so an install without
