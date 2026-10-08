@@ -19,8 +19,9 @@ _LISTED = 2
 
 
 def finish_check(episode: Any) -> None:
-    """Store grouped warnings, then raise when the check found errors."""
-    episode.warnings = script_warnings(episode)
+    """Store grouped warnings after those the shot checks already noted (a document too long), then raise when the
+    check found errors."""
+    episode.warnings = [*(getattr(episode, "warnings", None) or []), *script_warnings(episode)]
     _missing_voices(episode)
     _cast_indexes(episode)
     if episode.checker.problems:
