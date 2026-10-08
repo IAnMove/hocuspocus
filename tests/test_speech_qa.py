@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from services.speech_qa import command_catalog, command_handlers, measure_speech, word_error_rate, words
+from services.speech_text_es import dictionary_map, merge_names, phonetic_es, pronounce, token_error_rate
 
 
 def test_numbers_accents_and_punctuation_do_not_count_as_errors():
@@ -43,7 +44,8 @@ def test_the_mcp_tool_reads_workspace_files_only(tmp_path, monkeypatch):
     (tmp_path / "ws" / "take.wav").write_bytes(b"not decoded in this test")
     (tmp_path / "secret.wav").write_bytes(b"x")
     monkeypatch.setattr("services.speech_qa.measure_speech",
-                        lambda path, text, language, pitch_range=None: {"path": path, "text": text, "language": language, "range": pitch_range})
+                        lambda path, text, language, pitch_range=None, names=None: {
+                            "path": path, "text": text, "language": language, "range": pitch_range, "names": names})
     handle = command_handlers(lambda name: str(tmp_path / name))["qa.speech"]
     result = asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "/api/v1/file/take.wav?workspace=ws",
                                                          "text": "Hola.", "language": "es", "pitch_range": [80, 170]}}))
@@ -52,3 +54,32 @@ def test_the_mcp_tool_reads_workspace_files_only(tmp_path, monkeypatch):
         asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "../secret.wav", "text": "x"}}))
     assert error.value.status_code == 404
     assert command_catalog()[0]["mutation"] is False
+    named = asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "take.wav", "text": "Hola.", "names": ["Bilbao"]}}))
+    assert named["result"]["names"] == ["Bilbao"]
+    with pytest.raises(HTTPException) as rejected:
+        asyncio.run(handle({"version": 1, "input": {"workspace": "ws", "file": "take.wav", "text": "Hola.", "names": "Bilbao"}}))
+    assert rejected.value.status_code == 422
+
+
+def test_spanish_phonetics_names_short_lines_and_the_spoken_dictionary():
+    assert phonetic_es("Vilbao") == phonetic_es("Bilbao") == "bilbao"
+    assert phonetic_es("Ávila") == phonetic_es("Abila") == "abila"
+    assert phonetic_es("Zaragoza") == phonetic_es("Saragosa") == "saragosa"
+    assert phonetic_es("acción") == "acsion" and phonetic_es("que") == "ke" and phonetic_es("noche") == "noche"
+    assert phonetic_es("llave") == "yabe"
+    names = ["San Sebastián"]
+    assert token_error_rate(merge_names(words("San Sebastián", "es"), names),
+                            merge_names(words("San Sebas Tián", "es"), names)) == 0
+    short = measure_speech("take.wav", "norte claro", "es", pitch_range=[85, 165],
+                           load=lambda _path: _stub_audio(seconds=1.2, lead=0.1, trail=0.1),
+                           transcribe=lambda _audio, _code: "norte oscuro", pitch=lambda _audio, _rate: 120.0)
+    assert (short["wer"], short["wer_raw"], short["wer_threshold"]) == (0.5, 0.5, 0.5)
+    assert short["warnings"] == []
+    spoken = measure_speech("take.wav", "El Pejó espera.", "es",
+                            load=lambda _path: _stub_audio(seconds=2.0, lead=0.1, trail=0.1),
+                            transcribe=lambda _audio, _code: "el pejo espera", pitch=lambda _audio, _rate: 120.0)
+    assert spoken["wer"] == 0 and spoken["wer"] <= spoken["wer_threshold"]
+    assert pronounce("El Peugeot espera.", {"Peugeot": "Pejó"}) == "El Pejó espera."
+    assert pronounce("El Peugeot espera.", "Peugeot: Pejó") == "El Pejó espera."
+    assert pronounce("Peugeots", {"Peugeot": "Pejó"}) == "Peugeots"
+    assert dictionary_map("Peugeot=Pejó") == {"Peugeot": "Pejó"}

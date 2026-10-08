@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender, public_job, render_inputs, speech_params
+from services.series_shot_plan import recording_key
 
 KEVIN_ES = {"provider": "local", "model": "qwen3_tts_base", "voiceId": "reference", "name": "Kevin ES",
             "referenceAudio": "/api/v1/file/kevin-es.wav?workspace=cast", "transcript": "Hola.", "language": "spanish"}
@@ -95,6 +96,7 @@ class Tools:
         self.root, self.calls, self.jobs = tmp_path, [], 0
         self.bad_first_take, self.fail_export_once = bad_first_take, fail_export_once
         self.exports, self.wait_errors, self.fail_speech_at = {}, list(wait_errors), fail_speech_at
+        self.reported_wer = None
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
@@ -115,6 +117,9 @@ class Tools:
             return {"status": "completed", "outputs": [{"path": f"{speech['input']['output_name']}.wav"}]}
         if tool == "qa.speech":
             takes = [name for name, _ in self.calls if name == "qa.speech"]
+            if self.reported_wer is not None:
+                wer, threshold = self.reported_wer
+                return {"result": {"wer": wer, "wer_threshold": threshold}}
             return {"result": {"wer": 0.6 if self.bad_first_take and len(takes) == 1 else 0.05}}
         if tool == "audio.mouth_cues":
             return {"result": {"mouthCues": [{"start": 0, "end": 0.4, "value": "D"}], "recognizer": "wav2vec2-phoneme"}}
@@ -540,3 +545,36 @@ def test_without_the_phoneme_engine_lines_are_drawn_by_rhubarb_and_say_so(tmp_pa
     line = next(iter(public_job(done)["items"][0]["lines"].values()))
     assert line["driver"] == "rhubarb" and line["engine"] == "rhubarb" and line["fallbackReason"] == "phoneme_not_installed"
     assert line["cueCount"] == 1 and compiled[0]["shot"]["lines"][0]["cues"]
+
+
+def test_a_pronunciation_dictionary_is_spoken_and_the_subtitle_keeps_the_script(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    series = project["seriesById"]["uv"]
+    series["characters"][1]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    series["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "El Peugeot espera."}]
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_library = lambda _ws: project
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    speech = [args["input"] for tool, args in tools.calls if tool == "generation.speech"]
+    cues = [args["input"] for tool, args in tools.calls if tool == "audio.mouth_cues"]
+    checked = [args["input"] for tool, args in tools.calls if tool == "qa.speech"]
+    assert speech[0]["params"]["prompt"] == "El Pejó espera."
+    assert cues[0]["dialogue"] == "El Peugeot espera."
+    assert checked[0]["text"] == "El Pejó espera." and "Peugeot" in checked[0]["names"]
+    assert done["items"][0]["lines"]["s03_d0"]["key"] == recording_key("El Peugeot espera.", GARY)
+    spoken = [tool for tool, _ in tools.calls].count("generation.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["items"][0]["lines"]["s03_d0"]["reused"]
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken
+
+
+def test_a_one_word_miss_within_the_spanish_threshold_is_not_spoken_again(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_wer = (1.0, 1.0)
+    render = service(tmp_path, tools, compiled)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert (line["attempt"], line["wer"]) == (0, 1.0)
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == 1
