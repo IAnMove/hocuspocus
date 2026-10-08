@@ -51,8 +51,10 @@ METHODS = {"3d": "animation_3d", "video": "imported_video", "generated": "genera
 
 class ScriptError(ValueError):
     def __init__(self, problems: list[str]) -> None:
+        from services.series_script_problems import format_groups, group_problems
         self.problems = problems
-        super().__init__("; ".join(problems[:12]) + (f" (+{len(problems) - 12} more)" if len(problems) > 12 else ""))
+        self.groups = group_problems(problems)
+        super().__init__(format_groups(self.groups))
 
 
 def _language(key: str) -> str | None:

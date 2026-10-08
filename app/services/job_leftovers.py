@@ -30,8 +30,20 @@ _RUNTIME_PARAM_KEYS = frozenset({
 })
 
 
-def _error(status: int, code: str, message: str) -> HTTPException:
-    return HTTPException(status, {"code": code, "message": message, "retryable": status >= 500})
+def _error(status: int, code: str, message: str, *, unexpected: list[str] | None = None,
+           allowed: list[str] | None = None) -> HTTPException:
+    detail = {"code": code, "message": message, "retryable": status >= 500}
+    if unexpected is not None:
+        detail["unexpected"] = unexpected
+    if allowed is not None:
+        detail["allowed"] = allowed
+    return HTTPException(status, detail)
+
+
+def _field_message(unexpected: list[str], allowed: list[str]) -> str:
+    if not allowed:
+        return "This tool takes no input fields"
+    return f"Unexpected field(s): {', '.join(unexpected)}. Allowed: {', '.join(allowed)}"
 
 
 def _workspace(value: Any) -> str:
@@ -229,8 +241,9 @@ def command_catalog() -> list[dict]:
         _operation(
             "jobs.leftovers", False,
             "List generation requests left in the durable queue after a restart, and Video 2D/3D exports a restart "
-            "interrupted. They are not running. Resume or discard one by intent_id; do not submit a second copy.",
-            {"version": version, "input": _input({})}, ["version"],
+            "interrupted. They are not running. The queue is process-wide; optional input.workspace is ignored. "
+            "Resume or discard one by intent_id; do not submit a second copy.",
+            {"version": version, "input": _input({"workspace": {"type": "string", "minLength": 1}})}, ["version"],
         ),
         _operation(
             "jobs.resume", True,
@@ -269,8 +282,20 @@ def _intent_argument(arguments: Any, operation: str) -> str:
 def command_handlers(service: "JobLeftovers") -> dict[str, Callable[[Any], dict]]:
     def leftovers(arguments: Any) -> dict:
         payload = _require_version(arguments, "jobs.leftovers")
-        if set(payload) - {"version", "input"} or payload.get("input") not in (None, {}):
-            raise _error(422, "invalid_command", "jobs.leftovers accepts only version and an empty input")
+        if set(payload) - {"version", "input"}:
+            raise _error(422, "invalid_command", "jobs.leftovers accepts version and input")
+        nested = payload.get("input")
+        if nested is None:
+            nested = {}
+        if not isinstance(nested, dict):
+            raise _error(422, "invalid_command", "jobs.leftovers input must be an object")
+        unexpected = sorted(set(nested) - {"workspace"})
+        if unexpected:
+            allowed = ["workspace"]
+            raise _error(422, "invalid_command", _field_message(unexpected, allowed), unexpected=unexpected, allowed=allowed)
+        workspace = nested.get("workspace")
+        if workspace is not None and (not isinstance(workspace, str) or not workspace.strip()):
+            raise _error(422, "invalid_command", "workspace must be a non-empty string")
         return service.list_response()
 
     def resume(arguments: Any) -> dict:

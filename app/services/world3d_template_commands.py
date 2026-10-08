@@ -17,7 +17,7 @@ from services.world3d_scenes import (
     publish_scene, put_user_template, talk_scene,
 )
 from services.world3d_template_catalog import (
-    CATALOG_OPERATION, World3DTemplateError, require_card, search_templates, user_template_document,
+    CATALOG_OPERATION, World3DTemplateError, page_templates, require_card, search_templates, user_template_document,
 )
 
 _LOCK = threading.RLock()
@@ -47,7 +47,7 @@ _MUTATIONS = {
     "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
 }
 _OPERATIONS = {
-    "world3d.templates.list": (False, "Search Video 3D shots. Returns at most 8 short cards unless limit is set, never the whole library.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, []),
+    "world3d.templates.list": (False, "List Video 3D shots. With no query, cards stay in id order. limit defaults to 50 and is at most 200; offset pages the list. The reply includes total. workspace is required.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 200}, "offset": {"type": "integer", "minimum": 0}}, []),
     CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, []),
     "world3d.templates.get": (False, "Return one exact Video 3D template card and its editable document. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
     "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-.", {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
@@ -104,7 +104,9 @@ def command_handlers(workspace_dir):
 
 
 def _effect(name, data, workspace_dir):
-    if name in {"world3d.templates.list", CATALOG_OPERATION}:
+    if name == "world3d.templates.list":
+        return _list_page(data, workspace_dir)
+    if name == CATALOG_OPERATION:
         return _search(data, workspace_dir)
     if name == "world3d.templates.get":
         return _get(data, workspace_dir)
@@ -132,6 +134,13 @@ def _search(data, workspace_dir):
     cards = search_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
                              limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"])
     return {"status": "completed", "templates": cards}
+
+
+def _list_page(data, workspace_dir):
+    page = page_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
+                          limit=data.get("limit"), offset=data.get("offset", 0), workspace_dir=workspace_dir,
+                          workspace=data["workspace"])
+    return {"status": "completed", **page}
 
 
 def _get(data, workspace_dir):
