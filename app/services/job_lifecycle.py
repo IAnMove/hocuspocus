@@ -935,8 +935,19 @@ def generation_slot(
     acquired = acquire_generation_slot(
         generation_lock, job, poll_interval=poll_interval, yield_to=yield_to,
     )
+    # The file lock is taken only after this process owns the GPU, and it is
+    # dropped before that ownership returns to the local queue.
     try:
-        yield acquired
+        from services.gpu_machine_lock import machine_generation
+
+        with machine_generation(
+            job,
+            acquired,
+            poll_interval=poll_interval,
+            should_stop=lambda: is_cancel_requested(job),
+            publish=_notify_job_state,
+        ) as run:
+            yield run
     finally:
         if acquired:
             generation_lock.release()
