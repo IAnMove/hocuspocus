@@ -145,7 +145,8 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
         episode = stored["episodesById"][episode_id]
         shot = next(item for item in episode["shots"] if item["id"] == outcome["shot"]["id"])
         reply = {"shotId": shot["id"], "number": outcome["number"], "changed": outcome["changed"],
-                 "approvalReset": outcome["approvalReset"], "missingLines": outcome["missingLines"],
+                 "approvalReset": outcome["approvalReset"], "reset": outcome["reset"],
+                 "missingLines": outcome["missingLines"],
                  "revision": stored.get("revision"), "shot": shot_view(stored, episode, shot, outcome["number"]), **told,
                  **look(stored, shot)}
         if body.stored:

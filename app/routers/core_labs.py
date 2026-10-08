@@ -20,8 +20,8 @@ from services.character_kit_library import (
     patch_character_kit,
     read_character_kit_library,
 )
+from routers.series_episode import create_checked_episode
 from services.series_library import (
-    create_series_episode,
     create_series_project,
     duplicate_series_project,
     import_story_project,
@@ -281,10 +281,7 @@ def create_core_labs_router() -> APIRouter:
             series = copy.deepcopy(_series_or_404(library, series_id))
             if series.get("canon", {}).get("approval") != "approved":
                 raise HTTPException(status_code=400, detail="Approve the reviewed Series canon before creating an episode")
-            episode = create_series_episode(
-                series, str(body.get("seasonId") or "") or None,
-                **(body.get("episode") if isinstance(body.get("episode"), dict) else {}),
-            )
+            episode = create_checked_episode(series, body)
             series["episodesById"][episode["id"]] = episode
             season = next(item for item in series["seasons"] if item["id"] == episode["seasonId"])
             season["episodeOrder"].append(episode["id"])

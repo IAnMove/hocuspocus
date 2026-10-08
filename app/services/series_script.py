@@ -34,6 +34,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from services.series_entrances import GAITS
+from services.series_library import assign_episode_number
 from services.series_layers import layout_layers
 from services.series_look_room import apply as keep_look_room
 from services.series_shot3d import normalize_scene3d, scene3d_problems
@@ -354,14 +355,16 @@ def _tool_caller(call: Callable[[str, dict], dict], workspace: str, series_id: s
 
 def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], dict], kits: dict[str, Any], files: set[str],
                  workspace: str, script: dict[str, Any], episode_id: str | None = None, check_only: bool = False,
-                 root: str | None = None) -> dict[str, Any]:
+                 root: str | None = None, number: int | None = None) -> dict[str, Any]:
     """Check, then create (or rewrite) the episode and its language versions through the series tools.
 
     ``root`` is the workspace folder: 3D objects' models and clip names are checked in it, and the poses' images are
     read there for which way they look. A 2D shot's cast is moved so nobody looks out of the frame
     (``series_look_room``): ``lookRoom`` lists the moves, ``lookRoomKept`` who still looks out and why."""
     series = read_series()
-    number = _episode_number(series.get("episodesById") or {}, episode_id)
+    episodes = series.get("episodesById") or {}
+    requested = number
+    number = _episode_number(episodes, episode_id) if episode_id else assign_episode_number(episodes, requested)
     built = EpisodeScript(series, script, number, kits, files, root)
     built.check()
     shots = built.shots()
@@ -373,7 +376,8 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     title = str(_pick(_texts(script.get("title")), built.original) or f"Episode {number}")
     premise = str(_pick(_texts(script.get("premise")), built.original) or "")
     if not episode_id:
-        episode_id = tool("series.episode.create", {"episode": {"title": title, "premise": premise}})["episode"]["id"]
+        body = {"title": title, "premise": premise, **({"number": number} if requested is not None else {})}
+        episode_id = tool("series.episode.create", {"episode": body})["episode"]["id"]
     current = read_series()
     # The script is the whole episode: shots it no longer has are removed, and a shot whose content changed
     # loses its takes instead of keeping a video of other lines (replaceShots).
