@@ -82,17 +82,6 @@ def game_warning(code: str, message: str, **extra: Any) -> dict[str, Any]:
     return item
 
 
-def warning_codes(items) -> list[str]:
-    """Codes from warning objects, and from a legacy ``code`` or ``code:ref`` string."""
-    codes: list[str] = []
-    for item in items or []:
-        if isinstance(item, dict) and isinstance(item.get("code"), str):
-            codes.append(item["code"])
-        elif isinstance(item, str) and item:
-            codes.append(item.split(":", 1)[0])
-    return codes
-
-
 def empty_library() -> dict[str, Any]:
     return {"schema": SCHEMA, "version": 1, "games": []}
 

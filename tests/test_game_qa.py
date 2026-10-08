@@ -11,9 +11,10 @@ from services import game_qa
 from services.game_generators import REGISTRY
 from services.game_generators.base import AttemptResult
 from services.game_inputs import asset_inputs
-from services.game_library import add_attempt, approve_attempt, create_game, normalize_style, update_game, upsert_assets, warning_codes
+from services.game_library import add_attempt, approve_attempt, create_game, normalize_style, update_game, upsert_assets
 from services.game_produce import GameProduce, ProduceDeps
 from services.game_qa import file_dhash, note_style, style_check
+from tests.game_warnings import warning_codes
 
 NOW = "2026-10-06T12:00:00Z"
 

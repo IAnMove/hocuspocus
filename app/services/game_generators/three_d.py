@@ -152,15 +152,26 @@ def _inspect(path: Path, *, skinned: bool = False):
     return report
 
 
+def _raw_refs(ctx: GenContext, raw) -> list[str]:
+    if not raw:
+        return []
+    file = resolve_path(ctx, raw)
+    try:
+        return [relative(ctx, file)]
+    except ValueError:
+        return [str(file)]
+
+
 def _concepts(ctx: GenContext, count: int, staging: str = _STAGING, reuse_raw: bool = True) -> list[tuple[str, bool]]:
-    """``(image, generated)`` per candidate. Approved art is shared only when ``reuse_raw``."""
-    raw = _approved_raw(ctx.game, ctx.asset) if reuse_raw else None
-    if raw:
+    """``(image, generated)`` per candidate. Approved art is shared when ``reuse_raw``; otherwise it is the
+    reference of the new concept, so a character's T-pose keeps the approved sprite's look."""
+    raw = _approved_raw(ctx.game, ctx.asset)
+    if raw and reuse_raw:
         return [(str(resolve_path(ctx, raw)), False)] * count
     prompt, negative = build(ctx.game, ctx.asset, staging, chroma=False)
     files = image(
         ctx, "concept", prompt=prompt, negative=negative, resolution="1024x1024",
-        seed=spec_seed(ctx.asset), batch=count,
+        refs=_raw_refs(ctx, raw), seed=spec_seed(ctx.asset), batch=count,
     )
     return [(str(name), True) for name in files[:count]]
 

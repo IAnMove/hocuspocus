@@ -19,9 +19,10 @@ from services.game_generators.audio import (
     music_seconds,
 )
 from services.game_generators.base import GenContext
-from services.game_library import normalize_game, warning_codes
+from services.game_library import normalize_game
 from services.game_produce import _candidates
 from services.game_tools import GameToolError
+from tests.game_warnings import warning_codes
 
 NOW = "2026-10-07T12:00:00Z"
 

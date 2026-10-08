@@ -20,8 +20,8 @@ from services.game_generators.three_d import (
     clips_for,
 )
 from services.game_produce import _candidates
-from services.game_library import warning_codes
 from services.game_tools import GameToolError
+from tests.game_warnings import warning_codes
 
 GLB_MAGIC = 0x46546C67
 JSON_CHUNK = 0x4E4F534A
@@ -350,6 +350,23 @@ def test_character_uses_approved_art_and_reports_missing_clips(tmp_path):
     assert "concept" in result.files
     assert (workspace / result.files["rig"]).is_file()
     assert generator.estimate(game, asset) == {"image": 1, "3d": 1, "rig": 1}
+
+
+def test_the_t_pose_concept_takes_the_approved_art_as_its_reference(tmp_path):
+    workspace = _workspace(tmp_path)
+    (workspace / "hero.png").write_bytes(b"png")
+    game, asset = _character([_approved_hero("enemy")], character="heroe")
+    fake = _Tools(workspace)
+    Character3dGenerator().run(_ctx(workspace, game, asset, fake))
+    params = fake.named("generation.image")[0]["input"]["params"]
+    assert params["image_refs"] == ["/api/v1/file/hero.png?workspace=bosque"]
+    assert params["video_prompt_type"] == "I"
+    assert "T-pose" in params["prompt"]
+    assert fake.named("model3d.generate")[0]["input"]["image_path"].endswith("cofre-concept.png")
+    lone_game, lone = _character()
+    alone = _Tools(workspace)
+    Character3dGenerator().run(_ctx(workspace, lone_game, lone, alone))
+    assert "image_refs" not in alone.named("generation.image")[0]["input"]["params"]
 
 
 def test_enemy_humanoid_asks_only_for_clips_the_humanoid_rig_has(tmp_path):

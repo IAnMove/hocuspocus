@@ -224,7 +224,7 @@ A jingle is cut on the downbeat nearest `seconds` and faded out over 300 ms. Sfx
 
 ### Meshes
 
-Hunyuan3D gets `reduce_face: true` and `target_face_num` from `spec.maxTriangles`, else `style.model3d.maxTriangles`, else 3000. `texture_resolution` is `spec.texture` (the service clamps it to 256–1024), and the candidate's seed. Its preset is `multiview` with `multiview`, `quality` for a `painted` look, else `balanced`. A `model3d` reuses the approved character plate when there is one. A `character3d` always generates its own concept: "T-pose, front view, arms horizontal, plain light grey background". The orbit sends that image as `image_refs`, which is what the character-sheet engine requires.
+Hunyuan3D gets `reduce_face: true` and `target_face_num` from `spec.maxTriangles`, else `style.model3d.maxTriangles`, else 3000. `texture_resolution` is `spec.texture` (the service clamps it to 256–1024), and the candidate's seed. Its preset is `multiview` with `multiview`, `quality` for a `painted` look, else `balanced`. A `model3d` reuses the approved character plate when there is one. A `character3d` always generates its own concept: "T-pose, front view, arms horizontal, plain light grey background", with the approved character's art as the image reference when there is one, so the mesh keeps the approved look. The orbit sends that image as `image_refs`, which is what the character-sheet engine requires.
 
 Rig clips are `spec.clips`, else the role's clips. A clip takes the engine's nearest name (humanoid `attack` → `punch`, procedural `punch` → `attack`). Only clips the engine accepts are sent, else `idle`. The others come back as `clip_missing`.
 

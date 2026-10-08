@@ -22,9 +22,10 @@ from services.game_generators.animation import (
 )
 from services.game_generators.base import GenContext
 from services.game_image_ops import feet_point
-from services.game_library import normalize_game, warning_codes
+from services.game_library import normalize_game
 from services.game_produce import GameProduce, ProduceDeps
 from services.game_tools import GameToolError
+from tests.game_warnings import warning_codes
 
 
 NOW = "2026-10-07T00:00:00Z"
