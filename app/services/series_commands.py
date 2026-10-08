@@ -343,7 +343,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "it (repeat: steps on every footfall). A change renders again only the shots it reaches. score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
-        "changing it renders no take. An sfx's in (source second) and length play only that part of its file. A "
+        "changing it renders no take. kitPins {kitId: revision} renders and fingerprints those Character Kit revisions; "
+        "omit it to keep using the latest kit (series.episode.kits.pin and series.episode.kits.update). An sfx's in "
+        "(source second) and length play only that part of its file. A "
         "generated_video or imported_video shot's layout2d.sfx, music and foley are laid on its take at the cut, over "
         "the clip's own sound (layout2d.clipAudio keep | drop, clipVolume 0-2), and a clip in another size, frame rate "
         "or pixel aspect is conformed to the episode's (layout2d.clipFit cover | contain); changing them keeps the take. "
@@ -351,6 +353,20 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "fade?, speed?, offset?, loop?}]), hold {carrier (a 3D model object that does not speak in the shot), hand left|right, "
         "offset? [x,y,z] m, rotation? [x,y,z] radians, Euler XYZ in the hand bone's frame} and appearance {start, "
         "duration?, color?}; a model is 1.7 m x scale tall.",
+    ),
+    "series.episode.kits.pin": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID,
+         "kits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Pin this episode to Character Kit revisions. Without kits, pin every kit of the cast at its current "
+        "revision. With kits {kitId: revision}, pin those. The render and the shot fingerprint then use that "
+        "revision. An episode with no pins keeps using the latest kit, as it did before.",
+    ),
+    "series.episode.kits.update": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "kit_id": ID},
+        ["workspace", "series_id", "episode_id"], True,
+        "Move this episode's kit pins to the latest revision. kit_id moves one kit; omitted moves every pin. "
+        "Returns the shots that become stale, and only the shots of the character whose kit moved.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},
@@ -908,9 +924,17 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
 }
 
 
-def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str]) -> Any:
+def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:
     if name == "series.asset.import":
         return _import_asset(data, request, workspace_file=workspace_file, uploads_dir=uploads_dir)
+    if name in ("series.episode.kits.pin", "series.episode.kits.update"):
+        from services.series_kit_pins import KitPinError, run_episode_kits
+        if workspace_dir is None:
+            raise SeriesCommandError("The workspace is not ready", status=503)
+        try:
+            return run_episode_kits(name, data, workspace_dir)
+        except KitPinError as error:
+            raise SeriesCommandError(str(error), status=error.status) from error
     runner = _RUNNERS.get(name)
     if runner is None:
         raise SeriesCommandError("Unknown operation")
@@ -977,8 +1001,8 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
 
     def run(name: str, data: dict[str, Any], intent: Any = None) -> Any:
         if intent is None or name not in INTENT_OPERATIONS:
-            return _run_operation(name, data, request, workspace_file, uploads_dir)
-        return _run_once(name, data, intent, lambda: _run_operation(name, data, request, workspace_file, uploads_dir), workspace_dir)
+            return _run_operation(name, data, request, workspace_file, uploads_dir, workspace_dir)
+        return _run_once(name, data, intent, lambda: _run_operation(name, data, request, workspace_file, uploads_dir, workspace_dir), workspace_dir)
 
     def handler(name: str) -> Callable[[Any], Any]:
         properties, required, _, _ = OPERATIONS[name]

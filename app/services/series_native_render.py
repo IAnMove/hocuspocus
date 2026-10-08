@@ -302,7 +302,7 @@ class SeriesNativeRender:
         missing = self._missing_kits(workspace, series, shots)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
-        voiceless = self._missing_voices(workspace, series, shots, language, language_key(raw_series))
+        voiceless = self._missing_voices(workspace, series, raw_episode, shots, language, language_key(raw_series))
         if voiceless:
             raise NativeRenderError("no_voice", f"{', '.join(voiceless)} have no {language} voice (voicesByLanguage); "
                                     f"design one before rendering this version", 400)
@@ -315,7 +315,7 @@ class SeriesNativeRender:
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
         if mode == "direct":
             return [{"shot": shot, "pass": None} for shot in shots], {}
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         root = self.deps.workspace_dir(workspace)
         planned, waiting = render_passes(series, episode, shots, lambda shot: render_inputs(series, shot, kits, root),
                                          explicit=explicit, original=original)
@@ -327,12 +327,17 @@ class SeriesNativeRender:
             raise NativeRenderError("up_to_date", "Every shot asked for already has its approved final take", 409)
         return planned, {"mode": mode, "waiting": waiting}
 
-    def _missing_voices(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]], language: str, original: str) -> list[str]:
+    def _kits(self, workspace: str, episode: dict | None) -> dict:
+        """Latest kits, unless this episode pins revisions (``series_kit_pins``)."""
+        from services.series_kit_pins import kits_for_episode
+        return kits_for_episode(self.deps.read_kits(workspace), episode, self.deps.workspace_dir(workspace))
+
+    def _missing_voices(self, workspace: str, series: dict[str, Any], episode: dict, shots: list[dict[str, Any]], language: str, original: str) -> list[str]:
         """Speakers of a language version whose kit has no voice designed for that language (the default would be the wrong accent)."""
         if language == original:
             return []
         shots = _drawn(shots)
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         speakers = dict.fromkeys(beat.get("characterId") for shot in shots for beat in shot.get("dialogueBeats") or []
                                  if str(beat.get("text") or "").strip() and beat.get("characterId"))
@@ -389,7 +394,7 @@ class SeriesNativeRender:
         raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
         original = (language or language_key(raw_series)) == language_key(raw_series)
         series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         shots = sorted((shot for shot in episode.get("shots") or [] if _renders(shot, episode)), key=lambda shot: shot.get("order", 0))
         root = self.deps.workspace_dir(workspace)
         stale = stale_shot_ids(series, episode, kits, root)
@@ -490,7 +495,7 @@ class SeriesNativeRender:
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         item["status"] = "running"
         if item["stage"] in ("voices", "scene"):
             # Recorded lines are reused; a resume after a restart (or after a cleanup) only records what is missing.

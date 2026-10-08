@@ -416,6 +416,7 @@
   "episode": {
     "heading": "Episode {{number}} · {{title}}",
     "frozen": "Frozen canon revision {{revision}}. Planning cannot mutate the current series canon.",
+    "kitPinBehind": "this episode uses revision {{pinned}} of {{name}}; there is a {{latest}}",
     "title": "Episode title",
     "duration": "Target duration",
     "premise": "Episode premise",

@@ -299,6 +299,7 @@
         "tests/test_assets_router.py",
         "tests/test_cancellable_model_downloads.py",
         "tests/test_character_kit_library.py",
+        "tests/test_series_kit_pins.py",
         "tests/test_character_kit_library_router.py",
         "tests/test_character_language_voices.py",
         "tests/test_character_sheet.py",
@@ -978,7 +979,14 @@
         "tests/test_lips_creator.py",
         "tests/test_lips_creator_commands.py",
         "tests/test_flat_rig_warp.py",
-        "tests/test_pose_facing.py"
+        "tests/test_pose_facing.py",
+        "tests/test_series_kit_pins.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_kit_pins.py",
+      "paths": [
+        "tests/test_series_kit_pins.py"
       ]
     },
     {
@@ -992,7 +1000,8 @@
       "prefix": "app/services/series_commands.py",
       "paths": [
         "tests/test_series_commands.py",
-        "tests/test_series_line_voice.py"
+        "tests/test_series_line_voice.py",
+        "tests/test_series_kit_pins.py"
       ]
     },
     {
@@ -1819,7 +1828,7 @@
     },
     {
       "prefix": "app/services/mcp_profiles.py",
-      "paths": ["tests/test_game_profile.py", "tests/test_series_agent_fixes.py"]
+      "paths": ["tests/test_game_profile.py", "tests/test_series_agent_fixes.py", "tests/test_series_kit_pins.py"]
     },
     {
       "prefix": "app/services/game_generators/animation.py",

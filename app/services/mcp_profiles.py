@@ -19,6 +19,7 @@ SERIES_TOOLS = frozenset({
     "series.assembly.start", "series.assembly.status", "series.location.plate3d", "series.location.plate3d.status",
     # The user's staged review: production mode, plan/preview approvals and notes per shot.
     "series.episode.review.get", "series.episode.review.set", "series.shot.review.set",
+    "series.episode.kits.pin", "series.episode.kits.update",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
     "characters.rig.flat.preview",

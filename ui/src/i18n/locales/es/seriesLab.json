@@ -416,6 +416,7 @@
   "episode": {
     "heading": "Episodio {{number}} · {{title}}",
     "frozen": "Revisión de canon congelada {{revision}}. La planificación no puede mutar el canon actual de la serie.",
+    "kitPinBehind": "este episodio usa la revisión {{pinned}} de {{name}}; hay una {{latest}}",
     "title": "Título del episodio",
     "duration": "Duración objetivo",
     "premise": "Premisa del episodio",
