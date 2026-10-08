@@ -46,9 +46,10 @@ _MUTATIONS = {
     "world3d.scene.instantiate", "world3d.scene.patch", "world3d.scene.publish",
     "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
 }
+_ROLES = {"type": "array", "maxItems": 4, "items": {"enum": ["subject_1", "subject_2", "background", "prop"]}}
 _OPERATIONS = {
-    "world3d.templates.list": (False, "Search or list Video 3D shots. With a query, limit defaults to 8 and is at most 24. With no query, cards stay in id order and limit defaults to 50, the maximum. offset pages either; the reply includes total. workspace is required.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0}}, []),
-    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, []),
+    "world3d.templates.list": (False, "Search or list Video 3D shots. With a query, limit defaults to 8 and is at most 24. With no query, cards stay in id order and limit defaults to 50, the maximum. offset pages either; the reply includes total. roles keeps templates that have every listed role (for a cast and a painted set: [\"subject_1\", \"background\"]); setting keeps one place (studio, city, sea, stage, space...). workspace is required.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0}, "roles": _ROLES, "setting": {"type": "string"}}, []),
+    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles and setting filter as in list.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}}, []),
     "world3d.templates.get": (False, "Return one exact Video 3D template card and its editable document. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
     "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-.", {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
     "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
@@ -132,14 +133,15 @@ def _effect(name, data, workspace_dir):
 
 def _search(data, workspace_dir):
     cards = search_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
-                             limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"])
+                             limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"],
+                             roles=data.get("roles"), setting=data.get("setting"))
     return {"status": "completed", "templates": cards}
 
 
 def _list_page(data, workspace_dir):
     page = page_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
                           limit=data.get("limit"), offset=data.get("offset", 0), workspace_dir=workspace_dir,
-                          workspace=data["workspace"])
+                          workspace=data["workspace"], roles=data.get("roles"), setting=data.get("setting"))
     return {"status": "completed", **page}
 
 

@@ -86,6 +86,8 @@ SPEC_SCHEMA: dict[str, Any] = {
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
                                                    "lyric_template": {"type": "string"}, "lyric_style": {"type": "object"},
+                                                   "lyric_look": {"type": "string", "description": "a designed lyric look (app/shared/lyric_looks.json): cinema, storybook, marker-pop, neon, big-word, typewriter, paper-strip, comic-caption, riso-offset, quiet-left, engraved, arcade, wave-chant"},
+                                                   "lyric_looks": {"type": "object", "description": "song section (default, intro, verse, pre-chorus, chorus, bridge, outro) -> lyric look, so sections differ"},
                                                    "theme": {"type": "string", "description": "Omarchy colour theme id (app/shared/omarchy_themes.json): screen shots, lyric and footer colours"},
                                                    "content": {"enum": ["screen"], "description": "what auto-planned non-sung shots are: the native desktop (default: a short H3 clip, or stills when given)"},
                                                    "singer": {"type": "boolean", "description": "false: nobody sings on screen (auto-planned shots have no sung H3 shots)"},
@@ -98,12 +100,14 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                         "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
                                                                   "description": "ids of other cast entries: one reference image with their portraits side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
+        "sets": {"type": "object", "description": "name -> {prompt, seed}: painted sets for scene3d background, drawn eye-level with an open floor and nobody in it, in the same image batch as the models"},
+        "models": {"type": "object", "description": "name -> {from (cast id, stills name or picture URL) or prompt, rig (humanoid, prop, vehicle, quadruped, flying, serpentine, none; humanoid for a cast id), animations [clip names], seed}: textured Hunyuan3D GLBs, rigged with clips on the song's tempo, made in one batch after cast. A scene3d cast entry uses the name."},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
-            "scene3d": {"type": "object", "description": "Native Video 3D: template or document, GLB subject/slots, camera, atmosphere and movement"},
+            "scene3d": {"type": "object", "description": "Native Video 3D: template or document; cast {role or object id: GLB/picture or {source, clip, motion...}}, background (painted set projected on the floor), floor, GLB subject/slots, camera, atmosphere and movement"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"},
             "allow": {"type": "array", "maxItems": 3, "items": {"enum": ["still", "dark", "secondary"]},
@@ -186,6 +190,13 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
+    from services.production_lyric_looks import LyricLookError, check_lyric_looks
+    from services.production_models import ModelError, check_models
+    try:
+        check_models(spec)
+        check_lyric_looks(spec["style"])
+    except (ModelError, LyricLookError) as error:
+        raise ProductionError("invalid_spec", str(error)) from error
     from services.production_resolution import check_resolution
     return require_direction(check_resolution(spec))
 
@@ -480,8 +491,10 @@ class Production:
         return title_ops(shot, dur, style)
 
     def _lyric_ops(self, shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int) -> list[dict]:
+        from services.production_lyric_looks import line_sections
         from services.production_scene_ops import lyric_ops
-        return lyric_ops(self.log, shot, a, b, dur, score, style, used)
+        sections = line_sections(((getattr(self, "state", {}).get("spec") or {}).get("song") or {}).get("lyrics") or "")
+        return lyric_ops(self.log, shot, a, b, dur, score, style, used, sections)
 
     @staticmethod
     def _footer_ops(dur: float, style: dict) -> list[dict]:
@@ -498,7 +511,8 @@ class Production:
 
     def run(self, spec: dict, retake: tuple[str, ...] = (), through: str = "all") -> None:
         from services.production_stage_run import execute_run
-        execute_run(self, spec, retake, through)
+        from services.production_turn import run_in_turn
+        run_in_turn(self, lambda: execute_run(self, spec, retake, through))
 
 
 
@@ -626,7 +640,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         data = _input(arguments)
         if data.get("dry_run") is True:
             from services.production_dry_run import dry_run
-            return {"version": 1, "status": "completed", "operation": RUN, "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]))}
+            return {"version": 1, "status": "completed", "operation": RUN,
+                    "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]), production_id=data["production_id"])}
         if mcp is None and (not token() or not app_url()):
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"
@@ -653,6 +668,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+            from services.production_quality_gate import refuse_thin_plan
+            refuse_thin_plan(spec, production.state.get("spec"))
             through = data.get("through", "all")
             if through not in ("all", "frames", "animatic"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})

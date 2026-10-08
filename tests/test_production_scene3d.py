@@ -380,3 +380,152 @@ def test_mixed_native_cuts_share_the_grid_and_existing_2d_cuts_stay_unchanged():
     assert round((cuts[0][2] - cuts[0][1]) * 24) + round((cuts[1][2] - cuts[1][1]) * 24) == 48
     legacy = [first, ({'key': 'clip', 'kind': 'clip'}, 1.009, 2.018)]
     assert align_native_cuts(legacy) == legacy
+
+
+# ---------------------------------------------------------------- template + cast + painted set
+from services.production_scene3d import resolve_media  # noqa: E402
+
+NODE = pytest.mark.skipif(not (Path(__file__).resolve().parents[1] / "ui/node_modules/tsx/dist/loader.mjs").is_file(),
+                          reason="UI dependencies not installed in Python-only CI")
+
+
+def cast_shot(**config):
+    return {"key": "set", "kind": "scene3d", "t0": 0, "scene3d": {"template": "dance-stage", **config}}
+
+
+def glb(path, clips):
+    """A .glb that only carries animation names, enough for the clip lookup."""
+    import json
+    import struct
+    body = json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": name} for name in clips]}).encode()
+    body += b" " * (-len(body) % 4)
+    path.write_bytes(b"glTF" + struct.pack("<II", 2, 20 + len(body)) + struct.pack("<I4s", len(body), b"JSON") + body)
+
+
+def test_a_template_takes_a_cast_and_a_background_instead_of_a_document():
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "hero.glb"}, background="fair", floor="backdrop"))
+    validate_scene3d_shot(cast_shot(cast={"subject_1": {"source": "hero.glb", "clip": "dance", "scale": 1.2}},
+                                    background={"source": "fair", "surface": "environment"}))
+
+
+@pytest.mark.parametrize("config", [
+    {"cast": {}}, {"cast": {"subject_1": {"clip": "dance"}}}, {"cast": {"subject_1": {"source": "a.glb", "colour": 1}}},
+    {"cast": {"subject_1": "a.glb"}, "background": {"source": "fair", "surface": "sky"}},
+    {"cast": {"subject_1": "a.glb"}, "floor": "lava"}, {"background": "fair"},
+])
+def test_rejects_a_cast_or_set_it_cannot_bind(config):
+    with pytest.raises(ValueError):
+        validate_scene3d_shot(cast_shot(**config))
+
+
+def test_names_become_urls_and_clip_names_their_index(tmp_path):
+    glb(tmp_path / "hero.glb", ["idle", "dance"])
+    config = {"template": "dance-stage", "background": "fair",
+              "cast": {"subject_1": {"source": "hero.glb", "clip": "dance",
+                                     "clips": [{"clip": "idle", "start": 0}, {"clip": {"index": 1, "name": "dance"}, "start": 2}]}}}
+    resolved = resolve_media(config, stills={"fair": "/api/v1/uploads/fair.png"}, root=tmp_path, workspace="my ws")
+    hero = resolved["cast"]["subject_1"]
+    assert resolved["background"] == {"source": "/api/v1/uploads/fair.png"}
+    assert hero["source"] == "/api/v1/file/hero.glb?workspace=my%20ws"
+    assert hero["clip"] == {"index": 1, "name": "dance"}
+    assert [cue["clip"] for cue in hero["clips"]] == [{"index": 0, "name": "idle"}, {"index": 1, "name": "dance"}]
+    assert config["cast"]["subject_1"]["source"] == "hero.glb"  # the spec itself is left alone
+
+
+def test_a_clip_asked_by_its_rig_id_finds_the_baked_name(tmp_path):
+    glb(tmp_path / "hero.glb", ["Idle", "Dance Bounce", "Kneel Pray"])
+    resolved = resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "hero.glb", "clip": "kneel_pray"}}},
+                             stills={}, root=tmp_path, workspace="w")
+    assert resolved["cast"]["subject_1"]["clip"] == {"index": 2, "name": "Kneel Pray"}
+
+
+def test_unknown_names_and_clips_fail_before_any_export(tmp_path):
+    glb(tmp_path / "hero.glb", ["idle"])
+    with pytest.raises(ValueError, match="is not a URL, a model, a stills name or a file"):
+        resolve_media({"template": "dance-stage", "background": "nowhere"}, stills={}, root=tmp_path, workspace="w")
+    with pytest.raises(ValueError, match=r"no clip 'dance' in its model \(clips: idle\)"):
+        resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "hero.glb", "clip": "dance"}}},
+                      stills={}, root=tmp_path, workspace="w")
+    with pytest.raises(ValueError, match="not a URL"):
+        resolve_media({"template": "dance-stage", "cast": {"subject_1": "../outside.glb"}}, stills={}, root=tmp_path, workspace="w")
+
+
+def test_a_spec_that_already_gives_urls_keeps_its_fingerprint(tmp_path):
+    production = Production(tmp_path)
+    render(production)
+    before = production.state["clips"]["hero"]["fingerprint"]
+    config = shot()["scene3d"]
+    assert resolve_media(config, stills={}, root=tmp_path, workspace="test") == config
+    render(production)
+    assert production.state["clips"]["hero"]["fingerprint"] == before
+    assert len(production.calls) == 2
+
+
+def test_the_export_compiles_the_resolved_set(tmp_path):
+    seen = []
+
+    def compile_set(shot, duration):
+        seen.append(shot["scene3d"])
+        return {"version": 1, "slots": [], "duration": duration}
+
+    production = Production(tmp_path)
+    window = cast_shot(cast={"subject_1": "/api/v1/file/hero.glb?workspace=test"}, background="fair")
+    spec = {"shots": [window], "stills": {"fair": "/api/v1/uploads/fair.png"}}
+    export_scene3d_clips(production, spec, [window], (), compiler=compile_set, sleep=lambda _: None)
+    assert seen[0]["background"] == {"source": "/api/v1/uploads/fair.png"}
+    assert window["scene3d"]["background"] == "fair"
+
+
+@NODE
+def test_real_compiler_binds_cast_and_background_and_projects_the_floor():
+    doc = compile_document(cast_shot(cast={"subject_1": "/api/v1/file/hero.glb?workspace=t"},
+                                     background="/api/v1/file/fair.png?workspace=t"), 4)
+    slots = {slot["slot"]: slot for slot in doc["slots"]}
+    assert slots["subject_1"]["sourceUrl"].endswith("hero.glb?workspace=t") and slots["subject_1"]["media"] == "model3d"
+    assert slots["background"]["sourceUrl"].endswith("fair.png?workspace=t") and slots["background"]["media"] == "image"
+    assert doc["environment"]["floorStyle"] == "backdrop"
+    # The painted set replaces the street dressing and hangs as one plane facing the camera, behind the cast.
+    assert doc["dressing"] == "none"
+    plate = slots["background"]
+    assert plate["surface"] == "cutout" and "loop" not in plate and plate["position"][2] < -10
+    assert plate["position"][1] < 0 < plate["position"][1] + 2 * plate["scale"], "the plane reaches below the floor and above the eye"
+    assert abs(doc["camera"].get("orbitTurns", 0)) <= 0.06, "a flat set holds only a short orbit"
+    flat = compile_document(cast_shot(cast={"subject_1": "/api/v1/file/hero.glb?workspace=t"},
+                                      background="/api/v1/file/fair.png?workspace=t", floor="none"), 4)
+    assert flat["environment"]["floorStyle"] == "none"
+
+
+@NODE
+def test_real_compiler_keeps_a_floor_the_template_chose_and_skips_an_environment_plate():
+    mirror = compile_document(cast_shot(template="cine-reflections", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
+                                        background="/api/v1/file/f.png?workspace=t"), 4)
+    assert mirror["environment"]["floorStyle"] == "mirror"
+    built = compile_document(cast_shot(template="dark-forest", cast={"subject_1": "/api/v1/file/h.png?workspace=t"},
+                                       background="/api/v1/file/f.png?workspace=t"), 4)
+    forest = next(slot for slot in built["slots"] if slot["slot"] == "background")
+    assert forest["position"] == [0, 2.1500000000000004, -12] and forest["scale"] == 24, "a template drawn as a set keeps its plane"
+    plate = compile_document(cast_shot(template="reflective-stage", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
+                                       background="/api/v1/file/f.png?workspace=t"), 4)
+    assert (plate.get("environment") or {}).get("floorStyle") != "backdrop"
+    assert any(slot["slot"] == "background" and slot["sourceUrl"].endswith("f.png?workspace=t") for slot in plate["slots"])
+
+
+@NODE
+def test_real_compiler_binds_by_object_id_refuses_ambiguous_or_missing_roles_and_adds_props():
+    pictures = {"hero": "/api/v1/file/hero.png?workspace=t", "near-prop": "/api/v1/file/lamp.png?workspace=t"}
+    doc = compile_document(cast_shot(template="dark-still-two-distances", cast=pictures), 4)
+    by_id = {slot["id"]: slot for slot in doc["slots"]}
+    assert by_id["hero"]["sourceUrl"] == pictures["hero"] and by_id["near-prop"]["sourceUrl"] == pictures["near-prop"]
+    assert by_id["exterior-video"]["sourceUrl"] == ""  # untouched template objects stay
+    with pytest.raises(ValueError, match="cast_role_ambiguous:prop"):
+        compile_document(cast_shot(template="dark-still-two-distances", cast={"prop": "/api/v1/file/x.png?workspace=t"}), 4)
+    with pytest.raises(ValueError, match="cast_slot_missing:subject_2"):
+        compile_document(cast_shot(cast={"subject_2": "/api/v1/file/x.glb?workspace=t"}), 4)
+    added = compile_document(cast_shot(cast={"subject_1": "/api/v1/file/h.glb?workspace=t",
+                                             "boat": {"source": "/api/v1/file/boat.glb?workspace=t", "add": True,
+                                                      "position": [2, 0, 0]}}), 4)
+    boat = next(slot for slot in added["slots"] if slot["id"] == "boat")
+    assert boat["slot"] == "prop" and boat["media"] == "model3d" and boat["position"] == [2, 0, 0]
+    with pytest.raises(ValueError, match="background_slot_missing"):
+        compile_document(cast_shot(template="speech-portrait", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
+                                   background="/api/v1/file/f.png?workspace=t"), 4)

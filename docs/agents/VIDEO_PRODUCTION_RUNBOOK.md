@@ -58,6 +58,26 @@ A later `production.run` with the same id and no `retake` resumes from the last 
 
 `production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check. Each window includes `hold_after_clip`: how many seconds that H3 shot would sit still after its clip (the longest H3 bucket is 345 frames, 14.375 s), or 0 when the shot is not H3 or a moving fill (`h3`, `clip`, `scene3d`, `screen`) covers the tail. A hand-written `title-card` on an `h3` or `still` shot is `title_card_on_image` and still validates; the planner rewrites that template to `lower-third-date` on those kinds. The same check compiles every scene document in-process, so a style the editor would reject (`scene_invalid`, for example a text field out of range) shows up here. Before the scenes stage the run measures the busiest caption against its start frame and stops with `caption_unreadable` (the scene and the ratio) when contrast is under 3:1. An opaque caption box is measured against the box; text with no box is measured against the picture.
 
+**One at a time.** Productions on one instance take the GPU in the order they
+were sent: a `production.run` sent while another production runs answers
+`running: true` and waits with status `queued` (`production.status` shows it;
+a cancel still stops it). Plan and dry-run every piece of a batch first, then
+send them all: the GPU works through them without gaps, and no two pieces
+interleave their jobs (that made each job reload a model and one piece take 7 h).
+
+**Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
+`quality_gate` (and `problems`) when one still picture fills three or more shots
+that are not marked deliberate (`allow: ["still"]`), or when still pictures take
+more of the runtime than the `quality` bar. A resume of an unchanged spec is never
+refused. `dry_run` lists the same items under `blocking`, and warns about shot
+fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
+puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
+H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
+(`procedural_model`: use `spec.models`), rigged models that never play a clip
+(`model_not_animated`), one 3D template in more than four shots
+(`template_reused`), and the same sequence of shot kinds or the same lyric look as
+another production in the workspace (`same_shot_pattern`, `same_lyric_look`).
+
 ## Edit it by hand, shot by shot
 
 A finished production is not a black box. At the end of every run the studio packages it (`package` in the log):
@@ -260,6 +280,16 @@ Style fields beyond the example:
   steps a preset set for another model. Do not run Qwen next to H3 on one GPU: `production.run` already makes every cast
   sheet, portrait and start frame before it submits the first H3 clip. `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
 - `lyric_template`: any text template; the lyric goes in its `caption`/`line` field (`ransom`, `dymo`, `social-caption`, ...).
+- `lyric_look` / `lyric_looks`: designed lyric type instead of a template's stock box. A look sets font, weight,
+  colour, outline or shadow, a box only where it belongs to the design, entrance, loop and place
+  (`app/shared/lyric_looks.json`): `cinema`, `storybook`, `marker-pop`, `neon`, `big-word`, `typewriter`,
+  `paper-strip`, `comic-caption`, `riso-offset`, `quiet-left`, `engraved`, `arcade`, `wave-chant`.
+  `lyric_looks` maps song sections (`default`, `intro`, `verse`, `pre-chorus`, `chorus`, `bridge`, `outro`, read
+  from the lyric tags) to looks, so a chorus can land big while verses stay quiet:
+  `{"verse": "quiet-left", "chorus": "big-word"}`. Word, letter and typewriter entrances last until the line's
+  last sung word. `lyric_style` still overrides single fields. With no lyric template, style, theme or look, a
+  finish preset picks its look (warmCinema cinema, oldDoc typewriter, nightNeon neon, paperComic comic-caption,
+  risoPress riso-offset). Give each piece its own treatment (`same_lyric_look` warns).
 - `theme`: an Omarchy colour theme (`tokyo-night`, `catppuccin`, `gruvbox`, `nord`, `rose-pine`, `kanagawa`): lyrics become
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
@@ -348,6 +378,61 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 `grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
+
+**Template + cast + painted set.** Prefer this over writing a `document`: pick a
+template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
+and a `setting` such as `sea` or `city`) and assign only what changes.
+`cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
+picture; `background` puts a picture in the template's background slot. The
+template keeps its camera, props, lights and moves. With a painted background on
+a plane, the floor becomes `backdrop`: the picture is projected onto a real floor,
+so models stand on the painted ground and the camera gets parallax. `floor`
+(`backdrop`, `none`, `tiles`, `mirror`, `road`) overrides it. Sources may be URLs,
+workspace file names or `stills` names. A cast clip may be given by its GLB
+animation name.
+
+```json
+{"key": "dance", "kind": "scene3d",
+ "scene3d": {"template": "dance-stage", "background": "fairground-night",
+   "cast": {"subject_1": {"source": "hero-rigged.glb", "clip": "dance"},
+            "subject_2": {"source": "friend-rigged.glb", "clip": "wave"}}}}
+```
+
+A role that more than one object has must be bound by object id
+(`cast_role_ambiguous`); a role the template lacks fails (`cast_slot_missing`)
+unless the entry sets `add: true`, which adds it as a prop. A template without a
+background slot fails with `background_slot_missing`: choose another template.
+
+**Models.** Do not build characters or objects from boxes. `spec.models` makes
+textured Hunyuan3D models once, in one batch after the cast sheets, and rigs them
+with clips on the song's tempo:
+
+```json
+{"models": {
+  "hero": {"from": "hero", "animations": ["idle", "walk", "dance_bounce", "wave"]},
+  "boat": {"from": "boat-picture", "rig": "vehicle"},
+  "kite": {"prompt": "a red paper kite with a long tail"}
+}}
+```
+
+`from` is a cast id (its plain portrait), a `stills` name or a picture URL; an
+object without a picture gives a `prompt`. A cast id defaults to `rig: "humanoid"`:
+the portrait is redrawn in a T-pose first, because the humanoid rig needs one.
+Humanoid clips: idle, breathe, walk, run, jump, wave, cheer, dance_bounce,
+dance_side, dance_arms, clap, punch, sit_down, victory, talk, nod, look_around,
+bow, point, shrug, kneel_pray, crouch. Procedural profiles (`prop`, `vehicle`,
+`quadruped`, `flying`, `serpentine`) take their own clips (hover, bounce, spin,
+wobble, strafe…); `none` keeps a rigid model that moves along `motion` paths.
+A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dance_bounce"}`.
+`production.status` times the stage as `models`; a failed model stops the run
+and a resume retries it with a new picture.
+
+**Sets.** `spec.sets` paints the backgrounds for those templates in the same image
+batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. Each
+is drawn eye-level, with an open floor across the lower third, a clear horizon and
+nobody in it, so the projected floor has ground for the cast to stand on. A shot
+names it as its `background`: `{"template": "dance-stage", "background": "harbour",
+"cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
 
 For a musical performance, set the document's `rhythm` to
 `{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add

@@ -109,6 +109,26 @@ def test_search_is_bounded_bilingual_and_rejects_a_bad_limit():
     assert language.value.code == "invalid_language"
 
 
+def test_search_keeps_templates_that_take_a_cast_and_a_painted_set():
+    fit = search_templates("baile", roles=["subject_1", "background"], limit=24)
+    assert fit and all({"subject_1", "background"} <= set(card["roles"]) for card in fit)
+    sea = search_templates("", roles=["background"], setting="Sea", limit=24)
+    assert sea and all(card["setting"] == "sea" for card in sea)
+    assert search_templates("", roles=["subject_2", "background"], setting="moon") == [
+        card for card in search_templates("", setting="moon") if {"subject_2", "background"} <= set(card["roles"])]
+    with pytest.raises(World3DTemplateError) as bad:
+        search_templates("", roles="background")
+    assert bad.value.code == "invalid_roles"
+
+
+def test_list_filters_by_role_and_setting_over_mcp(tmp_path):
+    client, _root = client_for(tmp_path)
+    page = call(client, "world3d.templates.list", {"roles": ["subject_1", "background"], "setting": "city"}, mcp=True)["result"]
+    assert page["total"] == len([card for card in builtin_cards() if card.get("setting") == "city"
+                                 and {"subject_1", "background"} <= set(card.get("roles") or ())])
+    assert page["templates"] and all(card["setting"] == "city" for card in page["templates"])
+
+
 def test_mutation_without_intent_is_rejected(tmp_path):
     client, root = client_for(tmp_path)
     response = post(client, "world3d.scene.apply_query", {"query": "dolly zoom"})
