@@ -192,7 +192,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "mode and notes too, and a shot whose content changed goes back to pending review). The script written is kept "
         "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
         "Optional number (integer >= 1), only when there is no episode_id: a taken number is 409 episode_number_taken "
-        "with the holder's id.",
+        "with the holder's id. "
+        "warnings lists speaker_not_on_screen and location_differs_from_scene and does not block, even with check: true. "
+        "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice. "
+        "A kit with lines and no voice for the episode language fails the check.",
     ),
     "series.episode.script.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "revision": {"type": "integer", "minimum": 1}},

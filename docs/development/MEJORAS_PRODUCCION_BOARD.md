@@ -12,7 +12,7 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | F1 Guía de agentes | `docs/agent-guide-lessons` | [#914](https://github.com/IAnMove/hocuspocus/pull/914) | borrador abierto | `app/shared/series_agent_guide.md`, documentos de desarrollo desfasados |
 | V1 Voz en español | `feat/speech-qa-spanish` | [#915](https://github.com/IAnMove/hocuspocus/pull/915) | borrador abierto | `app/services/speech_text_es.py`, diccionario de pronunciación |
 | V2 Tono y acento | `feat/voice-pitch-accent` | [#916](https://github.com/IAnMove/hocuspocus/pull/916) | borrador abierto | `voiceProfile.pitchRange`, `app/services/qa_accent.py` |
-| S1 Avisos del guion | `feat/series-script-warnings` | — | pendiente | avisos de `from_script`, `instanceKey` si el kit se repite |
+| S1 Avisos del guion | `feat/series-script-warnings` | [#917](https://github.com/IAnMove/hocuspocus/pull/917) | borrador abierto | avisos de `from_script`, `instanceKey` si el kit se repite |
 | S2 Huella y cuadro | `fix/series-render-fingerprint-frame` | — | pendiente | huella de planos mudos, cuadro 3D, `estimate` |
 | S3 Boca del rig | `feat/rig-mouth-report-precheck` | — | pendiente | `app/services/flat_rig_metrics.py`, `characters.rig.check` |
 | S4 Fondos | `feat/series-plate-checks` | — | pendiente | aviso `people_in_plate`, `scene3d.backdrop` |

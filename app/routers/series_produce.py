@@ -120,9 +120,10 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
                 "code": "episode_number_taken", "message": str(error), "episodeId": error.holder_id,
             }) from error
         except ScriptError as error:
-            raise HTTPException(status_code=400, detail={
-                "code": "invalid_script", "message": str(error), "problems": error.problems, "groups": error.groups,
-            }) from error
+            detail = {"code": "invalid_script", "message": str(error), "problems": error.problems, "groups": error.groups}
+            if getattr(error, "warnings", None):
+                detail["warnings"] = error.warnings
+            raise HTTPException(status_code=400, detail=detail) from error
 
     def history_error(error: ScriptHistoryError) -> HTTPException:
         return HTTPException(status_code=error.status, detail={"code": error.code, "message": str(error)})

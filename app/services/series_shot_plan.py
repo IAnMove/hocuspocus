@@ -455,10 +455,13 @@ def _shot_lines(series: dict[str, Any], episode: dict[str, Any], beats: list[dic
     for beat, (start, end) in zip(beats, timing):
         ref = kit_ref(series, beat.get("characterId", ""))
         heard = recorded[beat["id"]]
-        lines.append({"id": line_id(episode["id"], beat["id"]), "kitId": ref["id"] if ref else beat.get("characterId", ""),
-                      "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
-                      "cues": heard.get("cues") or None, "driver": heard.get("driver"),
-                      "visible": beat.get("characterId") in visible, "name": beat.get("characterId")})
+        line = {"id": line_id(episode["id"], beat["id"]), "kitId": ref["id"] if ref else beat.get("characterId", ""),
+                "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
+                "cues": heard.get("cues") or None, "driver": heard.get("driver"),
+                "visible": beat.get("characterId") in visible, "name": beat.get("characterId")}
+        if type(beat.get("castIndex")) is int:
+            line["castIndex"] = beat["castIndex"]
+        lines.append(line)
     return lines
 
 

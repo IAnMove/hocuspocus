@@ -111,6 +111,15 @@ def test_a_full_shot_spec_with_lines_card_and_focus():
     assert card["framing"] == "title" and card["cast"] == [] and card["duration"] == 6 and card["texts"][0]["text"] == "VALLE"
 
 
+def test_a_line_keeps_cast_index_only_when_the_beat_has_a_real_one():
+    shot = {"id": "s1", "visibleCharacterIds": ["kevin", "kevin"], "dialogueBeats": [
+        {"id": "b1", "characterId": "kevin", "text": "Hola.", "castIndex": 1},
+        {"id": "b2", "characterId": "kevin", "text": "Otra.", "castIndex": True}]}
+    recorded = {"b1": {"filename": "l1.wav", "duration": 1.0}, "b2": {"filename": "l2.wav", "duration": 1.0}}
+    lines = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded=recorded)["lines"]
+    assert lines[0]["castIndex"] == 1 and "castIndex" not in lines[1]
+
+
 def test_a_vertical_series_plans_1080x1920_with_wider_spacing_and_smaller_cards():
     vertical = {**series(), "provider": {"videoSettings": {"orientation": "portrait"}}}
     assert frame_size(vertical) == (1080, 1920) and frame_size(series()) == (1920, 1080)

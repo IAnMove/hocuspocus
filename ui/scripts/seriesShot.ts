@@ -31,6 +31,8 @@ export type CastSpec = {
 export type LineSpec = {
   id: string; kitId: string; text: string; start: number; end: number; filename: string
   cues?: unknown; driver?: string; visible?: boolean; volume?: number; name?: string
+  /** Which copy speaks when the same kit is in the shot more than once. The first copy otherwise. */
+  castIndex?: number
 }
 export type PropSpec = {
   id: string; name: string; source: string; x: number; y: number; scale: number; z?: number
@@ -369,11 +371,11 @@ function blinkAnimation(layer: SceneLayer, blinks: number[]): SceneLayer['animat
 
 /** Mount one kit: pose, mouths and blink, z-shifted, with body motion and blinks. Returns the layers and mouth ids. */
 export function mountCast(kit: CharacterKit, cast: CastSpec, base: Pose, duration: number, viewport: { width: number; height: number },
-  workspace: string, talking: Array<[number, number]>) {
+  workspace: string, talking: Array<[number, number]>, instanceKey?: number) {
   const transform = { ...base, opacity: 1, rotation: 0 }
   // Children follow the pose from its t=0 state, so mount where the pose starts.
   const origin = cast.enter ? { ...transform, x: cast.enter.fromX } : transform
-  const mounted = mountCharacterKitLayers(kit, cast.poseId ?? 'base', origin, duration, viewport)
+  const mounted = mountCharacterKitLayers(kit, cast.poseId ?? 'base', origin, duration, viewport, 'approved', instanceKey)
   const pose = mounted[0]
   const shift = (cast.z ?? pose.z) - pose.z
   for (const layer of mounted) {
@@ -435,6 +437,17 @@ export function shotEffects(sfx: ShotFxSpec[] | undefined, cast: CastSpec[], pos
   })
 }
 
+function lineOwnsAppearance(cast: CastSpec[], line: LineSpec, index: number): boolean {
+  if (line.kitId !== cast[index]?.kitId || line.visible === false) return false
+  if (typeof line.castIndex === 'number') return line.castIndex === index
+  return cast.findIndex(item => item.kitId === line.kitId) === index
+}
+
+function mouthsForLine(cast: CastSpec[], line: LineSpec, mouths: string[][]): string[] {
+  const index = typeof line.castIndex === 'number' ? line.castIndex : cast.findIndex(item => item.kitId === line.kitId)
+  return mouths[index] ?? []
+}
+
 /** One editable Video 2D shot: background, set layers behind the cast, props, mounted cast, set layers in front of it,
  * recorded lines with mouths, camera and finish. */
 export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: ShotSpec): Scene {
@@ -446,28 +459,32 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
   // Behind the cast and the props (z 8), above the background (z 0).
   layers.push(...setLayers(shot, false, 1, 0.5))
   for (const prop of shot.props ?? []) layers.push(propLayer({ ...prop, y: groundedY(prop, shot.framing, aspect) }, shot.duration))
-  const mouthIds = new Map<string, string[]>()
+  const counts = new Map<string, number>()
+  for (const cast of shot.cast) counts.set(cast.kitId, (counts.get(cast.kitId) ?? 0) + 1)
+  const mouths: string[][] = []
   const poseLayerIds: string[] = []
   shot.cast.forEach((cast, index) => {
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
+    const instanceKey = (counts.get(cast.kitId) ?? 0) > 1 ? index : undefined
     const single = shot.cast.length === 1 && shot.framing === 'wide'
     const z = cast.z ?? 20 + index * 10
     const seat = !cast.transform && cast.perch ? perchTransforms(poseAsset(kit, cast.poseId ?? 'base'), shot.framing, cast.x, aspect, cast.perch) : null
     if (seat && cast.perch) {
-      layers.push(propLayer({ id: `perch-${kit.id}`, name: `${kit.name} seat`, source: cast.perch.source, ...seat.prop, z: z - 1 }, shot.duration))
+      const perchId = instanceKey === undefined ? `perch-${kit.id}` : `perch-${kit.id}-${index}`
+      layers.push(propLayer({ id: perchId, name: `${kit.name} seat`, source: cast.perch.source, ...seat.prop, z: z - 1 }, shot.duration))
     }
     const base = cast.transform ?? seat?.character ?? castTransform(kit, cast, shot.framing, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
-    const talking = shot.lines.filter(line => line.kitId === cast.kitId && line.visible !== false)
+    const talking = shot.lines.filter(line => lineOwnsAppearance(shot.cast, line, index))
       .map(line => [line.start, line.end] as [number, number])
-    const mounted = mountCast(kit, { ...cast, z }, base, shot.duration, viewport, shot.workspace, talking)
-    mouthIds.set(cast.kitId, mounted.mouthIds)
+    const mounted = mountCast(kit, { ...cast, z }, base, shot.duration, viewport, shot.workspace, talking, instanceKey)
+    mouths[index] = mounted.mouthIds
     poseLayerIds.push(mounted.layers[0].id)
     layers.push(...mounted.layers)
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
   if (shot.camera === 'push') layers.push(cameraLayer(shot.duration))
-  const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthIds.get(line.kitId) ?? []))
+  const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthsForLine(shot.cast, line, mouths)))
   const sfx = shotEffects(shot.sfx, shot.cast, poseLayerIds)
   return {
     version: 1, name: shot.name, width: shot.width, height: shot.height, fps: shot.fps, duration: round(shot.duration),
