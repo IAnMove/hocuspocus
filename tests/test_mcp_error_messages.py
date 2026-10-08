@@ -131,6 +131,36 @@ def test_a_script_with_no_kits_groups_one_character_across_shots():
     assert str(caught.value) == "pedro: no Character Kit (shots e1s00, e1s01 … 14 shots)"
 
 
+def test_different_unmatched_problems_never_share_a_group_and_a_pose_keeps_its_detail():
+    series = {
+        "id": "lab", "revision": 1, "spokenLanguage": "es",
+        "characters": [{"id": "ana", "name": "Ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}],
+        "locations": [{"id": "street", "variants": []}],
+        "episodesById": {},
+    }
+    kits = {"kit-ana": {"poses": {"idle": {}, "walk": {}}}}
+    shots = [
+        {"scene": "a", "cast": [{"characterId": "ana", "motion": "spin"}]},
+        {"scene": "a", "cast": [["ana", "run"]]},
+        {"scene": "a", "cast": [{"characterId": "ana", "enterGait": "run"}]},
+        {"scene": "a", "cast": [{"characterId": "ana", "motion": "spin"}]},
+        {"scene": "a", "cast": [["ana", "run"]]},
+        {"scene": "a", "cast": [["ana", "jump"]]},
+    ]
+    script = {"scenes": [{"id": "a", "location": "street"}], "shots": shots}
+    with pytest.raises(ScriptError) as caught:
+        apply_script(lambda *_args: {}, lambda: series, kits, set(), "lab", script, check_only=True)
+    groups = caught.value.groups
+    by_shots = {tuple(group["shots"]): group for group in groups}
+    assert len(groups) == 4
+    assert by_shots[("e1s00", "e1s03")]["message"].startswith("motion must be one of ")
+    assert by_shots[("e1s02",)]["message"].startswith("shot 2 (e1s02): enterGait must be one of ")
+    run = by_shots[("e1s01", "e1s04")]
+    assert run["code"] == "no_pose"
+    assert run["message"] == "ana: no pose run (poses: base, idle, walk) (shots e1s01, e1s04)"
+    assert by_shots[("e1s05",)]["message"] == "shot 5 (e1s05): ana has no pose jump (poses: base, idle, walk)"
+
+
 def test_template_list_pages_by_id_and_keeps_a_query_ranked():
     page = page_templates("")
     assert page["total"] == len(builtin_cards())
@@ -141,9 +171,20 @@ def test_template_list_pages_by_id_and_keeps_a_query_ranked():
     assert set(card["id"] for card in page["templates"]).isdisjoint(card["id"] for card in second["templates"])
     queried = page_templates("dolly zoom", limit=3)
     assert [card["id"] for card in queried["templates"]] == [card["id"] for card in search_templates("dolly zoom", limit=3)]
-    with pytest.raises(World3DTemplateError) as limited:
-        page_templates("zoom", limit=201)
-    assert limited.value.code == "invalid_limit"
+    searched = page_templates("zoom")
+    assert len(searched["templates"]) == 8 < searched["total"]
+    for query, limit in (("zoom", 25), ("", 51)):
+        with pytest.raises(World3DTemplateError) as limited:
+            page_templates(query, limit=limit)
+        assert limited.value.code == "invalid_limit"
     with pytest.raises(HTTPException) as empty:
         execute_command("world3d.templates.list", {"version": 1, "input": {}}, lambda _workspace: "/tmp")
     assert empty.value.detail["code"] == "invalid_workspace"
+
+
+def test_the_agent_search_through_the_command_stays_at_eight_cards(tmp_path):
+    reply = execute_command(
+        "world3d.templates.list", {"version": 1, "input": {"workspace": "lab", "query": "zoom"}},
+        lambda _workspace: str(tmp_path),
+    )
+    assert len(reply["result"]["templates"]) == 8

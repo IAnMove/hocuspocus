@@ -1,7 +1,8 @@
 """Group a script check's repeated lines so an agent can read them.
 
 ``detail.problems`` stays the original list. The exception message lists one
-line per ``(code, subject)`` and stops after 30 groups.
+line per ``(code, subject, phrase)`` and stops after 30 groups. A problem that
+matches no rule is its own phrase, so different problems never share a line.
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ _PREFIX = re.compile(
 _RULES = (
     ("unknown_character", re.compile(r"^unknown character (.+)$"), "unknown character"),
     ("no_character_kit", re.compile(r"^(.+) has no Character Kit$"), "no Character Kit"),
-    ("no_pose", re.compile(r"^(.+) has no pose (\S+)"), "no pose"),
+    ("no_pose", re.compile(r"^(.+) has no pose (.+)$"), "no pose {}"),
     ("unknown_location", re.compile(r"^unknown location (.+)$"), "unknown location"),
     ("no_variant", re.compile(r"^location (.+) has no variant"), "no variant"),
     ("missing_file", re.compile(r"^file (.+) is not in the workspace$"), "file is not in the workspace"),
@@ -30,12 +31,12 @@ _SHOTS_LISTED = 2
 
 
 def group_problems(problems: list[str]) -> list[dict]:
-    """One group per code and subject, in the order the first line appeared."""
-    order: list[tuple[str, str]] = []
-    buckets: dict[tuple[str, str], dict] = {}
+    """One group per code, subject and phrase, in the order the first line appeared."""
+    order: list[tuple[str, str, str]] = []
+    buckets: dict[tuple[str, str, str], dict] = {}
     for raw in problems:
         parsed = _parse(str(raw))
-        key = (parsed["code"], parsed["subject"])
+        key = (parsed["code"], parsed["subject"], parsed["phrase"])
         bucket = buckets.get(key)
         if bucket is None:
             bucket = {**parsed, "shots": [], "raws": []}
@@ -71,7 +72,7 @@ def _classify(body: str) -> tuple[str, str, str]:
         if found is None:
             continue
         subject = found.group(1) if found.groups() else ""
-        return code, subject, phrase
+        return code, subject, phrase.format(*found.groups()[1:])
     return "problem", "", body
 
 

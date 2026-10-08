@@ -17,8 +17,9 @@ CATALOG_OPERATION = "world3d.templates.catalog"
 USER_FILE = "world3d-user-templates.json"
 DEFAULT_LIMIT = 8
 MAX_LIMIT = 24
+# A plain listing (no query) pages by id; a query stays the bounded search above.
 LIST_DEFAULT_LIMIT = 50
-LIST_MAX_LIMIT = 200
+LIST_MAX_LIMIT = 50
 _GROUPS = (
     frozenset({"orbit", "orbita", "girar", "alrededor", "around", "360"}),
     frozenset({"lluvia", "rain", "llueve"}),
@@ -58,10 +59,11 @@ def page_templates(query: str = "", *, category: str | None = None, language: st
                    workspace: str | None = None) -> dict:
     """One page of ``world3d.templates.list``. No query keeps id order."""
     _require_language(language)
-    bounded = _list_limit(limit)
+    queried = bool(str(query or "").strip())
+    bounded = _limit(limit) if queried else _list_limit(limit)
     start = _offset(offset)
     cards = _cards(workspace_dir, workspace)
-    if str(query or "").strip():
+    if queried:
         chosen = [(score, card) for score, _index, card in _ranked(query, cards, category)]
     else:
         filtered = [card for card in cards if not category or card.get("category") == category]
