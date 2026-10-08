@@ -26410,12 +26410,13 @@ def get_status(job_id: str):
     }
     from services.generation_output_name import status_output_fields
     from services.generation_memory import include_performance
+    from services.output_names import annotate_generation_view
     payload.update(status_output_fields(
         payload.get("output_files"),
         workspace=str(j.get("workspace") or ""),
         workspace_dir=str(j.get("out_dir") or ""),
     ))
-    return include_performance(payload, j)
+    return annotate_generation_view(include_performance(payload, j), j)
 
 
 @api.post("/api/v1/cancel/{job_id}")
@@ -28556,7 +28557,7 @@ def import_story_as_series_endpoint(body: dict):
 
 @api.post("/api/v1/series/{series_id}/episodes")
 def create_series_episode_endpoint(series_id: str, body: dict):
-    from services.series_library import create_series_episode
+    from routers.series_episode import create_checked_episode
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -28564,10 +28565,7 @@ def create_series_episode_endpoint(series_id: str, body: dict):
         series = copy.deepcopy(_series_project_or_404(library, series_id))
         if series.get("canon", {}).get("approval") != "approved":
             raise HTTPException(status_code=400, detail="Approve the reviewed Series canon before creating an episode")
-        episode = create_series_episode(
-            series, str(body.get("seasonId") or "") or None,
-            **(body.get("episode") if isinstance(body.get("episode"), dict) else {}),
-        )
+        episode = create_checked_episode(series, body)
         series["episodesById"][episode["id"]] = episode
         season = next(item for item in series["seasons"] if item["id"] == episode["seasonId"])
         season["episodeOrder"].append(episode["id"])
@@ -28635,6 +28633,7 @@ def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: s
 def import_series_asset_endpoint(series_id: str, body: dict):
     """Copy a Maestro upload into the authoritative workspace asset tree."""
     import shutil
+    from services.series_plate_checks import with_plate_warning
     from services.series_production import attach_series_import, existing_generated_reference
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -28705,7 +28704,9 @@ def import_series_asset_endpoint(series_id: str, body: dict):
         series["updatedAt"] = now
         library["seriesById"][series_id] = series
         stored = _write_series_workspace(workspace, library)
-    return {"asset": stored["seriesById"][series_id]["assets"][asset_id], "series": stored["seriesById"][series_id]}
+    stored_series = stored["seriesById"][series_id]
+    return with_plate_warning(
+        {"asset": stored_series["assets"][asset_id], "series": stored_series}, source, body, stored_series)
 
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
@@ -30717,6 +30718,7 @@ def approve_series_episode_attempts_endpoint(
 
 
 from routers.series_assembly import control_series_assembly_job, create_series_assembly_router
+from services.core_series_assembly import with_transitions as _series_join_with_transitions
 
 api.include_router(create_series_assembly_router(
     resolve_workspace=_series_library_workspace,
@@ -30728,7 +30730,7 @@ api.include_router(create_series_assembly_router(
     find_series=_series_project_or_404,
     asset_local_path=_series_asset_local_path,
     available_filename=wgp.get_available_filename,
-    concatenate_clips=wgp.concatenate_multi_clip_videos,
+    concatenate_clips=_series_join_with_transitions(wgp.concatenate_multi_clip_videos),
     iso_now=_series_iso_now,
 ))
 
@@ -36239,6 +36241,7 @@ def _generation_task_fields(job: dict) -> dict:
         "command_id": command.get("command_id"),
         "workflow_id": command.get("workflow_id"),
         "run_id": command.get("run_id"),
+        "output_name_requested": params.get("output_filename") or params.get("output_name") or None,
     }
     task_metadata.update(task_identity.pop("metadata", {}))
     task_metadata.update(performance_fields(job.get("performance")))
@@ -37061,9 +37064,12 @@ api.include_router(create_publish_router(
     workspace_dir=_workspace_dir,
 ))
 from services.jobs_wait import command_catalog as jobs_wait_catalog, command_handlers as jobs_wait_handlers
+from services.jobs_cancel import command_catalog as jobs_cancel_catalog, command_handlers as jobs_cancel_handlers
 from services.song_analysis import command_catalog as audio_analysis_catalog, command_handlers as audio_analysis_handlers
 from services.lipsync_qa import command_catalog as lipsync_qa_catalog, command_handlers as lipsync_qa_handlers
 from services.speech_qa import command_catalog as speech_qa_catalog, command_handlers as speech_qa_handlers
+from services.qa_accent import command_catalog as qa_accent_catalog, command_handlers as qa_accent_handlers
+_qa_accent_handlers = qa_accent_handlers(_workspace_dir)
 from services.export_qa import command_catalog as export_qa_catalog, command_handlers as export_qa_handlers
 from services.export_qa import remember_on_task as remember_export_qa
 
@@ -37076,6 +37082,7 @@ from services.production_review import command_catalog as production_review_cata
 from services.series_commands import command_catalog as series_command_catalog, command_handlers as series_command_handlers
 from services.game_commands import command_catalog as game_command_catalog, command_handlers as game_command_handlers
 _jobs_wait_handlers = jobs_wait_handlers(get_status, lambda job_id: _jobs.get(job_id))
+_jobs_cancel_handlers = jobs_cancel_handlers(_control_canonical_task, _task_registry, _list_workspaces, lambda job_id: _jobs.get(job_id), _sync_canonical_tasks)
 from services.studio_key import command_catalog as studio_key_catalog, command_handlers as studio_key_handlers
 _studio_key_handlers = studio_key_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
 # media.frame, media.compose, audio.trim, assets.import_from_workspace (services/production_media_commands.py).
@@ -37087,6 +37094,7 @@ from routers.character_tools import create_character_tools_router
 
 api.include_router(create_character_tools_router(
     studio_key=_studio_key_handlers["studio.key"], speech_qa=speech_qa_handlers(_workspace_dir)["qa.speech"],
+    accent=_qa_accent_handlers["qa.accent"],
 ))
 from services.clip_align import command_catalog as clip_align_catalog, command_handlers as clip_align_handlers
 _clip_align_handlers = clip_align_handlers(_workspace_dir)
@@ -37306,12 +37314,12 @@ api.include_router(create_wangp_mcp_router(
     token_getter=_mcp_access.token, on_mutation=_agent_activity.record,
     handlers=(_mcp_handlers := {"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_production_media_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_export_qa_handlers,
+              **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_jobs_cancel_handlers, **_qa_people_handlers, **_studio_key_handlers, **_production_media_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_qa_accent_handlers, **_export_qa_handlers,
               **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token, mcp=_local_mcp.call), **production_review_handlers(_workspace_dir), **series_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **game_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers}),
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     profiles=_MCP_PROFILES, oauth=_mcp_oauth,
     command_operations=[*lips_creator_catalog(), *scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *world3d_template_catalog(), *montage_command_catalog(), *template_command_catalog(), *media_options_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *qa_people_catalog(), *studio_key_catalog(), *production_media_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *speech_qa_catalog(), *export_qa_catalog(), *music_production_catalog(), *production_review_catalog(), *series_command_catalog(), *game_command_catalog(), *model3d_command_catalog(), *model3d_rig_catalog(), *model3d_compose_catalog(), *model3d_animate_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *world3d_template_catalog(), *montage_command_catalog(), *template_command_catalog(), *media_options_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *jobs_cancel_catalog(), *qa_people_catalog(), *studio_key_catalog(), *production_media_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *speech_qa_catalog(), *qa_accent_catalog(), *export_qa_catalog(), *music_production_catalog(), *production_review_catalog(), *series_command_catalog(), *game_command_catalog(), *model3d_command_catalog(), *model3d_rig_catalog(), *model3d_compose_catalog(), *model3d_animate_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())

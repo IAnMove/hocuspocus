@@ -166,6 +166,22 @@ export async function previewFlatRigMouth(details: { workspace: string; kitId: s
   }, 'Could not preview the mouths', details.signal)
 }
 
+export type RigCheckReason = 'eyes_small' | 'eyes_not_found' | 'sclera_dark' | 'mouth_not_found' | 'face_low_confidence'
+  | 'not_keyed' | 'face_too_light' | 'face_keyed_out'
+
+/** Whether one keyed pose can be rigged (characters.rig.check). Nothing is painted or saved. */
+export type RigCheck = {
+  ready: boolean
+  reasons: RigCheckReason[]
+  face: { box: [number, number, number, number] | null; confidence: number }
+}
+
+export async function checkRigPose(details: { workspace: string; source: string; signal?: AbortSignal }): Promise<RigCheck> {
+  return postJson('/api/v1/character-kits/rig-check', {
+    workspace: details.workspace, source: details.source,
+  }, 'Could not check the pose', details.signal)
+}
+
 export type SpeechCheck = {
   transcript: string
   wer: number
@@ -173,6 +189,13 @@ export type SpeechCheck = {
   wordsPerSecond: number
   duration: number
   warnings: string[]
+  pitch_out_of_range?: { medianHz: number; range: [number, number] }
+}
+
+export type AccentCheck = {
+  thetaRate: number | null
+  positions: number
+  verdict: 'castilian' | 'seseo' | 'unknown'
 }
 
 /** Transcript, word error rate, pitch and pace of a workspace take (qa.speech). */
@@ -182,5 +205,13 @@ export async function checkSpeech(details: { workspace: string; file: string; te
     workspace: details.workspace, file: details.file, text: details.text, language: details.language,
     ...(details.pitchRange ? { pitch_range: details.pitchRange } : {}),
   }, 'Could not check the voice')
+  return reply.result
+}
+
+/** Castilian θ against s on the words that should have it (qa.accent). A warning, not a block. */
+export async function checkAccent(details: { workspace: string; file: string; text: string }): Promise<AccentCheck> {
+  const reply = await postJson<{ result: AccentCheck }>('/api/v1/qa/accent', {
+    workspace: details.workspace, file: details.file, text: details.text, accent: 'castilian',
+  }, 'Could not check the accent')
   return reply.result
 }

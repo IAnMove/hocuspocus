@@ -644,6 +644,10 @@ export interface Scene {
   height: number
   /** Preview, timeline and browser capture sampling rate. Defaults to 30 for legacy scenes. */
   fps?: SceneFrameRate
+  /** Stop-motion hold: the picture changes every 2, 3 or 4 frames. Absent, export time is unchanged. */
+  motionStep?: 2 | 3 | 4
+  /** Deterministic shake of one hold, in pixels, from 0 to 2. */
+  stopMotionJitter?: number
   duration: number
   layers: SceneLayer[]
   /** Real generated/imported audio assets mixed into the exported scene MP4. */

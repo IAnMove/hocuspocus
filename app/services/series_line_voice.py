@@ -29,6 +29,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services.series_jobs import SeriesJobStore
+from services.series_kit_pins import kits_for_episode
 from services.series_language_versions import LANGUAGES, localized_view
 from services.series_native_render import ACTIVE, NativeRenderError, SeriesNativeRender
 from services.series_shot_edit import find_shot
@@ -142,9 +143,13 @@ class SeriesLineVoice:
 
     def voices(self, workspace: str, series_id: str, episode_id: str, shot_ref: Any, language: str | None = None) -> dict[str, Any]:
         series, episode, shot, language = self._shot(workspace, series_id, episode_id, shot_ref, language)
-        lines = line_voices(self.render, workspace, series, episode, shot, self.read_kits(workspace), language)
+        lines = line_voices(self.render, workspace, series, episode, shot, self._kits(workspace, episode), language)
         active = [job for job in self.jobs(workspace) if job.get("shotId") == shot["id"] and job.get("status") in ACTIVE]
         return {"shotId": shot["id"], "language": language, "lines": lines, "recording": active}
+
+    def _kits(self, workspace: str, episode: dict[str, Any]) -> dict[str, Any]:
+        """The kits the episode's render uses: the latest, or the revisions it pins (``series_kit_pins``)."""
+        return kits_for_episode(self.read_kits(workspace), episode, self.render.deps.workspace_dir(workspace))
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
@@ -176,7 +181,7 @@ class SeriesLineVoice:
         """Record (or ``retake``) one line of a shot; returns the job (an already recording one for that line)."""
         series, episode, shot, language = self._shot(workspace, series_id, episode_id, shot_ref, language)
         beat = find_line(shot, line_ref)
-        self.render.line_voice(series, beat, self.read_kits(workspace), language)  # no voice: refused now, not in the job
+        self.render.line_voice(series, beat, self._kits(workspace, episode), language)  # no voice: refused now, not in the job
         for job in self.render.jobs(workspace):
             if job.get("episodeId") == episode_id and job.get("status") in ACTIVE:
                 raise LineVoiceError("render_running", "The episode is rendering on the server; record the line when it ends "
@@ -201,12 +206,12 @@ class SeriesLineVoice:
         job.update(status="running", updatedAt=time.time())
         store.save(job)
         try:
-            series, _episode, shot, language = self._shot(workspace, job["seriesId"], job["episodeId"], job["shotId"], job["language"])
+            series, episode, shot, language = self._shot(workspace, job["seriesId"], job["episodeId"], job["shotId"], job["language"])
             beat = find_line(shot, job["beatId"])
             if str(beat.get("text") or "").strip() != job["text"]:
                 raise LineVoiceError("line_changed", "The line changed while it waited to record; record it again", 409)
             line = self.render.record_line(workspace, {"jobId": job_id, "episodeId": job["episodeId"], "language": language},
-                                           series, beat, self.read_kits(workspace), retake=job["retake"])
+                                           series, beat, self._kits(workspace, episode), retake=job["retake"])
             result = {key: line[key] for key in ("filename", "duration", "wer", "attempt", "key", "reused", "retake") if key in line}
             job.update(status="completed", result={**result, "url": _file_url(line["filename"], workspace),
                                                    "cueCount": len(line.get("cues") or [])})

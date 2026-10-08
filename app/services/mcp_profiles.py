@@ -19,12 +19,14 @@ SERIES_TOOLS = frozenset({
     "series.assembly.start", "series.assembly.status", "series.location.plate3d", "series.location.plate3d.status",
     # The user's staged review: production mode, plan/preview approvals and notes per shot.
     "series.episode.review.get", "series.episode.review.set", "series.shot.review.set",
+    "series.episode.kits.pin", "series.episode.kits.update",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
-    "characters.rig.flat.preview",
+    "characters.rig.flat.preview", "characters.rig.check",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
-    "studio.key", "qa.speech", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
+    "jobs.cancel",
+    "studio.key", "qa.speech", "qa.accent", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
     # One shot by its number or id, and the media steps that used to need scripts outside the app.
     "series.shot.get", "series.shot.update", "series.shot.voices", "series.shot.voice", "series.shot.voice.status", "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
     # Editing a take's scene and Video 3D.
@@ -41,9 +43,9 @@ GAME_TOOLS = frozenset({
     "game.asset.approve", "game.asset.reject", "game.asset.lock",
     "game.produce", "game.produce.status", "game.produce.cancel", "game.produce.resume", "game.export",
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
-    "studio.key",
-    "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard",
-    "characters.list", "characters.get", "characters.save",
+    "studio.key", "qa.accent",
+    "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
+    "characters.list", "characters.get", "characters.save", "characters.rig.check",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
     "media.options", "scenes.assets.inspect",
 })

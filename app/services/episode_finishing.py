@@ -31,7 +31,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from services import series_ambience, series_score
+from services import series_ambience, series_hearing, series_score
 from services.audio_levels import gain_to
 from services.audio_mix import track_source
 from services.media_dimensions import probe_video_size
@@ -44,6 +44,7 @@ from services.mix_concat import (
     probe_duration_seconds,
     probe_has_audio,
 )
+from services.series_transitions import any_active, placed_offsets, placed_spans
 
 TARGET_LUFS = -16.0
 # Aim below the -1 dBTP delivery ceiling: AAC encoding overshoots the limiter by about 0.5 dB.
@@ -62,8 +63,12 @@ def ffmpeg_binary() -> str | None:
 
 # Timeline -------------------------------------------------------------------
 
-def join_offsets(durations: Sequence[float], joined_duration: float | None) -> tuple[list[float], str]:
-    """Clip starts for the join that produced ``joined_duration``: ``dissolve`` or ``cut``."""
+def join_offsets(durations: Sequence[float], joined_duration: float | None,
+                 transitions: Sequence[Any] | None = None) -> tuple[list[float], str]:
+    """Clip starts for the join that produced ``joined_duration``: ``dissolve`` or ``cut``, or ``transition`` when a
+    shot fades or dissolves in (``series_transitions``, whose cuts are that same dissolve)."""
+    if any_active(transitions):
+        return placed_offsets(durations, transitions), "transition"
     cut, elapsed = [], 0.0
     for duration in durations:
         cut.append(elapsed)
@@ -76,9 +81,12 @@ def join_offsets(durations: Sequence[float], joined_duration: float | None) -> t
     return cut, "cut"
 
 
-def join_spans(durations: Sequence[float], joined_duration: float | None) -> tuple[list[tuple[float, float]], str]:
+def join_spans(durations: Sequence[float], joined_duration: float | None,
+               transitions: Sequence[Any] | None = None) -> tuple[list[tuple[float, float]], str]:
     """Where each clip plays on the joined timeline, ``(start, end)``: a dissolve overlaps a clip's held tail with
     the next clip's start."""
+    if any_active(transitions):
+        return placed_spans(durations, transitions), "transition"
     offsets, join = join_offsets(durations, joined_duration)
     lengths = [max(0.1, float(duration)) + HOLD_TAIL_SEC if join == "dissolve" else float(duration) for duration in durations]
     return [(offset, offset + length) for offset, length in zip(offsets, lengths)], join
@@ -204,12 +212,12 @@ def scene_beats(workspace_dir: str, scene_filename: Any) -> list[dict[str, Any]]
 
 def write_episode_subtitles(
     output_path: str, clip_paths: Sequence[str], scene_filenames: Sequence[Any], *, workspace_dir: str,
-    ffmpeg: str,
+    ffmpeg: str, transitions: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     durations = [probe_duration_seconds(path, ffmpeg) for path in clip_paths]
     if any(duration is None for duration in durations):
         return {"written": False, "reason": "A clip duration could not be read"}
-    offsets, join = join_offsets(durations, probe_duration_seconds(output_path, ffmpeg))
+    offsets, join = join_offsets(durations, probe_duration_seconds(output_path, ffmpeg), transitions)
     clips = [{"offset": offset, "duration": duration, "beats": scene_beats(workspace_dir, name)}
              for offset, duration, name in zip(offsets, durations, scene_filenames)]
     cues = episode_cues(clips)
@@ -226,13 +234,14 @@ def write_episode_subtitles(
 
 # Ambience and score ---------------------------------------------------------
 
-def _timeline(output_path: str, clip_paths: Sequence[str], ffmpeg: str) -> tuple[list[float], float, list[tuple[float, float]], str] | None:
+def _timeline(output_path: str, clip_paths: Sequence[str], ffmpeg: str,
+              transitions: Sequence[Any] | None = None) -> tuple[list[float], float, list[tuple[float, float]], str] | None:
     """Each clip's length, the joined length, where each clip plays and the join; None when a length cannot be read."""
     durations = [probe_duration_seconds(path, ffmpeg) for path in clip_paths]
     joined = probe_duration_seconds(output_path, ffmpeg)
     if any(duration is None for duration in durations) or not joined:
         return None
-    spans, join = join_spans(durations, joined)
+    spans, join = join_spans(durations, joined, transitions)
     return durations, joined, spans, join
 
 
@@ -255,11 +264,11 @@ def speech_spans(spans: Sequence[tuple[float, float]], durations: Sequence[float
 def lay_ambience(
     output_path: str, clip_paths: Sequence[str], ambience: Sequence[dict[str, Any]], *, workspace_dir: str, ffmpeg: str,
     abort_callback: Callable[[], bool] | None = None, level: Callable[[str], float] = gain_to,
-    lines: Sequence[Any] | None = None,
+    lines: Sequence[Any] | None = None, transitions: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     """Episode-mode beds (``ambience``: each clip's location and entry) under the joined audio, before the loudness.
     Entries with ``duckDb`` dip under the clips' recorded ``lines`` (``finish_episode``'s scene documents)."""
-    timeline = _timeline(output_path, clip_paths, ffmpeg)
+    timeline = _timeline(output_path, clip_paths, ffmpeg, transitions)
     if timeline is None:
         return {"applied": False, "reason": "The clip durations could not be read"}
     durations, joined, spans, join = timeline
@@ -301,6 +310,7 @@ def _score_cue_reports(beds, cues, factors) -> list[dict[str, Any]]:
 def lay_score(
     output_path: str, clip_paths: Sequence[str], lines: Sequence[Any], score: dict[str, Any], *, workspace_dir: str,
     ffmpeg: str, abort_callback: Callable[[], bool] | None = None, level: Callable[[str], float] = gain_to,
+    transitions: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     """The episode's score (``series_score.clip_score``) under the joined audio, before the loudness: each cue dips
     under the clips' recorded ``lines`` and is silent under a clip with its own music."""
@@ -309,7 +319,7 @@ def lay_score(
     cues = [cue for cue in score.get("cues") or [] if isinstance(cue, dict) and cue.get("file")]
     if not cues:
         return {"applied": False, "reason": "No score cue covers shots the episode has", **report}
-    timeline = _timeline(output_path, clip_paths, ffmpeg)
+    timeline = _timeline(output_path, clip_paths, ffmpeg, transitions)
     if timeline is None:
         return {"applied": False, "reason": "The clip durations could not be read", **report}
     durations, joined, spans, join = timeline
@@ -440,20 +450,21 @@ def burn_subtitles(output_path: str, srt_name: str, *, ffmpeg: str,
 
 # All steps -------------------------------------------------------------------
 
-def thumbnail_time(durations: Sequence[float], joined: float) -> float:
+def thumbnail_time(durations: Sequence[float], joined: float, transitions: Sequence[Any] | None = None) -> float:
     """Into the second shot when the first is a short opening, else a third of the way in."""
     if len(durations) >= 2 and durations[0] < joined / 2:
-        offsets, _join = join_offsets(durations, joined)
+        offsets, _join = join_offsets(durations, joined, transitions)
         return round(min(joined - 0.05, offsets[1] + min(1.0, durations[1] / 2)), 3)
     return round(joined / 3, 3)
 
 
-def write_episode_thumbnail(output_path: str, clip_paths: Sequence[str], *, ffmpeg: str) -> dict[str, Any]:
+def write_episode_thumbnail(output_path: str, clip_paths: Sequence[str], *, ffmpeg: str,
+                            transitions: Sequence[Any] | None = None) -> dict[str, Any]:
     joined = probe_duration_seconds(output_path, ffmpeg)
     if not joined:
         return {"written": False, "reason": "The episode duration could not be read"}
     durations = [probe_duration_seconds(path, ffmpeg) for path in clip_paths]
-    at = thumbnail_time([] if any(value is None for value in durations) else durations, joined)
+    at = thumbnail_time([] if any(value is None for value in durations) else durations, joined, transitions)
     target = os.path.splitext(output_path)[0] + THUMBNAIL_SUFFIX
     result = subprocess.run([ffmpeg, "-v", "error", "-y", "-ss", f"{at:.3f}", "-i", output_path, "-frames:v", "1",
                              "-vf", "scale=1280:-2", "-q:v", "3", target], capture_output=True, text=True, timeout=120, check=False)
@@ -462,10 +473,22 @@ def write_episode_thumbnail(output_path: str, clip_paths: Sequence[str], *, ffmp
     return {"written": True, "file": os.path.basename(target), "time": at}
 
 
+def _color_hearing(output_path: str, clip_paths: Sequence[str], hearing: Sequence[str], ffmpeg: str,
+                   abort_callback: Callable[[], bool] | None, transitions: Sequence[Any] | None = None) -> dict[str, Any]:
+    """Subjective hearing on the joined timeline (where the transitions put each clip), after the ambience and the
+    score and before the loudness."""
+    timeline = _timeline(output_path, clip_paths, ffmpeg, transitions)
+    if timeline is None:
+        return {"applied": False, "reason": "The clip durations could not be read"}
+    return series_hearing.color_episode(output_path, timeline[2], hearing, ffmpeg=ffmpeg, abort_callback=abort_callback)
+
+
 def finish_episode(
     output_path: str, clip_paths: Sequence[str], scene_filenames: Sequence[Any], *, workspace_dir: str,
     abort_callback: Callable[[], bool] | None = None, burn: bool = False,
     ambience: Sequence[dict[str, Any]] | None = None, score: dict[str, Any] | None = None,
+    transitions: Sequence[Any] | None = None,
+    hearing: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """``ambience`` (``series_ambience.clip_ambience``) lays episode-mode beds and ``score``
     (``series_score.clip_score``) the episode's music, both before the loudness pass."""
@@ -476,17 +499,19 @@ def finish_episode(
         return {**finished, **{key: {"applied": False, **reason} for key, value in (("ambience", ambience), ("score", score))
                                if value is not None}}
     steps: list[tuple[str, Callable[[], dict[str, Any]]]] = [("subtitles", lambda: write_episode_subtitles(
-        output_path, clip_paths, scene_filenames, workspace_dir=workspace_dir, ffmpeg=ffmpeg))]
+        output_path, clip_paths, scene_filenames, workspace_dir=workspace_dir, ffmpeg=ffmpeg, transitions=transitions))]
     if ambience is not None:
         steps.append(("ambience", lambda: lay_ambience(
             output_path, clip_paths, ambience, workspace_dir=workspace_dir, ffmpeg=ffmpeg, abort_callback=abort_callback,
-            lines=scene_filenames)))
+            lines=scene_filenames, transitions=transitions)))
     if score is not None:
         steps.append(("score", lambda: lay_score(
             output_path, clip_paths, scene_filenames, score, workspace_dir=workspace_dir, ffmpeg=ffmpeg,
-            abort_callback=abort_callback)))
+            abort_callback=abort_callback, transitions=transitions)))
+    if series_hearing.active(hearing):
+        steps.append(("hearing", lambda: _color_hearing(output_path, clip_paths, hearing, ffmpeg, abort_callback, transitions)))
     steps.append(("loudness", lambda: normalize_loudness(output_path, ffmpeg=ffmpeg, abort_callback=abort_callback)))
-    steps.append(("sync", lambda: check_episode_sync(output_path, clip_paths, ffmpeg=ffmpeg)))
+    steps.append(("sync", lambda: check_episode_sync(output_path, clip_paths, ffmpeg=ffmpeg, transitions=transitions)))
     finished: dict[str, Any] = {}
     for key, step in steps:
         try:
@@ -501,15 +526,16 @@ def finish_episode(
         except Exception as error:
             subtitles.update({"burned": False, "reason": str(error)})
     try:
-        finished["thumbnail"] = write_episode_thumbnail(output_path, clip_paths, ffmpeg=ffmpeg)
+        finished["thumbnail"] = write_episode_thumbnail(output_path, clip_paths, ffmpeg=ffmpeg, transitions=transitions)
     except Exception as error:  # Nor does the thumbnail.
         finished["thumbnail"] = {"written": False, "reason": str(error)}
     return finished
 
 
-def check_episode_sync(output_path: str, clip_paths: Sequence[str], *, ffmpeg: str) -> dict[str, Any]:
+def check_episode_sync(output_path: str, clip_paths: Sequence[str], *, ffmpeg: str,
+                       transitions: Sequence[Any] | None = None) -> dict[str, Any]:
     """Every take's sound against where the join put its pictures in the finished episode (``episode_av_sync``)."""
-    timeline = _timeline(output_path, clip_paths, ffmpeg)
+    timeline = _timeline(output_path, clip_paths, ffmpeg, transitions)
     if timeline is None:
         return {"checked": False, "reason": "The clip durations could not be read"}
     _durations, _joined, spans, _join = timeline

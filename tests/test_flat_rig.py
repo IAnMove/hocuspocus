@@ -273,6 +273,8 @@ def test_a_kit_is_rigged_saved_and_can_be_rigged_again_from_its_original_poses(t
     kit = first["character"]
     assert first["revision"] == 2 and first["unwipedPoses"] == ["shrug"]
     assert first["warnings"] == {"shrug": ["mouth_not_found"]}
+    assert first["poses"]["base"]["mouth"]["openPx"] > 0 and first["poses"]["base"]["mouth"]["openRatio"] > 0.08
+    assert set(kit["anchors"]["base"]["mouth"]) == {"offsetX", "offsetY", "scale", "rotation"}
     assert sorted(kit["mouth"]) == sorted(STATES) and kit["mouthMapping"]["rest"] == "closed"
     assert kit["eyes"]["blink"]["reviewState"] == "approved"
     assert set(kit["anchors"]) == {"base", "shrug"}
@@ -505,6 +507,170 @@ def test_a_textured_face_without_a_painted_mouth_has_nothing_wiped():
     for screen in (False, True):
         rig = rig_pose(_code_face(mouth=False), rig_style({"screen": screen}))
         assert rig["wiped"] is False and "mouth_not_found" in rig["warnings"]
+
+
+def _band(rows: int, height: int = 40) -> Image.Image:
+    image = Image.new("RGBA", (64, height), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((8, 8, 56, 8 + rows - 1), fill=(20, 10, 10, 255))
+    return image
+
+
+def _pose(rows: int, scale: float, span: int = 80) -> dict:
+    return {"width": 200, "height": 400, "eyes_box": (100, 40, 100 + span, 70), "warnings": [],
+            "mouth": {"offsetX": 0.0, "offsetY": 10.0, "scale": scale, "rotation": 0.0},
+            "sprites": {"wide": _band(rows)}}
+
+
+def test_open_ratio_tracks_the_wide_mouth_height_and_warns_when_it_is_tiny():
+    from services.flat_rig_metrics import MOUTH_SMALL_OPENING, attach_openings
+
+    short, tall = _pose(4, 0.2), _pose(20, 0.2)
+    attach_openings({"base": short}, {})
+    attach_openings({"base": tall}, {})
+    # Placed height is scale * the longer edge (400): 4 of 40 rows is 8 px, 20 of 40 rows is 40 px.
+    assert short["mouth"]["openPx"] == 8 and short["mouth"]["openRatio"] == round(8 / 80, 3)
+    assert tall["mouth"]["openPx"] == 40 and tall["mouth"]["openRatio"] == round(40 / 80, 3)
+    assert tall["mouth"]["openRatio"] > short["mouth"]["openRatio"]
+    tiny = _pose(4, 0.02)
+    attach_openings({"base": tiny}, {})
+    assert tiny["mouth"]["openRatio"] < MOUTH_SMALL_OPENING
+    assert tiny["warnings"] == ["mouth_small_opening"]
+
+
+def test_a_warp_mouth_reports_the_jaw_drop():
+    from services.flat_rig_metrics import attach_openings
+    from services.flat_rig_warp import drop_pixels
+
+    rig = {"width": 400, "height": 600, "eyes_box": (10, 10, 90, 30), "warnings": [],
+           "mouth": {"offsetX": 0.0, "offsetY": 0.0, "scale": 0.1, "rotation": 0.0},
+           "line": {"mouthWidth": 8.0}, "frame": (0, 0, 400, 600)}
+    attach_openings({"base": rig}, {})
+    assert rig["mouth"]["openPx"] == drop_pixels("wide", 32) == 9
+    assert rig["mouth"]["openRatio"] == round(9 / 80, 3)
+
+
+def _dark_eyes() -> Image.Image:
+    """A keyed face whose eyes are dark: no light sclera for the rig to find."""
+    image = Image.new("RGBA", (420, 760), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((110, 360, 310, 740), fill=(40, 50, 70, 255))
+    draw.ellipse((60, 40, 360, 380), fill=(180, 140, 110, 255))
+    for x in (120, 220):
+        draw.ellipse((x, 120, x + 80, 220), fill=(20, 20, 20, 255))
+    draw.arc((150, 250, 270, 300), 20, 160, fill=(40, 20, 20, 255), width=6)
+    return image
+
+
+def test_light_sclera_is_the_white_the_eye_search_uses():
+    from services.flat_rig_eyes import light_sclera
+
+    rgb = np.zeros((1, 3, 3), np.uint8)
+    rgb[0, 0] = (230, 230, 230)
+    rgb[0, 1] = (219, 10, 10)
+    alpha = np.array([[255, 255, 100]], np.uint8)
+    mask = light_sclera(rgb, alpha)
+    assert bool(mask[0, 0]) and not bool(mask[0, 1]) and not bool(mask[0, 2])
+
+
+def test_rig_check_accepts_a_paper_face_and_rejects_dark_eyes_without_landmarks():
+    from services.flat_rig_metrics import check_image
+
+    ready = check_image(_cutout())
+    assert ready["ready"] is True and ready["reasons"] == []
+    assert ready["face"]["confidence"] == 0.0 and ready["face"]["box"] is not None
+    dark = check_image(_dark_eyes())
+    assert dark["ready"] is False and dark["reasons"] == ["sclera_dark"]
+    blank = check_image(Image.new("RGBA", (80, 80), (0, 0, 0, 0)))
+    assert blank == {"ready": False, "reasons": ["not_keyed"], "face": {"box": None, "confidence": 0.0}}
+
+
+def test_an_unkeyed_pose_is_not_keyed_rather_than_eyeless():
+    """A pose still on its screen (opaque all over) would be rigged background and all: the check says to key it."""
+    from services.flat_rig_metrics import check_image
+
+    screen = Image.new("RGB", _cutout().size, (40, 200, 60))
+    screen.paste(_cutout(), (0, 0), _cutout())
+    assert check_image(screen) == {"ready": False, "reasons": ["not_keyed"], "face": {"box": None, "confidence": 0.0}}
+    assert check_image(screen.convert("RGBA"))["reasons"] == ["not_keyed"]
+
+
+def _ring(cx: float, cy: float, rx: float, ry: float, count: int) -> list[list[float]]:
+    return [[round(cx + rx * np.cos(2 * np.pi * k / count), 1), round(cy + ry * np.sin(2 * np.pi * k / count), 1)] for k in range(count)]
+
+
+def _face_points(mouth_y: float, score: float) -> dict:
+    """Landmarks where ``_cutout`` and ``_dark_eyes`` draw the eyes and the mouth, as ``face_landmarks.detect`` returns them."""
+    return {"eyes": [_ring(160, 170, 40, 50, 6), _ring(260, 170, 40, 50, 6)], "mouth": _ring(210, mouth_y, 52, 9, 12),
+            "contour": [[0, 0], [40, 50]], "scores": {"eyes": score, "mouth": score, "contour": score}}
+
+
+def test_with_sure_landmarks_the_check_takes_the_dark_eyes_the_rig_takes(monkeypatch):
+    """The rig places dark eyes from the landmarks' outlines; the check runs that same search instead of failing them."""
+    from services import face_landmarks
+    from services.flat_rig_look import kit_look
+    from services.flat_rig_metrics import check_image
+
+    sure = _face_points(292, 0.9)
+    rig = rig_pose(_dark_eyes(), kit_look({}, None), None, sure)
+    assert rig["found"] and rig["guided"] == ["eyes", "mouth"]
+    monkeypatch.setattr(face_landmarks, "detect", lambda _image: sure)
+    assert check_image(_dark_eyes()) == {"ready": True, "reasons": [], "face": {"box": [0, 0, 40, 50], "confidence": 0.9}}
+
+
+def test_low_face_confidence_is_reported_only_beside_another_reason(monkeypatch):
+    from services import face_landmarks
+    from services.flat_rig_metrics import check_image
+
+    payload = {
+        "eyes": [[[10, 10]] * 6, [[30, 10]] * 6], "mouth": [[20, 40]] * 12, "contour": [[0, 0], [40, 50]],
+        "scores": {"eyes": 0.2, "mouth": 0.2, "contour": 0.2},
+    }
+    monkeypatch.setattr(face_landmarks, "detect", lambda _image: payload)
+    dark = check_image(_dark_eyes())
+    assert dark["reasons"] == ["sclera_dark", "face_low_confidence"] and dark["face"]["confidence"] == 0.2
+    # Sure landmarks guide the rig's search, so they must sit on the face they were read from.
+    payload.update(_face_points(285, 0.8), scores={"eyes": 0.8, "mouth": 0.9, "contour": 0.8})
+    good = check_image(_cutout())
+    assert good["ready"] is True and good["reasons"] == []
+    assert good["face"]["confidence"] == 0.8 and good["face"]["box"] == [0, 0, 40, 50]
+
+
+def test_rig_check_route_reports_a_pose_and_does_not_save(tmp_path):
+    from services.flat_rig_metrics import check_image
+
+    folder = tmp_path / WORKSPACE
+    folder.mkdir()
+    _cutout().save(folder / "ready.png")
+    _dark_eyes().save(folder / "dark.png")
+    Image.new("RGBA", (40, 40), (0, 0, 0, 0)).save(folder / "empty.png")
+
+    def workspace_dir(name):
+        if name != WORKSPACE:
+            raise HTTPException(404, "Unknown workspace")
+        return str(folder)
+
+    from routers.character_kit_library import _bind_character_kit_library_runtime, create_character_kit_library_router
+    _bind_character_kit_library_runtime(workspace_dir=workspace_dir, conflict=lambda exc: HTTPException(status_code=409, detail=str(exc)))
+    app = FastAPI()
+    app.include_router(create_character_kit_library_router())
+    client = TestClient(app)
+
+    def post(name):
+        return client.post("/api/v1/character-kits/rig-check", json={
+            "workspace": WORKSPACE, "source": f"/api/v1/file/{name}?workspace={WORKSPACE}",
+        })
+
+    ready = post("ready.png")
+    assert ready.status_code == 200, ready.text
+    assert ready.json()["ready"] is True and ready.json()["reasons"] == []
+    assert ready.json() == check_image(_cutout())
+    dark = post("dark.png")
+    assert dark.status_code == 200 and dark.json()["reasons"] == ["sclera_dark"]
+    empty = post("empty.png")
+    assert empty.status_code == 200 and empty.json()["reasons"] == ["not_keyed"]
+    missing = post("missing.png")
+    assert missing.status_code == 409 and missing.json()["detail"]["code"] == "missing_source"
+    assert not (folder / ".character-kit-library-v1.json").exists()
 
 
 def test_only_a_textured_face_is_filled_with_its_texture_and_plain_faces_keep_the_inpaint():

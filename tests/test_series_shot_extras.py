@@ -112,6 +112,33 @@ def test_a_3d_shot_instantiates_sets_the_length_makes_each_speaker_talk_and_publ
     assert talk["lines"] == [{"start": 0.8, "cues": lines[0]["cues"], "audio": "/api/v1/file/ln%201.wav?workspace=cast"}]
 
 
+class HeldWorld3D(World3D):
+    """A template whose document already has a stop-motion step (a scene saved from the editor)."""
+
+    def __call__(self, tool, arguments):
+        if tool == "world3d.scene.instantiate":
+            self.calls.append((tool, arguments))
+            return {"result": {"scene": {"sceneId": "w3d-1", "revision": 1, "document": {"motionStep": 2, "slots": []}}}}
+        return super().__call__(tool, arguments)
+
+
+def test_a_3d_shot_saves_its_stop_motion_in_the_scene_and_a_plain_shot_asks_as_before():
+    def length(tools):
+        return next(args["input"] for tool, args in tools.calls if tool == "world3d.scene.patch" and "duration" in args["input"])
+
+    held = {"id": "s20", "layout2d": {"motionStep": 3, "stopMotionJitter": 1.5}, "scene3d": {"template": "user-mars", "cast": []}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", held, [], 4.0, {}, {}, NativeRenderError)
+    assert (length(tools)["motionStep"], length(tools)["stopMotionJitter"]) == (3, 1.5)
+    plain = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", plain, [], 4.0, {}, {}, NativeRenderError)
+    assert not {"motionStep", "stopMotionJitter"} & set(length(tools)), "the patch earlier renders asked for"
+    tools = HeldWorld3D()
+    series_shot3d.build_scene(tools, "cast", "job", plain, [], 4.0, {}, {}, NativeRenderError)
+    assert length(tools)["motionStep"] == 0 and "stopMotionJitter" not in length(tools), "the shot took it off"
+
+
 def test_a_speaker_without_an_object_is_heard_over_the_shot_and_a_failing_tool_stops_it():
     shot = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
     lines = [{"characterId": "elon", "start": 0.3, "filename": "a b.wav"}]
@@ -180,7 +207,7 @@ def test_the_server_render_makes_a_3d_dialogue_shot_a_take(tmp_path):
         time.sleep(0.02)
     assert job["status"] == "completed", job
     export = next(args for tool, args in tools.calls if tool == "scenes.world3d.export")
-    assert export["input"] == {"workspace": "cast", "document": {"v": 1}, "quality": "final"}
+    assert export["input"] == {"workspace": "cast", "document": {"v": 1, "width": 1920, "height": 1080, "fps": 24}, "quality": "final"}
     talk = next(args for tool, args in tools.calls if tool == "world3d.scene.talk")["input"]
     assert talk["lines"][0]["start"] == 0.8
     imported = next(args for tool, args in tools.calls if tool == "series.asset.import")["input"]
@@ -472,3 +499,38 @@ def test_scene3d_problems_name_bad_holds_sequences_and_appearances_without_a_wor
     assert problems == ["scene3d object gun: hold.rotation must be [x, y, z], each -6.2832 to 6.2832 radians",
                         "scene3d object hero: clips[0] must be {clip, start, duration?, fade?, speed?, offset?, loop?}",
                         "scene3d object hero: appearance.duration must be 0.1-30 seconds"], "files and clip names wait for a workspace"
+
+
+class _PlatedWorld(World3D):
+    def __call__(self, tool, arguments):
+        result = super().__call__(tool, arguments)
+        if tool == "world3d.scene.instantiate":
+            result["result"]["scene"]["document"] = {"slots": [
+                {"id": "background", "slot": "background", "surface": "environment", "sourceUrl": "/old/madrid.png"},
+                {"id": "hero", "slot": "subject", "surface": "character"},
+            ]}
+        return result
+
+
+def test_a_location_backdrop_replaces_only_the_environment_slot():
+    plate = "/api/v1/file/plaza.png?workspace=cast"
+    shot = {"id": "s20", "scene3d": {"template": "user-mars", "cast": [{"characterId": "elon", "objectId": "elon"}], "backdrop": "location"}}
+    tools = _PlatedWorld()
+    series_shot3d.build_scene(tools, "cast", "job", shot, [], 4, {}, {}, NativeRenderError, plate=plate)
+    length = next(args["input"] for name, args in tools.calls if name == "world3d.scene.patch" and "duration" in args["input"])
+    assert length["bindings"] == [{"object_id": "background", "source_url": plate}]
+    plain = {"id": "s20", "scene3d": {"template": "user-mars", "cast": [{"characterId": "elon", "objectId": "elon"}]}}
+    first = series_shot3d.build_scene(World3D(), "cast", "job", plain, [], 4, {}, {}, NativeRenderError)
+    second = series_shot3d.build_scene(World3D(), "cast", "job", plain, [], 4, {}, {}, NativeRenderError)
+    moved = series_shot3d.build_scene(World3D(), "cast", "job", plain, [], 4, {}, {}, NativeRenderError, plate=plate)
+    assert first["renderDigest"] == second["renderDigest"] != moved["renderDigest"]
+    untouched = _PlatedWorld()
+    series_shot3d.build_scene(untouched, "cast", "job", plain, [], 4, {}, {}, NativeRenderError)
+    bare = next(args["input"] for name, args in untouched.calls if name == "world3d.scene.patch" and "duration" in args["input"])
+    assert "bindings" not in bare
+    assert "backdrop" not in series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": "template"})
+    assert series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": "location"})["backdrop"] == "location"
+    assert series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": {"asset": "asset_1"}})["backdrop"] == {"asset": "asset_1"}
+    assert "backdrop" not in series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": {"asset": "../x"}})
+    assert series_shot3d.scene3d_problems({"template": "user-mars", "backdrop": 3}) == [
+        "scene3d.backdrop must be template, location, or {asset}"]

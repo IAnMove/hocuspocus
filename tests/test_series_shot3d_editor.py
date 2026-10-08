@@ -76,6 +76,18 @@ def test_the_editor_opens_the_shots_scene_with_its_length_look_sound_effects_and
     assert again.calls[0][1]["intent_id"] == tools.calls[0][1]["intent_id"], "the same shot asks with the same intents"
 
 
+def test_the_editor_scene_carries_the_shots_stop_motion_and_a_new_one_is_another_scene():
+    project = series()
+    plain, held = World3D(), World3D()
+    editor_scene(plain, "mp", None, project, project["episodesById"]["ep1"], project["episodesById"]["ep1"]["shots"][0])
+    stepped = shot()
+    stepped["layout2d"].update(motionStep=2, stopMotionJitter=0.5)
+    editor_scene(held, "mp", None, project, project["episodesById"]["ep1"], stepped)
+    patch = held.calls[1][1]["input"]
+    assert (patch["motionStep"], patch["stopMotionJitter"]) == (2, 0.5) and "motionStep" not in plain.calls[1][1]["input"]
+    assert held.calls[0][1]["intent_id"] != plain.calls[0][1]["intent_id"], "a changed stop-motion asks with new intents"
+
+
 def edited_document():
     return {"duration": 5.0, "renderLook": "toon", "toon": {"steps": 3},
             "slots": [slot("ines"), slot("e1", position=[-1.0, 0, 2.0], rotationY=2.4, scale=1.9, grounded=True,

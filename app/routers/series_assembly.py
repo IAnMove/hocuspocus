@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.asset_manifest import publish_generation_sidecar
 from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
+from services import series_hearing
 from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
@@ -30,6 +31,7 @@ from services.series_review_gate import assembly_blockers, blocker_message
 from services.series_jobs import SeriesJobStore
 from services.series_score import clip_score
 from services.series_take_sound import plan_take_sound, prepare_clips, prepared_metadata, prepared_note
+from services.series_transitions import join_arguments
 from services.task_manager import get_cancellation_token, get_task_registry
 
 
@@ -411,10 +413,10 @@ def create_series_assembly_router(
                 )
             except (TypeError, ValueError):
                 supports_abort = False
-            joined = (
-                concatenate_clips(clip_paths, output_path, abort_callback=token.is_cancelled)
-                if supports_abort else concatenate_clips(clip_paths, output_path)
-            )
+            transitions = [item.get("transitionIn") for item in job.get("clips", [])]
+            joined = concatenate_clips(clip_paths, output_path, **join_arguments(
+                transitions, abort_callback=token.is_cancelled, supports_abort=supports_abort,
+            ))
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
                 update(
@@ -435,7 +437,8 @@ def create_series_assembly_router(
             finishing = finish_episode(
                 output_path, clip_paths, [item.get("dialogueBeats") or item.get("sceneFilename") for item in job.get("clips", [])],
                 workspace_dir=output_directory, abort_callback=token.is_cancelled,
-                burn=bool(job.get("burnSubtitles")), ambience=ambience, score=score,
+                burn=bool(job.get("burnSubtitles")), ambience=ambience, score=score, hearing=job.get("hearing"),
+                transitions=transitions,
             )
             if token.is_cancelled():
                 _remove_assembly_artifacts(output_path)
@@ -568,7 +571,8 @@ def create_series_assembly_router(
                 frame = plan_take_sound(view_series, view_episode, clips)
                 # Episode-mode ambience and the episode's score are laid at the join: what each clip gets, kept for a resume.
                 ambience = clip_ambience(view_series, view_episode, clips)
-                score = clip_score(view_episode, clips)
+                score = series_hearing.quiet_under_deaf(clip_score(view_episode, clips), view_series, view_episode, clips)
+                hearing = series_hearing.clip_kinds(view_series, view_episode, clips)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             language = payload.language if view_series is not series else None
@@ -619,6 +623,7 @@ def create_series_assembly_router(
                     "frame": frame,
                     **({"ambience": ambience} if ambience is not None else {}),
                     **({"score": score} if score is not None else {}),
+                    **({"hearing": hearing} if hearing else {}),
                     "burnSubtitles": bool(payload.burnSubtitles),
                     "language": language,
                     "message": "Episode assembly queued.",

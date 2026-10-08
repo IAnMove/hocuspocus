@@ -98,23 +98,75 @@ def _flat_run(diff: np.ndarray, limit: float) -> tuple[int, int]:
     return best[0], best[1]
 
 
-def nine_slice_margins(rgba: Any) -> dict[str, int]:
-    """Margins of the stretchable center. The minimum reported margin is 2 px."""
-    data = _array(rgba).astype(np.float32)
-    color = data[..., :3] if data.ndim == 3 else data
-    height, width = color.shape[:2]
-    column_diff = np.abs(color[:, 1:] - color[:, :-1]).mean(axis=(0, 2)) if color.ndim == 3 else np.abs(color[:, 1:] - color[:, :-1]).mean(axis=0)
-    row_diff = np.abs(color[1:] - color[:-1]).mean(axis=(1, 2)) if color.ndim == 3 else np.abs(color[1:] - color[:-1]).mean(axis=1)
-    scale = max(float(color.mean()) * 0.02, 1.0)
+# A mirrored frame whose mean absolute difference stays under this shares one margin per pair.
+_MIRROR_LIMIT = 12.0
 
-    def margins(diff: np.ndarray, length: int) -> tuple[int, int]:
-        left_index, right_index = _flat_run(diff, scale)
-        left = max(2, int(left_index))
-        right = max(2, int(length - (right_index + 2)))
-        if left + right >= length:
-            left = right = 2
+
+def _content_crop(data: np.ndarray, color: np.ndarray) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+    """Opaque crop, plus padding ``(top, bottom, left, right)``. A fully opaque image is unchanged."""
+    if data.ndim != 3 or data.shape[2] < 4:
+        return color, (0, 0, 0, 0)
+    rows = np.any(data[..., 3] > 0, axis=1)
+    cols = np.any(data[..., 3] > 0, axis=0)
+    if not bool(rows.any()):
+        return color, (0, 0, 0, 0)
+    top = int(np.argmax(rows))
+    bottom = int(len(rows) - np.argmax(rows[::-1]))
+    left = int(np.argmax(cols))
+    right = int(len(cols) - np.argmax(cols[::-1]))
+    height, width = int(color.shape[0]), int(color.shape[1])
+    return color[top:bottom, left:right], (top, height - bottom, left, width - right)
+
+
+def _axis_diff(color: np.ndarray, axis: int) -> np.ndarray:
+    values = np.asarray(color, dtype=np.float32)
+    if axis == 1:
+        delta = np.abs(values[:, 1:] - values[:, :-1])
+        return delta.mean(axis=(0, 2)) if values.ndim == 3 else delta.mean(axis=0)
+    delta = np.abs(values[1:] - values[:-1])
+    return delta.mean(axis=(1, 2)) if values.ndim == 3 else delta.mean(axis=1)
+
+
+def _pair_margins(diff: np.ndarray, length: int, scale: float) -> tuple[int, int]:
+    left_index, right_index = _flat_run(diff, scale)
+    left = max(2, int(left_index))
+    right = max(2, int(length - (right_index + 2)))
+    if left + right >= length:
+        return 2, 2
+    return left, right
+
+
+def _mirror_mean(data: np.ndarray, axis: int) -> float:
+    flipped = np.flip(data, axis=axis)
+    return float(np.mean(np.abs(data.astype(np.float32) - flipped.astype(np.float32))))
+
+
+def _snap_pair(left: int, right: int, length: int, delta: float) -> tuple[int, int]:
+    if left + right >= length:
+        return 2, 2
+    if delta > _MIRROR_LIMIT:
         return left, right
+    shared = max(2, int(round((left + right) / 2.0)))
+    if shared * 2 >= length:
+        return left, right
+    return shared, shared
 
-    left, right = margins(column_diff, width)
-    top, bottom = margins(row_diff, height)
+
+def nine_slice_margins(rgba: Any) -> dict[str, int]:
+    """Margins of the stretchable center. The minimum reported margin is 2 px.
+
+    Transparent padding is not treated as the center. A frame that mirrors
+    within ``_MIRROR_LIMIT`` gets the same margin on both sides of each pair.
+    """
+    data = _array(rgba)
+    color = data[..., :3] if data.ndim == 3 else data
+    height, width = int(color.shape[0]), int(color.shape[1])
+    crop, pad = _content_crop(data, color)
+    if int(crop.shape[0]) < 3 or int(crop.shape[1]) < 3:
+        return {"left": 2, "right": 2, "top": 2, "bottom": 2}
+    scale = max(float(np.asarray(crop, dtype=np.float32).mean()) * 0.02, 1.0)
+    left, right = _pair_margins(_axis_diff(crop, 1), int(crop.shape[1]), scale)
+    top, bottom = _pair_margins(_axis_diff(crop, 0), int(crop.shape[0]), scale)
+    left, right = _snap_pair(left + pad[2], right + pad[3], width, _mirror_mean(data, 1))
+    top, bottom = _snap_pair(top + pad[0], bottom + pad[1], height, _mirror_mean(data, 0))
     return {"left": left, "right": right, "top": top, "bottom": bottom}

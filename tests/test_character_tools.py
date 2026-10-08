@@ -13,14 +13,17 @@ def test_routes_wrap_the_body_in_the_command_envelope():
         return {"version": 1, "status": "completed", "result": {"ok": True}}
 
     app = FastAPI()
-    app.include_router(create_character_tools_router(studio_key=handler, speech_qa=handler))
+    app.include_router(create_character_tools_router(studio_key=handler, speech_qa=handler, accent=handler))
     client = TestClient(app)
     keyed = client.post("/api/v1/studio/key", json={"workspace": "cast", "source": "a.png", "mode": "magenta", "intent_id": "key-a"})
     assert keyed.status_code == 200 and keyed.json()["result"] == {"ok": True}
     checked = client.post("/api/v1/qa/speech", json={"workspace": "cast", "file": "take.wav", "text": "Hola."})
     assert checked.status_code == 200
+    accented = client.post("/api/v1/qa/accent", json={"workspace": "cast", "file": "take.wav", "text": "Zaragoza.", "accent": "castilian"})
+    assert accented.status_code == 200 and accented.json()["result"] == {"ok": True}
     assert seen == [
         {"version": 1, "input": {"workspace": "cast", "source": "a.png", "mode": "magenta"}, "intent_id": "key-a"},
         {"version": 1, "input": {"workspace": "cast", "file": "take.wav", "text": "Hola."}},
+        {"version": 1, "input": {"workspace": "cast", "file": "take.wav", "text": "Zaragoza.", "accent": "castilian"}},
     ]
     assert client.post("/api/v1/qa/speech", json=["not", "an", "object"]).status_code == 422

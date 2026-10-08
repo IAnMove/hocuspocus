@@ -239,6 +239,80 @@ def test_an_approval_survives_the_browser_saving_the_project_back():
     assert shot_entry(_episode(saved), "s01")["plan"] == "approved"
 
 
+def test_a_note_alone_keeps_an_approved_plan():
+    """A note is not a content edit: the plan stays approved."""
+    series, _ = _apply(_series(), {"mode": "plan", "shots": [{"shotId": "s01", "plan": "approved"}]})
+    series, _ = _apply(series, {"shots": [{"shotId": "s01", "note": {"text": "sigue bien"}}]})
+    entry = shot_entry(_episode(series), "s01")
+    assert entry["plan"] == "approved" and entry["notes"][0]["text"] == "sigue bien"
+
+
+def test_an_edit_names_every_approval_the_picture_change_clears():
+    from services.series_shot_edit import apply_edit
+    shot = _shot("s01", 1, attempts=[_take("t1")], approved="t1")
+    series, _ = _apply(_series(shot), {"mode": "preview", "shots": [
+        {"shotId": "s01", "plan": "approved", "preview": "approved", "attemptId": "t1"}]})
+    moved = copy.deepcopy(_episode(series)["shots"][0])
+    moved["layout2d"]["cast"][0]["x"] = 70
+    _edited, report = apply_edit(series, "ep1", "s01", {"id": "s01", "layout2d": moved["layout2d"]}, {}, ["cast"], False)
+    assert report["approvalReset"] is True and report["reset"] == ["plan", "preview", "take"]
+
+
+def test_sfx_volume_keeps_the_plan_and_the_take():
+    """Volume is a mix level. A different file still clears plan and take."""
+    from services.series_shot_edit import apply_edit
+    shot = _shot("s01", 1, attempts=[_take("t1")], approved="t1")
+    shot["layout2d"]["sfx"] = [{"file": "pen.wav", "at": 1.0, "volume": 0.8}]
+    series, _ = _apply(_series(shot), {"mode": "plan", "shots": [{"shotId": "s01", "plan": "approved"}]})
+    layout = copy.deepcopy(_episode(series)["shots"][0]["layout2d"])
+    layout["sfx"][0]["volume"] = 0.2
+    edited, report = apply_edit(series, "ep1", "s01", {"id": "s01", "layout2d": layout}, {}, ["sfx"], False)
+    assert report["approvalReset"] is False and report["reset"] == []
+    saved = normalize_series_project(edited, "mp", "cast")
+    assert shot_entry(_episode(saved), "s01")["plan"] == "approved"
+    kept = next(item for item in _episode(saved)["shots"] if item["id"] == "s01")
+    assert kept["approvedAttemptId"] == "t1" and kept["layout2d"]["sfx"][0]["volume"] == 0.2
+    layout["sfx"][0]["file"] = "other.wav"
+    _changed, again = apply_edit(saved, "ep1", "s01", {"id": "s01", "layout2d": layout}, {}, ["sfx"], False)
+    assert again["approvalReset"] is True and again["reset"] == ["plan", "take"]
+
+
+def test_a_decision_stored_before_the_volume_exemption_stays_approved():
+    """Stored digests count each sfx cue's volume. The digest must not change: 143 of 869 real plan approvals
+    (plus-ultra, goya) would go back to pending. 0e91… is what the code before the exemption wrote for this shot."""
+    shot = _shot("s01", 1, attempts=[_take("t1")], approved="t1")
+    shot["layout2d"]["sfx"] = [{"file": "pen.wav", "at": 1.0, "volume": 0.8}]
+    stored = {"plan": "approved", "planDigest": "0e91411977a564cc", "planAt": NOW, "planBy": "user",
+              "preview": "approved", "previewDigest": "0e91411977a564cc", "previewAt": NOW, "previewBy": "user",
+              "previewAttemptId": "t1", "notes": []}
+    series = _series(shot, review={"mode": "preview", "shots": {"s01": stored}})
+    assert content_digest(_episode(series)["shots"][0]) == "0e91411977a564cc"
+    entry = shot_entry(_episode(series), "s01")
+    assert entry["plan"] == "approved" and entry["preview"] == "approved"
+
+
+def test_an_sfx_volume_edit_keeps_a_preview_and_a_different_one_still_resets():
+    from services.series_shot_edit import apply_edit
+    shot = _shot("s01", 1, attempts=[_take("t1")], approved="t1")
+    shot["layout2d"]["sfx"] = [{"file": "pen.wav", "at": 1.0, "volume": 0.8}]
+    series, _ = _apply(_series(shot), {"mode": "preview", "shots": [
+        {"shotId": "s01", "plan": "approved", "preview": "approved", "attemptId": "t1"}]})
+    before = content_digest(_episode(series)["shots"][0])
+    layout = copy.deepcopy(_episode(series)["shots"][0]["layout2d"])
+    layout["sfx"][0]["volume"] = 0.2
+    edited, report = apply_edit(series, "ep1", "s01", {"id": "s01", "layout2d": layout}, {}, ["sfx"], False)
+    saved = normalize_series_project(edited, "mp", "cast")
+    after = content_digest(_episode(saved)["shots"][0])
+    assert after != before, "the digest still counts the volume"
+    assert report["reset"] == []
+    entry = shot_entry(_episode(saved), "s01")
+    assert entry["plan"] == "approved" and entry["preview"] == "approved"
+    assert _episode(saved)["review"]["shots"]["s01"]["planDigest"] == after
+    layout["sfx"][0]["at"] = 2.0
+    _moved, again = apply_edit(saved, "ep1", "s01", {"id": "s01", "layout2d": layout}, {}, ["sfx"], False)
+    assert again["reset"] == ["plan", "preview", "take"]
+
+
 def test_an_edit_by_shot_number_resets_that_shots_review():
     """series.shot.update ("edit the second shot") writes through the editor patch, so its approvals go back to pending."""
     from services.series_shot_edit import apply_edit

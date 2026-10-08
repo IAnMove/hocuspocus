@@ -14,6 +14,7 @@ import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
 import { sceneProgressFromSeconds, sceneVideoTime } from '../../lib/sceneTimeline'
 import { FrameAccumulator } from '../scene3d/exportQuality.ts'
+import { heldFrameTime, holdBlock, motionStepOf, shiftHeldFrame, stopMotionJitterOf, stopMotionOffset } from '../stopMotion.ts'
 import { qualityPaintSize, qualitySampleTimes, type QualityPlan } from './qualityFrame.ts'
 
 type Size = QualityPlan
@@ -78,9 +79,29 @@ function assertRenderable(layer: AnimatorLayer) {
   if (layer.visible && isVisualLayer(layer) && layer.type !== 'effect' && !layer.source.trim() && !hasSequence(layer)) throw new Error(`Layer ${layer.name} has no media source.`)
 }
 
+/** Picture time. A hold repeats one frame; without motionStep the clock is the one the caller asked for. */
+function pictureSeconds(seconds: number): number {
+  if (!scene) return seconds
+  const step = motionStepOf(scene.motionStep)
+  const played = step ? heldFrameTime(seconds, fps, step) : seconds
+  return Math.min(scene.duration, Math.max(0, played))
+}
+
+/** Shake the finished canvas once per hold. Jitter 0 does not read the pixels back. */
+function shiftOutput(seconds: number) {
+  if (!scene) return
+  const step = motionStepOf(scene.motionStep)
+  const jitter = stopMotionJitterOf(scene.stopMotionJitter)
+  if (!step || !(jitter > 0)) return
+  const context = canvas.getContext('2d')
+  if (!context) return
+  const held = pictureSeconds(seconds)
+  shiftHeldFrame(context, canvas.width, canvas.height, stopMotionOffset(holdBlock(held, fps, step), jitter))
+}
+
 async function paintAt(seconds: number, target: HTMLCanvasElement) {
   if (!scene) throw new Error('Load a Video 2D snapshot first')
-  const time = Math.min(scene.duration, Math.max(0, seconds))
+  const time = pictureSeconds(seconds)
   for (const layer of scene.layers) {
     if (layer.sequence?.kind === 'frames') {
       const image = sequenceImages.get(`${layer.id}:${sequenceFrame(layer.sequence, time)}`)
@@ -123,6 +144,7 @@ window.__scene2dExport = {
     const paintSize = qualityPaintSize(plan)
     if (times.length === 1 && paintSize.width === canvas.width && paintSize.height === canvas.height) {
       await paintAt(times[0], canvas)
+      shiftOutput(times[0])
       return canvas.toDataURL('image/png')
     }
     const work = document.createElement('canvas')
@@ -145,6 +167,7 @@ window.__scene2dExport = {
     const image = new ImageData(canvas.width, canvas.height)
     image.data.set(accumulator.result())
     output.putImageData(image, 0, 0)
+    shiftOutput(times[0] ?? seconds)
     return canvas.toDataURL('image/png')
   },
   async audio() {

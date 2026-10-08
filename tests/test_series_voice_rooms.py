@@ -343,20 +343,24 @@ DESIGN = {"stinger": {"file": "sfx-s.wav", "volume": 0.6}, "ambienceByLocation":
 
 
 def test_a_series_without_rooms_keeps_the_digests_its_takes_were_rendered_with():
-    # Computed with the code from before rooms existed.
+    # Talk and deck were computed before rooms existed. The card is silent, so version 2 hashes the frames the planner
+    # renders (five seconds is 120 frames). Version 1, which older takes carry, hashed the five seconds as written.
     golden = {
-        "none": ("26ba124fa2ad4168", "058d6bd5b5b8c606", "c58ca4383e385ee5", _bare()),
-        "empty": ("edf4104106d3dd77", "6d896d24c9dd124b", "6abe8a02e2b260b9", _series()),
-        "design": ("026426c8d5189725", "cb73f8aaba45eaa4", "ae9e31571f0323e7", _series(**DESIGN)),
-        "shot mode": ("026426c8d5189725", "cb73f8aaba45eaa4", "ae9e31571f0323e7", _series(**DESIGN, ambienceMode="shot")),
-        "episode mode": ("0014231dd234edae", "6e2f560b8ccd8f30", "01b4663bbb4cb53e", _series(**DESIGN, ambienceMode="episode")),
+        "none": ("26ba124fa2ad4168", "8a1684735dac9b30", "c58ca4383e385ee5", "058d6bd5b5b8c606", _bare()),
+        "empty": ("edf4104106d3dd77", "e80755cea50461b0", "6abe8a02e2b260b9", "6d896d24c9dd124b", _series()),
+        "design": ("026426c8d5189725", "4af6a3125e2cc597", "ae9e31571f0323e7", "cb73f8aaba45eaa4", _series(**DESIGN)),
+        "shot mode": ("026426c8d5189725", "4af6a3125e2cc597", "ae9e31571f0323e7", "cb73f8aaba45eaa4",
+                      _series(**DESIGN, ambienceMode="shot")),
+        "episode mode": ("0014231dd234edae", "82eb9df1b829f6d2", "01b4663bbb4cb53e", "6e2f560b8ccd8f30",
+                         _series(**DESIGN, ambienceMode="episode")),
     }
-    for name, (talk, card, deck, series) in golden.items():
+    for name, (talk, card, deck, legacy_card, series) in golden.items():
         assert [render_inputs(series, shot, KITS) for shot in (TALK, CARD, DECK)] == [talk, card, deck], name
+        assert render_inputs(series, CARD, KITS, version=1) == legacy_card, name
     # Nothing a room adds shows while no shot hears one.
     for series in (_series(**DESIGN, roomByLocation={}), _series(**DESIGN, roomByLocation={"nave": "none", "attic": "hall"})):
         assert [render_inputs(series, shot, KITS) for shot in (TALK, CARD, DECK)] == [
-            "026426c8d5189725", "cb73f8aaba45eaa4", "ae9e31571f0323e7"]
+            "026426c8d5189725", "4af6a3125e2cc597", "ae9e31571f0323e7"]
 
 
 def _bare():
@@ -676,3 +680,100 @@ def test_a_missing_recording_or_missing_ffmpeg_is_an_error_not_a_dry_take(tmp_pa
     with pytest.raises(RoomError, match="did not run"):
         apply_room(str(tmp_path), "ln-a.wav", "hall")
     assert sorted(os.listdir(tmp_path)) == ["ln-a.wav", rooms.impulse_response_filename("hall")], "a failed copy leaves nothing half made"
+
+
+# Subjective hearing ----------------------------------------------------------
+
+def _pcm(path: Path, samples: np.ndarray, rate: int = 48000) -> None:
+    clipped = np.clip(samples, -1, 1)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes((clipped * 32767).astype(np.int16).tobytes())
+
+
+def _high_rms(path: Path, low_hz: float = 2000) -> float:
+    with wave.open(str(path), "rb") as handle:
+        rate, channels = handle.getframerate(), handle.getnchannels()
+        samples = np.frombuffer(handle.readframes(handle.getnframes()), dtype=np.int16).astype(np.float64)
+    if channels > 1:
+        samples = samples.reshape(-1, channels).mean(axis=1)
+    window = np.hanning(len(samples))
+    power = np.abs(np.fft.rfft(samples * window))
+    high = power[np.fft.rfftfreq(len(samples), 1 / rate) >= low_hz]
+    return float(np.sqrt(np.mean(high ** 2) + 1e-20))
+
+
+def test_muffled_dries_the_room_and_deaf_drops_the_line():
+    from services.series_hearing import hearing_of, shape
+    series = {"soundDesign": {"roomByLocation": {"garage": "hall"}, "hearingDefault": "ringing"}}
+    assert shot_room(series, {"locationId": "garage"}) == "hall"
+    assert shot_room(series, {"locationId": "garage", "layout2d": {"hearing": "muffled"}}) is None
+    assert hearing_of(series, {"layout2d": {"hearing": "normal"}}) == "normal"
+    assert hearing_of(series, {}) == "ringing"
+    lines, tracks = [{"filename": "line.wav"}], [
+        {"filename": "sfx-pen.wav", "kind": "sfx"}, {"filename": "sfx-bell.wav", "kind": "sfx", "keepInDeaf": True},
+        {"filename": "mus-theme.wav", "kind": "music"}]
+    assert shape(series, {"layout2d": {"hearing": "deaf"}}, lines, tracks) == ([], [tracks[1]])
+    assert shape(series, {"layout2d": {"hearing": "normal"}}, lines, tracks) == (lines, tracks)
+    shot = {"id": "s0", "durationSeconds": 2, "locationId": "garage", "visibleCharacterIds": [],
+            "dialogueBeats": [{"id": "b0", "characterId": "kevin", "text": "Hoy el río."}],
+            "layout2d": {"hearing": "deaf", "framing": "wide", "music": {"file": "mus-theme.wav", "volume": 0.4, "start": 0},
+                         "sfx": [{"file": "sfx-pen.wav", "at": 0.2}, {"file": "sfx-bell.wav", "at": 0.4, "keepInDeaf": True}]}}
+    spec = build_shot_spec({"id": "s", "title": "S"}, {"id": "ep", "title": "Ep"}, shot, workspace="cast",
+                           recorded={"b0": {"filename": "line.wav", "duration": 1.0}})
+    assert spec["lines"] == [] and [track["filename"] for track in spec["audioTracks"]] == ["sfx-bell.wav"]
+
+
+def test_a_normal_hearing_is_the_same_bytes_and_muffled_cuts_the_highs(tmp_path):
+    from services.series_hearing import apply_wav
+    if not HAS_FFMPEG:
+        pytest.skip("ffmpeg is not installed")
+    rate, count = 48000, 48000 * 2
+    tone = tmp_path / "tone.wav"
+    _pcm(tone, 0.2 * np.sin(2 * math.pi * 440 * np.arange(count) / rate))
+    copied = tmp_path / "same.wav"
+    assert apply_wav(str(tone), str(copied), "normal")
+    assert copied.read_bytes() == tone.read_bytes()
+    noise = tmp_path / "noise.wav"
+    _pcm(noise, np.random.default_rng(0).standard_normal(count) * 0.08)
+    muffled = tmp_path / "muffled.wav"
+    assert apply_wav(str(noise), str(muffled), "muffled")
+    drop = 20 * math.log10(_high_rms(noise) / _high_rms(muffled))
+    assert drop >= 20, drop
+
+
+def test_a_normal_default_does_not_change_the_digest_and_a_real_one_does():
+    from services.series_hearing import clip_kinds, quiet_under_deaf
+    from services.series_ambience import check_sound_design
+    series = {"id": "s", "spokenLanguage": "english", "characters": [], "locations": [],
+              "soundDesign": {"stinger": {"file": "a.wav"}}}
+    shot = {"id": "e1s00", "productionMethod": "animation_2d", "layout2d": {"framing": "wide"}, "locationId": "garage"}
+    before = render_inputs(series, shot, {})
+    assert shot_sound_design({**series["soundDesign"], "hearingDefault": "normal"}) == series["soundDesign"]
+    assert render_inputs(series, shot, {}) == before
+    # Ringing and muffling are laid at assembly: the take is the same, so it is not rendered again.
+    for kind in ("ringing", "muffled"):
+        assert render_inputs(series, {**shot, "layout2d": {"framing": "wide", "hearing": kind}}, {}) == before
+        default = {**series, "soundDesign": {**series["soundDesign"], "hearingDefault": kind}}
+        assert render_inputs(default, shot, {}) == before
+    # Deaf drops the take's lines and sounds, and muffled its room: those takes change.
+    deaf = {**series, "soundDesign": {**series["soundDesign"], "hearingDefault": "deaf"}}
+    assert render_inputs(deaf, shot, {}) != before
+    own = {**shot, "layout2d": {"framing": "wide", "hearing": "deaf"}}
+    assert render_inputs(series, own, {}) == render_inputs(deaf, shot, {})
+    spoken = {**shot, "visibleCharacterIds": ["kevin"],
+              "dialogueBeats": [{"id": "b0", "characterId": "kevin", "text": "Hola."}]}
+    roomed = {**series, "soundDesign": {**series["soundDesign"], "roomByLocation": {"garage": "hall"}}}
+    muffled = {**spoken, "layout2d": {"framing": "wide", "hearing": "muffled"}}
+    assert render_inputs(roomed, muffled, {}) != render_inputs(roomed, spoken, {})
+    assert render_inputs(roomed, muffled, {}) == render_inputs(series, spoken, {}), "a muffled line is dry"
+    with pytest.raises(ValueError, match="hearingDefault"):
+        check_sound_design({"hearingDefault": "loud"})
+    episode = {"shots": [shot, {**shot, "id": "e1s01", "layout2d": {"hearing": "deaf"}}]}
+    clips = [{"shotId": "e1s00"}, {"shotId": "e1s01"}]
+    assert clip_kinds(series, episode, clips) == ["normal", "deaf"]
+    assert clip_kinds(series, {"shots": [shot]}, [{"shotId": "e1s00"}]) is None
+    score = {"music": [False, False], "cues": []}
+    assert quiet_under_deaf(score, series, episode, clips)["music"] == [False, True]

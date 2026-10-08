@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from services.agent_activity import current_actor
 from services.series_produce import ProduceError, SeriesProduce, public_job
+from services.series_library import EpisodeNumberTaken
 from services.series_script import ScriptError, apply_script
 from services.series_script_history import ScriptHistoryError, download_name, list_scripts, read_script, record_script
 
@@ -28,6 +29,7 @@ class FromScript(BaseModel):
     workspace: str = Field(min_length=1, max_length=200)
     script: dict[str, Any]
     episodeId: str | None = Field(default=None, min_length=1, max_length=160)
+    number: int | None = Field(default=None, ge=1)
     check: bool = False
 
 
@@ -93,7 +95,7 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
         return {**result, "scriptRevision": kept["revision"]}
 
     async def write_script(workspace: str, series_id: str, script: dict, episode_id: str | None, check: bool,
-                           restored_from: int | None = None) -> dict:
+                           restored_from: int | None = None, number: int | None = None) -> dict:
         def read_series() -> dict:
             found = (read_library(workspace).get("seriesById") or {}).get(series_id)
             if not found:
@@ -105,7 +107,7 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
         def run() -> dict:
             root = workspace_dir(workspace)
             result = apply_script(call, read_series, read_kits(workspace), workspace_files(root), workspace, script,
-                                  episode_id=episode_id, check_only=check, root=root)
+                                  episode_id=episode_id, check_only=check, root=root, number=number)
             if check:
                 return result
             return keep_script(workspace, series_id, script, result, by=by, created=not episode_id, restored_from=restored_from)
@@ -113,8 +115,15 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
         bind_loop(asyncio.get_running_loop())
         try:
             return await run_in_threadpool(run)
+        except EpisodeNumberTaken as error:
+            raise HTTPException(status_code=409, detail={
+                "code": "episode_number_taken", "message": str(error), "episodeId": error.holder_id,
+            }) from error
         except ScriptError as error:
-            raise HTTPException(status_code=400, detail={"code": "invalid_script", "message": str(error), "problems": error.problems}) from error
+            detail = {"code": "invalid_script", "message": str(error), "problems": error.problems, "groups": error.groups}
+            if getattr(error, "warnings", None):
+                detail["warnings"] = error.warnings
+            raise HTTPException(status_code=400, detail=detail) from error
 
     def history_error(error: ScriptHistoryError) -> HTTPException:
         return HTTPException(status_code=error.status, detail={"code": error.code, "message": str(error)})
@@ -124,7 +133,7 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
         """Check a compact bilingual script against the series and write it as an episode with its language versions.
 
         A written script is kept as the episode's next script revision (``scriptRevision`` in the reply)."""
-        return await write_script(body.workspace, series_id, body.script, body.episodeId, body.check)
+        return await write_script(body.workspace, series_id, body.script, body.episodeId, body.check, number=body.number)
 
     @router.get("/api/v1/series/{series_id}/episodes/{episode_id}/scripts")
     def episode_scripts(series_id: str, episode_id: str, workspace: str):

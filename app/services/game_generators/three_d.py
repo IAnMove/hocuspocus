@@ -18,10 +18,18 @@ from pathlib import Path
 from services.game_generators.base import (
     AttemptResult, GenContext, candidate_dirs, candidate_result, relative, seed_for_step, spec_seed,
 )
+from services.game_library import game_warning
 from services.game_prompts import build
 from services.game_tools import GameToolError, image, model3d, orbit, resolve_path, rig
 
 _STAGING = "single object, three-quarter view, neutral pose, plain light grey background, no shadow"
+_CHARACTER_STAGING = "T-pose, front view, arms horizontal, plain light grey background"
+_WARNING_TEXT = {
+    "over_budget": "The mesh is over the triangle budget.",
+    "triangles_unknown": "The mesh triangles could not be counted.",
+    "orbit_empty": "The turnaround video has no frames.",
+    "clip_missing": "A required animation clip is missing.",
+}
 _ORBIT = (("front", 2 / 24), ("left", 21 / 24), ("back", 42 / 24), ("right", 63 / 24))
 ROLE_CLIPS = {
     "player": ("idle", "walk", "run", "jump", "punch", "victory"),
@@ -38,14 +46,18 @@ def clips_for(role: str) -> tuple[str, ...]:
     return ROLE_CLIPS.get(key, ROLE_CLIPS["player"])
 
 
-def budget_warning(triangles, limit) -> list[str]:
+def _mesh_warning(code: str) -> dict:
+    return game_warning(code, _WARNING_TEXT[code])
+
+
+def budget_warning(triangles, limit) -> list[dict]:
     """``over_budget`` more than 10% above ``limit``, ``triangles_unknown`` when uncounted."""
     if limit is None:
         return []
     if triangles is None:
-        return ["triangles_unknown"]
+        return [_mesh_warning("triangles_unknown")]
     if float(triangles) > float(limit) * 1.10:
-        return ["over_budget"]
+        return [_mesh_warning("over_budget")]
     return []
 
 
@@ -61,11 +73,23 @@ def _count(asset: dict) -> int:
         return 1
 
 
-def _limit(asset: dict) -> int:
+def _positive_int(raw) -> int | None:
+    if isinstance(raw, bool) or raw in (None, ""):
+        return None
     try:
-        return max(1, int(_spec(asset).get("maxTriangles") or 3000))
+        value = int(raw)
     except (TypeError, ValueError):
-        return 3000
+        return None
+    return value if value >= 1 else None
+
+
+def _limit(game: dict, asset: dict) -> int:
+    """``spec.maxTriangles``, else ``style.model3d.maxTriangles``, else 3000."""
+    spec_limit = _positive_int(_spec(asset).get("maxTriangles"))
+    if spec_limit is not None:
+        return spec_limit
+    style = ((game.get("style") or {}).get("model3d") or {}).get("maxTriangles")
+    return _positive_int(style) or 3000
 
 
 def _orbit_steps(asset: dict, count: int) -> dict[str, int]:
@@ -128,15 +152,26 @@ def _inspect(path: Path, *, skinned: bool = False):
     return report
 
 
-def _concepts(ctx: GenContext, count: int) -> list[tuple[str, bool]]:
-    """``(image, generated)`` per candidate. Approved art is shared by every candidate."""
+def _raw_refs(ctx: GenContext, raw) -> list[str]:
+    if not raw:
+        return []
+    file = resolve_path(ctx, raw)
+    try:
+        return [relative(ctx, file)]
+    except ValueError:
+        return [str(file)]
+
+
+def _concepts(ctx: GenContext, count: int, staging: str = _STAGING, reuse_raw: bool = True) -> list[tuple[str, bool]]:
+    """``(image, generated)`` per candidate. Approved art is shared when ``reuse_raw``; otherwise it is the
+    reference of the new concept, so a character's T-pose keeps the approved sprite's look."""
     raw = _approved_raw(ctx.game, ctx.asset)
-    if raw:
+    if raw and reuse_raw:
         return [(str(resolve_path(ctx, raw)), False)] * count
-    prompt, negative = build(ctx.game, ctx.asset, _STAGING, chroma=False)
+    prompt, negative = build(ctx.game, ctx.asset, staging, chroma=False)
     files = image(
         ctx, "concept", prompt=prompt, negative=negative, resolution="1024x1024",
-        seed=spec_seed(ctx.asset), batch=count,
+        refs=_raw_refs(ctx, raw), seed=spec_seed(ctx.asset), batch=count,
     )
     return [(str(name), True) for name in files[:count]]
 
@@ -152,7 +187,7 @@ def _orbit_views(ctx: GenContext, concept: str, root: Path, suffix: str) -> tupl
     try:
         video = str(resolve_path(ctx, orbit(ctx, f"orbit{suffix}", concept)))
     except (GameToolError, RuntimeError):
-        return {}, ["orbit_empty"]
+        return {}, [_mesh_warning("orbit_empty")]
     found: dict[str, str] = {}
     for name, start in _ORBIT:
         try:
@@ -162,7 +197,7 @@ def _orbit_views(ctx: GenContext, concept: str, root: Path, suffix: str) -> tupl
         if path:
             found[name] = path
     if not found:
-        return {}, ["orbit_empty"]
+        return {}, [_mesh_warning("orbit_empty")]
     return found, []
 
 
@@ -174,7 +209,7 @@ def _mesh(ctx: GenContext, concept: str, folder: Path, suffix: str) -> tuple[str
         views, warnings = _orbit_views(ctx, concept, folder / "orbit", suffix)
     name = model3d(
         ctx, f"mesh{suffix}", image_path=concept, images=views or None, preset=_preset(spec, ctx.game),
-        reduce_face=True, target_face_num=_limit(ctx.asset),
+        reduce_face=True, target_face_num=_limit(ctx.game, ctx.asset),
         texture_resolution=spec.get("texture"), seed=seed_for_step(ctx.asset, f"mesh{suffix}"),
     )
     return name, warnings
@@ -221,7 +256,7 @@ def _metrics(report, limit: int, wanted=(), labels=None) -> tuple[dict, list[str
     missing = _missing(wanted, present, labels or {})
     warnings = budget_warning(report.total_triangles, limit)
     if missing:
-        warnings.append("clip_missing")
+        warnings.append(_mesh_warning("clip_missing"))
     metrics = {
         "triangles": report.total_triangles,
         "bones": sum(int(skin.joint_count) for skin in report.skins),
@@ -234,7 +269,7 @@ def _metrics(report, limit: int, wanted=(), labels=None) -> tuple[dict, list[str
 def _model_candidate(ctx: GenContext, folder: Path, suffix: str, concept: str) -> tuple[dict, list[str]]:
     mesh_name, warnings = _mesh(ctx, concept, folder, suffix)
     stored = _fetch(ctx, mesh_name, folder / "model.glb")
-    metrics, extra = _metrics(_inspect(stored), _limit(ctx.asset))
+    metrics, extra = _metrics(_inspect(stored), _limit(ctx.game, ctx.asset))
     return {"files": {"model": relative(ctx, stored)}, "metrics": metrics}, [*warnings, *extra]
 
 
@@ -250,14 +285,22 @@ def _character_candidate(ctx: GenContext, folder: Path, suffix: str, concept: st
         rig_profile=None if engine == "humanoid" else profile,
     )
     stored = _fetch(ctx, rigged, folder / "rig.glb")
-    metrics, extra = _metrics(_inspect(stored, skinned=True), _limit(ctx.asset), wanted, labels)
+    metrics, extra = _metrics(_inspect(stored, skinned=True), _limit(ctx.game, ctx.asset), wanted, labels)
     files = {"model": relative(ctx, model), "rig": relative(ctx, stored)}
     return {"files": files, "metrics": metrics}, [*warnings, *extra]
 
 
-def _run(ctx: GenContext, make) -> AttemptResult:
+def _dedupe(items: list) -> list:
+    kept: list = []
+    for item in items:
+        if item not in kept:
+            kept.append(item)
+    return kept
+
+
+def _run(ctx: GenContext, make, staging: str = _STAGING, reuse_raw: bool = True) -> AttemptResult:
     """One ``make`` call per candidate. Step names get ``-a<i>`` so each candidate has its own job."""
-    concepts = _concepts(ctx, _count(ctx.asset))
+    concepts = _concepts(ctx, _count(ctx.asset), staging, reuse_raw)
     slots = candidate_dirs(ctx, len(concepts))
     written: list[dict] = []
     for (attempt_id, folder), (concept, generated) in zip(slots, concepts):
@@ -266,7 +309,7 @@ def _run(ctx: GenContext, make) -> AttemptResult:
         if generated:
             kept = _fetch(ctx, concept, folder / f"concept{Path(concept).suffix or '.png'}")
             item["files"]["concept"] = relative(ctx, kept)
-        written.append({"id": attempt_id, **item, "warnings": list(dict.fromkeys(found))})
+        written.append({"id": attempt_id, **item, "warnings": _dedupe(found)})
     return candidate_result(written, [], ctx.steps)
 
 
@@ -284,12 +327,9 @@ class Model3dGenerator:
 class Character3dGenerator:
     kind = "character3d"
 
-    def estimate(self, game: dict, asset: dict) -> dict[str, int]:
+    def estimate(self, _game: dict, asset: dict) -> dict[str, int]:
         count = _count(asset)
-        counts = {"3d": count, "rig": count, **_orbit_steps(asset, count)}
-        if not _approved_raw(game, asset):
-            counts["image"] = count
-        return counts
+        return {"image": count, "3d": count, "rig": count, **_orbit_steps(asset, count)}
 
     def run(self, ctx: GenContext) -> AttemptResult:
-        return _run(ctx, _character_candidate)
+        return _run(ctx, _character_candidate, _CHARACTER_STAGING, False)

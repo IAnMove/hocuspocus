@@ -6,7 +6,7 @@ Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loa
 
 ## Search
 
-`POST /api/v1/world3d/templates/commands` with `{"operation","version":1,"input":{"workspace",...}}`. Mutations also send `intent_id`. The same operations are MCP tools. `world3d.templates.list` and `world3d.templates.catalog` are the same bounded search (default 8, maximum 24). Both languages are searched. A limit above 24 or a language other than `es` or `en` is rejected. An unknown id returns `unknown_template` and does not open another shot.
+`POST /api/v1/world3d/templates/commands` with `{"operation","version":1,"input":{"workspace",...}}`. Mutations also send `intent_id`. The same operations are MCP tools. With a query, `world3d.templates.list` and `world3d.templates.catalog` are the same bounded search (default 8, maximum 24). Without a query, `world3d.templates.list` pages the library in id order (default and maximum 50, `offset`, `total`). Both languages are searched. A limit above those maximums or a language other than `es` or `en` is rejected. An unknown id returns `unknown_template` and does not open another shot.
 
 `world3d.scene.apply_query` instantiates a scene only when the top score is strictly higher than the second. A tie returns `needs_choice` and creates nothing. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.
 

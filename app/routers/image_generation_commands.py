@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.image_generation_spec import image_generation_schema
@@ -70,13 +70,74 @@ def image_command_catalog(additional_operations=()):
                              "required": ["version", "operation", "input"]}}, *additional_operations]
 
 
+def _field_values(arguments, name):
+    values = []
+    if name in arguments:
+        values.append(arguments[name])
+    payload = arguments.get("input")
+    if isinstance(payload, dict):
+        if name in payload:
+            values.append(payload[name])
+        params = payload.get("params")
+        if isinstance(params, dict) and name in params:
+            values.append(params[name])
+    return values
+
+
+def _reject_field_type(name, values):
+    for value in values:
+        if name == "priority" and type(value) is not int:
+            raise command_error(422, "invalid_command", "priority must be an integer")
+        if name == "output_name" and not isinstance(value, str):
+            raise command_error(422, "invalid_command", "output_name must be a string")
+
+
+def _reject_conflict(name, values):
+    if any(item != values[0] for item in values):
+        raise HTTPException(422, {
+            "code": "conflicting_field",
+            "message": f"{name} was supplied more than once with different values",
+            "field": name,
+            "values": list(values),
+            "retryable": False,
+        })
+
+
+def _fold_transport_fields(arguments):
+    """Move top-level priority and output_name into the command input."""
+    payload = arguments.get("input")
+    if not isinstance(payload, dict):
+        raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+    for name in ("priority", "output_name"):
+        values = _field_values(arguments, name)
+        if not values:
+            continue
+        _reject_field_type(name, values)
+        _reject_conflict(name, values)
+        if name not in arguments:
+            continue
+        top = arguments.pop(name)
+        if name == "output_name":
+            payload["output_name"] = top
+            continue
+        params = payload.get("params")
+        if params is None:
+            params = {}
+            payload["params"] = params
+        if not isinstance(params, dict):
+            raise command_error(422, "invalid_command", "input.params must be an object")
+        params["priority"] = top
+
+
 def _generation_arguments(arguments):
     if not isinstance(arguments, dict):
         raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
     if "validate" in arguments and type(arguments.get("validate")) is not bool:
         raise command_error(422, "invalid_command", "validate must be true or false")
-    if set(arguments) - {"validate"} != {"version", "intent_id", "input"}:
+    allowed = {"version", "intent_id", "input", "validate", "priority", "output_name"}
+    if set(arguments) - allowed or set(arguments) & {"version", "intent_id", "input"} != {"version", "intent_id", "input"}:
         raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+    _fold_transport_fields(arguments)
     return arguments
 
 

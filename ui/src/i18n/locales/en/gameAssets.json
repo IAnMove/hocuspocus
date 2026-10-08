@@ -251,7 +251,9 @@
     "loop_seam": "The loop seam is audible.",
     "duplicate_of": "Looks like a duplicate of {{id}}.",
     "loop_not_closed": "The animation loop does not close.",
-    "identity_drift": "The character changes between frames.",
+    "identity_drift": "The figure's colors change between frames.",
+    "orbit_empty": "The turnaround has no frames.",
+    "ogg_fallback": "The loop was saved as WAV because Ogg encoding failed.",
     "foot_drift": "The feet slide between frames.",
     "halo": "A halo is left around the sprite.",
     "strip_count_mismatch": "The strip has a different number of figures.",
@@ -378,6 +380,7 @@
     "files_missing": "some files are missing"
   },
   "metrics": {
-    "styleScore": "Style match (1–5)"
+    "styleScore": "Style match (1–5)",
+    "poseChange": "Pose change"
   }
 }

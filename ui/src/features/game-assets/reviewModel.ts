@@ -83,7 +83,8 @@ function readWarning(item: unknown, index: number): ReviewWarning {
   const code = typeof entry.code === 'string' ? entry.code : ''
   const file = typeof entry.file === 'string' ? entry.file : ''
   const message = typeof entry.message === 'string' ? entry.message : ''
-  return { key: `${code || 'warning'}-${file}-${index}`, code, message, file, ref: '' }
+  const ref = typeof entry.ref === 'string' ? entry.ref : ''
+  return { key: `${code || 'warning'}-${file}-${index}`, code, message, file, ref }
 }
 
 export function attemptWarnings(attempt: GameAttempt | null | undefined): ReviewWarning[] {

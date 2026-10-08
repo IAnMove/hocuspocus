@@ -865,4 +865,7 @@ def test_a_published_export_releases_its_frames_and_keeps_its_snapshot(tmp_path,
     staging = staging_dir(registry.workspace_dir, "release-me")
     assert not (staging / "frames").exists() and not (staging / "encoded.mp4").exists(), "intermediates go with the publish"
     assert (staging / "snapshot.json").is_file(), "what was rendered stays readable"
+    # Staging goes before the task says completed; the published MP4 was moved out of it, so the result is whole.
+    name = registry.get(task_id)["result_refs"][0]
+    assert (Path(registry.workspace_dir) / name).stat().st_size > 0
     forget_task_registry(registry.workspace_dir)

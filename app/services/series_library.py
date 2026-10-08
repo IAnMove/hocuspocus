@@ -16,6 +16,7 @@ import uuid
 from typing import Any
 
 from .language_intent import normalize_language_intent
+from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
 
 SERIES_LIBRARY_FILENAME = ".series-library-v1.json"
@@ -28,7 +29,8 @@ _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
-    "continuityIssues", "proposedCanonDelta", "languageVersions", "score",
+    "continuityIssues", "proposedCanonDelta", "languageVersions", "score", "videoBudget",
+    "kitPins",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -36,13 +38,14 @@ SHOT_EDITOR_FIELDS = frozenset({
     "primarySpeakerId", "locationId", "locationVariantId",
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
-    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley",
+    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley", "video",
+    "transitionIn",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 # A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
 SHOT_CONTENT_FIELDS = frozenset({
     "dialogueBeats", "visibleCharacterIds", "locationId", "locationVariantId", "productionMethod",
-    "framing", "camera", "layout2d", "scene3d", "wardrobeByCharacterId", "propIds",
+    "framing", "camera", "layout2d", "scene3d", "wardrobeByCharacterId", "propIds", "video",
 })
 SERIES_CANON_INPUT_FIELDS = (
     "title", "premise", "logline", "format", "language", "spokenLanguage",
@@ -392,6 +395,9 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         "negativePrompt": _text(shot.get("negativePrompt")),
         "attempts": attempts,
     })
+    # A scripted H3 request is checked the same way from the script and from the editor.
+    from .series_video_shots import store_video
+    store_video(shot)
     from .series_shot_plan import normalize_layout2d
     layout = normalize_layout2d(shot.get("layout2d"))
     if layout:
@@ -410,6 +416,13 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         shot["foley"] = foley
     else:
         shot.pop("foley", None)
+    from .series_transitions import normalize_transition
+    if "transitionIn" in shot:
+        transition = normalize_transition(shot.get("transitionIn"))
+        if transition:
+            shot["transitionIn"] = transition
+        else:
+            shot.pop("transitionIn", None)
     policy = shot["referencePolicy"]
     policy["mode"] = "manual" if policy.get("mode") == "manual" else "automatic"
     policy["manualIncludeAssetIds"] = _unique_ids(policy.get("manualIncludeAssetIds"))
@@ -572,6 +585,12 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
     # The staged review (series_review): mode, per-shot decisions on the current content, notes.
     from .series_review import normalize_episode_review
     normalize_episode_review(episode)
+    from .series_kit_pins import normalize_kit_pins
+    pins = normalize_kit_pins(episode.get("kitPins"))
+    if pins:
+        episode["kitPins"] = pins
+    else:
+        episode.pop("kitPins", None)
     from .series_shot_dialogue import annotate_episode_shot_dialogue
     return annotate_episode_shot_dialogue(episode)
 
@@ -1102,6 +1121,7 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
         raise ValueError("Create a season before adding an episode")
     season = next((item for item in seasons if item.get("id") == season_id), seasons[0])
     episodes = series.get("episodesById") if isinstance(series.get("episodesById"), dict) else {}
+    guard_episode_number(episodes, season.get("id"), overrides)
     season_episodes = [
         item for item in episodes.values()
         if isinstance(item, dict) and item.get("seasonId") == season.get("id")
@@ -1450,6 +1470,7 @@ def update_series_episode(
     current = episodes.get(episode_id) if isinstance(episodes, dict) else None
     if not isinstance(current, dict):
         raise ValueError("Series episode not found")
+    guard_episode_number(episodes, patch.get("seasonId") or current.get("seasonId"), patch, episode_id)
     current_revision = _integer(updated.get("revision"), 1, 1)
     if base_series_revision is not None:
         try:

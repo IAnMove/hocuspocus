@@ -24,7 +24,8 @@ An author is who decided or wrote: ``user``, ``agent`` (an MCP client), ``wizard
 
 A shot without an entry is pending at both stages and has no notes. A decision keeps the digest of the shot's
 content (``SHOT_CONTENT_FIELDS``: lines, cast, layout2d, scene3d, location, framing...) it was made on, so when that
-content changes, by any write path, the decision goes back to pending; the notes stay. A preview decision is also
+content changes, by any write path, the decision goes back to pending; the notes stay. The one exception is a
+``series.shot.update`` that changed only an sfx volume: it moves the decision to the new digest (``carry_decisions``). A preview decision is also
 about one take: a newer take that was not made as that preview's final (``attempt.reviewStage`` ``final``) puts it
 back to pending, since nobody has looked at it yet.
 """
@@ -69,17 +70,43 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def content_digest(shot: dict) -> str:
-    """Fingerprint of what a shot shows and says, as ``same_shot_content`` compares it."""
+def _without_sfx_volume(layout: Any) -> Any:
+    if not isinstance(layout, dict) or not isinstance(layout.get("sfx"), list):
+        return layout
+    cues = [{key: value for key, value in cue.items() if key != "volume"} if isinstance(cue, dict) else cue
+            for cue in layout["sfx"]]
+    return {**layout, "sfx": cues}
+
+
+def content_digest(shot: dict, *, sfx_volume: bool = True) -> str:
+    """Fingerprint of what a shot shows and says, as ``same_shot_content`` compares it.
+
+    Stored decisions always hold the full digest. ``sfx_volume=False`` leaves the sfx cues' volume out, only to tell
+    an edit that changed nothing but a mix level (``carry_decisions``)."""
     from .series_library import SHOT_CONTENT_FIELDS, _beat_content, _take_layout
     payload = {}
     for key in sorted(SHOT_CONTENT_FIELDS):
         # A generated or imported take keeps its look when only the sound laid at the cut changes.
         value = _beat_content(shot.get(key)) if key == "dialogueBeats" else _take_layout(shot) if key == "layout2d" else shot.get(key)
+        if key == "layout2d" and not sfx_volume:
+            value = _without_sfx_volume(value)
         if value:
             payload[key] = _plain(value)
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha1(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def carry_decisions(episode: dict, shot_id: str, before: str, after: str) -> None:
+    """Move the shot's plan and preview decisions made on digest ``before`` to ``after``: for an edit the caller
+    knows changed only a mix level (an sfx volume). Any other change leaves them to go back to pending."""
+    review = episode.get("review") if isinstance(episode.get("review"), dict) else {}
+    shots = review.get("shots") if isinstance(review.get("shots"), dict) else {}
+    entry = shots.get(shot_id)
+    if not isinstance(entry, dict):
+        return
+    for stage in ("plan", "preview"):
+        if entry.get(f"{stage}Digest") == before:
+            entry[f"{stage}Digest"] = after
 
 
 def _attempts(shot: dict) -> list[dict]:

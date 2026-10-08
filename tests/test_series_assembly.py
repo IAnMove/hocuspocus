@@ -76,3 +76,17 @@ def test_a_take_without_timing_brings_its_shot_lines_for_subtitles():
     assert "dialogueBeats" not in plan[1]
     series["assets"]["asset-1"]["metadata"] = {"sceneFilename": "s01.scene.json"}
     assert "dialogueBeats" not in episode_assembly_plan(series, episode)[0], "a scene document carries the real timing"
+
+
+def test_the_assembly_plan_carries_a_shots_transition():
+    episode = {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "transitionIn": {"kind": "fade_black", "seconds": 0.5},
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"]}],
+    }, {
+        "id": "shot-2", "order": 2, "approvedAttemptId": "attempt-2", "transitionIn": {"kind": "cut"},
+        "attempts": [{"id": "attempt-2", "status": "completed", "outputAssetIds": ["asset-2"]}],
+    }]}
+    plan = episode_assembly_plan(_series(), episode)
+    assert plan[0]["transitionIn"] == {"kind": "fade_black", "seconds": 0.5}
+    assert "transitionIn" not in plan[1]

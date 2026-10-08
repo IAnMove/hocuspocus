@@ -15,6 +15,7 @@ releases what a restart or an older version left behind. Set
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -33,6 +34,7 @@ LIVE_STATUSES = frozenset({"queued", "waiting_resource", "running", "interrupted
 SETTLE_SECONDS = 300
 VOICE_RAW = re.compile(r"^(ln-.+)-raw\d+\.wav$")
 TEMP_PREFIXES = ("hocuspocus-speech-", "hocuspocus-assembly-")
+logger = logging.getLogger(__name__)
 
 
 def keep_export_staging() -> bool:
@@ -40,17 +42,26 @@ def keep_export_staging() -> bool:
 
 
 def _remove(path: Path) -> int:
-    """Delete a file or a tree; returns the bytes it held (0 when it was already gone)."""
+    """Delete a file or a tree; returns the bytes it held (0 when it was already gone). What cannot be deleted is
+    logged and left: a cleanup never fails the work that released it (an export is published before its frames go)."""
     try:
         if path.is_dir() and not path.is_symlink():
             size = sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
-            shutil.rmtree(path, ignore_errors=True)
+            shutil.rmtree(path, onerror=_not_removed)
             return size
         size = path.stat().st_size
         path.unlink()
         return size
-    except OSError:
+    except FileNotFoundError:
         return 0
+    except OSError as error:
+        logger.warning("[Storage] could not remove %s: %s", path, error)
+        return 0
+
+
+def _not_removed(_function: Callable[..., Any], path: str, info: Any) -> None:
+    if not isinstance(info[1], FileNotFoundError):
+        logger.warning("[Storage] could not remove %s: %s", path, info[1])
 
 
 def release_export_staging(staging: Path) -> int:

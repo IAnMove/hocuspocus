@@ -14,8 +14,36 @@ from services.game_inputs import asset_inputs
 from services.game_library import add_attempt, approve_attempt, create_game, normalize_style, update_game, upsert_assets
 from services.game_produce import GameProduce, ProduceDeps
 from services.game_qa import file_dhash, note_style, style_check
+from tests.game_warnings import warning_codes
 
 NOW = "2026-10-06T12:00:00Z"
+
+
+def test_game_warnings_are_code_and_message():
+    from services.game_generators.animation import animation_warnings
+    from services.game_generators.audio import loop_warnings
+    from services.game_generators.three_d import budget_warning
+    from services.game_library import game_warning
+
+    batches = [
+        animation_warnings(0.06, 0.21, 0.21, 2.01),
+        loop_warnings(0.06, 0.0),
+        budget_warning(12, 10),
+        budget_warning(None, 10),
+        [game_warning("style_mismatch", "The image does not match the style reference.")],
+    ]
+    seen = set()
+    for batch in batches:
+        assert batch
+        for item in batch:
+            assert {"code", "message"} <= set(item)
+            assert isinstance(item["code"], str) and item["code"] and " " not in item["code"]
+            assert isinstance(item["message"], str) and item["message"]
+            seen.add(item["code"])
+    assert {
+        "loop_not_closed", "identity_drift", "foot_drift", "halo",
+        "loop_seam", "over_budget", "triangles_unknown", "style_mismatch",
+    } <= seen
 
 
 @pytest.fixture(autouse=True)
@@ -136,7 +164,10 @@ def test_references_skip_missing_files_and_the_candidate_itself(tmp_path):
     assert caller.calls == []
     # No reference left: nothing to compare, so no score and no warning, but the duplicate check still ran.
     assert metrics == {"colors": 3}
-    assert warnings == ["halo", "duplicate_of:self"]
+    assert warnings[0] == "halo"
+    assert warning_codes(warnings) == ["halo", "duplicate_of"]
+    assert warnings[1]["ref"] == "self"
+    assert warnings[1]["message"]
 
 
 def test_only_stills_inside_the_workspace_are_checked(tmp_path):
@@ -205,7 +236,7 @@ def test_analyze_down_does_not_break_the_batch(tmp_path, monkeypatch):
     assert saved["attempt"]["warnings"] == []  # saved before the vision check
     attempt_id, metrics, warnings = saved["stamped"]
     assert attempt_id == saved["attempt"]["id"]
-    assert "style_check_unavailable" in warnings
+    assert "style_check_unavailable" in warning_codes(warnings)
     assert "styleScore" not in metrics
 
 
@@ -239,7 +270,7 @@ def test_each_candidate_is_scored_from_its_own_picture(tmp_path, monkeypatch):
         stamp_attempt=lambda _w, _g, _a, attempt_id, metrics, warnings: stamped.append((attempt_id, metrics, warnings)),
     ))
     service.start("lab", "bosque", asset_ids=["heroe"])
-    assert [(attempt_id[-2:], metrics.get("styleScore"), warnings) for attempt_id, metrics, warnings in stamped] == [
+    assert [(attempt_id[-2:], metrics.get("styleScore"), warning_codes(warnings)) for attempt_id, metrics, warnings in stamped] == [
         ("a1", 5, []), ("a2", 1, ["style_mismatch"]),
     ]
 
@@ -261,7 +292,8 @@ def test_a_hung_analyzer_costs_one_wait_then_pauses(tmp_path, monkeypatch):
         for _ in range(3):
             metrics, warnings = note_style(hung, str(tmp_path), "lab", _game(ref), HERO, {"main": "hero.png"}, {}, [])
             assert metrics == {}
-            assert warnings == ["style_check_unavailable"]
+            assert warning_codes(warnings) == ["style_check_unavailable"]
+            assert warnings[0]["message"]
         assert time.monotonic() - started < 2
         assert len(calls) == 1
     finally:
@@ -282,7 +314,8 @@ def test_a_cancel_stops_the_wait_without_pausing_vision(tmp_path, monkeypatch):
     try:
         started = time.monotonic()
         _metrics, warnings = note_style(slow, str(tmp_path), "lab", _game(ref), HERO, {"main": "hero.png"}, {}, [], cancelled=stop.is_set)
-        assert warnings == ["style_check_unavailable"]
+        assert warning_codes(warnings) == ["style_check_unavailable"]
+        assert warnings[0]["message"]
         assert time.monotonic() - started < 2
         assert not game_qa._paused()
         caller = _Caller(error=AssertionError("cancelled jobs do not ask"))
@@ -308,7 +341,9 @@ def test_duplicate_of_an_approved_sibling(tmp_path):
     asset = {"id": "nuevo", "kind": "character", "status": "generating"}
     metrics, warnings = note_style(caller.loopback, str(tmp_path), "lab", _game(*assets), asset, {"main": "right.png"}, {}, [])
     assert metrics["styleScore"] == 2
-    assert warnings == ["style_mismatch", "duplicate_of:kept"]
+    assert warning_codes(warnings) == ["style_mismatch", "duplicate_of"]
+    assert warnings[1]["ref"] == "kept"
+    assert "kept" in warnings[1]["message"]
 
     quiet = _Caller(error=AssertionError("vision is off"))
     metrics, warnings = note_style(
@@ -316,7 +351,9 @@ def test_duplicate_of_an_approved_sibling(tmp_path):
     )
     # Vision off skips only the call; the duplicate check is local and still runs.
     assert metrics == {"colors": 3}
-    assert warnings == ["kept", "duplicate_of:kept"]
+    assert warnings[0] == "kept"
+    assert warning_codes(warnings) == ["kept", "duplicate_of"]
+    assert warnings[1]["ref"] == "kept"
     assert quiet.calls == []
 
 
@@ -348,7 +385,8 @@ def test_duplicates_hash_the_picture_over_black(tmp_path):
     Image.fromarray(hidden).save(tmp_path / "hidden.png")
     game = _game(_approved("kept", "sprite", "shown.png"), vision=False)
     _metrics, warnings = note_style(None, str(tmp_path), "lab", game, {"id": "pose", "kind": "sprite"}, {"main": "hidden.png"}, {}, [])
-    assert warnings == ["duplicate_of:kept"]
+    assert warning_codes(warnings) == ["duplicate_of"]
+    assert warnings[0]["ref"] == "kept"
 
 
 def test_each_approved_picture_is_decoded_once(tmp_path):

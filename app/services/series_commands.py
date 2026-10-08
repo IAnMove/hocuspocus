@@ -17,6 +17,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from services.command_input_errors import field_error as _field_error, reject_input as _reject_input  # noqa: F401 (tests)
+
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
@@ -116,7 +118,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "its face enlarged before and after the wipe; poses with warnings framed in red), unwipedPoses (no painted "
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
-        "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found. A pose whose eyes are covered (sunglasses) "
+        "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
+        "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
         "is saved with anchors.<pose>.blink false and never blinks.",
     ),
     "characters.rig.flat.preview": (
@@ -132,6 +135,16 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "mouthWidth, found, from: hint, landmarks, painted or guess; line points), view (the shown area), all in % "
         "of the pose image, and warnings (mouth_line_guessed, mouth_line_unsure). When it looks right, rig with hints {<pose>: {mouth, mouthWidth, exact: true}} and mouthStyle warp; "
         "shots already rendered with that pose need rendering again.",
+    ),
+    "characters.rig.check": (
+        {"workspace": WORKSPACE, "source": {"type": "string", "minLength": 1, "maxLength": 2000}},
+        ["workspace", "source"], False,
+        "Check one keyed pose before saving it: whether the flat rig can find the eyes and a mouth, with the rig's "
+        "own search (face landmarks guide it, as in characters.rig.flat). "
+        "Saves nothing and paints nothing. Returns ready, reasons (not_keyed, eyes_small, eyes_not_found, sclera_dark, "
+        "mouth_not_found, face_low_confidence, or another rig error code such as face_too_light) and face {box, confidence}. "
+        "eyes_small means some light sclera is there but not a pair the rig can use on its own; not_keyed means the "
+        "background is still there (no transparent pixel) or nothing is left after the key.",
     ),
     "series.episode.render_native": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot_ids": {"type": "array", "items": ID, "maxItems": 500},
@@ -168,7 +181,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
     ),
     "series.episode.from_script": (
-        {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"}},
+        {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"},
+         "number": {"type": "integer", "minimum": 1}},
         ["workspace", "series_id", "script"], True,
         "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
         "[[character, pose, x, {edgeSnap: false, lookRoom: false}]] (a pose cut by its image border is otherwise moved so "
@@ -189,7 +203,16 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "3D object model, clip name and hold against the series first and lists all problems; check: true only checks. Assigns the episode's ids, writes the original and a language version for "
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id; its review "
         "mode and notes too, and a shot whose content changed goes back to pending review). The script written is kept "
-        "as the episode's next script revision (scriptRevision; read it with series.episode.script.get).",
+        "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
+        "Optional number (integer >= 1), only when there is no episode_id: a number taken in the first season (where "
+        "the episode goes) is 409 episode_number_taken with the holder's id. "
+        "warnings ({code, subject, shots, message}) lists speaker_not_on_screen, location_differs_from_scene, "
+        "template_backdrop_other_location, document_text_too_long and video_budget and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
+        "location (the shot location's plate) or {asset: id}. "
+        "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice; without it the "
+        "first cast member who is that character speaks. "
+        "A kit with lines and no voice for the episode language fails the check (lines of kind video or generated shots are not voiced). "
+        "estimate is the planned length in seconds: each speaker's approved-take pace, else 2.6 Spanish or 2.8 English words per second.",
     ),
     "series.episode.script.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "revision": {"type": "integer", "minimum": 1}},
@@ -249,7 +272,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
         "Read one episode compactly: script, shots with their layout2d and lines, the last takes (id, language, seconds, "
-        "editable scene file), its language versions and score. Use it instead of series.get to copy an episode's style.",
+        "editable scene file), its language versions, score and estimate (planned seconds). Use it instead of series.get to copy an episode's style.",
     ),
     "series.episode.review.get": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID}, ["workspace", "series_id", "episode_id"], False,
@@ -282,8 +305,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Optional envelope intent_id replays the first result.",
     ),
     "series.templates": (
-        {"language": {"enum": ["es", "en"]}}, [], False,
-        "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot.",
+        {"language": {"enum": ["es", "en"]}, "workspace": WORKSPACE}, [], False,
+        "List series templates (cutout satire, host explainer, office sitcom...): cast, locations and a five-shot 2D pilot. "
+        "Optional workspace is ignored.",
     ),
     "series.create_from_template": (
         {"workspace": WORKSPACE, "template_id": ID, "title": {"type": "string", "maxLength": 300}, "language": {"enum": ["es", "en"]}},
@@ -308,7 +332,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "series": OBJECT, "base_revision": REVISION},
         ["workspace", "series_id", "series", "base_revision"], True,
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
-        "value (send an empty list to clear one). Changing canon inputs returns the canon to draft. soundDesign: stinger, "
+        "value (send an empty list or object to clear one). A nested object or list is replaced whole, so send the whole "
+        "soundDesign, not one key inside it. Changing canon inputs returns the canon to draft. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
         "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
         "lowers episode-mode beds under the lines; roomByLocation "
@@ -327,7 +352,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "series.episode.create": (
         {"workspace": WORKSPACE, "series_id": ID, "season_id": {"type": "string", "maxLength": 160}, "episode": OBJECT},
         ["workspace", "series_id"], True,
-        "Create an episode (chapter) in an approved series. It freezes the approved canon and references.",
+        "Create an episode (chapter) in an approved series. It freezes the approved canon and references. "
+        "Optional episode.number (integer >= 1) is honored; a number taken in that season is 409 episode_number_taken "
+        "with the holder's id.",
     ),
     "series.episode.update": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "episode": OBJECT, "base_revision": REVISION,
@@ -343,14 +370,32 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "it (repeat: steps on every footfall). A change renders again only the shots it reaches. score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
-        "changing it renders no take. An sfx's in (source second) and length play only that part of its file. A "
+        "changing it renders no take. kitPins {kitId: revision} renders and fingerprints those Character Kit revisions; "
+        "omit it to keep using the latest kit (series.episode.kits.pin and series.episode.kits.update). An sfx's in "
+        "(source second) and length play only that part of its file. A "
         "generated_video or imported_video shot's layout2d.sfx, music and foley are laid on its take at the cut, over "
         "the clip's own sound (layout2d.clipAudio keep | drop, clipVolume 0-2), and a clip in another size, frame rate "
         "or pixel aspect is conformed to the episode's (layout2d.clipFit cover | contain); changing them keeps the take. "
         "To edit one shot use series.shot.update. scene3d.objects[] also take clips (a clip sequence: [{clip name, start, duration?, "
         "fade?, speed?, offset?, loop?}]), hold {carrier (a 3D model object that does not speak in the shot), hand left|right, "
         "offset? [x,y,z] m, rotation? [x,y,z] radians, Euler XYZ in the hand bone's frame} and appearance {start, "
-        "duration?, color?}; a model is 1.7 m x scale tall.",
+        "duration?, color?}; a model is 1.7 m x scale tall. Optional episode.number (integer >= 1) renumbers it; "
+        "a number taken in that season is 409 episode_number_taken with the holder's id.",
+    ),
+    "series.episode.kits.pin": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID,
+         "kits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}},
+        ["workspace", "series_id", "episode_id"], True,
+        "Pin this episode to Character Kit revisions. Without kits, pin every kit of the cast at its current "
+        "revision. With kits {kitId: revision}, pin those. The render, a line's recording and the shot fingerprint "
+        "then use that revision; a render refuses a pin whose revision is no longer kept (kit_revision_missing). "
+        "An episode with no pins keeps using the latest kit, as it did before.",
+    ),
+    "series.episode.kits.update": (
+        {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "kit_id": ID},
+        ["workspace", "series_id", "episode_id"], True,
+        "Move this episode's kit pins to the latest revision. kit_id moves one kit; omitted moves every pin. "
+        "Returns the shots that become stale, and only the shots of the character whose kit moved.",
     ),
     "series.asset.import": (
         {"workspace": WORKSPACE, "series_id": ID, "file": {"type": "string", "minLength": 1, "maxLength": 300},
@@ -360,7 +405,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "reference_role": {"type": "string", "maxLength": 100}, "metadata": OBJECT},
         ["workspace", "series_id", "file", "owner_type", "owner_id", "kind"], True,
         "Import a workspace file as a reference image of a character/location, or as_take a finished shot video "
-        "(metadata.sceneFilename lets Series Lab reopen its editable scene). A take is appended unapproved. Import a "
+        "(metadata.sceneFilename lets Series Lab reopen its editable scene). A location plate (reference_role "
+        "environment, plate or location_reference) warns people_in_plate unless layout2d.allowPeople is true. A take is appended unapproved. Import a "
         "generated or outside clip as it is: its shot's sfx, music and foley are laid at the cut and it is conformed "
         "to the episode's frame and frame rate there, so do not mux or re-encode it first.",
     ),
@@ -428,7 +474,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "lines a version still lacks). check true only checks and returns the patch. render true renders just that shot "
         "in the series language (series.episode.render_native, approve default true); produce true runs "
         "series.episode.produce (renders what changed in every language and recuts). Returns the shot as series.shot.get. "
-        "A cast change that leaves someone looking out of the frame is kept as sent and named in warnings (look room).",
+        "A cast change that leaves someone looking out of the frame is kept as sent and named in warnings (look room). "
+        "approvalReset is true when plan, preview or take approval was cleared; reset lists those, in that order. "
+        "A note is not this edit and never clears approval. Changing only an sfx volume does not; changing its file, "
+        "its timing or adding a cue does.",
     ),
     "series.shot.voices": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "shot": _SHOT, "language": LANGUAGE},
@@ -580,6 +629,10 @@ def _preview_flat_rig(data: dict[str, Any], request: Callable[..., Any], **_extr
     return request("POST", f"/api/v1/character-kits/library/kits/{_quote(data['character_id'])}/flat-rig/preview", body=body)
 
 
+def _check_flat_rig(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    return request("POST", "/api/v1/character-kits/rig-check", body={"workspace": data["workspace"], "source": data["source"]})
+
+
 def _render_native(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "approve": bool(data.get("approve"))}
     if data.get("language"):
@@ -603,7 +656,8 @@ def _native_job(action: str) -> Callable[..., dict[str, Any]]:
 
 def _from_script(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body = {"workspace": data["workspace"], "script": data["script"], "check": bool(data.get("check")),
-            **({"episodeId": data["episode_id"]} if data.get("episode_id") else {})}
+            **({"episodeId": data["episode_id"]} if data.get("episode_id") else {}),
+            **({"number": data["number"]} if data.get("number") is not None else {})}
     return request("POST", f"/api/v1/series/{_quote(data['series_id'])}/episodes/from-script", body=body)
 
 
@@ -656,7 +710,9 @@ def _guide(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 
 def _episode_get(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     path = f"/api/v1/series/{_quote(data['series_id'])}/episodes/{_quote(data['episode_id'])}/compact"
-    return {"episode": request("GET", path, query={"workspace": data["workspace"]})}
+    episode = request("GET", path, query={"workspace": data["workspace"]})
+    estimate = episode.get("estimate") if isinstance(episode, dict) else None
+    return {"episode": episode, **({"estimate": estimate} if estimate else {})}
 
 
 def _review_path(data: dict[str, Any]) -> str:
@@ -789,7 +845,12 @@ def _import_asset(data: dict[str, Any], request: Callable[..., Any], *, workspac
     attempt = None
     if data.get("as_take"):
         attempt = _matching_take(series, data["owner_id"], imported["asset"]["id"])
-    return {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
+    result = {"asset": imported.get("asset"), "attempt": attempt, "revision": series.get("revision")}
+    # The server checks a plate for people (``series_plate_checks.with_plate_warning``); it is not scanned again here.
+    warnings = imported.get("warnings") if isinstance(imported.get("warnings"), list) else []
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def _approve_take(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -869,6 +930,7 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.styles": _character_styles,
     "characters.rig.flat": _rig_flat_character,
     "characters.rig.flat.preview": _preview_flat_rig,
+    "characters.rig.check": _check_flat_rig,
     "series.episode.render_native": _render_native,
     "series.episode.render_native.status": _native_job("status"),
     "series.episode.render_native.cancel": _native_job("cancel"),
@@ -908,9 +970,17 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
 }
 
 
-def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str]) -> Any:
+def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:
     if name == "series.asset.import":
         return _import_asset(data, request, workspace_file=workspace_file, uploads_dir=uploads_dir)
+    if name in ("series.episode.kits.pin", "series.episode.kits.update"):
+        from services.series_kit_pins import KitPinError, run_episode_kits
+        if workspace_dir is None:
+            raise SeriesCommandError("The workspace is not ready", status=503)
+        try:
+            return run_episode_kits(name, data, workspace_dir)
+        except KitPinError as error:
+            raise SeriesCommandError(str(error), status=error.status) from error
     runner = _RUNNERS.get(name)
     if runner is None:
         raise SeriesCommandError("Unknown operation")
@@ -977,8 +1047,8 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
 
     def run(name: str, data: dict[str, Any], intent: Any = None) -> Any:
         if intent is None or name not in INTENT_OPERATIONS:
-            return _run_operation(name, data, request, workspace_file, uploads_dir)
-        return _run_once(name, data, intent, lambda: _run_operation(name, data, request, workspace_file, uploads_dir), workspace_dir)
+            return _run_operation(name, data, request, workspace_file, uploads_dir, workspace_dir)
+        return _run_once(name, data, intent, lambda: _run_operation(name, data, request, workspace_file, uploads_dir, workspace_dir), workspace_dir)
 
     def handler(name: str) -> Callable[[Any], Any]:
         properties, required, _, _ = OPERATIONS[name]
@@ -987,8 +1057,7 @@ def command_handlers(app_url: Callable[[], str], workspace_dir: Callable[[str], 
             from fastapi import HTTPException
             from starlette.concurrency import run_in_threadpool
             data = arguments.get("input") if isinstance(arguments, dict) and arguments.get("version") == 1 else None
-            if not isinstance(data, dict) or set(data) - set(properties) or any(key not in data for key in required):
-                raise HTTPException(422, {"code": "invalid_command", "message": f"Use version 1 with input fields: {', '.join(required)}", "retryable": False})
+            _reject_input(data, properties, required)
             try:
                 result = await run_in_threadpool(run, name, data, arguments.get("intent_id"))
             except SeriesCommandError as error:

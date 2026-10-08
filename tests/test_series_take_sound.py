@@ -186,3 +186,34 @@ def test_a_video_takes_foley_is_laid_when_made_and_named_when_not(tmp_path):
     paths, report = prepare_clips([str(clip)], clips, SMALL, str(tmp_path), str(tmp_path / "prep2"), gain=lambda _path: 1.0)
     assert report[0]["foley"] is True and "warning" not in report[0] and report[0]["mixedInputs"] == 1
     assert _levels(Path(paths[0]), 2.0)[2:15].min() > 200, "the foley plays under the silent clip"
+
+
+def test_a_deaf_video_shot_drops_its_own_sound_and_keeps_only_what_deaf_keeps():
+    episode = {"shots": [
+        {"id": "e1s00", "productionMethod": "generated_video", "layout2d": {
+            "hearing": "deaf", "clipVolume": 0.5, "music": {"file": "m.wav", "volume": 0.4, "start": 0},
+            "sfx": [{"file": "boom.wav", "at": 0.5, "volume": 0.8},
+                    {"file": "bell.wav", "at": 1.0, "volume": 0.8, "keepInDeaf": True}]}},
+        {"id": "e1s01", "productionMethod": "imported_video", "layout2d": {}},
+        {"id": "e1s02", "productionMethod": "imported_video", "layout2d": {"hearing": "ringing"}},
+    ]}
+    clips = [{"shotId": "e1s00"}, {"shotId": "e1s01"}, {"shotId": "e1s02"}]
+    plan_take_sound({}, episode, clips)
+    assert clips[0]["takeSound"] == {"clipAudio": "drop", "sfx": [{"file": "bell.wav", "at": 1.0, "volume": 0.8,
+                                                                    "keepInDeaf": True}]}
+    assert "takeSound" not in clips[1] and "takeSound" not in clips[2], "only deaf changes a take's own sound"
+    clips = [{"shotId": "e1s00"}, {"shotId": "e1s01"}, {"shotId": "e1s02"}]
+    plan_take_sound({"soundDesign": {"hearingDefault": "deaf"}}, episode, clips)
+    assert clips[1]["takeSound"] == {"clipAudio": "drop"}, "a deaf default silences a take without a hearing of its own"
+    assert "takeSound" not in clips[2]
+
+
+@needs_ffmpeg
+def test_a_deaf_imported_take_is_silent_in_the_cut(tmp_path):
+    clip = _clip(tmp_path / "imported.mp4", size="160x90", rate=24)
+    episode = {"shots": [{"id": "e1s00", "productionMethod": "imported_video", "layout2d": {"hearing": "deaf"}}]}
+    clips = [{"shotId": "e1s00"}]
+    frame = plan_take_sound({}, episode, clips)
+    paths, report = prepare_clips([str(clip)], clips, {**frame, **SMALL}, str(tmp_path), str(tmp_path / "prep"))
+    assert report[0]["clipAudio"] == "drop" and report[0]["mixedInputs"] == 0
+    assert _levels(Path(paths[0]), 2.0).max() < 50, "its own tone is gone; the assembly lays the rumble"

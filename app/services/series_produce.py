@@ -17,6 +17,9 @@ through (``series_review_gate``) and, while shots still wait for an approval, st
 those shots; resuming after the approvals renders again (previews' finals) and cuts.
 
 Steps are saved as they finish, so a restart or a cancel resumes where it stopped.
+Each step and the job carry ``progress``, the child job's own message (text, as
+the UI shows it), and ``progressCount`` ``{done, total}``: finished shots or
+clips. Missing counts stay null.
 """
 from __future__ import annotations
 
@@ -37,6 +40,21 @@ RENDER_RETRIES = 1
 ASSEMBLY_RETRIES = 1
 ACTIVE = ("queued", "running", "cancelling")
 INTERRUPTED = "The server restarted during this production; resume to continue"
+UP_TO_DATE = "Every shot already has an up-to-date approved take"
+
+
+def _count(child: dict[str, Any]) -> dict[str, Any]:
+    """Finished count from a render or a cut. ``done`` is how many are done."""
+    done, total = child.get("current"), child.get("total")
+    if type(done) is not int or type(total) is not int:
+        done = total = None
+    return {"done": done, "total": total}
+
+
+def _show(job: dict, step: dict, progress: str | None, count: dict[str, Any]) -> None:
+    """``progress`` stays text: stored jobs and the UI read it as a string."""
+    step.update(progress=progress, progressCount=count)
+    job.update(progress=progress, progressCount=count)
 
 
 class ProduceError(RuntimeError):
@@ -56,6 +74,10 @@ class ProduceDeps:
     review_blockers: Callable[[str, str, str, str], list[dict]] | None = None
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 5.0
+    # Optional: a scripted H3 shot reads kits for its start frame, writes the take, or lets a test import it.
+    read_kits: Callable[[str], dict] | None = None
+    import_take: Callable[[dict], Any] | None = None
+    write_library: Callable[[str, dict], Any] | None = None
 
 
 def _result(reply: dict, label: str) -> dict:
@@ -94,6 +116,8 @@ class SeriesProduce:
         if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in self.jobs(workspace)):
             raise ProduceError("already_running", "This episode is already being produced")
         steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
+        if self._has_video(workspace, series_id, episode_id):
+            steps.insert(0, {"kind": "video", "language": original, "status": "queued"})
         job = {"jobId": f"produce-{uuid.uuid4().hex[:12]}", "workspace": workspace, "seriesId": series_id, "episodeId": episode_id,
                "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "rerender": bool(rerender),
                "status": "queued",
@@ -137,6 +161,10 @@ class SeriesProduce:
             step = next((item for item in job["steps"] if item["status"] == "running" and item.get("jobId")), None)
             if step and step["kind"] == "render":
                 self.deps.call("series.episode.render_native.cancel", self._args(job, job_id=step["jobId"]))
+            elif step and step["kind"] == "video":
+                # The clip already sent would keep the GPU until it ends.
+                from services.series_video_shots import cancel_generation
+                cancel_generation(self.deps, step["jobId"])
             job.update(status="cancelling", message="Stopping after the current step")
             self._store(workspace).save(job)
         return job
@@ -153,8 +181,14 @@ class SeriesProduce:
         return job
 
     def _launch(self, workspace: str, job: dict) -> None:
-        """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
+        """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan.
+
+        A resume can arrive while the run that just saved "failed" is still returning: wait for that thread to end,
+        or the resume would see it alive and start nothing."""
         job_id = job["jobId"]
+        closing = self._threads.get(job_id)
+        if closing is not None and closing.is_alive() and closing is not threading.current_thread():
+            closing.join(timeout=10)
         with self._lock:
             running = self._threads.get(job_id)
             if running and running.is_alive():
@@ -190,6 +224,10 @@ class SeriesProduce:
                 return
             if step["kind"] == "assemble" and self._waits_for_review(job, step):
                 return
+            if step["kind"] == "video":
+                if self._spend_video(job, step):
+                    return
+                continue
             self._save(job, message=f"{step['kind'].capitalize()} {step['language']}")
             step["status"] = "running"
             try:
@@ -204,6 +242,33 @@ class SeriesProduce:
         self._save(job, status="completed", finishedAt=time.time(),
                    message=f"Rendered and cut in {', '.join(job['languages'])}")
 
+    def _has_video(self, workspace: str, series_id: str, episode_id: str) -> bool:
+        """True when a shot stores a ``video`` object. A plain imported take does not."""
+        from services.series_video_shots import needs_video_step
+        series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id) or {}
+        episode = (series.get("episodesById") or {}).get(episode_id) or {}
+        return needs_video_step(episode)
+
+    def _spend_video(self, job: dict, step: dict) -> bool:
+        """Generate the scripted clips. True when this run stops (waiting on a plan, or the step failed)."""
+        from services.series_video_shots import produce_videos
+        step["status"] = "running"
+        self._save(job, message=f"Video {step['language']}")
+        try:
+            held = produce_videos(job, step, self.deps, cancelled=lambda: self._cancelled(job["jobId"]),
+                                  save=lambda: self._save(job))
+        except Exception as error:
+            step.update(status="failed", error=f"{type(error).__name__}: {error}"[:500])
+            self._save(job, status="cancelled" if self._cancelled(job["jobId"]) else "failed", finishedAt=time.time(),
+                       message="Video failed; resume to retry")
+            return True
+        if held:
+            self._save(job)
+            return True
+        step.update(status="done", error=None)
+        self._save(job)
+        return False
+
     def _waits_for_review(self, job: dict, step: dict) -> bool:
         """A staged episode is cut once every shot passed its review. Until then the production stops as ``waiting``
         (not failed) with the shots it waits for; its renders run again on resume, so approved previews get their finals."""
@@ -214,7 +279,7 @@ class SeriesProduce:
             return False
         for item in job["steps"]:
             if item["kind"] == "render":
-                item.update(status="queued", jobId=None, retries=0, progress=None)
+                item.update(status="queued", jobId=None, retries=0, progress=None, progressCount=None)
         plans = sum(1 for item in blockers if item["reason"] == "plan")
         previews = sum(1 for item in blockers if item["reason"] == "preview")
         self._save(job, status="waiting", waiting=blockers, finishedAt=time.time(),
@@ -230,7 +295,7 @@ class SeriesProduce:
             if isinstance(error, dict) and (error.get("status") == 404 or error.get("code") == "not_found"):
                 return {"status": "unknown", "message": f"{step['kind']} job {step['jobId']} is gone"}
             current = _result(reply, tool)["job"]
-            step["progress"] = current.get("message")
+            _show(job, step, current.get("message"), _count(current))
             self._save(job)
             if current.get("status") not in ACTIVE:
                 return current
@@ -244,7 +309,7 @@ class SeriesProduce:
             if self.deps.stale_shots and not job.get("rerender"):
                 stale = self.deps.stale_shots(job["workspace"], job["seriesId"], job["episodeId"], step["language"])
                 if not stale:
-                    step["progress"] = "Every shot already has an up-to-date approved take"
+                    _show(job, step, UP_TO_DATE, {"done": 0, "total": 0})
                     return
                 data["shot_ids"] = stale
                 step["shots"] = len(stale)

@@ -15,7 +15,9 @@ from services.game_generators.animation import (
     AnimationGenerator,
     ItemGenerator,
     animation_warnings,
+    identity_distance,
     method_for,
+    pose_change,
     split_figures,
 )
 from services.game_generators.base import GenContext
@@ -23,6 +25,7 @@ from services.game_image_ops import feet_point
 from services.game_library import normalize_game
 from services.game_produce import GameProduce, ProduceDeps
 from services.game_tools import GameToolError
+from tests.game_warnings import warning_codes
 
 
 NOW = "2026-10-07T00:00:00Z"
@@ -43,14 +46,41 @@ def test_method_for_follows_the_trial_table():
     assert GAME_ANIMATION_DEFAULTS["steps"] == 30
 
 
+def _codes(warnings) -> list[str]:
+    return warning_codes(warnings)
+
+
 def test_warnings_use_the_trial_thresholds_not_a_half_error():
-    assert animation_warnings(0.05, 0.20, 0.20, 2.0) == []
-    assert "loop_not_closed" in animation_warnings(0.06, 0, 0, None)
-    assert "identity_drift" in animation_warnings(None, 0.21, 0, None)
-    assert "foot_drift" in animation_warnings(None, 0, 0.21, None)
-    assert "foot_drift" not in animation_warnings(None, 0, None, None)
-    assert "halo" in animation_warnings(None, 0, 0, 2.01)
-    assert "halo" not in animation_warnings(None, 0, 0, None)
+    assert _codes(animation_warnings(0.05, 0.20, 0.20, 2.0)) == []
+    assert "loop_not_closed" in _codes(animation_warnings(0.06, 0, 0, None))
+    assert "identity_drift" in _codes(animation_warnings(None, 0.21, 0, None))
+    assert "foot_drift" in _codes(animation_warnings(None, 0, 0.21, None))
+    assert "foot_drift" not in _codes(animation_warnings(None, 0, None, None))
+    assert "halo" in _codes(animation_warnings(None, 0, 0, 2.01))
+    assert "halo" not in _codes(animation_warnings(None, 0, 0, None))
+    for item in animation_warnings(0.06, 0.21, 0.21, 2.01):
+        assert isinstance(item["code"], str) and isinstance(item["message"], str) and item["message"]
+
+
+def _solid(color, box) -> np.ndarray:
+    image = np.zeros((32, 48, 4), dtype=np.uint8)
+    y0, y1, x0, x1 = box
+    image[y0:y1, x0:x1, :3] = color
+    image[y0:y1, x0:x1, 3] = 255
+    return image
+
+
+def test_identity_ignores_a_pose_change_and_warns_on_a_new_palette():
+    red = _solid((220, 30, 30), (4, 28, 6, 20))
+    shifted = _solid((220, 30, 30), (4, 28, 24, 40))
+    blue = _solid((30, 40, 220), (4, 28, 6, 20))
+    same = identity_distance(red, shifted)
+    other = identity_distance(red, blue)
+    assert same <= 0.20
+    assert pose_change(red, shifted) > 0
+    assert "identity_drift" not in _codes(animation_warnings(None, same, 0, None))
+    assert other > 0.20
+    assert "identity_drift" in _codes(animation_warnings(None, other, 0, None))
 
 
 def test_explicit_method_overrides_the_table():
@@ -233,8 +263,8 @@ def test_h3_sheet_has_equal_cells_a_stable_pivot_and_the_character_palette(tmp_p
     assert result.metrics["frames"] == 4
     assert result.metrics["palette"] == ["#14283c", "#e8d8a0"]
     assert result.metrics["scale"] == pytest.approx(48 / 28)
-    assert "loop_not_closed" in result.warnings
-    assert "halo" not in result.warnings
+    assert "loop_not_closed" in warning_codes(result.warnings)
+    assert "halo" not in warning_codes(result.warnings)
     cells = _cells(workspace, result)
     assert len(cells) == 4
     assert len({cell.shape for cell in cells}) == 1
@@ -293,7 +323,7 @@ def test_loop_period_is_searched_in_clip_frames(tmp_path):
     asset = _action("idle", frames=4, fps=8, loop=True)
     _workspace_dir, _fake, result = _h3(tmp_path, frames, asset, style=_illustration(), metrics={}, rate=24)
     assert result.metrics["cycleFrames"] == 16
-    assert "loop_not_closed" not in result.warnings
+    assert "loop_not_closed" not in warning_codes(result.warnings)
 
 
 def test_h3_candidates_are_separate_clips(tmp_path):
@@ -402,7 +432,7 @@ def test_strip_keeps_six_figures_in_left_to_right_order(tmp_path):
     params = fake.params()
     assert params["resolution"] == "1536x512"
     assert "8 frames" in params["prompt"] and "single row" in params["prompt"]
-    assert "strip_count_mismatch" in result.warnings
+    assert "strip_count_mismatch" in warning_codes(result.warnings)
     assert result.metrics["frames"] == 6
     atlas = json.loads((workspace / result.files["atlas"]).read_text(encoding="utf-8"))
     frames = [atlas["frames"][f"walk_{index}"]["frame"] for index in range(6)]
@@ -415,7 +445,7 @@ def test_strip_keeps_six_figures_in_left_to_right_order(tmp_path):
 
 def test_extra_strip_figures_warn_and_spread_over_the_cycle(tmp_path):
     workspace, _fake, result = _strip(tmp_path, _blobs(), _walk(frames=3))
-    assert "strip_count_mismatch" in result.warnings
+    assert "strip_count_mismatch" in warning_codes(result.warnings)
     red, blue, cyan = _means(workspace, result)
     assert red[0] > 150 and blue[2] > 150 and cyan[1] > 150 and cyan[2] > 150
 
@@ -478,7 +508,7 @@ def test_strip_figures_keep_their_width(tmp_path):
 
 def test_strip_strides_are_not_foot_drift(tmp_path):
     _workspace_dir, _fake, result = _strip(tmp_path, _strides(), _walk(frames=4))
-    assert "foot_drift" not in result.warnings
+    assert "foot_drift" not in warning_codes(result.warnings)
     assert result.metrics["footDrift"] is None
 
 

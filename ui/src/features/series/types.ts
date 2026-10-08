@@ -56,6 +56,9 @@ export interface SeriesVoiceProfile {
   pronunciationDictionary?: Record<string, string>
   pace?: number
   pitch?: number
+  gender?: string
+  pitchRange?: [number, number] | null
+  accent?: 'castilian'
   emotionalDefaults?: string
   approvedSampleAssetId?: string
   consentSourceNote?: string
@@ -430,6 +433,8 @@ export type SeriesScoreCue = ({ fromShotId: string; toShotId?: string; sceneId?:
 export interface SeriesEpisode {
   /** Music laid under runs of shots at assembly; no take depends on it. */
   score?: SeriesScoreCue[]
+  /** Character Kit revisions this episode renders. Absent means the latest kit. */
+  kitPins?: Record<string, number>
   /** Dubbed versions by spoken language (english, spanish...); the series language is the original. */
   languageVersions?: Record<string, SeriesLanguageVersion>
   latestAssemblyAssetId?: string

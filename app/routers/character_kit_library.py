@@ -95,6 +95,18 @@ def create_character_kit_library_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.post("/api/v1/character-kits/rig-check")
+    def check_flat_rig_pose(body: dict):
+        """Say whether one keyed pose can be rigged. Nothing is painted or saved."""
+        from services.flat_rig import FlatRigError
+        from services.flat_rig_metrics import check_pose
+
+        workspace = str(body.get("workspace") or "")
+        try:
+            return check_pose(_workspace_dir(workspace), workspace, str(body.get("source") or ""))
+        except FlatRigError as exc:
+            raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
+
     @router.delete("/api/v1/character-kits/library/kits/{kit_id}")
     def delete_character_kit_library_item(kit_id: str, body: dict):
         """Delete one kit under the same compare-and-swap contract."""

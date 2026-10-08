@@ -25,7 +25,7 @@ from services.game_generators.base import (
 )
 from services.game_generators.still import StillGenerator
 from services.game_image_ops import SCREEN_RGB, compose_start_frame, feet_point, place_on_cell, to_illustration
-from services.game_library import resolve_action
+from services.game_library import game_warning, resolve_action
 from services.game_pixel import pixel_metrics, to_pixel
 from services.game_prompts import build, screen_for
 from services.game_sheet import pack_rows, uniform_cell, write_gif_preview
@@ -74,18 +74,36 @@ def method_for(action: str, explicit: str | None = None) -> str:
     return str(GAME_ANIMATION_DEFAULTS["byAction"].get(str(action or ""), "h3"))
 
 
-def animation_warnings(loop_error, identity: float, foot, halo_pct) -> list[str]:
-    """Non-blocking warning codes. ``foot`` and ``halo_pct`` are ``None`` when they do not apply."""
+_WARNING_TEXT = {
+    "loop_not_closed": "The loop does not close.",
+    "identity_drift": "The figure colors differ from the reference frame.",
+    "foot_drift": "The feet slide between frames.",
+    "halo": "The cutout halo is above the limit.",
+    "strip_count_mismatch": "The strip has a different frame count than requested.",
+}
+# OKLab histogram bins. Distance is half the L1 of the two normalized histograms.
+_COLOR_BINS = 8
+
+
+def _animation_warning(code: str) -> dict:
+    return game_warning(code, _WARNING_TEXT[code])
+
+
+def animation_warnings(loop_error, identity: float, foot, halo_pct) -> list[dict]:
+    """Non-blocking warnings. ``foot`` and ``halo_pct`` are ``None`` when they do not apply.
+
+    ``identity`` is the OKLab histogram distance, not the pose pixel delta.
+    """
     limits = GAME_ANIMATION_DEFAULTS["warnings"]
     found = []
     if loop_error is not None and float(loop_error) > float(limits["loopError"]):
-        found.append("loop_not_closed")
+        found.append(_animation_warning("loop_not_closed"))
     if float(identity) > float(limits["identityDrift"]):
-        found.append("identity_drift")
+        found.append(_animation_warning("identity_drift"))
     if foot is not None and float(foot) > float(limits["footDrift"]):
-        found.append("foot_drift")
+        found.append(_animation_warning("foot_drift"))
     if halo_pct is not None and float(halo_pct) > float(limits["haloPct"]):
-        found.append("halo")
+        found.append(_animation_warning("halo"))
     return found
 
 
@@ -424,6 +442,61 @@ def _placed(frames, cell: tuple[int, int], shared_stage: bool) -> list[np.ndarra
     return [place_on_cell(frame, (width, height), pivot, feet) for frame, feet in zip(frames, _feet(frames, shared_stage))]
 
 
+def _linear_srgb(channel: np.ndarray) -> np.ndarray:
+    value = channel.astype(np.float64) / 255.0
+    low = value / 12.92
+    high = ((value + 0.055) / 1.055) ** 2.4
+    return np.where(value <= 0.04045, low, high)
+
+
+def _oklab(rgb: np.ndarray) -> np.ndarray:
+    """OKLab of an ``(N, 3)`` sRGB array."""
+    red, green, blue = (_linear_srgb(rgb[..., index]) for index in range(3))
+    long = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue
+    medium = 0.2119034982 * red + 0.6939740926 * green + 0.0941224092 * blue
+    short = 0.0883024619 * red + 0.1070273437 * green + 0.8046691944 * blue
+    long_c, medium_c, short_c = np.cbrt(long), np.cbrt(medium), np.cbrt(short)
+    lightness = 0.2104542553 * long_c + 0.7936177850 * medium_c - 0.0040720468 * short_c
+    green_red = 1.9779984951 * long_c - 2.4285922050 * medium_c + 0.4505937099 * short_c
+    blue_yellow = 0.0259040371 * long_c + 0.7827717662 * medium_c - 0.8086757660 * short_c
+    return np.stack((lightness, green_red, blue_yellow), axis=-1)
+
+
+def _color_histogram(image) -> np.ndarray:
+    """Normalized OKLab histogram of pixels with alpha above 0."""
+    counts = np.zeros((_COLOR_BINS, _COLOR_BINS, _COLOR_BINS), dtype=np.float64)
+    data = np.asarray(image)
+    if data.ndim != 3 or data.shape[2] < 4 or not np.any(data[..., 3] > 0):
+        return counts.ravel()
+    lab = _oklab(data[..., :3][data[..., 3] > 0])
+    lightness = np.clip((lab[:, 0] * _COLOR_BINS).astype(np.int32), 0, _COLOR_BINS - 1)
+    green_red = np.clip(((lab[:, 1] + 0.5) * _COLOR_BINS).astype(np.int32), 0, _COLOR_BINS - 1)
+    blue_yellow = np.clip(((lab[:, 2] + 0.5) * _COLOR_BINS).astype(np.int32), 0, _COLOR_BINS - 1)
+    np.add.at(counts, (lightness, green_red, blue_yellow), 1.0)
+    total = float(counts.sum())
+    if total:
+        counts /= total
+    return counts.ravel()
+
+
+def identity_distance(left, right) -> float:
+    """OKLab color distance of the opaque pixels. 0 is one palette; 1 is disjoint.
+
+    The histogram ignores where the pixels sit, so a pose change of the same
+    figure does not move it.
+    """
+    first = _color_histogram(left)
+    second = _color_histogram(right)
+    if first.sum() == 0 or second.sum() == 0:
+        return 0.0 if first.sum() == second.sum() else 1.0
+    return float(0.5 * np.abs(first - second).sum())
+
+
+def pose_change(left, right) -> float:
+    """Mean RGB change where either frame is opaque. Informational only."""
+    return _mean_delta(left, right)
+
+
 def _mean_delta(left, right) -> float:
     first = np.asarray(left)
     other = np.asarray(right)
@@ -464,11 +537,16 @@ def _halo_pct(raw_frame, keyed_frame, screen: str, palette: list[str]):
 
 def _measure(chosen, loop_error, halo, shared_stage: bool):
     """Warnings and metrics. Foot drift only exists on a shared stage: strip figures are each centered."""
-    identity = _mean_delta(chosen[0], chosen[len(chosen) // 2]) if chosen else 0.0
+    if chosen:
+        pose = pose_change(chosen[0], chosen[len(chosen) // 2])
+        identity = identity_distance(chosen[0], chosen[len(chosen) // 2])
+    else:
+        pose = identity = 0.0
     foot = _foot_span(chosen) if shared_stage else None
     return animation_warnings(loop_error, identity, foot, halo), {
         "loopError": loop_error,
         "identityDrift": identity,
+        "poseChange": pose,
         "footDrift": foot,
         "haloPct": halo,
     }
@@ -626,7 +704,7 @@ def _strip_candidate(ctx: GenContext, art: dict, screen: str, raw: str, slot: tu
     if not figures:
         raise GameToolError("empty_strip", "the strip did not contain a figure")
     requested = _frame_count(ctx.asset)
-    warnings = [] if len(figures) == requested else ["strip_count_mismatch"]
+    warnings = [] if len(figures) == requested else [_animation_warning("strip_count_mismatch")]
     chosen = _spread(figures, requested, _loops(ctx.asset)) if len(figures) > requested else figures
     palette = _palette(ctx.game.get("style") or {}, art.get("metrics") or {})
     extra, measured = _measure(chosen, None, _halo_pct(pre, post, screen, palette), False)

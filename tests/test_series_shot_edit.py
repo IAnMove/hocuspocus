@@ -75,7 +75,7 @@ def test_appending_an_effect_writes_only_the_effects_and_resets_the_approvals():
     assert {key: value for key, value in shot["layout2d"].items() if key != "fx"} == \
         {key: value for key, value in before["layout2d"].items() if key != "fx"}
     assert shot["dialogueBeats"] == before["dialogueBeats"] and shot["attempts"][0]["id"] == "att-1", "the take is kept"
-    assert "approvedAttemptId" not in shot and info["approvalReset"] is True
+    assert "approvedAttemptId" not in shot and info["approvalReset"] is True and info["reset"] == ["take"]
     assert "e2s01" not in episode["languageVersions"]["english"]["approvedAttemptIds"]
     assert episode["languageVersions"]["english"]["approvedAttemptIds"]["e2s03"] == "att-v", "other shots keep theirs"
 
@@ -108,12 +108,62 @@ def test_a_video_take_keeps_its_approval_when_only_its_cut_sound_changes():
     series = library()
     _episode, shot, info, changed = edit(series, 4, changes={"clipAudio": "drop", "foley": {"prompt": "waves", "volume": 0.4}},
                                          append={"sfx": [{"file": "sfx-boom.wav", "at": 2.0, "in": 0.5, "length": 0.4}]})
-    assert sorted(changed) == ["clipAudio", "foley", "sfx"] and info["approvalReset"] is False
+    assert sorted(changed) == ["clipAudio", "foley", "sfx"] and info["approvalReset"] is False and info["reset"] == []
     assert shot["approvedAttemptId"] == "att-v" and shot["layout2d"]["clipAudio"] == "drop"
     assert shot["layout2d"]["sfx"][1] == {"file": "sfx-boom.wav", "at": 2.0, "in": 0.5, "length": 0.4}
     assert shot["foley"] == {"prompt": "waves", "volume": 0.4} and shot["productionMethod"] == "imported_video"
     _episode, moved, info, _ = edit(series, 4, changes={"kind": None})
     assert moved["productionMethod"] == "animation_2d" and info["approvalReset"] is True
+
+
+def test_an_sfx_volume_change_keeps_the_take():
+    series = library()
+    _episode, shot, info, changed = edit(series, 2, changes={"sfx": [{"file": "sfx-pen.wav", "line": 1, "anchor": "end", "volume": 0.3}]})
+    assert changed == ["sfx"] and info["approvalReset"] is False and info["reset"] == []
+    assert shot["approvedAttemptId"] == "att-1" and shot["layout2d"]["sfx"][0]["volume"] == 0.3
+
+
+def test_foley_on_a_2d_shot_still_clears_the_take():
+    series = library()
+    _episode, shot, info, changed = edit(series, 2, changes={"foley": {"prompt": "wind", "volume": 0.4}})
+    assert changed == ["foley"] and info["reset"] == ["take"] and "approvedAttemptId" not in shot
+
+
+def test_a_cast_index_survives_an_edit_of_the_lines():
+    """The stored beat's castIndex reads back into its script line, so appending a line keeps which copy says the first."""
+    series = library()
+    episode = series["episodesById"]["ep2"]
+    shot, _number = find_shot(episode, 2)
+    twins = {"cast": [["kevin", "base", 30], ["kevin", "panic", 70]],
+             "lines": [{"who": "kevin", "es": "Uno.", "castIndex": 1}, {"who": "kevin", "es": "Dos."}]}
+    merged, changed = merge_changes(to_script(series, episode, shot), twins, None)
+    patch, texts = build_patch(series, episode, shot, merged, changed, KITS, FILES, None)
+    series, _info = apply_edit(series, "ep2", shot["id"], patch, texts, changed, take_still_fits(shot, changed))
+    _episode, edited, _info, changed = edit(series, 2, append={"lines": [{"who": "kevin", "es": "Tres."}]})
+    assert changed == ["lines"]
+    assert [(beat["text"], beat.get("castIndex")) for beat in edited["dialogueBeats"]] == [("Uno.", 1), ("Dos.", None), ("Tres.", None)]
+
+
+def test_stop_motion_is_kept_by_a_shot_edit_and_null_takes_it_off():
+    """Through the library's write (normalized), as series.shot.update stores it."""
+    def stored(changes):
+        episode = series["episodesById"]["ep2"]
+        shot, _number = find_shot(episode, 2)
+        merged, changed = merge_changes(to_script(series, episode, shot), changes, None)
+        patch, texts = build_patch(series, episode, shot, merged, changed, KITS, FILES, None)
+        updated, info = apply_edit(series, "ep2", shot["id"], patch, texts, changed, take_still_fits(shot, changed))
+        saved = normalize_series_library({"seriesById": {"uv": updated}}, "cast")["seriesById"]["uv"]
+        return saved, find_shot(saved["episodesById"]["ep2"], 2)[0], info, changed
+
+    series = library()
+    series, shot, info, changed = stored({"motionStep": 3, "stopMotionJitter": 1.5})
+    assert changed == ["motionStep", "stopMotionJitter"] and info["reset"] == ["take"]
+    assert (shot["layout2d"]["motionStep"], shot["layout2d"]["stopMotionJitter"]) == (3, 1.5)
+    assert to_script(series, series["episodesById"]["ep2"], shot)["motionStep"] == 3
+    with pytest.raises(ShotEditError, match="motionStep must be 2, 3 or 4"):
+        stored({"motionStep": 5})
+    series, cleared, _info, changed = stored({"motionStep": None})
+    assert changed == ["motionStep"] and "motionStep" not in cleared["layout2d"] and cleared["layout2d"]["stopMotionJitter"] == 1.5
 
 
 class Library:
@@ -154,7 +204,7 @@ def test_the_route_edits_the_fifth_shot_and_renders_just_that_shot(tmp_path):
     assert store.series["episodesById"]["ep2"]["shots"][1]["layout2d"]["camera"] == "push", "check writes nothing"
     reply = asyncio.run(post("uv", "ep2", ShotEdit(workspace="cast", shot=2, append={"fx": [{"kind": "confetti", "at": 0.5}]},
                                                    render=True)))
-    assert reply["shotId"] == "e2s01" and reply["number"] == 2 and reply["approvalReset"] is True
+    assert reply["shotId"] == "e2s01" and reply["number"] == 2 and reply["approvalReset"] is True and reply["reset"] == ["take"]
     assert reply["shot"]["script"]["fx"][-1] == {"kind": "confetti", "at": 0.5, "duration": 1.0}
     assert store.calls == [("series.episode.render_native", {"workspace": "cast", "series_id": "uv", "episode_id": "ep2",
                                                              "shot_ids": ["e2s01"], "approve": True})]
@@ -208,7 +258,7 @@ def test_an_instruction_without_an_llm_and_a_render_without_changes(tmp_path):
 
 def test_a_missing_version_voice_blocks_new_lines_but_not_an_effect():
     series = library()
-    kits = {**KITS, "kit-gary": {"poses": {}}}  # gary has no English voice now
+    kits = {**KITS, "kit-gary": {"poses": {}, "voice": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}  # episode voice, no English one
 
     def edit_with(changes=None, append=None):
         episode = series["episodesById"]["ep2"]
@@ -237,3 +287,17 @@ def test_series_lab_asks_for_the_stored_shot_to_merge_the_edit_into_its_open_cop
     assert stored["languageVersions"]["english"]["dialogue"]["e2s01_b0"] == "And the hat?"
     assert stored["shot"] == next(item for item in store.series["episodesById"]["ep2"]["shots"] if item["id"] == "e2s01")
     assert reply["revision"] == store.series["revision"]
+
+
+def test_a_transition_keeps_the_approved_take_on_a_2d_shot_and_on_a_video_take():
+    series = library()
+    _episode, shot, info, changed = edit(series, 2, changes={"transitionIn": {"kind": "dip_white", "seconds": 0.8}})
+    assert changed == ["transitionIn"] and info["approvalReset"] is False
+    assert shot["transitionIn"] == {"kind": "dip_white", "seconds": 0.8} and shot["approvedAttemptId"] == "att-1"
+    _episode, video, info, changed = edit(series, "e2s03", changes={"transitionIn": {"kind": "fade_black", "seconds": 1.2}})
+    assert changed == ["transitionIn"] and info["approvalReset"] is False and video["approvedAttemptId"] == "att-v"
+    find_shot(series["episodesById"]["ep2"], 2)[0]["transitionIn"] = {"kind": "dissolve", "seconds": 0.5}
+    _episode, cleared, info, changed = edit(series, 2, changes={"transitionIn": None})
+    assert changed == ["transitionIn"] and info["approvalReset"] is False and cleared.get("transitionIn") is None
+    with pytest.raises(ShotEditError, match="transitionIn.kind"):
+        edit(series, 2, changes={"transitionIn": {"kind": "wipe", "seconds": 0.5}})

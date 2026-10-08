@@ -27,6 +27,7 @@ import numpy as np
 from PIL import Image
 
 from services.game_image_ops import dhash, hamming
+from services.game_library import game_warning
 
 _STILL_KINDS = frozenset({"character", "sprite", "item", "icon", "ui", "tile", "tileset"})
 _SHEET_KEYS = ("atlas", "sheet")
@@ -46,6 +47,10 @@ _SCHEMA = {
 }
 _UNAVAILABLE = "style_check_unavailable"
 _MISMATCH = "style_mismatch"
+_WARNING_TEXT = {
+    "style_check_unavailable": "The style check could not run.",
+    "style_mismatch": "The image does not match the style reference.",
+}
 _MISMATCH_MAX = 2
 _DUPLICATE_BITS = 6
 _FLAT_LEVELS = 4.0
@@ -75,8 +80,8 @@ def note_style(loopback, root: str, workspace: str, game: dict, asset: dict, fil
         candidate = _file_url(candidate_png(files), workspace)
         request_id = _request_id(game, asset, attempt_id)
         _stamp(metrics, warnings, style_check(_Caller(loopback, workspace), candidate, refs, request_id, cancelled))
-    for code in _duplicate_codes(root, game, asset, png):
-        _push(warnings, code)
+    for other_id in _duplicate_codes(root, game, asset, png):
+        _push(warnings, "duplicate_of", other_id)
     return metrics, warnings
 
 
@@ -106,15 +111,16 @@ def style_check(ctx, candidate_url: str, refs, request_id: str = "", cancelled=N
 
 
 def duplicates(game: dict, asset: dict, candidate: Path, root: str) -> list[str]:
-    """``duplicate_of:<id>`` per other approved still of the same kind within ``_DUPLICATE_BITS``."""
+    """Ids of other approved stills of the same kind within ``_DUPLICATE_BITS``."""
     current = file_dhash(candidate)
     if current is None:
         return []
     found = []
     for other in _approved_peers(game, asset):
+        other_id = str(other.get("id") or "")
         other_hash = file_dhash(_inside(root, _approved_image(other)))
-        if other_hash is not None and hamming(current, other_hash) <= _DUPLICATE_BITS:
-            found.append(f"duplicate_of:{other.get('id')}")
+        if other_id and other_hash is not None and hamming(current, other_hash) <= _DUPLICATE_BITS:
+            found.append(other_id)
     return found
 
 
@@ -343,6 +349,19 @@ def _approved_image(asset: dict) -> str:
     return ""
 
 
-def _push(warnings: list, code: str) -> None:
-    if code and code not in warnings:
-        warnings.append(code)
+def _same_warning(item, code: str, ref: str | None) -> bool:
+    if isinstance(item, str):
+        head, _, tail = item.partition(":")
+        return head == code and (ref is None or tail == ref)
+    if not isinstance(item, dict):
+        return False
+    return item.get("code") == code and (ref is None or item.get("ref") == ref)
+
+
+def _push(warnings: list, code: str, ref: str | None = None) -> None:
+    if not code or any(_same_warning(item, code, ref) for item in warnings):
+        return
+    if code == "duplicate_of":
+        warnings.append(game_warning(code, f"Same picture as {ref}.", ref=ref))
+        return
+    warnings.append(game_warning(code, _WARNING_TEXT.get(code, code)))

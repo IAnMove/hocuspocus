@@ -48,12 +48,16 @@ from services.series_review_gate import actionable_shots, assembly_blockers, ren
 from services.series_scene_inputs import audio_content
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
 from services import series_shot3d
+from services.series_plate_checks import location_plate_url
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_sound_cuts import materialize_cuts
 from services.series_video_foley import VIDEO_METHODS, pending_video_foley, shot_foley, sound_name, take_file, video_take, wants_video_foley
 from services.series_shot_foley import MAX_VOLUME, extract_audio, file_digest, foley_keys, foley_seed, mix_under, normalize_foley, sfx_params
+from services.series_document_card import DocumentCardError, document_plate
+from services import series_hearing
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
-from services.series_take_inputs import render_inputs, stale_shot_ids
+from services.speech_text_es import line_notes, pronounce, qa_verdict
+from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
 from services.series_voice_rooms import RoomError, apply_room, roomed
 
 KIND = "native"
@@ -299,10 +303,14 @@ class SeriesNativeRender:
         series, episode = self._episode(workspace, series_id, episode_id, language)
         planned, review = self._review_passes(workspace, series, episode, wanted, explicit, language == language_key(raw_series))
         shots = [item["shot"] for item in planned if item.get("pass") != "promote"]
-        missing = self._missing_kits(workspace, series, shots)
+        lost = self._lost_pins(workspace, series, episode, shots)
+        if lost:
+            raise NativeRenderError("kit_revision_missing", f"This episode pins {lost}, which is no longer kept; pin the "
+                                    "kits again (series.episode.kits.pin or series.episode.kits.update)", 409)
+        missing = self._missing_kits(workspace, series, episode, shots)
         if missing:
             raise NativeRenderError("missing_kits", f"Make a Character Kit for {', '.join(missing)} before rendering", 400)
-        voiceless = self._missing_voices(workspace, series, shots, language, language_key(raw_series))
+        voiceless = self._missing_voices(workspace, series, raw_episode, shots, language, language_key(raw_series))
         if voiceless:
             raise NativeRenderError("no_voice", f"{', '.join(voiceless)} have no {language} voice (voicesByLanguage); "
                                     f"design one before rendering this version", 400)
@@ -315,9 +323,9 @@ class SeriesNativeRender:
         shots = sorted((shot for shot in episode.get("shots") or [] if shot["id"] in wanted), key=lambda shot: shot.get("order", 0))
         if mode == "direct":
             return [{"shot": shot, "pass": None} for shot in shots], {}
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         root = self.deps.workspace_dir(workspace)
-        planned, waiting = render_passes(series, episode, shots, lambda shot: render_inputs(series, shot, kits, root),
+        planned, waiting = render_passes(series, episode, shots, lambda shot: accepted_inputs(series, shot, kits, root),
                                          explicit=explicit, original=original)
         if not planned:
             if waiting:
@@ -327,26 +335,39 @@ class SeriesNativeRender:
             raise NativeRenderError("up_to_date", "Every shot asked for already has its approved final take", 409)
         return planned, {"mode": mode, "waiting": waiting}
 
-    def _missing_voices(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]], language: str, original: str) -> list[str]:
+    def _kits(self, workspace: str, episode: dict | None) -> dict:
+        """Latest kits, unless this episode pins revisions (``series_kit_pins``)."""
+        from services.series_kit_pins import kits_for_episode
+        return kits_for_episode(self.deps.read_kits(workspace), episode, self.deps.workspace_dir(workspace))
+
+    def _missing_voices(self, workspace: str, series: dict[str, Any], episode: dict, shots: list[dict[str, Any]], language: str, original: str) -> list[str]:
         """Speakers of a language version whose kit has no voice designed for that language (the default would be the wrong accent)."""
         if language == original:
             return []
         shots = _drawn(shots)
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         speakers = dict.fromkeys(beat.get("characterId") for shot in shots for beat in shot.get("dialogueBeats") or []
                                  if str(beat.get("text") or "").strip() and beat.get("characterId"))
         return [str(names.get(cid, cid)) for cid in speakers
                 if not ((kits.get((kit_ref(series, cid) or {}).get("id") or "") or {}).get("voicesByLanguage") or {}).get(language)]
 
-    def _missing_kits(self, workspace: str, series: dict[str, Any], shots: list[dict[str, Any]]) -> list[str]:
-        """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast)."""
+    def _missing_kits(self, workspace: str, series: dict[str, Any], episode: dict, shots: list[dict[str, Any]]) -> list[str]:
+        """Names of characters seen or heard in ``shots`` without a Character Kit in the workspace (a new template's cast),
+        or without the revision the episode pins."""
         shots = _drawn(shots)
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         names = {item.get("id"): item.get("name") or item.get("id") for item in series.get("characters") or []}
         ids = dict.fromkeys(cid for shot in shots for cid in [*(shot.get("visibleCharacterIds") or []),
                                                               *(beat.get("characterId") for beat in shot.get("dialogueBeats") or [])] if cid)
         return [str(names.get(cid, cid)) for cid in ids if (kit_ref(series, cid) or {}).get("id") not in kits]
+
+    def _lost_pins(self, workspace: str, series: dict[str, Any], episode: dict, shots: list[dict[str, Any]]) -> str:
+        """The pins of the kits in ``shots`` whose revision is no longer kept, as ``kit revision N``; empty when none."""
+        from services.series_kit_pins import cast_kit_ids, lost_pins
+        kit_ids = set(cast_kit_ids(series, {"shots": _drawn(shots)}))
+        lost = lost_pins(self.deps.read_kits(workspace), episode, self.deps.workspace_dir(workspace), kit_ids)
+        return ", ".join(f"{kit_id} revision {revision}" for kit_id, revision in lost.items())
 
     def _launch(self, workspace: str, job: dict) -> None:
         """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
@@ -389,12 +410,12 @@ class SeriesNativeRender:
         raw_series, _raw_episode = self._episode(workspace, series_id, episode_id)
         original = (language or language_key(raw_series)) == language_key(raw_series)
         series, episode = self._episode(workspace, series_id, episode_id, language or language_key(raw_series))
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         shots = sorted((shot for shot in episode.get("shots") or [] if _renders(shot, episode)), key=lambda shot: shot.get("order", 0))
         root = self.deps.workspace_dir(workspace)
         stale = stale_shot_ids(series, episode, kits, root)
         stale.extend(shot["id"] for shot in shots if video_promotion(episode, shot) or pending_video_foley(series, episode, shot, root))
-        return actionable_shots(series, episode, shots, lambda shot: render_inputs(series, shot, kits, root),
+        return actionable_shots(series, episode, shots, lambda shot: accepted_inputs(series, shot, kits, root),
                                 stale, original=original)
 
     def review_blockers(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[dict[str, Any]]:
@@ -490,7 +511,7 @@ class SeriesNativeRender:
         shot = next((value for value in episode.get("shots") or [] if value["id"] == item["shotId"]), None)
         if shot is None:
             raise NativeRenderError("not_found", f"Shot {item['shotId']} no longer exists", 404)
-        kits = self.deps.read_kits(workspace)
+        kits = self._kits(workspace, episode)
         item["status"] = "running"
         if item["stage"] in ("voices", "scene"):
             # Recorded lines are reused; a resume after a restart (or after a cleanup) only records what is missing.
@@ -525,7 +546,10 @@ class SeriesNativeRender:
         voice = voice_for(kit, language) if kit else None
         if not voice:
             raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {language}")
-        return text, voice, recording_key(text, voice)
+        noted = line_notes(series, beat, voice)
+        # The key follows the spoken words: a dictionary entry that changes the line records it again. A line the
+        # dictionary leaves alone keeps the key of the written text, so its recording is still reused.
+        return text, noted, recording_key(pronounce(text, noted.get("pronunciationDictionary")), voice)
 
     def record_line(self, workspace: str, job: dict, series: dict, beat: dict, kits: dict, *, retake: bool = False) -> dict[str, Any]:
         """One line as ``_voices`` records it (``series_line_voice``): its recording when there is one, else a new one.
@@ -597,12 +621,13 @@ class SeriesNativeRender:
                     # The voice stopped before speaking (only silence, or a click the trim kept): another seed.
                     _discard(final)
                     continue
-                wer = self._wer(workspace, f"{stem}.wav", text, job["language"])
-                take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": attempt}
+                wer, limit, notes = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
+                take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer,
+                        "attempt": attempt, **notes}
                 if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
                     best = take
                     _replace_with_sidecar(final, best_path)
-                if wer is None or wer <= MAX_WER:
+                if wer is None or wer <= limit:
                     break
         finally:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
@@ -624,6 +649,7 @@ class SeriesNativeRender:
 
     def _speak(self, workspace: str, job: dict, stem: str, text: str, voice: dict, attempt: int) -> str:
         seed = int(hashlib.sha1(f"{stem}-{attempt}".encode()).hexdigest()[:6], 16)
+        text = pronounce(text, voice.get("pronunciationDictionary"))
         intent = f"{stem}-a{attempt}"
         for _ in range(2):
             submitted = _ok(self.deps.call("generation.speech", {"version": 2, "intent_id": intent[:160], "input": {
@@ -668,11 +694,10 @@ class SeriesNativeRender:
             if deadline is not None and self.deps.clock() >= deadline:
                 raise NativeRenderError("timeout", f"{label} was still {state or 'waiting'} when its time ran out", 504)
 
-    def _wer(self, workspace: str, filename: str, text: str, language: str) -> float | None:
+    def _wer(self, workspace: str, filename: str, text: str, language: str, voice: dict | None = None) -> tuple[float | None, float, dict]:
         if not self.deps.check_speech:
-            return None
-        checked = self.deps.call("qa.speech", {"version": 1, "input": {"workspace": workspace, "file": filename, "text": text, "language": language}})
-        return None if checked.get("_is_error") else (checked.get("result") or {}).get("wer")
+            return None, MAX_WER, {}
+        return qa_verdict(self.deps.call, workspace, filename, text, language, voice, MAX_WER)
 
     def _cues(self, workspace: str, filename: str, duration: float, text: str, language: str) -> dict[str, Any]:
         # "auto" uses the optional phoneme engine when it is installed and Rhubarb otherwise, so an install without
@@ -695,6 +720,13 @@ class SeriesNativeRender:
         first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
         spec = build_shot_spec(series, episode, shot, workspace=workspace, recorded=self._heard(workspace, series, shot, item["lines"]),
                                first_of_scene=first)
+        try:
+            plate = document_plate(self.deps.workspace_dir(workspace), shot, spec)
+        except DocumentCardError as error:
+            raise NativeRenderError("document_card", str(error), 502) from error
+        if plate:
+            spec["background"] = plate
+            spec["texts"] = []
         root = self.deps.workspace_dir(workspace)
         self._balance(root, spec)
         measure_props(spec, root)
@@ -745,15 +777,18 @@ class SeriesNativeRender:
         # Its sound effects and screen effects too, at a second or on a line, like in a 2D shot.
         sound = {"audioTracks": [*sound_tracks(series, shot, first), *sfx_tracks(layout, timing, duration)]}
         self._balance(self.deps.workspace_dir(workspace), sound)
+        lines, sound["audioTracks"] = series_hearing.shape(series, shot, lines, sound["audioTracks"])
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
                                           tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace),
-                                          screen_fx=fx_cues(layout, timing, duration))
+                                          screen_fx=fx_cues(layout, timing, duration),
+                                          plate=location_plate_url(series, shot, workspace))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['renderDigest']}-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         # A staged review's preview is the cheap faithful look: draft quality, whatever the shot's own.
         quality = "draft" if item.get("pass") == "preview" else config.get("quality", "draft")
+        document = series_shot3d.series_frame_document(series, scene.get("document") or {})
         _ok(self.deps.call("scenes.world3d.export", {"version": 1, "intent_id": intent, "input": {
-            "workspace": workspace, "document": scene["document"], "quality": quality}}), "export 3D")
+            "workspace": workspace, "document": document, "quality": quality}}), "export 3D")
         # A Video 3D scene has no dialogue beats: the take carries its lines for the episode's subtitles.
         subtitles = [{"text": str(beat.get("text") or "").strip(), "start": start, "end": end} for beat, (start, end) in zip(beats, timing)]
         item.update(scene=scene.get("file"), duration=round(duration, 3), stage="export", exportIntent=intent,
@@ -926,7 +961,7 @@ class SeriesNativeRender:
         self._set_length(workspace, job, item)
         metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
-                    **({"renderInputs": item["inputs"]} if item.get("inputs") else {}),
+                    **({"renderInputs": item["inputs"], "renderInputsVersion": INPUTS_VERSION} if item.get("inputs") else {}),
                     **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {}),
                     **({"foley": {key: item["foley"][key] for key in ("prompt", "volume", "file")}} if item.get("foley") else {}),
                     **({"reviewStage": item["pass"]} if item.get("pass") in ("preview", "final") else {})}

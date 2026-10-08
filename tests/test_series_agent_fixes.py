@@ -144,11 +144,47 @@ def test_the_bible_lists_what_an_agent_may_use():
 
 def test_a_compact_episode_keeps_layout_lines_and_takes():
     ep = episode()
+    ep["shots"][0]["transitionIn"] = {"kind": "fade_black", "seconds": 0.8}
     compact = compact_episode(series(ep), ep)
     shot = compact["shots"][0]
     assert shot["layout2d"]["framing"] == "close" and shot["dialogueBeats"][0]["text"].startswith("¡¿CIEN")
+    assert shot["transitionIn"] == {"kind": "fade_black", "seconds": 0.8}
     assert shot["takes"][0] == {"id": "a1", "status": "completed", "language": "spanish", "seconds": 1.71, "sceneFilename": "e2s06.scene.json"}
     assert "attempts" not in shot and compact["languageVersions"]["english"]["dialogue"]
+    assert "transitionIn" in guide_text() and "fade_black" in guide_text() and "dip_white" in guide_text()
+
+
+def test_the_guide_names_the_production_lessons():
+    """Lessons that cost hours, and the real series.update merge. Growth stays within 15% of 40364 bytes."""
+    guide = guide_text()
+    assert len(guide.encode()) <= int(40364 * 1.15)
+    for phrase in (
+        "keeps every top-level field you omit",
+        "ambienceByLocation",
+        "base_revision",
+        "JSON copy",
+        "boats, waves, crowds, rain",
+        "image_start",
+        "image_end",
+        "10–13 key shots",
+        "shot_ids",
+        "One kit per character",
+        "voice-over",
+        "12 frames",
+        "85–155 Hz",
+        "165–255 Hz",
+        "pitch_range",
+        "magenta",
+        "output_name",
+        "output_name_taken",
+        "pitch_out_of_range",
+        "assets included",
+    ):
+        assert phrase in guide, phrase
+    # An existing name is kept (the new file is name(2)); agents with only MCP tools have no shell; no tool blends
+    # frames; the render checks the pitch range (#916).
+    for wrong in ("Reusing a name replaces", "nvidia-smi", "last 14 frames", "does not apply that range"):
+        assert wrong not in guide, wrong
 
 
 def test_the_guide_routes(tmp_path):

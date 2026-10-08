@@ -194,6 +194,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_jobs_cancel.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
       "file": "tests/test_krea2_features.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -354,6 +360,12 @@
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
+      "file": "tests/test_series_assembly_router.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
       "file": "tests/test_series_jobs.py",

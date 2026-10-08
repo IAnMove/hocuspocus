@@ -35,6 +35,7 @@ from typing import Any, Callable
 from urllib.parse import quote
 
 from services.series_scene_inputs import audio_content, document_digest, scene_source_digest
+from services.series_stop_motion import KEYS as STOP_MOTION_KEYS, read_fields
 
 QUALITIES = ("draft", "final")
 OBJECT_MEDIA = ("model3d", "image")
@@ -64,6 +65,11 @@ def _extras(value: dict[str, Any]) -> dict[str, Any]:
         extras["objects"] = objects[:MAX_OBJECTS]
     if value.get("retime") is False:
         extras["retime"] = False
+    if "backdrop" in value:
+        from services.series_plate_checks import stored_backdrop
+        kept = stored_backdrop(value.get("backdrop"))
+        if kept is not None:
+            extras["backdrop"] = kept
     extras.update(_look(value))
     return extras
 
@@ -194,7 +200,13 @@ def scene3d_problems(value: Any, root: str | None = None) -> list[str]:
     raw = value.get("objects") if isinstance(value, dict) and isinstance(value.get("objects"), list) else []
     entries = [entry for entry in raw if isinstance(entry, dict) and _valid_id(entry.get("objectId"))]
     images = {entry["objectId"] for entry in entries if entry.get("media") == "image"}
-    return [f"scene3d object {entry['objectId']}: {problem}" for entry in entries for problem in _entry_problems(entry, images, root)]
+    problems = [f"scene3d object {entry['objectId']}: {problem}" for entry in entries for problem in _entry_problems(entry, images, root)]
+    if isinstance(value, dict) and "backdrop" in value:
+        from services.series_plate_checks import backdrop_problem
+        found = backdrop_problem(value.get("backdrop"))
+        if found:
+            problems.append(found)
+    return problems
 
 
 def _entry_problems(entry: dict[str, Any], images: set[str], root: str | None) -> list[str]:
@@ -422,7 +434,7 @@ def scene_sound(workspace: str, tracks: list[dict[str, Any]] | None) -> list[dic
 def open_shot_scene(call: Callable, workspace: str, stem: str, shot: dict[str, Any], duration: float, error: Callable[..., Exception], *,
                     root: str | None = None, sound: list[dict[str, Any]] | None = None, effects: list[dict[str, Any]] | None = None,
                     lines: list[dict[str, Any]] | None = None, talking: set[str] | None = None,
-                    template_id: str | None = None) -> dict[str, Any]:
+                    template_id: str | None = None, plate: str | None = None) -> dict[str, Any]:
     """The shot's scene before anyone talks: its template (or saved scene) instantiated, with the shot's length, look,
     sound, screen effects, objects and voice-over. Returns the working scene (``sceneId``, ``revision``, ``document``);
     ``stem`` names the intents, so the same request replays."""
@@ -435,16 +447,30 @@ def open_shot_scene(call: Callable, workspace: str, stem: str, shot: dict[str, A
     scene = _ok(call("world3d.scene.instantiate", {"version": 1, "intent_id": f"{stem}-new", "input": {
         "workspace": workspace, "template_id": template_id}}), "instantiate 3D scene", error)["scene"]
     _check_carriers(config, scene.get("document"), talking or set(), error)
+    setup = _setup(workspace, root, config, sound or [], error, effects or [])
+    from services.series_plate_checks import backdrop_bindings
+    added = backdrop_bindings(scene.get("document"), plate)
+    if added:
+        setup["bindings"] = [*added, *(setup.get("bindings") or [])]
     return _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-length", "input": {
         "workspace": workspace, "scene_id": scene["sceneId"], "base_revision": scene["revision"], "duration": round(duration, 3),
-        **_setup(workspace, root, config, sound or [], error, effects or []), **_voice_over(workspace, lines or [], config)}}),
+        **setup, **_voice_over(workspace, lines or [], config), **_held(shot, scene.get("document"))}}),
         "set 3D length", error)["scene"]
+
+
+def _held(shot: dict[str, Any], document: Any) -> dict[str, Any]:
+    """The shot's stop-motion (``layout2d.motionStep``, ``stopMotionJitter``), saved in the scene so its file keeps it.
+    One the source scene has and the shot does not is removed (0). A shot and a scene without any send nothing, so
+    their patch stays the one earlier renders asked for."""
+    held = read_fields(shot)
+    stale = [key for key in STOP_MOTION_KEYS if key not in held and isinstance(document, dict) and document.get(key)]
+    return {**held, **dict.fromkeys(stale, 0)}
 
 
 def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any], lines: list[dict[str, Any]], duration: float,
                 kits: dict[str, Any], series_characters: dict[str, str], error: Callable[..., Exception],
                 tracks: list[dict[str, Any]] | None = None, root: str | None = None,
-                screen_fx: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                screen_fx: list[dict[str, Any]] | None = None, plate: str | None = None) -> dict[str, Any]:
     """Instantiate, set the length, sound and objects, make every cast object talk and publish; returns the published scene.
 
     ``tracks`` are the shot's ambience, stinger and music (``series_shot_plan.sound_tracks``); they join the scene
@@ -459,11 +485,14 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     template_id = _template(call, workspace, config, error)
     source = scene_source_digest(config, root)
     audio = audio_content(root, (line["filename"] for line in [*lines, *(tracks or [])]))
-    digest = hashlib.sha1(repr((config, template_id, source, round(duration, 3),
-                               lines, audio, sound, effects)).encode()).hexdigest()[:10]
+    held = read_fields(shot)
+    asked = (config, template_id, source, round(duration, 3), lines, audio, sound, effects)
+    if plate:
+        asked = (*asked, plate)
+    digest = hashlib.sha1(repr((*asked, tuple(sorted(held.items()))) if held else asked).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
-                            talking=_talking(config, lines, series_characters), template_id=template_id)
+                            talking=_talking(config, lines, series_characters), template_id=template_id, plate=plate)
     scene_id, revision = scene["sceneId"], scene["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]
@@ -473,3 +502,14 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
     return {**published, "renderDigest": digest}
+
+
+def series_frame_document(series: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
+    """A Series 3D export uses the episode frame, so the cut does not conform the clip.
+
+    Templates are often 1280x720 at 30 fps. The episode is 1920x1080, or 1080x1920 when
+    ``provider.videoSettings.orientation`` is portrait, at 24 fps (``series_shot_plan.frame_size``).
+    """
+    from services.series_shot_plan import FPS, frame_size
+    width, height = frame_size(series if isinstance(series, dict) else {})
+    return {**(document or {}), "width": width, "height": height, "fps": FPS}

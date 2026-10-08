@@ -101,7 +101,8 @@ def sfx_entry(value: Any) -> dict[str, Any] | None:
         return None
     volume = _number(value.get("volume"), 0, 1)
     return {"file": value["file"], **_when(value), "volume": 0.8 if volume is None else volume,
-            **({"repeat": "steps"} if value.get("repeat") == "steps" else {}), **cut_fields(value)}
+            **({"repeat": "steps"} if value.get("repeat") == "steps" else {}),
+            **({"keepInDeaf": True} if value.get("keepInDeaf") is True else {}), **cut_fields(value)}
 
 
 def fx_origin(value: Any) -> dict[str, Any] | None:
@@ -183,7 +184,8 @@ def sfx_tracks(layout: dict[str, Any], timing: list[tuple[float, float]], durati
         times = [(f"sfx-{index}", cue_time(cue, timing, duration, moves))] if steps is None else [
             (f"sfx-{index}-step{number}", time) for number, time in enumerate(steps)]
         tracks += [{"id": track_id, "filename": cue["file"], "name": "Sound effect", "kind": "sfx", "startTime": start,
-                    "volume": cue.get("volume", 0.8), **track_cut(cue)} for track_id, start in times]
+                    "volume": cue.get("volume", 0.8), **({"keepInDeaf": True} if cue.get("keepInDeaf") is True else {}),
+                    **track_cut(cue)} for track_id, start in times]
     return tracks
 
 

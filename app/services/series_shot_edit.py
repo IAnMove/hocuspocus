@@ -8,11 +8,14 @@ list (``fx``, ``sfx``, ``props``, ``layers``, ``cast``, ``lines``) without
 knowing what is there. The shot is checked like a script shot (characters,
 poses, files, effects, 3D objects), and only the fields that changed are
 written: the rest of the shot, its takes and the other shots stay as they are.
-A shot whose take no longer shows what it says loses its approval (in every
-language version); a generated or imported take keeps it when only the sound
-laid at the cut changed (``sfx``, ``music``, ``clipAudio``, ``clipVolume``,
-``clipFit``, ``foley``). Lines in other languages update that language
-version's text.
+A change of what the shot shows clears plan, preview and take approval.
+``approvalReset`` is true when any of those was set, and ``reset`` lists them
+in that order (``plan``, ``preview``, ``take``). A note is not this edit: it
+never clears an approval. Changing only the volume of an sfx does not clear
+approval; changing its file, its timing or adding a cue does. A generated or
+imported take also keeps its approval when only the sound laid at the cut
+changed (``sfx``, ``music``, ``clipAudio``, ``clipVolume``, ``clipFit``,
+``foley``). Lines in other languages update that language version's text.
 """
 from __future__ import annotations
 
@@ -25,10 +28,10 @@ from services.series_video_foley import VIDEO_METHODS
 
 SCRIPT_KEYS = ("scene", "location", "variant", "framing", "camera", "cast", "lines", "card", "music", "sfx", "fx",
                "props", "timing", "voiceRoom", "layers", "castDepth", "clipAudio", "clipVolume", "clipFit", "kind",
-               "scene3d", "foley", "duration", "lookRoom")
+               "scene3d", "foley", "duration", "lookRoom", "transitionIn", "hearing", "motionStep", "stopMotionJitter")
 LIST_KEYS = ("cast", "lines", "sfx", "fx", "props", "layers")
 LAYOUT_KEYS = ("framing", "camera", "cast", "card", "music", "sfx", "fx", "props", "timing", "voiceRoom", "layers",
-               "castDepth", "clipAudio", "clipVolume", "clipFit", "lookRoom")
+               "castDepth", "clipAudio", "clipVolume", "clipFit", "lookRoom", "hearing", "motionStep", "stopMotionJitter")
 # What a generated or imported take gets at the cut: changing only these keeps its approval.
 CUT_KEYS = frozenset({"sfx", "music", "clipAudio", "clipVolume", "clipFit", "foley"})
 KIND_OF = {method: kind for kind, method in METHODS.items()}
@@ -95,7 +98,7 @@ def _line(beat: dict[str, Any], original: str, versions: dict[str, dict[str, Any
         text = (version.get("dialogue") or {}).get(beat.get("id"))
         if text:
             line[language] = text
-    for key in ("pauseBefore", "voiceRoom", "emotion", "delivery"):
+    for key in ("pauseBefore", "voiceRoom", "emotion", "delivery", "castIndex"):
         if beat.get(key) not in (None, ""):
             line[key] = beat[key]
     return line
@@ -147,6 +150,8 @@ def to_script(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, A
                 "kind": KIND_OF.get(shot.get("productionMethod")), "scene3d": copy.deepcopy(shot.get("scene3d")),
                 "foley": copy.deepcopy(shot.get("foley")), "duration": None if lines else shot.get("durationSeconds")}
     script.update({key: value for key, value in optional.items() if value is not None})
+    if shot.get("transitionIn"):
+        script["transitionIn"] = copy.deepcopy(shot["transitionIn"])
     return script
 
 
@@ -234,6 +239,8 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
     for key, field in (("kind", "productionMethod"), ("scene3d", "scene3d"), ("foley", "foley")):
         if key in changed:
             patch[field] = built.get(field)
+    if "transitionIn" in changed:
+        patch["transitionIn"] = built.get("transitionIn")
     # A shot with lines takes its take's length; one without says it (duration, 5 s when it has none).
     if set(changed) & {"duration", "lines"} and "durationSeconds" in built:
         patch["durationSeconds"] = built["durationSeconds"]
@@ -242,8 +249,16 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
 
 
 def take_still_fits(shot: dict[str, Any], changed: list[str]) -> bool:
-    """A generated or imported take gets its sound at the cut: changing only that keeps its approval."""
-    return shot.get("productionMethod") in VIDEO_METHODS and set(changed) <= CUT_KEYS
+    """A generated or imported take gets its sound at the cut: changing only that keeps its approval.
+
+    ``transitionIn`` is applied at the join, so it keeps the take on every production method."""
+    if not changed:
+        return shot.get("productionMethod") in VIDEO_METHODS
+    if set(changed) <= {"transitionIn"}:
+        return True
+    if shot.get("productionMethod") in VIDEO_METHODS and set(changed) <= CUT_KEYS | {"transitionIn"}:
+        return True
+    return False
 
 
 def _spoken_beats(episode: dict[str, Any], shot_id: str) -> list[str]:
@@ -281,6 +296,33 @@ def _write_versions(episode: dict[str, Any], shot_id: str, old_beats: list[str],
     return missing
 
 
+def _approved_stages(episode: dict[str, Any], shot_id: str, before: str, after: str) -> list[str]:
+    """Plan and preview approvals this edit drops. ``changes`` is not an approval, and a same digest keeps both."""
+    if before == after:
+        return []
+    review = episode.get("review") if isinstance(episode.get("review"), dict) else {}
+    shots = review.get("shots") if isinstance(review.get("shots"), dict) else {}
+    entry = shots.get(shot_id) if isinstance(shots.get(shot_id), dict) else {}
+    return [stage for stage in ("plan", "preview") if entry.get(stage) == "approved"]
+
+
+def _approval_report(episode: dict[str, Any], shot_id: str, stored: dict[str, Any], changed: list[str],
+                     keep_approval: bool) -> dict[str, Any]:
+    """What this edit cleared. Volume-only sfx keeps every approval: the stored digest still counts the volume, so the
+    plan and preview decisions move to the new one. Other digest-stable edits (foley) still drop the take."""
+    from services.series_review import carry_decisions, content_digest
+    shot = next(item for item in episode.get("shots") or [] if item.get("id") == shot_id)
+    before, after = content_digest(stored), content_digest(shot)
+    volume_only = set(changed) <= {"sfx"} and \
+        content_digest(stored, sfx_volume=False) == content_digest(shot, sfx_volume=False)
+    if volume_only:
+        carry_decisions(episode, shot_id, before, after)
+    cleared = [] if volume_only else _approved_stages(episode, shot_id, before, after)
+    if not keep_approval and not volume_only and reset_approvals(episode, shot_id):
+        cleared.append("take")
+    return {"approvalReset": bool(cleared), "reset": cleared}
+
+
 def reset_approvals(episode: dict[str, Any], shot_id: str) -> bool:
     """The shot's approved take and every language version's approval of it are cleared; True when one was set."""
     shot = next(item for item in episode.get("shots") or [] if item.get("id") == shot_id)
@@ -304,8 +346,8 @@ def apply_edit(series: dict[str, Any], episode_id: str, shot_id: str, patch: dic
                                     updated_at=updated_at)
     episode = updated["episodesById"][episode_id]
     missing = _write_versions(episode, shot_id, old_beats, texts, changed)
-    reset = False if keep_approval else reset_approvals(episode, shot_id)
-    return updated, {"approvalReset": reset, "missingLines": {key: value for key, value in missing.items() if value}}
+    report = _approval_report(episode, shot_id, stored, changed, keep_approval)
+    return updated, {**report, "missingLines": {key: value for key, value in missing.items() if value}}
 
 
 __all__ = ["CUT_KEYS", "LIST_KEYS", "SCRIPT_KEYS", "ShotEditError", "apply_edit", "build_patch", "find_shot", "merge_changes",

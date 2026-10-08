@@ -25,6 +25,8 @@ MAX_CHARACTER_KITS = 100
 MAX_LIBRARY_BYTES = 20 * 1024 * 1024
 # Snapshots of earlier revisions kept next to the library (one file per save).
 HISTORY_REVISIONS = 10
+# Per-kit documents (series_kit_pins). Each library has its own folder, so a lips pack never shares a kit's id space.
+_KIT_HISTORY = {CHARACTER_KIT_LIBRARY_FILENAME: ".character-kit-revisions", LIPS_CREATOR_LIBRARY_FILENAME: ".lips-creator-revisions"}
 _LOCK = threading.RLock()
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _STYLES = {"cutout", "children-illustration", "anime-2d"}
@@ -273,6 +275,11 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
             raise ValueError("Character rest pose must be an object")
         result["restPose"] = {"asset": _asset(rest.get("asset"), "Character rest pose"),
                               "fingerprint": _text(rest.get("fingerprint"), "Rest pose fingerprint", 8000, required=True)}
+    # Per-kit counter (series_kit_pins). Absent on kits saved before pinning; readers treat that as 0.
+    # A client cannot choose it: patch_character_kit overwrites it after normalize.
+    revision = value.get("revision")
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision >= 0:
+        result["revision"] = revision
     for key in ("identityReference", "base"):
         if value.get(key) is not None:
             result[key] = _asset(value[key], f"Character Kit {key}")
@@ -319,6 +326,84 @@ def _revision(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("baseRevision must be a non-negative integer")
     return value
+
+
+def kit_revision(kit: Any) -> int:
+    """The kit's own revision. A kit saved before per-kit history has none, which is revision 0."""
+    if not isinstance(kit, dict):
+        return 0
+    value = kit.get("revision", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
+
+
+def kit_revision_path(workspace_dir: str, kit_id: str, revision: int, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> str:
+    return os.path.join(workspace_dir, _KIT_HISTORY[library_filename], f"{kit_id}.v{revision}.json")
+
+
+def read_kit_revision(workspace_dir: str, kit_id: str, revision: int) -> dict[str, Any] | None:
+    """One stored kit document. Missing history is absence, not the live kit."""
+    path = kit_revision_path(workspace_dir, kit_id, revision)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        document = json.load(handle)
+    return document if isinstance(document, dict) else None
+
+
+def _highest_kept(workspace_dir: str, kit_id: str, library_filename: str) -> int:
+    """The highest revision of ``kit_id`` in the history, or -1 when none is kept."""
+    folder = os.path.join(workspace_dir, _KIT_HISTORY[library_filename])
+    pattern = re.compile(re.escape(kit_id) + r"\.v(\d+)\.json")
+    try:
+        names = os.listdir(folder)
+    except FileNotFoundError:
+        return -1
+    return max((int(match.group(1)) for match in map(pattern.fullmatch, names) if match), default=-1)
+
+
+def _remember_kit(workspace_dir: str, kit: dict[str, Any], library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> None:
+    """Store this kit document before a newer one replaces it or it is deleted.
+
+    The write is a temp file plus replace. Image files named by the kit stay
+    where they are: a revision points at them, and this function never deletes
+    a pose, a mouth or a blink. A revision already kept as another document is
+    refused, so a pin never finds a document it was not made with.
+    """
+    path = kit_revision_path(workspace_dir, str(kit.get("id") or ""), kit_revision(kit), library_filename)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as handle:
+            if json.load(handle) == json.loads(json.dumps(kit, ensure_ascii=False, allow_nan=False)):
+                return
+        raise ValueError(f"Character Kit {kit.get('id')} revision {kit_revision(kit)} is already kept as another document")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(kit, handle, ensure_ascii=False, allow_nan=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            if os.path.isfile(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+
+
+def _stamp_kit_revision(workspace_dir: str, current: dict[str, Any], token: str, candidate: dict[str, Any],
+                        library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> None:
+    """Bump this kit only. characters.save, a re-rig and a voice edit all arrive here.
+
+    The number goes on after the highest kept revision too, so a kit made again with a deleted kit's id never
+    takes a number that a pin to the deleted kit still means."""
+    previous = (current.get("kits") or {}).get(token)
+    if isinstance(previous, dict):
+        _remember_kit(workspace_dir, previous, library_filename)
+    latest = kit_revision(previous) if isinstance(previous, dict) else 0
+    candidate["revision"] = max(latest, _highest_kept(workspace_dir, token, library_filename)) + 1
 
 
 def _prune_history(path: str, keep: int = HISTORY_REVISIONS) -> None:
@@ -383,6 +468,7 @@ def patch_character_kit(workspace_dir: str, kit_id: str, kit: Any, *, base_revis
         expected = _revision(base_revision)
         if expected != current["revision"]:
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
+        _stamp_kit_revision(workspace_dir, current, token, candidate, library_filename)
         next_library = {**current, "kits": {**current["kits"], token: candidate}}
         if make_active or not current.get("activeId"):
             next_library["activeId"] = token
@@ -398,6 +484,8 @@ def delete_character_kit(workspace_dir: str, kit_id: str, *, base_revision: int,
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
         if token not in current["kits"]:
             raise KeyError(token)
+        # A pin to the deleted kit's last revision still finds its document.
+        _remember_kit(workspace_dir, current["kits"][token], library_filename)
         kits = dict(current["kits"])
         del kits[token]
         next_library = {**current, "kits": kits, "activeId": current["activeId"] if current.get("activeId") in kits else next(iter(kits), "")}

@@ -31,9 +31,12 @@ from urllib.parse import quote
 
 from services import series_entrances as entrances
 from services import series_shot_extras as extras
+from services import series_hearing
 from services.series_ambience import ambience_mode
+from services.series_document_card import stored_document
 from services.series_layers import PLAYBACK, layer_kind, layout_layers, shot_layers
 from services.series_voice_rooms import check_room
+from services import series_stop_motion
 from services.speech_language import speech_language_code
 
 FRAMINGS = ("wide", "two", "medium", "close", "insert", "title")
@@ -104,7 +107,14 @@ def _prop_entry(value: Any) -> dict[str, Any] | None:
 
 
 def _layout_card(card: Any) -> dict[str, Any]:
-    if not isinstance(card, dict) or card.get("kind") not in ("title", "disclaimer", "end"):
+    if not isinstance(card, dict):
+        return {}
+    if card.get("kind") == "document":
+        try:
+            return {"card": stored_document(card)}
+        except ValueError:
+            return {}
+    if card.get("kind") not in ("title", "disclaimer", "end"):
         return {}
     return {"card": {"kind": card["kind"], "title": str(card.get("title") or "")[:200], "body": str(card.get("body") or "")[:1200]}}
 
@@ -140,7 +150,8 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
               **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
-              **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {})}
+              **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {}),
+              **series_hearing.layout_field(value), **series_stop_motion.stored_fields(value)}
     return layout or None
 
 
@@ -208,16 +219,20 @@ def plan_timing(durations: list[float], *, intro: float = 0.35, gap: float = 0.2
     return timing, round(round(duration * FPS) / FPS, 4)
 
 
-def _asset_url(series: dict[str, Any], asset_id: str, workspace: str) -> tuple[str, str] | None:
+def _asset_url(series: dict[str, Any], asset_id: str, workspace: str,
+               kinds: tuple[str, ...] = ("image", "video")) -> tuple[str, str] | None:
+    """The file URL and kind of a series asset of one of ``kinds``."""
     asset = (series.get("assets") or {}).get(asset_id)
-    if not isinstance(asset, dict) or asset.get("kind") not in ("image", "video") or not asset.get("uri"):
+    if not isinstance(asset, dict) or asset.get("kind") not in kinds or not asset.get("uri"):
         return None
     uri = str(asset["uri"])
     uri = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
     return f"/api/v1/file/{quote(uri)}?workspace={quote(workspace)}", asset["kind"]
 
 
-def background_for(series: dict[str, Any], shot: dict[str, Any], workspace: str) -> dict[str, Any] | None:
+def background_for(series: dict[str, Any], shot: dict[str, Any], workspace: str,
+                   kinds: tuple[str, ...] = ("image", "video")) -> dict[str, Any] | None:
+    """The shot location's first picture of one of ``kinds``: its plate, its background, the variant's references, then its own."""
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
     if not location:
         return None
@@ -226,7 +241,7 @@ def background_for(series: dict[str, Any], shot: dict[str, Any], workspace: str)
     candidates = [layout.get("plateAssetId"), layout.get("backgroundAssetId"), *(variant.get("referenceAssetIds") or []),
                   *(location.get("referenceAssetIds") or [])]
     for asset_id in candidates:
-        found = _asset_url(series, asset_id, workspace) if asset_id else None
+        found = _asset_url(series, asset_id, workspace, kinds) if asset_id else None
         if found:
             return {"source": found[0], "kind": found[1]}
     return None
@@ -288,11 +303,16 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
     return item
 
 
-def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float, workspace: str = "",
-              portrait: bool = False) -> list[dict[str, Any]]:
+def _cast_entries(shot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The shot's ``layout2d.cast`` (the script's cast, in its order), else its visible characters."""
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     explicit = [item for item in layout.get("cast") or [] if isinstance(item, dict) and item.get("characterId")]
-    entries = explicit or [{"characterId": cid} for cid in shot.get("visibleCharacterIds") or []]
+    return explicit or [{"characterId": cid} for cid in shot.get("visibleCharacterIds") or []]
+
+
+def plan_cast(series: dict[str, Any], shot: dict[str, Any], framing: str, duration: float, workspace: str = "",
+              portrait: bool = False) -> list[dict[str, Any]]:
+    entries = _cast_entries(shot)
     homes, defaults = _homes(series, shot), spread(len(entries), portrait)
     items = (_cast_item(series, entry, _cast_x(entry, framing, len(entries), homes, defaults[index]), duration, workspace)
              for index, entry in enumerate(entries))
@@ -410,6 +430,8 @@ def card_texts(card: dict[str, Any], duration: float, portrait: bool = False) ->
     """Title, disclaimer and end cards in the production's lettering. Sizes are % of the frame height, so a
     vertical frame (0.56 as wide) draws them smaller and wider to keep the same line length."""
     kind, title, body = card.get("kind"), str(card.get("title") or ""), str(card.get("body") or "")
+    if kind == "document":
+        return []
     if kind == "disclaimer":
         texts = _disclaimer_texts(title, body, duration)
     else:
@@ -449,16 +471,39 @@ def _shot_framing(layout: dict[str, Any], shot: dict[str, Any], card: dict[str, 
     return classify_framing(shot.get("framing", ""), 0 if card else len(entries))
 
 
-def _shot_lines(series: dict[str, Any], episode: dict[str, Any], beats: list[dict], timing: list[tuple[float, float]],
-                recorded: dict[str, dict[str, Any]], visible: set[str]) -> list[dict[str, Any]]:
-    lines = []
+def _speaker_index(series: dict[str, Any], shot: dict[str, Any], cast: list[dict[str, Any]], beat: dict[str, Any]) -> int | None:
+    """The planned cast member who says ``beat``. ``castIndex`` counts in ``layout2d.cast``; the plan leaves out members
+    without a kit, so it is moved to the planned cast. Without it the speaker is the first member who is that
+    character, not the first copy of its kit (two characters can share one kit)."""
+    index = beat.get("castIndex")
+    if type(index) is int and cast:
+        entries = _cast_entries(shot)
+        if 0 <= index < len(entries) and kit_ref(series, entries[index]["characterId"]):
+            return sum(1 for entry in entries[:index] if kit_ref(series, entry["characterId"]))
+    return next((number for number, item in enumerate(cast) if item["characterId"] == beat.get("characterId")), None)
+
+
+def _copies(series: dict[str, Any], cast: list[dict[str, Any]], kit_id: str) -> list[int]:
+    return [number for number, item in enumerate(cast) if (kit_ref(series, item["characterId"]) or {}).get("id", item["characterId"]) == kit_id]
+
+
+def _shot_lines(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], beats: list[dict],
+                timing: list[tuple[float, float]], recorded: dict[str, dict[str, Any]], cast: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    lines, visible = [], {item["characterId"] for item in cast}
     for beat, (start, end) in zip(beats, timing):
         ref = kit_ref(series, beat.get("characterId", ""))
         heard = recorded[beat["id"]]
-        lines.append({"id": line_id(episode["id"], beat["id"]), "kitId": ref["id"] if ref else beat.get("characterId", ""),
-                      "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
-                      "cues": heard.get("cues") or None, "driver": heard.get("driver"),
-                      "visible": beat.get("characterId") in visible, "name": beat.get("characterId")})
+        line = {"id": line_id(episode["id"], beat["id"]), "kitId": ref["id"] if ref else beat.get("characterId", ""),
+                "text": beat["text"], "start": start, "end": end, "filename": heard["filename"],
+                "cues": heard.get("cues") or None, "driver": heard.get("driver"),
+                "visible": beat.get("characterId") in visible, "name": beat.get("characterId")}
+        # The compiler moves the mouth of the planned cast member at castIndex (seriesShot.ts lineOwnsAppearance),
+        # else the first copy of the line's kit. castIndex is written only when the kit is on screen more than once,
+        # so a shot whose speakers each have their own kit plans the spec it always did.
+        speaker = _speaker_index(series, shot, cast, beat)
+        if speaker is not None and len(_copies(series, cast, line["kitId"])) > 1:
+            line["castIndex"] = speaker
+        lines.append(line)
     return lines
 
 
@@ -493,10 +538,11 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     """The compiler input for one shot. ``recorded`` maps beat id to {filename, duration, cues, driver}."""
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     card = layout.get("card") if isinstance(layout.get("card"), dict) else None
+    document = bool(card and card.get("kind") == "document")
     beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
     timing, duration = plan_timing([float(recorded[beat["id"]]["duration"]) for beat in beats], **extras.timing_args(layout),
                                    at_least=0.0 if beats else float(shot.get("durationSeconds") or 0), pauses=extras.pauses(beats))
-    framing = _shot_framing(layout, shot, card)
+    framing = "title" if document else _shot_framing(layout, shot, card)
     size = size or frame_size(series)
     portrait = size[1] > size[0]
     cast = [] if framing == "title" else plan_cast(series, shot, framing, duration, workspace, portrait)
@@ -504,11 +550,15 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     title = f"{series.get('title') or series.get('id')} · {episode.get('title') or episode['id']} · {shot['id']}"
     spec = {
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
-        "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, beats, timing, recorded, {item["characterId"] for item in cast}),
+        "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, shot, beats, timing, recorded, cast),
         "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
         "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
         "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
+        **series_stop_motion.read_fields(shot),
     }
+    spec["lines"], spec["audioTracks"] = series_hearing.shape(series, shot, spec["lines"], spec["audioTracks"])
+    if document:
+        return spec
     return _with_set(spec, series, shot, _focus(cast, framing), workspace)
 
 

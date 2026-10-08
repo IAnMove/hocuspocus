@@ -73,6 +73,15 @@ class GameNotFoundError(Exception):
         super().__init__(code)
 
 
+def game_warning(code: str, message: str, **extra: Any) -> dict[str, Any]:
+    """One non-blocking warning. ``code`` and ``message`` are always present."""
+    item: dict[str, Any] = {"code": str(code), "message": str(message)}
+    for key, value in extra.items():
+        if value is not None:
+            item[key] = value
+    return item
+
+
 def empty_library() -> dict[str, Any]:
     return {"schema": SCHEMA, "version": 1, "games": []}
 

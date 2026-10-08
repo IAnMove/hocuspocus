@@ -13,7 +13,9 @@ use only those ids and file names, never invent one.
      `generation.image` (base, then each pose with the base as `image_refs`) → `studio.key` → `characters.save`
      (approved assets) → `characters.rig.flat` (with the style's `rig` as `style`) → design a voice per
      language (`generation.speech` with `qwen3_tts_voicedesign`, check with `qa.speech`) → `characters.save` with
-     `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`;
+     `voicesByLanguage` → add the character to the series (`series.update`) with `voiceProfile.characterKitRef`.
+     Check the pitch with `qa.speech` and `pitch_range`: an adult man sits at 85–155 Hz, an adult woman at 165–255 Hz.
+     The series render only notes a line outside the character's range (`pitch_out_of_range`) and keeps the take;
    - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
      eyes in a wide head: graphic-novel or tenebrist art, eye bags, spectacles, moustaches) is detected, and its mouth
      is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "warp"}`
@@ -26,7 +28,9 @@ use only those ids and file names, never invent one.
      in % of that pose's keyed image; later rigs reuse the hints, and `null` clears a pose's hints;
    - location: `generation.image` 1920x1088 in the series style → `series.update` (new location) → `series.asset.import`
      (owner_type location, reference_role environment); for depth, also make its planes as separate keyed images (a
-     pillar or a bed frame in front, columns behind the cast) and list them in its `layout2d.layers` (below);
+     pillar or a bed frame in front, columns behind the cast) and list them in its `layout2d.layers` (below).
+     Paint the plate empty of anything that must move (boats, waves, crowds, rain): a frozen wave reads as broken.
+     Animate that motion afterwards, as an H3 loop (`image_start` and `image_end` the same image) or a Video 3D scene;
    - 3D background: `world3d.templates.list` → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
    After changing characters or locations, `series.canon.approve` (episodes freeze the approved canon).
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
@@ -35,6 +39,8 @@ use only those ids and file names, never invent one.
 4. **Make it:** `series.episode.produce`: renders the original and every language version on the server (voices checked
    with `qa.speech`, up to three takes per line; failed shots retried once), approves the takes and cuts each language
    with subtitles burned in. Poll `series.episode.produce.status` every minute or two; `chapters` lists the files.
+   Before that full render, make 10–13 key shots with `series.episode.render_native` and `shot_ids`, or use `preview`
+   mode, and look at those takes first.
 5. **Look and fix:** `series.episode.get` lists each take's editable scene (`sceneFilename`): `scenes.video2d.preview`
    it, or open it with `scenes.document.get`. Fix one shot with `series.shot.update` (by id or its number, below), or
    change the script and send it again with `episode_id` (takes are kept by shot id), then `series.episode.produce` again: it renders only the shots whose script, kits or
@@ -78,7 +84,8 @@ dark mouth in the character's ink.
 
 1. **Generate for the rig.** `characters.styles` with `style: "graphic-novel"`, `kind: "character"` (then `"pose"`)
    and the description. The prompt asks for what the rig must find: both eyes with clean white sclera, never in the
-   shadow, and the closed mouth painted as one short dark line. Key the image in the screen colour it returns.
+   shadow, and the closed mouth painted as one short dark line. Key in the screen colour `characters.styles` returns:
+   magenta when the character or object is green, so green cloth is not keyed away, and green otherwise.
 2. **Save and rig.** Save the kit with `provenance: [{"method": "character-style-create", "style": "graphic-novel"}]`;
    `characters.rig.flat` then uses the style's rig, `{"mouthStyle": "warp"}`, with no `style` (passing it does the
    same). Later rigs of the kit (a pose added, a mouth line placed) keep warp mouths: only `style.mouthStyle`
@@ -158,7 +165,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   `insert`/`title` (no cast; cards).
 - **camera:** `static` or `push` (slow push-in; use it on punchlines and reveals).
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
-  as in the bible's `homes`. `motion`: `idle` (default bob), `still`, `shake` (panic). `enterFrom`: `left`/`right`
+  as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
+  kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
+  `shake` (panic). `enterFrom`: `left`/`right`
   walks in, from 0.2 s to 1.4 s unless `enterAt` (s, when it starts) and `enterDuration` (s, how long it takes; a
   slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick paper-puppet
   hop) or `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
@@ -222,6 +231,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   and centre-cropped when its shape is within 6 % of the frame's, else fitted with bars (`"clipFit": "cover" |
   "contain"` forces it). The take file is never changed and changing its sound only recuts. Do not mux sound or
   re-encode clips with ffmpeg before importing them.
+- **transitionIn** (optional, on the shot): `{kind, seconds}` is how this shot enters from the previous one. `kind` is `cut` (the default, the same join as today), `fade_black`, `dissolve` or `dip_white`; `seconds` is from 0.2 to 2. A `cut` holds the previous shot's last frame 0.5 s and dissolves 0.4 s into this one, also when other shots have transitions. A `dissolve` overlaps picture and sound and shortens the cut by that much; `fade_black` and `dip_white` fade the previous shot out and this one in and do not overlap. A shot before any of these three ends on its own last frame, with no held frame.
 - **foley** (on the shot, not in `layout2d` or `scene3d`; same key in the script)**:** `{"prompt": "wooden airship
   creaking, wind, cannon shots", "volume": 0.5}`. After the shot is exported, MMAudio (`generation.sfx` with the
   export as `video_guide`) makes sound that follows the shot's own picture, and it is mixed under the lines, music
@@ -340,7 +350,8 @@ Do these in the app, never with scripts: every file they make has a `.meta.json`
 it can be found, reused and redone.
 
 - **Cutouts:** `studio.key` reads the screen colour from the image border (`adaptive`, default true), keys relative
-  to it and clears the backdrop connected to the border, and `despill` (default true) takes the screen colour off
+  to it and clears the backdrop connected to the border. If the character or object has green, the screen is magenta
+  (`characters.styles` already chooses it); key in that colour. `despill` (default true) takes the screen colour off
   the edges. Check `result.report`: `semiTransparentShare` is the residual haze (alpha 6-199); `haze: true` (20 % or
   more) means the screen did not key: try another `mode` or generate the image again. Do not re-key with scipy.
 - **A frame of a clip:** `media.frame {workspace, source, at: seconds | "first" | "last", output_name}` saves it as
@@ -360,10 +371,14 @@ it can be found, reused and redone.
   `set-crane-loop.previous.mp4`. Name it in `layers` (`{"file": "set-crane-loop.mp4", "depth": 0.2}`) instead of
   copying the export. A file changed under the same name is not seen as a change: render the shots that show it
   again (`series.shot.update` with `render`, or `series.episode.render_native` with their `shot_ids`).
+- **A new name per variant:** every `generation.image`, `generation.speech` and `generation.video` variant gets its
+  own `output_name`. A name in use keeps the old file and saves the new one as `name(2)` (warning
+  `output_name_taken`): use the path the result returns.
 
 ## Sound design
 
-`soundDesign` on the series (`series.update`) is the sound every shot gets without the script naming it:
+`soundDesign` on the series (`series.update`, replaced as one object: see Known pitfalls) is the sound every shot gets
+without the script naming it:
 `stinger` (`{file, volume}`) under the first shot of each scene, `ambienceByLocation`
 (`{"<locationId>": {"file": "sfx-rain.wav", "volume": 0.22}}`, volume 0–2 relative to the dialogue, default 0.22) and
 `roomByLocation` (below).
@@ -425,6 +440,7 @@ ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let
 ## Writing for quality
 
 - One idea per line; short lines land better and lip-sync better. Write numbers and acronyms as they are spoken.
+- Judge lip-sync on 12 frames of one long line, with the mouth enlarged. The contact sheet hides a mouth that barely opens.
 - Every scene starts on a `wide` that shows who is there, then `two`/`medium`/`close` for the exchange, and a
   `close` + `push` on the punchline.
 - Use the bible's rules (running gags, how each character speaks, how episodes end). The voice traits in the bible
@@ -436,7 +452,12 @@ ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let
 ## Known pitfalls
 
 - Episodes freeze the approved canon: add characters and locations, then `series.canon.approve`, then create the episode.
-- `series.update` replaces the whole project at a revision: read, change, send back with `base_revision`.
+- `series.update` keeps every top-level field you omit and replaces every top-level field you send, as a whole.
+  A `soundDesign` with only `ambienceByLocation` drops `stinger`, `roomByLocation`, `ambienceMode` and `ambienceDuckDb`.
+  A `characters` list with one character drops the others, and that character is saved from what you sent (missing
+  traits become defaults, not the stored ones). The same is true of `canon`, `locations` and `assets`. Send `[]` or
+  `{}` to clear a field. Each episode's review stays the stored one. Read with `series.get` (it returns the whole
+  project, assets included), edit a copy, send it with `base_revision`, and keep a JSON copy before a large change.
 - A language version keeps its own takes, lengths and music; approve its takes with `series.take.approve` + `language`.
 - Effects and sounds placed by hand in a take's scene are lost when the shot renders again: declare them in the
   script (`sfx`, `fx`) instead.

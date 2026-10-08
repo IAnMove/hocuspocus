@@ -67,6 +67,10 @@ QUEUE_PRIORITY = {
     'description': 'Optional GPU queue priority; higher runs first, omitted is 0. Within one priority the shortest '
                    'declared output runs first, and a job that has waited 5 minutes is overtaken only by a higher priority.',
 }
+OUTPUT_NAME = {
+    'type': 'string',
+    'description': 'Optional file name inside the workspace. An existing file is kept; this request is saved as name (2).',
+}
 
 
 def _takes_queue_priority(operation):
@@ -82,7 +86,7 @@ def _command_tool(operation):
     schema = {**schema, 'properties': {key: value for key, value in schema['properties'].items() if key != 'operation'},
               'required': [key for key in schema['required'] if key != 'operation']}
     if _takes_queue_priority(operation):
-        schema['properties'] = {**schema['properties'], 'priority': QUEUE_PRIORITY}
+        schema['properties'] = {**schema['properties'], 'priority': QUEUE_PRIORITY, 'output_name': OUTPUT_NAME}
     guidance = 'Versioned command. Follow inputSchema for workspace and exact resource IDs.'
     # A catalog that forgets the flag must not take tools/list down for every
     # client; treat it as a mutation, the conservative reading.

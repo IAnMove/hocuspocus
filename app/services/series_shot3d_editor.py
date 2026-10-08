@@ -26,6 +26,7 @@ from urllib.parse import unquote, urlparse
 from services import series_shot3d
 from services.series_shot_extras import fx_cues
 from services.series_shot_plan import sound_tracks
+from services.series_stop_motion import read_fields
 
 # What the render binds over the scene for each listed object (``series_shot3d._object_binding``).
 OBJECT_FIELDS = ("position", "rotationY", "scale", "motion", "grounded", "clips", "hold", "appearance", "clipPlayback")
@@ -61,7 +62,10 @@ def editor_scene(call: Callable[[str, dict], dict], workspace: str, root: str | 
     sound = series_shot3d.scene_sound(workspace, sound_tracks(series, shot, _first_of_scene(episode, shot)))
     # Effects on a line start at its second without the recording: the line timing is the render's.
     effects = series_shot3d.shot_effects(fx_cues(layout, [], duration))
-    digest = hashlib.sha1(json.dumps([config, duration, sound, effects], sort_keys=True, default=str).encode()).hexdigest()[:10]
+    # The scene's patch carries the shot's stop-motion: a changed one is another scene (the digest stays as it was without).
+    held = read_fields(shot)
+    asked = [config, duration, sound, effects, *([held] if held else [])]
+    digest = hashlib.sha1(json.dumps(asked, sort_keys=True, default=str).encode()).hexdigest()[:10]
     stem = f"editor-{episode.get('id')}-{shot['id']}-{digest}"[:140]
     scene = series_shot3d.open_shot_scene(call, workspace, stem, shot, duration, _tool_error, root=root, sound=sound, effects=effects)
     return {"sceneId": scene.get("sceneId"), "revision": scene.get("revision"), "document": scene.get("document"),
