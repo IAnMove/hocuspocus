@@ -48,7 +48,7 @@ from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
-from services.series_video_shots import budget_warning, normalize_video, parse_budget, reference_problems
+from services.series_video_shots import budget_warning, parse_budget, reference_problems, store_video
 from services.series_voice_rooms import PRESETS
 
 CODES = {key: code for code, key in LANGUAGE_KEYS.items()}
@@ -380,13 +380,12 @@ class EpisodeScript:
         return body
 
     def _attach_video(self, shot: dict[str, Any], body: dict[str, Any]) -> None:
-        """Store the normalized request. ``keepAudio`` false drops the model's own track at the cut."""
+        """Store the normalized request (``store_video``, as the episode editor does). ``keepAudio`` false drops
+        the model's own track at the cut unless the shot names ``clipAudio``."""
         if shot.get("kind") != "video" or not isinstance(shot.get("video"), dict):
             return
-        request = normalize_video(shot["video"])
-        body["video"] = request
-        if not request["keepAudio"]:
-            body["layout2d"]["clipAudio"] = "drop"
+        body["video"] = shot["video"]
+        store_video(body)
 
     def shots(self) -> list[dict[str, Any]]:
         return [self._shot(index, shot) for index, shot in enumerate(self.script.get("shots") or [])]

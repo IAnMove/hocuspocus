@@ -1,13 +1,17 @@
 """Scripted H3 shots: the video object, the produce step, and a simulated generation."""
+import json
 import os
 import shutil
 import subprocess
+import time
+from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from services.series_library import (
-    EPISODE_EDITOR_FIELDS, SHOT_CONTENT_FIELDS, SHOT_EDITOR_FIELDS, _merge_episode_shot_patch,
+    EPISODE_EDITOR_FIELDS, SHOT_CONTENT_FIELDS, SHOT_EDITOR_FIELDS, _merge_episode_shot_patch, normalize_series_project,
+    update_series_episode,
 )
 from services.series_produce import ProduceDeps, SeriesProduce
 from services.series_review import content_digest
@@ -159,7 +163,7 @@ def test_produce_puts_one_video_step_before_the_renders_and_loops_on_end_same(tm
     done = finished(service, job["jobId"])
     assert done["status"] == "completed", done
     sent = _video_calls(tools, "generation.video")
-    assert len(sent) == 1 and sent[0]["intent_id"] == "series-ep1-s00-video-1"
+    assert len(sent) == 1 and sent[0]["intent_id"].startswith("series-ep1-s00-video-") and sent[0]["intent_id"].endswith("-1")
     params = sent[0]["input"]["params"]
     assert params["image_end"] == params["image_start"] and params["resolution"] == "864x480"
     assert params["video_length"] == 124 and "operation" not in sent[0]
@@ -248,3 +252,209 @@ def test_import_generated_take_approves_without_an_mcp_import(tmp_path):
     assert shot["approvedAttemptId"] == attempt
     stored = series["assets"][next(iter(series["assets"]))]
     assert stored["metadata"]["videoRequest"] == "abc" and os.path.isfile(os.path.join(str(tmp_path), stored["uri"]))
+
+
+class _Server(_Tools):
+    """The tools with the server's intent rules (``task_command_admission``, ``production_media_common.run_once``).
+
+    The same intent with the same input replays the first answer, so a failed job stays failed; the same intent
+    with other input is a 409 ``intent_conflict``. ``outcomes`` is the status of each new clip in order
+    (``running`` lasts until ``jobs.cancel``); after them every clip completes. Composed plates are real files."""
+
+    def __init__(self, root, clip, outcomes=()):
+        super().__init__("", clip)
+        self.root, self.outcomes, self.intents, self.clips = Path(root), list(outcomes), {}, {}
+
+    def __call__(self, tool, arguments):
+        intent = arguments.get("intent_id")
+        if intent is None:
+            return self._answer(tool, arguments)
+        sent = json.dumps(arguments["input"], sort_keys=True)
+        if (tool, intent) in self.intents:
+            self.calls.append((tool, arguments))
+            first, reply = self.intents[(tool, intent)]
+            if first != sent:
+                return {"_is_error": True, "error": {"code": "intent_conflict", "status": 409,
+                                                     "message": "intent_id was already used with different parameters"}}
+            return reply
+        reply = self._answer(tool, arguments)
+        self.intents[(tool, intent)] = (sent, reply)
+        return reply
+
+    def _answer(self, tool, arguments):
+        data = arguments["input"]
+        if tool == "media.compose":
+            self.calls.append((tool, arguments))
+            name = f"{data['output_name']} ({len(self.intents)}).png"
+            Image.new("RGB", tuple(data["size"]), (196, 180, 154)).save(self.root / name)
+            return {"result": {"file": name}}
+        if tool == "generation.video":
+            self.calls.append((tool, arguments))
+            job_id = f"vid-{len(self.clips) + 1}"
+            self.clips[job_id] = self.outcomes.pop(0) if self.outcomes else "completed"
+            return {"result": {"job_id": job_id}}
+        if tool == "jobs.wait":
+            self.calls.append((tool, arguments))
+            status = self.clips[data["job_id"]]
+            if status == "running":
+                time.sleep(0.01)
+                return {"result": {"status": "running", "timed_out": True}}
+            if status != "completed":
+                return {"result": {"status": status, "error": f"{data['job_id']} {status}"}}
+            return {"result": {"status": "completed", "output_files": [self.take]}}
+        if tool == "jobs.cancel":
+            self.calls.append((tool, arguments))
+            if self.clips.get(data["job_id"]) != "running":
+                return {"_is_error": True, "error": {"code": "already_finished", "status": 409}}
+            self.clips[data["job_id"]] = "cancelled"
+            return {"result": {"job_id": data["job_id"], "status": "cancelled"}}
+        return super().__call__(tool, arguments)
+
+    def waited(self, job_id):
+        return [arguments for tool, arguments in self.calls if tool == "jobs.wait" and arguments["input"]["job_id"] == job_id]
+
+
+def _intents(tools):
+    return [arguments["intent_id"] for arguments in _video_calls(tools, "generation.video")]
+
+
+def _conflicts(tools):
+    return [reply for (_tool, _intent), (_sent, reply) in tools.intents.items() if reply.get("_is_error")]
+
+
+def test_a_failed_take_is_retried_under_a_new_intent_and_resume_does_not_replay_it(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip, outcomes=["failed"])
+    library, _episode_body = _episode(_request())
+    service = _produce(tmp_path, tools, library)
+    failed = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert failed["status"] == "failed" and tools.imports == []
+    first = _intents(tools)
+    assert len(first) == 1 and first[0].endswith("-1")
+    assert failed["steps"][0]["failedTakes"]["s00"]["takes"] == [1]
+    done = finished(service, service.resume("cast", failed["jobId"])["jobId"])
+    assert done["status"] == "completed", done
+    second = _intents(tools)[1:]
+    assert len(second) == 1 and second[0].endswith("-2") and second[0][:-2] == first[0][:-2]
+    assert len(tools.waited("vid-1")) == 1, "the failed job is never waited on again"
+    assert tools.imports[0]["metadata"]["intentId"] == second[0]
+    # In one run, a failure uses the next take of maxTakes.
+    again = _Server(tmp_path, clip, outcomes=["failed"])
+    library, _episode_body = _episode(_request(maxTakes=2))
+    service = _produce(tmp_path, again, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert [intent[-2:] for intent in _intents(again)] == ["-1", "-2"] and len(again.imports) == 1
+
+
+def test_a_changed_prompt_is_a_new_take_not_a_conflict(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    episode["shots"][0]["video"]["prompt"] = "A loud room"
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    intents = _intents(tools)
+    assert len(intents) == 2 and intents[0] != intents[1] and _conflicts(tools) == []
+    assert [item["metadata"]["videoRequest"] for item in tools.imports][0] != tools.imports[1]["metadata"]["videoRequest"]
+    # The same request again replays its take instead of paying for a second clip.
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert _intents(tools)[2] == intents[1] and len(tools.clips) == 2
+
+
+def _editor_series(shot):
+    series = normalize_series_project({
+        "id": "uv", "spokenLanguage": "Español de España", "allowedProductionMethods": ["imported_video"],
+        "episodesById": {"ep1": {"id": "ep1", "number": 1, "script": [{"id": "scene_1"}],
+                                 "shots": [{"id": "s00", "sceneId": "scene_1", "productionMethod": "imported_video"}]}},
+    }, "uv", "cast")
+    edited = update_series_episode(series, "ep1", {"shots": [{"id": "s00", **shot}]}, base_series_revision=series["revision"])
+    return normalize_series_project(edited, "uv", "cast")
+
+
+def test_the_editor_path_stores_the_same_checked_video_as_the_script(tmp_path):
+    series = _editor_series({"video": {"prompt": "  Ana waves once  ", "end": "same"}})
+    shot = series["episodesById"]["ep1"]["shots"][0]
+    tools = Series()
+    apply_script(tools, tools.read, KITS, FILES, "cast", _script())
+    assert shot["video"] == _shot(tools)["video"]
+    assert shot["layout2d"]["clipAudio"] == "drop"
+    kept = _editor_series({"video": {"prompt": "Ana waves", "keepAudio": False}, "layout2d": {"clipAudio": "keep"}})
+    assert kept["episodesById"]["ep1"]["shots"][0]["layout2d"]["clipAudio"] == "keep"
+    with pytest.raises(ValueError, match="video.prompt is required"):
+        _editor_series({"video": {"prompt": " "}})
+    with pytest.raises(ValueError, match="maxTakes"):
+        _editor_series({"video": {"prompt": "x", "maxTakes": 9}})
+    other = _editor_series({"productionMethod": "animation_2d", "video": {"prompt": "x"}})
+    assert "video" not in other["episodesById"]["ep1"]["shots"][0]
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    server = _Server(tmp_path, clip)
+    service = _produce(tmp_path, server, {"seriesById": {"uv": series}})
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    params = _video_calls(server, "generation.video")[0]["input"]["params"]
+    assert params["video_length"] == 124 and params["model_type"] == "minimax_h3" and params["prompt"] == "Ana waves once"
+
+
+def test_a_raw_stored_video_fails_the_step_with_its_problem_not_a_key_error(tmp_path):
+    tools = _Server(tmp_path, "clip.png")
+    library, _episode_body = _episode({"id": "s00", "productionMethod": "imported_video", "video": {"prompt": "hi", "frames": 7}})
+    service = _produce(tmp_path, tools, library)
+    failed = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert failed["status"] == "failed" and "H3 length" in failed["steps"][0]["error"]
+    assert "KeyError" not in failed["steps"][0]["error"] and _video_calls(tools, "generation.video") == []
+
+
+def test_a_portrait_series_gets_a_portrait_clip_and_plate(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, _episode_body = _episode(_request())
+    series = library["seriesById"]["uv"]
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    series["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    landscape, portrait = (arguments["input"]["params"] for arguments in _video_calls(tools, "generation.video"))
+    assert landscape["resolution"] == "864x480" and portrait["resolution"] == "480x864"
+    plates = _video_calls(tools, "media.compose")
+    assert [plate["input"]["size"] for plate in plates] == [[864, 480], [480, 864]] and _conflicts(tools) == []
+    with Image.open(tmp_path / tools.intents[("media.compose", plates[1]["intent_id"])][1]["result"]["file"]) as plate:
+        assert plate.size == (480, 864)
+
+
+def test_cancel_stops_the_clip_already_sent_and_resume_asks_for_a_new_one(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip, outcomes=["running"])
+    library, _episode_body = _episode(_request())
+    service = _produce(tmp_path, tools, library)
+    job_id = service.start("cast", "uv", "ep1")["jobId"]
+    for _ in range(300):
+        if service.status("cast", job_id)["steps"][0].get("jobId") == "vid-1":
+            break
+        time.sleep(0.01)
+    assert service.status("cast", job_id)["steps"][0]["jobId"] == "vid-1"
+    service.cancel("cast", job_id)
+    stopped = finished(service, job_id)
+    assert stopped["status"] == "cancelled" and tools.clips["vid-1"] == "cancelled"
+    assert {"version": 1, "input": {"job_id": "vid-1"}} in _video_calls(tools, "jobs.cancel")
+    assert stopped["steps"][0]["failedTakes"]["s00"]["takes"] == [1] and "jobId" not in stopped["steps"][0]
+    waits = len(tools.waited("vid-1"))
+    done = finished(service, service.resume("cast", job_id)["jobId"])
+    assert done["status"] == "completed", done
+    assert _intents(tools)[1].endswith("-2") and len(tools.waited("vid-1")) == waits and len(tools.imports) == 1
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg/ffprobe required")
+def test_drift_is_measured_on_later_frames_not_the_first(tmp_path):
+    clip = tmp_path / "take.mp4"
+    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "color=c=0xC4B49A:s=96x54:r=24:d=0.5", "-f", "lavfi", "-i", "color=c=blue:s=96x54:r=24:d=5",
+                    "-filter_complex", "[0][1]concat=n=2:v=1:a=0", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip)], check=True)
+    tools = _Server(tmp_path, str(clip))
+    library, _episode_body = _episode(_request())
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    warning = done["steps"][0]["warnings"][0]
+    assert warning["code"] == "style_drift" and warning["distance"] > STYLE_DRIFT_THRESHOLD

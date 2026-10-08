@@ -455,6 +455,9 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         "negativePrompt": _text(shot.get("negativePrompt")),
         "attempts": attempts,
     })
+    # A scripted H3 request is checked the same way from the script and from the editor.
+    from .series_video_shots import store_video
+    store_video(shot)
     from .series_shot_plan import normalize_layout2d
     layout = normalize_layout2d(shot.get("layout2d"))
     if layout:

@@ -2204,7 +2204,8 @@
       "paths": [
         "tests/test_series_script_produce.py",
         "tests/test_series_look_room.py",
-        "tests/test_mcp_error_messages.py"
+        "tests/test_mcp_error_messages.py",
+        "tests/test_series_video_shots.py"
       ]
     },
     {
@@ -2266,7 +2267,10 @@
     {
       "prefix": "app/services/series_produce.py",
       "paths": [
-        "tests/test_series_script_produce.py"
+        "tests/test_series_script_produce.py",
+        "tests/test_series_review_gate.py",
+        "tests/test_series_video_produce.py",
+        "tests/test_series_video_shots.py"
       ]
     },
     {
@@ -2281,7 +2285,8 @@
         "tests/test_series_library.py",
         "tests/test_series_episode_replace.py",
         "tests/test_series_review.py",
-        "tests/test_series_review_gate.py"
+        "tests/test_series_review_gate.py",
+        "tests/test_series_video_shots.py"
       ]
     },
     {
@@ -2359,33 +2364,12 @@
       ]
     },
     {
-      "prefix": "app/services/series_script.py",
-      "paths": [
-        "tests/test_series_script_produce.py",
-        "tests/test_series_look_room.py",
-        "tests/test_series_video_shots.py"
-      ]
-    },
-    {
       "prefix": "app/services/series_video_shots.py",
       "paths": [
-        "tests/test_series_video_shots.py"
-      ]
-    },
-    {
-      "prefix": "app/services/series_produce.py",
-      "paths": [
+        "tests/test_series_video_shots.py",
         "tests/test_series_script_produce.py",
-        "tests/test_series_review_gate.py",
-        "tests/test_series_video_produce.py",
-        "tests/test_series_video_shots.py"
-      ]
-    },
-    {
-      "prefix": "app/services/series_library.py",
-      "paths": [
         "tests/test_series_library.py",
-        "tests/test_series_video_shots.py"
+        "tests/test_series_shot_edit.py"
       ]
     },
     {

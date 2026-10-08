@@ -161,6 +161,10 @@ class SeriesProduce:
             step = next((item for item in job["steps"] if item["status"] == "running" and item.get("jobId")), None)
             if step and step["kind"] == "render":
                 self.deps.call("series.episode.render_native.cancel", self._args(job, job_id=step["jobId"]))
+            elif step and step["kind"] == "video":
+                # The clip already sent would keep the GPU until it ends.
+                from services.series_video_shots import cancel_generation
+                cancel_generation(self.deps, step["jobId"])
             job.update(status="cancelling", message="Stopping after the current step")
             self._store(workspace).save(job)
         return job
@@ -245,7 +249,8 @@ class SeriesProduce:
         step["status"] = "running"
         self._save(job, message=f"Video {step['language']}")
         try:
-            held = produce_videos(job, step, self.deps, cancelled=lambda: self._cancelled(job["jobId"]))
+            held = produce_videos(job, step, self.deps, cancelled=lambda: self._cancelled(job["jobId"]),
+                                  save=lambda: self._save(job))
         except Exception as error:
             step.update(status="failed", error=f"{type(error).__name__}: {error}"[:500])
             self._save(job, status="cancelled" if self._cancelled(job["jobId"]) else "failed", finishedAt=time.time(),

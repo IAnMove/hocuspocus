@@ -8,9 +8,16 @@ own track (``layout2d.clipAudio: "drop"``).
 
 ``plan`` and ``preview`` reviews do not spend a generation until that shot's plan is
 approved. ``episode.videoBudget.maxShots`` is a warning on ``from_script`` and a cap
-here. After each take the start frame and the take are compared (color histogram, edge
-density, dHash). Crossing ``STYLE_DRIFT_THRESHOLD`` records ``style_drift`` and does
-not fail the shot.
+here. After each take its middle and last frames are compared with the start frame
+(color histogram, edge density, dHash); the first frame is the start frame itself.
+Crossing ``STYLE_DRIFT_THRESHOLD`` records ``style_drift`` and does not fail the shot.
+
+Every take's ``intent_id`` carries a digest of what it asks for (prompt, length, model,
+size, start and end frames) and its take number. A resumed run replays a take that is
+still running instead of paying for it twice. A take that failed or was cancelled is
+remembered in the step (``failedTakes``) and never asked for again under that intent:
+the next attempt takes the next number, up to ``maxTakes`` per run. The clip is the
+model's 480p preset in the series frame (``480x864`` for a portrait series).
 """
 from __future__ import annotations
 
@@ -26,8 +33,10 @@ from urllib.parse import quote, urlencode
 from PIL import Image
 
 from services.pose_facing import pose_asset, workspace_path
+from services.series_render import H3_RESOLUTIONS
 from services.series_review import episode_mode, shot_entry
 from services.series_script_warnings import listed_shots
+from services.series_shot_plan import frame_size
 
 # H3 publishes 24 fps and lengths 124, then +17, through 345 (minimax_h3_handler).
 FRAME_RATE = 24
@@ -36,8 +45,8 @@ FRAMES_STEP = 17
 FRAMES_MAX = 345
 DEFAULT_FRAMES = FRAMES_MIN
 DEFAULT_MODEL = "minimax_h3"
-# The model's own 480p 16:9 preset. 1080p H3 is a separate, experimental tier.
-DEFAULT_RESOLUTION = "864x480"
+# The model's own 480p presets (864x480, 480x864). 1080p H3 is a separate, experimental tier.
+VIDEO_QUALITY = "480p"
 # An unchanged plate scores 0. A flat plate recolored to the opposite hue scores about 0.67.
 STYLE_DRIFT_THRESHOLD = 0.45
 _TERMINAL = frozenset({"completed", "failed", "cancelled", "discarded", "error"})
@@ -110,6 +119,38 @@ def normalize_video(raw: Any) -> dict[str, Any]:
             "model": model, "maxTakes": takes, "keepAudio": keep}
 
 
+def store_video(shot: dict[str, Any]) -> None:
+    """Normalize a stored shot's ``video`` in place. The script and the episode editor both store it here.
+
+    Only an ``imported_video`` shot keeps one. ``keepAudio`` false drops the model's own track
+    (``layout2d.clipAudio: "drop"``) unless the shot already says what to do with it.
+    Raises ``ValueError`` on a bad shape.
+    """
+    if shot.get("video") is None or shot.get("productionMethod") != "imported_video":
+        shot.pop("video", None)
+        return
+    request = normalize_video(shot["video"])
+    shot["video"] = request
+    if not request["keepAudio"]:
+        layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+        layout.setdefault("clipAudio", "drop")
+        shot["layout2d"] = layout
+
+
+def video_resolution(series: dict[str, Any]) -> str:
+    """The model's 480p preset in the series frame: ``480x864`` for a portrait series."""
+    width, height = frame_size(series)
+    return H3_RESOLUTIONS[("portrait" if height > width else "landscape", VIDEO_QUALITY)]
+
+
+def cancel_generation(deps: Any, job_id: str) -> None:
+    """Stop a submitted clip so it does not keep the GPU. A finished job answers 409 and is left as it is."""
+    try:
+        deps.call("jobs.cancel", {"version": 1, "input": {"job_id": job_id}})
+    except Exception:  # best effort: the production stops either way
+        return
+
+
 def reference_problems(shot: dict[str, Any], checker: Any, where: str) -> None:
     """The start and end frames name a pose, a workspace file or an image asset of the series."""
     if shot.get("kind") != "video" or not isinstance(shot.get("video"), dict):
@@ -138,13 +179,17 @@ def style_distance(left: Image.Image, right: Image.Image) -> float:
     return round(max(histogram, (histogram + edges + hashed) / 3), 4)
 
 
-def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, cancelled: Callable[[], bool]) -> bool:
-    """Generate the episode's scripted video shots. True when the job is now waiting on a plan."""
+def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, cancelled: Callable[[], bool],
+                   save: Callable[[], None] | None = None) -> bool:
+    """Generate the episode's scripted video shots. True when the job is now waiting on a plan.
+
+    ``save`` stores the job; it runs when a take is submitted, so a cancel can stop that take."""
     series, episode = _episode_of(deps, job)
     allowed, overflow = _cap(episode, _scripted(episode))
     warnings = [_overflow_warning(episode, overflow)] if overflow else []
     waiting: list[dict[str, str]] = []
     done = set(step.get("doneShots") or [])
+    run = _Run(job, step, deps, cancelled, save or (lambda: None))
     for shot in allowed:
         if _already_made(series, shot, done):
             done.add(shot.get("id"))
@@ -152,7 +197,7 @@ def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, canc
         if _plan_blocks(episode, shot):
             waiting.append({"shotId": shot.get("id"), "reason": "plan"})
             continue
-        _spend_one(job, step, deps, series, episode, shot, done, warnings, cancelled)
+        _spend_one(run, series, episode, shot, done, warnings)
     step["warnings"] = warnings
     step["doneShots"] = sorted(item for item in done if item)
     if waiting:
@@ -175,15 +220,21 @@ def _already_made(series: dict[str, Any], shot: dict[str, Any], done: set) -> bo
     return shot.get("id") in done or _take_matches(series, shot)
 
 
-def _spend_one(job: dict, step: dict, deps: Any, series: dict, episode: dict, shot: dict, done: set,
-               warnings: list, cancelled: Callable[[], bool]) -> None:
-    if cancelled():
+class _Run:
+    """One produce run of the video step: the job, its step, the tools and the cancel and save hooks."""
+
+    def __init__(self, job: dict, step: dict, deps: Any, cancelled: Callable[[], bool], save: Callable[[], None]) -> None:
+        self.job, self.step, self.deps, self.cancelled, self.save = job, step, deps, cancelled, save
+
+
+def _spend_one(run: _Run, series: dict, episode: dict, shot: dict, done: set, warnings: list) -> None:
+    if run.cancelled():
         raise VideoShotError("cancelled")
-    made = _generate(job, shot, series, deps, cancelled)
-    _remember(deps, job, shot, made, episode_mode(episode) != "preview")
+    made = _generate(run, shot, series)
+    _remember(run.deps, run.job, shot, made, episode_mode(episode) != "preview")
     _note_drift(warnings, shot, made)
     done.add(shot.get("id"))
-    step["doneShots"] = sorted(done)
+    run.step["doneShots"] = sorted(done)
 
 
 def _note_drift(warnings: list, shot: dict[str, Any], made: dict[str, Any]) -> None:
@@ -294,8 +345,57 @@ def _request_digest(request: dict[str, Any]) -> str:
     return hashlib.sha1(json.dumps(request, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def _stored_request(shot: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return normalize_video(shot.get("video"))
+    except ValueError as error:
+        raise VideoShotError(f"{shot.get('id')}: {error}") from error
+
+
+def _intent(job: dict[str, Any], shot: dict[str, Any], *parts: Any) -> str:
+    """``series-<episode>-<shot>-...``. The ids are cut first, so the digest and the take number always fit."""
+    tail = "-".join(str(part) for part in parts)
+    return f"series-{job['episodeId']}-{shot['id']}"[:150 - len(tail)] + f"-{tail}"
+
+
+def _file_digest(path: str) -> str:
+    digest = hashlib.sha1()
+    try:
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+    except OSError:
+        return ""
+    return digest.hexdigest()
+
+
+def _take_digest(params: dict[str, Any], start_path: str) -> str:
+    """What one take asks for: its parameters and the start frame's pixels (a file can be replaced in place)."""
+    body = {"params": params, "start": _file_digest(start_path)}
+    return hashlib.sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def _failed_takes(step: dict[str, Any], shot_id: str, digest: str) -> list[int]:
+    """Take numbers of this request that failed or were cancelled. The list is the step's, so it is saved with it."""
+    failed = step.setdefault("failedTakes", {})
+    record = failed.get(shot_id)
+    if not isinstance(record, dict) or record.get("digest") != digest or not isinstance(record.get("takes"), list):
+        record = failed[shot_id] = {"digest": digest, "takes": []}
+    return record["takes"]
+
+
+def _next_take(number: int, failed: list[int]) -> int:
+    number += 1
+    while number in failed:
+        number += 1
+    return number
+
+
 def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
-    digest = _request_digest(shot["video"])
+    try:
+        digest = _request_digest(normalize_video(shot["video"]))
+    except ValueError:
+        return False
     assets = series.get("assets") or {}
     for attempt in reversed(shot.get("attempts") or []):
         if attempt.get("status") != "completed":
@@ -308,30 +408,57 @@ def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
 
 # One shot ------------------------------------------------------------------------------------------
 
-def _generate(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any, cancelled: Callable[[], bool]) -> dict[str, Any]:
-    request = shot["video"]
-    start_path, start_ref = _start_frame(job, shot, series, deps)
+def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[str, Any]:
+    job, deps = run.job, run.deps
+    request = _stored_request(shot)
+    resolution = video_resolution(series)
+    start_path, start_ref = _start_frame(job, shot, series, deps, resolution)
     end_ref = start_ref if request.get("end") == "same" else _end_reference(job, request.get("end"), series, deps)
+    params = {"prompt": request["prompt"], "model_type": request["model"], "resolution": resolution,
+              "video_length": request["frames"], "image_start": start_ref}
+    if end_ref:
+        params["image_end"] = end_ref
+    digest = _take_digest(params, start_path)
+    failed = _failed_takes(run.step, shot["id"], digest)
     best: dict[str, Any] | None = None
-    for number in range(1, int(request["maxTakes"]) + 1):
-        if cancelled():
-            raise VideoShotError("cancelled")
-        intent = f"series-{job['episodeId']}-{shot['id']}-video-{number}"[:160]
-        params = {"prompt": request["prompt"], "model_type": request["model"], "resolution": DEFAULT_RESOLUTION,
-                  "video_length": request["frames"], "image_start": start_ref}
-        if end_ref:
-            params["image_end"] = end_ref
-        submitted = _call(deps, "generation.video", 3, {"workspace": job["workspace"], "params": params}, intent=intent)
-        finished = _wait(deps, _job_id(submitted), cancelled)
-        take_path = _output_file(finished, deps, job["workspace"])
-        distance = _compare(start_path, take_path)
+    number, problem = 0, None
+    for _ in range(int(request["maxTakes"])):
+        number = _next_take(number, failed)
+        intent = _intent(job, shot, "video", digest, number)
+        try:
+            take_path = _take(run, params, intent)
+        except VideoShotError as error:
+            failed.append(number)
+            if run.cancelled():
+                raise
+            problem = error
+            continue
+        distance = _drift(start_path, take_path, request["frames"])
         if best is None or _closer(distance, best.get("distance")):
             best = {"distance": distance, "file": take_path, "intent": intent, "number": number, "request": request}
         if distance is not None and distance <= STYLE_DRIFT_THRESHOLD:
             break
     if best is None:
-        raise VideoShotError(f"{shot.get('id')}: no take")
+        raise VideoShotError(f"{shot.get('id')}: no take ({problem})")
     return best
+
+
+def _take(run: _Run, params: dict[str, Any], intent: str) -> str:
+    """Submit one take (or replay it under its intent) and wait for its file. The step names the running job."""
+    workspace = run.job["workspace"]
+    submitted = _call(run.deps, "generation.video", 3, {"workspace": workspace, "params": params}, intent=intent)
+    job_id = _job_id(submitted)
+    run.step["jobId"] = job_id
+    run.save()
+    try:
+        finished = _wait(run.deps, job_id, run.cancelled)
+    finally:
+        run.step.pop("jobId", None)
+    path = _output_file(finished, run.deps, workspace)
+    if not os.path.isfile(path):
+        # A replayed take whose file was cleaned up: the next take asks again.
+        raise VideoShotError(f"{job_id}: {os.path.basename(path)} is missing")
+    return path
 
 
 def _closer(distance: float | None, best: float | None) -> bool:
@@ -341,7 +468,7 @@ def _closer(distance: float | None, best: float | None) -> bool:
 
 
 def _remember(deps: Any, job: dict[str, Any], shot: dict[str, Any], made: dict[str, Any], approve: bool) -> None:
-    metadata = {"productionMethod": "imported_video", "automaticDraft": True, "videoRequest": _request_digest(shot["video"]),
+    metadata = {"productionMethod": "imported_video", "automaticDraft": True, "videoRequest": _request_digest(made["request"]),
                 "intentId": made["intent"], **({} if made.get("distance") is None else {"styleDistance": made["distance"]})}
     if not approve:
         metadata["reviewStage"] = "preview"
@@ -433,6 +560,7 @@ def _job_id(payload: dict[str, Any]) -> str:
 def _wait(deps: Any, job_id: str, cancelled: Callable[[], bool]) -> dict[str, Any]:
     while True:
         if cancelled():
+            cancel_generation(deps, job_id)
             raise VideoShotError("cancelled")
         payload = _call(deps, "jobs.wait", 1, {"job_id": job_id, "timeout_s": 30})
         status = str(payload.get("status") or "")
@@ -460,11 +588,12 @@ def _locate(deps: Any, workspace: str, name: str) -> str:
 
 # Start frame ---------------------------------------------------------------------------------------
 
-def _start_frame(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any) -> tuple[str, str]:
-    request = shot["video"]
-    if request["start"] == "plan":
-        return _compose_plan(job, shot, series, deps)
-    return _named_frame(job, request["start"], series, deps)
+def _start_frame(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any,
+                 resolution: str) -> tuple[str, str]:
+    start = _stored_request(shot)["start"]
+    if start == "plan":
+        return _compose_plan(job, shot, series, deps, resolution)
+    return _named_frame(job, start, series, deps)
 
 
 def _end_reference(job: dict[str, Any], end: str | None, series: dict[str, Any], deps: Any) -> str | None:
@@ -489,17 +618,20 @@ def _named_frame(job: dict[str, Any], name: str, series: dict[str, Any], deps: A
     return os.path.join(root, name), _file_reference(job["workspace"], name)
 
 
-def _compose_plan(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any) -> tuple[str, str]:
+def _compose_plan(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any,
+                  resolution: str) -> tuple[str, str]:
     root = deps.workspace_dir(job["workspace"])
+    size = [int(part) for part in resolution.split("x")]
     layers = _plan_layers(shot, series, _kits(deps, job["workspace"]), root)
     if not layers:
-        layers = [{"file": _flat_plate(root, f"{shot['id']}-plate.png"), "x": 50, "y": 50}]
-    intent = f"series-{job['episodeId']}-{shot['id']}-start"[:160]
-    plate = {"workspace": job["workspace"], "size": [864, 480], "background": "#c4b49a", "layers": layers,
+        layers = [{"file": _flat_plate(root, f"{shot['id']}-plate.png", size), "x": 50, "y": 50}]
+    plate = {"workspace": job["workspace"], "size": size, "background": "#c4b49a", "layers": layers,
              "output_name": f"{shot['id']}-video-start"}
     base = _location_file(series, shot)
     if base:
         plate["base"] = base
+    # The same plate replays the composed file; a changed plate is a new intent, not a 409.
+    intent = _intent(job, shot, "start", hashlib.sha1(json.dumps(plate, sort_keys=True).encode()).hexdigest()[:12])
     composed = _call(deps, "media.compose", 1, plate, intent=intent)
     name = str(composed.get("file") or "")
     if not name:
@@ -545,11 +677,11 @@ def _location_file(series: dict[str, Any], shot: dict[str, Any]) -> str | None:
     return str(uri) if isinstance(uri, str) and uri else None
 
 
-def _flat_plate(root: str, name: str) -> str:
+def _flat_plate(root: str, name: str, size: list[int]) -> str:
     folder = os.path.join(root, "series-video")
     os.makedirs(folder, exist_ok=True)
     relative = f"series-video/{name}"
-    Image.new("RGB", (864, 480), (196, 180, 154)).save(os.path.join(root, "series-video", name))
+    Image.new("RGB", (size[0], size[1]), (196, 180, 154)).save(os.path.join(root, "series-video", name))
     return relative
 
 
@@ -569,32 +701,37 @@ def _asset_id(value: str) -> bool:
     return value.startswith("asset_") and " " not in value
 
 
-def _compare(start_path: str, take_path: str) -> float | None:
+def _drift(start_path: str, take_path: str, frames: int) -> float | None:
+    """The larger distance of the take's middle and last frames from the start frame.
+
+    The first frame of the take is the start frame by construction, so it is not compared."""
     try:
-        left, right = _open_frame(start_path), _open_frame(take_path)
+        plate = _open_frame(start_path)
+        later = [_open_frame(take_path, at) for at in (frames / FRAME_RATE / 2, None)]
     except OSError:
         return None
-    if left is None or right is None:
-        return None
-    return style_distance(left, right)
+    distances = [style_distance(plate, frame) for frame in later if frame is not None] if plate is not None else []
+    return max(distances) if distances else None
 
 
-def _open_frame(path: str) -> Image.Image | None:
+def _open_frame(path: str, at: float | None = 0.0) -> Image.Image | None:
+    """A still, or the frame of a video at ``at`` seconds (``None``: the last frame)."""
     if not path or not os.path.isfile(path):
         return None
     if path.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
         with Image.open(path) as image:
             return image.convert("RGB")
-    return _video_frame(path)
+    return _video_frame(path, at)
 
 
-def _video_frame(path: str) -> Image.Image | None:
+def _video_frame(path: str, at: float | None) -> Image.Image | None:
     import subprocess
     import tempfile
     folder = tempfile.mkdtemp(prefix="video-shot-")
     target = os.path.join(folder, "frame.png")
+    seek = ["-sseof", "-0.25"] if at is None else ["-ss", f"{max(0.0, at):.3f}"]
     try:
-        subprocess.run(["ffmpeg", "-y", "-i", path, "-frames:v", "1", target], check=False,
+        subprocess.run(["ffmpeg", "-y", *seek, "-i", path, "-frames:v", "1", target], check=False,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
         if not os.path.isfile(target):
             return None
