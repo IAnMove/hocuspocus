@@ -9,7 +9,9 @@ and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the epi
 part of a shot, so changing them renders nothing again. A shot's ``foley`` is, so a new prompt or volume renders
 that shot again; a shot without one keeps the digest it had before foley existed. A location's ``layout2d.layers``
 (``series_layers``) are seen only by its 2D shots that do not bring their own, so changing them renders just those;
-a location without layers keeps the digests it had.
+a location without layers keeps the digests it had. Hearing (``series_hearing``) is laid at assembly; a take
+depends only on a ``deaf`` one, which drops its lines and sounds, and on the room a ``muffled`` one skips, so a
+``ringing`` shot or default renders nothing again.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
 """
 from __future__ import annotations
@@ -20,6 +22,7 @@ from typing import Any
 
 from services import series_shot3d
 from services.series_ambience import shot_sound_design
+from services.series_hearing import hearing_of
 from services.series_layers import digest_location
 from services.series_shot_extras import pauses, timing_args
 from services.series_scene_inputs import scene_source_digest
@@ -52,7 +55,7 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     kit_ids = {cid: (kit_ref(series, cid) or {}).get("id") for cid in people}
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
     payload = {
-        "shot": {key: shot.get(key) for key in _SHOT_INPUTS}, "beats": beats,
+        "shot": _shot_inputs(shot), "beats": beats,
         "duration": _duration_input(shot, beats, version), "language": series.get("spokenLanguage"),
         "location": digest_location(location, shot),
         "sound": shot_sound_design(series.get("soundDesign")),
@@ -65,12 +68,23 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
+def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
+    """The shot's fields its render reads, without ``layout2d.hearing`` (assembly-only but for ``deaf``)."""
+    inputs = {key: shot.get(key) for key in _SHOT_INPUTS}
+    layout = inputs.get("layout2d")
+    if isinstance(layout, dict) and "hearing" in layout:
+        inputs["layout2d"] = {key: value for key, value in layout.items() if key != "hearing"}
+    return inputs
+
+
 def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
     """Omit absent additions so existing dry, unpaused 2D takes keep their fingerprints."""
     payload = {}
     rooms = line_rooms(series, shot)
     if rooms:
         payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
+    if hearing_of(series, shot) == "deaf":
+        payload["hearing"] = "deaf"
     timing = pauses(shot.get("dialogueBeats") or [])
     if any(timing):
         payload["pauses"] = timing

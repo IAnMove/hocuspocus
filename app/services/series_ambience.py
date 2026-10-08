@@ -88,15 +88,16 @@ def ambience_duck_db(design: Any) -> float:
 def shot_sound_design(design: Any) -> Any:
     """The sound design a shot's render depends on. In episode mode the beds are laid at assembly, so the take does
     not depend on them; shot mode is the design as stored, so takes from before the mode keep their digest. The
-    beds' ducking is assembly-only in both modes. The rooms are left out too: a shot depends on its own room only
-    (``series_voice_rooms.shot_room``, kept apart)."""
+    beds' ducking is assembly-only in both modes. The rooms and the hearing default are left out too: a shot depends
+    on its own room and hearing only (``series_voice_rooms.shot_room``, ``series_take_inputs``, kept apart)."""
     if not isinstance(design, dict):
         return design
     left_out = {"roomByLocation", "ambienceMode", "ambienceDuckDb"} & design.keys()
     if ambience_mode(design) == "episode":
         left_out.add("ambienceByLocation")
-    # A default of normal is the absence of a default: takes from before the field keep their digest.
-    if design.get("hearingDefault") == "normal":
+    # Hearing is laid at assembly. What a take does depend on (deaf drops its sound, muffled its room) is read per
+    # shot (``series_take_inputs``), so a ringing default renders nothing again.
+    if "hearingDefault" in design:
         left_out.add("hearingDefault")
     return {key: value for key, value in design.items() if key not in left_out} if left_out else design
 

@@ -14,6 +14,9 @@ episode made the join fail. At assembly now:
 * a video shot's ``foley`` (made by ``series.episode.render_native`` from the
   take's picture, ``series_video_foley``) is laid under it at its volume; when
   it has not been made yet the cut goes without it and says so;
+* a ``deaf`` shot (``series_hearing``) drops the take's own sound, its music and
+  every effect without ``keepInDeaf``, as a rendered shot does (its foley stays,
+  as there); the assembly lays the rumble;
 * every clip whose frame size, frame rate or pixel aspect differ from the
   episode's (1920x1080 or 1080x1920 at 24 fps) is conformed: ``cover``
   (scale and centre-crop) when its shape is within 6 % of the frame's, else
@@ -32,6 +35,7 @@ from typing import Any, Callable
 
 from services.audio_levels import gain_to
 from services.audio_mix import AUDIO_FILTER_TAIL, track_source
+from services.series_hearing import hearing_of
 from services.series_shot_extras import CLIP_AUDIO, CLIP_FIT, cue_time, normalize_clip_fields
 from services.series_shot_plan import FPS, frame_size
 from services.series_sound_cuts import materialize_cuts, track_cut
@@ -45,12 +49,21 @@ def episode_frame(series: dict[str, Any]) -> dict[str, int]:
     return {"width": width, "height": height, "fps": FPS}
 
 
-def _sound_plan(shot: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
+def _deaf(sound: dict[str, Any]) -> dict[str, Any]:
+    """What a deaf shot keeps of its sound (``series_hearing.shape``): effects with ``keepInDeaf``, and its foley."""
+    kept = [cue for cue in sound.get("sfx") or [] if isinstance(cue, dict) and cue.get("keepInDeaf") is True]
+    return {"clipAudio": "drop", **({"sfx": kept} if kept else {}),
+            **({"foley": sound["foley"]} if "foley" in sound else {})}
+
+
+def _sound_plan(shot: dict[str, Any], episode_id: str, deaf: bool = False) -> dict[str, Any] | None:
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     sound = {key: layout[key] for key in ("sfx", "music", "clipAudio", "clipVolume") if layout.get(key) not in (None, [], {})}
     foley = shot_foley(shot)
     if foley:
         sound["foley"] = {**foley, "episodeId": episode_id, "shotId": shot.get("id")}
+    if deaf:
+        sound = _deaf(sound)
     if sound.get("clipAudio") == "keep":
         sound.pop("clipAudio")
     if sound.get("clipVolume") == 1.0:
@@ -65,7 +78,7 @@ def plan_take_sound(series: dict[str, Any], episode: dict[str, Any], clips: list
         shot = shots.get(str(clip.get("shotId"))) or {}
         if shot.get("productionMethod") not in VIDEO_METHODS:
             continue
-        sound = _sound_plan(shot, str(episode.get("id") or ""))
+        sound = _sound_plan(shot, str(episode.get("id") or ""), deaf=hearing_of(series, shot) == "deaf")
         if sound:
             clip["takeSound"] = sound
         fit = (shot.get("layout2d") or {}).get("clipFit") if isinstance(shot.get("layout2d"), dict) else None

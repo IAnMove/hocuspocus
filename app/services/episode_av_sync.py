@@ -7,7 +7,9 @@ timeline: the lag against where the join placed its pictures. Ambience and score
 but do not move its peak. A take whose sound cannot be told apart (silence, a still with a drone) is reported as
 unsure, not as late.
 
-It is how a drifting join is caught (#903: ~10 ms a join, 2.7 s over 268 shots), whatever the cause.
+It is how a drifting join is caught (#903: ~10 ms a join, 2.7 s over 268 shots), whatever the cause. A take that
+cannot be placed says nothing about the ones after it, so the sound's length is also held against the pictures': a
+pass that adds or drops sound moves every later take, placed or not.
 """
 from __future__ import annotations
 
@@ -16,6 +18,8 @@ from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
+
+from services.mix_concat import ffprobe_for
 
 RATE = 8000
 # Envelope step, seconds: 5 ms, well under a 24 fps frame.
@@ -28,6 +32,8 @@ TOLERANCE = 0.045
 MIN_SCORE = 0.45
 # Takes shorter than this hold too little sound to place.
 MIN_SECONDS = 0.4
+# The sound and the pictures may end a video frame and an AAC frame apart; more is sound added or lost on the way.
+LENGTH_TOLERANCE = 0.1
 
 
 def decode(path: str, ffmpeg: str, *, timeout: float = 600) -> np.ndarray | None:
@@ -41,6 +47,17 @@ def decode(path: str, ffmpeg: str, *, timeout: float = 600) -> np.ndarray | None
     if completed.returncode != 0 or not completed.stdout:
         return None
     return np.frombuffer(completed.stdout, dtype=np.float32)
+
+
+def picture_seconds(path: str, ffmpeg: str) -> float | None:
+    """How long the file's pictures run, or None when it cannot be read."""
+    try:
+        completed = subprocess.run(
+            [ffprobe_for(ffmpeg), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration",
+             "-of", "csv=p=0", path], capture_output=True, text=True, timeout=30)
+        return float((completed.stdout or "").strip())
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
 
 
 def envelope(samples: np.ndarray) -> np.ndarray:
@@ -97,6 +114,7 @@ def check_sync(output_path: str, clip_paths: Sequence[str], offsets: Sequence[fl
 
     ``late``: takes whose sound is off by more than ``tolerance``, in episode order, with ``index`` (0-based clip),
     ``lagMs`` (positive: the sound comes after the pictures) and ``score``. ``unsure``: takes that could not be placed.
+    ``lengthGapMs``: how much longer the sound runs than the pictures; past ``LENGTH_TOLERANCE`` it is out of sync too.
     """
     joined = decode(output_path, ffmpeg)
     if joined is None:
@@ -116,8 +134,15 @@ def check_sync(output_path: str, clip_paths: Sequence[str], offsets: Sequence[fl
         placed.append({"index": index, "lagMs": round(found[0] * 1000), "score": round(found[1], 2)})
     late = [item for item in placed if abs(item["lagMs"]) > tolerance * 1000]
     worst = max((abs(item["lagMs"]) for item in placed), default=0)
-    return {"checked": True, "inSync": not late, "placed": len(placed), "unsure": unsure, "toleranceMs": round(tolerance * 1000),
-            "maxLagMs": worst, "late": late, "lags": [[item["index"], item["lagMs"]] for item in placed]}
+    pictures = picture_seconds(output_path, ffmpeg)
+    gap = {} if pictures is None else {"lengthGapMs": round((len(joined) / RATE - pictures) * 1000)}
+    return {"checked": True, "inSync": not late and not _lengths_differ(gap), "placed": len(placed), "unsure": unsure,
+            "toleranceMs": round(tolerance * 1000), "maxLagMs": worst, "late": late,
+            "lags": [[item["index"], item["lagMs"]] for item in placed], **gap}
+
+
+def _lengths_differ(report: dict[str, Any]) -> bool:
+    return abs(report.get("lengthGapMs") or 0) > LENGTH_TOLERANCE * 1000
 
 
 def sync_note(report: dict[str, Any]) -> str:
@@ -126,6 +151,11 @@ def sync_note(report: dict[str, Any]) -> str:
         return f"Sound sync not checked: {report.get('reason', 'unknown')}."
     if report["inSync"]:
         return f"Sound in sync on {report['placed']} clips (worst {report['maxLagMs']} ms)."
-    late = report["late"]
-    return (f"Sound out of sync on {len(late)} of {report['placed']} clips, from clip {late[0]['index'] + 1} "
-            f"(worst {report['maxLagMs']} ms).")
+    late, notes = report["late"], []
+    if late:
+        notes.append(f"Sound out of sync on {len(late)} of {report['placed']} clips, from clip {late[0]['index'] + 1} "
+                     f"(worst {report['maxLagMs']} ms).")
+    if _lengths_differ(report):
+        gap = report["lengthGapMs"]
+        notes.append(f"The sound runs {abs(gap)} ms {'longer' if gap > 0 else 'shorter'} than the pictures.")
+    return " ".join(notes)

@@ -750,10 +750,22 @@ def test_a_normal_default_does_not_change_the_digest_and_a_real_one_does():
     before = render_inputs(series, shot, {})
     assert shot_sound_design({**series["soundDesign"], "hearingDefault": "normal"}) == series["soundDesign"]
     assert render_inputs(series, shot, {}) == before
-    heard = {**shot, "layout2d": {"framing": "wide", "hearing": "muffled"}}
-    assert render_inputs(series, heard, {}) != before
+    # Ringing and muffling are laid at assembly: the take is the same, so it is not rendered again.
+    for kind in ("ringing", "muffled"):
+        assert render_inputs(series, {**shot, "layout2d": {"framing": "wide", "hearing": kind}}, {}) == before
+        default = {**series, "soundDesign": {**series["soundDesign"], "hearingDefault": kind}}
+        assert render_inputs(default, shot, {}) == before
+    # Deaf drops the take's lines and sounds, and muffled its room: those takes change.
     deaf = {**series, "soundDesign": {**series["soundDesign"], "hearingDefault": "deaf"}}
     assert render_inputs(deaf, shot, {}) != before
+    own = {**shot, "layout2d": {"framing": "wide", "hearing": "deaf"}}
+    assert render_inputs(series, own, {}) == render_inputs(deaf, shot, {})
+    spoken = {**shot, "visibleCharacterIds": ["kevin"],
+              "dialogueBeats": [{"id": "b0", "characterId": "kevin", "text": "Hola."}]}
+    roomed = {**series, "soundDesign": {**series["soundDesign"], "roomByLocation": {"garage": "hall"}}}
+    muffled = {**spoken, "layout2d": {"framing": "wide", "hearing": "muffled"}}
+    assert render_inputs(roomed, muffled, {}) != render_inputs(roomed, spoken, {})
+    assert render_inputs(roomed, muffled, {}) == render_inputs(series, spoken, {}), "a muffled line is dry"
     with pytest.raises(ValueError, match="hearingDefault"):
         check_sound_design({"hearingDefault": "loud"})
     episode = {"shots": [shot, {**shot, "id": "e1s01", "layout2d": {"hearing": "deaf"}}]}

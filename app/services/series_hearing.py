@@ -4,7 +4,9 @@
 voice room is skipped (a drier take). ``deaf`` drops dialogue, music and sound effects unless the effect says
 ``keepInDeaf``, and the assembly adds a low rumble plus a 4–6 kHz tone at -30 dB with fades. ``ringing`` keeps
 the mix and adds that tone. The spectral part runs once, at episode assembly, after the ambience and the score,
-which is where those beds are mixed. A shot that omits the field, and a default of ``normal``, keep today's mix.
+which is where those beds are mixed: each clip's piece of the joined sound runs from its start to the next clip's,
+so the soft join's and the transitions' overlaps are filtered once. A shot that omits the field, and a default of
+``normal``, keep today's mix.
 """
 from __future__ import annotations
 
@@ -136,10 +138,12 @@ def _tone(frequency: float, duration: float, gain_db: float, index: int, name: s
             f"aformat=channel_layouts=stereo[{name}{index}]")
 
 
-def _span(kind: str, start: float, end: float, index: int, *, source: str) -> str:
-    """One clip's hearing as an ffmpeg chain whose output is ``[h{index}]``."""
-    length = max(0.05, float(end) - float(start))
-    head = f"{source}atrim={start:.4f}:{end:.4f},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo"
+def _span(kind: str, start: str, end: str | None, length: float, index: int, *, source: str) -> str:
+    """One clip's hearing as an ffmpeg chain whose output is ``[h{index}]``: the sound from ``start`` to ``end``
+    (None: to its end), ``length`` seconds long."""
+    length = max(0.05, float(length))
+    trim = f"atrim=start={start}" + (f":end={end}" if end is not None else "")
+    head = f"{source}{trim},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo"
     if kind == "muffled":
         return f"{head},lowpass=f={_LOWPASS_HZ}:poles=2,lowpass=f={_LOWPASS_HZ}:poles=2,volume={_MUFFLED_DB:g}dB[h{index}]"
     if kind == "normal":
@@ -153,13 +157,24 @@ def _span(kind: str, start: float, end: float, index: int, *, source: str) -> st
 
 
 def filter_graph(spans: Sequence[tuple[float, float]], kinds: Sequence[Any]) -> str:
-    """The assembly graph for these clips. The output pad is ``[a]``."""
+    """The assembly graph for these clips (``spans``: where each plays on the joined timeline). The output pad is
+    ``[a]``.
+
+    Joined clips overlap where they dissolve into each other, so the sound is cut at the clips' starts instead: each
+    clip's piece runs to the next clip's start, the first from the start of the sound and the last to its end. The
+    pieces tile the sound, which keeps its length and every clip where its pictures are.
+    """
     count = len(spans)
     labels = [_kind(kind) for kind in kinds]
     sources = ["[0:a]"] if count == 1 else [f"[s{index}]" for index in range(count)]
     split = "" if count == 1 else "[0:a]asplit=" + str(count) + "".join(sources) + ";"
-    parts = [_span(kind, start, end, index, source=sources[index])
-             for index, ((start, end), kind) in enumerate(zip(spans, labels))]
+    starts = [0.0, *(float(start) for start, _end in spans[1:])]
+    lengths = [*(after - before for before, after in zip(starts, starts[1:])), float(spans[-1][1]) - starts[-1]]
+    # One spelling per cut, so the piece before it and the piece after it meet on the same sample.
+    cuts = [f"{start:.4f}" for start in starts]
+    parts = [_span(kind, cuts[index], cuts[index + 1] if index + 1 < count else None, lengths[index], index,
+                   source=sources[index])
+             for index, kind in enumerate(labels)]
     tail = "".join(f"[h{index}]" for index in range(count)) + f"concat=n={count}:v=0:a=1[a]"
     return split + ";".join(parts) + ";" + tail
 
