@@ -103,7 +103,7 @@ SPEC_SCHEMA: dict[str, Any] = {
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
-            "scene3d": {"type": "object", "description": "Native Video 3D: template or document, GLB subject/slots, camera, atmosphere and movement"},
+            "scene3d": {"type": "object", "description": "Native Video 3D: template or document; cast {role or object id: GLB/picture or {source, clip, motion...}}, background (painted set projected on the floor), floor, GLB subject/slots, camera, atmosphere and movement"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"},
             "allow": {"type": "array", "maxItems": 3, "items": {"enum": ["still", "dark", "secondary"]},

@@ -349,6 +349,29 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
+**Template + cast + painted set.** Prefer this over writing a `document`: pick a
+template whose roles fit (`world3d.templates.list`) and assign only what changes.
+`cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
+picture; `background` puts a picture in the template's background slot. The
+template keeps its camera, props, lights and moves. With a painted background on
+a plane, the floor becomes `backdrop`: the picture is projected onto a real floor,
+so models stand on the painted ground and the camera gets parallax. `floor`
+(`backdrop`, `none`, `tiles`, `mirror`, `road`) overrides it. Sources may be URLs,
+workspace file names or `stills` names. A cast clip may be given by its GLB
+animation name.
+
+```json
+{"key": "dance", "kind": "scene3d",
+ "scene3d": {"template": "dance-stage", "background": "fairground-night",
+   "cast": {"subject_1": {"source": "hero-rigged.glb", "clip": "dance"},
+            "subject_2": {"source": "friend-rigged.glb", "clip": "wave"}}}}
+```
+
+A role that more than one object has must be bound by object id
+(`cast_role_ambiguous`); a role the template lacks fails (`cast_slot_missing`)
+unless the entry sets `add: true`, which adds it as a prop. A template without a
+background slot fails with `background_slot_missing`: choose another template.
+
 For a musical performance, set the document's `rhythm` to
 `{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
 `"rhythm":{"beats":1,"phase":0,"bounce":0.12,"sway":0.06,"yaw":0.12,"pulse":0.025}`

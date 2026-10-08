@@ -10,10 +10,13 @@ const config = request.scene3d
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
 if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
+for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
+if (config.background) bindBackground(document, sourced(config.background))
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
   if (config[key] !== undefined) document[key] = structuredClone(config[key])
 }
+applyFloor(document, config)
 applyRequestedFrame(document, config)
 const speed = scene3dPlaybackSpeed(config.playbackSpeed ?? document.playbackSpeed)
 const authored = Number(request.duration) * speed
@@ -51,6 +54,39 @@ function bindSubject(document, config) {
   if (config.rotationY !== undefined) next.rotationY = config.rotationY
   if (config.grounded !== undefined) next.grounded = config.grounded
   document.slots = document.slots.map(slot => slot.id === current.id ? next : slot)
+}
+
+/** A bare URL is shorthand for { source }. */
+function sourced(entry) {
+  return typeof entry === 'string' ? { source: entry } : entry
+}
+
+/** Bind by object id, else by role when exactly one object has it. The template keeps its camera, props and moves. */
+function bindCast(document, key, entry) {
+  const byRole = document.slots.filter(slot => slot.slot === key)
+  const current = document.slots.find(slot => slot.id === key) ?? (byRole.length === 1 ? byRole[0] : null)
+  if (!current && !entry.add) throw new Error(byRole.length > 1 ? `cast_role_ambiguous:${key}` : `cast_slot_missing:${key}`)
+  const base = current ?? { id: key, slot: 'prop', position: [0, 0, 0], rotationY: 0, scale: 1, media: 'model3d', clip: null }
+  const next = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
+  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance']) {
+    if (entry[field] !== undefined) next[field] = structuredClone(entry[field])
+  }
+  document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]
+}
+
+/** The template's background picture. On a cutout plane it is also projected onto the floor (see applyFloor). */
+function bindBackground(document, entry) {
+  const slots = document.slots.filter(slot => slot.slot === 'background')
+  if (!slots.length) throw new Error('background_slot_missing')
+  document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
+    : { ...slot, sourceUrl: entry.source, media: 'image', ...(entry.surface ? { surface: entry.surface } : {}) })
+}
+
+/** An explicit floor wins; a painted background on a plane gets the projected floor unless the template chose one. */
+function applyFloor(document, config) {
+  const floorStyle = config.floor ?? (config.background && document.environment?.floorStyle === undefined
+    && document.slots.some(slot => slot.slot === 'background' && (!slot.surface || slot.surface === 'cutout')) ? 'backdrop' : undefined)
+  if (floorStyle) document.environment = { reflectiveFloor: false, platform: false, ...document.environment, floorStyle }
 }
 
 /** A GLB in a cutout's slot becomes a model and a picture in a model's slot a cutout; anything else keeps the slot's media. */

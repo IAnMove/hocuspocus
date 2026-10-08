@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import quote, unquote, urlparse, parse_qs
 
 from services.production_scene_retry import receipt_action, _artifact_name
 from services.world3d_look import check_document_look
@@ -20,7 +21,10 @@ EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
-               "fps", "playbackSpeed"}
+               "fps", "playbackSpeed", "cast", "background", "floor"}
+CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add"}
+SURFACES = ("cutout", "environment", "wall", "floor")
+FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 
 
 def validate_scene3d_shot(shot):
@@ -34,8 +38,10 @@ def validate_scene3d_shot(shot):
     if "document" in config and not isinstance(config["document"], dict):
         raise ValueError("scene3d.document must be an object")
     _check_looks(config)
-    if "template" in config and not (config.get("subject") or config.get("slots")):
-        raise ValueError("A template shot needs a subject GLB or explicit slots")
+    _check_cast(config.get("cast"))
+    _check_background(config)
+    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast")):
+        raise ValueError("A template shot needs a subject GLB, a cast or explicit slots")
     if shot.get("sing"):
         raise ValueError("scene3d does not promise H3 lip-sync; use rigid object motion or authored GLB clips")
 
@@ -47,6 +53,82 @@ def _check_looks(config):
             check_document_look(looks)
         except ValueError as error:
             raise ValueError(f"scene3d: {error}") from error
+
+
+def _source(value):
+    return isinstance(value, str) and 0 < len(value) <= 2000
+
+
+def _check_cast(cast):
+    """cast maps a template role (subject_1, subject_2, background...) or an object id to a model or picture."""
+    if cast is None:
+        return
+    if not isinstance(cast, dict) or not 0 < len(cast) <= 8:
+        raise ValueError("scene3d.cast maps 1-8 template roles or object ids to a GLB or picture")
+    for key, value in cast.items():
+        entry = value if isinstance(value, dict) else {"source": value}
+        if not (isinstance(key, str) and 0 < len(key) <= 64) or set(entry) - CAST_FIELDS or not _source(entry.get("source")):
+            raise ValueError(f"scene3d.cast.{key}: give a source (GLB or picture URL, workspace file or stills name) "
+                             f"and only {', '.join(sorted(CAST_FIELDS - {'source'}))}")
+
+
+def _check_background(config):
+    if "background" in config:
+        entry = config["background"] if isinstance(config["background"], dict) else {"source": config["background"]}
+        if set(entry) - {"source", "surface"} or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
+            raise ValueError("scene3d.background is a picture (URL, workspace file or stills name) or "
+                             "{source, surface: cutout|environment|wall|floor}")
+    if config.get("floor", "backdrop") not in FLOOR_STYLES:
+        raise ValueError(f"scene3d.floor must be one of {', '.join(FLOOR_STYLES)}")
+
+
+def resolve_media(config, *, stills, root, workspace):
+    """The shot's scene3d with every named picture or model as a URL, and clips named by name as {index, name}.
+
+    A name is a stills entry, else a file in the workspace. URLs pass unchanged, so a spec that already
+    gives URLs resolves to itself (and keeps its fingerprint).
+    """
+    from services.series_shot3d import glb_clip_names
+
+    def url(value):
+        if value.startswith(("/api/", "http://", "https://")):
+            return value
+        if value in (stills or {}):
+            return stills[value]
+        path = (Path(root) / value).resolve()
+        if path.is_relative_to(Path(root).resolve()) and path.is_file():
+            return f"/api/v1/file/{quote(value)}?workspace={quote(workspace)}"
+        raise ValueError(f"scene3d: {value!r} is not a URL, a stills name or a file in the workspace")
+
+    def clip(source, value, key):
+        if not isinstance(value, str):
+            return value
+        address = urlparse(source)
+        name = unquote(address.path.removeprefix("/api/v1/file/"))
+        names = []
+        if address.path.startswith("/api/v1/file/") and parse_qs(address.query).get("workspace") == [workspace]:
+            names = glb_clip_names(Path(root) / name)
+        if value not in names:
+            raise ValueError(f"scene3d.cast.{key}: no clip {value!r} in its model (clips: {', '.join(names) or 'none'})")
+        return {"index": names.index(value), "name": value}
+
+    resolved = json.loads(json.dumps(config))
+    if _source(resolved.get("subject")):
+        resolved["subject"] = url(resolved["subject"])
+    if "background" in resolved:
+        entry = resolved["background"] if isinstance(resolved["background"], dict) else {"source": resolved["background"]}
+        resolved["background"] = {**entry, "source": url(entry["source"])}
+    for key, value in (resolved.get("cast") or {}).items():
+        entry = value if isinstance(value, dict) else {"source": value}
+        source = url(entry["source"])
+        entry = {**entry, "source": source}
+        if "clip" in entry:
+            entry["clip"] = clip(source, entry["clip"], key)
+        if isinstance(entry.get("clips"), list):
+            entry["clips"] = [{**cue, "clip": clip(source, cue.get("clip"), key)} if isinstance(cue, dict) else cue
+                              for cue in entry["clips"]]
+        resolved["cast"][key] = entry
+    return resolved
 
 
 def compile_document(shot, duration):
@@ -133,6 +215,8 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
             # The revision bump already busts the fingerprint. Keep the last good
             # clip until this export lands; a failed retake must not drop it.
             production.state.setdefault("world3d_exports", {}).pop(key, None)
+        shot = {**shot, "scene3d": resolve_media(shot["scene3d"], stills=spec.get("stills"), root=production.root,
+                                                 workspace=production.ws)}
         source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0)}, sort_keys=True)
         fingerprint = hashlib.sha256(source.encode()).hexdigest()[:16]
         if clips.get(key, {}).get("fingerprint") == fingerprint and (production.root / clips[key]["file"]).is_file():
