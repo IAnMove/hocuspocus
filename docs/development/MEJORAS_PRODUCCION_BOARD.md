@@ -13,7 +13,7 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | V1 Voz en español | `feat/speech-qa-spanish` | — | pendiente | `app/services/speech_text_es.py`, diccionario de pronunciación |
 | V2 Tono y acento | `feat/voice-pitch-accent` | — | pendiente | `voiceProfile.pitchRange`, `app/services/qa_accent.py` |
 | S1 Avisos del guion | `feat/series-script-warnings` | [#917](https://github.com/IAnMove/hocuspocus/pull/917) | borrador abierto | avisos de `from_script`, `instanceKey` si el kit se repite |
-| S2 Huella y cuadro | `fix/series-render-fingerprint-frame` | — | pendiente | huella de planos mudos, cuadro 3D, `estimate` |
+| S2 Huella y cuadro | `fix/series-render-fingerprint-frame` | [#918](https://github.com/IAnMove/hocuspocus/pull/918) | borrador abierto | huella de planos mudos, cuadro 3D, `estimate` |
 | S3 Boca del rig | `feat/rig-mouth-report-precheck` | — | pendiente | `app/services/flat_rig_metrics.py`, `characters.rig.check` |
 | S4 Fondos | `feat/series-plate-checks` | — | pendiente | aviso `people_in_plate`, `scene3d.backdrop` |
 | D1 Candado de GPU | `feat/gpu-machine-lock` | — | pendiente | `app/services/gpu_machine_lock.py`, `scripts/hocus_instances.py` |
