@@ -180,7 +180,7 @@ def test_the_server_render_makes_a_3d_dialogue_shot_a_take(tmp_path):
         time.sleep(0.02)
     assert job["status"] == "completed", job
     export = next(args for tool, args in tools.calls if tool == "scenes.world3d.export")
-    assert export["input"] == {"workspace": "cast", "document": {"v": 1}, "quality": "final"}
+    assert export["input"] == {"workspace": "cast", "document": {"v": 1, "width": 1920, "height": 1080, "fps": 24}, "quality": "final"}
     talk = next(args for tool, args in tools.calls if tool == "world3d.scene.talk")["input"]
     assert talk["lines"][0]["start"] == 0.8
     imported = next(args for tool, args in tools.calls if tool == "series.asset.import")["input"]

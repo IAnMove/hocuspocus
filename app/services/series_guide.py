@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from services.pose_facing import kit_facings
+from services.series_duration_estimate import estimate_episode
 
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
@@ -136,9 +137,11 @@ def compact_episode(series: dict[str, Any], episode: dict[str, Any]) -> dict[str
     versions = {lang: {key: value for key, value in version.items() if key in VERSION_FIELDS}
                 for lang, version in (episode.get("languageVersions") or {}).items()}
     script = [{key: scene.get(key) for key in ("id", "order", "locationId", "purpose")} for scene in episode.get("script") or []]
+    shots = episode.get("shots") or []
     return {"id": episode["id"], "number": episode.get("number"), "title": episode.get("title"), "premise": episode.get("premise"),
-            "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in episode.get("shots") or []],
+            "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in shots],
             "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId"),
+            "estimate": estimate_episode(series, shots),
             **({"score": episode["score"]} if episode.get("score") else {}), **_review(episode)}
 
 

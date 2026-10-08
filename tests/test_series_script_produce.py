@@ -113,8 +113,11 @@ def test_every_problem_is_listed_before_anything_is_written():
 def test_check_only_and_rewriting_an_existing_episode():
     tools = Series()
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, check_only=True)
+    estimate = checked.pop("estimate")
     assert checked == {"checked": True, "number": 2, "shots": ["e2s00", "e2s01", "e2s02"], "original": "spanish",
                        "languages": ["spanish", "english"], "warnings": []} and tools.calls == []
+    assert estimate["method"] == "default_rate" and [item["id"] for item in estimate["perShot"]] == checked["shots"]
+    assert estimate["perShot"][0]["seconds"] == 6.0, "a title card keeps the length the script asked for"
     rewritten = apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": SCRIPT["shots"][:1]}, episode_id="ep1")
     assert rewritten["shots"] == ["e1s00"] and [tool for tool, _ in tools.calls][0] == "series.episode.update"
     with pytest.raises(ScriptError):
@@ -562,3 +565,20 @@ def test_a_failing_check_still_returns_the_warnings(tmp_path):
     assert reply.status_code == 400
     assert reply.json()["detail"]["warnings"][0]["subject"] == "bolivar"
     assert any("framing must be" in problem for problem in reply.json()["detail"]["problems"])
+
+
+def test_the_estimate_uses_an_approved_pace_and_counts_a_card():
+    """Four words in 2.0 s of speech is 2.0 words/s. Two words are then 1.0 s, and the planner's frame is 1.7917 s."""
+    from services.series_duration_estimate import estimate_episode
+    approved = {"id": "old", "approvedAttemptId": "a", "durationSeconds": 2.8,
+                "dialogueBeats": [{"characterId": "kevin", "text": "one two three four"}]}
+    series = {"spokenLanguage": "Español de España", "episodesById": {"ep1": {"shots": [approved]}}}
+    card = {"id": "card", "durationSeconds": 3, "dialogueBeats": []}
+    spoken = {"id": "line", "dialogueBeats": [{"characterId": "kevin", "text": "one two"}]}
+    estimate = estimate_episode(series, [card, spoken])
+    assert estimate["method"] == "approved_takes"
+    assert estimate["perShot"] == [{"id": "card", "seconds": 3.0}, {"id": "line", "seconds": 1.792}]
+    assert estimate["seconds"] == 4.8
+    english = estimate_episode({"spokenLanguage": "English"}, [
+        {"id": "s", "dialogueBeats": [{"characterId": "gary", "text": "one two three four five six seven"}]}])
+    assert english["method"] == "default_rate" and english["perShot"][0]["seconds"] == 3.292 and english["seconds"] == 3.3

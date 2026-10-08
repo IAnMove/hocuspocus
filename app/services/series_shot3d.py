@@ -473,3 +473,14 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
     return {**published, "renderDigest": digest}
+
+
+def series_frame_document(series: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
+    """A Series 3D export uses the episode frame, so the cut does not conform the clip.
+
+    Templates are often 1280x720 at 30 fps. The episode is 1920x1080, or 1080x1920 when
+    ``provider.videoSettings.orientation`` is portrait, at 24 fps (``series_shot_plan.frame_size``).
+    """
+    from services.series_shot_plan import FPS, frame_size
+    width, height = frame_size(series if isinstance(series, dict) else {})
+    return {**(document or {}), "width": width, "height": height, "fps": FPS}
