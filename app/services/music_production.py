@@ -100,6 +100,7 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                         "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
                                                                   "description": "ids of other cast entries: one reference image with their portraits side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
+        "sets": {"type": "object", "description": "name -> {prompt, seed}: painted sets for scene3d background, drawn eye-level with an open floor and nobody in it, in the same image batch as the models"},
         "models": {"type": "object", "description": "name -> {from (cast id, stills name or picture URL) or prompt, rig (humanoid, prop, vehicle, quadruped, flying, serpentine, none; humanoid for a cast id), animations [clip names], seed}: textured Hunyuan3D GLBs, rigged with clips on the song's tempo, made in one batch after cast. A scene3d cast entry uses the name."},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},

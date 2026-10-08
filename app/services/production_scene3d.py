@@ -82,11 +82,11 @@ def _check_background(config):
         raise ValueError(f"scene3d.floor must be one of {', '.join(FLOOR_STYLES)}")
 
 
-def resolve_media(config, *, stills, root, workspace, models=None):
+def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
     """The shot's scene3d with every named picture or model as a URL, and clips named by name as {index, name}.
 
-    A name is a production model (``spec.models``), a stills entry, else a file in the workspace. URLs pass
-    unchanged, so a spec that already gives URLs resolves to itself (and keeps its fingerprint).
+    A name is a production model (``spec.models``) or set (``spec.sets``), a stills entry, else a file in the
+    workspace. URLs pass unchanged, so a spec that already gives URLs resolves to itself (and keeps its fingerprint).
     """
     from services.series_shot3d import glb_clip_names
 
@@ -95,6 +95,8 @@ def resolve_media(config, *, stills, root, workspace, models=None):
             return value
         if (models or {}).get(value, {}).get("file"):
             return f"/api/v1/file/{quote(models[value]['file'])}?workspace={quote(workspace)}"
+        if (sets or {}).get(value, {}).get("url"):
+            return sets[value]["url"]
         if value in (stills or {}):
             return stills[value]
         path = (Path(root) / value).resolve()
@@ -218,7 +220,8 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
             # clip until this export lands; a failed retake must not drop it.
             production.state.setdefault("world3d_exports", {}).pop(key, None)
         shot = {**shot, "scene3d": resolve_media(shot["scene3d"], stills=spec.get("stills"), root=production.root,
-                                                 workspace=production.ws, models=production.state.get("models"))}
+                                                 workspace=production.ws, models=production.state.get("models"),
+                                                 sets=production.state.get("sets"))}
         source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0)}, sort_keys=True)
         fingerprint = hashlib.sha256(source.encode()).hexdigest()[:16]
         if clips.get(key, {}).get("fingerprint") == fingerprint and (production.root / clips[key]["file"]).is_file():

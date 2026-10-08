@@ -60,7 +60,7 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
         watch.call("song", production.song, spec)
         watch.call("analyze", production.analyze, spec)
         watch.call("cast", production.cast, spec)
-        if spec.get("models"):
+        if spec.get("models") or spec.get("sets"):
             from services.production_models import make_models
             watch.call("models", make_models, production, spec)
         windows = host.shot_windows(spec, production.score())

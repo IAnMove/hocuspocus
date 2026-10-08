@@ -136,3 +136,32 @@ def test_a_scene3d_cast_names_a_model_and_its_clips(tmp_path):
     hero = resolved["cast"]["subject_1"]
     assert hero["source"] == "/api/v1/file/hero-rigged.glb?workspace=w"
     assert hero["clip"] == {"index": 1, "name": "dance_bounce"}
+
+
+def test_sets_are_painted_in_the_same_batch_with_the_floor_recipe_and_named_as_backgrounds(tmp_path):
+    spec = {**SPEC, "sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}
+    production = Production(tmp_path)
+    waited = []
+    plain_wait = production.wait
+    production.wait = lambda jobs: waited.append(sorted(jobs)) or plain_wait(jobs)
+    make_models(production, spec, sleep=lambda _: None)
+    assert waited == [["hero", "kite", "set:harbour"]]
+    painted = next(image for image in production.images if image["key"] == "set-harbour")
+    assert painted["res"] == "1664x928" and "open floor across the lower third" in painted["prompt"]
+    assert painted["prompt"].startswith("felt puppets. a night harbour")
+    url = production.state["sets"]["harbour"]["url"]
+    resolved = resolve_media({"template": "dance-stage", "background": "harbour"}, stills={}, root=tmp_path, workspace="w",
+                             sets=production.state["sets"])
+    assert resolved["background"] == {"source": url}
+    calls = len(production.images)
+    make_models(production, spec, sleep=lambda _: None)
+    assert len(production.images) == calls, "an unchanged set is not painted again"
+
+
+def test_a_spec_with_only_sets_runs_the_stage_and_bad_sets_are_refused(tmp_path):
+    production = Production(tmp_path)
+    make_models(production, {"style": {}, "sets": {"roof": {"prompt": "a moonlit rooftop"}}}, sleep=lambda _: None)
+    assert production.state["sets"]["roof"]["url"].endswith("roof.png") and production.calls == []
+    for bad in ({"Roof": {"prompt": "x"}}, {"roof": {}}, {"roof": {"prompt": "x", "size": 3}}):
+        with pytest.raises(ModelError):
+            check_models({"sets": bad})

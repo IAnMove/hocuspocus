@@ -427,6 +427,13 @@ A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dan
 `production.status` times the stage as `models`; a failed model stops the run
 and a resume retries it with a new picture.
 
+**Sets.** `spec.sets` paints the backgrounds for those templates in the same image
+batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. Each
+is drawn eye-level, with an open floor across the lower third, a clear horizon and
+nobody in it, so the projected floor has ground for the cast to stand on. A shot
+names it as its `background`: `{"template": "dance-stage", "background": "harbour",
+"cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
+
 For a musical performance, set the document's `rhythm` to
 `{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
 `"rhythm":{"beats":1,"phase":0,"bounce":0.12,"sway":0.06,"yaw":0.12,"pulse":0.025}`
