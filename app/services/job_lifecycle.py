@@ -867,18 +867,54 @@ def _remove_generation_waiter(
     _generation_queue_condition.notify_all()
 
 
+def _ready_head(
+    queue: deque[tuple[int, object, MutableMapping[str, Any]]] | None,
+    token: object,
+    job: MutableMapping[str, Any],
+    yield_to: Callable[[float], bool] | None,
+) -> bool:
+    """Whether ``job`` heads the queue and is not standing aside for ``yield_to``."""
+    if not (queue and queue[0][1] is token):
+        return False
+    waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
+    return yield_to is None or not yield_to(waited)
+
+
+def _hold_machine_turn(machine: Any, ready: bool, poll_interval: float) -> bool:
+    """Whether the ready queue head holds its machine turn (always, without one).
+
+    Only the ready head keeps a ticket or the machine lock: a head that stops
+    being ready gives them back, so a local job ahead of it can take its turn.
+    """
+    if machine is None:
+        return True
+    if not ready:
+        machine.release()
+        return False
+    if machine.take():
+        return True
+    with _generation_queue_condition:
+        _generation_queue_condition.wait(timeout=poll_interval)
+    return False
+
+
 def acquire_generation_slot(
     generation_lock: threading.Lock,
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
     yield_to: Callable[[float], bool] | None = None,
+    machine: Any = None,
 ) -> bool:
     """Acquire the single GPU lock in scheduled pending order.
 
     ``yield_to(waited)`` receives how long this job has waited. While it
     returns true, the queue head leaves the free lock to another waiter on the
     same device (see ``ResourceCoordinator.has_waiter_owed_turn``).
+
+    ``machine`` is the job's ``gpu_machine_lock.MachineTurn``. The ready queue
+    head takes it before the process lock, so waiting for another instance
+    never holds the process GPU. A head that stops being ready gives it back.
     """
     register_generation_job(generation_lock, job)
     lock_key = id(generation_lock)
@@ -895,14 +931,13 @@ def acquire_generation_slot(
             while queue and is_cancel_requested(queue[0][2]):
                 _, cancelled_token, cancelled_job = queue[0]
                 _remove_generation_waiter(lock_key, cancelled_token, cancelled_job)
-            is_head = bool(queue and queue[0][1] is token)
-            if not is_head:
+            ready = _ready_head(queue, token, job, yield_to)
+            if not ready and not getattr(machine, "active", False):
                 _generation_queue_condition.wait(timeout=poll_interval)
                 continue
-            waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
-            if yield_to is not None and yield_to(waited):
-                _generation_queue_condition.wait(timeout=poll_interval)
-                continue
+
+        if not _hold_machine_turn(machine, ready, poll_interval):
+            continue
 
         # Only the FIFO head is allowed to compete for the underlying mutex.
         if not generation_lock.acquire(timeout=poll_interval):
@@ -931,24 +966,25 @@ def generation_slot(
     poll_interval: float = 0.1,
     yield_to: Callable[[float], bool] | None = None,
 ) -> Iterator[bool]:
-    """Context manager form of :func:`acquire_generation_slot`."""
-    acquired = acquire_generation_slot(
-        generation_lock, job, poll_interval=poll_interval, yield_to=yield_to,
-    )
-    # The file lock is taken only after this process owns the GPU, and it is
-    # dropped before that ownership returns to the local queue.
-    try:
-        from services.gpu_machine_lock import machine_generation
+    """Context manager form of :func:`acquire_generation_slot`.
 
-        with machine_generation(
-            job,
-            acquired,
-            poll_interval=poll_interval,
-            should_stop=lambda: is_cancel_requested(job),
-            publish=_notify_job_state,
-        ) as run:
-            yield run
+    With ``HOCUS_GPU_MACHINE_LOCK=1`` the job also holds the machine lock
+    (``services.gpu_machine_lock``), taken before the process GPU.
+    """
+    from services.gpu_machine_lock import MachineTurn
+
+    machine = MachineTurn(job, publish=_notify_job_state)
+    try:
+        acquired = acquire_generation_slot(
+            generation_lock, job, poll_interval=poll_interval, yield_to=yield_to, machine=machine,
+        )
+    except BaseException:
+        machine.release()
+        raise
+    try:
+        yield acquired
     finally:
+        machine.release()
         if acquired:
             generation_lock.release()
             with _generation_queue_condition:

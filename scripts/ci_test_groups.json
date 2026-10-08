@@ -548,14 +548,27 @@
       "prefix": "app/services/gpu_machine_lock.py",
       "paths": [
         "tests/test_job_lifecycle.py",
-        "tests/test_job_lifecycle_wiring.py"
+        "tests/test_job_lifecycle_wiring.py",
+        "tests/test_generation_queue_priority.py",
+        "tests/test_resource_scheduler.py"
       ]
     },
     {
       "prefix": "app/services/job_lifecycle.py",
       "paths": [
         "tests/test_job_lifecycle.py",
-        "tests/test_job_lifecycle_wiring.py"
+        "tests/test_job_lifecycle_wiring.py",
+        "tests/test_generation_queue_priority.py",
+        "tests/test_resource_scheduler.py",
+        "tests/test_director_cancellation.py",
+        "tests/test_jobs_wait.py",
+        "tests/test_jobs_cancel.py",
+        "tests/test_generation_contract.py",
+        "tests/test_tools_upscale_contract.py",
+        "tests/test_remove_background_tool.py",
+        "tests/test_studio_sfx_native_worker.py",
+        "tests/test_series_agent_fixes.py",
+        "tests/test_comic_film_pass_addendum.py"
       ]
     },
     {

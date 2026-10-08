@@ -1,10 +1,22 @@
 """Cross-process GPU lock for one shared graphics card.
 
-The in-process generation queue still decides which local job runs. This lock
-is taken only after that queue has handed the job the process GPU, and it is
-released before the process GPU returns to the local queue. The kernel drops
-the lock when the holder exits. ``HOCUS_GPU_MACHINE_LOCK`` of ``0``,
-``false``, ``no``, or ``off`` takes nothing.
+The lock is off unless ``HOCUS_GPU_MACHINE_LOCK`` is ``1`` (or ``true``,
+``yes``, ``on``). Every instance that shares ``HOME`` shares one lock file, so
+turning it on is a decision for all of them.
+
+The in-process generation queue still decides which local job runs. Only the
+head of that queue takes a turn here, and it takes the turn before the process
+GPU: a job that waits for another instance does not block local LLM, 3D, rig
+or music work. Waiters are served in ticket order. Each waiter leaves a locked
+ticket file in ``gpu.lock.queue`` next to the lock, and only the oldest live
+ticket may take the lock, so an instance that runs jobs back to back cannot
+keep the GPU from the others. The kernel drops the lock and the ticket locks
+when a process exits.
+
+Limits: only jobs that go through ``generation_slot`` take the lock. Workers
+that use ``ResourceCoordinator.acquire`` (local LLM, 3D, rig) do not, and a
+model can stay in VRAM after the lock is released. A holder that hangs while
+alive blocks everyone until it is stopped. One lock file covers every GPU.
 """
 from __future__ import annotations
 
@@ -12,15 +24,17 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-_OFF = {"0", "false", "no", "off"}
+_ON = {"1", "true", "yes", "on"}
 _BACKEND: str | None = None
+# A ticket is locked right after it is created. One that is still unlocked
+# after this long belongs to a process that has gone.
+_TICKET_GRACE_SECONDS = 5.0
 
 
 class _Held:
@@ -30,11 +44,8 @@ class _Held:
 
 
 def machine_lock_enabled() -> bool:
-    """Return whether this process should take the machine GPU lock."""
-    raw = os.environ.get("HOCUS_GPU_MACHINE_LOCK")
-    if raw is None:
-        return True
-    return raw.strip().lower() not in _OFF
+    """Return whether this process should take the machine GPU lock (opt-in)."""
+    return os.environ.get("HOCUS_GPU_MACHINE_LOCK", "").strip().lower() in _ON
 
 
 def lock_path() -> Path:
@@ -48,6 +59,11 @@ def lock_path() -> Path:
 def meta_path() -> Path:
     """Return the sibling record of who holds :func:`lock_path`."""
     return lock_path().with_name("gpu.lock.json")
+
+
+def queue_dir() -> Path:
+    """Return the folder of waiting tickets next to :func:`lock_path`."""
+    return lock_path().with_name("gpu.lock.queue")
 
 
 def pid_alive(pid: object) -> bool:
@@ -282,6 +298,13 @@ def _clear_meta_if_ours(pid: int) -> None:
         return
 
 
+def _unlink(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        return
+
+
 def _emit(job: Mapping[str, Any], publish: Callable[[Mapping[str, Any]], None] | None) -> None:
     if publish is None:
         return
@@ -344,56 +367,145 @@ def _settle_stop(
     _restore(job, saved, publish)
 
 
-def _stopped(should_stop: Callable[[], bool] | None) -> bool:
-    if should_stop is None:
-        return False
-    return bool(should_stop())
+class _Ticket:
+    def __init__(self, fd: int, path: Path) -> None:
+        self.fd = fd
+        self.path = path
 
 
-def _wait_for_lock(
-    fd: int,
-    job: dict[str, Any],
-    *,
-    poll_interval: float,
-    should_stop: Callable[[], bool] | None,
-    publish: Callable[[Mapping[str, Any]], None] | None,
-) -> _Held | None:
-    saved: tuple[Any, Any] | None = None
-    previous: str | None = None
-    while True:
-        if _stopped(should_stop):
-            _close(fd)
-            _settle_stop(job, saved, publish)
-            return None
-        if _try_lock(fd):
-            _write_owner(job)
-            _restore(job, saved, publish)
-            return _Held(fd, noop=False)
-        saved, previous = _announce(job, saved, previous, publish)
-        time.sleep(max(0.01, float(poll_interval)))
-
-
-def _acquire(
-    job: dict[str, Any],
-    *,
-    poll_interval: float,
-    should_stop: Callable[[], bool] | None,
-    publish: Callable[[Mapping[str, Any]], None] | None,
-) -> _Held | None:
-    fd = _open_lock()
-    if fd is None:
-        return _Held(None, noop=True)
+def _new_ticket() -> _Ticket | None:
+    folder = queue_dir()
+    name = f"{time.time_ns():020d}-{os.getpid()}-{os.urandom(3).hex()}.ticket"
     try:
-        return _wait_for_lock(
-            fd,
-            job,
-            poll_interval=poll_interval,
-            should_stop=should_stop,
-            publish=publish,
-        )
-    except Exception:
+        folder.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(folder / name), os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o644)
+    except OSError:
+        log.warning("GPU machine lock queue %s is not usable; waiters are not ordered.", folder)
+        return None
+    if _try_lock(fd):
+        return _Ticket(fd, folder / name)
+    _close(fd)
+    _unlink(folder / name)
+    return None
+
+
+def _discard_ticket(ticket: _Ticket) -> None:
+    # Remove the name first where the platform allows it, so no waiter sees
+    # this live ticket unlocked. Windows removes an open file only after close.
+    _unlink(ticket.path)
+    _close(ticket.fd)
+    _unlink(ticket.path)
+
+
+def _ticket_age(name: str) -> float:
+    try:
+        born = int(name.split("-", 1)[0])
+    except ValueError:
+        return float("inf")
+    return (time.time_ns() - born) / 1e9
+
+
+def _ticket_alive(path: Path) -> bool:
+    """Whether ``path`` belongs to a live waiter. A dead waiter's ticket is removed."""
+    try:
+        fd = os.open(str(path), os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        if not _try_lock(fd):
+            return True
+        _unlock(fd)
+    finally:
         _close(fd)
-        raise
+    if _ticket_age(path.name) < _TICKET_GRACE_SECONDS:
+        return True
+    _unlink(path)
+    return False
+
+
+def _first_in_line(ticket: _Ticket) -> bool:
+    try:
+        names = sorted(entry.name for entry in os.scandir(ticket.path.parent) if entry.name.endswith(".ticket"))
+    except OSError:
+        return True
+    for name in names:
+        if name >= ticket.path.name:
+            return True
+        if _ticket_alive(ticket.path.parent / name):
+            return False
+    return True
+
+
+class MachineTurn:
+    """One job's turn on the machine GPU: a ticket in line, then the lock.
+
+    :meth:`take` never blocks. The caller polls it while the job is the ready
+    head of its local queue, and calls :meth:`release` when the job stops being
+    ready, is cancelled, or has finished on the GPU. When the lock is disabled
+    every call is a no-op and :meth:`take` returns True.
+    """
+
+    def __init__(
+        self,
+        job: dict[str, Any],
+        *,
+        publish: Callable[[Mapping[str, Any]], None] | None = None,
+    ) -> None:
+        self.job = job
+        self.publish = publish
+        self.enabled = machine_lock_enabled()
+        self._fd: int | None = None
+        self._ticket: _Ticket | None = None
+        self._held: _Held | None = None
+        self._saved: tuple[Any, Any] | None = None
+        self._previous: str | None = None
+
+    @property
+    def active(self) -> bool:
+        """Whether this turn holds a ticket or the lock."""
+        return self._ticket is not None or self._held is not None or self._fd is not None
+
+    def take(self) -> bool:
+        """Return True once this job holds the lock; a False result has announced the wait."""
+        if not self.enabled or self._held is not None:
+            return True
+        if lock_backend() == "noop":
+            self._held = _Held(None, noop=True)
+            return True
+        if self._fd is None:
+            self._fd = _open_lock()
+            if self._fd is None:
+                self._held = _Held(None, noop=True)
+                return True
+        if self._ticket is None:
+            self._ticket = _new_ticket()
+        if (self._ticket is None or _first_in_line(self._ticket)) and _try_lock(self._fd):
+            _write_owner(self.job)
+            self._held, self._fd = _Held(self._fd, noop=False), None
+            self._drop_ticket()
+            _restore(self.job, self._saved, self.publish)
+            self._saved = self._previous = None
+            return True
+        self._saved, self._previous = _announce(self.job, self._saved, self._previous, self.publish)
+        return False
+
+    def release(self) -> None:
+        """Give back the ticket and the lock, and undo the waiting message."""
+        self._drop_ticket()
+        held, self._held = self._held, None
+        if held is not None:
+            _release(held)
+        fd, self._fd = self._fd, None
+        if fd is not None:
+            _close(fd)
+        if self._saved is not None:
+            _settle_stop(self.job, self._saved, self.publish)
+        self._saved = self._previous = None
+
+    def _drop_ticket(self) -> None:
+        ticket, self._ticket = self._ticket, None
+        if ticket is not None:
+            _discard_ticket(ticket)
 
 
 def _release(held: _Held) -> None:
@@ -407,58 +519,3 @@ def _release(held: _Held) -> None:
         _unlock(fd)
     finally:
         os.close(fd)
-
-
-@contextmanager
-def machine_gpu_lock(
-    job: dict[str, Any],
-    *,
-    poll_interval: float = 0.25,
-    should_stop: Callable[[], bool] | None = None,
-    publish: Callable[[Mapping[str, Any]], None] | None = None,
-) -> Iterator[_Held | None]:
-    """Hold the machine lock for one GPU job, or yield ``None`` when disabled.
-
-    ``None`` with the lock enabled means the wait was stopped. A noop hold
-    is returned when this platform cannot lock, so the job still runs.
-    """
-    if not machine_lock_enabled():
-        yield None
-        return
-    held = _acquire(
-        job,
-        poll_interval=poll_interval,
-        should_stop=should_stop,
-        publish=publish,
-    )
-    try:
-        yield held
-    finally:
-        if held is not None:
-            _release(held)
-
-
-@contextmanager
-def machine_generation(
-    job: dict[str, Any],
-    acquired: bool,
-    *,
-    poll_interval: float,
-    should_stop: Callable[[], bool] | None,
-    publish: Callable[[Mapping[str, Any]], None] | None,
-) -> Iterator[bool]:
-    """Wrap one acquired process slot with the machine lock.
-
-    The caller releases the process lock after this context exits. A stopped
-    wait yields ``False`` so the caller does not start the GPU job.
-    """
-    if not acquired:
-        yield False
-        return
-    with machine_gpu_lock(
-        job,
-        poll_interval=poll_interval,
-        should_stop=should_stop,
-        publish=publish,
-    ) as held:
-        yield not (machine_lock_enabled() and held is None)

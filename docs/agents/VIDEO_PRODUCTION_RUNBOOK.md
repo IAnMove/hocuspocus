@@ -546,6 +546,7 @@ Queue and memory settings (2026-10-04):
 
 - `HOCUS_QUEUE_MAX_WAIT_SECONDS` (default 300). A generation job that has waited this long is overtaken only by a higher `priority`. `0` turns it off. `tools/list` shows `priority` on every `generation.*` tool.
 - `HOCUS_GPU_WAITER_MAX_WAIT_SECONDS` (default 120). A Video 3D export, or another coordinator ticket on the local GPU, gets the next turn when it has waited longer than the generation queue head, or this long. `0` turns it off.
+- `HOCUS_GPU_MACHINE_LOCK` (default off). `1` makes the generation queue head of this instance wait its turn for a machine-wide lock (`~/.cache/hocuspocus/gpu.lock`, or `HOCUS_GPU_LOCK_PATH`) before it takes the local GPU. Waiters are served in arrival order. Every instance that shares `HOME` shares the lock, so turn it on for all of them or for none. `scripts/hocus_instances.py` shows who holds it.
 - `HOCUS_MALLOC_TRIM` (default on). Freed model memory goes back to the system after a model release and after each GPU job. `0` turns it off. Large releases are logged as `[Memory] Returned … GiB`.
 - `app/settings/server-endpoint.json` holds the bound `url`, `mcp_url` and `pid` while the server runs. Check `pid` before you trust it.
 - After a restart, `jobs.leftovers` also lists interrupted Video 2D/3D exports. Use `jobs.resume` to retry the same task and `jobs.discard` to cancel it.
