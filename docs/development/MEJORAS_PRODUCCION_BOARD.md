@@ -17,7 +17,7 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | S3 Boca del rig | `feat/rig-mouth-report-precheck` | [#919](https://github.com/IAnMove/hocuspocus/pull/919) | borrador abierto | `app/services/flat_rig_metrics.py`, `characters.rig.check` |
 | S4 Fondos | `feat/series-plate-checks` | [#920](https://github.com/IAnMove/hocuspocus/pull/920) | borrador abierto | aviso `people_in_plate`, `scene3d.backdrop` |
 | D1 Candado de GPU | `feat/gpu-machine-lock` | [#921](https://github.com/IAnMove/hocuspocus/pull/921) | borrador abierto | `app/services/gpu_machine_lock.py`, `scripts/hocus_instances.py` |
-| Q1 Conjunto dorado | `feat/golden-shots` | — | pendiente | `scripts/golden_shots.py`, `docs/development/GOLDEN_SHOTS.md` |
+| Q1 Conjunto dorado | `feat/golden-shots` | [#922](https://github.com/IAnMove/hocuspocus/pull/922) | borrador abierto | `scripts/golden_shots.py`, `docs/development/GOLDEN_SHOTS.md` |
 | E1 Videojuegos, defectos | `fix/game-assets-followups` | — | pendiente | identidad por color, avisos `game_*`, T-pose, nine-slice, órbita |
 | E2 Videojuegos, prueba real | `docs/game-assets-acceptance-run` | — | pendiente | informe de aceptación y entrega fuera del repo |
 | G1 Transiciones | `feat/series-transitions` | — | pendiente | `shot.transitionIn` |
