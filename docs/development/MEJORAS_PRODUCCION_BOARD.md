@@ -9,7 +9,7 @@ Antes de empezar un bloque: `git fetch`, `gh pr list` y `git grep` de sus palabr
 | M1 Contrato de generation | `fix/mcp-generation-contract` | [#911](https://github.com/IAnMove/hocuspocus/pull/911) | borrador abierto | `app/services/jobs_cancel.py`, `app/services/output_names.py`, `app/routers/image_generation_commands.py`, `tests/test_generation_contract.py`, `tests/test_jobs_cancel.py`, `tests/test_output_names.py` |
 | M2 Mensajes de error | `fix/mcp-error-messages` | [#912](https://github.com/IAnMove/hocuspocus/pull/912) | borrador abierto | `app/services/series_script_problems.py`, control de campos en `series_commands.py` y `job_leftovers.py`, paginación de `world3d.templates.list` |
 | M3 Informe de produce | `fix/series-produce-reporting` | [#913](https://github.com/IAnMove/hocuspocus/pull/913) | borrador abierto | avance de `series.episode.produce`, `approvalReset` de `series.shot.update`, número de episodio |
-| F1 Guía de agentes | `docs/agent-guide-lessons` | — | pendiente | `app/shared/series_agent_guide.md`, documentos de desarrollo desfasados |
+| F1 Guía de agentes | `docs/agent-guide-lessons` | [#914](https://github.com/IAnMove/hocuspocus/pull/914) | borrador abierto | `app/shared/series_agent_guide.md`, documentos de desarrollo desfasados |
 | V1 Voz en español | `feat/speech-qa-spanish` | — | pendiente | `app/services/speech_text_es.py`, diccionario de pronunciación |
 | V2 Tono y acento | `feat/voice-pitch-accent` | — | pendiente | `voiceProfile.pitchRange`, `app/services/qa_accent.py` |
 | S1 Avisos del guion | `feat/series-script-warnings` | — | pendiente | avisos de `from_script`, `instanceKey` si el kit se repite |
