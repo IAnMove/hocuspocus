@@ -687,6 +687,8 @@ def _pop_command_priority(command: dict[str, Any]) -> Any:
             inner = params.pop("priority")
             if found is _MISSING:
                 found = inner
+            if not params:
+                payload.pop("params", None)
     return found
 
 
