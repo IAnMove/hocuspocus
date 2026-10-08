@@ -251,7 +251,9 @@
     "loop_seam": "La costura del bucle se oye.",
     "duplicate_of": "Se parece a un duplicado de {{id}}.",
     "loop_not_closed": "El bucle de la animación no cierra.",
-    "identity_drift": "El personaje cambia entre fotogramas.",
+    "identity_drift": "Los colores de la figura cambian entre fotogramas.",
+    "orbit_empty": "El giro no tiene fotogramas.",
+    "ogg_fallback": "El bucle se guardó como WAV porque falló la codificación Ogg.",
     "foot_drift": "Los pies se deslizan entre fotogramas.",
     "halo": "Queda un halo alrededor del sprite.",
     "strip_count_mismatch": "La tira tiene otro número de figuras.",
@@ -378,6 +380,7 @@
     "files_missing": "faltan archivos"
   },
   "metrics": {
-    "styleScore": "Encaje con el estilo (1–5)"
+    "styleScore": "Encaje con el estilo (1–5)",
+    "poseChange": "Cambio de pose"
   }
 }

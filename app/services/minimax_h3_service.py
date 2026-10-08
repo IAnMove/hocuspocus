@@ -9,6 +9,7 @@ demand so it never competes with WanGP for VRAM.
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import math
 import os
@@ -83,6 +84,14 @@ VAE_FILES = (
     (HF_REPO, f"vae/{VIDEO_VAE}", VIDEO_VAE),
     (HF_REPO, f"vae/{AUDIO_VAE}", AUDIO_VAE),
 )
+
+# Abiray does not publish the INT8 text encoder (the Hub answers 404). The
+# official Comfy-Org file has the same name. Check the digest only after a
+# fresh download; an encoder that is already on disk is left untouched.
+PINNED_SHA256 = {
+    "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors":
+        "bc2ced0fbea64757fa9acddccfc0b3f4819d1dcf1da6c124d690d368be283923",
+}
 
 # Cache entries from the original integration, retained only so Settings can
 # remove them after a user moves to one of the Ada-safe ConvRot profiles.
@@ -307,6 +316,25 @@ def _model_path(relative_name: str) -> Path:
     return COMFY_DIR / "models" / relative_name
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _reject_bad_download(path: Path, relative: str) -> None:
+    """Unlink a fresh download whose digest is not the pinned one."""
+    expected = PINNED_SHA256.get(relative)
+    if not expected or not path.is_file():
+        return
+    if _sha256_file(path) == expected:
+        return
+    path.unlink(missing_ok=True)
+    raise RuntimeError(f"{path.name} does not match the pinned MiniMax H3 digest")
+
+
 def _profile_name(params: dict | None = None) -> str:
     requested = str((params or {}).get("h3_model_profile") or "quality").strip().lower()
     requested = {"mixed": "balanced", "int8": "quality", "int4": "low_memory"}.get(
@@ -336,10 +364,18 @@ def ensure_audio_prompt(prompt: str, audio_direction: str = "") -> str:
     return f"{prefix}Audio: {normalized_audio}"
 
 
+def _text_encoder_source(name: str) -> tuple[str, str]:
+    relative = f"text_encoders/{name}"
+    if relative in PINNED_SHA256:
+        return HF_REPO, relative
+    return COMMUNITY_HF_REPO, relative
+
+
 def _profile_files(profile: str, pipeline: str | None = None) -> list[tuple[str, str, str]]:
     selected = MODEL_PROFILES[profile]
+    repo_id, relative = _text_encoder_source(selected["text_encoder"])
     files = [
-        (COMMUNITY_HF_REPO, f"text_encoders/{selected['text_encoder']}", selected["text_encoder"]),
+        (repo_id, relative, selected["text_encoder"]),
         *VAE_FILES,
     ]
     pipelines = (pipeline,) if pipeline else ("fl2va", "ref2va")
@@ -418,6 +454,7 @@ def _ensure_models(pipeline: str, profile: str, progress: Callable[[str], None])
             filename=remote_filename,
             local_dir=str(local_dir),
         )
+        _reject_bad_download(destination, relative)
 
 
 def ensure_quality_assets(progress: Callable[[str], None]) -> None:

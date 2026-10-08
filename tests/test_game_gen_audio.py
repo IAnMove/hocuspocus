@@ -19,7 +19,7 @@ from services.game_generators.audio import (
     music_seconds,
 )
 from services.game_generators.base import GenContext
-from services.game_library import normalize_game
+from services.game_library import normalize_game, warning_codes
 from services.game_produce import _candidates
 from services.game_tools import GameToolError
 
@@ -114,8 +114,9 @@ GAME = {"id": "bosque", "style": {"audio": {"genre": "chiptune", "instruments": 
 def test_loop_warning_thresholds():
     assert loop_warnings(0.05, 2.0) == []
     assert loop_warnings(0.05, -2.0) == []
-    assert loop_warnings(0.06, 0.0) == ["loop_seam"]
-    assert loop_warnings(0.0, 2.01) == ["loop_seam"]
+    assert warning_codes(loop_warnings(0.06, 0.0)) == ["loop_seam"]
+    assert warning_codes(loop_warnings(0.0, 2.01)) == ["loop_seam"]
+    assert loop_warnings(0.06, 0.0)[0]["message"]
     assert music_seconds(60, 120) == 76
     assert jingle_seconds(4) == 10
     assert jingle_seconds(14) == 20
@@ -228,7 +229,7 @@ def test_music_cuts_a_four_bar_loop_with_the_real_best_loop(tmp_path, monkeypatc
     assert frames == 4 * bar
     assert _smpl_loops(wav) == [(0, frames - 1)]
     assert result.metrics["loopEnd"] == frames - 1
-    assert "loop_seam" not in result.warnings
+    assert "loop_seam" not in warning_codes(result.warnings)
     assert abs(result.metrics["lufs"] - (-16)) <= 1.0
     ogg = tmp_path / "ws" / result.files["ogg"]
     assert sf.info(str(ogg)).frames == frames
@@ -241,8 +242,8 @@ def test_music_without_downbeats_loops_four_bars_near_the_target(tmp_path, monke
     asset = {"id": "tema", "kind": "music", "spec": {"loopSeconds": 8, "bpm": 120}}
     result = MusicGenerator().run(_ctx(tmp_path, GAME, asset, _Calls(source)))
     assert result.metrics["duration"] == 8.0
-    assert "loop_no_downbeats" in result.warnings
-    assert "loop_seam" not in result.warnings
+    assert "loop_no_downbeats" in warning_codes(result.warnings)
+    assert "loop_seam" not in warning_codes(result.warnings)
 
 
 def test_jingle_asks_for_an_instrumental_that_reaches_its_length(tmp_path, monkeypatch):
@@ -269,7 +270,7 @@ def test_a_missed_loudness_target_is_reported(tmp_path, monkeypatch):
     monkeypatch.setattr("services.game_generators.audio.lufs_normalize", lambda _path, _target: 0.0)
     asset = {"id": "fanfarria", "kind": "jingle", "spec": {"seconds": 4, "mood": "victory"}}
     result = JingleGenerator().run(_ctx(tmp_path, GAME, asset, _Calls(source)))
-    assert "loudness_off_target" in result.warnings
+    assert "loudness_off_target" in warning_codes(result.warnings)
 
 
 def test_music_jingle_and_voice_make_every_candidate_they_estimate(tmp_path, monkeypatch):

@@ -1763,6 +1763,10 @@
       "paths": ["tests/test_recoverability_last.py", "tests/test_output_completion_time.py"]
     },
     {
+      "prefix": "app/services/minimax_h3_service.py",
+      "paths": ["tests/test_minimax_h3_service.py"]
+    },
+    {
       "prefix": "app/services/game_library.py",
       "paths": ["tests/test_game_library.py", "tests/test_game_library_router.py", "tests/test_game_qa.py"]
     },

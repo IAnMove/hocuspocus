@@ -27,7 +27,7 @@ class Fake:
 
 def _ctx(tmp_path, fake) -> GenContext:
     workspace = tmp_path / "ws"
-    workspace.mkdir()
+    workspace.mkdir(exist_ok=True)
     game = {"id": "bosque", "style": {}, "assets": []}
     asset = {"id": "heroe", "kind": "character", "spec": {}}
     return GenContext(
@@ -73,6 +73,34 @@ def test_empty_output_raises(tmp_path):
     with pytest.raises(GameToolError) as caught:
         image(_ctx(tmp_path, fake), "still", prompt="knight", negative="text", resolution="768x1024", seed=7)
     assert caught.value.code == "empty_output"
+
+
+def test_image_provenance_splits_queue_from_gpu_time(tmp_path):
+    fake = Fake([{
+        "status": "completed",
+        "output_files": ["hero.png"],
+        "created_at": 1000.0,
+        "started_at": 1040.5,
+        "finished_at": 1055.5,
+        "processing_time_sec": 15.0,
+    }])
+    ctx = _ctx(tmp_path, fake)
+    image(ctx, "still", prompt="knight", negative="text", resolution="768x1024", seed=7, refs=["plate.png"])
+    step = ctx.steps[0]
+    assert step["queued_seconds"] == 40.5
+    assert step["gpu_seconds"] == 15.0
+    assert step["num_inference_steps"] == 40
+    assert step["resolution"] == "768x1024"
+    assert step["refCount"] == 1
+    assert "seconds" in step
+    bare = Fake([{"status": "completed", "output_files": ["hero.png"]}])
+    quiet = _ctx(tmp_path, bare)
+    image(quiet, "still", prompt="knight", negative="text", resolution="768x1024", seed=7)
+    omitted = quiet.steps[0]
+    assert "queued_seconds" not in omitted
+    assert "gpu_seconds" not in omitted
+    assert omitted["num_inference_steps"] == 40
+    assert omitted["refCount"] == 0
 
 
 def test_resolution_is_rejected_before_submit(tmp_path):

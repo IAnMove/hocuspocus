@@ -39,8 +39,16 @@ from services.game_generators.base import (
     relative,
     spec_seed,
 )
+from services.game_library import game_warning
 from services.game_sfxr import PRESETS, generate
 from services.game_tools import GameToolError, music, resolve_path, sfx, speech
+
+_WARNING_TEXT = {
+    "loop_seam": "The loop seam is audible.",
+    "loudness_off_target": "Loudness is off the target.",
+    "sfx_silent": "The effect is silent.",
+    "loop_no_downbeats": "The loop has no downbeats.",
+}
 
 _LOOP_JUMP = 0.05
 _LOOP_RMS_DB = 2.0
@@ -49,10 +57,14 @@ _VOICE_LUFS = -16
 _LUFS_TOLERANCE = 1.0
 
 
-def loop_warnings(sample_jump: float, rms_db: float) -> list[str]:
+def _audio_warning(code: str, message: str | None = None) -> dict:
+    return game_warning(code, message or _WARNING_TEXT[code])
+
+
+def loop_warnings(sample_jump: float, rms_db: float) -> list[dict]:
     """``loop_seam`` above a 0.05 sample jump or a 2 dB RMS change."""
     if float(sample_jump) > _LOOP_JUMP or abs(float(rms_db)) > _LOOP_RMS_DB:
-        return ["loop_seam"]
+        return [_audio_warning("loop_seam")]
     return []
 
 
@@ -232,7 +244,7 @@ def _leveled(path: Path, target: float) -> tuple[dict, list[str]]:
     measured = _measure(path)
     lufs = measured["lufs"]
     if lufs is not None and abs(float(lufs) - float(target)) > _LUFS_TOLERANCE:
-        return measured, ["loudness_off_target"]
+        return measured, [_audio_warning("loudness_off_target")]
     return measured, []
 
 
@@ -310,7 +322,7 @@ def _run_sfx(ctx: GenContext) -> AttemptResult:
         _write(path, _sfx_audio(ctx, engine, index, path.name), _sample_rate(ctx.game))
         row = {"file": path.name, **_measure(path)}
         if row["peakDb"] is None:
-            _merge(warnings, ["sfx_silent"])
+            _merge(warnings, [_audio_warning("sfx_silent")])
         files[str(index)] = relative(ctx, path)
         rows.append(row)
     return AttemptResult(files, {"engine": engine, "variants": rows}, warnings, {"steps": list(ctx.steps)})
@@ -350,7 +362,7 @@ def _loop_points(path, audio: np.ndarray, sr: int, target: float, bpm: float) ->
         return int(start), int(end), int(xf), []
     # best_loop found no downbeat pair and returned the whole (too long) take.
     start, end, xf = _grid_loop(int(audio.shape[0]), sr, target, bpm)
-    return start, end, xf, ["loop_no_downbeats"]
+    return start, end, xf, [_audio_warning("loop_no_downbeats")]
 
 
 def _music_files(ctx: GenContext, folder: Path, loop: np.ndarray, sr: int) -> tuple[dict, dict, list[str]]:
@@ -368,7 +380,7 @@ def _music_files(ctx: GenContext, folder: Path, loop: np.ndarray, sr: int) -> tu
     seam = seam_metrics(leveled, leveled_sr)
     _merge(warnings, loop_warnings(seam["sample_jump"], seam["rms_db"]))
     if fallback:
-        warnings.append(str(fallback))
+        warnings.append(_audio_warning("ogg_fallback", str(fallback)))
     metrics = {
         "loopStart": 0,
         "loopEnd": max(0, int(leveled.shape[0]) - 1),

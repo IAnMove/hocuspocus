@@ -1,5 +1,8 @@
 """Seam metric, half-roll and 9-slice on synthetic textures."""
+from pathlib import Path
+
 import numpy as np
+from PIL import Image
 
 from services.game_tiles import nine_slice_margins, roll_half, seam_error, unroll
 
@@ -41,3 +44,15 @@ def test_nine_slice_finds_a_six_pixel_border():
     margins = nine_slice_margins(panel)
     for side in ("left", "right", "top", "bottom"):
         assert abs(margins[side] - 6) <= 1
+
+
+def test_prado_frame_margins_are_symmetric_and_leave_a_center():
+    fixture = Path(__file__).resolve().parent / "fixtures" / "prado-marco.png"
+    image = np.asarray(Image.open(fixture).convert("RGBA"))
+    margins = nine_slice_margins(image)
+    assert margins["left"] == margins["right"]
+    assert margins["top"] == margins["bottom"]
+    assert min(margins.values()) >= 2
+    assert margins["left"] + margins["right"] < image.shape[1]
+    assert margins["top"] + margins["bottom"] < image.shape[0]
+    assert (margins["left"], margins["right"], margins["top"], margins["bottom"]) == (38, 38, 13, 13)
