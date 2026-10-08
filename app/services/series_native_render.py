@@ -760,6 +760,15 @@ class SeriesNativeRender:
             if track.get("kind") != "speech" and path is not None and path.is_file():
                 track["volume"] = round(min(2.0, float(track.get("volume", 1)) * self.deps.loudness_gain(str(path))), 3)
 
+    def _scene3d_bed(self, workspace: str, series: dict, episode: dict, shot: dict, layout: dict, timing: list, duration: float, lines: list) -> tuple[list, list]:
+        """Ambience, stingers, music and effects under a 3D shot, balanced like a 2D shot."""
+        ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
+        position = next((i for i, value in enumerate(ordered) if value["id"] == shot["id"]), 0)
+        first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
+        sound = {"audioTracks": [*sound_tracks(series, shot, first), *sfx_tracks(layout, timing, duration)]}
+        self._balance(self.deps.workspace_dir(workspace), sound)
+        return series_hearing.shape(series, shot, lines, sound["audioTracks"])
+
     def _scene3d(self, workspace: str, job: dict, item: dict, series: dict, episode: dict, shot: dict, kits: dict) -> None:
         """A Video 3D shot: lines timed like a 2D shot, cast objects talk as their kits, exported by the 3D exporter."""
         beats = [beat for beat in shot.get("dialogueBeats") or [] if str(beat.get("text") or "").strip()]
@@ -770,16 +779,9 @@ class SeriesNativeRender:
         lines = [{"characterId": beat.get("characterId"), "start": start, "filename": heard[beat["id"]]["filename"],
                   "cues": item["lines"][beat["id"]].get("cues") or []} for beat, (start, _end) in zip(beats, timing)]
         characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
-        # The scene's ambience, stinger and music play under a 3D shot too, balanced like in a 2D shot.
-        ordered = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
-        position = next((i for i, value in enumerate(ordered) if value["id"] == shot["id"]), 0)
-        first = position == 0 or ordered[position - 1].get("sceneId") != shot.get("sceneId")
-        # Its sound effects and screen effects too, at a second or on a line, like in a 2D shot.
-        sound = {"audioTracks": [*sound_tracks(series, shot, first), *sfx_tracks(layout, timing, duration)]}
-        self._balance(self.deps.workspace_dir(workspace), sound)
-        lines, sound["audioTracks"] = series_hearing.shape(series, shot, lines, sound["audioTracks"])
+        lines, tracks = self._scene3d_bed(workspace, series, episode, shot, layout, timing, duration, lines)
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
-                                          tracks=sound["audioTracks"], root=self.deps.workspace_dir(workspace),
+                                          tracks=tracks, root=self.deps.workspace_dir(workspace),
                                           screen_fx=fx_cues(layout, timing, duration),
                                           plate=location_plate_url(series, shot, workspace))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
@@ -806,6 +808,12 @@ class SeriesNativeRender:
         retries = int(item.get("exportRetries") or 0)
         return f"-r{retries}" if retries else ""
 
+    @staticmethod
+    def _export_was_lost(error: dict | None, task: dict) -> bool:
+        """The exporter dropped the receipt, so the scene stage has to ask for the video again."""
+        return task.get("status") in ("interrupted", "discarded") or (
+            error is not None and (error.get("status") == 404 or error.get("code") == "receipt_not_found"))
+
     def _export(self, workspace: str, job: dict, item: dict) -> bool:
         """True when the take's video is there; False when the export was lost and the scene stage must ask again."""
         while True:
@@ -819,9 +827,7 @@ class SeriesNativeRender:
                 item.update(video=artifacts[0]["name"], stage="foley")
                 self._save(workspace, job)
                 return True
-            lost = task.get("status") in ("interrupted", "discarded") or (
-                error is not None and (error.get("status") == 404 or error.get("code") == "receipt_not_found"))
-            if lost:
+            if self._export_was_lost(error, task):
                 item.update(stage="scene", exportRetries=int(item.get("exportRetries") or 0) + 1,
                             error=f"export {task.get('status') or 'unknown'}; asking again")
                 self._save(workspace, job)
