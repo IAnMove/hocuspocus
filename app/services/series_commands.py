@@ -200,8 +200,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "every other language in the lines. episode_id rewrites that episode (takes are kept by shot id; its review "
         "mode and notes too, and a shot whose content changed goes back to pending review). The script written is kept "
         "as the episode's next script revision (scriptRevision; read it with series.episode.script.get). "
-        "Optional number (integer >= 1), only when there is no episode_id: a taken number is 409 episode_number_taken "
-        "with the holder's id. "
+        "Optional number (integer >= 1), only when there is no episode_id: a number taken in the first season (where "
+        "the episode goes) is 409 episode_number_taken with the holder's id. "
         "warnings lists speaker_not_on_screen, location_differs_from_scene and template_backdrop_other_location "
         "and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
         "location (the shot location's plate) or {asset: id}. "
@@ -348,7 +348,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "season_id": {"type": "string", "maxLength": 160}, "episode": OBJECT},
         ["workspace", "series_id"], True,
         "Create an episode (chapter) in an approved series. It freezes the approved canon and references. "
-        "Optional episode.number (integer >= 1) is honored; a taken number is 409 episode_number_taken with the holder's id.",
+        "Optional episode.number (integer >= 1) is honored; a number taken in that season is 409 episode_number_taken "
+        "with the holder's id.",
     ),
     "series.episode.update": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID, "episode": OBJECT, "base_revision": REVISION,
@@ -374,7 +375,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "fade?, speed?, offset?, loop?}]), hold {carrier (a 3D model object that does not speak in the shot), hand left|right, "
         "offset? [x,y,z] m, rotation? [x,y,z] radians, Euler XYZ in the hand bone's frame} and appearance {start, "
         "duration?, color?}; a model is 1.7 m x scale tall. Optional episode.number (integer >= 1) renumbers it; "
-        "a taken number is 409 episode_number_taken with the holder's id.",
+        "a number taken in that season is 409 episode_number_taken with the holder's id.",
     ),
     "series.episode.kits.pin": (
         {"workspace": WORKSPACE, "series_id": ID, "episode_id": ID,

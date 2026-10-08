@@ -411,7 +411,7 @@ def test_bulk_attempt_approval_is_atomic_and_rejects_duplicate_shots():
         ])
 
 
-def test_an_episode_number_is_optional_and_unique_across_the_series():
+def test_an_episode_number_is_optional_and_unique_in_its_season():
     from fastapi import HTTPException
     from routers.series_episode import apply_series_episode_update, create_checked_episode
     from services.series_library import EpisodeNumberTaken
@@ -512,3 +512,36 @@ def test_a_series_put_keeps_omitted_fields_and_replaces_a_nested_object_whole():
     sent_episodes[episode["id"]]["review"] = {"mode": "direct", "shots": {}}
     kept = saved({"episodesById": sent_episodes})
     assert kept["episodesById"][episode["id"]]["review"]["mode"] == "plan"
+
+
+def test_an_episode_number_is_unique_per_season_and_checked_only_when_it_changes():
+    """Season 2 has its own episode 1, and the editor re-sending a number an episode already has is no change."""
+    from routers.series_episode import apply_series_episode_update
+    from services.series_library import EpisodeNumberTaken
+
+    series = create_series_project("default")
+    first_season = series["seasons"][0]["id"]
+    series["seasons"].append({**series["seasons"][0], "id": "season_2", "number": 2, "title": "Season 2", "episodeOrder": []})
+    one = create_series_episode(series)
+    series["episodesById"][one["id"]] = one
+    other_one = create_series_episode(series, "season_2", number=1)
+    assert other_one["seasonId"] == "season_2" and other_one["number"] == 1
+    series["episodesById"][other_one["id"]] = other_one
+    old_twin = {**create_series_episode(series), "number": 1}
+    series["episodesById"][old_twin["id"]] = old_twin
+    series["revision"] = 1
+
+    for episode in (one, other_one, old_twin):
+        sent = copy.deepcopy(series["episodesById"][episode["id"]])
+        sent["title"] = "Renamed"
+        saved = apply_series_episode_update("show", episode["id"], {"episode": sent, "baseSeriesRevision": 1}, series, updated_at="t")
+        assert saved["episodesById"][episode["id"]]["title"] == "Renamed"
+    moved = update_series_episode(series, old_twin["id"], {"number": 2}, base_series_revision=1)
+    assert moved["episodesById"][old_twin["id"]]["number"] == 2
+    with pytest.raises(EpisodeNumberTaken) as taken:
+        update_series_episode(moved, one["id"], {"number": 2}, base_series_revision=2)
+    assert taken.value.holder_id == old_twin["id"]
+    second = update_series_episode(moved, other_one["id"], {"number": 2}, base_series_revision=2)
+    assert second["episodesById"][other_one["id"]]["number"] == 2, "season 1's episode 2 does not block season 2"
+    with pytest.raises(EpisodeNumberTaken):
+        update_series_episode(moved, other_one["id"], {"number": 1, "seasonId": first_season}, base_series_revision=2)

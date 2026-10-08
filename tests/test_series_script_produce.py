@@ -276,8 +276,8 @@ def test_producing_again_renders_only_out_of_date_shots_and_rerender_renders_the
     assert done["status"] == "completed", done
     renders = [data for tool, data in tools.calls if tool == "series.episode.render_native"]
     assert renders == [{"workspace": "cast", "series_id": "uv", "episode_id": "ep2", "approve": True, "shot_ids": ["e2s03"]}]
-    assert done["steps"][1]["progress"]["label"].startswith("Every shot already has"), "nothing to render in English: straight to the cut"
-    assert done["steps"][1]["progress"]["done"] == 0 and done["steps"][1]["progress"]["total"] == 0
+    assert done["steps"][1]["progress"].startswith("Every shot already has"), "nothing to render in English: straight to the cut"
+    assert done["steps"][1]["progressCount"] == {"done": 0, "total": 0}
     assert sorted(done["chapters"]) == ["english", "spanish"]
     tools.calls.clear()
     again = finished(service, service.start("cast", "uv", "ep2", rerender=True)["jobId"])
@@ -347,7 +347,7 @@ def test_a_finished_production_is_not_overwritten_by_a_stale_running_read(tmp_pa
 
 
 def test_produce_counts_finished_shots_then_clips(tmp_path):
-    """A 5-shot render reports 0/5 while the first shot runs, then 1/5 … 5/5. The label stays the child's message."""
+    """A 5-shot render reports 0/5 while the first shot runs, then 1/5 … 5/5. progress stays the child's message (text)."""
     seen = []
     polls = {"render": 0, "cut": 0}
 
@@ -374,7 +374,7 @@ def test_produce_counts_finished_shots_then_clips(tmp_path):
 
     def sleep(_seconds):
         job = box["service"].jobs("cast")[0]
-        seen.append(dict(job["progress"]))
+        seen.append({**job["progressCount"], "label": job["progress"]})
 
     base = producer(tmp_path, call)
     service = SeriesProduce(ProduceDeps(call=call, workspace_dir=base.deps.workspace_dir, read_library=base.deps.read_library,
@@ -382,11 +382,12 @@ def test_produce_counts_finished_shots_then_clips(tmp_path):
     box["service"] = service
     done = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
     assert done["status"] == "completed" and done["message"].startswith("Rendered and cut")
-    assert done["steps"][0]["progress"] == {"done": 5, "total": 5, "label": "5 of 5 shots rendered"}
-    assert done["steps"][1]["progress"] == {"done": 5, "total": 5, "label": "Cut"}
+    assert done["steps"][0]["progress"] == "5 of 5 shots rendered"
+    assert done["steps"][0]["progressCount"] == {"done": 5, "total": 5}
+    assert done["steps"][1]["progress"] == "Cut" and done["steps"][1]["progressCount"] == {"done": 5, "total": 5}
     assert [item["done"] for item in seen if item["label"].startswith("Shot")] == [0, 1, 2, 3, 4]
     assert {"done": 2, "total": 5, "label": "Cutting 2 of 5"} in seen
-    assert done["progress"] == {"done": 5, "total": 5, "label": "Cut"}
+    assert done["progress"] == "Cut" and done["progressCount"] == {"done": 5, "total": 5}
 
 
 def test_from_script_uses_a_free_number_and_refuses_a_taken_one(tmp_path):

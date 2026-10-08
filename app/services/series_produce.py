@@ -17,8 +17,9 @@ through (``series_review_gate``) and, while shots still wait for an approval, st
 those shots; resuming after the approvals renders again (previews' finals) and cuts.
 
 Steps are saved as they finish, so a restart or a cancel resumes where it stopped.
-Each step and the job carry ``progress`` ``{done, total, label}``: finished shots
-or clips, and the child job's own message as the label. Missing counts stay null.
+Each step and the job carry ``progress``, the child job's own message (text, as
+the UI shows it), and ``progressCount`` ``{done, total}``: finished shots or
+clips. Missing counts stay null.
 """
 from __future__ import annotations
 
@@ -42,12 +43,18 @@ INTERRUPTED = "The server restarted during this production; resume to continue"
 UP_TO_DATE = "Every shot already has an up-to-date approved take"
 
 
-def _progress(child: dict[str, Any]) -> dict[str, Any]:
-    """Finished count from a render or a cut. ``done`` is how many are done; the label is the child's message."""
+def _count(child: dict[str, Any]) -> dict[str, Any]:
+    """Finished count from a render or a cut. ``done`` is how many are done."""
     done, total = child.get("current"), child.get("total")
     if type(done) is not int or type(total) is not int:
         done = total = None
-    return {"done": done, "total": total, "label": child.get("message")}
+    return {"done": done, "total": total}
+
+
+def _show(job: dict, step: dict, progress: str | None, count: dict[str, Any]) -> None:
+    """``progress`` stays text: stored jobs and the UI read it as a string."""
+    step.update(progress=progress, progressCount=count)
+    job.update(progress=progress, progressCount=count)
 
 
 class ProduceError(RuntimeError):
@@ -261,7 +268,7 @@ class SeriesProduce:
             return False
         for item in job["steps"]:
             if item["kind"] == "render":
-                item.update(status="queued", jobId=None, retries=0, progress=None)
+                item.update(status="queued", jobId=None, retries=0, progress=None, progressCount=None)
         plans = sum(1 for item in blockers if item["reason"] == "plan")
         previews = sum(1 for item in blockers if item["reason"] == "preview")
         self._save(job, status="waiting", waiting=blockers, finishedAt=time.time(),
@@ -277,9 +284,7 @@ class SeriesProduce:
             if isinstance(error, dict) and (error.get("status") == 404 or error.get("code") == "not_found"):
                 return {"status": "unknown", "message": f"{step['kind']} job {step['jobId']} is gone"}
             current = _result(reply, tool)["job"]
-            progress = _progress(current)
-            step["progress"] = progress
-            job["progress"] = progress
+            _show(job, step, current.get("message"), _count(current))
             self._save(job)
             if current.get("status") not in ACTIVE:
                 return current
@@ -293,9 +298,7 @@ class SeriesProduce:
             if self.deps.stale_shots and not job.get("rerender"):
                 stale = self.deps.stale_shots(job["workspace"], job["seriesId"], job["episodeId"], step["language"])
                 if not stale:
-                    progress = {"done": 0, "total": 0, "label": UP_TO_DATE}
-                    step["progress"] = progress
-                    job["progress"] = progress
+                    _show(job, step, UP_TO_DATE, {"done": 0, "total": 0})
                     return
                 data["shot_ids"] = stale
                 step["shots"] = len(stale)

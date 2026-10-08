@@ -308,12 +308,16 @@ def _approved_stages(episode: dict[str, Any], shot_id: str, before: str, after: 
 
 def _approval_report(episode: dict[str, Any], shot_id: str, stored: dict[str, Any], changed: list[str],
                      keep_approval: bool) -> dict[str, Any]:
-    """What this edit cleared. Volume-only sfx keeps the take; other digest-stable edits (foley) still drop it."""
-    from services.series_review import content_digest
+    """What this edit cleared. Volume-only sfx keeps every approval: the stored digest still counts the volume, so the
+    plan and preview decisions move to the new one. Other digest-stable edits (foley) still drop the take."""
+    from services.series_review import carry_decisions, content_digest
     shot = next(item for item in episode.get("shots") or [] if item.get("id") == shot_id)
     before, after = content_digest(stored), content_digest(shot)
-    cleared = _approved_stages(episode, shot_id, before, after)
-    volume_only = set(changed) <= {"sfx"} and before == after
+    volume_only = set(changed) <= {"sfx"} and \
+        content_digest(stored, sfx_volume=False) == content_digest(shot, sfx_volume=False)
+    if volume_only:
+        carry_decisions(episode, shot_id, before, after)
+    cleared = [] if volume_only else _approved_stages(episode, shot_id, before, after)
     if not keep_approval and not volume_only and reset_approvals(episode, shot_id):
         cleared.append("take")
     return {"approvalReset": bool(cleared), "reset": cleared}

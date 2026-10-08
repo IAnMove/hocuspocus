@@ -454,7 +454,7 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     series = read_series()
     episodes = series.get("episodesById") or {}
     requested = number
-    number = _episode_number(episodes, episode_id) if episode_id else assign_episode_number(episodes, requested)
+    number = _episode_number(episodes, episode_id) if episode_id else assign_episode_number(series, requested)
     built = EpisodeScript(series, script, number, kits, files, root)
     built.check()
     shots = built.shots()
