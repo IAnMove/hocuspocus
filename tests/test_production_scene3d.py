@@ -432,6 +432,13 @@ def test_names_become_urls_and_clip_names_their_index(tmp_path):
     assert config["cast"]["subject_1"]["source"] == "hero.glb"  # the spec itself is left alone
 
 
+def test_a_clip_asked_by_its_rig_id_finds_the_baked_name(tmp_path):
+    glb(tmp_path / "hero.glb", ["Idle", "Dance Bounce", "Kneel Pray"])
+    resolved = resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "hero.glb", "clip": "kneel_pray"}}},
+                             stills={}, root=tmp_path, workspace="w")
+    assert resolved["cast"]["subject_1"]["clip"] == {"index": 2, "name": "Kneel Pray"}
+
+
 def test_unknown_names_and_clips_fail_before_any_export(tmp_path):
     glb(tmp_path / "hero.glb", ["idle"])
     with pytest.raises(ValueError, match="is not a URL, a model, a stills name or a file"):
@@ -477,6 +484,12 @@ def test_real_compiler_binds_cast_and_background_and_projects_the_floor():
     assert slots["subject_1"]["sourceUrl"].endswith("hero.glb?workspace=t") and slots["subject_1"]["media"] == "model3d"
     assert slots["background"]["sourceUrl"].endswith("fair.png?workspace=t") and slots["background"]["media"] == "image"
     assert doc["environment"]["floorStyle"] == "backdrop"
+    # The painted set replaces the street dressing and hangs as one plane facing the camera, behind the cast.
+    assert doc["dressing"] == "none"
+    plate = slots["background"]
+    assert plate["surface"] == "cutout" and "loop" not in plate and plate["position"][2] < -10
+    assert plate["position"][1] < 0 < plate["position"][1] + 2 * plate["scale"], "the plane reaches below the floor and above the eye"
+    assert abs(doc["camera"].get("orbitTurns", 0)) <= 0.06, "a flat set holds only a short orbit"
     flat = compile_document(cast_shot(cast={"subject_1": "/api/v1/file/hero.glb?workspace=t"},
                                       background="/api/v1/file/fair.png?workspace=t", floor="none"), 4)
     assert flat["environment"]["floorStyle"] == "none"
@@ -487,6 +500,10 @@ def test_real_compiler_keeps_a_floor_the_template_chose_and_skips_an_environment
     mirror = compile_document(cast_shot(template="cine-reflections", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
                                         background="/api/v1/file/f.png?workspace=t"), 4)
     assert mirror["environment"]["floorStyle"] == "mirror"
+    built = compile_document(cast_shot(template="dark-forest", cast={"subject_1": "/api/v1/file/h.png?workspace=t"},
+                                       background="/api/v1/file/f.png?workspace=t"), 4)
+    forest = next(slot for slot in built["slots"] if slot["slot"] == "background")
+    assert forest["position"] == [0, 2.1500000000000004, -12] and forest["scale"] == 24, "a template drawn as a set keeps its plane"
     plate = compile_document(cast_shot(template="reflective-stage", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
                                        background="/api/v1/file/f.png?workspace=t"), 4)
     assert (plate.get("environment") or {}).get("floorStyle") != "backdrop"

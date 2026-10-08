@@ -4,10 +4,16 @@ import { applyScene3DTemplate, SCENE3D_TEMPLATE_IDS } from '../src/features/scen
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { scene3dPlaybackSpeed } from '../src/features/scene3d/clock.ts'
 import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/scene3d/frameFormat.ts'
+import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 
+const SET_BEHIND = 12
+const SET_MAX_TURNS = 0.06
+const SET_COVER = 2
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
+// A template drawn for a painted set already hangs its plate where its camera needs it.
+const drawnAsSet = document.environment?.floorStyle === 'backdrop'
 if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
@@ -26,6 +32,7 @@ document.duration = authored
 document.fps = config.fps ?? document.fps
 delete document.soundtrack
 retargetFraming(document)
+if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
 const parsed = parseScene3DDocument(document)
 if (!parsed) throw new Error('Invalid Video 3D document')
 process.stdout.write(JSON.stringify(parsed))
@@ -74,10 +81,12 @@ function bindCast(document, key, entry) {
   document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]
 }
 
-/** The template's background picture. On a cutout plane it is also projected onto the floor (see applyFloor). */
+/** The template's background picture. On a cutout plane it is also projected onto the floor (see applyFloor).
+ * The painted set replaces the template's procedural dressing (a street, a stage...) unless the shot asks for one. */
 function bindBackground(document, entry) {
   const slots = document.slots.filter(slot => slot.slot === 'background')
   if (!slots.length) throw new Error('background_slot_missing')
+  document.dressing = 'none'
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
     : { ...slot, sourceUrl: entry.source, media: 'image', ...(entry.surface ? { surface: entry.surface } : {}) })
 }
@@ -87,6 +96,32 @@ function applyFloor(document, config) {
   const floorStyle = config.floor ?? (config.background && document.environment?.floorStyle === undefined
     && document.slots.some(slot => slot.slot === 'background' && (!slot.surface || slot.surface === 'cutout')) ? 'backdrop' : undefined)
   if (floorStyle) document.environment = { reflectiveFloor: false, platform: false, ...document.environment, floorStyle }
+}
+
+/** Hang the painted set as one big plane facing the camera, 12 m behind what it looks at, so the projected floor
+ * continues the picture under the cast. Only for a template not drawn for a painted set (its background is a
+ * cylinder or a small plane at the origin). The plane covers the view with room for the camera move (twice the
+ * frustum at that distance). */
+function stagePaintedSet(document) {
+  const background = document.slots.find(slot => slot.slot === 'background')
+  if (!background || background.surface === 'environment') return
+  // A flat picture holds for a short arc: a wider orbit would swing past its edge into the void.
+  const turns = document.camera.orbitTurns
+  if (typeof turns === 'number' && Math.abs(turns) > SET_MAX_TURNS) document.camera = { ...document.camera, orbitTurns: Math.sign(turns) * SET_MAX_TURNS }
+  // The projected floor is drawn from the camera at mid-shot (backdropFloor.referenceEye), so the plane faces it.
+  const eye = cameraEyeAtTime(document.camera, document.duration / 2, document.duration, document.slots)
+  const { look, fov } = document.camera
+  const [dx, dz] = [look[0] - eye[0], look[2] - eye[2]]
+  const flat = Math.hypot(dx, dz) || 1
+  const [ux, uz] = [dx / flat, dz / flat]
+  const distance = flat + SET_BEHIND
+  const half = distance * Math.tan((fov * Math.PI) / 360) * SET_COVER
+  // A cutout stands on its position (its centre is scale above it), so the plane hangs half its height lower.
+  const centre = eye[1] + (look[1] - eye[1]) * (distance / flat)
+  const plane = { ...background, surface: 'cutout', grounded: false, scale: half, rotationY: Math.atan2(-ux, -uz),
+    position: [look[0] + ux * SET_BEHIND, centre - half, look[2] + uz * SET_BEHIND] }
+  delete plane.loop
+  document.slots = document.slots.map(slot => slot === background ? plane : slot)
 }
 
 /** A GLB in a cutout's slot becomes a model and a picture in a model's slot a cutout; anything else keeps the slot's media. */

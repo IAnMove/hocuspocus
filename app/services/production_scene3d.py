@@ -82,6 +82,10 @@ def _check_background(config):
         raise ValueError(f"scene3d.floor must be one of {', '.join(FLOOR_STYLES)}")
 
 
+def _clip_key(name):
+    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+
 def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
     """The shot's scene3d with every named picture or model as a URL, and clips named by name as {index, name}.
 
@@ -112,9 +116,11 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         names = []
         if address.path.startswith("/api/v1/file/") and parse_qs(address.query).get("workspace") == [workspace]:
             names = glb_clip_names(Path(root) / name)
-        if value not in names:
+        # The rig asks for dance_bounce and bakes "Dance Bounce": either spelling names the clip.
+        found = [index for index, name in enumerate(names) if _clip_key(name) == _clip_key(value)]
+        if not found:
             raise ValueError(f"scene3d.cast.{key}: no clip {value!r} in its model (clips: {', '.join(names) or 'none'})")
-        return {"index": names.index(value), "name": value}
+        return {"index": found[0], "name": names[found[0]]}
 
     resolved = json.loads(json.dumps(config))
     if _source(resolved.get("subject")):
