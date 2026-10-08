@@ -35,7 +35,7 @@ def test_a_video_object_is_stored_and_drops_the_model_audio():
     tools = Series()
     result = apply_script(tools, tools.read, KITS, FILES, "cast", _script())
     shot = _shot(tools)
-    assert result["shots"] == ["e2s00"] and "warnings" not in result
+    assert result["shots"] == ["e2s00"] and not result.get("warnings")
     assert shot["productionMethod"] == "imported_video"
     assert shot["video"] == {"prompt": "Ana waves once", "start": "plan", "end": "same", "frames": 124,
                              "model": "minimax_h3", "maxTakes": 2, "keepAudio": False}
@@ -71,7 +71,7 @@ def test_a_bad_video_is_a_script_error_and_a_budget_only_warns():
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", over, check_only=True)
     assert checked["warnings"] == [{"code": "video_budget", "maxShots": 0, "shots": 1}] and tools.calls == []
     written = apply_script(tools, tools.read, KITS, FILES, "cast", {**_script(), "videoBudget": {"maxShots": 2}})
-    assert "warnings" not in written and tools.calls[1][1]["episode"]["videoBudget"] == {"maxShots": 2}
+    assert not written.get("warnings") and tools.calls[1][1]["episode"]["videoBudget"] == {"maxShots": 2}
 
 
 def test_the_video_field_survives_an_episode_update_and_does_not_change_a_shot_that_omits_it():
