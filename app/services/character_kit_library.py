@@ -185,32 +185,10 @@ def _pose_mouth_sources(value: Any, pose_id: str) -> dict[str, str]:
     return sources
 
 
-def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError("Character Kit must be a JSON object")
-    kit_id = _token(value.get("id") or fallback_id, "Character Kit")
-    style = str(value.get("style") or "cutout")
-    if style not in _STYLES:
-        raise ValueError("Character Kit style is invalid")
-
-    poses_raw = value.get("poses") or {}
-    if not isinstance(poses_raw, dict) or len(poses_raw) > 32:
-        raise ValueError("Character Kit poses must be an object with at most 32 entries")
-    poses = {_token(key, "Pose"): _asset(asset, f"Pose {key}") for key, asset in poses_raw.items()}
-
-    mouth_raw = value.get("mouth") or {}
-    if not isinstance(mouth_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_raw):
-        raise ValueError("Character Kit mouth states are invalid")
-    mouth = {key: _asset(asset, f"Mouth {key}") for key, asset in mouth_raw.items()}
-    lips_fields: dict[str, Any] = {}
-    _copy_mouth_candidates(value, lips_fields)
-
-    eyes_raw = value.get("eyes") or {}
-    if not isinstance(eyes_raw, dict) or any(key not in {"open", "blink"} for key in eyes_raw):
-        raise ValueError("Character Kit eye states are invalid")
-    eyes = {key: _asset(asset, f"Eyes {key}") for key, asset in eyes_raw.items()}
-
-    anchors_raw = value.get("anchors") or {}
+def _pose_anchors(anchors_raw: Any) -> dict[str, dict[str, Any]]:
+    """Mouth, eye and blink anchors for each pose. Missing input is an empty set."""
+    if not anchors_raw:
+        anchors_raw = {}
     if not isinstance(anchors_raw, dict) or len(anchors_raw) > 32:
         raise ValueError("Character Kit anchors must be an object with at most 32 poses")
     anchors: dict[str, dict[str, Any]] = {}
@@ -241,6 +219,35 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
                 raise ValueError(f"{pose_id} blink source must be persistent, not a browser blob URL")
             group["blinkSource"] = source
         anchors[pose_id] = group
+    return anchors
+
+
+def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("Character Kit must be a JSON object")
+    kit_id = _token(value.get("id") or fallback_id, "Character Kit")
+    style = str(value.get("style") or "cutout")
+    if style not in _STYLES:
+        raise ValueError("Character Kit style is invalid")
+
+    poses_raw = value.get("poses") or {}
+    if not isinstance(poses_raw, dict) or len(poses_raw) > 32:
+        raise ValueError("Character Kit poses must be an object with at most 32 entries")
+    poses = {_token(key, "Pose"): _asset(asset, f"Pose {key}") for key, asset in poses_raw.items()}
+
+    mouth_raw = value.get("mouth") or {}
+    if not isinstance(mouth_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_raw):
+        raise ValueError("Character Kit mouth states are invalid")
+    mouth = {key: _asset(asset, f"Mouth {key}") for key, asset in mouth_raw.items()}
+    lips_fields: dict[str, Any] = {}
+    _copy_mouth_candidates(value, lips_fields)
+
+    eyes_raw = value.get("eyes") or {}
+    if not isinstance(eyes_raw, dict) or any(key not in {"open", "blink"} for key in eyes_raw):
+        raise ValueError("Character Kit eye states are invalid")
+    eyes = {key: _asset(asset, f"Eyes {key}") for key, asset in eyes_raw.items()}
+
+    anchors = _pose_anchors(value.get("anchors"))
 
     result: dict[str, Any] = {
         "version": 1,
