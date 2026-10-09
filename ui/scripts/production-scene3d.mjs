@@ -75,6 +75,8 @@ function bindCast(document, key, entry) {
   if (!current && !entry.add) throw new Error(byRole.length > 1 ? `cast_role_ambiguous:${key}` : `cast_slot_missing:${key}`)
   const base = current ?? { id: key, slot: 'prop', position: [0, 0, 0], rotationY: 0, scale: 1, media: 'model3d', clip: null }
   const next = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
+  // A generated model is centred on its origin; standing it on its feet keeps its animated legs above the floor.
+  if (next.media === 'model3d' && entry.grounded === undefined) next.grounded = true
   for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance']) {
     if (entry[field] !== undefined) next[field] = structuredClone(entry[field])
   }
@@ -87,8 +89,9 @@ function bindBackground(document, entry) {
   const slots = document.slots.filter(slot => slot.slot === 'background')
   if (!slots.length) throw new Error('background_slot_missing')
   document.dressing = 'none'
-  // An unbound prop is an editor placeholder (a plain block): in front of a painted set it would block the picture.
-  document.slots = document.slots.filter(slot => slot.slot !== 'prop' || slot.sourceUrl || slot.screen?.sourceUrl)
+  // An unbound object (a second subject or a prop nobody cast) is an editor placeholder, a plain block:
+  // in front of a painted set it would hide the picture.
+  document.slots = document.slots.filter(slot => slot.slot === 'background' || slot.sourceUrl || slot.screen?.sourceUrl)
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
     : { ...slot, sourceUrl: entry.source, media: 'image', ...(entry.surface ? { surface: entry.surface } : {}) })
 }
@@ -118,8 +121,10 @@ function stagePaintedSet(document) {
   const [ux, uz] = [dx / flat, dz / flat]
   const distance = flat + SET_BEHIND
   const half = distance * Math.tan((fov * Math.PI) / 360) * SET_COVER
-  // A cutout stands on its position (its centre is scale above it), so the plane hangs half its height lower.
-  const centre = eye[1] + (look[1] - eye[1]) * (distance / flat)
+  // The set is painted at eye level, so its horizon is the picture's middle: that line goes at the camera's eye height,
+  // and the painted floor then lies where the cast stands. A cutout stands on its position (its centre is scale
+  // above it), so the plane hangs half its height lower.
+  const centre = eye[1]
   const plane = { ...background, surface: 'cutout', grounded: false, scale: half, rotationY: Math.atan2(-ux, -uz),
     position: [look[0] + ux * SET_BEHIND, centre - half, look[2] + uz * SET_BEHIND] }
   delete plane.loop
