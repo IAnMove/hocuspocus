@@ -214,3 +214,62 @@ def test_the_scenery_look_drops_the_sentences_about_people():
     look = ("Toy diorama of painted wood and felt; characters are vinyl figurines with rounded faces; warm lanterns. "
             "No text.")
     assert scenery_look(look) == "Toy diorama of painted wood and felt; warm lanterns. No text."
+
+
+DIORAMA = {"kind": "diorama", "prompt": "a village square on a summer night", "seed": 5,
+           "houses": ["a pale yellow house with a green door", "a terracotta townhouse with blue shutters"],
+           "ground": "worn terracotta floor tiles", "sky": "a deep blue night with a big moon"}
+
+
+def painting(production):
+    """Real pictures: a diorama set's pieces are built from them."""
+    from PIL import Image
+
+    def wait(jobs):
+        for name in jobs:
+            Image.new("RGB", (48, 64), (200, 110, 60)).save(production.root / f"{name}.png")
+        return {name: f"{name}.png" for name in jobs}
+    production.wait = wait
+
+
+def test_a_diorama_set_draws_facades_a_ground_and_a_sky_and_builds_its_pieces(tmp_path):
+    production = Production(tmp_path)
+    painting(production)
+    spec = {"style": {"image": "felt puppets, two figurines dancing"}, "sets": {"plaza": DIORAMA}}
+    check_models(spec)
+    make_models(production, spec, sleep=lambda _: None)
+    drawn = {image["key"]: image for image in production.images}
+    assert sorted(drawn) == ["set-plaza-ground", "set-plaza-house-1", "set-plaza-house-2", "set-plaza-sky"]
+    assert drawn["set-plaza-house-1"]["res"] == "768x1024" and "fills the whole picture" in drawn["set-plaza-house-1"]["prompt"]
+    assert "a pale yellow house" in drawn["set-plaza-house-1"]["prompt"] and "figurines" not in drawn["set-plaza-house-1"]["prompt"]
+    assert "seamless tileable" in drawn["set-plaza-ground"]["prompt"] and drawn["set-plaza-sky"]["res"] == "1664x928"
+    made = production.state["sets"]["plaza"]
+    assert [house["height"] for house in made["houses"]] == [7.5, 9.0] and made["houses"][0]["width"] == 5.625
+    assert made["houses"][0]["source"] == "/api/v1/file/set-piece-plaza-house-1.glb?workspace=w"
+    assert (tmp_path / "set-piece-plaza-ground.glb").is_file() and made["ground"]["size"] == 80.0
+    resolved = resolve_media({"template": "dance-stage", "background": {"source": "plaza", "layout": "open"}},
+                             stills={}, root=tmp_path, workspace="w", sets=production.state["sets"])
+    assert resolved["background"] == {"source": made["sky"], "houses": made["houses"], "ground": made["ground"], "layout": "open"}
+    calls = len(production.images)
+    make_models(production, spec, sleep=lambda _: None)
+    assert len(production.images) == calls, "a built set is not drawn again"
+    for bad in ({**DIORAMA, "houses": ["one"]}, {**DIORAMA, "sky": ""}, {**DIORAMA, "size": 3}):
+        with pytest.raises(ModelError):
+            check_models({"sets": {"plaza": bad}})
+
+
+def test_a_models_height_sizes_its_cast_entries_without_remaking_it(tmp_path):
+    production = Production(tmp_path)
+    spec = {**SPEC, "models": {**SPEC["models"], "boat": {**SPEC["models"]["boat"], "height": 1.1}}}
+    make_models(production, spec, sleep=lambda _: None)
+    calls = len(production.calls)
+
+    def scale(**entry):
+        resolved = resolve_media({"template": "dance-stage", "cast": {"prop": {"source": "boat", **entry}}},
+                                 stills=SPEC["stills"], root=tmp_path, workspace="w", models=production.state["models"])
+        return resolved["cast"]["prop"].get("scale")
+    assert scale() == round(1.1 / 1.7, 4) and scale(scale=2) == 2
+    make_models(production, {**spec, "models": {**spec["models"], "boat": {**spec["models"]["boat"], "height": 3.4}}}, sleep=lambda _: None)
+    assert len(production.calls) == calls and scale() == 2.0, "a new height resizes the model, it does not remake it"
+    with pytest.raises(ModelError):
+        check_models({**SPEC, "models": {"boat": {"from": "boat-pic", "height": "tall"}}})

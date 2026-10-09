@@ -25,6 +25,8 @@ CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "po
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add"}
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
+BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout"}
+MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scale
 
 
 def validate_scene3d_shot(shot):
@@ -75,11 +77,32 @@ def _check_cast(cast):
 def _check_background(config):
     if "background" in config:
         entry = config["background"] if isinstance(config["background"], dict) else {"source": config["background"]}
-        if set(entry) - {"source", "surface"} or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
-            raise ValueError("scene3d.background is a picture (URL, workspace file or stills name) or "
+        if set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
+            raise ValueError("scene3d.background is a picture (URL, workspace file, stills name or set) or "
                              "{source, surface: cutout|environment|wall|floor}")
+        if "houses" in entry or "ground" in entry:
+            _check_diorama(entry)
+        if entry.get("layout", "plaza") not in ("plaza", "open"):
+            raise ValueError("scene3d.background.layout is plaza or open")
     if config.get("floor", "backdrop") not in FLOOR_STYLES:
         raise ValueError(f"scene3d.floor must be one of {', '.join(FLOOR_STYLES)}")
+
+
+def _measure(value, low, high):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high
+
+
+def _check_diorama(entry):
+    """A diorama set spelled out: the sky picture as source, house GLBs with their size in metres, a ground slab GLB."""
+    houses, ground = entry.get("houses"), entry.get("ground")
+    if not isinstance(houses, list) or not 0 < len(houses) <= 16 or not all(
+            isinstance(house, dict) and set(house) == {"source", "width", "height"} and _source(house["source"])
+            and _measure(house["width"], 0.5, 60) and _measure(house["height"], 0.5, 60) for house in houses):
+        raise ValueError("scene3d.background.houses lists 1-16 {source, width, height} house models (metres)")
+    if ground is not None and not (isinstance(ground, dict) and set(ground) == {"source", "height", "size"}
+                                   and _source(ground["source"]) and _measure(ground["height"], 0.01, 5)
+                                   and _measure(ground["size"], 4, 1000)):
+        raise ValueError("scene3d.background.ground is {source, height, size}: a ground slab model and its size in metres")
 
 
 def _rig_labels():
@@ -134,11 +157,15 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         resolved["subject"] = url(resolved["subject"])
     if "background" in resolved:
         entry = resolved["background"] if isinstance(resolved["background"], dict) else {"source": resolved["background"]}
-        resolved["background"] = {**entry, "source": url(entry["source"])}
+        resolved["background"] = _diorama(entry, (sets or {}).get(entry["source"])) or {**entry, "source": url(entry["source"])}
     for key, value in (resolved.get("cast") or {}).items():
         entry = value if isinstance(value, dict) else {"source": value}
+        height = (models or {}).get(entry["source"], {}).get("height")
         source = url(entry["source"])
         entry = {**entry, "source": source}
+        # A model made at its real height ("the moto is 1.1 m") keeps it; every model is otherwise 1.7 m tall.
+        if height and "scale" not in entry:
+            entry["scale"] = round(height / MODEL_HEIGHT, 4)
         if "clip" in entry:
             entry["clip"] = clip(source, entry["clip"], key)
         if isinstance(entry.get("clips"), list):
@@ -146,6 +173,14 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
                               for cue in entry["clips"]]
         resolved["cast"][key] = entry
     return resolved
+
+
+def _diorama(entry, made):
+    """A diorama set named as the background: its sky becomes the source, its houses and ground come along."""
+    if not (made or {}).get("houses"):
+        return None
+    pieces = {"source": made["sky"], "houses": made["houses"], **({"ground": made["ground"]} if made.get("ground") else {})}
+    return {**pieces, **{key: value for key, value in entry.items() if key in ("layout",)}}
 
 
 def compile_document(shot, duration):

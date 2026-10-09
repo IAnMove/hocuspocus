@@ -424,6 +424,9 @@ bow, point, shrug, kneel_pray, crouch. Procedural profiles (`prop`, `vehicle`,
 `quadruped`, `flying`, `serpentine`) take their own clips (hover, bounce, spin,
 wobble, strafe…); `none` keeps a rigid model that moves along `motion` paths.
 A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dance_bounce"}`.
+Every model stands 1.7 m tall in a scene unless it gives its real `height` in
+metres (`"moto": {"prompt": "...", "rig": "vehicle", "height": 1.1}`); a cast
+entry's own `scale` wins, and a new height does not remake the model.
 `production.status` times the stage as `models`; a failed model stops the run
 and a resume retries it with a new picture.
 
@@ -433,6 +436,30 @@ is drawn eye-level, with an open floor across the lower third, a clear horizon a
 nobody in it, so the projected floor has ground for the cast to stand on. A shot
 names it as its `background`: `{"template": "dance-stage", "background": "harbour",
 "cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
+
+**Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
+sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
+drawn in the same batch:
+
+```json
+{"sets": {"plaza": {"kind": "diorama", "prompt": "a village square on a summer night",
+  "houses": ["a pale yellow two-storey house with a green door and a flowered balcony",
+             "a terracotta townhouse with blue shutters and string lights",
+             "a white-washed bakery with a striped awning",
+             "an ochre three-storey building with iron balconies"],
+  "ground": "worn terracotta floor tiles", "sky": "a deep blue summer night with a big moon"}}}
+```
+
+Each house facade becomes a textured block 6–10 m tall; the ground is a tiled
+slab and the sky the shot's environment. A shot that names the set as its
+`background` stands the houses in a plaza around what its camera looks at,
+outside every place the camera and the cast go, so an orbit, a crane or a dolly
+gets real parallax and the cast stands on the ground with its shadow. Fronts
+are staggered, with an alley every third house. `{"source": "plaza", "layout":
+"open"}` leaves the back of the plaza empty so the ground meets the sky. A
+camera looking straight down sees the ground only. The houses and the ground
+are ordinary objects in the saved Video 3D document (`set-house-N`,
+`set-ground`), so they can be moved or removed in the editor.
 
 For a musical performance, set the document's `rhythm` to
 `{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
