@@ -21,8 +21,9 @@ What the LLM translated (``series.episode.translate``) is marked until a person 
     version.machineTranslated = {"dialogue": [beatId], "cards": [shotId], "title": true,
                                  "translatedAt": "...", "requestedBy": "agent" | "wizard" | "user" | "server"}
 
-A person's edit of a line, card or title clears its mark (:func:`clear_checked`); an agent's or the Wizard's
-write keeps it, because the text is still not checked by a person.
+A person's edit of a line, card or title clears its mark (:func:`clear_checked`). An agent's or the Wizard's
+write marks the lines, cards and title it just wrote (:func:`record_writer`), because a person has not checked
+them. The server's own jobs leave the marks as they are.
 """
 from __future__ import annotations
 
@@ -95,6 +96,40 @@ def _machine(value: Any, version: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value.get(key), str) and value[key]:
             marks[key] = value[key][:40]
     return marks
+
+
+def _written_ids(mapping: Any, *, cards: bool = False) -> list[str]:
+    """Dialogue keys with text, or card keys with a title or a body."""
+    if not isinstance(mapping, dict):
+        return []
+    found = []
+    for key, value in mapping.items():
+        if not isinstance(key, str) or not key:
+            continue
+        if cards:
+            if isinstance(value, dict) and (str(value.get("title") or "").strip() or str(value.get("body") or "").strip()):
+                found.append(key)
+        elif isinstance(value, str) and value.strip():
+            found.append(key)
+    return found
+
+
+def mark_written(version: dict[str, Any], update: dict[str, Any], requested_by: str) -> dict[str, Any]:
+    """Mark the title, lines and cards an agent or the Wizard just wrote. Music is not text."""
+    title = isinstance(update.get("title"), str) and bool(update["title"].strip())
+    return _mark_translated(
+        version, _written_ids(update.get("dialogue")), _written_ids(update.get("cards"), cards=True),
+        title, requested_by, None,
+    )
+
+
+def record_writer(version: dict[str, Any], update: dict[str, Any], actor: str) -> dict[str, Any]:
+    """A person clears marks on what they wrote. An agent or the Wizard marks that text. The server does neither."""
+    if actor == "user":
+        return clear_checked(version, update)
+    if actor in ("agent", "wizard"):
+        return mark_written(version, update, actor)
+    return version
 
 
 def clear_checked(version: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:

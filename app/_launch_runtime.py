@@ -26712,6 +26712,10 @@ def save_scene_output(body: dict):
                 pass
         raise HTTPException(status_code=500, detail=f"Failed to save scene: {exc}") from exc
 
+    from pathlib import Path
+    from services.document_origin import write_document_origin
+    write_document_origin(Path(scene_path), "scenes.save")
+
     return {
         "name": scene_name,
         "type": "scene",

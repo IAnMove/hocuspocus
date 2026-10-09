@@ -170,9 +170,9 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `assets.upload` | Root file (named copies keep the source sidecar) | Gallery, Assets; trail | As media | Trail | ✅ |
 | `world3d.templates.user.put` | `world3d-user-templates.json` row | **My templates → Saved in this workspace**; trail | Opens as an editable shot | `createdBy` badge, dates | ✅ fixed here (was ❌) |
 | `world3d.scene.instantiate` / `apply_query` / `patch` / `talk` | `world3d-edits/w3d-*.json` (working scene) | Trail (one row per scene) | Trail button opens the current revision in Video 3D | Template, tools and counts | ✅ fixed here. Unpublished ones are also in the Video 3D Open dialog |
-| `world3d.scene.publish`, `scenes.document.save` (3D) | `<template title>-<scene id>-<uuid>.world3d.scene.json` (publish) | Gallery (scene), Open scene dialog, trail | Video 3D | Trail; the working copy records the published revision | ✅ fixed here. The preview stays the placeholder until the scene is exported (then its middle frame) |
+| `world3d.scene.publish`, `scenes.document.save` (3D) | `<template title>-<scene id>-<uuid>.world3d.scene.json` (publish) + `.meta.json` when an agent or the Wizard saved it | Gallery (scene), Open scene dialog, trail, **Made by agents** | Video 3D | Trail; gallery `origin` (`requested_by` for an agent). A person's save has no sidecar, and a later edit keeps the first origin. The working copy records the published revision | ✅ fixed here. The preview stays the placeholder until the scene is exported (then its middle frame) |
 | `scenes.world3d.export` | Timestamped MP4 + sidecar with the embedded document | Gallery, Activity task | **Edit scene** reopens the document in Video 3D | Agent badge on the task; `requested_by` in the sidecar | ✅ fixed here. The sidecar names the saved scene file (`params.scene_file`) |
-| `scenes.document.save` (2D) | `<name>-<hex>.scene.json` (+ `.scene.preview.png`) | Gallery, Video 2D library, trail | Video 2D | Trail | ✅ The preview is the one sent with the save, or the export's middle frame |
+| `scenes.document.save` (2D) | `<name>-<hex>.scene.json` (+ `.scene.preview.png`, and `.meta.json` when an agent or the Wizard saved it) | Gallery, Video 2D library, trail, **Made by agents** | Video 2D | Trail and gallery `origin`. A person's file has none | ✅ The preview is the one sent with the save, or the export's middle frame |
 | `scenes.video2d.export` | MP4 + sidecar with the scene | Gallery, Activity task | **Edit scene** opens Video 2D | Agent badge | ✅ fixed here. Names keep the shot id; the sidecar names the saved scene |
 | `scenes.video2d.edit`, `lyrics.import`, `template.compile`, `effects.apply` | Nothing until a save (read-only operations) | — | Only once saved | — | ⚠️ by design: lost if the agent never saves |
 | `model3d.generate` | `{stamp}_{model}_{job}.glb` + meta + `.preview.png` | Gallery (3D), Activity | Viewer, Rig, Retexture | Recipe; agent label on the task | ✅ |
@@ -181,7 +181,7 @@ Legend: ✅ the user can find it, open it in its editor and see who made it · �
 | `characters.save` | `.character-kit-library-v1.json` | Character Kit library, trail (the Wizard's changes too) | Character Kit editor | Trail (`kit.provenance` is not shown) | ✅ via the trail |
 | `characters.rig.flat` | `kit-*-mouth/blink/rig-*.png` (no sidecar) + kit record; warp mouths also `kit-*-<pose>-mouth-*.png` in `anchors.<pose>.mouthSources` | Kit face rig, trail | Anchors editable (face rig panel); a warp pose's mouth line in the Face Rig's Mouth line editor | Every PNG has a sidecar (kit, role, style, hints, pose sources as parents); kit record and trail | ✅ (the PNGs still show in the gallery) |
 | `lips.*` | `.lips-creator-library-v1.json` | Lips Creator, trail | Yes | Trail | ✅ |
-| `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail (the Wizard's changes too) | Series Lab | Trail. Machine translations are marked per line, card and title until a person checks them. No creator on the series or episode record | ✅ |
+| `series.create` / `update` / `create_from_template` / `canon.approve` / `episode.*` / `language_version.set` / `translate` | `.series-library-v1.json` | Series Lab, trail (the Wizard's changes too) | Series Lab | Trail. `createdBy` (`actor`, `tool`, optional `capability`) is set when the series or episode is created. A record without it has an unknown author, and a later save does not invent or replace one. Machine translations, including other-language lines a script writes, are marked per line, card and title until a person checks them | ✅ |
 | `series.episode.from_script` | The episode + `.series-scripts-v1/<series>/<episode>.json` (every script written, revisioned, with who sent it) | Series Lab **Episode** tab (scripts), `series.episode.script.get`, trail | View, download, **Rewrite from this script** | `by` on each revision | ✅ fixed here |
 | `series.episode.review.set` / `series.shot.review.set` | `episode.review` in `.series-library-v1.json` | Series Lab **Validation**, trail | Series Lab | `planBy`, `previewBy` and each note's `by` (`user`, `agent`, `wizard`, `server`), shown on the cards | ✅ |
 | `series.asset.import` (`as_take`), `series.take.approve` | `assets/<series>/asset_*` copy + take | Series Lab only, trail | Series Lab (see the per-shot review work) | The take's `approvedBy` (`user`, `agent`, `wizard` or `server` for a render's own approval), shown in Render & Review | ✅ fixed here |
@@ -220,17 +220,14 @@ names and the saved scene in the sidecar, montage links (and the Wizard saving i
 `audio.shorten` and flat-rig sidecars, take, staged-review and production-review deciders, and the
 list of productions. Done in the third pass: machine translations marked, the scripts of
 `from_script` kept (viewer, download, rewrite, MCP read tool), publication links on the music
-production cards, and `origin` in the gallery listing with **Made by agents**. Still open:
+production cards, and `origin` in the gallery listing with **Made by agents**. Scene documents and
+comics an agent or the Wizard saves now get that same sidecar, so **Made by agents** lists them.
+A series or episode records `createdBy` at creation, and other-language lines a script writes are
+marked until a person checks them. Still open:
 
 1. **Previews of scenes that were never exported.** An agent's scene gets a real preview from its
    first export. Before that it keeps the placeholder: a still from the headless renderer would
    take the export lane on every save.
-2. **Files without a sidecar.** Scene documents (`.scene.json`, `.world3d.scene.json`) and comics
-   have no `.meta.json`, so the listing gives them no `origin` and **Made by agents** does not list
-   them. The Activity *Agents* view does.
-3. **Who made the series records.** The series and episode records still have no creator field (the
-   trail and the kept scripts say who wrote them). The other-language lines a script brings are
-   the agent's text and are not marked as machine translations.
 
 ## Tests
 
@@ -256,3 +253,7 @@ production cards, and `origin` in the gallery listing with **Made by agents**. S
 - `ui/tests/recoverabilityLast.test.tsx`: the marks and **Checked** / **Mark all as checked** in Language
   versions, the Episode tab's scripts (view, download, rewrite, a script that no longer fits), the published
   page link on the music production cards, and **Made by agents** (query, listing origin, tile badge).
+- `tests/test_document_origin.py`: scene, world and comic sidecars (agent, Wizard, person, server), the
+  gallery `origin=agent` filter, `createdBy` on create only, and other-language lines an agent writes.
+- `ui/tests/documentSaveActor.test.ts`: a Wizard scene action sends `X-Hocus-UI-Surface: wizard` only while
+  that action is running.

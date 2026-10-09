@@ -17,6 +17,7 @@ from urllib.parse import quote
 from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
 from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error
+from services.document_origin import write_document_origin
 from services.scene_library import preview_png, save_world3d
 from services.scene_links import remember_saved
 
@@ -85,7 +86,7 @@ def _remote_sequence(document: dict) -> bool:
 
 
 def save_document(workspace: str, document: Any, *, name: str | None, preview: str | None,
-                  workspace_dir: Callable[[str], str]) -> dict[str, Any]:
+                  workspace_dir: Callable[[str], str], capability: str = "scenes.document.save") -> dict[str, Any]:
     if not isinstance(workspace, str) or not WORKSPACE_RE.fullmatch(workspace):
         raise SceneDocumentError("Use an explicit valid workspace")
     try:
@@ -95,7 +96,7 @@ def save_document(workspace: str, document: Any, *, name: str | None, preview: s
     if "slots" in valid:
         body = {"workspace": workspace, "document": valid, "name": name, "preview": preview or _placeholder_preview()}
         try:
-            return {**save_world3d(body, workspace_dir), "editor": "video3d"}
+            return {**save_world3d(body, workspace_dir, capability=capability), "editor": "video3d"}
         except ValueError as error:
             raise SceneDocumentError(str(error)) from error
     encoded = json.dumps(valid, ensure_ascii=False, allow_nan=False, indent=2)
@@ -118,6 +119,7 @@ def save_document(workspace: str, document: Any, *, name: str | None, preview: s
     temporary.replace(target)
     # An export of this document names this file and, without a preview, gives it its middle frame (scene_links).
     remember_saved(folder, valid, target.name)
+    write_document_origin(target, capability)
     saved = {"name": target.name, "type": "scene", "workspace_id": workspace, "url": _url(target.name, workspace),
              "editor": "video2d"}
     if png:

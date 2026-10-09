@@ -73,6 +73,7 @@ def create_series_library_router() -> APIRouter:
 
     @router.post("/api/v1/series")
     def create_series_project_endpoint(body: dict):
+        from services.document_origin import stamp_created_series
         from services.series_library import create_series_project, normalize_series_project
 
         workspace = _resolve_workspace(body.get("workspace"))
@@ -80,11 +81,11 @@ def create_series_library_router() -> APIRouter:
             with _library_lock:
                 library = _read_library(workspace)
                 raw_series = body.get("series")
-                series = (
-                    normalize_series_project(raw_series, str(raw_series.get("id") or ""), workspace)
-                    if isinstance(raw_series, dict)
-                    else create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
-                )
+                if isinstance(raw_series, dict):
+                    series = normalize_series_project(raw_series, str(raw_series.get("id") or ""), workspace)
+                    stamp_created_series(series, "series.create", episodes="series.episode.create")
+                else:
+                    series = create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
                 if series["id"] in library["seriesById"]:
                     raise HTTPException(status_code=409, detail="A Series Lab project with this id already exists")
                 library["seriesById"][series["id"]] = series

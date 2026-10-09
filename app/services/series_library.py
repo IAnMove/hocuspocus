@@ -15,6 +15,7 @@ import re
 import uuid
 from typing import Any
 
+from .document_origin import created_by, keep_record_author, restore_created_by
 from .language_intent import normalize_language_intent
 from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
@@ -223,6 +224,7 @@ def create_series_project(
         },
         "createdAt": now, "updatedAt": now,
     }
+    value["createdBy"] = created_by("series.create")
     return normalize_series_project(value, series_id, workspace_id)
 
 
@@ -592,7 +594,9 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
     else:
         episode.pop("kitPins", None)
     from .series_shot_dialogue import annotate_episode_shot_dialogue
-    return annotate_episode_shot_dialogue(episode)
+    episode = annotate_episode_shot_dialogue(episode)
+    keep_record_author(episode)
+    return episode
 
 
 def _normalize_episode_languages(episode: dict, project: dict) -> None:
@@ -823,6 +827,7 @@ def series_put_payload(current: dict, sent: dict) -> dict:
     from .series_review import keep_stored_review
     payload = {**copy.deepcopy(current), **copy.deepcopy(sent)}
     keep_stored_review(current, payload)
+    restore_created_by(current, payload)
     return payload
 
 
@@ -1010,6 +1015,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     })
     synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
+    keep_record_author(project)
     return project
 
 
@@ -1146,11 +1152,13 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
         if key not in {"id", "seasonId", "canonRevisionAtCreation", "canonSnapshot", "createdAt"}:
             episode[key] = copy.deepcopy(value)
     from services.series_production import normalize_production_methods
-    return _normalize_episode(
+    episode = _normalize_episode(
         episode, episode_id, len(season_episodes), str(season["id"]),
         _normalize_canon(series.get("canon")),
         normalize_production_methods(series.get("allowedProductionMethods")),
     )
+    episode["createdBy"] = created_by("series.episode.create")
+    return episode
 
 
 def import_story_project(story: dict, workspace_id: str = "default") -> dict:
@@ -1287,6 +1295,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
         },
         "createdAt": now, "updatedAt": now,
     }
+    series["createdBy"] = created_by("series.import")
     return normalize_series_project(series, series_id, workspace_id)
 
 
@@ -1324,6 +1333,7 @@ def duplicate_series_project(series: dict) -> dict:
         "importedAt": now, "historicalProductionIds": [],
         "migrationNotes": f"Duplicated from Series Lab project {old_id}; episodes and attempts were not copied.",
     }
+    duplicate["createdBy"] = created_by("series.duplicate")
     return duplicate
 
 

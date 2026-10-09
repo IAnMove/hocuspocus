@@ -128,6 +128,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_document_origin.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "symbol_importable",
+      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
       "file": "tests/test_download_state.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",

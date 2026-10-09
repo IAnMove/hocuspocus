@@ -315,7 +315,7 @@ def published_name(workspace: str, scene_id: str, record: dict, workspace_dir) -
 def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
     saved = save_document(workspace, record["document"], name=published_name(workspace, scene_id, record, workspace_dir),
-                          preview=None, workspace_dir=workspace_dir)
+                          preview=None, workspace_dir=workspace_dir, capability="world3d.scene.publish")
     opened = get_document(workspace, saved["name"], workspace_dir=workspace_dir)
     traits = _traits(opened["document"])
     # The working copy remembers what it was published as (the editor's Open dialog lists the unpublished ones).

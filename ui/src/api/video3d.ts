@@ -1,10 +1,11 @@
 import { BASE } from './http'
 import type { ApiOutput } from './outputs'
+import { documentSaveHeaders } from '../lib/documentSaveActor'
 
 export async function saveScene(scene: import('../types').Scene, preview: string, workspace?: string): Promise<{ name: string; type: 'scene'; url: string; thumbnail_url: string }> {
   const res = await fetch(`${BASE}/api/v1/scenes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...documentSaveHeaders() },
     body: JSON.stringify({ scene, preview, workspace }),
   })
   if (!res.ok) {
