@@ -451,7 +451,11 @@ drawn in the same batch:
 ```
 
 Each house facade becomes a textured block 6–10 m tall; the ground is a tiled
-slab and the sky the shot's environment. A shot that names the set as its
+slab and the sky the shot's environment. The facades get the place and the
+production's look; the ground and the sky get neither (with them the image model
+paints a street or rooftops in perspective instead of a texture or an empty sky),
+so put any style words in `ground` and `sky` themselves. Avoid asking for signs:
+the image model writes letters on them. A shot that names the set as its
 `background` stands the houses in a plaza around what its camera looks at,
 outside every place the camera and the cast go, so an orbit, a crane or a dolly
 gets real parallax and the cast stands on the ground with its shadow. Fronts

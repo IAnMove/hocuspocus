@@ -6,7 +6,11 @@
   straight on, filling the picture, and becomes a box of that facade 6-10 m tall (``diorama_set.build_house``).
 - ``ground`` describes the floor ("worn terracotta tiles"), drawn as a seamless top-down tile.
 - ``sky`` describes the sky ("a deep blue summer night with a big moon"), drawn with nothing else in it.
-- ``prompt`` is the place, added to every picture so the pieces belong together.
+- ``prompt`` is the place, added to every facade so the houses belong together.
+
+The ground and the sky get neither the place nor the production's look: with them the image model paints a scene in
+perspective (a street with lanterns, rooftops under the moon) instead of a texture or an empty sky. Their own
+description carries any style ("worn terracotta tiles, matte painted wood").
 
 A scene3d ``background`` naming the set stands the houses in a ring around the action, outside where the camera
 and the cast go, on the ground, with the sky behind (``ui/src/features/scene3d/dioramaSet.ts``); ``layout: "open"``
@@ -22,9 +26,13 @@ SKY_SIZE = "1664x928"
 HEIGHTS = (7.5, 9.0, 6.5, 10.0, 8.0, 7.0, 9.5, 6.0)    # metres, by house; a varied roofline
 FACADE_STAGING = ("flat frontal elevation of the front facade, straight-on orthographic view, the facade fills the whole "
                   "picture edge to edge, everything in sharp focus, no sky, no ground, no street, no people, nothing in front of it")
-GROUND_STAGING = "seamless tileable top-down texture, everything in sharp focus, flat even lighting, no objects, no shadows, no people"
-SKY_STAGING = "only the sky, seen from the ground looking up a little, no buildings, no ground, no trees, no people"
+GROUND_STAGING = ("Flat orthographic view straight down, the pattern fills the whole picture edge to edge and repeats evenly, "
+                  "everything in sharp focus, flat even lighting, no perspective, no horizon, no walls, no furniture, no plants, "
+                  "no lights, no objects, no shadows, no people")
+SKY_STAGING = ("The sky fills the whole picture, no buildings, no rooftops, no towers, no ground, no hills, no trees, no lights, "
+               "no lanterns, no people")
 FIELDS = {"kind", "prompt", "houses", "ground", "sky", "seed"}
+RECIPE = 2      # the picture recipe above; a change draws every diorama set again
 
 
 def is_diorama(entry: Any) -> bool:
@@ -43,6 +51,11 @@ def check_diorama(name: str, entry: dict, text) -> str | None:
     return None
 
 
+def recipe(entry: dict) -> dict:
+    """What a diorama set's fingerprint covers: the entry and the picture recipe."""
+    return {**entry, "recipe": RECIPE}
+
+
 def is_built(record: dict) -> bool:
     return bool(record.get("houses") and record.get("sky"))
 
@@ -54,8 +67,8 @@ def picture_jobs(production: Any, name: str, entry: dict, look: str, choice: tup
     place = entry["prompt"].rstrip(". ")
     parts = {f"house-{index + 1}": (f"The front of {house.rstrip('. ')}, in {place}. {look} {FACADE_STAGING}", FACADE_SIZE)
              for index, house in enumerate(entry["houses"])}
-    parts["ground"] = (f"{entry['ground'].rstrip('. ')}, the floor of {place}. {look} {GROUND_STAGING}", GROUND_SIZE)
-    parts["sky"] = (f"{entry['sky'].rstrip('. ')}, the sky over {place}. {look} {SKY_STAGING}", SKY_SIZE)
+    parts["ground"] = (f"A seamless tileable texture seen from straight above: {entry['ground'].rstrip('. ')}. {GROUND_STAGING}", GROUND_SIZE)
+    parts["sky"] = (f"The open sky and nothing else: {entry['sky'].rstrip('. ')}. {SKY_STAGING}", SKY_SIZE)
     return {f"set:{name}:{part}": production.image(f"set-{name}-{part}", prompt, None, size, seed + index, *choice, attempt)
             for index, (part, (prompt, size)) in enumerate(parts.items())}
 

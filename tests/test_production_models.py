@@ -243,6 +243,9 @@ def test_a_diorama_set_draws_facades_a_ground_and_a_sky_and_builds_its_pieces(tm
     assert drawn["set-plaza-house-1"]["res"] == "768x1024" and "fills the whole picture" in drawn["set-plaza-house-1"]["prompt"]
     assert "a pale yellow house" in drawn["set-plaza-house-1"]["prompt"] and "figurines" not in drawn["set-plaza-house-1"]["prompt"]
     assert "seamless tileable" in drawn["set-plaza-ground"]["prompt"] and drawn["set-plaza-sky"]["res"] == "1664x928"
+    for part in ("ground", "sky"):
+        prompt = drawn[f"set-plaza-{part}"]["prompt"]
+        assert "felt puppets" not in prompt and "village square" not in prompt, "no look and no place: they paint a scene"
     made = production.state["sets"]["plaza"]
     assert [house["height"] for house in made["houses"]] == [7.5, 9.0] and made["houses"][0]["width"] == 5.625
     assert made["houses"][0]["source"] == "/api/v1/file/set-piece-plaza-house-1.glb?workspace=w"

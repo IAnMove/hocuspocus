@@ -28,7 +28,9 @@ import time
 from typing import Any, Callable
 
 from services.production_control import sleep_until
-from services.production_diorama import build as build_diorama, check_diorama, is_built, is_diorama, picture_jobs as diorama_jobs
+from services.production_diorama import (
+    build as build_diorama, check_diorama, is_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
+)
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
 FIELDS = {"from", "prompt", "rig", "animations", "seed", "height"}
@@ -193,7 +195,7 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     made = production.state.setdefault("sets", {})
     jobs = {}
     for name, entry in (spec.get("sets") or {}).items():
-        fingerprint = _fingerprint(entry, None, spec)
+        fingerprint = _fingerprint(diorama_recipe(entry) if is_diorama(entry) else entry, None, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and (kept.get("url") or is_built(kept)):
             continue
