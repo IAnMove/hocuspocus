@@ -241,8 +241,9 @@ def _prepare_generate_params(params):
 
 
 def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None, profiles=None, oauth=None,
-                            on_mutation=None):
-    """``on_mutation(name, arguments, result)`` hears every successful mutating call from an MCP client."""
+                            on_mutation=None, local_mcp=None):
+    """``on_mutation(name, arguments, result)`` hears every successful mutating call from an MCP client.
+    ``local_mcp`` (``services.local_mcp.LocalMcp``) gets this router's adaptation for its in-process calls."""
     router = APIRouter()
     journal = RequestJournal(journal_path)
     token_getter = token_getter or (lambda: os.environ.get('HOCUS_MCP_TOKEN', ''))
@@ -327,6 +328,18 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         else:
             result = handlers[name]()
         return await result if inspect.isawaitable(result) else result
+
+    async def local_call(name, arguments):
+        """``services.local_mcp``: an operation tool gets its arguments as sent; a legacy tool (status, generate...)
+        is adapted exactly as for an MCP client (its job id, its request journal), which a plain handler call skips."""
+        if name in operation_names:
+            result = handlers[name](arguments)
+            return await result if inspect.isawaitable(result) else result
+        return await call_tool(name, arguments)
+
+    router.local_call = local_call
+    if local_mcp is not None:
+        local_mcp.use_dispatch(local_call)
 
     default_instructions = ('One queue: keep returned job IDs and poll status. Reuse request_id on retries; never assume '
                             'generated quality from submission success.')
