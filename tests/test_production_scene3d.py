@@ -552,3 +552,60 @@ def test_a_painted_set_drops_the_templates_unbound_placeholder_props_but_keeps_b
     assert [slot["slot"] for slot in two["slots"] if not slot["sourceUrl"]] == [], "an uncast second subject is no block either"
     bare = compile_document(cast_shot(template="cine-layered-depth", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"}), 4)
     assert any(slot["slot"] == "prop" and not slot["sourceUrl"] for slot in bare["slots"]), "without a painted set the template is untouched"
+
+
+DIORAMA = {"source": "/api/v1/uploads/sky.png", "ground": {"source": "/api/v1/file/ground.glb?workspace=t", "height": 0.2, "size": 80},
+           "houses": [{"source": f"/api/v1/file/house-{n}.glb?workspace=t", "width": width, "height": height}
+                      for n, (width, height) in enumerate([(5.6, 7.5), (6.6, 9.0), (4.2, 6.5)], 1)]}
+
+
+def ring(doc):
+    """(distance from the middle, angle) of each house front; the middle is what the camera looks at mid-shot."""
+    import math
+    houses = [slot for slot in doc["slots"] if slot["id"].startswith("set-house-")]
+    return [(math.hypot(slot["position"][0], slot["position"][2]), math.atan2(slot["position"][0], slot["position"][2])) for slot in houses], houses
+
+
+def test_a_diorama_background_is_checked():
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background={**DIORAMA, "layout": "open"}))
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background={"source": "plaza", "layout": "open"}))
+    for bad in ({**DIORAMA, "houses": []}, {**DIORAMA, "houses": [{"source": "h.glb", "width": 5}]},
+                {**DIORAMA, "ground": {"source": "g.glb"}}, {**DIORAMA, "layout": "maze"}):
+        with pytest.raises(ValueError):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=bad))
+
+
+@NODE
+def test_real_compiler_stands_a_diorama_plaza_around_the_camera_and_the_cast():
+    import math
+    doc = compile_document(cast_shot(template="cine-two-shot", background=DIORAMA, cast={
+        "subject_1": "/api/v1/file/a.glb?workspace=t", "subject_2": "/api/v1/file/b.glb?workspace=t"}), 4)
+    sky = next(slot for slot in doc["slots"] if slot["slot"] == "background")
+    assert sky["surface"] == "environment" and sky["sourceUrl"] == "/api/v1/uploads/sky.png" and "loop" not in sky
+    assert doc["environment"]["floorStyle"] == "none" and doc["dressing"] == "none"
+    ground = next(slot for slot in doc["slots"] if slot["id"] == "set-ground")
+    assert ground["position"][1] == 0 and ground["scale"] == pytest.approx(0.2 / 1.7) and ground["grounded"] is False
+    places, houses = ring(doc)
+    assert len(houses) >= 6 and {slot["sourceUrl"] for slot in houses} == {house["source"] for house in DIORAMA["houses"]}
+    assert min(distance for distance, _ in places) >= 7, "the facades stand outside the camera and the cast"
+    for slot, (distance, angle) in zip(houses, places):
+        assert slot["position"][1] == 0 and slot["scale"] in [pytest.approx(h["height"] / 1.7) for h in DIORAMA["houses"]]
+        facing = (math.sin(slot["rotationY"]), math.cos(slot["rotationY"]))
+        assert facing == pytest.approx((-math.sin(angle), -math.cos(angle)), abs=1e-6), "every front faces the middle"
+    eye = doc["camera"]["eye"]
+    back = min(places, key=lambda place: abs(math.atan2(math.sin(place[1]), math.cos(place[1])) - math.atan2(-eye[0], -eye[2])))
+    assert abs(back[1] - math.atan2(-eye[0], -eye[2])) < 0.5, "the first house closes the back of the shot"
+    orbit = compile_document(cast_shot(template="dance-orbit", background=DIORAMA, cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    reach = orbit["camera"].get("orbitRadius") or 4.2
+    assert min(distance for distance, _ in ring(orbit)[0]) >= reach + 2.5, "an orbiting camera stays inside the plaza"
+
+
+@NODE
+def test_real_compiler_leaves_the_back_of_an_open_plaza_to_the_sky():
+    import math
+    doc = compile_document(cast_shot(template="cine-dolly-in", background={**DIORAMA, "layout": "open"},
+                                     cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    places, _ = ring(doc)
+    eye, look = doc["camera"]["eye"], doc["camera"]["look"]
+    back = math.atan2(look[0] - eye[0], look[2] - eye[2])
+    assert places and all(abs(math.atan2(math.sin(angle - back), math.cos(angle - back))) > 0.85 for _, angle in places)

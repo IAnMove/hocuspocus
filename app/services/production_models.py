@@ -8,9 +8,12 @@
   because the humanoid rig needs one; a rigged model's clips follow the song's tempo.
 - ``rig`` is ``humanoid``, a procedural profile (prop, vehicle, quadruped, flying, serpentine) or ``none``.
 
+``height`` (metres) is the model's real size in a scene; without it every model stands 1.7 m tall. It does not
+remake the model.
+
 ``spec.sets`` maps a name to ``{prompt, seed}``: a painted set for a scene3d ``background``, drawn with a fixed
 recipe (eye-level, an open floor across the lower third, a clear horizon, nobody in it) so the projected floor
-has ground to stand on.
+has ground to stand on. ``{kind: "diorama", ...}`` is a set built in 3D instead (``production_diorama``).
 
 Every picture (sets included), then every Hunyuan3D mesh, then every rig is submitted together, so each model
 loads once. A scene3d ``cast`` entry names a model, and a ``background`` a set, by its name
@@ -25,9 +28,10 @@ import time
 from typing import Any, Callable
 
 from services.production_control import sleep_until
+from services.production_diorama import build as build_diorama, check_diorama, is_built, is_diorama, picture_jobs as diorama_jobs
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
-FIELDS = {"from", "prompt", "rig", "animations", "seed"}
+FIELDS = {"from", "prompt", "rig", "animations", "seed", "height"}
 HUMANOID_CLIPS = ["idle", "walk", "dance_bounce", "wave"]
 PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin"], "vehicle": ["bounce", "wobble"], "quadruped": ["idle", "walk", "run"],
                  "flying": ["hover", "strafe"], "serpentine": ["idle", "wobble"]}
@@ -62,9 +66,13 @@ def check_sets(spec: dict) -> None:
     if not isinstance(sets, dict) or len(sets) > 12:
         raise ModelError("spec.sets maps up to 12 names to {prompt, seed}")
     for name, entry in sets.items():
-        if not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
+        if is_diorama(entry) and isinstance(name, str) and _NAME.match(name):
+            why = check_diorama(name, entry, _text)
+            if why:
+                raise ModelError(why)
+        elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
                 or set(entry) - {"prompt", "seed"} or not _text(entry.get("prompt")):
-            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed}}")
+            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed}}, or a diorama {{kind: \"diorama\", ...}}")
 
 
 def check_models(spec: dict) -> None:
@@ -86,6 +94,9 @@ def _check_model(name: Any, entry: Any, cast: set) -> None:
         raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL) or a prompt")
     if rig_of(entry, cast) not in RIGS:
         raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
+    height = entry.get("height")
+    if height is not None and not (isinstance(height, (int, float)) and not isinstance(height, bool) and 0.05 <= height <= 60):
+        raise ModelError(f"models.{name}.height is the model's size in metres (0.05-60)")
     clips = entry.get("animations")
     if clips is not None and (not isinstance(clips, list) or not 0 < len(clips) <= 8 or not all(_text(c) for c in clips)):
         raise ModelError(f"models.{name}.animations is a list of 1-8 clip names")
@@ -119,7 +130,8 @@ def _source(production: Any, spec: dict, entry: dict) -> str | None:
 def _fingerprint(entry: dict, source: str | None, spec: dict) -> str:
     look = (spec.get("style") or {}).get("image", "")
     bpm = (spec.get("song") or {}).get("bpm")
-    return hashlib.sha256(json.dumps([entry, source, look, bpm, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
+    made_from = {key: value for key, value in entry.items() if key != "height"}
+    return hashlib.sha256(json.dumps([made_from, source, look, bpm, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
 
 
 def scenery_look(look: str) -> str:
@@ -182,9 +194,14 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     jobs = {}
     for name, entry in (spec.get("sets") or {}).items():
         fingerprint = _fingerprint(entry, None, spec)
-        if (made.get(name) or {}).get("fingerprint") == fingerprint and made[name].get("url"):
+        kept = made.get(name) or {}
+        if kept.get("fingerprint") == fingerprint and (kept.get("url") or is_built(kept)):
             continue
         made[name] = {"fingerprint": fingerprint}
+        if is_diorama(entry):
+            made[name]["kind"] = "diorama"
+            jobs.update(diorama_jobs(production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
+            continue
         prompt = f"{SET_LEAD} {entry['prompt']}. {scenery_look(style.get('image', ''))} {SET_STAGING}"
         jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", 11),
                                                *image_choice(entry, style), production._attempt("set_attempts", name))
@@ -222,13 +239,19 @@ def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, s
 def _collect_pictures(production: Any, jobs: dict, made: dict, sets: dict, pictures: dict) -> None:
     for name, file in production.wait(jobs).items():
         is_set = name.startswith("set:")
-        record = sets[name[4:]] if is_set else made[name]
+        set_name, _, part = name[4:].partition(":")
+        record = sets[set_name] if is_set else made[name]
         if not file:
             record["error"] = f"picture failed ({production.failures.get(name, 'no output')})"
+        elif part:
+            record.setdefault("pictures", {})[part] = file
         elif is_set:
             record["url"] = production.upload(file)[1]
         else:
             pictures[name] = production.upload(file)[1]
+    for set_name, record in sets.items():
+        if record.get("pictures") and not record.get("error"):
+            build_diorama(production, set_name, record)
     production.save()
 
 
@@ -283,6 +306,8 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
     made = production.state.setdefault("models", {})
     sets = production.state.setdefault("sets", {})
     todo = _models_to_make(production, spec, made)
+    for name, entry in (spec.get("models") or {}).items():
+        made.setdefault(name, {})["height"] = entry.get("height")
     pictures, jobs = _picture_jobs(production, todo, spec.get("style") or {})
     _collect_pictures(production, {**jobs, **set_jobs}, made, sets, pictures)
     _meshes_and_rigs(production, spec, todo, pictures, made, sleep)
@@ -292,6 +317,7 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
         production.log(f"model {name}: " + (made[name].get("error") or made[name].get("rig_error")
                                             or f"{file} ({', '.join(made[name]['clips']) or 'rigid'})"))
     production.save()
-    failed = [name for name in todo if made[name].get("error")] + [f"set {name[4:]}" for name in set_jobs if sets[name[4:]].get("error")]
+    asked = {key[4:].partition(":")[0] for key in set_jobs}
+    failed = [name for name in todo if made[name].get("error")] + [f"set {name}" for name in sorted(asked) if sets[name].get("error")]
     if failed:
         raise ModelError(f"models failed: {', '.join(failed)}")

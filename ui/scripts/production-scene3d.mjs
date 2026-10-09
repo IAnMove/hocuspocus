@@ -5,6 +5,7 @@ import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { scene3dPlaybackSpeed } from '../src/features/scene3d/clock.ts'
 import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/scene3d/frameFormat.ts'
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
+import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
 
 const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
@@ -33,6 +34,7 @@ document.fps = config.fps ?? document.fps
 delete document.soundtrack
 retargetFraming(document)
 if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
+if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
 const parsed = parseScene3DDocument(document)
 if (!parsed) throw new Error('Invalid Video 3D document')
 process.stdout.write(JSON.stringify(parsed))
@@ -84,7 +86,8 @@ function bindCast(document, key, entry) {
 }
 
 /** The template's background picture. On a cutout plane it is also projected onto the floor (see applyFloor).
- * The painted set replaces the template's procedural dressing (a street, a stage...) unless the shot asks for one. */
+ * The painted set replaces the template's procedural dressing (a street, a stage...) unless the shot asks for one.
+ * A diorama set (houses, ground) keeps its picture as the sky and builds its pieces once the camera is known. */
 function bindBackground(document, entry) {
   const slots = document.slots.filter(slot => slot.slot === 'background')
   if (!slots.length) throw new Error('background_slot_missing')
@@ -92,8 +95,16 @@ function bindBackground(document, entry) {
   // An unbound object (a second subject or a prop nobody cast) is an editor placeholder, a plain block:
   // in front of a painted set it would hide the picture.
   document.slots = document.slots.filter(slot => slot.slot === 'background' || slot.sourceUrl || slot.screen?.sourceUrl)
+  const surface = entry.houses ? 'environment' : entry.surface
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
-    : { ...slot, sourceUrl: entry.source, media: 'image', ...(entry.surface ? { surface: entry.surface } : {}) })
+    : withoutLoop({ ...slot, sourceUrl: entry.source, media: 'image', ...(surface ? { surface } : {}) }, surface))
+  if (entry.houses) document.environment = { reflectiveFloor: false, platform: false, bloom: 0, ...document.environment, floorStyle: 'none' }
+}
+
+/** A picture moved to the sky no longer scrolls round a cylinder. */
+function withoutLoop(slot, surface) {
+  if (surface === 'environment') delete slot.loop
+  return slot
 }
 
 /** An explicit floor wins; a painted background on a plane gets the projected floor unless the template chose one. */
