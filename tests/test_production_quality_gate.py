@@ -45,6 +45,17 @@ def test_too_much_still_runtime_is_refused_at_the_quality_bar():
     assert blocking_problems({"song": SONG, "shots": shots, "quality": "draft"}) == []
 
 
+def test_a_full_frame_title_over_a_moving_shot_is_refused_but_a_title_card_on_a_still_is_not():
+    shots = [card("s00", 0, title={"template": "title-card", "fields": {"title": "Faro"}}),
+             h3("h1", 4, title={"template": "title-card", "fields": {"title": "toma 2"}}),
+             {"key": "d1", "kind": "scene3d", "t0": 8, "scene3d": {"template": "cine-dolly-in"},
+              "title": {"template": "trailer-slam", "fields": {"lines": "toma 3|dolly"}}},
+             h3("h2", 12, title={"template": "lower-third-date", "fields": {"date": "04", "caption": "dolly"}}),
+             h3("h3", 16, title={"template": "title-card", "fields": {"title": "fin"}}, allow=["title_card"])]
+    problems = blocking_problems({"song": SONG, "shots": shots})
+    assert [(item["code"], item.get("shots")) for item in problems] == [("title_card_hides_shot", ["h1", "d1"])]
+
+
 def test_dry_run_reports_blocking_and_the_warnings_that_explain_thin_plans(tmp_path):
     spec = pattern_spec()
     spec["shots"].append({"key": "r1", "kind": "clip", "clip": "h1", "t0": 38})

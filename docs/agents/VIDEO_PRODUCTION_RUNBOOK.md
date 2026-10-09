@@ -67,9 +67,12 @@ interleave their jobs (that made each job reload a model and one piece take 7 h)
 
 **Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
 `quality_gate` (and `problems`) when one still picture fills three or more shots
-that are not marked deliberate (`allow: ["still"]`), or when still pictures take
-more of the runtime than the `quality` bar. A resume of an unchanged spec is never
-refused. `dry_run` lists the same items under `blocking`, and warns about shot
+that are not marked deliberate (`allow: ["still"]`), when still pictures take
+more of the runtime than the `quality` bar, or when a `title-card` or
+`trailer-slam` title sits on a moving shot (`h3`, `clip`, `scene3d`, `screen`):
+both paint an opaque plate over the whole frame and the clip under it is never
+seen (`title_card_hides_shot`; `allow: ["title_card"]` keeps a deliberate card).
+A resume of an unchanged spec is never refused. `dry_run` lists the same items under `blocking`, and warns about shot
 fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
 puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
 H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
