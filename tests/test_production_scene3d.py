@@ -490,6 +490,9 @@ def test_real_compiler_binds_cast_and_background_and_projects_the_floor():
     assert plate["surface"] == "cutout" and "loop" not in plate and plate["position"][2] < -10
     assert plate["position"][1] < 0 < plate["position"][1] + 2 * plate["scale"], "the plane reaches below the floor and above the eye"
     assert abs(doc["camera"].get("orbitTurns", 0)) <= 0.06, "a flat set holds only a short orbit"
+    centre = plate["position"][1] + plate["scale"]
+    assert 0.5 < centre < 3, "the painted horizon (the picture's middle) sits at the camera's eye height"
+    assert slots["subject_1"]["grounded"] is True, "a generated model stands on its feet"
     flat = compile_document(cast_shot(cast={"subject_1": "/api/v1/file/hero.glb?workspace=t"},
                                       background="/api/v1/file/fair.png?workspace=t", floor="none"), 4)
     assert flat["environment"]["floorStyle"] == "none"
@@ -540,5 +543,8 @@ def test_a_painted_set_drops_the_templates_unbound_placeholder_props_but_keeps_b
                                       cast={"subject_1": "/api/v1/file/h.glb?workspace=t",
                                             "lamp": {"source": "/api/v1/file/lamp.glb?workspace=t", "add": True}}), 4)
     assert [slot["id"] for slot in kept["slots"] if slot["slot"] == "prop"] == ["lamp"]
+    two = compile_document(cast_shot(template="cine-two-shot", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
+                                     background="/api/v1/file/f.png?workspace=t"), 4)
+    assert [slot["slot"] for slot in two["slots"] if not slot["sourceUrl"]] == [], "an uncast second subject is no block either"
     bare = compile_document(cast_shot(template="cine-layered-depth", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"}), 4)
     assert any(slot["slot"] == "prop" and not slot["sourceUrl"] for slot in bare["slots"]), "without a painted set the template is untouched"

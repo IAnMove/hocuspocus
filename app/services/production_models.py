@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 import time
-from typing import Any
+from typing import Any, Callable
 
 from services.production_control import sleep_until
 
@@ -31,13 +31,22 @@ FIELDS = {"from", "prompt", "rig", "animations", "seed"}
 HUMANOID_CLIPS = ["idle", "walk", "dance_bounce", "wave"]
 PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin"], "vehicle": ["bounce", "wobble"], "quadruped": ["idle", "walk", "run"],
                  "flying": ["hover", "strafe"], "serpentine": ["idle", "wobble"]}
-CHARACTER_STAGING = "full body, T-pose, front view, arms horizontal, plain light grey background, no shadow"
-OBJECT_STAGING = "single object, three-quarter view, plain light grey background, no shadow"
+# Pictures for Hunyuan3D are isolated: a busy background gets meshed into the model. The reference portrait
+# already carries the look, so a character's T-pose prompt is only the staging.
+CHARACTER_STAGING = ("The same character as the reference, full body, T-pose, front view, arms horizontal, isolated on a "
+                     "plain light grey studio background, nothing else in the picture, no shadow")
+OBJECT_STAGING = "single object, three-quarter view, isolated on a plain light grey studio background, nothing else in the picture, no shadow"
 PICTURE_SIZE = "1024x1024"
-SET_STAGING = ("wide eye-level view of an empty set, open floor across the lower third, clear horizon, "
-               "no people, no animals, no text")
+# A set must leave the cast room and company to nobody: figures painted into it stand where the cast stands
+# and stretch across the projected floor. The rule goes first and last, and the look loses its sentences about people.
+SET_LEAD = "An EMPTY set with nobody in it, ready for actors to step in:"
+SET_STAGING = ("wide eye-level view, a large open EMPTY floor across the foreground and lower third where actors can stand, "
+               "the scenery behind it, clear horizon, no people, no figurines, no dolls, no characters, no animals, no text")
+RECIPE = 2                      # the picture recipes above; a change remakes pictures, meshes and sets
+_PEOPLE = re.compile(r"\b(characters?|figurines?|figures?|people|persons?|actors?|dolls?|toys? figures?|cast)\b", re.IGNORECASE)
 SET_SIZE = "1664x928"         # 16:9 on the 32-pixel grid the image models need
 MESH_PRESET = "balanced"        # Hunyuan3D 2 Turbo geometry with Paint 2.0 Turbo texture
+WAVE = 4                        # model3d_service._MAX_ACTIVE_JOBS
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _DONE = ("completed", "failed", "cancelled", "discarded", "error")
 
@@ -110,7 +119,13 @@ def _source(production: Any, spec: dict, entry: dict) -> str | None:
 def _fingerprint(entry: dict, source: str | None, spec: dict) -> str:
     look = (spec.get("style") or {}).get("image", "")
     bpm = (spec.get("song") or {}).get("bpm")
-    return hashlib.sha256(json.dumps([entry, source, look, bpm], sort_keys=True).encode()).hexdigest()[:16]
+    return hashlib.sha256(json.dumps([entry, source, look, bpm, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
+
+
+def scenery_look(look: str) -> str:
+    """The style without its sentences about people, which make an image model populate an empty picture."""
+    sentences = re.split(r"(?<=[.;:])\s+", look or "")
+    return " ".join(sentence for sentence in sentences if not _PEOPLE.search(sentence)).strip()
 
 
 def _digest(value: str) -> str:
@@ -127,17 +142,21 @@ def _job(reply: dict) -> dict:
     return result or reply
 
 
-def _submit(production: Any, operation: str, intent: str, payload: dict) -> str | None:
+def _submit(production: Any, operation: str, intent: str, payload: dict) -> tuple[str | None, str | None]:
+    """(job id, None), or (None, why it was not admitted): a refusal, a tool error or an uninstalled engine."""
     reply = production.mcp(operation, {"version": 1, "intent_id": intent, "input": {"workspace": production.ws, **payload}})
-    if reply.get("status") == "failed":
-        production.log(f"{operation} {intent}: {str(reply.get('error'))[:120]}")
-        return None
-    return _job(reply).get("job_id")
+    job = None if reply.get("status") == "failed" or reply.get("_is_error") else _job(reply).get("job_id")
+    if job:
+        return job, None
+    error = reply.get("error") if isinstance(reply.get("error"), dict) else {"message": reply.get("error") or reply}
+    return None, str(error.get("message") or error)[:200]
 
 
-def _await(production: Any, operation: str, jobs: dict[str, str | None], poll: float = 5, sleep=time.sleep) -> dict[str, dict]:
-    """Final job record per name; a job that was never admitted is reported failed."""
-    done = {name: {"status": "failed", "error": "not admitted"} for name, job in jobs.items() if not job}
+def _await(production: Any, operation: str, jobs: dict[str, tuple[str | None, str | None]], poll: float = 5,
+           sleep=time.sleep) -> dict[str, dict]:
+    """Final job record per name; a job that was never admitted is reported failed with the reason."""
+    done = {name: {"status": "failed", "error": f"not admitted: {why}"} for name, (job, why) in jobs.items() if not job}
+    jobs = {name: job for name, (job, _why) in jobs.items()}
     unknown: dict[str, int] = {}
     while len(done) < len(jobs):
         for name, job in jobs.items():
@@ -166,7 +185,7 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
         if (made.get(name) or {}).get("fingerprint") == fingerprint and made[name].get("url"):
             continue
         made[name] = {"fingerprint": fingerprint}
-        prompt = f"{style.get('image', '')}. {entry['prompt']}, {SET_STAGING}".lstrip(". ")
+        prompt = f"{SET_LEAD} {entry['prompt']}. {scenery_look(style.get('image', ''))} {SET_STAGING}"
         jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", 11),
                                                *image_choice(entry, style), production._attempt("set_attempts", name))
     return jobs
@@ -189,13 +208,13 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
 def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, str], dict[str, str | None]]:
     """Pictures already there, and image jobs for the rest: a T-pose from the portrait, or the object's prompt."""
     from services.production_image_defaults import image_choice
-    look, pictures, jobs = style.get("image", ""), {}, {}
+    look, pictures, jobs = scenery_look(style.get("image", "")), {}, {}
     for name, (entry, source, rig) in todo.items():
         if rig != "humanoid" and source:
             pictures[name] = source
             continue
-        staged = f"The same character as the reference, {CHARACTER_STAGING}" if rig == "humanoid" else f"{entry['prompt']}, {OBJECT_STAGING}"
-        jobs[name] = production.image(f"model-{name}", f"{look}. {staged}".lstrip(". "), [source] if source else None, PICTURE_SIZE,
+        staged = CHARACTER_STAGING if rig == "humanoid" else f"{entry['prompt']}. Style: {look} {OBJECT_STAGING}".replace("Style:  ", "")
+        jobs[name] = production.image(f"model-{name}", staged, [source] if source else None, PICTURE_SIZE,
                                       entry.get("seed", 7), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
     return pictures, jobs
 
@@ -219,13 +238,22 @@ def _rig_request(entry: dict, rig: str, mesh: str, bpm: int) -> dict:
             **({} if engine == "humanoid" else {"rig_profile": rig})}
 
 
+def _in_waves(production: Any, status: str, requests: dict[str, Callable[[], tuple[str | None, str | None]]], sleep) -> dict[str, dict]:
+    """Submit at most WAVE jobs at a time: the 3D and rig services refuse a fifth active job ("Too many queued")."""
+    done: dict[str, dict] = {}
+    names = list(requests)
+    for start in range(0, len(names), WAVE):
+        done.update(_await(production, status, {name: requests[name]() for name in names[start:start + WAVE]}, sleep=sleep))
+    return done
+
+
 def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, made: dict, sleep) -> None:
-    meshes = _await(production, "model3d.status", sleep=sleep, jobs={
-        name: _submit(production, "model3d.generate", f"{production.id}-mesh-{name}-{_digest(picture)}",
-                      {"image_path": picture, "preset": MESH_PRESET})
-        for name, picture in pictures.items()})
+    meshes = _in_waves(production, "model3d.status", {
+        name: (lambda name=name, picture=picture: _submit(production, "model3d.generate", f"{production.id}-mesh-{name}-{_digest(picture)}",
+                                                         {"image_path": picture, "preset": MESH_PRESET}))
+        for name, picture in pictures.items()}, sleep)
     bpm = min(180, max(60, int((spec.get("song") or {}).get("bpm") or 120)))
-    rigs = {}
+    rigs: dict[str, Callable[[], tuple[str | None, str | None]]] = {}
     for name, record in meshes.items():
         made[name]["picture"] = pictures[name]
         if record.get("status") != "completed" or not record.get("filename"):
@@ -234,10 +262,11 @@ def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, ma
         made[name].update(mesh=record["filename"], file=record["filename"])
         entry, _source_url, rig = todo[name]
         if rig != "none":
-            rigs[name] = _submit(production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(record['filename'])}",
-                                 _rig_request(entry, rig, record["filename"], bpm))
+            mesh = record["filename"]
+            rigs[name] = lambda name=name, mesh=mesh, entry=entry, rig=rig: _submit(
+                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
     production.save()
-    for name, record in _await(production, "model3d.rig.status", rigs, sleep=sleep).items():
+    for name, record in _in_waves(production, "model3d.rig.status", rigs, sleep).items():
         if record.get("status") == "completed" and record.get("filename"):
             made[name]["file"] = record["filename"]
         else:

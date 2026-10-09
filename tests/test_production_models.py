@@ -89,8 +89,9 @@ def test_characters_get_a_t_pose_from_their_portrait_then_a_mesh_and_a_tempo_rig
     pictures = {image["key"]: image for image in production.images}
     assert set(pictures) == {"model-hero", "model-kite"}        # the boat already has its picture
     assert pictures["model-hero"]["refs"] == ["/api/v1/uploads/hero-single.png"]
-    assert "T-pose" in pictures["model-hero"]["prompt"] and pictures["model-hero"]["prompt"].startswith("felt puppets")
-    assert pictures["model-kite"]["refs"] is None and "a paper kite" in pictures["model-kite"]["prompt"]
+    hero, kite = pictures["model-hero"]["prompt"], pictures["model-kite"]["prompt"]
+    assert "T-pose" in hero and "isolated" in hero and "felt puppets" not in hero, "the portrait carries the look; the prompt is the staging"
+    assert pictures["model-kite"]["refs"] is None and kite.startswith("a paper kite") and "felt puppets" in kite and kite.endswith("no shadow")
     meshes = {item["image_path"]: item for item in submitted(production, "model3d.generate")}
     assert set(meshes) == {"/api/v1/uploads/hero.png", "/api/v1/uploads/boat.png", "/api/v1/uploads/kite.png"}
     assert all(item["preset"] == "balanced" for item in meshes.values())
@@ -147,8 +148,8 @@ def test_sets_are_painted_in_the_same_batch_with_the_floor_recipe_and_named_as_b
     make_models(production, spec, sleep=lambda _: None)
     assert waited == [["hero", "kite", "set:harbour"]]
     painted = next(image for image in production.images if image["key"] == "set-harbour")
-    assert painted["res"] == "1664x928" and "open floor across the lower third" in painted["prompt"]
-    assert painted["prompt"].startswith("felt puppets. a night harbour")
+    assert painted["res"] == "1664x928" and "large open EMPTY floor" in painted["prompt"]
+    assert painted["prompt"].startswith("An EMPTY set with nobody in it") and "a night harbour" in painted["prompt"]
     url = production.state["sets"]["harbour"]["url"]
     resolved = resolve_media({"template": "dance-stage", "background": "harbour"}, stills={}, root=tmp_path, workspace="w",
                              sets=production.state["sets"])
@@ -165,3 +166,51 @@ def test_a_spec_with_only_sets_runs_the_stage_and_bad_sets_are_refused(tmp_path)
     for bad in ({"Roof": {"prompt": "x"}}, {"roof": {}}, {"roof": {"prompt": "x", "size": 3}}):
         with pytest.raises(ModelError):
             check_models({"sets": bad})
+
+
+def test_a_refused_mesh_says_why(tmp_path):
+    """An engine that is not installed answers with a tool error; the model's error carries its message."""
+    production = Production(tmp_path)
+    plain = production.mcp
+
+    def refusing(operation, args):
+        if operation == "model3d.generate":
+            production.calls.append((operation, args))
+            return {"_is_error": True, "error": {"code": "failed", "message": "Optional engine: install 3D Generation (Hunyuan3D)"}}
+        return plain(operation, args)
+
+    production.mcp = refusing
+    with pytest.raises(ModelError, match="models failed"):
+        make_models(production, SPEC, sleep=lambda _: None)
+    assert "not admitted: Optional engine: install 3D Generation (Hunyuan3D)" in production.state["models"]["hero"]["error"]
+
+
+def test_meshes_go_in_waves_the_3d_service_accepts(tmp_path):
+    """model3d_service refuses a fifth active job; six models are submitted four, then two."""
+    models = {f"thing{i}": {"from": "boat-pic"} for i in range(6)}
+    production = Production(tmp_path)
+    active, peak = [], []
+    plain = production.mcp
+
+    def counting(operation, args):
+        if operation == "model3d.generate":
+            active.append(args["intent_id"])
+            peak.append(len(active))
+        if operation == "model3d.status":
+            reply = plain(operation, args)
+            intent = args["input"]["job_id"].split(":", 1)[1]
+            if intent in active:
+                active.remove(intent)
+            return reply
+        return plain(operation, args)
+
+    production.mcp = counting
+    make_models(production, {**SPEC, "models": models}, sleep=lambda _: None)
+    assert max(peak) == 4 and all(production.state["models"][name]["file"] for name in models)
+
+
+def test_the_scenery_look_drops_the_sentences_about_people():
+    from services.production_models import scenery_look
+    look = ("Toy diorama of painted wood and felt; characters are vinyl figurines with rounded faces; warm lanterns. "
+            "No text.")
+    assert scenery_look(look) == "Toy diorama of painted wood and felt; warm lanterns. No text."
