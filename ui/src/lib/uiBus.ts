@@ -1,5 +1,6 @@
 import type { SeriesJobStatus } from '../features/series/types'
 import type { SeriesAssemblyJob } from '../features/series/assemblyContract'
+import { wizardDocumentSave } from './documentSaveActor'
 
 export type AgentStorySection = 'overview' | 'assets' | 'world' | 'characters' | 'relationships' | 'structure' | 'music' | 'trailer' | 'productions' | 'assembly'
 export type AgentSeriesSection = 'setup' | 'canon' | 'episode' | 'shots' | 'approval' | 'review'
@@ -124,7 +125,7 @@ export function listenForAgentSceneWorkflow(
     while (active && pendingSceneWorkflowRequests.length) {
       const pending = pendingSceneWorkflowRequests.shift()
       if (!pending) continue
-      try { pending.resolve(await listener(pending.request)) }
+      try { pending.resolve(await wizardDocumentSave(() => listener(pending.request))) }
       catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
     }
   }
@@ -158,7 +159,7 @@ export function listenForAgentSceneControl(
     while (active && pendingSceneControlRequests.length) {
       const pending = pendingSceneControlRequests.shift()
       if (!pending) continue
-      try { pending.resolve(await listener(pending.request)) }
+      try { pending.resolve(await wizardDocumentSave(() => listener(pending.request))) }
       catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
     }
   }

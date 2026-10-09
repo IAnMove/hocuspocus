@@ -255,6 +255,7 @@
         "tests/test_series_review.py",
         "tests/test_series_review_router.py",
         "tests/test_recoverability_last.py",
+        "tests/test_document_origin.py",
         "tests/test_game_library.py",
         "tests/test_game_inputs.py",
         "tests/test_game_library_router.py",
@@ -1348,7 +1349,8 @@
     {
       "prefix": "app/services/scene_documents.py",
       "paths": [
-        "tests/test_scene2d_export.py"
+        "tests/test_scene2d_export.py",
+        "tests/test_document_origin.py"
       ]
     },
     {
@@ -1958,6 +1960,12 @@
       ]
     },
     {
+      "prefix": "app/services/document_origin.py",
+      "paths": [
+        "tests/test_document_origin.py"
+      ]
+    },
+    {
       "prefix": "app/services/minimax_h3_service.py",
       "paths": [
         "tests/test_minimax_h3_service.py"
@@ -2293,7 +2301,8 @@
         "tests/test_series_episode_replace.py",
         "tests/test_series_review.py",
         "tests/test_series_review_gate.py",
-        "tests/test_series_video_shots.py"
+        "tests/test_series_video_shots.py",
+        "tests/test_document_origin.py"
       ]
     },
     {

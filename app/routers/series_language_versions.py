@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from services.agent_activity import current_actor
 from services.series_language_versions import (
-    LANGUAGES, clear_checked, missing_lines, translation_request, version_from_translation,
+    LANGUAGES, missing_lines, record_writer, translation_request, version_from_translation,
 )
 from services.series_shot_plan import language_key
 
@@ -64,8 +64,9 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
     def put_language_version(series_id: str, episode_id: str, language: str, body: VersionWrite):
         """Set a version's title, lines ({beatId: text}), cards or music ({shotId: file}); takes, lengths and cuts are kept.
 
-        A person's write clears the machine-translation mark of what it wrote; an agent's or the Wizard's keeps it."""
-        by_person = current_actor() == "user"
+        A person's write clears the machine-translation mark of what it wrote. An agent's or the Wizard's write marks
+        the lines, cards and title it wrote. The server leaves those marks unchanged."""
+        actor = current_actor()
 
         def merge(current: dict, _episode: dict) -> dict:
             update = body.version
@@ -73,7 +74,7 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
                       "dialogue": {**current.get("dialogue", {}), **(update.get("dialogue") or {})},
                       "cards": {**current.get("cards", {}), **(update.get("cards") or {})},
                       "music": {**current.get("music", {}), **(update.get("music") or {})}}
-            return clear_checked(merged, update) if by_person else merged
+            return record_writer(merged, update, actor)
         return write(body.workspace, series_id, episode_id, language, merge)
 
     @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}/translate")
