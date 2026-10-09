@@ -468,7 +468,9 @@ gets real parallax and the cast stands on the ground with its shadow. Fronts
 are staggered, with an alley every third house. `{"source": "plaza", "layout":
 "open"}` puts the houses behind the cast far away, a skyline 3.5 times further
 than the plaza, so the view runs out to a horizon with depth in it. A
-camera looking straight down sees the ground only. The houses and the ground
+camera looking down from above the roofs (an aerial, a bird's-eye, a tilt-shift)
+sees the plaza from above: the houses close in around the ground it sees, just
+clear of the cast, and its own side stays open. The houses and the ground
 are ordinary objects in the saved Video 3D document (`set-house-N`,
 `set-ground`), so they can be moved or removed in the editor.
 

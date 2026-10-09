@@ -20,6 +20,11 @@ const MODEL_HEIGHT = 1.7      // fitGltf scales a model to this height times its
 const HOUSE_DEPTH = 3         // diorama_set.DEPTH
 const GROUND_MARGIN = 6
 const SETBACKS = [0, 1.1, 0.4, 1.6, 0.7]   // metres each house stands back from the ring, so the fronts do not form one wall
+const ROOFLINE = 5            // a camera above this height flies over the roofs: it does not push the houses out
+const STEEP = -0.6            // radians: a camera pitched further down than this looks at the plaza from above
+const OVERHEAD_FILL = 0.75    // from above, the houses stand this far out across the ground the camera sees
+const CAST_CLEARANCE = 1.5    // metres between the cast and the facades in a plaza seen from above
+const CAMERA_SIDE = 0.9       // radians either side of the camera a plaza seen from above leaves empty
 
 type Pose = { eye: Vec3; look: Vec3 }
 type Spot = { house: DioramaHouse; angle: number; distance: number }
@@ -76,8 +81,10 @@ function arcSpots(houses: readonly DioramaHouse[], radius: number, middle: numbe
 }
 
 /** A plaza closes the whole ring, starting behind the cast (opposite the camera at mid-shot). An 'open' plaza leaves
- * that back arc to a skyline of the same houses far away, so the view runs out to a horizon with depth in it. */
-export function ringSpots(houses: readonly DioramaHouse[], radius: number, back: number, open: boolean): Spot[] {
+ * that back arc to a skyline of the same houses far away, so the view runs out to a horizon with depth in it. A plaza
+ * seen from above leaves the camera's side empty, so no house stands between the camera and the cast. */
+export function ringSpots(houses: readonly DioramaHouse[], radius: number, back: number, open: boolean, fromAbove = false): Spot[] {
+  if (fromAbove) return arcSpots(houses, radius, back, Math.PI - CAMERA_SIDE)
   if (!open) return arcSpots(houses, radius, back, Math.PI)
   const skyline = arcSpots(houses, radius * SKYLINE, back, OPEN_ARC)
   return [...skyline, ...arcSpots(houses, radius, back + Math.PI, Math.PI - OPEN_ARC, skyline.length)]
@@ -103,17 +110,43 @@ function groundSlot(ground: DioramaGround, centre: [number, number], reach: numb
   }
 }
 
+/** For a camera looking down, how far the ground in view reaches beyond what it looks at and to its sides, or
+ * Infinity when the frame also holds the horizon. */
+function groundInView(pose: Pose, fov: number, aspect: number): number {
+  const across = Math.hypot(pose.look[0] - pose.eye[0], pose.look[2] - pose.eye[2])
+  const drop = pose.eye[1] - pose.look[1]
+  const down = Math.atan2(drop, across)
+  const half = (fov * Math.PI) / 360
+  if (down - half <= 0.05) return Infinity
+  const beyond = pose.eye[1] / Math.tan(down - half) - across
+  const aside = Math.hypot(across, drop) * Math.tan(half) * aspect
+  return Math.min(beyond, aside)
+}
+
+/** How wide the plaza is: outside every place the camera and the cast go at street level. A camera looking down from
+ * above the roofs sees the plaza from above: its houses stand across the ground it sees, just clear of the cast. */
+function plazaRadius(document: Scene3DDocument, path: Pose[], centre: [number, number], fromAbove: boolean): number {
+  const away = (point: Vec3) => Math.hypot(point[0] - centre[0], point[2] - centre[1])
+  const cast = Math.max(0, ...castPoints(document).map(away))
+  const street = path.filter(pose => pose.eye[1] < ROOFLINE).map(pose => away(pose.eye))
+  const radius = Math.max(MIN_RADIUS, Math.max(cast, ...street) + CLEARANCE)
+  if (!fromAbove) return radius
+  const aspect = document.width / Math.max(1, document.height)
+  const seen = Math.min(...path.map(pose => groundInView(pose, document.camera.fov, aspect)))
+  return Math.max(cast + CAST_CLEARANCE, Math.min(radius, seen * OVERHEAD_FILL))
+}
+
 /** The set's ground and a plaza of houses around what the camera looks at, outside where it and the cast go.
  * The whole ring is built, so a later edit can move the camera anywhere in the plaza. */
 export function stageDioramaSet(document: Scene3DDocument, set: DioramaSet): Scene3DSlot[] {
   const path = cameraPath(document)
   const mid = path[Math.floor(path.length / 2)]
   const centre: [number, number] = [mid.look[0], mid.look[2]]
-  const points = [...path.map(pose => pose.eye), ...castPoints(document)]
-  const reach = Math.max(0, ...points.map(point => Math.hypot(point[0] - centre[0], point[2] - centre[1])))
-  const radius = Math.max(MIN_RADIUS, reach + CLEARANCE)
+  const pitch = Math.atan2(mid.look[1] - mid.eye[1], Math.hypot(mid.look[0] - mid.eye[0], mid.look[2] - mid.eye[2]))
+  const fromAbove = pitch < STEEP && mid.eye[1] > ROOFLINE
+  const radius = plazaRadius(document, path, centre, fromAbove)
   const back = Math.atan2(mid.look[0] - mid.eye[0], mid.look[2] - mid.eye[2])
-  const spots = ringSpots(set.houses, radius, back, set.layout === 'open')
+  const spots = ringSpots(set.houses, radius, back, set.layout === 'open' && !fromAbove, fromAbove)
   const houses = spots.map((spot, index) => houseSlot(spot, index, centre))
   const far = Math.max(radius, ...spots.map(spot => spot.distance)) + HOUSE_DEPTH + GROUND_MARGIN
   return set.ground ? [groundSlot(set.ground, centre, far), ...houses] : houses
