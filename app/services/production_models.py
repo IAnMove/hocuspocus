@@ -127,17 +127,21 @@ def _job(reply: dict) -> dict:
     return result or reply
 
 
-def _submit(production: Any, operation: str, intent: str, payload: dict) -> str | None:
+def _submit(production: Any, operation: str, intent: str, payload: dict) -> tuple[str | None, str | None]:
+    """(job id, None), or (None, why it was not admitted): a refusal, a tool error or an uninstalled engine."""
     reply = production.mcp(operation, {"version": 1, "intent_id": intent, "input": {"workspace": production.ws, **payload}})
-    if reply.get("status") == "failed":
-        production.log(f"{operation} {intent}: {str(reply.get('error'))[:120]}")
-        return None
-    return _job(reply).get("job_id")
+    job = None if reply.get("status") == "failed" or reply.get("_is_error") else _job(reply).get("job_id")
+    if job:
+        return job, None
+    error = reply.get("error") if isinstance(reply.get("error"), dict) else {"message": reply.get("error") or reply}
+    return None, str(error.get("message") or error)[:200]
 
 
-def _await(production: Any, operation: str, jobs: dict[str, str | None], poll: float = 5, sleep=time.sleep) -> dict[str, dict]:
-    """Final job record per name; a job that was never admitted is reported failed."""
-    done = {name: {"status": "failed", "error": "not admitted"} for name, job in jobs.items() if not job}
+def _await(production: Any, operation: str, jobs: dict[str, tuple[str | None, str | None]], poll: float = 5,
+           sleep=time.sleep) -> dict[str, dict]:
+    """Final job record per name; a job that was never admitted is reported failed with the reason."""
+    done = {name: {"status": "failed", "error": f"not admitted: {why}"} for name, (job, why) in jobs.items() if not job}
+    jobs = {name: job for name, (job, _why) in jobs.items()}
     unknown: dict[str, int] = {}
     while len(done) < len(jobs):
         for name, job in jobs.items():

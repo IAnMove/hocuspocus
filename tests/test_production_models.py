@@ -165,3 +165,20 @@ def test_a_spec_with_only_sets_runs_the_stage_and_bad_sets_are_refused(tmp_path)
     for bad in ({"Roof": {"prompt": "x"}}, {"roof": {}}, {"roof": {"prompt": "x", "size": 3}}):
         with pytest.raises(ModelError):
             check_models({"sets": bad})
+
+
+def test_a_refused_mesh_says_why(tmp_path):
+    """An engine that is not installed answers with a tool error; the model's error carries its message."""
+    production = Production(tmp_path)
+    plain = production.mcp
+
+    def refusing(operation, args):
+        if operation == "model3d.generate":
+            production.calls.append((operation, args))
+            return {"_is_error": True, "error": {"code": "failed", "message": "Optional engine: install 3D Generation (Hunyuan3D)"}}
+        return plain(operation, args)
+
+    production.mcp = refusing
+    with pytest.raises(ModelError, match="models failed"):
+        make_models(production, SPEC, sleep=lambda _: None)
+    assert "not admitted: Optional engine: install 3D Generation (Hunyuan3D)" in production.state["models"]["hero"]["error"]
