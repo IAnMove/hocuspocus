@@ -1,10 +1,11 @@
 """Diorama set pieces: a house block wearing its facade, a tiled ground slab, a facade freed of its backdrop."""
 import numpy as np
-import pygltflib
 import pytest
 from PIL import Image, ImageDraw
 
-from services.diorama_set import DEPTH, build_ground, build_house, trim_border
+pygltflib = pytest.importorskip("pygltflib")
+
+from services.diorama_set import DEPTH, build_ground, build_house, trim_border  # noqa: E402
 
 
 def facade(path, size=(300, 400), margin=0, backdrop=(236, 236, 236), base=None):
