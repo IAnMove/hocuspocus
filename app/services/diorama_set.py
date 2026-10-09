@@ -28,14 +28,19 @@ MARGIN_CLOSE = 28        # a pixel this near the backdrop colour (on every chann
 MARGIN_TINT = 24         # a backdrop is grey or white: its channels differ by less than this
 MARGIN_SHARE = 0.6       # a line mostly of backdrop is margin
 MAX_TRIM = 0.12          # never trim more than this share of a side
+SKY_BLUE = 18            # a sky pixel is bluer than red by this much, and at least as blue as green
+SKY_SHARE = 0.85         # a top row mostly of sky is sky
+SKY_TRIM = 0.35          # sky above a small house is trimmed up to this share of the picture
 
 
 def trim_border(picture: Image.Image) -> Image.Image:
-    """Crop the backdrop around a facade (an image model sometimes draws it on a grey or white studio backdrop).
+    """Crop what is not the facade: a grey or white studio backdrop around it, then sky above it."""
+    return _trim_sky(_trim_backdrop(picture))
 
-    The backdrop is the colour of both top corners when they agree and are grey or white. A side loses the lines
-    that are mostly that colour, never more than MAX_TRIM of it; a facade that fills the picture keeps it all.
-    """
+
+def _trim_backdrop(picture: Image.Image) -> Image.Image:
+    """The backdrop is the colour of both top corners when they agree and are grey or white. A side loses the lines
+    that are mostly that colour, never more than MAX_TRIM of it; a facade that fills the picture keeps it all."""
     pixels = np.asarray(picture.convert("RGB"), dtype=np.float32)
     left_corner, right_corner = pixels[0, 0], pixels[0, -1]
     colour = (left_corner + right_corner) / 2
@@ -53,6 +58,17 @@ def trim_border(picture: Image.Image) -> Image.Image:
     if not (top or bottom or left or right):
         return picture
     return picture.crop((left, top, width - right, height - bottom))
+
+
+def _trim_sky(picture: Image.Image) -> Image.Image:
+    """A small house drawn whole leaves sky over its walls (a beach hut under a blue sky): the top rows that are
+    mostly sky go, up to SKY_TRIM of the picture. A blue sky and a night sky are both bluer than they are red."""
+    pixels = np.asarray(picture.convert("RGB"), dtype=np.float32)
+    red, green, blue = pixels[..., 0], pixels[..., 1], pixels[..., 2]
+    sky = ((blue - red >= SKY_BLUE) & (blue >= green)).mean(axis=1)
+    limit = int(len(sky) * SKY_TRIM)
+    top = next((count for count, share in enumerate(sky[:limit]) if share < SKY_SHARE), limit)
+    return picture.crop((0, top, picture.width, picture.height)) if top else picture
 
 
 def _png(picture: Image.Image, widest: int) -> bytes:

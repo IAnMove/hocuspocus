@@ -454,7 +454,9 @@ drawn in the same batch:
   "ground": "worn terracotta floor tiles", "sky": "a deep blue summer night with a big moon"}}}
 ```
 
-Each house facade becomes a textured block 6–10 m tall; the ground is a tiled
+Each house facade is drawn as its flat front wall, cropped to the wall (studio
+backdrop and sky above a small house are trimmed), and becomes a textured block
+6–10 m tall; the ground is a tiled
 slab and the sky the shot's environment. The facades get the place and the
 production's look; the ground and the sky get neither (with them the image model
 paints a street or rooftops in perspective instead of a texture or an empty sky),

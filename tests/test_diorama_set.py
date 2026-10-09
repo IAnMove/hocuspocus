@@ -47,8 +47,22 @@ def test_a_facade_that_fills_its_picture_is_kept_whole_and_a_backdrop_is_cropped
     assert trim_border(full).size == full.size
     framed = trim_border(Image.open(facade(tmp_path / "framed.png", margin=24, base=20)))
     assert framed.size == (300 - 48, 400 - 24), "the pavement band across the bottom is part of the facade"
-    tinted = Image.open(facade(tmp_path / "tinted.png", margin=24, backdrop=(30, 120, 200)))
+    tinted = Image.open(facade(tmp_path / "tinted.png", margin=24, backdrop=(200, 120, 30)))
     assert trim_border(tinted).size == tinted.size, "only a grey or white backdrop is taken for a studio backdrop"
+
+
+def test_sky_over_a_small_house_is_cropped_but_a_house_without_sky_keeps_its_top(tmp_path):
+    hut = Image.new("RGB", (300, 400), (210, 60, 50))
+    ImageDraw.Draw(hut).rectangle((0, 0, 300, 99), fill=(90, 160, 230))
+    assert trim_border(hut).size == (300, 300), "the blue band over the hut is sky"
+    night = Image.new("RGB", (300, 400), (200, 170, 90))
+    ImageDraw.Draw(night).rectangle((0, 0, 300, 49), fill=(15, 25, 70))
+    assert trim_border(night).size == (300, 350), "a night sky too"
+    tall = Image.new("RGB", (300, 400), (210, 60, 50))
+    ImageDraw.Draw(tall).rectangle((0, 0, 300, 299), fill=(90, 160, 230))
+    assert trim_border(tall).size == (300, 260), "never more than 35 % of the picture"
+    full = Image.open(facade(tmp_path / "full.png"))
+    assert trim_border(full).size == full.size
 
 
 def test_the_ground_is_a_slab_with_its_top_at_zero_repeating_its_picture(tmp_path):
