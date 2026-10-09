@@ -23,7 +23,7 @@
               "stroke": {"color": "#FF3FC8", "width": 0.06}, "shadow": {"color": "#FF3FC8", "blur": 1.4, "x": 0, "y": 0},
               "enter": {"preset": "blur", "duration": 0.3}, "exit": {"preset": "blur", "duration": 0.2}, "loop": "flicker"}},
     {"id": "big-word", "label": "Big centred chorus", "finish": [], "template": "social-caption", "sync": true,
-     "look": {"font": "display", "weight": 400, "size": 11, "color": "#FFFFFF", "y": 50, "maxWidth": 86, "uppercase": true,
+     "look": {"font": "display", "weight": 400, "size": 11, "color": "#FFFFFF", "y": 24, "maxWidth": 86, "uppercase": true,
               "lineHeight": 0.95, "box": {"kind": "none", "color": "#000000", "opacity": 0, "padding": 0},
               "stroke": {"color": "#000000", "width": 0.05}, "shadow": {"color": "#000000", "blur": 0.8, "x": 0, "y": 0.08},
               "enter": {"preset": "words", "duration": 1}, "exit": {"preset": "scale", "duration": 0.15}, "loop": "pulse"}},

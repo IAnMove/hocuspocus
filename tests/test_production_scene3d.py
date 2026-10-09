@@ -437,6 +437,10 @@ def test_a_clip_asked_by_its_rig_id_finds_the_baked_name(tmp_path):
     resolved = resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "hero.glb", "clip": "kneel_pray"}}},
                              stills={}, root=tmp_path, workspace="w")
     assert resolved["cast"]["subject_1"]["clip"] == {"index": 2, "name": "Kneel Pray"}
+    glb(tmp_path / "moto.glb", ["Bounce", "Wobble Dance"])          # a procedural rig bakes its clips' labels
+    resolved = resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "moto.glb", "clip": "wobble"}}},
+                             stills={}, root=tmp_path, workspace="w")
+    assert resolved["cast"]["subject_1"]["clip"] == {"index": 1, "name": "Wobble Dance"}
 
 
 def test_unknown_names_and_clips_fail_before_any_export(tmp_path):

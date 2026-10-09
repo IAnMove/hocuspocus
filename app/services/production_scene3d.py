@@ -82,6 +82,11 @@ def _check_background(config):
         raise ValueError(f"scene3d.floor must be one of {', '.join(FLOOR_STYLES)}")
 
 
+def _rig_labels():
+    from services.rig_service import ANIMATIONS
+    return {item["id"]: item["label"] for item in ANIMATIONS}
+
+
 def _clip_key(name):
     return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
@@ -116,8 +121,10 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         names = []
         if address.path.startswith("/api/v1/file/") and parse_qs(address.query).get("workspace") == [workspace]:
             names = glb_clip_names(Path(root) / name)
-        # The rig asks for dance_bounce and bakes "Dance Bounce": either spelling names the clip.
-        found = [index for index, name in enumerate(names) if _clip_key(name) == _clip_key(value)]
+        # The rig asks for dance_bounce and bakes "Dance Bounce", or for wobble and bakes its label "Wobble Dance":
+        # the rig id, its label or the baked name all name the clip.
+        wanted = {_clip_key(value), _clip_key(_rig_labels().get(value, value))}
+        found = [index for index, name in enumerate(names) if _clip_key(name) in wanted]
         if not found:
             raise ValueError(f"scene3d.cast.{key}: no clip {value!r} in its model (clips: {', '.join(names) or 'none'})")
         return {"index": found[0], "name": names[found[0]]}
