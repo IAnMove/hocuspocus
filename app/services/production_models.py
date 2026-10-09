@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 import time
-from typing import Any
+from typing import Any, Callable
 
 from services.production_control import sleep_until
 
@@ -38,6 +38,7 @@ SET_STAGING = ("wide eye-level view of an empty set, open floor across the lower
                "no people, no animals, no text")
 SET_SIZE = "1664x928"         # 16:9 on the 32-pixel grid the image models need
 MESH_PRESET = "balanced"        # Hunyuan3D 2 Turbo geometry with Paint 2.0 Turbo texture
+WAVE = 4                        # model3d_service._MAX_ACTIVE_JOBS
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _DONE = ("completed", "failed", "cancelled", "discarded", "error")
 
@@ -223,13 +224,22 @@ def _rig_request(entry: dict, rig: str, mesh: str, bpm: int) -> dict:
             **({} if engine == "humanoid" else {"rig_profile": rig})}
 
 
+def _in_waves(production: Any, status: str, requests: dict[str, Callable[[], tuple[str | None, str | None]]], sleep) -> dict[str, dict]:
+    """Submit at most WAVE jobs at a time: the 3D and rig services refuse a fifth active job ("Too many queued")."""
+    done: dict[str, dict] = {}
+    names = list(requests)
+    for start in range(0, len(names), WAVE):
+        done.update(_await(production, status, {name: requests[name]() for name in names[start:start + WAVE]}, sleep=sleep))
+    return done
+
+
 def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, made: dict, sleep) -> None:
-    meshes = _await(production, "model3d.status", sleep=sleep, jobs={
-        name: _submit(production, "model3d.generate", f"{production.id}-mesh-{name}-{_digest(picture)}",
-                      {"image_path": picture, "preset": MESH_PRESET})
-        for name, picture in pictures.items()})
+    meshes = _in_waves(production, "model3d.status", {
+        name: (lambda name=name, picture=picture: _submit(production, "model3d.generate", f"{production.id}-mesh-{name}-{_digest(picture)}",
+                                                         {"image_path": picture, "preset": MESH_PRESET}))
+        for name, picture in pictures.items()}, sleep)
     bpm = min(180, max(60, int((spec.get("song") or {}).get("bpm") or 120)))
-    rigs = {}
+    rigs: dict[str, Callable[[], tuple[str | None, str | None]]] = {}
     for name, record in meshes.items():
         made[name]["picture"] = pictures[name]
         if record.get("status") != "completed" or not record.get("filename"):
@@ -238,10 +248,11 @@ def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, ma
         made[name].update(mesh=record["filename"], file=record["filename"])
         entry, _source_url, rig = todo[name]
         if rig != "none":
-            rigs[name] = _submit(production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(record['filename'])}",
-                                 _rig_request(entry, rig, record["filename"], bpm))
+            mesh = record["filename"]
+            rigs[name] = lambda name=name, mesh=mesh, entry=entry, rig=rig: _submit(
+                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
     production.save()
-    for name, record in _await(production, "model3d.rig.status", rigs, sleep=sleep).items():
+    for name, record in _in_waves(production, "model3d.rig.status", rigs, sleep).items():
         if record.get("status") == "completed" and record.get("filename"):
             made[name]["file"] = record["filename"]
         else:

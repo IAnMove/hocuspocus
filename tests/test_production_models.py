@@ -182,3 +182,27 @@ def test_a_refused_mesh_says_why(tmp_path):
     with pytest.raises(ModelError, match="models failed"):
         make_models(production, SPEC, sleep=lambda _: None)
     assert "not admitted: Optional engine: install 3D Generation (Hunyuan3D)" in production.state["models"]["hero"]["error"]
+
+
+def test_meshes_go_in_waves_the_3d_service_accepts(tmp_path):
+    """model3d_service refuses a fifth active job; six models are submitted four, then two."""
+    models = {f"thing{i}": {"from": "boat-pic"} for i in range(6)}
+    production = Production(tmp_path)
+    active, peak = [], []
+    plain = production.mcp
+
+    def counting(operation, args):
+        if operation == "model3d.generate":
+            active.append(args["intent_id"])
+            peak.append(len(active))
+        if operation == "model3d.status":
+            reply = plain(operation, args)
+            intent = args["input"]["job_id"].split(":", 1)[1]
+            if intent in active:
+                active.remove(intent)
+            return reply
+        return plain(operation, args)
+
+    production.mcp = counting
+    make_models(production, {**SPEC, "models": models}, sleep=lambda _: None)
+    assert max(peak) == 4 and all(production.state["models"][name]["file"] for name in models)
