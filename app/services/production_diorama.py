@@ -21,8 +21,8 @@ GROUND_SIZE = "1024x1024"
 SKY_SIZE = "1664x928"
 HEIGHTS = (7.5, 9.0, 6.5, 10.0, 8.0, 7.0, 9.5, 6.0)    # metres, by house; a varied roofline
 FACADE_STAGING = ("flat frontal elevation of the front facade, straight-on orthographic view, the facade fills the whole "
-                  "picture edge to edge, no sky, no ground, no street, no people, nothing in front of it")
-GROUND_STAGING = "seamless tileable top-down texture, flat even lighting, no objects, no shadows, no people"
+                  "picture edge to edge, everything in sharp focus, no sky, no ground, no street, no people, nothing in front of it")
+GROUND_STAGING = "seamless tileable top-down texture, everything in sharp focus, flat even lighting, no objects, no shadows, no people"
 SKY_STAGING = "only the sky, seen from the ground looking up a little, no buildings, no ground, no trees, no people"
 FIELDS = {"kind", "prompt", "houses", "ground", "sky", "seed"}
 
