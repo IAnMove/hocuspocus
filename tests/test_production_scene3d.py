@@ -613,3 +613,17 @@ def test_real_compiler_opens_the_back_of_an_open_plaza_to_a_distant_skyline():
     assert behind and around and min(behind) > 2.5 * max(around), "the back looks out to a skyline far beyond the plaza"
     ground = next(slot for slot in doc["slots"] if slot["id"] == "set-ground")
     assert ground["scale"] == pytest.approx(0.2 / 1.7), "the 80 m slab still reaches the skyline"
+
+
+@NODE
+def test_real_compiler_closes_a_plaza_seen_from_above_around_the_ground_in_view():
+    import math
+    street = compile_document(cast_shot(template="cine-medium-shot", background=DIORAMA, cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    above = compile_document(cast_shot(template="cine-birds-eye", background=DIORAMA, cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    assert min(distance for distance, _ in ring(street)[0]) >= 7
+    places, _ = ring(above)
+    assert places and 1.5 <= min(distance for distance, _ in places) < 7, "from above the houses stand where the camera sees ground"
+    framing = above["camera"]["framing"]
+    toward_camera = math.atan2(framing["from"][0], framing["from"][2])
+    assert all(abs(math.atan2(math.sin(angle - toward_camera), math.cos(angle - toward_camera))) > 0.9 for _, angle in places), \
+        "no house between the camera and the cast"
