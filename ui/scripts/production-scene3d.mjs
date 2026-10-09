@@ -87,6 +87,8 @@ function bindBackground(document, entry) {
   const slots = document.slots.filter(slot => slot.slot === 'background')
   if (!slots.length) throw new Error('background_slot_missing')
   document.dressing = 'none'
+  // An unbound prop is an editor placeholder (a plain block): in front of a painted set it would block the picture.
+  document.slots = document.slots.filter(slot => slot.slot !== 'prop' || slot.sourceUrl || slot.screen?.sourceUrl)
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
     : { ...slot, sourceUrl: entry.source, media: 'image', ...(entry.surface ? { surface: entry.surface } : {}) })
 }
