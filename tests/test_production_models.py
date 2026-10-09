@@ -89,8 +89,9 @@ def test_characters_get_a_t_pose_from_their_portrait_then_a_mesh_and_a_tempo_rig
     pictures = {image["key"]: image for image in production.images}
     assert set(pictures) == {"model-hero", "model-kite"}        # the boat already has its picture
     assert pictures["model-hero"]["refs"] == ["/api/v1/uploads/hero-single.png"]
-    assert "T-pose" in pictures["model-hero"]["prompt"] and pictures["model-hero"]["prompt"].startswith("felt puppets")
-    assert pictures["model-kite"]["refs"] is None and "a paper kite" in pictures["model-kite"]["prompt"]
+    hero, kite = pictures["model-hero"]["prompt"], pictures["model-kite"]["prompt"]
+    assert "T-pose" in hero and "isolated" in hero and "felt puppets" not in hero, "the portrait carries the look; the prompt is the staging"
+    assert pictures["model-kite"]["refs"] is None and kite.startswith("a paper kite") and "felt puppets" in kite and kite.endswith("no shadow")
     meshes = {item["image_path"]: item for item in submitted(production, "model3d.generate")}
     assert set(meshes) == {"/api/v1/uploads/hero.png", "/api/v1/uploads/boat.png", "/api/v1/uploads/kite.png"}
     assert all(item["preset"] == "balanced" for item in meshes.values())
@@ -147,8 +148,8 @@ def test_sets_are_painted_in_the_same_batch_with_the_floor_recipe_and_named_as_b
     make_models(production, spec, sleep=lambda _: None)
     assert waited == [["hero", "kite", "set:harbour"]]
     painted = next(image for image in production.images if image["key"] == "set-harbour")
-    assert painted["res"] == "1664x928" and "open floor across the lower third" in painted["prompt"]
-    assert painted["prompt"].startswith("felt puppets. a night harbour")
+    assert painted["res"] == "1664x928" and "large open EMPTY floor" in painted["prompt"]
+    assert painted["prompt"].startswith("An EMPTY set with nobody in it") and "a night harbour" in painted["prompt"]
     url = production.state["sets"]["harbour"]["url"]
     resolved = resolve_media({"template": "dance-stage", "background": "harbour"}, stills={}, root=tmp_path, workspace="w",
                              sets=production.state["sets"])
@@ -206,3 +207,10 @@ def test_meshes_go_in_waves_the_3d_service_accepts(tmp_path):
     production.mcp = counting
     make_models(production, {**SPEC, "models": models}, sleep=lambda _: None)
     assert max(peak) == 4 and all(production.state["models"][name]["file"] for name in models)
+
+
+def test_the_scenery_look_drops_the_sentences_about_people():
+    from services.production_models import scenery_look
+    look = ("Toy diorama of painted wood and felt; characters are vinyl figurines with rounded faces; warm lanterns. "
+            "No text.")
+    assert scenery_look(look) == "Toy diorama of painted wood and felt; warm lanterns. No text."
