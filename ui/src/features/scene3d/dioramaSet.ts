@@ -12,7 +12,8 @@ export interface DioramaSet { houses: DioramaHouse[]; ground?: DioramaGround; la
 const MIN_RADIUS = 7          // the plaza is at least this wide around what the camera looks at
 const CLEARANCE = 2.5         // metres between the furthest camera or cast position and the facades
 const ALLEY = 1.8             // every third house leaves an alley this wide, so the sky shows between roofs
-const OPEN_ARC = 0.85         // radians either side of the back an 'open' plaza leaves to the horizon
+const OPEN_ARC = 0.85         // radians either side of the back where an 'open' plaza looks out to a distant skyline
+const SKYLINE = 3.5           // the skyline stands this many times further away than the plaza's fronts
 const SAMPLES = 12
 const MAX_HOUSES = 32
 const MODEL_HEIGHT = 1.7      // fitGltf scales a model to this height times its scale
@@ -21,7 +22,7 @@ const GROUND_MARGIN = 6
 const SETBACKS = [0, 1.1, 0.4, 1.6, 0.7]   // metres each house stands back from the ring, so the fronts do not form one wall
 
 type Pose = { eye: Vec3; look: Vec3 }
-type Spot = { house: DioramaHouse; angle: number; setback: number }
+type Spot = { house: DioramaHouse; angle: number; distance: number }
 
 /** Where the camera is and looks over the shot. A framed camera is anchored at the target's middle. */
 export function cameraPath(document: Scene3DDocument): Pose[] {
@@ -46,35 +47,45 @@ function castPoints(document: Scene3DDocument): Vec3[] {
     slotPoseAtTime(slot, (document.duration * index) / SAMPLES, document.duration).position))
 }
 
-/** Houses around the ring, starting at the back (opposite the camera at mid-shot) and alternating left and right
- * until they meet. An 'open' plaza leaves the back arc empty, so the sky meets the ground there. */
-export function ringSpots(houses: readonly DioramaHouse[], radius: number, back: number, open: boolean): Spot[] {
+/** Houses along an arc of the given half-width round ``middle``, the first in the middle, then alternating left and
+ * right until the arc is full. ``first`` offsets the house, alley and setback pattern. */
+function arcSpots(houses: readonly DioramaHouse[], radius: number, middle: number, half: number, first = 0): Spot[] {
   const arc = (width: number) => 2 * Math.atan(width / (2 * radius))
   const spots: Spot[] = []
-  const first = houses[0]
-  let left = back + (open ? OPEN_ARC : arc(first.width) / 2)
-  let right = back - (open ? OPEN_ARC : arc(first.width) / 2)
-  if (!open) spots.push({ house: first, angle: back, setback: SETBACKS[0] })
-  for (let index = open ? 0 : 1; index < MAX_HOUSES; index++) {
+  let [left, right] = [middle, middle]
+  for (let index = first; index < first + MAX_HOUSES; index++) {
     const house = houses[index % houses.length]
     const span = arc(house.width)
     const alley = index % 3 === 2 ? arc(ALLEY) : 0
-    if (left - right + span + alley > 2 * Math.PI) break
-    const setback = SETBACKS[index % SETBACKS.length]
-    if (index % 2 === 1) {
-      spots.push({ house, angle: left + alley + span / 2, setback })
+    const distance = radius + SETBACKS[index % SETBACKS.length]
+    if (index === first) {
+      if (span > 2 * half) break
+      spots.push({ house, angle: middle, distance })
+      ;[left, right] = [middle + span / 2, middle - span / 2]
+    } else if (left - right + span + alley > 2 * half) {
+      break
+    } else if ((index - first) % 2 === 1) {
+      spots.push({ house, angle: left + alley + span / 2, distance })
       left += alley + span
     } else {
-      spots.push({ house, angle: right - alley - span / 2, setback })
+      spots.push({ house, angle: right - alley - span / 2, distance })
       right -= alley + span
     }
   }
   return spots
 }
 
-function houseSlot(spot: Spot, index: number, centre: [number, number], radius: number): Scene3DSlot {
+/** A plaza closes the whole ring, starting behind the cast (opposite the camera at mid-shot). An 'open' plaza leaves
+ * that back arc to a skyline of the same houses far away, so the view runs out to a horizon with depth in it. */
+export function ringSpots(houses: readonly DioramaHouse[], radius: number, back: number, open: boolean): Spot[] {
+  if (!open) return arcSpots(houses, radius, back, Math.PI)
+  const skyline = arcSpots(houses, radius * SKYLINE, back, OPEN_ARC)
+  return [...skyline, ...arcSpots(houses, radius, back + Math.PI, Math.PI - OPEN_ARC, skyline.length)]
+}
+
+function houseSlot(spot: Spot, index: number, centre: [number, number]): Scene3DSlot {
   const [ux, uz] = [Math.sin(spot.angle), Math.cos(spot.angle)]
-  const distance = radius + spot.setback
+  const distance = spot.distance
   // A house's front is its +z; turned to face the middle of the plaza, its block reaches outwards.
   return {
     id: `set-house-${index + 1}`, slot: 'prop', media: 'model3d', sourceUrl: spot.house.source, clip: null,
@@ -103,7 +114,7 @@ export function stageDioramaSet(document: Scene3DDocument, set: DioramaSet): Sce
   const radius = Math.max(MIN_RADIUS, reach + CLEARANCE)
   const back = Math.atan2(mid.look[0] - mid.eye[0], mid.look[2] - mid.eye[2])
   const spots = ringSpots(set.houses, radius, back, set.layout === 'open')
-  const houses = spots.map((spot, index) => houseSlot(spot, index, centre, radius))
-  const far = radius + Math.max(...SETBACKS) + HOUSE_DEPTH + GROUND_MARGIN
+  const houses = spots.map((spot, index) => houseSlot(spot, index, centre))
+  const far = Math.max(radius, ...spots.map(spot => spot.distance)) + HOUSE_DEPTH + GROUND_MARGIN
   return set.ground ? [groundSlot(set.ground, centre, far), ...houses] : houses
 }

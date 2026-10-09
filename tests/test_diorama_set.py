@@ -59,3 +59,4 @@ def test_the_ground_is_a_slab_with_its_top_at_zero_repeating_its_picture(tmp_pat
     uv = attribute(gltf, gltf.meshes[0].primitives[0].attributes.TEXCOORD_0, 2)
     assert uv[:4].max() == pytest.approx(10), "the top repeats the picture every 3 m"
     assert gltf.samplers[0].wrapS == pygltflib.REPEAT
+    assert gltf.materials[0].pbrMetallicRoughness.baseColorFactor == [0.8, 0.8, 0.8, 1.0], "a pale floor must not glare"
