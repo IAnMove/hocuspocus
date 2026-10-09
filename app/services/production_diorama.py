@@ -24,15 +24,17 @@ FACADE_SIZE = "768x1024"
 GROUND_SIZE = "1024x1024"
 SKY_SIZE = "1664x928"
 HEIGHTS = (7.5, 9.0, 6.5, 10.0, 8.0, 7.0, 9.5, 6.0)    # metres, by house; a varied roofline
-FACADE_STAGING = ("flat frontal elevation of the front facade, straight-on orthographic view, the facade fills the whole "
-                  "picture edge to edge, everything in sharp focus, no sky, no ground, no street, no people, nothing in front of it")
+FACADE_STAGING = ("Architectural texture, straight-on orthographic view of the flat front wall only, cropped tight so the wall "
+                  "fills the entire picture from edge to edge: the left and right edges of the picture are the corners of the "
+                  "wall, the top edge is the eaves, the bottom edge is the foot of the wall. No sky, no roof slope, no ground, "
+                  "no street, no surroundings, no people, nothing in front of it, everything in sharp focus")
 GROUND_STAGING = ("Flat orthographic view straight down, the pattern fills the whole picture edge to edge and repeats evenly, "
                   "everything in sharp focus, flat even lighting, no perspective, no horizon, no walls, no furniture, no plants, "
                   "no lights, no objects, no shadows, no people")
 SKY_STAGING = ("The sky fills the whole picture, no buildings, no rooftops, no towers, no ground, no hills, no trees, no lights, "
                "no lanterns, no people")
 FIELDS = {"kind", "prompt", "houses", "ground", "sky", "seed"}
-RECIPE = 2      # the picture recipe above; a change draws every diorama set again
+RECIPE = 3      # the picture recipe above; a change draws every diorama set again
 
 
 def is_diorama(entry: Any) -> bool:
@@ -65,7 +67,7 @@ def picture_jobs(production: Any, name: str, entry: dict, look: str, choice: tup
     seed = entry.get("seed", 11)
     attempt = production._attempt("set_attempts", name)
     place = entry["prompt"].rstrip(". ")
-    parts = {f"house-{index + 1}": (f"The front of {house.rstrip('. ')}, in {place}. {look} {FACADE_STAGING}", FACADE_SIZE)
+    parts = {f"house-{index + 1}": (f"The front wall of {house.rstrip('. ')}, in {place}. {look} {FACADE_STAGING}", FACADE_SIZE)
              for index, house in enumerate(entry["houses"])}
     parts["ground"] = (f"A seamless tileable texture seen from straight above: {entry['ground'].rstrip('. ')}. {GROUND_STAGING}", GROUND_SIZE)
     parts["sky"] = (f"The open sky and nothing else: {entry['sky'].rstrip('. ')}. {SKY_STAGING}", SKY_SIZE)

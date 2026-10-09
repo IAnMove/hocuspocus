@@ -240,7 +240,7 @@ def test_a_diorama_set_draws_facades_a_ground_and_a_sky_and_builds_its_pieces(tm
     make_models(production, spec, sleep=lambda _: None)
     drawn = {image["key"]: image for image in production.images}
     assert sorted(drawn) == ["set-plaza-ground", "set-plaza-house-1", "set-plaza-house-2", "set-plaza-sky"]
-    assert drawn["set-plaza-house-1"]["res"] == "768x1024" and "fills the whole picture" in drawn["set-plaza-house-1"]["prompt"]
+    assert drawn["set-plaza-house-1"]["res"] == "768x1024" and "wall fills the entire picture" in drawn["set-plaza-house-1"]["prompt"]
     assert "a pale yellow house" in drawn["set-plaza-house-1"]["prompt"] and "figurines" not in drawn["set-plaza-house-1"]["prompt"]
     assert "seamless tileable" in drawn["set-plaza-ground"]["prompt"] and drawn["set-plaza-sky"]["res"] == "1664x928"
     for part in ("ground", "sky"):
