@@ -42,6 +42,10 @@ PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin"], "vehicle": ["bounce", "wob
 CHARACTER_STAGING = ("The same character as the reference, full body, T-pose, front view, arms horizontal, isolated on a "
                      "plain light grey studio background, nothing else in the picture, no shadow")
 OBJECT_STAGING = "single object, three-quarter view, isolated on a plain light grey studio background, nothing else in the picture, no shadow"
+# A cast portrait often stands the figure on a base or in its scenery (a diorama style draws little houses under
+# it). Hunyuan3D meshes all of that, so a model that is not a humanoid is redrawn alone from its picture too.
+REFERENCE_STAGING = ("The same character or object as the reference, alone and whole, three-quarter view, isolated on a plain "
+                     "light grey studio background, no base, no stand, no scenery, nothing else in the picture, no shadow")
 PICTURE_SIZE = "1024x1024"
 # A set must leave the cast room and company to nobody: figures painted into it stand where the cast stands
 # and stretch across the projected floor. The rule goes first and last, and the look loses its sentences about people.
@@ -214,25 +218,30 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
     """(entry, source picture, rig) for each model that is new or changed; a resume skips the rest."""
     cast, todo = _cast_ids(spec), {}
     for name, entry in (spec.get("models") or {}).items():
-        source = _source(production, spec, entry)
-        fingerprint = _fingerprint(entry, source, spec)
+        source, rig = _source(production, spec, entry), rig_of(entry, cast)
+        # A model meshed straight from its picture before REFERENCE_STAGING is made again.
+        restaged = {**entry, "staging": "isolated"} if source and rig != "humanoid" else entry
+        fingerprint = _fingerprint(restaged, source, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and kept.get("file") and not kept.get("rig_error"):
             continue
         made[name] = {"fingerprint": fingerprint}
-        todo[name] = (entry, source, rig_of(entry, cast))
+        todo[name] = (entry, source, rig)
     return todo
 
 
 def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, str], dict[str, str | None]]:
-    """Pictures already there, and image jobs for the rest: a T-pose from the portrait, or the object's prompt."""
+    """Image jobs for every model's picture: a T-pose from a character's portrait, the subject of any other picture
+    alone on a plain background, or an object drawn from its prompt."""
     from services.production_image_defaults import image_choice
     look, pictures, jobs = scenery_look(style.get("image", "")), {}, {}
     for name, (entry, source, rig) in todo.items():
-        if rig != "humanoid" and source:
-            pictures[name] = source
-            continue
-        staged = CHARACTER_STAGING if rig == "humanoid" else f"{entry['prompt']}. Style: {look} {OBJECT_STAGING}".replace("Style:  ", "")
+        if rig == "humanoid":
+            staged = CHARACTER_STAGING
+        elif source:
+            staged = REFERENCE_STAGING
+        else:
+            staged = f"{entry['prompt']}. Style: {look} {OBJECT_STAGING}".replace("Style:  ", "")
         jobs[name] = production.image(f"model-{name}", staged, [source] if source else None, PICTURE_SIZE,
                                       entry.get("seed", 7), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
     return pictures, jobs

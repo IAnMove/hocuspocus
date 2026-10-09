@@ -422,6 +422,9 @@ with clips on the song's tempo:
 `from` is a cast id (its plain portrait), a `stills` name or a picture URL; an
 object without a picture gives a `prompt`. A cast id defaults to `rig: "humanoid"`:
 the portrait is redrawn in a T-pose first, because the humanoid rig needs one.
+Any other model made from a picture is redrawn alone on a plain background first
+(no base, stand or scenery): Hunyuan3D meshes everything in the picture, and a
+diorama-style portrait stands the figure on a little village.
 Humanoid clips: idle, breathe, walk, run, jump, wave, cheer, dance_bounce,
 dance_side, dance_arms, clap, punch, sit_down, victory, talk, nod, look_around,
 bow, point, shrug, kneel_pray, crouch. Procedural profiles (`prop`, `vehicle`,
