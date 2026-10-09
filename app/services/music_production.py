@@ -236,12 +236,14 @@ def title_span(dur: float) -> tuple[float, float] | None:
     return start, length
 
 
-def lyric_span(line: dict, a: float, b: float, dur: float) -> tuple[float, float] | None:
-    """Scene-relative start/duration for a score line, or None if it would be rejected by edit."""
+def lyric_span(line: dict, a: float, b: float, dur: float, until: float | None = None) -> tuple[float, float] | None:
+    """Scene-relative start/duration for a score line, or None if it would be rejected by edit. A line stays 0.15 s
+    after its last word, but never past ``until`` (the next line's start): two lines in one place would overlap."""
     if line["t1"] <= a or line["t0"] >= b:
         return None
     start = round(max(0.0, line["t0"] - a), 3)
-    length = round(min(b, line["t1"] + 0.15) - max(a, line["t0"]), 3)
+    end = min(b, line["t1"] + 0.15, until if until is not None and until > line["t0"] else float("inf"))
+    length = round(end - max(a, line["t0"]), 3)
     if length <= 0 or start + length - dur > 1e-6:
         return None
     return start, length

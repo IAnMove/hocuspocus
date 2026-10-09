@@ -269,6 +269,9 @@ def test_title_and_lyric_spans_fit_the_scene():
     assert title_span(0.0) is None
     assert lyric_span({"t0": 1.0, "t1": 2.0, "text": "x"}, 1.0, 1.2, 0.2) == (0.0, 0.2)
     assert lyric_span({"t0": 5.0, "t1": 6.0, "text": "x"}, 0.0, 1.0, 1.0) is None
+    line = {"t0": 1.0, "t1": 2.0, "text": "x"}
+    assert lyric_span(line, 0.0, 4.0, 4.0) == (1.0, 1.15), "a line stays 0.15 s after its last word"
+    assert lyric_span(line, 0.0, 4.0, 4.0, until=2.05) == (1.0, 1.05), "but gives way to the next line"
 
 
 def test_a_long_lyric_scene_is_edited_in_batches(tmp_path):

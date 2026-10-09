@@ -43,8 +43,9 @@ def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: f
     ops: list[dict] = []
     limit = MAX_TEXTS - bool(style.get("footer"))
     sections = sections or []
-    for index, line in enumerate(score.get("lines") or []):
-        span = lyric_span(line, a, b, dur)
+    lines = score.get("lines") or []
+    for index, line in enumerate(lines):
+        span = lyric_span(line, a, b, dur, lines[index + 1]["t0"] if index + 1 < len(lines) else None)
         if span is None:
             continue
         designed = look_for(style, sections[index] if index < len(sections) else "verse")
