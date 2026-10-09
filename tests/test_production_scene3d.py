@@ -529,3 +529,16 @@ def test_real_compiler_binds_by_object_id_refuses_ambiguous_or_missing_roles_and
     with pytest.raises(ValueError, match="background_slot_missing"):
         compile_document(cast_shot(template="speech-portrait", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
                                    background="/api/v1/file/f.png?workspace=t"), 4)
+
+
+@NODE
+def test_a_painted_set_drops_the_templates_unbound_placeholder_props_but_keeps_bound_ones():
+    doc = compile_document(cast_shot(template="cine-layered-depth", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"},
+                                     background="/api/v1/file/f.png?workspace=t"), 4)
+    assert all(slot["sourceUrl"] for slot in doc["slots"] if slot["slot"] == "prop"), "no empty placeholder block in front of the set"
+    kept = compile_document(cast_shot(template="cine-layered-depth", background="/api/v1/file/f.png?workspace=t",
+                                      cast={"subject_1": "/api/v1/file/h.glb?workspace=t",
+                                            "lamp": {"source": "/api/v1/file/lamp.glb?workspace=t", "add": True}}), 4)
+    assert [slot["id"] for slot in kept["slots"] if slot["slot"] == "prop"] == ["lamp"]
+    bare = compile_document(cast_shot(template="cine-layered-depth", cast={"subject_1": "/api/v1/file/h.glb?workspace=t"}), 4)
+    assert any(slot["slot"] == "prop" and not slot["sourceUrl"] for slot in bare["slots"]), "without a painted set the template is untouched"
