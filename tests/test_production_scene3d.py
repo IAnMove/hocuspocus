@@ -601,11 +601,15 @@ def test_real_compiler_stands_a_diorama_plaza_around_the_camera_and_the_cast():
 
 
 @NODE
-def test_real_compiler_leaves_the_back_of_an_open_plaza_to_the_sky():
+def test_real_compiler_opens_the_back_of_an_open_plaza_to_a_distant_skyline():
     import math
     doc = compile_document(cast_shot(template="cine-dolly-in", background={**DIORAMA, "layout": "open"},
                                      cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
     places, _ = ring(doc)
     eye, look = doc["camera"]["eye"], doc["camera"]["look"]
     back = math.atan2(look[0] - eye[0], look[2] - eye[2])
-    assert places and all(abs(math.atan2(math.sin(angle - back), math.cos(angle - back))) > 0.85 for _, angle in places)
+    behind = [distance for distance, angle in places if abs(math.atan2(math.sin(angle - back), math.cos(angle - back))) <= 0.85]
+    around = [distance for distance, angle in places if abs(math.atan2(math.sin(angle - back), math.cos(angle - back))) > 0.85]
+    assert behind and around and min(behind) > 2.5 * max(around), "the back looks out to a skyline far beyond the plaza"
+    ground = next(slot for slot in doc["slots"] if slot["id"] == "set-ground")
+    assert ground["scale"] == pytest.approx(0.2 / 1.7), "the 80 m slab still reaches the skyline"

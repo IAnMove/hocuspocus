@@ -23,6 +23,7 @@ GROUND_TEXTURE = 1024
 GROUND_SIZE = 80.0       # the slab's side
 GROUND_TILE = 3.0        # metres the ground picture covers before it repeats
 GROUND_THICKNESS = 0.2
+GROUND_TONE = 0.8        # the ground a little darker than its picture: a pale floor glared and drowned the lyrics
 MARGIN_CLOSE = 28        # a pixel this near the backdrop colour (on every channel) is backdrop
 MARGIN_TINT = 24         # a backdrop is grey or white: its channels differ by less than this
 MARGIN_SHARE = 0.6       # a line mostly of backdrop is margin
@@ -111,7 +112,7 @@ def ground_arrays(size: float, tile: float, thickness: float):
     ])
 
 
-def _write(target: str | Path, name: str, arrays, png: bytes, *, repeat: bool) -> None:
+def _write(target: str | Path, name: str, arrays, png: bytes, *, repeat: bool, tone: float = 1.0) -> None:
     positions, normals, uvs, indices = arrays
     blob = bytearray()
     gltf = pygltflib.GLTF2(asset=pygltflib.Asset(version="2.0", generator="hocuspocus diorama_set"),
@@ -135,7 +136,7 @@ def _write(target: str | Path, name: str, arrays, png: bytes, *, repeat: bool) -
     gltf.images.append(pygltflib.Image(bufferView=view(png), mimeType="image/png", name=name))
     gltf.textures.append(pygltflib.Texture(source=0, sampler=0))
     gltf.materials.append(pygltflib.Material(name=name, pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(
-        baseColorTexture=pygltflib.TextureInfo(index=0), metallicFactor=0.0, roughnessFactor=0.9)))
+        baseColorTexture=pygltflib.TextureInfo(index=0), baseColorFactor=[tone, tone, tone, 1.0], metallicFactor=0.0, roughnessFactor=0.9)))
     attributes = pygltflib.Attributes(POSITION=accessor(positions, "VEC3", pygltflib.FLOAT, pygltflib.ARRAY_BUFFER),
                                       NORMAL=accessor(normals, "VEC3", pygltflib.FLOAT, pygltflib.ARRAY_BUFFER),
                                       TEXCOORD_0=accessor(uvs, "VEC2", pygltflib.FLOAT, pygltflib.ARRAY_BUFFER))
@@ -158,5 +159,6 @@ def build_house(target: str | Path, facade: str | Path, height: float) -> dict:
 
 def build_ground(target: str | Path, texture: str | Path, *, size: float = GROUND_SIZE, tile: float = GROUND_TILE) -> dict:
     with Image.open(texture) as picture:
-        _write(target, Path(target).stem, ground_arrays(size, tile, GROUND_THICKNESS), _png(picture, GROUND_TEXTURE), repeat=True)
+        _write(target, Path(target).stem, ground_arrays(size, tile, GROUND_THICKNESS), _png(picture, GROUND_TEXTURE), repeat=True,
+               tone=GROUND_TONE)
     return {"size": size, "height": GROUND_THICKNESS}

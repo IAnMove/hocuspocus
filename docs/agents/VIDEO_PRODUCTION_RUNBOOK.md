@@ -302,7 +302,8 @@ Shot fields:
   `screen` (a tiling-window-manager desktop painted natively, no GPU: `desktop` = `{layout: single|split|triple|quad|master,
   apps: dev|system|mixed, focus, workspace, switch: none|left|right}`; windows open one after another and `switch` slides
   the desktop in like a workspace change).
-- Timing: `line` (index of a lyric line; the shot starts 0.25 s before it and spans `span` lines), `t0` (seconds) or `after` (starts 0.3 s after that line ends). Shots are cut at the next shot's start.
+- Timing: `line` (index of a lyric line; the shot starts 0.25 s before it and spans `span` lines), `t0` (seconds) or `after` (starts 0.3 s after that line ends). Shots are cut at the next shot's start. A cut shorter than one beat (at least 0.5 s) would flash: that shot is left out, the shot before it holds, and the log says so. Put an `after` shot only where the song leaves an instrumental gap.
+- Changing an H3 shot's `frame` redraws its start frame and reshoots its clip on the next `production.run`; changing only `action`, `camera` or `sing` reshoots the clip. Shots made before this release keep what they have until `production.shot.redo`.
 - `h3`: `frame` (start-frame prompt), `action` (what moves; use `(S1)` for the singer), `sing: true` for lip-sync, `cast` ids used as image references.
 - `still`: `focus` {x, y} (percent of the image kept centred while zooming), `zoom` [start, end], `camera` preset.
 - `title`: a text template (`lower-third-date`, `end-card`, `title-card`, …) with its fields. Lyric captions are added automatically.
@@ -460,7 +461,8 @@ the image model writes letters on them. A shot that names the set as its
 outside every place the camera and the cast go, so an orbit, a crane or a dolly
 gets real parallax and the cast stands on the ground with its shadow. Fronts
 are staggered, with an alley every third house. `{"source": "plaza", "layout":
-"open"}` leaves the back of the plaza empty so the ground meets the sky. A
+"open"}` puts the houses behind the cast far away, a skyline 3.5 times further
+than the plaza, so the view runs out to a horizon with depth in it. A
 camera looking straight down sees the ground only. The houses and the ground
 are ordinary objects in the saved Video 3D document (`set-house-N`,
 `set-ground`), so they can be moved or removed in the editor.

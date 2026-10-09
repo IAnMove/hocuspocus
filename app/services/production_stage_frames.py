@@ -61,11 +61,39 @@ def cast_sheets(production: Any, spec: dict) -> None:
         raise host.ProductionError("cast_incomplete", "no reference sheet for " + ", ".join(f"{cid} ({production.failures.get(cid, 'no output')})" for cid in absent))
 
 
+def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> None:
+    """An H3 shot whose spec changed is shot again: a new frame prompt drops its frame and its clip, a new action,
+    camera or singing only its clip. A shot seen for the first time (or made before this was recorded) keeps what
+    it has."""
+    import hashlib
+    import json
+
+    def digest(*parts: Any) -> str:
+        return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+    sources = production.state.setdefault("h3_sources", {})
+    frames, clips = production.state.setdefault("frames", {}), production.state.setdefault("clips", {})
+    for window in windows:
+        if window["kind"] != "h3":
+            continue
+        key = window["key"]
+        frame = digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
+        clip = digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
+        known = sources.get(key) or {"frame": frame, "clip": clip}
+        if known["frame"] != frame and frames.pop(key, None):
+            production.log(f"frame {key}: the shot's picture changed, drawing it again")
+        if known["clip"] != clip and isinstance(clips.get(key), dict):
+            clips[key]["obsolete"] = True
+            production.log(f"clip {key}: the shot changed, shooting it again")
+        sources[key] = {"frame": frame, "clip": clip}
+
+
 def shoot_frames(production: Any, spec: dict, windows: list[dict]) -> None:
     """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
     out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
     host = _host()
     windows = production._unlocked(windows)
+    forget_changed_shots(production, spec, windows)
     frames = production.state.setdefault("frames", {})
     failures = production.state.setdefault("frame_failures", {})
     settings = spec.get("style") or {}
