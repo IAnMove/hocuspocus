@@ -1,8 +1,9 @@
 """Plan checks that catch a thin video before any GPU work.
 
 ``blocking_problems`` is what ``production.run`` refuses in a new or changed spec: one still image filling
-three or more shots that are not marked deliberate (``allow: ["still"]``), and more runtime on still images
-than the quality allows. A resume of an unchanged spec is never refused.
+three or more shots that are not marked deliberate (``allow: ["still"]``), more runtime on still images
+than the quality allows, and a full-frame title (title-card, trailer-slam) over a moving shot, which hides the
+clip it paid for (``allow: ["title_card"]`` keeps a deliberate one). A resume of an unchanged spec is never refused.
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
@@ -19,6 +20,8 @@ from urllib.parse import unquote, urlparse
 from services.production_quality import profile_of
 
 REUSED_STILL = 3
+FULL_FRAME_TITLES = ("title-card", "trailer-slam")     # an opaque plate over the whole frame
+MOVING = ("h3", "clip", "scene3d", "screen")
 REUSED_TEMPLATE = 4
 SHOT_FIELDS = {"key", "kind", "line", "span", "t0", "t1", "after", "cast", "sing", "frame", "action", "still", "clip", "image_model",
                "image_steps", "graphic", "scene3d", "desktop", "focus", "zoom", "camera", "title", "allow", "moment", "seed"}
@@ -69,7 +72,19 @@ def blocking_problems(spec: dict) -> list[dict]:
     if ratio > limit:
         problems.append({"code": "too_static", "ratio": round(ratio, 2), "limit": limit,
                          "hint": "replace still shots with H3 or scene3d shots"})
+    hidden = [str(shot.get("key")) for shot in shots if _covered(shot)]
+    if hidden:
+        problems.append({"code": "title_card_hides_shot", "shots": hidden,
+                         "hint": "title-card and trailer-slam paint an opaque plate over the whole frame, so the clip under "
+                                 "it is never seen: use lower-third-date, social-caption, dymo, card, chapter or quote, or "
+                                 "mark a deliberate card with allow: [\"title_card\"]"})
     return problems
+
+
+def _covered(shot: dict) -> bool:
+    title = shot.get("title")
+    return (shot.get("kind") in MOVING and isinstance(title, dict) and title.get("template") in FULL_FRAME_TITLES
+            and "title_card" not in (shot.get("allow") or ()))
 
 
 def plan_warnings(spec: dict, root: Any = None, production_id: str | None = None) -> list[dict]:
