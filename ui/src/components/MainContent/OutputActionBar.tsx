@@ -3,6 +3,7 @@ import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loa
 import { editOutputImage, addOutputImageReference } from '../../features/studio/imageInputActions'
 import { beginImageSettingsChange } from '../../features/studio/imageSettingsRestore'
 import { outputImageUrl, outputMediaUrl } from '../../lib/storedImageFiles'
+import { captureShownFrame } from './videoFrameCapture'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { MediaMoveDialog } from './MediaMoveDialog'
@@ -294,8 +295,13 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
         // The dialog releases its player on close; recover its selected frame.
         video = document.createElement('video')
         temporaryVideo = video
-        video.src = outputMediaUrl(file.name, outputWorkspace)
         video.muted = true
+        video.playsInline = true
+        // A detached player can finish `seeked` with a black picture. Keep it in the
+        // document, off screen, so Chromium actually presents the saved frame.
+        video.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none'
+        document.body.appendChild(video)
+        video.src = outputMediaUrl(file.name, outputWorkspace)
         await new Promise<void>((resolve, reject) => {
           video!.onloadeddata = () => resolve()
           video!.onerror = () => reject(new Error('video load failed'))
@@ -312,15 +318,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
           })
         }
       }
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('canvas unavailable')
-      ctx.drawImage(video, 0, 0)
-      const blob: Blob = await new Promise((resolve, reject) =>
-        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('frame capture failed'))), 'image/png')
-      )
+      const blob = await captureShownFrame(video)
       const stem = file.name.replace(/\.[^.]+$/, '')
       const frameFile = new File([blob], `${stem}_t${video.currentTime.toFixed(2)}s.png`, { type: 'image/png' })
       addImageRef(frameFile)
@@ -331,6 +329,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
     } finally {
       if (temporaryVideo) {
         temporaryVideo.pause()
+        temporaryVideo.remove()
         temporaryVideo.removeAttribute('src')
         temporaryVideo.load()
       }
