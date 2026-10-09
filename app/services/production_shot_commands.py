@@ -135,7 +135,13 @@ def _shoot_frame(production: Any, spec: dict, key: str, frame_prompt: str | None
 
 
 def _shoot_clip(production: Any, spec: dict, key: str, action: str | None) -> None:
+    """A new take of the shot's clip: an H3 shot is shot again, a scene3d shot's document is exported again."""
     window = _window(production, spec, key)
+    if window.get("kind") == "scene3d":
+        from services.music_production import shot_windows
+        from services.production_scene3d import export_scene3d_clips
+        export_scene3d_clips(production, spec, shot_windows(spec, production.score()), retake=(key,))
+        return
     if action:
         window["action"] = action
     production.clips(spec, [window], retake=(key,))
