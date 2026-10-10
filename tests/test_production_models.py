@@ -90,7 +90,7 @@ def test_characters_get_a_t_pose_from_their_portrait_then_a_mesh_and_a_tempo_rig
     assert set(pictures) == {"model-hero", "model-kite", "model-boat"}
     assert pictures["model-hero"]["refs"] == ["/api/v1/uploads/hero-single.png"]
     boat = pictures["model-boat"]
-    assert boat["refs"] == ["/api/v1/uploads/boat.png"] and "no base, no stand, no scenery" in boat["prompt"], \
+    assert boat["refs"] == ["/api/v1/uploads/boat.png"] and "remove the base, stand, pedestal" in boat["prompt"], \
         "a picture with a base or scenery would be meshed with it: the subject is redrawn alone"
     hero, kite = pictures["model-hero"]["prompt"], pictures["model-kite"]["prompt"]
     assert "T-pose" in hero and "isolated" in hero and "felt puppets" not in hero, "the portrait carries the look; the prompt is the staging"
@@ -291,3 +291,43 @@ def test_a_model_meshed_straight_from_its_picture_is_made_again_and_the_others_a
     before = len(production.images)
     make_models(production, SPEC, sleep=lambda _: None)
     assert [image["key"] for image in production.images[before:]] == ["model-boat"]
+
+
+def test_a_glb_in_the_workspace_is_only_rigged_and_a_refused_humanoid_falls_back_to_a_profile(tmp_path):
+    (tmp_path / "pack").mkdir()
+    for name in ("ape", "parrot"):
+        (tmp_path / "pack" / f"{name}.glb").write_bytes(b"glb " + name.encode())
+    spec = {"song": {"bpm": 100}, "style": {}, "models": {
+        "ape": {"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop", "animations": ["idle", "dance_bounce"], "height": 1.9},
+        "parrot": {"glb": "pack/parrot.glb", "rig": "flying"}}}
+    check_models(spec)
+    production = Production(tmp_path)
+    plain = production.mcp
+
+    def mcp(operation, args):
+        if operation == "model3d.rig.status":
+            rig = next(a for o, a in production.calls if o == "model3d.rig" and a["intent_id"] == args["input"]["job_id"].split(":", 1)[1])["input"]
+            if rig["engine"] == "humanoid":
+                production.calls.append((operation, args))
+                return {"status": "failed", "result": {"status": "failed", "error": "not_humanoid: no gap between the legs"}}
+        return plain(operation, args)
+    production.mcp = mcp
+    make_models(production, spec, sleep=lambda _: None)
+    assert production.images == [] and submitted(production, "model3d.generate") == [], "a workspace GLB needs no picture and no mesh"
+    rigs = submitted(production, "model3d.rig")
+    assert [(rig["source"], rig["engine"], rig.get("rig_profile")) for rig in rigs] == [
+        ("pack/ape.glb", "humanoid", None), ("pack/parrot.glb", "procedural", "flying"), ("pack/ape.glb", "procedural", "prop")]
+    ape = production.state["models"]["ape"]
+    assert ape["rigged_as"] == "prop" and "rig_error" not in ape and ape["clips"] == ["hover", "bounce", "spin"]
+    assert any("humanoid rig refused" in line for line in production.state["log"])
+    resolved = resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "ape", "clip": "dance_bounce"},
+                                                                  "subject_2": {"source": "ape", "clip": "idle"}}},
+                             stills={}, root=tmp_path, workspace="w", models=production.state["models"])
+    assert resolved["cast"]["subject_1"]["clip"] == {"index": 1, "name": "bounce"}, "a dance stands in as the profile's bounce"
+    assert resolved["cast"]["subject_2"]["clip"] == {"index": 0, "name": "hover"} and resolved["cast"]["subject_1"]["scale"] == round(1.9 / 1.7, 4)
+    calls = len(production.calls)
+    make_models(production, spec, sleep=lambda _: None)
+    assert len(production.calls) == calls, "an unchanged GLB is not rigged again"
+    for bad in ({"glb": "pack/none.glb"}, {"glb": "pack/ape.glb", "prompt": "an ape"}, {"glb": "pack/ape.glb", "rig": "prop", "fallback": "prop"}):
+        with pytest.raises(ModelError):
+            check_models({"models": {"x": bad}}) if "none" not in bad.get("glb", "") else make_models(Production(tmp_path), {"style": {}, "models": {"x": bad}}, sleep=lambda _: None)

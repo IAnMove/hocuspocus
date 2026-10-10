@@ -114,6 +114,24 @@ def _clip_key(name):
     return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
 
+# A model whose humanoid rig was refused plays its procedural profile's nearest clip for a humanoid one.
+_STILL_CLIPS = {"idle", "breathe", "talk", "nod", "look_around", "shrug", "point", "bow", "sit_down", "kneel_pray", "crouch"}
+_DANCE_CLIPS = {"dance_bounce", "dance_side", "dance_arms"}
+
+
+def _profile_clip(value, names):
+    """The clip of a procedural profile that stands in for a humanoid one: dances wobble, stillness hovers or idles,
+    anything else bounces; else the model's first clip."""
+    wanted = ["wobble", "bounce"] if value in _DANCE_CLIPS else ["hover", "idle"] if value in _STILL_CLIPS else ["bounce", "jump"]
+    labels = _rig_labels()
+    keys = [_clip_key(name) for name in names]
+    for clip in wanted:
+        for key in (_clip_key(clip), _clip_key(labels.get(clip, clip))):
+            if key in keys:
+                return keys.index(key)
+    return 0 if names else None
+
+
 def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
     """The shot's scene3d with every named picture or model as a URL, and clips named by name as {index, name}.
 
@@ -136,7 +154,7 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
             return f"/api/v1/file/{quote(value)}?workspace={quote(workspace)}"
         raise ValueError(f"scene3d: {value!r} is not a URL, a model, a stills name or a file in the workspace")
 
-    def clip(source, value, key):
+    def clip(source, value, key, stand_in=False):
         if not isinstance(value, str):
             return value
         address = urlparse(source)
@@ -148,6 +166,8 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         # the rig id, its label or the baked name all name the clip.
         wanted = {_clip_key(value), _clip_key(_rig_labels().get(value, value))}
         found = [index for index, name in enumerate(names) if _clip_key(name) in wanted]
+        if not found and stand_in and _profile_clip(value, names) is not None:
+            found = [_profile_clip(value, names)]
         if not found:
             raise ValueError(f"scene3d.cast.{key}: no clip {value!r} in its model (clips: {', '.join(names) or 'none'})")
         return {"index": found[0], "name": names[found[0]]}
@@ -161,15 +181,16 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
     for key, value in (resolved.get("cast") or {}).items():
         entry = value if isinstance(value, dict) else {"source": value}
         height = (models or {}).get(entry["source"], {}).get("height")
+        stand_in = bool((models or {}).get(entry["source"], {}).get("rigged_as"))
         source = url(entry["source"])
         entry = {**entry, "source": source}
         # A model made at its real height ("the moto is 1.1 m") keeps it; every model is otherwise 1.7 m tall.
         if height and "scale" not in entry:
             entry["scale"] = round(height / MODEL_HEIGHT, 4)
         if "clip" in entry:
-            entry["clip"] = clip(source, entry["clip"], key)
+            entry["clip"] = clip(source, entry["clip"], key, stand_in)
         if isinstance(entry.get("clips"), list):
-            entry["clips"] = [{**cue, "clip": clip(source, cue.get("clip"), key)} if isinstance(cue, dict) else cue
+            entry["clips"] = [{**cue, "clip": clip(source, cue.get("clip"), key, stand_in)} if isinstance(cue, dict) else cue
                               for cue in entry["clips"]]
         resolved["cast"][key] = entry
     return resolved
