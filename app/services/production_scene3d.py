@@ -32,7 +32,8 @@ FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
-BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout"}
+BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
+LAYER_DEPTHS = ("mid", "near")
 MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scale
 
 
@@ -123,7 +124,9 @@ def _check_background(config):
         if set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
             raise ValueError("scene3d.background is a picture (URL, workspace file, stills name or set) or "
                              "{source, surface: cutout|environment|wall|floor}")
-        if "houses" in entry or "ground" in entry:
+        if "layers" in entry or "key" in entry:
+            _check_parallax(entry)
+        elif "houses" in entry or "ground" in entry:
             _check_diorama(entry)
         if entry.get("layout", "plaza") not in ("plaza", "open"):
             raise ValueError("scene3d.background.layout is plaza or open")
@@ -146,6 +149,21 @@ def _check_diorama(entry):
                                    and _source(ground["source"]) and _measure(ground["height"], 0.01, 5)
                                    and _measure(ground["size"], 4, 1000)):
         raise ValueError("scene3d.background.ground is {source, height, size}: a ground slab model and its size in metres")
+
+
+def _check_parallax(entry):
+    """A parallax set spelled out: the far picture as source, cutout layers at depths, the key colour, a ground slab."""
+    layers, key = entry.get("layers"), entry.get("key", "#00ff00")
+    if not isinstance(layers, list) or not 0 < len(layers) <= 3 or not all(
+            isinstance(layer, dict) and set(layer) == {"source", "depth"} and _source(layer["source"]) and layer["depth"] in LAYER_DEPTHS
+            for layer in layers):
+        raise ValueError("scene3d.background.layers lists 1-3 {source, depth: mid|near} painted cutouts")
+    if not (isinstance(key, str) and len(key) == 7 and key[0] == "#" and all(ch in "0123456789abcdefABCDEF" for ch in key[1:])):
+        raise ValueError("scene3d.background.key is the layers' chroma-key colour, #rrggbb")
+    if "houses" in entry:
+        raise ValueError("scene3d.background is a diorama or a parallax set, not both")
+    if entry.get("ground") is not None:
+        _check_diorama({"houses": [{"source": "x", "width": 1, "height": 1}], "ground": entry["ground"]})
 
 
 def _rig_labels():
@@ -284,10 +302,17 @@ def _jitter(index):
 
 
 def _diorama(entry, made):
-    """A diorama set named as the background: its sky becomes the source, its houses and ground come along."""
-    if not (made or {}).get("houses"):
+    """A diorama or parallax set named as the background: its sky becomes the source, its houses or layers and
+    its ground come along."""
+    made = made or {}
+    if made.get("houses"):
+        pieces = {"source": made["sky"], "houses": made["houses"]}
+    elif made.get("layers"):
+        pieces = {"source": made["sky"], "layers": made["layers"], "key": made["key"]}
+    else:
         return None
-    pieces = {"source": made["sky"], "houses": made["houses"], **({"ground": made["ground"]} if made.get("ground") else {})}
+    if made.get("ground"):
+        pieces["ground"] = made["ground"]
     return {**pieces, **{key: value for key, value in entry.items() if key in ("layout",)}}
 
 

@@ -33,7 +33,11 @@ from typing import Any, Callable
 from services.glb_cleanup import CLEANUP as GLB_CLEANUP
 from services.production_control import sleep_until
 from services.production_diorama import (
-    build as build_diorama, check_diorama, is_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
+    build as build_diorama, check_diorama, is_built as diorama_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
+)
+from services.production_parallax import (
+    build as build_parallax, check_parallax, is_built as parallax_built, is_parallax, picture_jobs as parallax_jobs,
+    recipe as parallax_recipe,
 )
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
@@ -81,13 +85,15 @@ def check_sets(spec: dict) -> None:
     if not isinstance(sets, dict) or len(sets) > 12:
         raise ModelError("spec.sets maps up to 12 names to {prompt, seed}")
     for name, entry in sets.items():
-        if is_diorama(entry) and isinstance(name, str) and _NAME.match(name):
-            why = check_diorama(name, entry, _text)
+        built = is_diorama(entry) or is_parallax(entry)
+        if built and isinstance(name, str) and _NAME.match(name):
+            why = (check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
             if why:
                 raise ModelError(why)
         elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
                 or set(entry) - {"prompt", "seed"} or not _text(entry.get("prompt")):
-            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed}}, or a diorama {{kind: \"diorama\", ...}}")
+            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed}}, a diorama {{kind: \"diorama\", ...}} "
+                             f"or a parallax set {{kind: \"parallax\", ...}}")
 
 
 def check_models(spec: dict) -> None:
@@ -211,6 +217,17 @@ def _await(production: Any, operation: str, jobs: dict[str, tuple[str | None, st
     return done
 
 
+# The set kinds built from several pictures, each with its recipe, its picture jobs and what a built record holds.
+SET_KINDS = (
+    {"name": "diorama", "is": is_diorama, "recipe": diorama_recipe, "jobs": diorama_jobs, "built": diorama_built},
+    {"name": "parallax", "is": is_parallax, "recipe": parallax_recipe, "jobs": parallax_jobs, "built": parallax_built},
+)
+
+
+def _set_kind(entry: Any) -> dict | None:
+    return next((kind for kind in SET_KINDS if kind["is"](entry)), None)
+
+
 def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     """Image jobs for the sets that are missing or changed, keyed ``set:<name>``."""
     from services.production_image_defaults import image_choice
@@ -218,14 +235,15 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     made = production.state.setdefault("sets", {})
     jobs = {}
     for name, entry in (spec.get("sets") or {}).items():
-        fingerprint = _fingerprint(diorama_recipe(entry) if is_diorama(entry) else entry, None, spec)
+        kind = _set_kind(entry)
+        fingerprint = _fingerprint(kind["recipe"](entry) if kind else entry, None, spec)
         kept = made.get(name) or {}
-        if kept.get("fingerprint") == fingerprint and (kept.get("url") or is_built(kept)):
+        if kept.get("fingerprint") == fingerprint and (kept.get("url") or (kind and kind["built"](kept))):
             continue
         made[name] = {"fingerprint": fingerprint}
-        if is_diorama(entry):
-            made[name]["kind"] = "diorama"
-            jobs.update(diorama_jobs(production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
+        if kind:
+            made[name]["kind"] = kind["name"]
+            jobs.update(kind["jobs"](production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
             continue
         prompt = f"{SET_LEAD} {entry['prompt']}. {scenery_look(style.get('image', ''))} {SET_STAGING}"
         jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", 11),
@@ -291,7 +309,7 @@ def _collect_pictures(production: Any, jobs: dict, made: dict, sets: dict, pictu
             pictures[name] = production.upload(file)[1]
     for set_name, record in sets.items():
         if record.get("pictures") and not record.get("error"):
-            build_diorama(production, set_name, record)
+            (build_parallax if record.get("kind") == "parallax" else build_diorama)(production, set_name, record)
     production.save()
 
 
