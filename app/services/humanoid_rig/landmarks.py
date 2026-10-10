@@ -314,9 +314,14 @@ def _require_height(height: float) -> None:
         raise NotHumanoid("degenerate")
 
 
+# A lying body is three to four times deeper than it is tall. A cartoon king with a cape and a big belly, or a
+# monkey with a long tail, is about as deep as it is tall and still stands upright.
+UPRIGHT_DEPTH = 1.5
+
+
 def _require_upright(triangles: np.ndarray, height: float) -> None:
     extent = triangles.reshape(-1, 3).max(axis=0) - triangles.reshape(-1, 3).min(axis=0)
-    if float(extent[2]) > height * 1.0 or float(extent[0]) > height * 2.4:
+    if float(extent[2]) > height * UPRIGHT_DEPTH or float(extent[0]) > height * 2.4:
         raise NotHumanoid("not_upright")
 
 
