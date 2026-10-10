@@ -393,6 +393,14 @@ def _land_rigs(production: Any, made: dict, records: dict[str, dict]) -> None:
             made[name]["rig_error"] = f"{record.get('status')}: {str(record.get('error') or '')[:160]}"
 
 
+def _outcome(model: dict) -> str:
+    """What the stage made of a model: its error, its lost rig when nothing landed, else its file and clips."""
+    file = model.get("file")
+    if model.get("error") or (not file and model.get("rig_error")):
+        return model.get("error") or model["rig_error"]
+    return f"{file} ({', '.join(model['clips']) or 'rigid'})"
+
+
 def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
     from services.series_shot3d import glb_clip_names
 
@@ -410,8 +418,7 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
     for name in todo:
         file = made[name].get("file")
         made[name]["clips"] = glb_clip_names(production.root / file) if file else []
-        production.log(f"model {name}: " + (made[name].get("error") or (None if file else made[name].get("rig_error"))
-                                            or f"{file} ({', '.join(made[name]['clips']) or 'rigid'})"))
+        production.log(f"model {name}: {_outcome(made[name])}")
     production.save()
     asked = {key[4:].partition(":")[0] for key in set_jobs}
     failed = [name for name in todo if made[name].get("error")] + [f"set {name}" for name in sorted(asked) if sets[name].get("error")]
