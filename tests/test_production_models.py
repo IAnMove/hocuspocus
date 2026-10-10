@@ -377,3 +377,30 @@ def test_a_cleaned_copy_is_named_by_the_originals_content_and_the_clean_up(tmp_p
     assert "rainbow" in production.state["log"][-1]
     monkeypatch.setattr("services.glb_cleanup.clean_glb", lambda source, target, *, standing=False: [])
     assert production_models._cleaned(production, "ape", "pack/ape.glb", standing=True) == "pack/ape.glb", "a clean model is rigged as it is"
+
+
+def test_a_humanoid_rig_that_was_lost_falls_back_for_now_and_is_asked_for_again_next_run(tmp_path):
+    (tmp_path / "pack").mkdir()
+    (tmp_path / "pack" / "ape.glb").write_bytes(b"glb ape")
+    spec = {"song": {"bpm": 100}, "style": {}, "models": {
+        "ape": {"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop", "animations": ["idle", "dance_bounce"], "height": 1.9}}}
+    production = Production(tmp_path)
+    plain, lost = production.mcp, [True]
+
+    def mcp(operation, args):
+        if operation == "model3d.rig.status" and lost[0]:
+            rig = next(a for o, a in production.calls if o == "model3d.rig" and a["intent_id"] == args["input"]["job_id"].split(":", 1)[1])["input"]
+            if rig["engine"] == "humanoid":
+                production.calls.append((operation, args))
+                return {"status": "failed", "result": {"status": "failed", "error": "not admitted: Too many queued"}}
+        return plain(operation, args)
+    production.mcp = mcp
+    make_models(production, spec, sleep=lambda _: None)
+    ape = production.state["models"]["ape"]
+    assert ape["rigged_as"] == "prop" and ape["file"] and ape["clips"] == ["hover", "bounce", "spin", "wobble"], "the video gets made"
+    assert "not admitted" in ape["rig_error"] and any("asks for it again" in line for line in production.state["log"])
+    lost[0] = False
+    make_models(production, spec, sleep=lambda _: None)
+    engines = [rig["engine"] for rig in submitted(production, "model3d.rig")]
+    assert engines == ["humanoid", "procedural", "humanoid"], "the next run asks for the humanoid rig again"
+    assert "rig_error" not in production.state["models"]["ape"] and "rigged_as" not in production.state["models"]["ape"]

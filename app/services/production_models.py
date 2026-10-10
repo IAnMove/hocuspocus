@@ -369,11 +369,17 @@ def _cleaned(production: Any, name: str, glb: str, *, standing: bool) -> str:
 
 
 def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: int, sleep) -> None:
-    """A refused humanoid rig is done again with the model's fallback profile."""
+    """A refused humanoid rig is done again with the model's fallback profile. A humanoid rig that was lost or
+    not admitted (no refusal) falls back the same way so the video gets made, but keeps its error: the next run
+    asks for the humanoid rig again."""
     refused = [name for name in failed if todo[name][0].get("fallback")]
     for name in refused:
         made[name]["rigged_as"] = todo[name][0]["fallback"]
-        production.log(f"model {name}: humanoid rig refused ({made[name].pop('rig_error')}), using the {made[name]['rigged_as']} profile")
+        error = made[name]["rig_error"]
+        if "not_humanoid" in error:
+            production.log(f"model {name}: humanoid rig refused ({made[name].pop('rig_error')}), using the {made[name]['rigged_as']} profile")
+        else:
+            production.log(f"model {name}: humanoid rig {error}; using the {made[name]['rigged_as']} profile, the next run asks for it again")
     fallbacks = {name: _rig_job(production, name, _rig_request({}, made[name]["rigged_as"], made[name]["mesh"], bpm)) for name in refused}
     _land_rigs(production, made, _in_waves(production, "model3d.rig.status", fallbacks, sleep))
 
@@ -382,7 +388,7 @@ def _land_rigs(production: Any, made: dict, records: dict[str, dict]) -> None:
     for name, record in records.items():
         if record.get("status") == "completed" and record.get("filename"):
             made[name]["file"] = record["filename"]
-        else:
+        elif not made[name].get("rig_error"):          # a fallback after a lost rig keeps that rig's error
             # The textured mesh still plays as a rigid model; a named clip on it fails at its 3D shot.
             made[name]["rig_error"] = f"{record.get('status')}: {str(record.get('error') or '')[:160]}"
 
@@ -404,7 +410,7 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
     for name in todo:
         file = made[name].get("file")
         made[name]["clips"] = glb_clip_names(production.root / file) if file else []
-        production.log(f"model {name}: " + (made[name].get("error") or made[name].get("rig_error")
+        production.log(f"model {name}: " + (made[name].get("error") or (None if file else made[name].get("rig_error"))
                                             or f"{file} ({', '.join(made[name]['clips']) or 'rigid'})"))
     production.save()
     asked = {key[4:].partition(":")[0] for key in set_jobs}
