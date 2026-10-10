@@ -3,7 +3,8 @@
 ``blocking_problems`` is what ``production.run`` refuses in a new or changed spec: one still image filling
 three or more shots that are not marked deliberate (``allow: ["still"]``), more runtime on still images
 than the quality allows, and a full-frame title (title-card, trailer-slam) over a moving shot, which hides the
-clip it paid for (``allow: ["title_card"]`` keeps a deliberate one). A resume of an unchanged spec is never refused.
+clip it paid for (``allow: ["title_card"]`` keeps a deliberate one), and a 3D shot asking a spec model for a clip its
+rig will not bake (the export would fail after every GPU stage). A resume of an unchanged spec is never refused.
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
@@ -34,7 +35,8 @@ def _shots(spec: dict) -> list[dict]:
 
 def _still_runtime(spec: dict, shots: list[dict]) -> float:
     duration = float((spec.get("song") or {}).get("duration") or 0)
-    timed = sorted((float(shot["t0"]), shot) for shot in shots if isinstance(shot.get("t0"), (int, float)))
+    # Sorted by start only: two shots at one t0 would otherwise compare their dicts and raise.
+    timed = sorted(((float(shot["t0"]), shot) for shot in shots if isinstance(shot.get("t0"), (int, float))), key=lambda pair: pair[0])
     if duration <= 0 or len(timed) != len(shots):
         return 0.0
     ends = [start for start, _ in timed[1:]] + [duration]
@@ -72,6 +74,7 @@ def blocking_problems(spec: dict) -> list[dict]:
     if ratio > limit:
         problems.append({"code": "too_static", "ratio": round(ratio, 2), "limit": limit,
                          "hint": "replace still shots with H3 or scene3d shots"})
+    problems += _unbaked_clips(spec, shots)
     hidden = [str(shot.get("key")) for shot in shots if _covered(shot)]
     if hidden:
         problems.append({"code": "title_card_hides_shot", "shots": hidden,
@@ -79,6 +82,36 @@ def blocking_problems(spec: dict) -> list[dict]:
                                  "it is never seen: use lower-third-date, social-caption, dymo, card, chapter or quote, or "
                                  "mark a deliberate card with allow: [\"title_card\"]"})
     return problems
+
+
+def _baked(entry: dict, rig: str) -> list[str] | None:
+    """The clips a spec model's rig bakes, or None when any clip resolves (a humanoid with a fallback stands in)."""
+    from services.production_models import HUMANOID_CLIPS, PROFILE_CLIPS
+    if rig == "none" or (rig == "humanoid" and entry.get("fallback")):
+        return [] if rig == "none" else None
+    return list(entry.get("animations") or (HUMANOID_CLIPS if rig == "humanoid" else PROFILE_CLIPS.get(rig, [])))
+
+
+def _unbaked_clips(spec: dict, shots: list[dict]) -> list[dict]:
+    """A cast clip its model will not have: «Grepdalf» asked Lia to wave and failed at the last 3D shot."""
+    from services.production_models import _cast_ids, rig_of
+    from services.production_scene3d import _clip_key, _rig_labels
+    models, cast, labels = spec.get("models") or {}, _cast_ids(spec), _rig_labels()
+    missing = []
+    for shot in shots:
+        config = shot.get("scene3d") if shot.get("kind") == "scene3d" and isinstance(shot.get("scene3d"), dict) else {}
+        for role, entry in _sources(config):
+            model = models.get(entry.get("source")) if isinstance(models, dict) else None
+            baked = _baked(model, rig_of(model, cast)) if isinstance(model, dict) else None
+            if baked is None:
+                continue
+            known = {_clip_key(clip) for clip in baked} | {_clip_key(labels.get(clip, clip)) for clip in baked}
+            asked = [entry.get("clip")] + [cue.get("clip") for cue in entry.get("clips") or [] if isinstance(cue, dict)]
+            missing += [f"{shot.get('key')}:{role} {clip}" for clip in asked if isinstance(clip, str) and _clip_key(clip) not in known]
+    if not missing:
+        return []
+    return [{"code": "clip_not_baked", "shots": missing,
+             "hint": "add the clip to that model's animations, or ask for one it bakes"}]
 
 
 def _covered(shot: dict) -> bool:
