@@ -478,6 +478,26 @@ waterfall, crystal cave, reef, volcano, sky islands, beach, snow, neon rain,
 synthwave grid, retro room...), the `pixel-*` places and the action sets. Vary
 them: one place for a whole video reads as one set.
 
+**Parallax sets.** A painted place in depth without building it: `{"kind": "parallax"}`
+draws a far view, one or two cutout layers and a ground in the same batch:
+
+```json
+{"sets": {"temple": {"kind": "parallax", "prompt": "the ruins of a forest temple at dusk",
+  "far": "mountains and a castle silhouette under a violet sunset sky",
+  "mid": "broken stone arches and tall pines", "near": "ferns and a mossy branch",
+  "ground": "mossy flagstones"}}}
+```
+
+`far` wraps the scene as the sky, `ground` is a seamless slab under the cast, and
+`mid` and `near` are drawn on a flat chroma-key green, keyed out in the renderer
+and stood as cutouts across the camera's line of sight: `mid` some metres
+behind the cast, `near` (optional) a short way in front of the camera with its
+middle empty, so a dolly, an arc or a crane slides the layers at different speeds.
+A shot whose camera would cross the near layer (an orbit, a crash zoom) leaves
+it out. Name the set as the shot's `background`, like a diorama. Ask the layers
+for pieces that stand on their own (arches, trees, rocks, posts); the far view
+and the ground get neither the place nor the production's look.
+
 **Composition.** Three controls work on any template, with or without a `world`:
 
 - `frame` moves the template's camera nearer or farther, keeping its angle and

@@ -708,3 +708,35 @@ def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
     assert night["light"]["color"] == "#9fb6ff" and night["dressing"] == "atmos-beach", "a named light wins over the world's"
     with pytest.raises(ValueError, match="scene3d.light"):
         compile_document(cast_shot(template="cine-dolly-in", cast=hero, light="disco"), 4)
+
+
+PARALLAX = {"source": "/api/v1/uploads/far.png", "key": "#00ff00",
+            "layers": [{"source": "/api/v1/uploads/mid.png", "depth": "mid"}, {"source": "/api/v1/uploads/near.png", "depth": "near"}],
+            "ground": {"source": "/api/v1/file/ground.glb?workspace=t", "height": 0.2, "size": 80}}
+
+
+def test_a_parallax_background_is_checked():
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX))
+    for bad in ({**PARALLAX, "layers": []}, {**PARALLAX, "layers": [{"source": "m.png", "depth": "far"}]}, {**PARALLAX, "key": "green"},
+                {**PARALLAX, "houses": [{"source": "h.glb", "width": 5, "height": 6}]}):
+        with pytest.raises(ValueError):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=bad))
+
+
+@NODE
+def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips_a_near_layer_an_orbit_would_cross():
+    hero = {"subject_1": "/api/v1/file/a.glb?workspace=t"}
+    doc = compile_document(cast_shot(template="cine-two-shot", background=PARALLAX, cast={**hero, "subject_2": "/api/v1/file/b.glb?workspace=t"}), 4)
+    sky = next(slot for slot in doc["slots"] if slot["slot"] == "background")
+    assert sky["surface"] == "environment" and sky["sourceUrl"] == "/api/v1/uploads/far.png" and doc["environment"]["floorStyle"] == "none"
+    layers = {slot["id"]: slot for slot in doc["slots"] if slot["id"].startswith("set-layer-")}
+    assert set(layers) == {"set-layer-mid", "set-layer-near"} and all(slot["surface"] == "cutout" and slot["media"] == "image" for slot in layers.values())
+    assert all(slot["imageLook"]["colorKey"]["color"] == "#00ff00" and slot["imageLook"]["unlit"] for slot in layers.values())
+    camera_z = doc["camera"]["eye"][2]
+    assert layers["set-layer-mid"]["position"][2] <= -9, "the mid layer stands well behind the cast, away from the camera"
+    assert 0 < layers["set-layer-near"]["position"][2] < camera_z, "the near layer stands between the camera and the cast"
+    assert layers["set-layer-mid"]["scale"] > layers["set-layer-near"]["scale"] > 0, "each layer covers the view at its distance"
+    assert next(slot for slot in doc["slots"] if slot["id"] == "set-ground")["position"][1] == 0
+    orbit = compile_document(cast_shot(template="dance-orbit", background=PARALLAX, cast=hero), 4)
+    ids = {slot["id"] for slot in orbit["slots"]}
+    assert "set-layer-mid" in ids and "set-layer-near" not in ids, "an orbit would cross the near layer"

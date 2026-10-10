@@ -6,6 +6,7 @@ import { scene3dPlaybackSpeed } from '../src/features/scene3d/clock.ts'
 import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/scene3d/frameFormat.ts'
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
+import { stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
 
 const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
@@ -52,6 +53,7 @@ delete document.soundtrack
 retargetFraming(document)
 if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
 if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
+if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background)]
 const parsed = parseScene3DDocument(document)
 if (!parsed) throw new Error('Invalid Video 3D document')
 process.stdout.write(JSON.stringify(parsed))
@@ -104,7 +106,8 @@ function bindCast(document, key, entry) {
 
 /** The template's background picture. On a cutout plane it is also projected onto the floor (see applyFloor).
  * The painted set replaces the template's procedural dressing (a street, a stage...) unless the shot asks for one.
- * A diorama set (houses, ground) keeps its picture as the sky and builds its pieces once the camera is known. */
+ * A diorama set (houses, ground) or a parallax set (layers, ground) keeps its picture as the sky and builds its pieces
+ * once the camera is known. */
 function bindBackground(document, entry) {
   const slots = document.slots.filter(slot => slot.slot === 'background')
   if (!slots.length) throw new Error('background_slot_missing')
@@ -112,10 +115,11 @@ function bindBackground(document, entry) {
   // An unbound object (a second subject or a prop nobody cast) is an editor placeholder, a plain block:
   // in front of a painted set it would hide the picture.
   document.slots = document.slots.filter(slot => slot.slot === 'background' || slot.sourceUrl || slot.screen?.sourceUrl)
-  const surface = entry.houses ? 'environment' : entry.surface
+  const built = Boolean(entry.houses || entry.layers)
+  const surface = built ? 'environment' : entry.surface
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
     : withoutLoop({ ...slot, sourceUrl: entry.source, media: 'image', ...(surface ? { surface } : {}) }, surface))
-  if (entry.houses) document.environment = { reflectiveFloor: false, platform: false, bloom: 0, ...document.environment, floorStyle: 'none' }
+  if (built) document.environment = { reflectiveFloor: false, platform: false, bloom: 0, ...document.environment, floorStyle: 'none' }
 }
 
 /** The camera nearer to or farther from what it looks at, keeping its angle: a framed camera scales its offsets

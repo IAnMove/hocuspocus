@@ -46,7 +46,7 @@ export function cameraPath(document: Scene3DDocument): Pose[] {
 }
 
 /** Every place the cast and props stand during the shot. */
-function castPoints(document: Scene3DDocument): Vec3[] {
+export function castPoints(document: Scene3DDocument): Vec3[] {
   const moving = document.slots.filter(slot => slot.slot !== 'background' && (!slot.surface || slot.surface === 'cutout'))
   return moving.flatMap(slot => Array.from({ length: SAMPLES + 1 }, (_, index) =>
     slotPoseAtTime(slot, (document.duration * index) / SAMPLES, document.duration).position))
