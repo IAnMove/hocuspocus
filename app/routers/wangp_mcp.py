@@ -205,6 +205,12 @@ class RequestJournal:
         with sqlite3.connect(self.path, timeout=15) as db:
             db.execute('UPDATE requests SET result=? WHERE id=?', (json.dumps(result), request_id))
 
+    def forget(self, request_id):
+        """A stored result the server can no longer honour (its job was lost to a restart or evicted): the next
+        reserve runs the request again."""
+        with sqlite3.connect(self.path, timeout=15) as db:
+            db.execute('DELETE FROM requests WHERE id=?', (request_id,))
+
 
 def _request_arguments(name, arguments):
     request_id, params = arguments.get('request_id'), arguments.get('params')
