@@ -449,7 +449,10 @@ profile's nearest one (a dance wobbles or bounces, a still pose hovers). A GLB
 whose vertex colours are really normals (game rips: rainbow tints that follow
 the surface), or whose textures were decoded into confetti (every texel a random
 vivid colour), is rigged from a `.clean.glb` copy without them; real vertex colours
-and textures are kept.
+and textures are kept. A `humanoid` model that came with a held thing hung under
+its feet instead of in its hand (a wooden gun that reads as a column between the
+legs and stands the body on its end) loses that part: a part reaching a fifth of
+the height below the feet hangs under the floor. The original GLB is untouched.
 Every model stands 1.7 m tall in a scene unless it gives its real `height` in
 metres (`"moto": {"prompt": "...", "rig": "vehicle", "height": 1.1}`); a cast
 entry's own `scale` wins, and a new height does not remake the model.

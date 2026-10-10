@@ -92,3 +92,41 @@ def test_a_texture_decoded_into_confetti_is_dropped_and_real_art_stays(tmp_path)
     assert paints[0] is None and [paint.index for paint in paints[1:]] == [1, 2, 3]
     fine = write_textured_glb(tmp_path / "fur.glb", [fur, stripes])
     assert clean_glb(fine, tmp_path / "fur.clean.glb") == [] and not (tmp_path / "fur.clean.glb").exists()
+
+
+def write_parts_glb(path, parts):
+    """One primitive per part, each a cloud of points; the tuple gives the point count and the y range."""
+    blob, views, accessors, primitives = b"", [], [], []
+    for index, (count, low, high) in enumerate(parts):
+        rng = np.random.default_rng(index)
+        points = rng.random((count, 3)).astype(np.float32)
+        points[:, 1] = (low + (high - low) * points[:, 1]).astype(np.float32)
+        points[0, 1], points[-1, 1] = low, high
+        data = points.tobytes()
+        views.append(pygltflib.BufferView(buffer=0, byteOffset=len(blob), byteLength=len(data)))
+        blob += data
+        accessors.append(pygltflib.Accessor(bufferView=index, componentType=pygltflib.FLOAT, count=count, type="VEC3",
+                                            min=points.min(0).tolist(), max=points.max(0).tolist()))
+        primitives.append(pygltflib.Primitive(attributes=pygltflib.Attributes(POSITION=index)))
+    gltf = pygltflib.GLTF2(scenes=[pygltflib.Scene(nodes=[0])], scene=0, nodes=[pygltflib.Node(mesh=0)], bufferViews=views,
+                           accessors=accessors, meshes=[pygltflib.Mesh(primitives=primitives)], buffers=[pygltflib.Buffer(byteLength=len(blob))])
+    gltf.set_binary_blob(blob)
+    gltf.save_binary(str(path))
+    return path
+
+
+def test_a_held_thing_hung_under_a_standing_bodys_feet_is_dropped_and_its_legs_stay(tmp_path):
+    from services.glb_cleanup import parts_under_feet
+
+    # A body 2 m tall on feet at 0..0.2, legs 0..0.9 and a gun hung from the chest to 0.6 m under the floor.
+    ape = write_parts_glb(tmp_path / "ape.glb", [(300, 0.2, 2.0), (60, 0.0, 0.2), (60, 0.0, 0.2), (80, 0.0, 0.9), (40, -0.6, 1.4)])
+    assert parts_under_feet(pygltflib.GLTF2().load(str(ape))) == [(0, 4)]
+    assert clean_glb(ape, tmp_path / "ape.clean.glb", standing=True) == ["1 of its parts hung under its feet (a held thing the rip misplaced), now dropped"]
+    assert len(pygltflib.GLTF2().load(str(tmp_path / "ape.clean.glb")).meshes[0].primitives) == 4
+    assert clean_glb(ape, tmp_path / "prop.clean.glb") == [], "a thing that does not stand keeps every part"
+    # Short legs under a coat reach only a little below the coat: they are the feet, not a hung thing.
+    coat = write_parts_glb(tmp_path / "coat.glb", [(300, 0.5, 2.0), (120, 0.0, 0.6), (120, 0.0, 0.6)])
+    assert parts_under_feet(pygltflib.GLTF2().load(str(coat))) == []
+    # The largest part is the body, however low it reaches.
+    low = write_parts_glb(tmp_path / "low.glb", [(300, -1.0, 1.0), (30, 0.5, 1.5)])
+    assert parts_under_feet(pygltflib.GLTF2().load(str(low))) == []
