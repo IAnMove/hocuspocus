@@ -671,7 +671,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
             from services.production_quality_gate import refuse_thin_plan
-            refuse_thin_plan(spec, production.state.get("spec"))
+            refuse_thin_plan(spec, production.state.get("spec"), production.root)
             through = data.get("through", "all")
             if through not in ("all", "frames", "animatic"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})

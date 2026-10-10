@@ -45,11 +45,11 @@ def _still_runtime(spec: dict, shots: list[dict]) -> float:
     return still / duration
 
 
-def refuse_thin_plan(spec: dict, stored: Any) -> None:
+def refuse_thin_plan(spec: dict, stored: Any, root: Any = None) -> None:
     """production.run: a new or changed spec that would look thin is HTTP 422 quality_gate; a resume never is."""
     if spec == stored:
         return
-    problems = blocking_problems(spec)
+    problems = blocking_problems(spec, root)
     if problems:
         from fastapi import HTTPException
         summary = "; ".join(f"{item['code']} ({item.get('still') or item.get('ratio')})" for item in problems)
@@ -57,7 +57,7 @@ def refuse_thin_plan(spec: dict, stored: Any) -> None:
                                   "problems": problems, "retryable": False})
 
 
-def blocking_problems(spec: dict) -> list[dict]:
+def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
     shots = _shots(spec)
     problems = []
     uses: dict[str, list[str]] = {}
@@ -74,7 +74,7 @@ def blocking_problems(spec: dict) -> list[dict]:
     if ratio > limit:
         problems.append({"code": "too_static", "ratio": round(ratio, 2), "limit": limit,
                          "hint": "replace still shots with H3 or scene3d shots"})
-    problems += _unbaked_clips(spec, shots)
+    problems += _unbaked_clips(spec, shots, root)
     hidden = [str(shot.get("key")) for shot in shots if _covered(shot)]
     if hidden:
         problems.append({"code": "title_card_hides_shot", "shots": hidden,
@@ -84,15 +84,31 @@ def blocking_problems(spec: dict) -> list[dict]:
     return problems
 
 
-def _baked(entry: dict, rig: str) -> list[str] | None:
-    """The clips a spec model's rig bakes, or None when any clip resolves (a humanoid with a fallback stands in)."""
+def _baked(entry: dict, rig: str, root: Any = None) -> list[str] | None:
+    """The clips a spec model's rig bakes, or None when any clip resolves (a humanoid with a fallback stands in).
+    A GLB played as it is (rig none) has the clips it brought, read from the file when the workspace is known."""
     from services.production_models import HUMANOID_CLIPS, PROFILE_CLIPS
-    if rig == "none" or (rig == "humanoid" and entry.get("fallback")):
-        return [] if rig == "none" else None
+    if rig == "none":
+        return _brought(entry, root)
+    if rig == "humanoid" and entry.get("fallback"):
+        return None
     return list(entry.get("animations") or (HUMANOID_CLIPS if rig == "humanoid" else PROFILE_CLIPS.get(rig, [])))
 
 
-def _unbaked_clips(spec: dict, shots: list[dict]) -> list[dict]:
+def _brought(entry: dict, root: Any) -> list[str] | None:
+    """The animations inside a workspace GLB, [] for a generated model with no rig, None when the file is out of reach."""
+    if not entry.get("glb"):
+        return []
+    if root is None:
+        return None
+    from services.series_shot3d import glb_clip_names
+    try:
+        return glb_clip_names(Path(root) / entry["glb"])
+    except (OSError, ValueError):
+        return None
+
+
+def _unbaked_clips(spec: dict, shots: list[dict], root: Any = None) -> list[dict]:
     """A cast clip its model will not have: «Grepdalf» asked Lia to wave and failed at the last 3D shot."""
     from services.production_models import _cast_ids, rig_of
     from services.production_scene3d import _clip_key, _rig_labels
@@ -102,7 +118,7 @@ def _unbaked_clips(spec: dict, shots: list[dict]) -> list[dict]:
         config = shot.get("scene3d") if shot.get("kind") == "scene3d" and isinstance(shot.get("scene3d"), dict) else {}
         for role, entry in _sources(config):
             model = models.get(entry.get("source")) if isinstance(models, dict) else None
-            baked = _baked(model, rig_of(model, cast)) if isinstance(model, dict) else None
+            baked = _baked(model, rig_of(model, cast), root) if isinstance(model, dict) else None
             if baked is None:
                 continue
             known = {_clip_key(clip) for clip in baked} | {_clip_key(labels.get(clip, clip)) for clip in baked}
