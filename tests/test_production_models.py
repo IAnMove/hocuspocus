@@ -94,6 +94,7 @@ def test_characters_get_a_t_pose_from_their_portrait_then_a_mesh_and_a_tempo_rig
         "a picture with a base or scenery would be meshed with it: the subject is redrawn alone"
     hero, kite = pictures["model-hero"]["prompt"], pictures["model-kite"]["prompt"]
     assert "T-pose" in hero and "isolated" in hero and "felt puppets" not in hero, "the portrait carries the look; the prompt is the staging"
+    assert "both legs and feet clearly visible" in hero, "the humanoid rig refuses a figure whose robe hides its legs"
     assert pictures["model-kite"]["refs"] is None and kite.startswith("a paper kite") and "felt puppets" in kite and kite.endswith("no shadow")
     meshes = {item["image_path"]: item for item in submitted(production, "model3d.generate")}
     assert set(meshes) == {"/api/v1/uploads/hero.png", "/api/v1/uploads/boat.png", "/api/v1/uploads/kite.png"}
