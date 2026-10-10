@@ -77,6 +77,8 @@ def dependency_fingerprint(engine: str, platform: str) -> str:
             paths.append("scripts/windows_toolchain.py")
     if engine == "rigging":
         paths.append("scripts/runtime_bpy_metadata.py")
+    if engine == "trellis2":
+        paths.append("app/services/trellis2/install_native.py")
     if "/vendor/" not in spec["requirements"]:
         paths.append(spec["requirements"])
     digest = hashlib.sha256(f"{engine}:{platform}:{FINGERPRINT_SCHEME}".encode())
@@ -186,7 +188,7 @@ def _engine_support(definition: dict, platform: str, arch: str, driver: str | No
 
 
 def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None,
-                    compute_capability: str | None = None) -> dict:
+                    compute_capability: str | None = None, memory_mib: float | None = None) -> dict:
     """Pure selection; unknown/unsupported capabilities never silently use CUDA.
 
     An engine with ``fallbackFor`` (core) shares its primary's environment and
@@ -201,6 +203,12 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
     for name, definition in manifest["engines"].items():
         reason, warning, minimum = _engine_support(definition, platform, arch, driver, cuda_reason, manifest,
                                                    compute_capability)
+        if not reason and definition.get("minimumVramMiB"):
+            if memory_mib is None or memory_mib < definition["minimumVramMiB"]:
+                reason = f"{definition['label']} requires a verified NVIDIA GPU with 24GB VRAM; memory is insufficient or unknown."
+            lower, upper = definition["computeCapabilityRange"]
+            if not reason and (not compute_capability or not lower <= _version(compute_capability)[0] < upper):
+                reason = f"{definition['label']} CUDA 12.4/FlashAttention recipe supports Ampere, Ada and Hopper GPUs (compute capability 8.x–9.x)."
         engines[name] = {**recipe(name, platform, arch), "supported": reason is None, "reason": reason,
                          "warning": warning, "driverMinimum": minimum}
     partners = {}
@@ -365,8 +373,14 @@ def _cuda_probe(gpu: str | None) -> tuple[str, str | None, str | None, str | Non
 def detect_profiles(*, platform: str | None = None, arch: str | None = None,
                     gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
     gpu, driver, compute_capability, device, warning = _cuda_probe(gpu)
+    memory_mib = None
+    if device:
+        values = _nvidia_query("memory.total", device)
+        if len(values) == 1 and re.fullmatch(r"\d+(?:\.\d+)?(?: MiB)?", values[0]):
+            memory_mib = float(values[0].split()[0])
     result = select_profiles(platform or sys.platform, arch or host_platform.machine(),
-                             gpu or "unknown", driver, compute_capability)
+                             gpu or "unknown", driver, compute_capability, memory_mib)
+    result["gpuMemoryMiB"] = memory_mib
     result["cudaDevice"] = device
     for name, item in result["engines"].items():
         if warning and item.get("cuda"):

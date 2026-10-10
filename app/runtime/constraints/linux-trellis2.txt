@@ -1,0 +1,10 @@
+# ABI contract from app/runtime/profiles.json
+numpy==1.26.4
+transformers==4.57.1
+huggingface-hub==0.36.0
+pillow==11.3.0
+opencv-python-headless==4.11.0.86
+timm==1.0.22
+kornia==0.8.2
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124

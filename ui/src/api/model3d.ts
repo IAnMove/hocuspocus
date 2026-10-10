@@ -15,7 +15,7 @@ export interface Hunyuan3DModel {
   supports_text: boolean
   recommended_vram_gb: number | null
   description: string
-  runtime?: { installed: boolean; install_hint: string | null; validation?: string }
+  runtime?: { installed: boolean; install_hint: string | null; validation?: string; compatible?: boolean; weights_downloaded?: boolean; compatibility_reason?: string | null }
   resolutions?: number[]
   supports_low_vram?: boolean
   supports_camera_fov?: boolean

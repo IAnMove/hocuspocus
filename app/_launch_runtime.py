@@ -1421,6 +1421,7 @@ def list_models(detail: bool = True):
             "nsfw_only": bool(md.get("nsfw_only", False)),
         })
 
+    from services import model3d_external
     for model in model3d_service.MODELS:
         models.append({
             "model_type": model["id"],
@@ -1440,6 +1441,14 @@ def list_models(detail: bool = True):
             # Variants sharing one HF repo lose their weights together when
             # the cache is deleted; the UI warns using this list.
             "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
+            **({"official": True, "optional": True,
+                "description": model["description"],
+                "selector_help": "Optional official image-to-3D. Install TRELLIS.2 from Advanced, download its weights explicitly, then select it. Requires Linux x64 / NVIDIA 24GB Ampere, Ada or Hopper.",
+                "resource_requirements": {"vram_gb": 24, "ram_gb": 32, "storage_gb": 40,
+                                          "platform": "Linux x64", "backend": "CUDA 12.4",
+                                          "note": "Optional; 32–64GB RAM recommended. Auxiliary model access terms apply."},
+                "runtime": model3d_external.installation_status("trellis2")}
+               if model["id"] == "trellis2" else {}),
         })
 
     # UniRig is a generative ML model too (autoregressive skeleton + learned
@@ -2018,6 +2027,9 @@ def debug_model(model_type: str):
 @api.delete("/api/v1/models/{model_type}")
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    with _model_downloads_lock:
+        if (_model_downloads.get(model_type) or {}).get("status") == "downloading":
+            raise HTTPException(409, "Cannot delete model weights while their download is active")
     active_generation_ids = [
         str(job_id)
         for job_id, job in list(_jobs.items())
@@ -2114,6 +2126,21 @@ def _download_model_files(model_type: str):
     Mirrors the file-resolution block at the top of wgp.load_models()
     (wgp.py:4041-4143) — keep the two in sync.
     """
+    if model_type == "trellis2":
+        import subprocess
+        from services import model3d_external
+        from services.runtime_environment import isolated_environment
+        from services.trellis2 import assets
+        root, python = model3d_external.runtime_paths(model_type)
+        result = subprocess.run([str(python), str(Path(assets.__file__).resolve())], cwd=root,
+                                env=isolated_environment(python), text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        print(result.stdout)
+        if result.returncode:
+            raise RuntimeError(result.stdout[-2000:] or "TRELLIS.2 weights download failed")
+        if not assets.downloaded():
+            raise RuntimeError("TRELLIS.2 download is incomplete")
+        return
     if _is_legacy_h3_model(model_type):
         minimax_h3_service.ensure_quality_assets(
             lambda message: print(f"[H3 Legacy] {message}")
@@ -2174,9 +2201,15 @@ def _download_model_files(model_type: str):
 @api.post("/api/v1/models/{model_type}/download")
 def download_model(model_type: str):
     """Start downloading a model's files in the background."""
-    md = wgp.get_model_def(model_type)
-    if not md:
-        return JSONResponse({"error": "Model not found"}, status_code=404)
+    if model_type == "trellis2":
+        from services import model3d_external
+        runtime = model3d_external.installation_status(model_type)
+        if not runtime["installed"] or not runtime["compatible"]:
+            raise HTTPException(409, runtime["install_hint"])
+    else:
+        md = wgp.get_model_def(model_type)
+        if not md:
+            return JSONResponse({"error": "Model not found"}, status_code=404)
     with _model_downloads_lock:
         entry = _model_downloads.get(model_type)
         if entry and entry["status"] == "downloading":

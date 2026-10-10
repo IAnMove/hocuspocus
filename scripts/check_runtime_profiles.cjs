@@ -4,6 +4,15 @@ const path = require('node:path')
 const vm = require('node:vm')
 const runtime = require('../runtime_install')
 
+assert.equal(require('../trellis2_install').requires.bundle, 'ai')
+assert.equal(runtime.catalog.engines.trellis2.defaultInstall, false)
+assert.deepEqual(runtime.catalog.engines.trellis2.platforms, ['linux'])
+assert.equal(runtime.catalog.engines.trellis2.env, 'app/services/model3d_runtimes/trellis2/env')
+const trellisPlan = JSON.stringify(runtime.installEngines(['trellis2']))
+assert(trellisPlan.includes('install_native.py') && trellisPlan.includes('cuda-toolkit=12.4'))
+assert(trellisPlan.includes('git submodule update --init --recursive'))
+assert(!trellisPlan.includes('services/trellis2/assets.py'), 'Runtime setup must never download model weights')
+
 function render(template, context) {
   return template.replace(/\{\{([\s\S]*?)\}\}/g, (_, expression) => vm.runInNewContext(expression, context))
 }
@@ -142,6 +151,9 @@ async function checkUiLaunchers() {
   assert(!core.some(item => item.text === 'LoRAs' || item.params?.compile), 'Core has no WanGP models')
   assert(!core.some(item => ['hunyuan3d_install.js', 'sam_install.js', 'rigging_install.js', 'hf_login.js'].includes(item.href)))
   const nvidia = flatten(await menu({platform: 'win32', arch: 'x64', gpu: 'nvidia'}, info))
+  assert(!nvidia.some(item => item.href === 'trellis2_install.js'), 'Official TRELLIS recipe is Linux-only')
+  const linux = flatten(await menu({platform: 'linux', arch: 'x64', gpu: 'nvidia'}, info))
+  assert(linux.some(item => item.href === 'trellis2_install.js'), 'TRELLIS must be installable on demand')
   assert(nvidia.some(item => item.href === 'hunyuan3d_install.js'), '3D generation must be installable on demand')
   // Setup installs only default engines; Hunyuan3D is refreshed only where it is present.
   const setupPlan = JSON.stringify(require('../runtime_setup').run)

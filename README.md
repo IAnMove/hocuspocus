@@ -559,3 +559,22 @@ with the full saved record under **All saved information**. Activity uses frozen
 reference links from the submitted job, with cached thumbnails and the same enlarged
 view. Updating the model catalog preserves the current Studio draft. A server or UI
 update now offers an explicit reload instead of discarding an in-progress form.
+
+### Optional official TRELLIS.2 3D generator
+
+TRELLIS.2 (Microsoft 4B) creates a GLB with native PBR materials from one
+reference image. It is selectable alongside Hunyuan3D; it is not installed or
+selected by default. The managed recipe requires Linux x64, an NVIDIA GPU
+with 24 GB VRAM (Ampere/Ada/Hopper), and at least 40 GiB free disk space.
+Windows, macOS, AMD, smaller GPUs and Blackwell are not supported by this
+CUDA 12.4 recipe; the rest of HocusPocus remains available.
+
+Use **Advanced > Install TRELLIS.2**, restart HocusPocus, then enable the model
+and click its download button under **Settings > Model Visibility > 3D**.
+Weights include DINOv3 and RMBG-2.0: accept their Hugging Face access terms
+and log in from Advanced if prompted. Choose TRELLIS.2 in image-to-3D, supply
+a front image and generate. The existing GPU queue, cancellation and Library
+publication apply. Generation uses the downloaded bundle offline.
+
+See [TRELLIS.2 installation, requirements, API examples (JavaScript, Python,
+curl) and validation limits](docs/development/TRELLIS2.md).
