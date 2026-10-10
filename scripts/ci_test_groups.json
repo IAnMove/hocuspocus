@@ -3,7 +3,7 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07. Language detection fallbacks add +8 (python-b, test_language_detection_fallbacks), 2026-10-07. Golden shots add +9 (python-a, test_golden_shots), 2026-10-08. Production models add +5 (python-a, test_production_models), 2026-10-08. The production quality gate adds +6 (python-b, test_production_quality_gate), 2026-10-08. Production turns add +3 (python-a, test_production_turn), 2026-10-08. Lyric looks add +8 (python-b, test_production_lyric_looks), 2026-10-08. Diorama sets add +2 (python-a, test_production_models) and +6 (python-b, test_diorama_set and test_production_scene3d), 2026-10-09.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07. Language detection fallbacks add +8 (python-b, test_language_detection_fallbacks), 2026-10-07. Golden shots add +9 (python-a, test_golden_shots), 2026-10-08. Production models add +5 (python-a, test_production_models), 2026-10-08. The production quality gate adds +6 (python-b, test_production_quality_gate), 2026-10-08. Production turns add +3 (python-a, test_production_turn), 2026-10-08. Lyric looks add +8 (python-b, test_production_lyric_looks), 2026-10-08. Diorama sets add +2 (python-a, test_production_models) and +6 (python-b, test_diorama_set and test_production_scene3d), 2026-10-09. GLB cleanup adds +1 (python-b, test_glb_cleanup), 2026-10-10.",
   "groups": [
     {
       "id": "python-a",
@@ -281,7 +281,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 3178,
+      "weight": 3179,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -545,7 +545,8 @@
         "tests/test_series_kit_pins.py",
         "tests/test_production_quality_gate.py",
         "tests/test_production_lyric_looks.py",
-        "tests/test_diorama_set.py"
+        "tests/test_diorama_set.py",
+        "tests/test_glb_cleanup.py"
       ]
     }
   ],

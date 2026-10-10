@@ -30,6 +30,7 @@ import re
 import time
 from typing import Any, Callable
 
+from services.glb_cleanup import CLEANUP as GLB_CLEANUP
 from services.production_control import sleep_until
 from services.production_diorama import (
     build as build_diorama, check_diorama, is_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
@@ -240,7 +241,7 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
         # A model meshed straight from its picture before REFERENCE_STAGING is made again.
         restaged = {**entry, "staging": "isolated-2"} if source and rig != "humanoid" else entry
         if entry.get("glb"):
-            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name)}
+            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name), "cleanup": GLB_CLEANUP}
         fingerprint = _fingerprint(restaged, source, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and kept.get("file") and not kept.get("rig_error"):
@@ -334,16 +335,28 @@ def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, ma
 
 
 def _glb_rigs(production: Any, todo: dict, made: dict, bpm: int) -> dict[str, Callable[[], tuple[str | None, str | None]]]:
-    """A model given as a workspace GLB is its own mesh: only its rig is asked for."""
+    """A model given as a workspace GLB is its own mesh (cleaned of vertex colours that are really normals): only its
+    rig is asked for."""
     rigs = {}
     for name, (entry, _source_url, rig) in todo.items():
         if not entry.get("glb"):
             continue
-        made[name].update(mesh=entry["glb"], file=entry["glb"])
+        mesh = _cleaned(production, name, entry["glb"])
+        made[name].update(mesh=mesh, file=mesh)
         if rig != "none":
-            rigs[name] = lambda name=name, entry=entry, rig=rig: _submit(
-                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(entry['glb'])}", _rig_request(entry, rig, entry["glb"], bpm))
+            rigs[name] = lambda name=name, entry=entry, rig=rig, mesh=mesh: _submit(
+                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
     return rigs
+
+
+def _cleaned(production: Any, name: str, glb: str) -> str:
+    from pathlib import PurePosixPath
+    from services.glb_cleanup import clean_glb
+    target = str(PurePosixPath(glb).with_suffix(".clean.glb"))
+    if clean_glb(production.root / glb, production.root / target):
+        production.log(f"model {name}: its vertex colours were normals (rainbow tints); rigging {target} without them")
+        return target
+    return glb
 
 
 def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: int, sleep) -> None:
