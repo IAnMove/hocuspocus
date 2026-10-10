@@ -3,7 +3,8 @@
 Same mechanism as the Video 2D compile tools: Python plans, the editor's own
 TypeScript mounts Character Kits and compiles mouths, nothing is saved here.
 Pose sizes are read from the workspace files when a kit does not store them,
-because mounting needs them to fit a pose in the frame.
+because mounting needs them to fit a pose in the frame, and so are the edges
+each pose is cut by (``series_cutouts``), so a cut never shows in the frame.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from services import resource_scheduler
+from services import resource_scheduler, series_cutouts
 from services.video2d_compile import TSX, UI_ROOT
 
 SCRIPT = UI_ROOT / "scripts" / "series-shot.ts"
@@ -38,19 +39,26 @@ def _workspace_path(source: str, workspace_dir: str) -> Path | None:
 
 
 def with_pose_sizes(kit: dict[str, Any], workspace_dir: str) -> dict[str, Any]:
-    """A copy of the kit whose base and poses carry width and height."""
-    from PIL import Image
-
+    """A copy of the kit whose base and poses carry width and height, and ``cut`` (``series_cutouts.cut_edges``) when
+    the figure is cut by its image border. The copy is for one compile; the kit library is not changed."""
     kit = copy.deepcopy(kit)
     for asset in [kit.get("base"), *(kit.get("poses") or {}).values()]:
-        if not isinstance(asset, dict) or (asset.get("width") and asset.get("height")):
+        if not isinstance(asset, dict):
             continue
         path = _workspace_path(asset.get("source", ""), workspace_dir)
-        if path is None:
+        found = series_cutouts.measure(path) if path is not None else None
+        if found is None:
             continue
-        with Image.open(path) as image:
-            asset["width"], asset["height"] = image.size
+        if not (asset.get("width") and asset.get("height")):
+            asset["width"], asset["height"] = found[0]
+        if found[1]:
+            asset["cut"] = found[1]
     return kit
+
+
+def measure_props(spec: dict[str, Any], workspace_dir: str) -> None:
+    """Give the props a shot plans with ``ground`` their image size and lowest opaque row (``series_cutouts``)."""
+    series_cutouts.ground_props(spec, lambda source: _workspace_path(source, workspace_dir))
 
 
 def run_series_shot(payload: dict[str, Any]) -> dict[str, Any]:

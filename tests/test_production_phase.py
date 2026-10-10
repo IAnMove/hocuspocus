@@ -595,3 +595,24 @@ def test_runbook_and_board_record_the_phase_close():
     board = BOARD.read_text(encoding="utf-8")
     assert "Cierre 2026-09-30" in board
     assert "#661" in board and "#672" in board
+
+
+def test_a_clip_redo_of_a_scene3d_shot_exports_its_document_again(monkeypatch):
+    """A 3D shot has no H3 clip to shoot: redo from clip re-exports its document (it used to fail 'clips missing')."""
+    import services.production_scene3d as scene3d
+    from services.production_shot_commands import _shoot_clip
+
+    class Production:
+        def score(self):
+            return {"duration": 20.0, "beat": 0.5, "lines": [{"t0": 1.0, "t1": 3.0, "text": "a"}]}
+
+        def clips(self, *_args, **_kwargs):
+            raise AssertionError("not an H3 shot")
+
+    calls = []
+    monkeypatch.setattr(scene3d, "export_scene3d_clips", lambda production, spec, windows, retake=(): calls.append((
+        [window["key"] for window in windows], retake)))
+    spec = {"shots": [{"key": "d0", "kind": "scene3d", "t0": 0, "scene3d": {"template": "cine-dolly-in"}},
+                      {"key": "h1", "kind": "h3", "line": 0, "frame": "f", "action": "a"}]}
+    _shoot_clip(Production(), spec, "d0", None)
+    assert calls == [(["d0", "h1"], ("d0",))]

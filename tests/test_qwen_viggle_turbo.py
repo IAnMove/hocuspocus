@@ -5,6 +5,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytest.importorskip("torch")
+
 import torch
 from diffusers import FlowMatchEulerDiscreteScheduler
 

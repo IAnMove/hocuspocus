@@ -299,6 +299,39 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
             h3.MODEL_PROFILES["quality"]["ref2va"],
         )
 
+    def test_int8_text_encoder_uses_the_official_comfy_file(self):
+        quality = h3._profile_files("quality", "ref2va")
+        encoder = next(item for item in quality if item[1].endswith("qwen3vl_32b_minimax_h3_int8_convrot.safetensors"))
+        relative = "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        self.assertEqual(encoder[0], h3.HF_REPO)
+        self.assertEqual(encoder[1], relative)
+        self.assertEqual(
+            h3.PINNED_SHA256[relative],
+            "bc2ced0fbea64757fa9acddccfc0b3f4819d1dcf1da6c124d690d368be283923",
+        )
+        low = next(item for item in h3._profile_files("low_memory", "fl2va") if item[1].startswith("text_encoders/"))
+        self.assertEqual(low[0], h3.COMMUNITY_HF_REPO)
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(h3, "COMFY_DIR", Path(tmp) / "ComfyUI"), \
+                patch("huggingface_hub.hf_hub_download") as download:
+            h3._ensure_models("ref2va", "quality", lambda _message: None)
+        text_call = next(call for call in download.call_args_list if str(call.kwargs["filename"]).startswith("text_encoders/"))
+        self.assertEqual(text_call.kwargs["repo_id"], h3.HF_REPO)
+        self.assertEqual(text_call.kwargs["filename"], relative)
+        bad = Path(tmp) / "bad.safetensors"
+        # The directory above is removed when the with-block ends.
+        with tempfile.TemporaryDirectory() as kept:
+            bad = Path(kept) / "bad.safetensors"
+            bad.write_bytes(b"not-the-weight")
+            with self.assertRaises(RuntimeError):
+                h3._reject_bad_download(bad, relative)
+            self.assertFalse(bad.exists())
+            good = Path(kept) / "good.safetensors"
+            good.write_bytes(b"official-bytes")
+            with patch.object(h3, "_sha256_file", return_value=h3.PINNED_SHA256[relative]):
+                h3._reject_bad_download(good, relative)
+            self.assertTrue(good.is_file())
+
     def test_community_dit_download_uses_hub_root_and_comfy_diffusion_folder(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.object(h3, "COMFY_DIR", Path(tmp) / "ComfyUI"), \
@@ -442,15 +475,17 @@ class TestMiniMaxH3Workflow(unittest.TestCase):
         }, "jobduration")
         length = workflow["10"]["inputs"]["length"]
         self.assertEqual(length % 17, 5)
-        self.assertGreaterEqual(length, 107)
-        self.assertLessEqual(length, 362)
+        self.assertGreaterEqual(length, 124)
+        self.assertLessEqual(length, 345)
 
+        # The sidecar rounds up like the handler, Series and the Director: a request never comes out shorter.
         near_default = {**h3.DEFAULTS, "prompt": "test", "video_length": 125}
-        near_workflow, _ = h3.build_workflow(near_default, "jobduration-nearest")
-        self.assertEqual(near_workflow["10"]["inputs"]["length"], 124)
+        near_workflow, _ = h3.build_workflow(near_default, "jobduration-ceil")
+        self.assertEqual(near_workflow["10"]["inputs"]["length"], 141)
         self.assertEqual(near_default["requested_video_length"], 125)
-        self.assertEqual(near_default["effective_video_length"], 124)
-        self.assertEqual(h3.MODEL_OPTIONS["frame_alignment_mode"], "nearest")
+        self.assertEqual(near_default["effective_video_length"], 141)
+        self.assertEqual(h3.MODEL_OPTIONS["frame_alignment_mode"], "ceil")
+        self.assertEqual(h3.MODEL_OPTIONS["frames_maximum"], 345)
 
     def test_oversized_resolution_is_reduced_to_open_base_canvas(self):
         workflow, _ = h3.build_workflow({

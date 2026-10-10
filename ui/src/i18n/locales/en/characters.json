@@ -449,7 +449,8 @@
       "minimaxDescribe": "MiniMax is describing the image…",
       "llmDescribe": "The internal LLM is describing the image…",
       "orbitQueued": "H3 orbit queued…",
-      "hunyuanQueued": "Hunyuan3D queued…"
+      "hunyuanQueued": "Hunyuan3D queued…",
+      "orbitInterrupted": "The orbit was interrupted by a server restart. Resume reruns the saved queue; discard clears it."
     },
     "errors": {
       "autoDescribe": "Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.",
@@ -618,6 +619,18 @@
     "generating": "Creating…",
     "keying": "Removing background…",
     "option": "Option {{number}}",
+    "rigReady": "Ready for the rig",
+    "rigReasons": {
+      "eyes_small": "The eyes are too small for the rig",
+      "eyes_not_found": "The eyes were not found",
+      "sclera_dark": "The eyes have no light sclera",
+      "mouth_not_found": "No mouth was found",
+      "face_low_confidence": "The face was not read clearly",
+      "not_keyed": "The background was not removed",
+      "face_too_light": "The face is as light as the eyes",
+      "face_keyed_out": "The face was removed with the background"
+    },
+    "haze": "A haze is left over {{percent}}% of the image: the screen did not key cleanly. Pick another option or generate it again.",
     "failed": "This option failed: {{error}}",
     "pick": "Pick the option you like.",
     "noneReady": "No option finished. Try again or change the description.",
@@ -626,6 +639,9 @@
     "ready": "Ready to talk. Check the mouths and the blink below.",
     "reviewAlt": "Mouth and blink review",
     "unwiped": "No painted mouth was found on: {{poses}}. A mouth was placed under the eyes.",
+    "warpReview": "These mouths are the drawing's own: the upper lip stays and the lower lip and chin move. In the review, check that each pose opens between the lips, not at the nose or a moustache.",
+    "mouthLine": "Check the mouth line of {{poses}}: the rig was not sure where the lips meet. Open Prepare 2D speech below, pick {{name}} and, in Mouth line, drag the dot onto the line between the lips.",
+    "checkPoses": "Look at {{poses}} in the review before using {{name}}: the eyes or a mark may have been found in the wrong place.",
     "designVoice": "Design its voice",
     "newPose": "New pose",
     "posePlaceholder": "Waving, arms up in panic, pointing…",
@@ -640,11 +656,15 @@
     }
   },
   "voiceDesigner": {
-    "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice.",
+    "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice. The pitch check follows the first word that names a man, a woman or a child: 75–175 Hz for a man, 150–320 for a woman and 220–400 for a child.",
     "missing": "Voice design needs these models: {{models}}.",
     "download": "Download",
     "downloading": "Download started. Try again when it finishes.",
     "language": "Language",
+    "accent": "Accent check",
+    "accentNone": "None",
+    "accentCastilian": "Castilian (θ)",
+    "accentSeseo": "Castilian θ on {{rate}}% of {{positions}} positions. The voice is kept.",
     "description": "Voice description",
     "placeholder": "Male voice. Late twenties, a bit nasal, fast and nervous, friendly.",
     "text": "Sample line (kept as the reference transcript)",
@@ -669,5 +689,50 @@
       "chinese": "Chinese",
       "russian": "Russian"
     }
+  },
+  "mouthLine": {
+    "title": "Mouth line · {{pose}}",
+    "intro": "These mouths are the drawing's own: the upper lip stays and the lower lip, chin and beard move down. Drag the dot onto the line between the lips and the two ends to the mouth's corners; the mouth shapes follow as you move.",
+    "notWarp": "Saving switches this character to these mouths and rigs every pose again.",
+    "noOwn": "This pose has no mouths of its own yet: place the line and save to make them.",
+    "zoomAlt": "{{name}}'s mouth, enlarged",
+    "stateAlt": "{{name}} saying {{sound}}",
+    "dot": "Point on the mouth line",
+    "left": "Left corner of the mouth",
+    "right": "Right corner of the mouth",
+    "nudge": {
+      "up": "Up",
+      "down": "Down",
+      "left": "Left",
+      "right": "Right",
+      "narrower": "Narrower",
+      "wider": "Wider"
+    },
+    "zoomOut": "Show more of the face",
+    "zoomIn": "Closer",
+    "loading": "Warping the mouths…",
+    "snapped": "The line sits on the painted line between the lips.",
+    "free": "No painted line here: the mouth opens exactly at the dot.",
+    "sounds": {
+      "rest": "rest",
+      "i": "i",
+      "e": "e",
+      "a": "a",
+      "o": "o",
+      "u": "u"
+    },
+    "undo": "Undo changes",
+    "save": "Save mouth",
+    "saving": "Rigging…",
+    "saved": "Saved the mouth of {{pose}}. Shots that use this pose keep the old mouth until they are rendered again.",
+    "previewOnly": "To save the line, open this character in Characters › Prepare 2D speech.",
+    "errors": {
+      "preview": "Could not preview the mouths.",
+      "unsaved": "Save the character's other changes first: the line is saved by rigging the saved character again.",
+      "save": "Could not save the mouth line."
+    },
+    "unsure": "The face points were unsure here (a moustache, a beard, a face seen from below): check that the line is between the lips.",
+    "smallFace": "Small face (head {{head}} px): the mouths are warped on the face enlarged {{times}}×, fitted back to the pose and opened a little deeper, so they read when the figure is drawn small.",
+    "headPass": "Its face points were read on the head alone."
   }
 }

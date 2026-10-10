@@ -9,6 +9,8 @@ import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import { queueFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
+import { isGenerationJobInterrupted } from '../../lib/generationJobState'
+import { isHttpStatus } from '../../api/http'
 import {
   attachCharacterCreatorMeshForWorkspace,
   characterCreatorHistoryKey,
@@ -82,13 +84,14 @@ export function CharacterCreatorPanel() {
   const workspace = useStore(state => state.activeWorkspace)
   const request = useCharacterEditorHandoff(state => state.request)
   if (request?.workspace === workspace) return <div className="h-full overflow-y-auto rounded-xl border border-border bg-bg-primary">
-    <CharacterEditorSession key={`${workspace}/${request.kit.id}`} request={request} />
+    <CharacterEditorSession key={`${workspace}/${request.kit.id}/${request.poseId ?? ''}`} request={request} />
   </div>
   return <CharacterCreatorWorkshop />
 }
 
 function CharacterCreatorWorkshop() {
   const { t } = useUiTranslation('characters')
+  const { t: tCommon } = useUiTranslation('common')
   const models = useStore(s => s.models)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const llmProvider = useStore(s => s.productionProfile.text.provider)
@@ -102,6 +105,8 @@ function CharacterCreatorWorkshop() {
   const [busy, setBusy] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [jobMessage, setJobMessage] = useState('')
+  // An orbit job a server restart left in the recovery queue; resume or discard restores control.
+  const [interruptedJobId, setInterruptedJobId] = useState<string | null>(null)
   const [videoName, setVideoName] = useState<string | null>(null)
   const [views, setViews] = useState<CapturedView[]>([])
   const [videoDuration, setVideoDuration] = useState(CHARACTER_SHEET_FRAMES / 24)
@@ -271,7 +276,7 @@ function CharacterCreatorWorkshop() {
           hunyuan: view.hunyuan,
           label: kind === 'object' ? view.objectLabel : view.label,
           filename: shot.filename,
-          url: shot.url || getFileUrl(shot.filename, workspace),
+          url: getFileUrl(shot.filename, workspace),
           time,
         })
       }
@@ -344,7 +349,7 @@ function CharacterCreatorWorkshop() {
         workspace: activeWorkspace,
       })
       setViews(current => current.map(view => view.id === selected.id
-        ? { ...view, filename: shot.filename, url: shot.url || getFileUrl(shot.filename, activeWorkspace), time }
+        ? { ...view, filename: shot.filename, url: getFileUrl(shot.filename, activeWorkspace), time }
         : view,
       ))
       void loadOutputs()
@@ -418,11 +423,18 @@ function CharacterCreatorWorkshop() {
         if (stillOnOrigin) setError(status.error || t(status.status === 'cancelled' ? 'creator.errors.orbitCancelled' : 'creator.errors.orbitFailed'))
         setBusy(false)
         setJobId(null)
+        return
+      }
+      if (isGenerationJobInterrupted(status.status)) {
+        if (stillOnOrigin) setJobMessage(t('creator.status.orbitInterrupted'))
+        setInterruptedJobId(jobId)
+        setBusy(false)
+        setJobId(null)
       }
     },
     onError: reason => {
       orbitFailuresRef.current += 1
-      const lost = (reason as Error & { status?: number }).status === 404
+      const lost = isHttpStatus(reason, 404)
       if (!lost && orbitFailuresRef.current < 4) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setBusy(false)
@@ -456,6 +468,29 @@ function CharacterCreatorWorkshop() {
       })
       setHunyuanJobId(job.job_id)
       setHunyuanMessage(job.message || t('creator.status.hunyuanQueued'))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setBusy(false)
+    }
+  }
+
+  const recoverOrbit = async (action: 'resume' | 'discard') => {
+    const recovered = interruptedJobId
+    if (!recovered) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (action === 'resume') {
+        await api.resumeGenerationQueue()
+        setInterruptedJobId(null)
+        setJobMessage(t('creator.status.orbitQueued'))
+        setJobId(recovered)
+        return
+      }
+      await api.discardGenerationQueue()
+      setInterruptedJobId(null)
+      setJobMessage('')
+      setBusy(false)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
       setBusy(false)
@@ -496,7 +531,7 @@ function CharacterCreatorWorkshop() {
     },
     onError: reason => {
       hunyuanFailuresRef.current += 1
-      const lost = (reason as Error & { status?: number }).status === 404
+      const lost = isHttpStatus(reason, 404)
       if (!lost && hunyuanFailuresRef.current < 4) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setHunyuanJobId(null)
@@ -644,6 +679,10 @@ function CharacterCreatorWorkshop() {
               {t('creator.hunyuanGenerate')}
             </button>
             {jobMessage && <p className="text-[11px] text-text-secondary">{jobMessage}</p>}
+            {interruptedJobId && <div className="flex gap-2">
+              <button type="button" className={button + ' flex-1'} disabled={busy} onClick={() => void recoverOrbit('resume')}>{tCommon('actions.resume')}</button>
+              <button type="button" className={button + ' flex-1'} disabled={busy} onClick={() => void recoverOrbit('discard')}>{tCommon('actions.discard')}</button>
+            </div>}
             {hunyuanMessage && <p className="text-[11px] text-text-secondary">{hunyuanMessage}</p>}
             {error && <p className="text-[11px] text-red-300">{error}</p>}
           </div>

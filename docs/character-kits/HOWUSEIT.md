@@ -97,7 +97,7 @@ CharacterKit
               name, referenceAudio, transcript, language }
   lookNotes?
   speech3d? { model, digest, settings? }
-  anchors { [poseId]: { mouth, mouthStates?, eyes? } }
+  anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources? } }
   provenance[]
 ```
 
@@ -107,6 +107,13 @@ the legacy physical output-folder token, not a Workspace collection ID.
 
 `alphaStatus` is `unknown`, `transparent`, or `opaque`. An image is considered
 transparent when at least 1% of pixels have alpha below 250.
+
+`anchors[pose].mouthSources` (`{state: url}`) are a pose's own mouth drawings:
+the flat rig's warp mouths, square patches cut from that pose's lower face.
+They share the review of `kit.mouth[state]`, which holds the base pose's. While
+it does, each pose mounts its own (`characterKitMouthSource`) and a pose with
+none mounts no mouth, never another pose's face. A drawing put on `kit.mouth`
+later is shared by every pose again.
 
 `mountCharacterKitLayers` parents each approved overlay to its pose, sets
 `faceBinding`, and starts with the closed mouth visible. Mounting a kit pose
@@ -226,6 +233,38 @@ Constraints from `uploadVoiceReference` / `parseCharacterVoice`:
 - Saved custom voices appear in the selector for other kits (`saved:<id>`).
   Existing takes stay; new or regenerated 2D/3D dialogue uses the stored
   recording + transcript.
+
+### 4.6 Painted / graphic-novel characters that talk
+
+Character Creator › **Style** › **Graphic novel (painted)** (`graphic-novel`
+in `app/shared/character_styles.json`, MCP `characters.styles`) is the path
+for painted art: bold ink, flat black shadows. Its prompts ask for what the
+flat rig must find: both eyes with clean white sclera, never in the shadow,
+and the closed mouth painted as one short dark line, on a plain screen.
+**Save and make it talk** rigs with the preset's `rig`,
+`{"mouthStyle": "warp"}`: each pose talks with its own drawing (the upper lip
+stays, the lower lip, chin and beard move down, the gap is a flat mouth in its
+ink). The kit records the preset (`provenance`
+`{"method": "character-style-create", "style": "graphic-novel"}`), so a first
+rig with no `style` uses it too, and every later rig (a pose added, a mouth
+line saved, an agent's re-rig) keeps the kit's last look: style keys left out
+are the last rig's. Only an explicit `style.mouthStyle` changes the mouths.
+
+What to check after each rig:
+
+- the review sheet: each pose opens between the lips, not at the nose or a
+  moustache;
+- the rig result's `poses.<pose>.mouthLine` and `warnings`. The creator names
+  the poses with `mouth_line_guessed` (no painted line where the mouth was
+  put) or `mouth_line_unsure` (unsure face points).
+
+Fix a pose in **Prepare 2D speech** › Face Rig › **Mouth line**: drag the dot
+onto the line between the lips and the ends to the corners, then **Save
+mouth**. An agent does the same with `characters.rig.flat.preview` and
+`hints: {"<pose>": {"mouth": [x, y], "mouthWidth": w}}`.
+
+A face in a full figure is small and its moving lips read less: add a bust
+pose (*bust, head and shoulders*) for close dialogue.
 
 ---
 
@@ -396,6 +435,23 @@ The response includes `filename`, public `source`, `original`, `width`,
 - Trying Face Rig from Character Creator object mode; it is rejected on purpose.
 - Confusing an output-folder token in these routes with a Workspace collection
   ID. The latter is metadata and does not select files.
+- Rigging realistic or graphic-novel art (small eyes, eye bags, spectacles,
+  flat black shadows) with the paper mouths. The flat rig
+  (`POST /api/v1/character-kits/library/kits/{id}/flat-rig`,
+  `characters.rig.flat`) detects such a face and finds its mouth lower down.
+  The cartoon paper mouths still clash with the art: send
+  `style: {"mouthStyle": "ink"}`. The painted mouth then stays as the rest
+  shape, and the open shapes are drawn in its own ink. With
+  `{"mouthStyle": "warp"}` each pose talks with its own drawing: the lower lip,
+  chin and beard move down and the gap is inked, one set of patches per pose
+  (`anchors[pose].mouthSources`). A full figure's small face is read and
+  warped enlarged, then fitted back (`faceSize` per pose). If a pose's mouth
+  or eyes are found in the wrong place, send
+  `hints: {"<pose id>": {"mouth": [x, y], "eyes": [x, y], "mouthWidth": w}}`,
+  in % of that pose's keyed image, or place the mouth line in the Face Rig's
+  **Mouth line** editor, which previews the warped states live. The kit
+  provenance keeps hints for later rigs, and `null` clears a pose's hints. See
+  `docs/agents/VIDEO_PRODUCTION_RUNBOOK.md`.
 
 ---
 

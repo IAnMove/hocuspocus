@@ -45,6 +45,8 @@ import type { AgentAttachVideoclipAlternativeSongAction, AgentMountVideoclipAlte
 import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferencesAction, AgentBuildCharacterKitAction, AgentCreateCharacterKitAction, AgentOpenCharacterKitAction, AgentOpenCharacterKitRigAction, AgentTrackCharacterKitJobAction } from './characterKitActions'
 import { registerLipsCreatorCapabilities } from './lipsCreatorCapabilities'
 import { registerProductionWorkCapabilities } from './productionWorkCapabilities'
+import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities'
+import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
 import { registerStudioCapabilities } from './studioCapabilities'
 export { restoreAuthoredMusicFields, authoredSfxPackInput } from './audioActionParser'
@@ -80,7 +82,7 @@ export const currentAgentInterfaceLanguage = detectUiLanguage
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
   'story_lab', 'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d',
-  'character_creator', 'character_kit', 'lips_creator', 'workspaces', 'settings',
+  'character_creator', 'character_kit', 'lips_creator', 'game_assets', 'workspaces', 'settings',
 ] as const
 
 export type AgentTab = typeof AGENT_TABS[number]
@@ -1204,6 +1206,8 @@ defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Expor
 registerLipsCreatorCapabilities(defineCapability)
 registerWorld3DTemplateCapabilities(defineCapability)
 registerProductionWorkCapabilities(defineCapability)
+registerSeriesShotEditCapabilities(defineCapability)
+registerMediaToolCapabilities(defineCapability)
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)
 registerEditorAuxCapabilities(defineCapability)

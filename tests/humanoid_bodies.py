@@ -192,7 +192,27 @@ _BODIES = {
     "arms_up": lambda: _human(-50.0),
     "with_orb": lambda: _human(0.0, extra=(("sphere", (1.12, 1.18, 0.3), 0.07),)),
     "on_base": lambda: _human(30.0, extra=tuple(("capsule", (-0.38, -0.04, z), (0.38, -0.04, z), 0.035, 0.035) for z in (-0.12, 0.0, 0.12, 0.24))),
+    # Hair down to the shoulders hides the neck notch and a flared skirt makes the waist the narrowest row.
+    "long_hair_skirt": lambda: _human(0.0, extra=(
+        ("capsule", (0.0, 1.00, 0.0), (0.0, 0.80, 0.0), 0.16, 0.22),
+        *(("capsule", (side * 0.085, 1.66, -0.04), (side * 0.10, 1.38, -0.06), 0.06, 0.055) for side in (1.0, -1.0)))),
+    # A short cape over the shoulders and upper arms: a front and a back sheet hang from a top sheet that
+    # rests on the arms, so the front view joins the arms to the torso down to the chest.
+    "cape": lambda: _human(0.0, extra=_CAPE),
+    # An ankle-length robe hides the legs; the feet show under the hem.
+    "robe": lambda: _human(20.0, extra=(("frustum", (0.0, 0.0), 0.12, 1.02, 0.30, 0.18, 0.85),)),
+    # The same robe down to the floor hides the feet as well.
+    "robe_to_floor": lambda: _human(20.0, extra=(("frustum", (0.0, 0.0), -0.02, 1.02, 0.30, 0.18, 0.85),)),
+    # A cape hanging behind the back down to the ankles fills the gap between the legs and under the arms.
+    "back_cape": lambda: _human(30.0, extra=(("box", (0.0, 1.28, -0.20), (0.30, 0.18, 0.018)),
+                                             ("box", (0.0, 0.60, -0.25), (0.30, 0.53, 0.018)))),
 }
+
+_CAPE = (
+    ("box", (0.0, 1.465, 0.0), (0.40, 0.018, 0.248)),
+    ("box", (0.0, 1.34, 0.23), (0.40, 0.13, 0.018)),
+    ("box", (0.0, 1.34, -0.23), (0.40, 0.13, 0.018)),
+)
 
 BODY_KINDS = tuple(_BODIES)
 
@@ -215,12 +235,21 @@ def _bounds(parts: list, voxel: float) -> tuple[np.ndarray, np.ndarray]:
         if part[0] == "sphere":
             points.append(part[1])
             radii.append(part[2])
+        elif part[0] in ("box", "frustum"):
+            points += list(_corners(part))
         else:
             points += [part[1], part[2]]
             radii += [part[3], part[4]]
     cloud = np.asarray(points, dtype=np.float64)
     pad = max(radii) + voxel * 3
     return cloud.min(axis=0) - pad, cloud.max(axis=0) + pad
+
+
+def _corners(part) -> tuple:
+    if part[0] == "box":
+        return np.asarray(part[1]) - np.asarray(part[2]), np.asarray(part[1]) + np.asarray(part[2])
+    (x, z), low, high, radius = part[1], part[2], part[3], max(part[4], part[5])
+    return np.array([x - radius, low, z - radius * part[6]]), np.array([x + radius, high, z + radius * part[6]])
 
 
 def _field(parts: list, points: np.ndarray) -> np.ndarray:
@@ -233,11 +262,25 @@ def _field(parts: list, points: np.ndarray) -> np.ndarray:
 def _distance(part, points: np.ndarray) -> np.ndarray:
     if part[0] == "sphere":
         return np.linalg.norm(points - np.asarray(part[1]), axis=1) - part[2]
+    if part[0] == "box":
+        outside = np.abs(points - np.asarray(part[1])) - np.asarray(part[2])
+        return np.linalg.norm(np.maximum(outside, 0.0), axis=1) + np.minimum(outside.max(axis=1), 0.0)
+    if part[0] == "frustum":
+        return _frustum(part, points)
     start, end = np.asarray(part[1], dtype=np.float64), np.asarray(part[2], dtype=np.float64)
     segment = end - start
     factor = np.clip(((points - start) @ segment) / max(float(segment @ segment), 1e-12), 0.0, 1.0)
     radius = part[3] + (part[4] - part[3]) * factor
     return np.linalg.norm(points - (start + factor[:, None] * segment), axis=1) - radius
+
+
+def _frustum(part, points: np.ndarray) -> np.ndarray:
+    """A solid cone cut flat at both ends along Y, its section an ellipse ``depth`` times as deep as wide: a robe."""
+    (x, z), low, high, bottom, top, depth = part[1:]
+    radial = np.hypot(points[:, 0] - x, (points[:, 2] - z) / depth)
+    share = np.clip((points[:, 1] - low) / (high - low), 0.0, 1.0)
+    side = (radial - (bottom + (top - bottom) * share)) * math.cos(math.atan2(bottom - top, high - low))
+    return np.maximum(side, np.maximum(low - points[:, 1], points[:, 1] - high))
 
 
 def _smooth_min(left: np.ndarray, right: np.ndarray, blend: float) -> np.ndarray:

@@ -1,5 +1,6 @@
 import { ExternalLink, Loader2, Play, RefreshCcw, Square, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRequestEpoch } from '../../hooks/useRequestEpoch'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
@@ -79,9 +80,12 @@ export function QuickVideoBatchPanel({
     setGenerationMode(inheritedGenerationMode)
   }, [project.id, inheritedGenerationMode])
 
+  const beginRefresh = useRequestEpoch()
   const refresh = useCallback(async () => {
+    const stale = beginRefresh()
     try {
       const response = await api.listQuickVideoBatches(workspace)
+      if (stale()) return
       setJobs(current => {
         const localById = new Map(current.map(job => [job.jobId, job]))
         return response.jobs.map(server => {
@@ -94,10 +98,11 @@ export function QuickVideoBatchPanel({
       })
       setError('')
     } catch (reason) {
-      setError((reason as Error).message)
+      if (!stale()) setError((reason as Error).message)
     }
-  }, [workspace])
+  }, [beginRefresh, workspace])
 
+  // A workspace change replaces `refresh`; the cleanup retires the previous load.
   useEffect(() => { void refresh() }, [refresh])
   const hasActiveJobs = jobs.some(job => activeStatuses.has(job.status))
   useSerializedPoll({

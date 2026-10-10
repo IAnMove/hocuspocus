@@ -1,4 +1,13 @@
 --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ort-cuda-13-nightly/pypi/simple/
+# Python requirements of the WanGP engine (the local AI runtime for NVIDIA x64
+# on Linux and Windows). This file is the pin contract and the input of
+# scripts/lock_runtime_dependencies.py; Pinokio installs the resolved locks in
+# app/runtime/locks/<platform>-wangp.txt (runtime_install.js), so a change
+# here reaches a machine only after the lock is regenerated. The core studio
+# that installs on any computer without Torch uses
+# app/runtime/requirements-core.txt; CI's CPU pins live in
+# scripts/ci-python-requirements.txt (pytest included).
+#
 # All versions below are pinned to the set that was tested against the
 # Maestro release. If you need to upgrade, do it one package at a time and
 # re-test Studio + Director end-to-end before committing. Do NOT loosen
@@ -22,7 +31,6 @@ numpy==2.1.2
 num2words==0.5.14
 
 # Video & media
-moviepy==1.0.3
 av==16.1.0
 ffmpeg-python==0.2.0
 pygame==2.6.1
@@ -72,7 +80,9 @@ taichi==1.7.4
 vector_quantize_pytorch==1.27.19
 
 
-# chumpy wheel hosted on GitHub to avoid sdist build isolation issue
+# chumpy is not imported here; it is a dependency of smplfitter. The explicit
+# GitHub wheel stays because the PyPI sdist does not build under pip's build
+# isolation, so the lock would otherwise resolve an uninstallable package.
 chumpy @ https://github.com/deepbeepmeep/chumpy/releases/download/v0.71/chumpy-0.71-py3-none-any.whl
 smplfitter @ https://github.com/deepbeepmeep/smplfitter/releases/download/v0.2.10/smplfitter-0.2.10-py3-none-any.whl
 
@@ -102,7 +112,6 @@ espeakng-loader==0.2.4  # Bundles the espeak-ng binary so phonemizer doesn't nee
 pydub==0.25.1            # Imported by seedvc/app_vc.py — used by Scenema's voice-reference (SeedVC) mode
 gitdb==4.0.12
 gitpython==3.1.45
-stringzilla==4.0.14
 xxhash==3.6.0
 munch==4.0.0
 wetext==0.1.2
@@ -112,11 +121,6 @@ wetext==0.1.2
 # the planner still works without it but loses the ability to recover
 # from these very common Gemma / Qwen JSON output bugs.
 json_repair==0.59.5
-
-# Regression suite. Keeping pytest in the managed environment ensures the
-# image-to-video preparation and checkpoint tests actually run after install
-# instead of being silently skipped by unittest discovery.
-pytest==8.3.5
 
 # Optional / commented out
 # transformers==4.46.3  # for llamallava pre-patch

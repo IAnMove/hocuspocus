@@ -24,6 +24,8 @@ import {
   type ConfiguredStorySongIdentity,
 } from './storyWorkflowIdentity'
 import type { AgentProductionWorksAction } from './productionWorkCapabilities'
+import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentRerenderSeriesShotAction } from './seriesShotEditCapabilities'
+import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type {
   AgentLipsCreatorAction,
@@ -632,6 +634,10 @@ export type AgentAction = AgentOpenTabAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction
   | AgentProductionWorksAction
+  | AgentEditSeriesShotAction
+  | AgentRerenderSeriesShotAction
+  | AgentRecordSeriesLineAction
+  | AgentMediaToolAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -3028,6 +3034,7 @@ const TAB_LABELS: Record<AgentTab, string> = {
   character_creator: 'Character Creator',
   character_kit: 'CharacterKit',
   lips_creator: 'Lips Creator',
+  game_assets: 'Game assets',
   workspaces: 'Workspaces',
   settings: 'Settings',
 }

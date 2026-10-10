@@ -7,6 +7,7 @@ import type { AssetCatalogItem, AssetKind } from '../../api/assets'
 import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { catalogOutputsFor, fileFromStudioOutput } from '../../lib/studioInputsPick.ts'
+import { useObjectUrl, useObjectUrls } from '../../lib/useObjectUrl'
 
 // A reference clip has to be long enough to carry a subject or a motion, and short enough that its
 // conditioning rows don't dwarf the shot being generated. Mirrors the backend validator.
@@ -572,25 +573,28 @@ export function InputsPanel() {
 
   type FrameTile = { key: string; kind: 'start' | 'end' | 'inject'; injectIndex?: number; preview: string; offset: string; window: number; sortKey: number }
 
+  const startImageUrl = useObjectUrl(startImage)
+  const endImageUrl = useObjectUrl(endImage)
+  const imageRefUrls = useObjectUrls(imageRefs)
   // Render-only list, SORTED by timeline position so the row always reads left
   // (start) to right (end) and a frame repositions itself when you change it.
   const frameTiles = useMemo<FrameTile[]>(() => {
     const out: FrameTile[] = []
     if (!isExtend) {
-      const startPreview = startImage ? URL.createObjectURL(startImage)
-        : (params.image_start ? api.getStoredAssetUrl(Array.isArray(params.image_start) ? params.image_start.find(Boolean) || '' : params.image_start) : null)
+      const startPreview = startImageUrl
+        || (params.image_start ? api.getStoredAssetUrl(Array.isArray(params.image_start) ? params.image_start.find(Boolean) || '' : params.image_start) : null)
       if (startPreview) out.push({ key: 'frame-start', kind: 'start', preview: startPreview, offset: 'start', window: 0, sortKey: 0 })
     }
     injectedFrames.forEach((f, i) => out.push({ key: `frame-inj-${i}`, kind: 'inject', injectIndex: i, preview: f.previewUrl, offset: f.offset, window: f.window, sortKey: frameKey(f.window, f.offset) }))
     if (!isExtend) {
-      const endPreview = endImage ? URL.createObjectURL(endImage)
-        : (params.image_end ? api.getStoredAssetUrl(Array.isArray(params.image_end) ? params.image_end.find(Boolean) || '' : params.image_end) : null)
+      const endPreview = endImageUrl
+        || (params.image_end ? api.getStoredAssetUrl(Array.isArray(params.image_end) ? params.image_end.find(Boolean) || '' : params.image_end) : null)
       if (endPreview) out.push({ key: 'frame-end', kind: 'end', preview: endPreview, offset: 'end', window: 0, sortKey: frameKey(0, 'end') })
     }
     out.sort((a, b) => a.sortKey - b.sortKey)
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startImage, endImage, injectedFrames, params.image_start, params.image_end, isExtend, supportsEndFrame, lastWindow])
+  }, [startImageUrl, endImageUrl, injectedFrames, params.image_start, params.image_end, isExtend, supportsEndFrame, lastWindow])
 
   // Whether the model takes a start frame at all. Some take none: MiniMax H3 Ref2VA allows only "T",
   // conditioning on reference material rather than on timeline positions, so offering a Frame tile invites
@@ -946,7 +950,7 @@ export function InputsPanel() {
             className={`relative w-[90px] h-[90px] shrink-0 rounded-xl overflow-hidden border cursor-grab active:cursor-grabbing transition-colors ${
               dragOverIndex === i ? 'border-accent-blue border-2' : selected === `ref-${i}` ? 'border-accent-blue' : 'border-border hover:border-border-light'
             }`}>
-            <img src={URL.createObjectURL(file)} alt={t('inputs.refAlt', { n: i + 1 })} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+            <img src={imageRefUrls[i]} alt={t('inputs.refAlt', { n: i + 1 })} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
             <span className="absolute top-1 left-1 z-10 rounded bg-black/55 text-white text-[9px] px-1">{i + 1}</span>
             <button onClick={e => { e.stopPropagation(); removeImageRef(i); if (selected === `ref-${i}`) setSelected(null) }}
               className="absolute top-1 right-1 z-10 rounded-full bg-black/45 text-white p-0.5 hover:bg-black/70" aria-label={tCommon('actions.remove')}><X size={12} /></button>

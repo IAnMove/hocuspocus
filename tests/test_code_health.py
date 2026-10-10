@@ -400,22 +400,184 @@ class ReleaseIntegrationHealthTests(unittest.TestCase):
 
     def test_changed_or_missing_historical_measurement_inputs_fail_closed(self):
         rows = [('100644', 'blob', 'a' * 40, path) for path in self.release.MEASUREMENT_INPUTS]
-        for second in (rows[:-1], [(mode, kind, 'b' * 40, path) for mode, kind, _, path in rows]):
+        changed_rows = [[(mode, kind, 'b' * 40 if path == changed else blob, path)
+                         for mode, kind, blob, path in rows]
+                        for changed in ('scripts/code_health.py', 'scripts/code_quality_score.py', 'ui/eslint.config.js')]
+        for second in (rows[:-1], *changed_rows):
             with self.patch.object(self.release, 'tree_entries', side_effect=[rows, second]), \
-                 self.patch.object(self.release, "git", return_value='{}'):
+                 self.patch.object(self.release, "git", side_effect=lambda _, path: self.measurement_sources()[path.split(':', 1)[1]]):
                 with self.assertRaisesRegex(ValueError, "measurement inputs|measurement inputs changed"):
                     self.release.read_trees(["base", "head"])
 
-    def test_only_install_hooks_among_scripts_are_measurement_inputs(self):
-        base = {"scripts": {"test": "old", "postinstall": "safe"}, "dependencies": {"eslint": "1"}}
-        changed = {**base, "scripts": {"test": "new", "postinstall": "safe", "atmos:capture": "tsx scripts/atmos-capture.mjs"}}
-        original = self.release.measurement_manifest(json.dumps(base))
-        self.assertEqual(original, self.release.measurement_manifest(json.dumps(changed)))
-        changed["scripts"]["postinstall"] = "mutate-eslint"
-        self.assertNotEqual(original, self.release.measurement_manifest(json.dumps(changed)))
-        changed["scripts"]["postinstall"] = "safe"
-        changed["dependencies"] = {"eslint": "2"}
-        self.assertNotEqual(original, self.release.measurement_manifest(json.dumps(changed)))
+    def measurement_fixture(self):
+        dependencies = {'eslint': '1', '@typescript-eslint/parser': '1', 'typescript': '1', '@types/dompurify': '1'}
+        manifest = {'name': 'ui', 'scripts': {'test': 'old'}, 'devDependencies': dependencies}
+        packages = {'': {'name': 'ui', 'devDependencies': dict(dependencies)}}
+        for name in (*dependencies, 'parser-helper'):
+            packages[f'node_modules/{name}'] = {
+                'version': '1', 'resolved': f'https://registry.example/{name}/1', 'integrity': 'sha512-fixture',
+            }
+        packages['node_modules/eslint']['bin'] = {'eslint': 'bin/eslint.js'}
+        packages['node_modules/@typescript-eslint/parser'].update(
+            dependencies={'parser-helper': '1'}, peerDependencies={'typescript': '*'},
+        )
+        return manifest, {'lockfileVersion': 3, 'packages': packages}, "import parser from '@typescript-eslint/parser'\n"
+
+    def fingerprint(self, fixture):
+        manifest, lock, config = fixture
+        return self.release.measurement_manifest(json.dumps(manifest), json.dumps(lock), config)
+
+    def measurement_sources(self):
+        manifest, lock, config = self.measurement_fixture()
+        return {'ui/package.json': json.dumps(manifest), 'ui/package-lock.json': json.dumps(lock),
+                'ui/eslint.config.js': config}
+
+    def read_fixture_chain(self, *fixtures):
+        import hashlib
+        from types import SimpleNamespace
+
+        sources, rows = {}, {}
+        for index, (manifest, lock, config) in enumerate(fixtures):
+            sha = str(index)
+            sources[sha] = dict.fromkeys(self.release.MEASUREMENT_INPUTS, '')
+            sources[sha].update({'ui/package.json': json.dumps(manifest), 'ui/package-lock.json': json.dumps(lock),
+                                 'ui/eslint.config.js': config})
+            rows[sha] = [('100644', 'blob', hashlib.sha1(value.encode()).hexdigest(), path)
+                         for path, value in sources[sha].items()]
+        with self.patch.object(self.release, 'tree_entries', side_effect=lambda sha: rows[sha]), \
+             self.patch.object(self.release, 'git', side_effect=lambda _, spec: sources[spec.split(':', 1)[0]][spec.split(':', 1)[1]]), \
+             self.patch.object(self.release.subprocess, 'run', return_value=SimpleNamespace(stdout=b'')):
+            return self.release.read_trees(list(sources))
+
+    def test_unrelated_types_removal_and_non_install_scripts_do_not_change_measurement(self):
+        fixture = self.measurement_fixture()
+        original = self.fingerprint(fixture)
+        manifest, lock, _ = fixture
+        manifest['scripts']['test'] = 'new'
+        manifest['scripts']['atmos:capture'] = 'tsx scripts/capture.mjs'
+        del manifest['devDependencies']['@types/dompurify']
+        del lock['packages']['']['devDependencies']['@types/dompurify']
+        del lock['packages']['node_modules/@types/dompurify']
+        self.assertEqual(original, self.fingerprint(fixture))
+
+    def test_analyzer_transitives_peers_and_resolution_paths_are_measurement_inputs(self):
+        for name in ('eslint', 'parser-helper', 'typescript'):
+            for field in ('version', 'resolved', 'integrity'):
+                with self.subTest(name=name, field=field):
+                    fixture = self.measurement_fixture()
+                    original = self.fingerprint(fixture)
+                    fixture[1]['packages'][f'node_modules/{name}'][field] = 'changed'
+                    self.assertNotEqual(original, self.fingerprint(fixture))
+        fixture = self.measurement_fixture()
+        original = self.fingerprint(fixture)
+        packages = fixture[1]['packages']
+        packages['node_modules/@typescript-eslint/parser/node_modules/parser-helper'] = packages.pop('node_modules/parser-helper')
+        self.assertNotEqual(original, self.fingerprint(fixture))
+
+    def test_analyzer_ranges_bin_overrides_and_install_hooks_remain_protected(self):
+        for mutate in (
+            lambda m, p: m['devDependencies'].update(eslint='2'),
+            lambda m, p: m.update(overrides={'parser-helper': '2'}),
+            lambda m, p: m['scripts'].update(postinstall='npm run test'),
+            lambda m, p: p['node_modules/eslint']['bin'].update(eslint='other.js'),
+        ):
+            fixture = self.measurement_fixture()
+            original = self.fingerprint(fixture)
+            mutate(fixture[0], fixture[1]['packages'])
+            self.assertNotEqual(original, self.fingerprint(fixture))
+        fixture = self.measurement_fixture()
+        fixture[0]['scripts']['postinstall'] = 'npm run test'
+        original = self.fingerprint(fixture)
+        fixture[0]['scripts']['test'] = 'mutate-eslint'
+        self.assertNotEqual(original, self.fingerprint(fixture))
+        original = self.fingerprint(fixture)
+        fixture[1]['packages']['node_modules/@types/dompurify']['integrity'] = 'changed'
+        self.assertNotEqual(original, self.fingerprint(fixture))
+
+    def test_unrelated_install_hook_and_its_transitives_are_measurement_inputs(self):
+        fixture = self.measurement_fixture()
+        original = self.fingerprint(fixture)
+        packages = fixture[1]['packages']
+        packages['node_modules/@types/dompurify'].update(hasInstallScript=True, dependencies={'hook-helper': '1'})
+        packages['node_modules/hook-helper'] = dict(packages['node_modules/parser-helper'])
+        hooked = self.fingerprint(fixture)
+        self.assertNotEqual(original, hooked)
+        packages['node_modules/hook-helper']['integrity'] = 'changed'
+        self.assertNotEqual(hooked, self.fingerprint(fixture))
+
+    def test_unmeasured_packages_and_root_ranges_allow_only_removal_across_history(self):
+        before, removed = self.measurement_fixture(), self.measurement_fixture()
+        del removed[0]['devDependencies']['@types/dompurify']
+        del removed[1]['packages']['']['devDependencies']['@types/dompurify']
+        del removed[1]['packages']['node_modules/@types/dompurify']
+        self.read_fixture_chain(before, removed)
+        for mutate in (
+            lambda m, p: p['node_modules/@types/dompurify'].update(integrity='changed'),
+            lambda m, p: m['devDependencies'].update({'@types/dompurify': '2'}),
+            lambda m, p: p['']['devDependencies'].update({'@types/dompurify': '2'}),
+        ):
+            changed = self.measurement_fixture()
+            mutate(changed[0], changed[1]['packages'])
+            with self.assertRaisesRegex(ValueError, 'Unmeasured UI dependencies'):
+                self.read_fixture_chain(before, changed)
+        # A later restoration must not hide an intermediate introduction.
+        with self.assertRaisesRegex(ValueError, 'Unmeasured UI dependencies'):
+            self.read_fixture_chain(before, removed, before)
+
+    def test_new_native_and_lock_script_packages_without_install_flag_fail_closed(self):
+        before = self.measurement_fixture()
+        for explicit_script in (False, True):
+            with self.subTest(explicit_script=explicit_script):
+                changed = self.measurement_fixture()
+                manifest, lock, _ = changed
+                manifest['devDependencies']['native-addon'] = '1'
+                lock['packages']['']['devDependencies']['native-addon'] = '1'
+                node = dict(lock['packages']['node_modules/parser-helper'])
+                # binding.gyp is inside the tarball, absent from the lock metadata;
+                # alternatively npm can execute scripts supplied by the lock itself.
+                if explicit_script:
+                    node['scripts'] = {'postinstall': 'node setup.js'}
+                lock['packages']['node_modules/native-addon'] = node
+                previous = self.release.unmeasured_inputs(json.dumps(before[0]), json.dumps(before[1]), self.fingerprint(before))
+                current = self.release.unmeasured_inputs(json.dumps(manifest), json.dumps(lock), self.fingerprint(changed))
+                if not explicit_script:
+                    self.assertEqual(self.fingerprint(before), self.fingerprint(changed))
+                    self.assertFalse(self.release.removed_only(previous, current))
+                with self.assertRaisesRegex(ValueError, 'measurement inputs changed|Unmeasured UI dependencies'):
+                    self.read_fixture_chain(before, changed)
+
+    def test_missing_required_nodes_links_and_invalid_lock_fail_closed(self):
+        for mutate in (
+            lambda lock: lock.clear(),
+            lambda lock: lock.update(lockfileVersion=1),
+            lambda lock: lock['packages'].pop(''),
+            lambda lock: lock['packages'].pop('node_modules/parser-helper'),
+            lambda lock: lock['packages'].pop('node_modules/typescript'),
+            lambda lock: lock['packages']['node_modules/eslint'].pop('integrity'),
+            lambda lock: lock['packages']['node_modules/@types/dompurify'].update(link=True),
+        ):
+            fixture = self.measurement_fixture()
+            mutate(fixture[1])
+            with self.subTest(lock=fixture[1]), self.assertRaises(ValueError):
+                self.fingerprint(fixture)
+
+    def test_optional_absence_is_explicit_and_config_imports_are_checked(self):
+        fixture = self.measurement_fixture()
+        packages = fixture[1]['packages']
+        packages['node_modules/eslint'].update(peerDependencies={'optional-peer': '*'},
+                                             peerDependenciesMeta={'optional-peer': {'optional': True}})
+        original = self.fingerprint(fixture)
+        packages['node_modules/optional-peer'] = dict(packages['node_modules/parser-helper'])
+        self.assertNotEqual(original, self.fingerprint(fixture))
+        packages['node_modules/eslint']['optionalDependencies'] = {'optional-package': '*'}
+        original = self.fingerprint(fixture)
+        packages['node_modules/optional-package'] = dict(packages['node_modules/parser-helper'])
+        self.assertNotEqual(original, self.fingerprint(fixture))
+        for config in ("import x from 'missing-plugin'", "const x = await import('eslint')", "import './local.js'",
+                       "import x from /* c */ 'plugin-extra'", "import/* c */('plugin-extra')",
+                       "import /* c */ './local.js'", "import x from// c\n'plugin-extra'"):
+            with self.subTest(config=config), self.assertRaises(ValueError):
+                self.fingerprint((*fixture[:2], config))
 
     def test_main_push_requires_exact_unchanged_two_parent_development_merge(self):
         import subprocess
@@ -471,7 +633,7 @@ class ReleaseIntegrationHealthTests(unittest.TestCase):
             for name in self.release.MEASUREMENT_INPUTS:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text('{}' if name.endswith('.json') else '', encoding='utf-8')
+                path.write_text(self.measurement_sources().get(name, ''), encoding='utf-8')
             git('add', '.')
             git('commit', '-qm', 'base')
             chain = [git('rev-parse', 'HEAD')]

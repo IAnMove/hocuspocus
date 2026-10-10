@@ -5,6 +5,7 @@ import pytest
 
 from services.series_produce import ProduceDeps, ProduceError, SeriesProduce
 from services.series_script import ScriptError, apply_script
+from services.series_stop_motion import read_fields
 
 FILES = {"mus-theme-es.wav", "mus-theme-en.wav", "sfx-pen.wav", "prop-key.png", "mars.world3d.scene.json"}
 
@@ -17,7 +18,9 @@ def project():
             "episodesById": {"ep1": {"id": "ep1", "number": 1, "shots": [{"id": "e1s00"}]}}}
 
 
-KITS = {"kit-kevin": {"poses": {"panic": {}}}, "kit-gary": {"poses": {}}, "kit-elon": {"poses": {"phone": {}}}}
+VOICE = {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}
+EN = {"voice": VOICE, "voicesByLanguage": {"english": VOICE}}
+KITS = {"kit-kevin": {"poses": {"panic": {}}, **EN}, "kit-gary": {"poses": {}, **EN}, "kit-elon": {"poses": {"phone": {}}, **EN}}
 
 SCRIPT = {
     "title": {"es": "El vecino", "en": "The Neighbour"}, "premise": {"es": "Llega Mark."},
@@ -108,11 +111,71 @@ def test_every_problem_is_listed_before_anything_is_written():
     assert tools.calls == [], "nothing is written while the script has problems"
 
 
+def test_a_document_card_is_stored_and_a_long_one_warns_without_blocking():
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "duration": 4, "lines": [{"who": "kevin", "es": "Leo.", "en": "I read."}],
+         "card": {"kind": "document", "style": "letter", "reveal": "typewriter",
+                  "date": "8 de octubre", "signature": "Ana",
+                  "es": ["Carta", "Hoy el río iba alto."], "en": ["Letter", "The river was high."]}},
+        {"scene": "a", "duration": 4, "card": {"kind": "document", "style": "file",
+                                               "es": ["Expediente", ("palabra " * 200)[:1200]]}},
+        {"scene": "a", "duration": 3, "card": {"kind": "document", "style": "file", "reveal": "pan",
+                                               "es": ["Expediente", ("palabra " * 200)[:1200]]}},
+    ]}
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True)
+    # Other script warnings (a speaker not on screen) may sit beside it: the long document is the one this checks.
+    # The grouped shape of every script warning: one per document title, with its shots.
+    assert {"code": "document_text_too_long", "subject": "Expediente", "shots": ["e2s01", "e2s02"],
+            "message": "Expediente: the document does not fit at the minimum readable size (shots e2s01, e2s02)"} in checked["warnings"]
+    assert all({"code", "subject", "shots", "message"} <= set(item) and isinstance(item["shots"], list) for item in checked["warnings"])
+    assert tools.calls == []
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    card = tools.calls[1][1]["episode"]["shots"][0]["layout2d"]["card"]
+    assert card == {"kind": "document", "style": "letter", "reveal": "typewriter", "title": "Carta",
+                    "body": "Hoy el río iba alto.", "date": "8 de octubre", "signature": "Ana"}
+    english = tools.calls[2][1]["cards"]["e2s00"]
+    assert english == {"title": "Letter", "body": "The river was high."}
+
+
+def test_a_document_style_must_be_one_of_the_five():
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "card": {"kind": "document", "style": "poster", "es": ["A", "B"]}}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    assert any("card style must be letter, typed, newspaper, telegram or file" in problem for problem in raised.value.problems)
+    assert tools.calls == []
+
+
+def test_a_shot_hears_and_a_bad_hearing_writes_nothing():
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "duration": 3, "hearing": "muffled", "lines": [{"who": "kevin", "es": "Leo.", "en": "I read."}]},
+        {"scene": "a", "duration": 3, "hearing": "deaf", "sfx": [{"file": "sfx-pen.wav", "keepInDeaf": True}]},
+        {"scene": "a", "duration": 3, "hearing": "normal"},
+    ]}
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    stored = tools.calls[1][1]["episode"]["shots"]
+    assert stored[0]["layout2d"]["hearing"] == "muffled"
+    assert stored[1]["layout2d"]["hearing"] == "deaf" and stored[1]["layout2d"]["sfx"][0]["keepInDeaf"] is True
+    assert "hearing" not in stored[2]["layout2d"]
+    refused = Series()
+    bad = {"scenes": [{"id": "a", "location": "garage"}], "shots": [{"scene": "a", "hearing": "loud"}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(refused, refused.read, KITS, FILES, "cast", bad)
+    assert any("hearing must be one of" in problem for problem in raised.value.problems)
+    assert refused.calls == []
+
+
 def test_check_only_and_rewriting_an_existing_episode():
     tools = Series()
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, check_only=True)
+    estimate = checked.pop("estimate")
     assert checked == {"checked": True, "number": 2, "shots": ["e2s00", "e2s01", "e2s02"], "original": "spanish",
-                       "languages": ["spanish", "english"]} and tools.calls == []
+                       "languages": ["spanish", "english"], "warnings": []} and tools.calls == []
+    assert estimate["method"] == "default_rate" and [item["id"] for item in estimate["perShot"]] == checked["shots"]
+    assert estimate["perShot"][0]["seconds"] == 6.0, "a title card keeps the length the script asked for"
     rewritten = apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": SCRIPT["shots"][:1]}, episode_id="ep1")
     assert rewritten["shots"] == ["e1s00"] and [tool for tool, _ in tools.calls][0] == "series.episode.update"
     with pytest.raises(ScriptError):
@@ -207,6 +270,25 @@ def test_resuming_a_cancelled_production_resumes_its_stopped_render(tmp_path):
     assert [tool for tool, _ in tools.calls].count("series.episode.render_native.resume") == 1, "the stopped render goes on"
 
 
+def test_producing_again_renders_only_out_of_date_shots_and_rerender_renders_them_all(tmp_path):
+    tools, stale = Production(fail_english=0), {"spanish": ["e2s03"], "english": []}
+    base = producer(tmp_path, tools)
+    service = SeriesProduce(ProduceDeps(call=tools, workspace_dir=base.deps.workspace_dir, read_library=base.deps.read_library,
+                                        stale_shots=lambda _ws, _series, _episode, language: stale[language],
+                                        sleep=lambda _s: None, poll_seconds=0))
+    done = finished(service, service.start("cast", "uv", "ep2")["jobId"])
+    assert done["status"] == "completed", done
+    renders = [data for tool, data in tools.calls if tool == "series.episode.render_native"]
+    assert renders == [{"workspace": "cast", "series_id": "uv", "episode_id": "ep2", "approve": True, "shot_ids": ["e2s03"]}]
+    assert done["steps"][1]["progress"].startswith("Every shot already has"), "nothing to render in English: straight to the cut"
+    assert done["steps"][1]["progressCount"] == {"done": 0, "total": 0}
+    assert sorted(done["chapters"]) == ["english", "spanish"]
+    tools.calls.clear()
+    again = finished(service, service.start("cast", "uv", "ep2", rerender=True)["jobId"])
+    assert again["status"] == "completed" and again["rerender"] is True
+    assert [("shot_ids" in data) for tool, data in tools.calls if tool == "series.episode.render_native"] == [False, False]
+
+
 def test_produce_refuses_a_language_without_a_version(tmp_path):
     service = producer(tmp_path, Production())
     with pytest.raises(ProduceError) as raised:
@@ -214,3 +296,464 @@ def test_produce_refuses_a_language_without_a_version(tmp_path):
     assert raised.value.code == "no_version"
     with pytest.raises(ProduceError):
         service.start("cast", "uv", "nope")
+
+
+def test_a_production_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
+    from services.series_jobs import SeriesJobStore
+    tools = Production(fail_english=0)
+    service = producer(tmp_path, tools)
+    store = SeriesJobStore(str(tmp_path), "produce")
+    store.save({"jobId": "produce-orphan", "workspace": "cast", "seriesId": "uv", "episodeId": "ep2", "original": "spanish",
+                "languages": ["spanish"], "burnSubtitles": True, "status": "running", "createdAt": time.time(), "message": "Render spanish",
+                "steps": [{"kind": "render", "language": "spanish", "status": "running", "jobId": "native-gone"},
+                          {"kind": "assemble", "language": "spanish", "status": "queued"}], "chapters": {}})
+    seen = service.status("cast", "produce-orphan")
+    assert seen["status"] == "interrupted" and "restarted" in seen["message"] and seen["steps"][0]["status"] == "queued"
+    started = service.start("cast", "uv", "ep2", languages=["spanish"])
+    assert finished(service, started["jobId"])["status"] == "completed", "the orphan does not block a new production"
+    # The render the orphan was waiting for is gone with the old server: resuming asks for a new one.
+    tools.jobs["native-gone"] = None
+
+    class Gone(Production):
+        pass
+    original_call = tools.__call__
+
+    def call(tool, arguments):
+        if tool == "series.episode.render_native.status" and arguments["input"]["job_id"] == "native-gone":
+            return {"_is_error": True, "error": {"code": "not_found", "status": 404, "message": "Render job not found"}}
+        return original_call(tool, arguments)
+    service.deps.call = call
+    done = finished(service, service.resume("cast", "produce-orphan")["jobId"])
+    assert done["status"] == "completed", done
+    assert done["steps"][0]["jobId"] == "native-spanish", "a new render replaced the one the server forgot"
+
+
+@pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "waiting"])
+def test_a_finished_production_is_not_overwritten_by_a_stale_running_read(tmp_path, terminal):
+    import threading
+    from services.series_jobs import SeriesJobStore
+
+    service = producer(tmp_path, Production(fail_english=0))
+    store = SeriesJobStore(str(tmp_path), "produce")
+    running = {"jobId": "produce-race", "status": "running", "chapters": {},
+               "steps": [{"kind": "assemble", "language": "spanish", "status": "running"}]}
+    store.save(running)
+    stale = store.load("produce-race")
+    finished_job = {**running, "kind": "produce", "status": terminal, "chapters": {"spanish": {"file": "chapter.mp4"}},
+                    "steps": [{**running["steps"][0], "status": "done"}], "message": "Worker finished"}
+    worker = threading.Thread(target=lambda: store.save(finished_job))
+    service._threads["produce-race"] = worker
+    worker.start()
+    worker.join()
+
+    assert service._reconcile("cast", stale) == finished_job
+    assert store.load("produce-race") == finished_job
+
+
+def test_produce_counts_finished_shots_then_clips(tmp_path):
+    """A 5-shot render reports 0/5 while the first shot runs, then 1/5 … 5/5. progress stays the child's message (text)."""
+    seen = []
+    polls = {"render": 0, "cut": 0}
+
+    def call(tool, arguments):
+        if tool == "series.episode.render_native":
+            return {"result": {"job": {"jobId": "native-spanish", "status": "queued"}}}
+        if tool == "series.episode.render_native.status":
+            polls["render"] += 1
+            index = polls["render"]
+            if index <= 5:
+                return {"result": {"job": {"status": "running", "current": index - 1, "total": 5, "message": f"Shot e1s0{index - 1}"}}}
+            return {"result": {"job": {"status": "completed", "current": 5, "total": 5, "message": "5 of 5 shots rendered"}}}
+        if tool == "series.assembly.start":
+            return {"result": {"job": {"jobId": "cut-spanish", "status": "queued"}}}
+        if tool == "series.assembly.status":
+            polls["cut"] += 1
+            if polls["cut"] == 1:
+                return {"result": {"job": {"status": "running", "current": 2, "total": 5, "message": "Cutting 2 of 5"}}}
+            return {"result": {"job": {"status": "completed", "current": 5, "total": 5, "message": "Cut",
+                                      "assetId": "asset-spanish", "filename": "es.mp4"}}}
+        raise AssertionError(tool)
+
+    box = {}
+
+    def sleep(_seconds):
+        job = box["service"].jobs("cast")[0]
+        seen.append({**job["progressCount"], "label": job["progress"]})
+
+    base = producer(tmp_path, call)
+    service = SeriesProduce(ProduceDeps(call=call, workspace_dir=base.deps.workspace_dir, read_library=base.deps.read_library,
+                                        sleep=sleep, poll_seconds=0))
+    box["service"] = service
+    done = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
+    assert done["status"] == "completed" and done["message"].startswith("Rendered and cut")
+    assert done["steps"][0]["progress"] == "5 of 5 shots rendered"
+    assert done["steps"][0]["progressCount"] == {"done": 5, "total": 5}
+    assert done["steps"][1]["progress"] == "Cut" and done["steps"][1]["progressCount"] == {"done": 5, "total": 5}
+    assert [item["done"] for item in seen if item["label"].startswith("Shot")] == [0, 1, 2, 3, 4]
+    assert {"done": 2, "total": 5, "label": "Cutting 2 of 5"} in seen
+    assert done["progress"] == "Cut" and done["progressCount"] == {"done": 5, "total": 5}
+
+
+def test_from_script_uses_a_free_number_and_refuses_a_taken_one(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from services.series_library import EpisodeNumberTaken
+    from routers.series_produce import create_series_produce_router
+
+    tools = Series()
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, number=3, check_only=True)
+    assert checked["number"] == 3 and checked["shots"] == ["e3s00", "e3s01", "e3s02"] and tools.calls == []
+    written = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, number=3)
+    assert written["shots"][0] == "e3s00" and tools.calls[0][1]["episode"]["number"] == 3
+    rewrite = apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, episode_id="ep1", number=3)
+    assert rewrite["number"] == 1 and rewrite["shots"][0] == "e1s00"
+    assert [name for name, _data in tools.calls].count("series.episode.create") == 1
+    with pytest.raises(EpisodeNumberTaken) as taken:
+        apply_script(tools, tools.read, KITS, FILES, "cast", SCRIPT, number=1, check_only=True)
+    assert taken.value.holder_id == "ep1" and taken.value.code == "episode_number_taken"
+
+    app = FastAPI()
+    app.include_router(create_series_produce_router(
+        SeriesProduce(ProduceDeps(call=lambda *_args: {}, workspace_dir=lambda _name: str(tmp_path), read_library=lambda _name: {})),
+        call=lambda *_args: {}, bind_loop=lambda _loop: None, read_library=lambda _name: {"seriesById": {"uv": project()}},
+        read_kits=lambda _name: KITS, workspace_dir=lambda _name: str(tmp_path)))
+    client = TestClient(app)
+    response = client.post("/api/v1/series/uv/episodes/from-script",
+                           json={"workspace": "cast", "script": SCRIPT, "number": 1, "check": True})
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "episode_number_taken"
+    assert response.json()["detail"]["episodeId"] == "ep1"
+
+
+def test_a_failed_cut_is_made_again_on_resume(tmp_path):
+    class Cuts(Production):
+        """Every cut gets its own job; the first two stay failed, like a real failed assembly does."""
+
+        def __init__(self):
+            super().__init__(fail_english=0)
+            self.failures, self.cuts, self.bad = 2, 0, set()
+
+        def __call__(self, tool, arguments):
+            data = arguments["input"]
+            if tool == "series.assembly.start":
+                self.calls.append((tool, data))
+                self.cuts += 1
+                job_id = f"cut-{self.cuts}"
+                if self.failures:
+                    self.failures -= 1
+                    self.bad.add(job_id)
+                return {"result": {"job": {"jobId": job_id, "status": "queued"}}}
+            if tool == "series.assembly.status":
+                self.calls.append((tool, data))
+                if data["job_id"] in self.bad:
+                    return {"result": {"job": {"status": "failed", "error": "ffmpeg exited 1"}}}
+                return {"result": {"job": {"status": "completed", "assetId": "asset-spanish", "filename": "spanish.mp4"}}}
+            return super().__call__(tool, arguments)
+
+    tools = Cuts()
+    service = producer(tmp_path, tools)
+    failed = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
+    assert failed["status"] == "failed" and "ffmpeg exited 1" in failed["steps"][1]["error"]
+    assert [tool for tool, _ in tools.calls].count("series.assembly.start") == 2, "the cut was tried again once in that run"
+    resumed = finished(service, service.resume("cast", failed["jobId"])["jobId"])
+    assert resumed["status"] == "completed" and resumed["chapters"]["spanish"]["file"] == "spanish.mp4"
+    assert [tool for tool, _ in tools.calls].count("series.assembly.start") == 3, "resume starts a new cut, not the failed one"
+
+
+def test_rewriting_an_episode_replaces_its_shots():
+    tools = Series()
+    tools.series["episodesById"]["ep1"]["shots"] = [{"id": "e1s00"}, {"id": "e1s01"}, {"id": "e1s02"}]
+    rewritten = apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": SCRIPT["shots"][:1]}, episode_id="ep1")
+    update = next(data for tool, data in tools.calls if tool == "series.episode.update")
+    assert update["episode"]["replaceShots"] is True and [shot["id"] for shot in update["episode"]["shots"]] == ["e1s00"]
+    assert rewritten["removedShots"] == ["e1s01", "e1s02"]
+
+
+def test_a_language_version_needs_a_voice_designed_for_that_language():
+    """The default voice has the series' accent; an English line spoken with it is wrong, so the check says so first."""
+    tools = Series()
+    kits = {**KITS, "kit-gary": {"poses": {}, "voice": VOICE}}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
+    assert raised.value.problems == ["gary has no english voice (voicesByLanguage); design one in the Character Kit"]
+    assert tools.calls == []
+    # A file in a subfolder is a workspace file too.
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "music": {"file": "music/theme-es.wav", "en": "music/theme-en.wav"}}]}
+    checked = apply_script(tools, tools.read, KITS, FILES | {"music/theme-es.wav", "music/theme-en.wav"}, "cast", script, check_only=True)
+    assert checked["checked"] is True
+    with pytest.raises(ScriptError, match="music/../secret.wav is not in the workspace"):
+        apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "music": {"file": "music/../secret.wav"}}]}, check_only=True)
+
+
+def test_workspace_files_lists_one_folder_down_and_skips_hidden_ones(tmp_path):
+    from routers.series_produce import workspace_files
+    (tmp_path / "theme.wav").write_bytes(b"x")
+    (tmp_path / "music").mkdir(); (tmp_path / "music" / "theme.wav").write_bytes(b"x")
+    (tmp_path / "music" / "stems").mkdir(); (tmp_path / "music" / "stems" / "deep.wav").write_bytes(b"x")
+    (tmp_path / ".series-jobs-v1").mkdir(); (tmp_path / ".series-jobs-v1" / "job.json").write_text("{}")
+    assert workspace_files(str(tmp_path)) == {"theme.wav", "music/theme.wav"}
+
+
+def test_a_3d_shot_names_its_objects_models_clips_and_carriers_before_any_render(tmp_path):
+    import json as _json
+    import struct as _struct
+    body = _json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": "Idle"}, {"name": "Aim"}]}).encode()
+    body += b" " * (-len(body) % 4)
+    (tmp_path / "guard.glb").write_bytes(b"glTF" + _struct.pack("<II", 2, 20 + len(body)) + _struct.pack("<I4s", len(body), b"JSON") + body)
+    objects = [{"objectId": "guard", "file": "guard.glb", "add": True, "clips": [{"clip": "Idle", "start": 0}, {"clip": "Aimm", "start": 1}]},
+               {"objectId": "rifle", "file": "rifle.glb", "add": True, "hold": {"carrier": "guard", "hand": "middle"}},
+               {"objectId": "flag", "media": "image", "file": "flag.png", "add": True},
+               {"objectId": "cup", "file": "guard.glb", "add": True, "hold": {"carrier": "flag", "hand": "left"}, "appearance": {"start": 1, "color": "red"}}]
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][2], "scene3d": {**SCRIPT["shots"][2]["scene3d"], "objects": objects}}]}
+    tools = Series()
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, KITS, FILES, "cast", script, root=str(tmp_path))
+    problems = raised.value.problems
+    expected = ["scene3d object guard: no clip 'Aimm' in guard.glb (clips: Idle, Aim)", "scene3d object rifle: hold.hand must be left or right",
+                "scene3d object rifle: file rifle.glb is not in the workspace", "scene3d object flag: file flag.png is not in the workspace",
+                "scene3d object cup: hold.carrier flag is an image cutout", "scene3d object cup: appearance.color must be #rrggbb"]
+    for text in expected:
+        assert any(text in problem for problem in problems), (text, problems)
+    assert tools.calls == []
+
+
+def test_stop_motion_is_optional_and_a_bad_step_writes_nothing():
+    tools = Series()
+    shots = [dict(SCRIPT["shots"][0]), {**SCRIPT["shots"][1], "motionStep": 2, "stopMotionJitter": 1.25}, dict(SCRIPT["shots"][2])]
+    apply_script(tools, tools.read, KITS, FILES, "cast", {**SCRIPT, "shots": shots})
+    episode = tools.calls[1][1]["episode"]
+    assert "motionStep" not in episode["shots"][0]["layout2d"]
+    assert "stopMotionJitter" not in episode["shots"][0]["layout2d"]
+    assert episode["shots"][1]["layout2d"]["motionStep"] == 2
+    assert episode["shots"][1]["layout2d"]["stopMotionJitter"] == 1.25
+    # series.episode.update stores the shot through the library's normalization, which keeps both.
+    from services.series_library import _normalize_shot
+    stored = _normalize_shot(episode["shots"][1], 1)["layout2d"]
+    assert (stored["motionStep"], stored["stopMotionJitter"]) == (2, 1.25)
+    quiet = Series()
+    apply_script(quiet, quiet.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "stopMotionJitter": 0}]})
+    assert "stopMotionJitter" not in quiet.calls[1][1]["episode"]["shots"][0]["layout2d"]
+    assert read_fields({"layout2d": {"motionStep": 2}}) == {"motionStep": 2}
+    assert read_fields({"layout2d": {"motionStep": 9}}) == {}
+    assert read_fields({}) == {}
+    refused = Series()
+    with pytest.raises(ScriptError, match="motionStep must be 2, 3 or 4"):
+        apply_script(refused, refused.read, KITS, FILES, "cast", {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "motionStep": 5}]})
+    assert refused.calls == []
+
+
+def test_video_shots_keep_their_kind_clip_sound_and_cue_parts():
+    """kind video / generated make imported and H3 takes; their sfx (with a part of a file), music and clip audio
+    are written on layout2d for the cut, and an unknown kind is refused."""
+    tools = Series()
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "kind": "video", "duration": 6, "clipAudio": "drop", "clipFit": "contain",
+         "sfx": [{"file": "sfx-pen.wav", "at": 1.5, "in": 0.4, "length": 0.3}]},
+        {"scene": "a", "kind": "generated", "duration": 5, "clipVolume": 0.5}]}
+    result = apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    imported, generated = tools.calls[1][1]["episode"]["shots"]
+    assert result["shots"] == ["e2s00", "e2s01"]
+    assert imported["productionMethod"] == "imported_video" and generated["productionMethod"] == "generated_video"
+    assert imported["layout2d"]["clipAudio"] == "drop" and imported["layout2d"]["clipFit"] == "contain"
+    assert imported["layout2d"]["sfx"] == [{"file": "sfx-pen.wav", "at": 1.5, "in": 0.4, "length": 0.3}]
+    assert generated["layout2d"]["clipVolume"] == 0.5 and generated["durationSeconds"] == 5.0
+    with pytest.raises(ScriptError, match="kind must be 2d"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", {**script, "shots": [{"scene": "a", "kind": "movie"}]})
+
+
+def test_a_speaker_off_the_shot_names_the_body_kit_and_a_shared_place_warns():
+    """Warnings do not block. A body kit of the same character is suggested; a place used by one scene is not."""
+    tools = Series()
+    tools.series["characters"].extend([
+        {"id": "bolivar", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar"}}},
+        {"id": "bolivar-c", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar-c"}}},
+        {"id": "ana", "name": "Ana", "voiceProfile": {"characterKitRef": {"id": "mp-ana"}}},
+        {"id": "cuerpo", "name": "Ana", "voiceProfile": {"characterKitRef": {"id": "mp-ana-c"}}},
+    ])
+    tools.series["locations"].extend([
+        {"id": "sky", "variants": []}, {"id": "bridge", "variants": []},
+        {"id": "town1787", "variants": []}, {"id": "dock", "variants": []}, {"id": "plaza", "variants": []},
+    ])
+    kits = {**KITS, "kit-bolivar": {**EN}, "kit-bolivar-c": {**EN}, "mp-ana": {**EN}, "mp-ana-c": {**EN}}
+    script = {"scenes": [
+        {"id": "street", "location": "plaza"}, {"id": "battle", "location": "sky"}, {"id": "prayer", "location": "sky"},
+        {"id": "course", "location": "bridge"}, {"id": "town", "location": "town1787"}, {"id": "yard", "location": "garage"},
+    ], "shots": [
+        {"scene": "street", "cast": [["bolivar-c", "base", 40]], "lines": [{"who": "bolivar", "es": "Norte."}]},
+        {"scene": "street", "cast": [["cuerpo", "base", 40]], "lines": [{"who": "ana", "es": "Sur."}]},
+        {"scene": "battle", "duration": 2}, {"scene": "battle", "duration": 2}, {"scene": "prayer", "duration": 2},
+        {"scene": "course", "duration": 2}, {"scene": "town", "duration": 2},
+        {"scene": "yard", "location": "garage", "duration": 2}, {"scene": "yard", "location": "dock", "duration": 2},
+    ]}
+    checked = apply_script(tools, tools.read, kits, FILES, "cast", script, check_only=True)
+    speakers = [item for item in checked["warnings"] if item["code"] == "speaker_not_on_screen"]
+    places = [item for item in checked["warnings"] if item["code"] == "location_differs_from_scene"]
+    assert speakers[0]["subject"] == "bolivar" and speakers[0]["shots"] == ["e2s00"]
+    assert "did you mean bolivar-c? The line is voice-over and the cutout won't move its mouth" in speakers[0]["message"]
+    assert speakers[1]["subject"] == "ana" and "did you mean cuerpo?" in speakers[1]["message"]
+    assert [(item["subject"], item["shots"]) for item in places] == [
+        ("battle", ["e2s02", "e2s03"]), ("prayer", ["e2s04"]), ("yard", ["e2s08"])]
+    # sky is battle's own location: the warning says who else shows it, not that battle left it.
+    assert places[0]["message"] == "battle: sky is also the location of prayer (shots e2s02, e2s03)"
+    assert places[1]["message"] == "prayer: sky is also the location of battle (shots e2s04)"
+    assert places[2]["message"] == "yard: 1 shot uses dock instead of garage (shots e2s08)"
+    assert tools.calls == []
+
+
+def test_a_shot_moved_to_another_scene_place_warns_alone():
+    """A shot set in another scene's place says so; that scene does not share its place because of it."""
+    tools = Series()
+    tools.series["locations"].extend([{"id": "bridge", "variants": []}, {"id": "plaza", "variants": []}])
+    script = {"scenes": [{"id": "street", "location": "plaza"}, {"id": "course", "location": "bridge"}], "shots": [
+        {"scene": "street", "duration": 2}, {"scene": "street", "location": "bridge", "duration": 2},
+        {"scene": "course", "duration": 2}, {"scene": "course", "location": "bridge", "duration": 2}]}
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True)
+    places = [item for item in checked["warnings"] if item["code"] == "location_differs_from_scene"]
+    assert places == [{"code": "location_differs_from_scene", "subject": "street", "shots": ["e2s01"],
+                       "message": "street: 1 shot uses bridge instead of plaza (shots e2s01)"}]
+
+
+def test_a_video_shot_line_needs_no_voice():
+    """The render voices no line of a video or generated take (its lines are in the clip), so the check does not ask."""
+    tools = Series()
+    kits = {**KITS, "kit-kevin": {"poses": {"panic": {}}}}
+    script = {"scenes": [{"id": "a", "location": "garage"}], "shots": [
+        {"scene": "a", "kind": "video", "duration": 5, "cast": [["kevin", "base", 40]], "lines": [{"who": "kevin", "es": "Hola."}]},
+        {"scene": "a", "kind": "generated", "duration": 5, "cast": [["kevin", "base", 40]], "lines": [{"who": "kevin", "es": "Adiós."}]}]}
+    checked = apply_script(tools, tools.read, kits, FILES, "cast", script, check_only=True)
+    assert checked["checked"] is True and checked["shots"] == ["e2s00", "e2s01"]
+    drawn = {**script, "shots": [*script["shots"], {"scene": "a", "cast": [["kevin", "base", 40]], "lines": [{"who": "kevin", "es": "Yo sí."}]}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", drawn, check_only=True)
+    assert [problem for problem in raised.value.problems if "voice" in problem] == ["shot 2 (e2s02): kevin has no spanish voice"]
+
+
+def test_a_kit_without_a_voice_fails_the_check():
+    tools = Series()
+    kits = {**KITS, "kit-kevin": {"poses": {"panic": {}}}}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
+    assert any(problem.endswith("kevin has no spanish voice") for problem in raised.value.problems)
+    assert any(group["code"] == "no_voice" and group["subject"] == "kevin" for group in raised.value.groups)
+    assert tools.calls == []
+
+
+def test_cast_index_is_stored_on_the_beat_and_must_point_at_the_cast():
+    from services.series_script import EpisodeScript
+    tools = Series()
+    base = {"scene": "cold_open", "cast": [["kevin", "base", 30], ["kevin", "panic", 70]]}
+    scenes = [{"id": "cold_open", "location": "garage"}]
+    bad = {"scenes": scenes, "shots": [{**base, "lines": [{"who": "kevin", "es": "Uno.", "castIndex": True}]}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, KITS, FILES, "cast", bad, check_only=True)
+    assert any("castIndex is not in the cast" in problem for problem in raised.value.problems)
+    good = {"scenes": scenes, "shots": [{**base, "lines": [
+        {"who": "kevin", "es": "Uno.", "castIndex": 1}, {"who": "kevin", "es": "Dos."}]}]}
+    built = EpisodeScript(tools.series, good, 2, KITS, FILES)
+    built.check()
+    first, second = built.shots()[0]["dialogueBeats"]
+    assert first["castIndex"] == 1 and "castIndex" not in second
+
+
+def test_a_failing_check_still_returns_the_warnings(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.series_produce import create_series_produce_router
+    from services.series_produce import ProduceDeps, SeriesProduce
+    tools = Series()
+    tools.series["characters"].append({"id": "bolivar", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar"}}})
+    tools.series["characters"].append({"id": "bolivar-c", "name": "Bolivar", "voiceProfile": {"characterKitRef": {"id": "kit-bolivar-c"}}})
+    kits = {**KITS, "kit-bolivar": {**EN}, "kit-bolivar-c": {**EN}}
+    script = {"scenes": [{"id": "street", "location": "garage"}], "shots": [{
+        "scene": "street", "framing": "dutch", "cast": [["bolivar-c", "base", 40]],
+        "lines": [{"who": "bolivar", "es": "Norte."}]}]}
+    with pytest.raises(ScriptError) as raised:
+        apply_script(tools, tools.read, kits, FILES, "cast", script, check_only=True)
+    assert raised.value.warnings[0]["code"] == "speaker_not_on_screen"
+    app = FastAPI()
+    app.include_router(create_series_produce_router(
+        SeriesProduce(ProduceDeps(call=tools, workspace_dir=lambda _name: str(tmp_path), read_library=lambda _w: {})),
+        call=tools, bind_loop=lambda _loop: None, read_library=lambda _w: {"seriesById": {"uv": tools.series}},
+        read_kits=lambda _w: kits, workspace_dir=lambda _name: str(tmp_path)))
+    reply = TestClient(app).post("/api/v1/series/uv/episodes/from-script", json={"workspace": "cast", "script": script, "check": True})
+    assert reply.status_code == 400
+    assert reply.json()["detail"]["warnings"][0]["subject"] == "bolivar"
+    assert any("framing must be" in problem for problem in reply.json()["detail"]["problems"])
+
+
+def test_the_estimate_uses_an_approved_pace_and_counts_a_card():
+    """Four words in 2.0 s of speech is 2.0 words/s. Two words are then 1.0 s, and the planner's frame is 1.7917 s."""
+    from services.series_duration_estimate import estimate_episode
+    approved = {"id": "old", "approvedAttemptId": "a", "durationSeconds": 2.8,
+                "dialogueBeats": [{"characterId": "kevin", "text": "one two three four"}]}
+    series = {"spokenLanguage": "Español de España", "episodesById": {"ep1": {"shots": [approved]}}}
+    card = {"id": "card", "durationSeconds": 3, "dialogueBeats": []}
+    spoken = {"id": "line", "dialogueBeats": [{"characterId": "kevin", "text": "one two"}]}
+    estimate = estimate_episode(series, [card, spoken])
+    assert estimate["method"] == "approved_takes"
+    assert estimate["perShot"] == [{"id": "card", "seconds": 3.0}, {"id": "line", "seconds": 1.792}]
+    assert estimate["seconds"] == 4.8
+    english = estimate_episode({"spokenLanguage": "English"}, [
+        {"id": "s", "dialogueBeats": [{"characterId": "gary", "text": "one two three four five six seven"}]}])
+    assert english["method"] == "default_rate" and english["perShot"][0]["seconds"] == 3.292 and english["seconds"] == 3.3
+
+
+def test_a_template_backdrop_from_another_location_warns(tmp_path):
+    import json
+    (tmp_path / "world3d-user-templates.json").write_text(json.dumps({"version": 1, "templates": [{"id": "user-street", "document": {"slots": [
+        {"id": "background", "slot": "background", "surface": "environment", "sourceUrl": "/api/v1/file/assets/uv/madrid.png?workspace=cast",
+         "sourceRef": {"assetId": "asset_madrid"}}]}}]}), encoding="utf-8")
+    tools = Series()
+    tools.series["locations"].extend([{"id": "plaza", "variants": []}, {"id": "madrid", "variants": []}])
+    tools.series["assets"] = {"asset_madrid": {"id": "asset_madrid", "ownerType": "location", "ownerId": "madrid",
+                                               "kind": "image", "uri": "assets/uv/madrid.png"}}
+    script = {"scenes": [{"id": "yard", "location": "plaza"}], "shots": [
+        {"scene": "yard", "kind": "3d", "duration": 4, "scene3d": {"template": "user-street", "cast": []}}]}
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True, root=str(tmp_path))
+    groups = [item for item in checked["warnings"] if item["code"] == "template_backdrop_other_location"]
+    assert groups == [{"code": "template_backdrop_other_location", "subject": "madrid", "shots": ["e2s00"],
+                       "message": "madrid: the template backdrop is this location's image (shots e2s00)"}]
+    assert tools.calls == []
+    home = {"scenes": [{"id": "yard", "location": "madrid"}], "shots": script["shots"]}
+    same = apply_script(tools, tools.read, KITS, FILES, "cast", home, check_only=True, root=str(tmp_path))
+    assert not any(item["code"] == "template_backdrop_other_location" for item in same["warnings"])
+    chosen = {"scenes": script["scenes"], "shots": [{**script["shots"][0], "scene3d": {**script["shots"][0]["scene3d"], "backdrop": "location"}}]}
+    picked = apply_script(tools, tools.read, KITS, FILES, "cast", chosen, check_only=True, root=str(tmp_path))
+    assert not any(item["code"] == "template_backdrop_other_location" for item in picked["warnings"])
+
+
+def test_transition_in_is_checked_and_a_missing_one_is_sent_as_null():
+    tools = Series()
+    script = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "dissolve", "seconds": 0.6}},
+                                  *SCRIPT["shots"][1:]]}
+    apply_script(tools, tools.read, KITS, FILES, "cast", script)
+    shots = tools.calls[1][1]["episode"]["shots"]
+    assert shots[0]["transitionIn"] == {"kind": "dissolve", "seconds": 0.6}
+    assert shots[1]["transitionIn"] is None and shots[2]["transitionIn"] is None
+    bad = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "wipe", "seconds": 0.5}}]}
+    with pytest.raises(ScriptError, match="transitionIn.kind"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", bad)
+    short = {**SCRIPT, "shots": [{**SCRIPT["shots"][0], "transitionIn": {"kind": "fade_black", "seconds": 0.1}}]}
+    with pytest.raises(ScriptError, match="transitionIn.seconds"):
+        apply_script(Series(), Series().read, KITS, FILES, "cast", short)
+
+
+def test_a_template_backdrop_belongs_to_the_asset_at_that_exact_path(tmp_path):
+    """An asset id inside another file's name is not that file; an ``outputs/`` asset is served without the prefix."""
+    import json
+    def warned(url):
+        (tmp_path / "world3d-user-templates.json").write_text(json.dumps({"version": 1, "templates": [{"id": "user-street", "document": {
+            "slots": [{"id": "background", "slot": "background", "surface": "environment", "sourceUrl": url}]}}]}), encoding="utf-8")
+        script = {"scenes": [{"id": "yard", "location": "plaza"}], "shots": [
+            {"scene": "yard", "kind": "3d", "duration": 4, "scene3d": {"template": "user-street", "cast": []}}]}
+        checked = apply_script(tools, tools.read, KITS, FILES, "cast", script, check_only=True, root=str(tmp_path))
+        return [item["subject"] for item in checked["warnings"] if item["code"] == "template_backdrop_other_location"]
+    tools = Series()
+    tools.series["locations"].extend([{"id": "plaza", "variants": []}, {"id": "madrid", "variants": []}])
+    tools.series["assets"] = {
+        "asset_ma": {"id": "asset_ma", "ownerType": "location", "ownerId": "madrid", "kind": "image", "uri": "assets/uv/asset_ma.png"},
+        "asset_old": {"id": "asset_old", "ownerType": "location", "ownerId": "madrid", "kind": "image", "uri": "outputs/uv/old.png"}}
+    assert warned("/api/v1/file/assets/uv/asset_ma2.png?workspace=cast") == []
+    assert warned("/api/v1/file/assets/uv/asset_ma.png?workspace=cast") == ["madrid"]
+    assert warned("/api/v1/file/uv/old.png?workspace=cast") == ["madrid"]
+    assert warned("/api/v1/file/uv/old.png.bak?workspace=cast") == []

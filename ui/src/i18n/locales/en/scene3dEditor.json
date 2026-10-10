@@ -364,7 +364,8 @@
     "creative": "Creative",
     "perspective": "Perspectives",
     "animated": "Living backgrounds",
-    "pixel": "Pixel worlds"
+    "pixel": "Pixel worlds",
+    "anime": "Anime"
   },
   "setting": {
     "sea": "Sea",
@@ -3399,6 +3400,74 @@
     "cine-ultraviolet": {
       "title": "Ultraviolet",
       "description": "Look. A violet key and a close, slightly high face."
+    },
+    "anime-speedline-charge": {
+      "title": "Speed-line charge",
+      "description": "One figure over animated focus lines; the camera snaps from a medium shot to the face and shakes as it lands."
+    },
+    "anime-impact-frame": {
+      "title": "Impact frame",
+      "description": "A hit lands: two negative frames, three white frames with ink focus lines, a starburst and a camera shake that dies away."
+    },
+    "anime-snap-zoom": {
+      "title": "Snap zoom",
+      "description": "A full figure, then a crash push to the eyes in under a third of a second, with speed lines during the move."
+    },
+    "anime-sword-clash": {
+      "title": "Sword clash",
+      "description": "Two fighters rush in from both edges and cross at the centre: a slash, a shockwave, a white impact frame and a hard shake."
+    },
+    "anime-face-off": {
+      "title": "Face-off",
+      "description": "Two rivals stare each other down in close-up on the left and right halves, over dark focus lines; a slow push and a flash."
+    },
+    "anime-airship-flyby": {
+      "title": "Airship flyby",
+      "description": "A vehicle flies across a painted sky on a gentle arc while the camera tracks it and clouds stream past."
+    },
+    "anime-fleet-approach": {
+      "title": "Fleet approach",
+      "description": "Four copies of one vehicle break out of a cloud bank in a staggered formation and come at the camera."
+    },
+    "anime-eyecatch": {
+      "title": "Eyecatch",
+      "description": "A short scene-change card: the figure spins in from the distance over a graphic backdrop of focus lines and stars."
+    },
+    "anime-code-rain": {
+      "title": "Code rain",
+      "description": "Green code falls on black behind one figure, which takes a green tint from it; a slow push-in. Without a figure the shot is a plate that loops with no seam."
+    },
+    "motion-bouncing-ball": {
+      "title": "Beat landing",
+      "description": "A 3D ball lands on tuned platforms; every visible contact shares its time with a locally synthesized note."
+    },
+    "motion-music-machine": {
+      "title": "Contact music machine",
+      "description": "A choreographed 3D mechanism strikes bars and drums. Original local notes follow the same deterministic contact timeline."
+    },
+    "motion-sunset-flight": {
+      "title": "Sunset formation flight",
+      "description": "Original aircraft bank over a 3D ocean, islands and moving clouds in a sunset formation."
+    },
+    "motion-seasonal-carriage": {
+      "title": "Four seasons carriage",
+      "description": "A volumetric train interior with a cup, table and window; moving scenery changes through four seasons."
+    },
+    "motion-data-assembly": {
+      "title": "Data centre assembly",
+      "description": "Racks, processing and cooling components assemble in phases, with moving data flows in a fully 3D set."
+    },
+    "motion-lighthouse-story": {
+      "title": "Lightkeeper journey",
+      "description": "A geometric keeper climbs a coastal lighthouse; the beacon rotates over a volumetric sea and island."
+    },
+    "motion-poster-breakout": {
+      "title": "Beyond the poster frame",
+      "description": "Solid block lettering, rings and an orb move through a physical frame. Editable title; no flat poster footage."
+    },
+    "motion-particle-morph": {
+      "title": "Particle shape typography",
+      "description": "A genuine 3D point cloud morphs between a sphere, torus, heart and editable block lettering."
     }
   },
   "atmos": {
@@ -3532,7 +3601,10 @@
   "holdOffsetX": "Offset X",
   "holdOffsetY": "Offset Y",
   "holdOffsetZ": "Offset Z",
-  "holdHelp": "The object follows the whole hand in the same frame. The offset is in that bone's metres. The gizmo rests while it is held.",
+  "holdTurnX": "Hand turn X (°)",
+  "holdTurnY": "Hand turn Y (°)",
+  "holdTurnZ": "Hand turn Z (°)",
+  "holdHelp": "The object follows the whole hand in the same frame. The offset is in that bone's metres. The hand turn aligns it in the hand: degrees about the bone's X, then Y, then Z axis; with a hand turn, the object's Rotation Y no longer applies. The gizmo rests while it is held.",
   "geometryReview": "Check geometry",
   "geometryUnavailable": "Load the models before checking geometry.",
   "geometryOk": "Geometry has no warnings.",
@@ -3674,12 +3746,14 @@
     "name": "Scene name",
     "save": "Save scene to gallery",
     "open": "Open scene",
-    "help": "Choose a saved Video3D scene. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
+    "help": "Choose a saved Video3D scene, or a working scene an agent made and did not publish. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
     "saved": "Scene saved to this workspace. Open scene to load it again.",
     "changed": "The scene changed while loading. Choose it again to replace the current scene.",
     "previewUnavailable": "Wait for the 3D preview to load before saving.",
     "saveFailed": "Could not save the scene.",
-    "cancelLoad": "Cancel loading"
+    "cancelLoad": "Cancel loading",
+    "workingScene": "{{title}} · working scene, not published (revision {{revision}})",
+    "workingChanged": "{{title}} · working scene, changed since it was published (revision {{revision}})"
   },
   "cinematic": {
     "title": "Cinematic environment",
@@ -3705,6 +3779,16 @@
     "road_speed": "Speed (m/s)",
     "road_slope": "Slope (°)",
     "road_offset": "Continuity (s)"
+  },
+  "renderLook": {
+    "title": "Render look",
+    "none": "Authored materials",
+    "n64": "Nintendo 64",
+    "toon": "Toon / cel",
+    "steps": "Light bands",
+    "outline": "Ink width (px at 1080p)",
+    "ink": "Ink color",
+    "help": "Toon / cel gives 3D model slots flat bands of light and an ink outline, so models sit next to flat cutouts and painted backgrounds. Images and cutouts keep their look. Preview and export match."
   },
   "imageLook": {
     "title": "Image appearance",
@@ -3941,5 +4025,33 @@
     "current": "Current",
     "pickOne": "Pick a shot to see it here.",
     "hint": "Double-click or press Enter to use a shot straight away"
+  },
+  "workspaceTemplates": {
+    "title": "Saved in this workspace",
+    "help": "Templates an agent, the Wizard or you saved in this workspace (world3d.templates.user.put). Pick one and press “Use this shot”: it opens as an editable shot.",
+    "objects_one": "{{count}} object",
+    "objects_other": "{{count}} objects",
+    "pending_one": "{{count}} empty slot",
+    "pending_other": "{{count}} empty slots",
+    "by": {
+      "agent": "Agent",
+      "wizard": "Wizard"
+    },
+    "invalid": "This workspace template is not a valid Video 3D document.",
+    "shotTitle": "Workspace template · {{id}}"
+  },
+  "motionLab": {
+    "controls": "Native motion scenes",
+    "bpm": "Tempo (BPM)",
+    "speed": "Motion speed",
+    "amplitude": "Motion size",
+    "color": "Primary colour",
+    "secondaryColor": "Accent colour",
+    "seed": "Variation seed",
+    "title": "Block title (24 characters)",
+    "density": "Particle count",
+    "sound": "Local contact music",
+    "volume": "Music volume",
+    "audioBlocked": "Allow browser audio and press Play again."
   }
 }

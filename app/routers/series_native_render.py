@@ -18,6 +18,8 @@ class NativeRenderStart(BaseModel):
     shotIds: list[str] | None = Field(default=None, max_length=500)
     approve: bool = False
     language: str | None = Field(default=None, min_length=2, max_length=40)
+    # Only the shots that need a render: out of date, and let through by the episode's staged review.
+    changed: bool = False
 
 
 class NativeRenderAction(BaseModel):
@@ -44,7 +46,7 @@ def create_series_native_render_router(service: SeriesNativeRender, bind_loop: C
     async def start_native_render(series_id: str, episode_id: str, body: NativeRenderStart):
         """Voices, scene, headless export and take for every 2D shot, on the server."""
         return await call(service.start, body.workspace, series_id, episode_id, shot_ids=body.shotIds, approve=body.approve,
-                          language=body.language)
+                          language=body.language, changed=body.changed)
 
     @router.get("/api/v1/series/native-render/jobs/{job_id}")
     async def native_render_status(job_id: str, workspace: str):

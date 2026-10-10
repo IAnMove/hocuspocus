@@ -268,5 +268,51 @@
     "results_other": "{{count}} results",
     "noResults": "No results for “{{query}}”",
     "noResultsHint": "Words match as you type and accents do not matter."
-  }
+  },
+  "origin": {
+    "agent": "Agent (MCP)",
+    "wizard": "Wizard",
+    "agentTitle": "An AI agent asked for this through MCP. You can open and edit the result like your own work.",
+    "wizardTitle": "Ask to the Wizard asked for this.",
+    "startedByAgent": "Started by an agent (MCP) · {{capability}}",
+    "startedByWizard": "Started by Ask to the Wizard",
+    "filterLabel": "Show",
+    "filter": {
+      "all": "All",
+      "agents": "Agents",
+      "allTitle": "Every task in this workspace",
+      "agentsTitle": "Everything an MCP agent or the Wizard made or changed in this workspace, newest change first"
+    },
+    "emptyAgents": "No agent has made or changed anything in this workspace yet."
+  },
+  "agentTrail": {
+    "open": {
+      "world3d_template": "Open template {{name}} in Video 3D",
+      "world3d_scene": "Open scene {{name}} in Video 3D",
+      "scene_file": "Edit {{name}}",
+      "character_kit": "Open kit {{name}}",
+      "series_episode": "Open episode {{name}} in Series Lab",
+      "series": "Open series {{name}} in Series Lab",
+      "story": "Open story {{name}} in Story Lab",
+      "montage": "Open montage {{name}} in the Video Editor",
+      "workspace_collection": "Open collection {{name}}",
+      "file": "Show {{name}}"
+    },
+    "kinds": {
+      "world3d_template": "Video 3D template · {{name}}",
+      "world3d_scene": "Video 3D scene · {{name}}",
+      "scene_file": "Scene · {{name}}",
+      "character_kit": "Character Kit · {{name}}",
+      "series_episode": "Series episode · {{name}}",
+      "series": "Series · {{name}}",
+      "story": "Story · {{name}}",
+      "montage": "Montage · {{name}}",
+      "template": "Template · {{name}}",
+      "workspace_collection": "Collection · {{name}}",
+      "file": "File · {{name}}"
+    }
+  },
+  "editScene3d": "Edit the Video 3D scene this video was rendered from",
+  "editScene2d": "Edit the Video 2D scene this video was rendered from",
+  "editMontage": "Edit the montage this video was exported from ({{name}})"
 }

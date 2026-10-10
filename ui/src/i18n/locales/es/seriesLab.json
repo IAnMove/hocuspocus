@@ -4,7 +4,8 @@
     "canon": "2 · Biblia",
     "episode": "3 · Episodio",
     "shots": "4 · Planos",
-    "review": "5 · Resultados"
+    "approval": "5 · Validación",
+    "review": "6 · Resultados"
   },
   "review": {
     "orderedAssembly": "Montaje ordenado",
@@ -55,6 +56,11 @@
     "edit": "Editar",
     "attemptsInSlot": "Intentos en esta posición",
     "tryN": "intento {{count}}",
+    "decidedBy": {
+      "agent": "por un agente",
+      "wizard": "por el Wizard",
+      "server": "automáticamente por el render"
+    },
     "tryFinal": "intento {{count}} · final",
     "noPlayable": "Esta posición aún no tiene un vídeo reproducible.",
     "editSource": "Editar datos de origen · plano {{order}}",
@@ -101,7 +107,8 @@
     "shotPlayErrorContinue": "No se pudo reproducir el plano {{order}}; se continúa con el siguiente disponible.",
     "approvePendingLabel": "Aprobar pendientes",
     "replaceFinalsLabel": "Sustituir finales",
-    "seedRandom": "aleatoria"
+    "seedRandom": "aleatoria",
+    "assembleAnyway": "Algunos planos aún esperan su aprobación: {{message}}\n\n¿Montar el episodio de todos modos?"
   },
   "library": {
     "loading": "Cargando Series Lab…",
@@ -380,7 +387,7 @@
     "when": "Cuándo",
     "whatHappened": "Qué ocurrió",
     "voicesTitle": "Biblia de voces · metadatos",
-    "voicesDescription": "El TTS sale del personaje de la biblioteca. Ritmo, tono y pronunciación aquí son notas de la serie; no controlan MiniMax H3. El audio hablado sigue el diálogo del plano.",
+    "voicesDescription": "El TTS sale del personaje de la biblioteca. Ritmo y tono aquí son notas de la serie y no controlan MiniMax H3. El diccionario de pronunciación sí se habla: cada palabra completa se sustituye antes de la voz y los subtítulos conservan el guion. Un rango de tono opcional y el acento castellano son comprobaciones: una voz fuera de rango, o sin θ, avisa y se conserva.",
     "kitTtsHint": "El preset TTS sale del personaje de la biblioteca.",
     "unlinkedTtsHint": "Vincula un personaje de la biblioteca para usar su TTS. Proveedor e ID de voz abajo son solo reserva.",
     "provider": "Proveedor",
@@ -390,6 +397,15 @@
     "language": "Idioma",
     "pace": "Ritmo",
     "pitch": "Tono",
+    "gender": "Género",
+    "genderHint": "Solo elige la comprobación de tono cuando no hay rango. Hombre 75–175 Hz, mujer 150–320, niño 220–400. La descripción no se lee.",
+    "pitchRange": "Rango de tono (Hz)",
+    "pitchRangeHint": "Vacío: se deduce del género. Fuera de rango la toma avisa y se conserva.",
+    "pitchMin": "Mín",
+    "pitchMax": "Máx",
+    "accent": "Comprobación de acento",
+    "accentNone": "Ninguna",
+    "accentCastilian": "Castellano (θ)",
     "emotion": "Emoción por defecto",
     "pronunciationPlaceholder": "Diccionario de pronunciación\nFarnsworth=FARNS-wurth",
     "consent": "Nota de consentimiento/origen",
@@ -409,6 +425,7 @@
   "episode": {
     "heading": "Episodio {{number}} · {{title}}",
     "frozen": "Revisión de canon congelada {{revision}}. La planificación no puede mutar el canon actual de la serie.",
+    "kitPinBehind": "este episodio usa la revisión {{pinned}} de {{name}}; hay una {{latest}}",
     "title": "Título del episodio",
     "duration": "Duración objetivo",
     "premise": "Premisa del episodio",
@@ -731,15 +748,45 @@
       "cancelling": "parando",
       "completed": "terminado",
       "failed": "algunos planos fallaron",
-      "cancelled": "parado"
+      "cancelled": "parado",
+      "interrupted": "interrumpido por un reinicio"
     },
     "stage": {
       "voices": "voces",
       "scene": "escena",
       "export": "vídeo",
+      "foley": "foley",
       "import": "toma",
       "done": "hecho"
     }
+  },
+  "productions": {
+    "title": "Producciones",
+    "hint": "Cada producción renderiza el episodio en todos sus idiomas y monta los capítulos (series.episode.produce, lanzada aquí, por un agente o por el Wizard). Una producción parada sigue donde lo dejó.",
+    "stop": "Parar tras este paso",
+    "resume": "Reanudar",
+    "status": {
+      "queued": "en cola",
+      "running": "produciendo",
+      "cancelling": "parando",
+      "completed": "hecha",
+      "failed": "falló",
+      "cancelled": "parada",
+      "interrupted": "interrumpida por un reinicio",
+      "waiting": "esperando la revisión"
+    },
+    "step": {
+      "render": "Render {{language}}",
+      "assemble": "Montaje {{language}}"
+    },
+    "stepStatus": {
+      "queued": "en espera",
+      "running": "en curso",
+      "done": "hecho",
+      "failed": "falló"
+    },
+    "chapter": "Capítulo {{language}}",
+    "chapterSubtitled": "Capítulo {{language}} con subtítulos"
   },
   "languages": {
     "title": "Versiones de idioma",
@@ -773,7 +820,28 @@
       "create": "Creando la versión…",
       "save": "Guardando…",
       "assemble": "Iniciando el montaje…",
-      "remove": "Quitando…"
+      "remove": "Quitando…",
+      "check": "Guardando…"
+    },
+    "versionTitle": "Título en este idioma",
+    "cards": "Rótulos",
+    "cardTitleLabel": "Título del rótulo de {{id}}",
+    "cardBodyLabel": "Texto del rótulo de {{id}}",
+    "machine": {
+      "badge": "Traducción automática",
+      "badgeTitle": "Lo tradujo el modelo de lenguaje (series.episode.translate) y nadie lo ha revisado todavía. Tu edición, o Revisado, quita la marca.",
+      "check": "Revisado",
+      "checkLabel": "Marcar {{id}} como revisado",
+      "checkAll": "Marcar todo como revisado",
+      "checked": "Marcado como revisado por ti.",
+      "summary_one": "{{count}} texto de esta versión es una traducción automática, pedida por {{by}}. Léelo antes de renderizar: tu edición, o Revisado, quita la marca.",
+      "summary_other": "{{count}} textos de esta versión son traducciones automáticas, pedidas por {{by}}. Léelos antes de renderizar: tu edición, o Revisado, quita cada marca.",
+      "by": {
+        "user": "una persona",
+        "agent": "un agente (MCP)",
+        "wizard": "el Wizard",
+        "server": "el servidor"
+      }
     }
   },
   "plates": {
@@ -794,5 +862,560 @@
     "language": "Idioma",
     "contents": "Reparto: {{characters}} · piloto de {{shots}} planos 2D",
     "create": "Crear «{{title}}»"
+  },
+  "approval": {
+    "title": "Validación de planos",
+    "empty": "Este episodio aún no tiene planos.",
+    "mode": {
+      "label": "Modo de producción",
+      "direct": {
+        "label": "Todo de una vez",
+        "hint": "Cada plano se renderiza directamente en su toma final, como hasta ahora. Las aprobaciones y notas son opcionales."
+      },
+      "plan": {
+        "label": "Aprobar planes",
+        "hint": "Cada plano solo se renderiza cuando apruebas su plan (lo que muestra y dice)."
+      },
+      "preview": {
+        "label": "Plan + previo",
+        "hint": "Aprueba el plan, mira un previo rápido de cada plano y apruébalo o pide cambios antes del render final."
+      }
+    },
+    "progress": {
+      "plan": "Planes aprobados",
+      "preview": "Previos aprobados",
+      "reviewed": "Tomas revisadas",
+      "ready": "Listos para el montaje"
+    },
+    "next": {
+      "approve_plan": "Aprueba el plan de {{count}} planos",
+      "approve_plan_one": "Aprueba el plan de 1 plano",
+      "render": "Renderiza los {{count}} planos aprobados",
+      "render_one": "Renderiza el plano aprobado",
+      "render_previews": "Renderiza los previos de los {{count}} planos aprobados",
+      "render_previews_one": "Renderiza el previo del plano aprobado",
+      "approve_previews": "Revisa {{count}} previos",
+      "approve_previews_one": "Revisa 1 previo",
+      "render_final": "Renderiza el final de {{count}} previos aprobados",
+      "render_final_one": "Renderiza el final del previo aprobado",
+      "changes": "{{count}} planos esperan los cambios que pediste",
+      "changes_one": "1 plano espera los cambios que pediste",
+      "assemble": "Todos los planos están listos: monta el episodio"
+    },
+    "steps": {
+      "changes": "{{count}} con cambios pedidos",
+      "changes_one": "1 con cambios pedidos",
+      "approve_plan": "{{count}} planes por aprobar",
+      "approve_plan_one": "1 plan por aprobar",
+      "render": "{{count}} por renderizar",
+      "render_one": "1 por renderizar",
+      "render_previews": "{{count}} previos por renderizar",
+      "render_previews_one": "1 previo por renderizar",
+      "approve_previews": "{{count}} previos por revisar",
+      "approve_previews_one": "1 previo por revisar",
+      "render_final": "{{count}} finales por renderizar",
+      "render_final_one": "1 final por renderizar"
+    },
+    "actions": {
+      "approveVisible": "Aprobar los planes visibles",
+      "approveVisibleConfirm": "¿Aprobar el plan de estos {{count}} planos?",
+      "showPending": "Ver pendientes",
+      "showChanges": "Ver cambios pedidos",
+      "render": "Renderizar planos aprobados",
+      "render_previews": "Renderizar previos",
+      "render_final": "Renderizar finales",
+      "openResults": "Ir a Resultados",
+      "rerenderChanged": "Volver a renderizar los planos con cambios"
+    },
+    "render": {
+      "progress": "Render en el servidor: {{done}} de {{total}} · {{status}}",
+      "waiting": "{{count}} esperan aprobación",
+      "waiting_one": "1 espera aprobación"
+    },
+    "cast": {
+      "title": "Reparto del episodio ({{count}}) · bocas y rig facial",
+      "faceRig": "{{name}} · rig facial"
+    },
+    "filters": {
+      "label": "Filtrar planos",
+      "all": "Todos ({{count}})",
+      "pending": "Pendientes ({{count}})",
+      "changes": "Cambios pedidos ({{count}})",
+      "approved": "Aprobados ({{count}})"
+    },
+    "scene": {
+      "title": "Escena {{number}}",
+      "progress": "{{done}} / {{total}} aprobados"
+    },
+    "status": {
+      "pending": "pendiente",
+      "approved": "aprobado",
+      "changes": "cambios pedidos"
+    },
+    "stage": {
+      "plan": "plan",
+      "preview": "previo",
+      "final": "final"
+    },
+    "notes": {
+      "earlier": "Notas de este plano",
+      "by": {
+        "user": "Tú",
+        "agent": "Agente",
+        "wizard": "Wizard",
+        "server": "Producción"
+      },
+      "label": "Tu nota ({{stage}})",
+      "placeholder": "¿Qué debería cambiar en este plano? Se guarda mientras escribes.",
+      "saving": "Guardando…",
+      "saved": "Guardado",
+      "failed": "No se pudo guardar la nota",
+      "pending": "Nota pendiente de guardar",
+      "retry": "Reintentar guardado"
+    },
+    "card": {
+      "noLines": "Sin diálogo",
+      "fx": "efectos: {{list}}",
+      "sfx": "{{count}} sonidos",
+      "props": "{{count}} objetos",
+      "layers": "{{count}} capas de decorado",
+      "cardKind": "rótulo {{kind}}",
+      "music": "música: {{file}}",
+      "scene3d": "3D {{source}} · {{objects}} objetos · {{quality}}",
+      "undo": "Deshacer",
+      "approvePlan": "Aprobar plan",
+      "approvePreview": "Aprobar previo",
+      "requestChange": "Pedir cambio",
+      "rerender": "Volver a renderizar este plano",
+      "seconds": "{{seconds}} s",
+      "planStatus": "Plan: {{status}}",
+      "previewStatus": "Previo: {{status}}"
+    },
+    "edit": {
+      "framing": "Encuadre",
+      "camera": "Cámara",
+      "auto": "Automático",
+      "intro": "Entrada (s)",
+      "tail": "Cola (s)",
+      "jsonObject": "Escribe un objeto JSON"
+    },
+    "framings": {
+      "wide": "General",
+      "two": "Plano a dos",
+      "medium": "Medio",
+      "close": "Primer plano",
+      "insert": "Inserto",
+      "title": "Título"
+    },
+    "cameras": {
+      "static": "Fija",
+      "push": "Acercamiento"
+    },
+    "editor": {
+      "title": "Editando el plano #{{order}}",
+      "exportTake": "Exportar y usar como toma del plano",
+      "chooseExport": "Elegir una exportación reciente",
+      "back": "Volver al plano",
+      "discard": "Dejar de editar este plano",
+      "recent": "Exportaciones recientes",
+      "noExports": "No se ha exportado ningún vídeo desde que abriste este plano.",
+      "useThis": "Usar {{name}}",
+      "savePlan": "Guardar en el plano",
+      "planTitle": "Escena 3D del plano #{{order}}"
+    }
+  },
+  "inspector": {
+    "title": "Plano #{{order}}",
+    "back": "Todos los planos",
+    "previous": "Plano anterior (←)",
+    "next": "Plano siguiente (→)",
+    "position": "{{index}} / {{total}}",
+    "parts": "Partes de este plano",
+    "loading": "Leyendo el plano…",
+    "edit": "Editar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "unsaved": "sin guardar",
+    "partNames": {
+      "plan": "Encuadre y ritmo",
+      "cast": "Personajes",
+      "cast3d": "Personajes",
+      "lines": "Diálogo",
+      "set": "Localización y decorado",
+      "props": "Objetos",
+      "fx": "Efectos de pantalla",
+      "sfx": "Efectos de sonido",
+      "sound": "Música y foley",
+      "card": "Rótulo",
+      "scene3d": "Escena 3D",
+      "video": "Toma de vídeo",
+      "takes": "Tomas"
+    },
+    "saved": {
+      "done": "Guardado ({{keys}}).",
+      "reset": "Su toma ya no muestra este plan: se le quitó la aprobación. Vuelve a renderizar el plano para ver el cambio.",
+      "missing": "A la versión {{language}} aún le faltan {{count}} líneas.",
+      "missing_one": "A la versión {{language}} aún le falta 1 línea.",
+      "plain": "Guardado."
+    },
+    "tile": {
+      "open": "Abrir el plano {{order}}",
+      "openButton": "Abrir",
+      "noTake": "solo plan",
+      "unsaved": "sin guardar"
+    },
+    "media": {
+      "take": "Toma {{number}} del plano",
+      "takes": "Tomas de este plano",
+      "planOnly": "Aún sin renderizar: el plan"
+    },
+    "regenerate": {
+      "stale": "Este plano cambió después de su toma.",
+      "newerVoices": "Una línea se grabó después de la toma: la toma aún no la tiene.",
+      "noTake": "Este plano aún no tiene toma.",
+      "record": "graba la voz de {{count}} líneas ({{lines}})",
+      "record_one": "graba la voz de 1 línea ({{lines}})",
+      "reuse": "usa las voces grabadas",
+      "scene2d": "monta la escena 2D y hace una toma nueva",
+      "scene3d": "monta la escena 3D y hace una toma nueva",
+      "withFoley": "y su foley",
+      "cut": "Una toma generada o importada no se vuelve a renderizar: sus efectos de sonido, su música y el sonido del clip se ponen en el montaje. Vuelve a montar el episodio (Resultados) para oír un cambio.",
+      "foley": "Hacer su foley",
+      "progress": "Renderizando este plano: {{stage}}",
+      "busy": "El servidor está renderizando otros planos de este episodio; este podrá renderizarse cuando termine.",
+      "stages": {
+        "voices": "voces",
+        "scene": "escena",
+        "export": "exportación",
+        "foley": "foley",
+        "import": "toma nueva",
+        "done": "hecho"
+      }
+    },
+    "list": {
+      "up": "Subir {{item}}",
+      "down": "Bajar {{item}}",
+      "remove": "Quitar {{item}}"
+    },
+    "cast": {
+      "title": "Personajes en pantalla",
+      "empty": "No hay nadie en pantalla.",
+      "empty3d": "Ningún personaje habla a través de un objeto de esta escena.",
+      "hint3d": "Cada uno habla a través de un objeto de la escena 3D, dibujado con su pose del Character Kit.",
+      "item": "Personaje {{number}}",
+      "add": "Añadir un personaje",
+      "character": "Personaje",
+      "pose": "Pose",
+      "basePose": "Pose base",
+      "x": "Posición x %",
+      "scale": "Escala",
+      "motion": "Movimiento",
+      "motions": {
+        "idle": "Reposo",
+        "still": "Quieto",
+        "shake": "Temblor"
+      },
+      "enterFrom": "Entra por",
+      "noEntrance": "Ya está",
+      "sides": {
+        "left": "la izquierda",
+        "right": "la derecha"
+      },
+      "enterAt": "Entra en (s)",
+      "enterDuration": "Entrada (s)",
+      "enterGait": "Paso",
+      "gaits": {
+        "slide": "Deslizarse",
+        "hop": "Saltitos",
+        "walk": "Andando"
+      },
+      "at": "en el {{x}} %",
+      "enters": "entra por {{side}}",
+      "object": "objeto {{id}}",
+      "open": "Abrir a {{name}} en Personajes (face rig de esta pose)",
+      "openShort": "Abrir"
+    },
+    "lines": {
+      "title": "Diálogo",
+      "empty": "Este plano no tiene diálogo.",
+      "item": "Línea {{number}}",
+      "add": "Añadir una línea",
+      "speaker": "Quién la dice",
+      "emotion": "Emoción",
+      "delivery": "Interpretación",
+      "pause": "Pausa antes (s)",
+      "pauseShort": "pausa {{seconds}} s",
+      "room": "Sala",
+      "roomInherit": "La sala del plano",
+      "text": "Texto ({{language}})",
+      "voice": "Voz",
+      "play": "Escuchar la línea {{number}}",
+      "playRoom": "Escucharla como suena en la sala ({{room}})",
+      "record": "Grabar la voz",
+      "retake": "Otra toma",
+      "recording": "Grabando…",
+      "retaking": "Grabando otra toma…",
+      "notRecorded": "Aún sin grabar: el render la graba.",
+      "newer": "más nueva que la toma",
+      "hint": "Otra toma de una línea sustituye su grabación cuando sale bien; renderiza el plano para oírla en la toma. La emoción y la interpretación son notas para la escena; la voz es la del personaje."
+    },
+    "rooms": {
+      "none": "Seca",
+      "small_room": "Habitación pequeña",
+      "room": "Sala",
+      "hall": "Salón",
+      "cathedral": "Catedral",
+      "cockpit": "Cabina",
+      "outdoor": "Exterior",
+      "radio": "Radio"
+    },
+    "set": {
+      "title": "Localización y decorado",
+      "location": "Localización",
+      "variant": "Variante",
+      "noVariant": "Sin variante",
+      "castDepth": "Profundidad del reparto (0,1–1)",
+      "castDepthShort": "reparto a profundidad {{value}}",
+      "ownLayers": "{{count}} capas propias",
+      "ownLayers_one": "1 capa propia",
+      "locationLayers": "{{count}} capas de la localización",
+      "locationLayers_one": "1 capa de la localización",
+      "useOwnLayers": "Este plano tiene sus propias capas de decorado (en vez de las de la localización)",
+      "locationLayersHint": "El plano usa las capas de decorado de su localización. Marca la casilla para darle las suyas (una lista vacía las quita).",
+      "addLayer": "Añadir una capa",
+      "layer": "Capa {{number}}",
+      "layerFile": "Imagen o vídeo",
+      "depth": "Profundidad (0 fondo, 1 cerca)",
+      "front": "Delante del reparto",
+      "opacity": "Opacidad",
+      "scale": "Escala",
+      "drift": "Deriva (px/s)",
+      "start": "Inicio del clip (s)",
+      "loop": "Bucle",
+      "loops": {
+        "restart": "Empieza en cada plano",
+        "loop": "Bucle",
+        "hold": "Se queda en el último fotograma",
+        "pingpong": "Ida y vuelta"
+      },
+      "speed": "Velocidad",
+      "layerShort": "profundidad {{depth}} · {{side}}",
+      "inFront": "delante",
+      "behind": "detrás",
+      "backgroundHint": "Fondo de esta localización: lo usan sus {{count}} planos.",
+      "backgroundHint_one": "Fondo de esta localización: lo usa su único plano.",
+      "plateActive": "Esta localización pone una placa 3D (un vídeo) de fondo en sus {{count}} planos.",
+      "plateActive_one": "Esta localización pone una placa 3D (un vídeo) de fondo.",
+      "images": "Imágenes de esta localización",
+      "useImage": "Usar esta imagen como fondo de la localización",
+      "generate": "Fondo nuevo"
+    },
+    "when": {
+      "title": "Cuándo",
+      "modes": {
+        "at": "En un segundo",
+        "line": "En una línea",
+        "enter": "En una entrada"
+      },
+      "seconds": "Segundo",
+      "line": "Línea",
+      "anchor": "De la línea",
+      "start": "inicio",
+      "end": "final",
+      "cast": "Quién entra",
+      "offset": "Desfase (s)",
+      "at": "en el segundo {{seconds}}",
+      "lineStart": "en la línea {{number}}",
+      "lineEnd": "al final de la línea {{number}}",
+      "enterOf": "cuando entra {{name}}"
+    },
+    "sfx": {
+      "title": "Efectos de sonido",
+      "empty": "Sin efectos de sonido.",
+      "item": "Sonido {{number}}",
+      "add": "Añadir un sonido",
+      "file": "Archivo de sonido",
+      "volume": "Volumen (0–1)",
+      "volumeShort": "vol {{volume}}",
+      "in": "Desde el segundo (in)",
+      "length": "Duración (s)",
+      "cut": "trozo {{in}} s + {{length}} s",
+      "play": "Escuchar {{file}}",
+      "listen": "Escuchar"
+    },
+    "fx": {
+      "title": "Efectos de pantalla",
+      "empty": "Sin efectos de pantalla.",
+      "item": "Efecto {{number}}",
+      "add": "Añadir un efecto",
+      "kind": "Efecto",
+      "duration": "Duración (s)",
+      "toEnd": "hasta el final del plano",
+      "lasts": "{{seconds}} s",
+      "intensity": "Intensidad (0,1–2)",
+      "intensityShort": "intensidad {{value}}",
+      "size": "Tamaño",
+      "color": "Color"
+    },
+    "props": {
+      "title": "Objetos",
+      "empty": "No hay objetos en el decorado.",
+      "item": "Objeto {{number}}",
+      "add": "Añadir un objeto",
+      "file": "Imagen",
+      "scale": "Escala",
+      "ground": "Apoyado en el suelo",
+      "at": "en {{x}} %, {{y}} %",
+      "onFloor": "en el suelo en el {{x}} %"
+    },
+    "sound": {
+      "title": "Música, foley y voces",
+      "music": "Música {{file}} (volumen {{volume}})",
+      "noMusic": "Sin música propia.",
+      "playMusic": "Escuchar la música del plano",
+      "score": "Bajo la banda sonora del episodio: {{file}}",
+      "scoreSilenced": "La banda sonora del episodio ({{file}}) se calla bajo la música de este plano.",
+      "playScore": "Escuchar el tema de la banda sonora",
+      "ambience": "Ambiente de la localización: {{file}}",
+      "ambienceEpisode": "Ambiente de la localización (puesto a lo largo del montaje): {{file}}",
+      "playAmbience": "Escuchar el ambiente de la localización",
+      "room": "Las voces suenan en: {{room}}",
+      "roomFromLocation": "la sala de la localización",
+      "foley": "Foley: «{{prompt}}» (volumen {{volume}})",
+      "noFoley": "Sin foley.",
+      "musicFile": "Archivo de música",
+      "volume": "Volumen (0–1)",
+      "musicStart": "Desde el segundo",
+      "voiceRoom": "Las voces suenan en",
+      "roomLocation": "La sala de la localización",
+      "foleyPrompt": "Foley: el sonido a generar a partir de la imagen",
+      "foleyPlaceholder": "disparos de fusil, aleteo, viento",
+      "foleyVolume": "Volumen del foley",
+      "hint": "La banda sonora del episodio y el ambiente de cada localización se ajustan para todo el episodio (Resultados, Preparación)."
+    },
+    "plan": {
+      "title": "Encuadre y ritmo",
+      "gap": "Hueco entre líneas (s)",
+      "duration": "Duración (s)",
+      "fromLines": "{{seconds}} s según sus líneas",
+      "length": "{{seconds}} s",
+      "introShort": "entrada {{seconds}} s",
+      "gapShort": "hueco {{seconds}} s",
+      "tailShort": "cola {{seconds}} s"
+    },
+    "card": {
+      "title": "Rótulo",
+      "empty": "Sin rótulo.",
+      "kind": "Tipo",
+      "kinds": {
+        "title": "Título",
+        "disclaimer": "Aviso",
+        "end": "Fin"
+      },
+      "cardTitle": "Título ({{language}})",
+      "body": "Texto ({{language}})"
+    },
+    "scene3d": {
+      "title": "Escena 3D",
+      "template": "plantilla {{id}}",
+      "scene": "escena {{file}}",
+      "quality": "Calidad",
+      "qualities": {
+        "draft": "calidad borrador",
+        "final": "calidad final"
+      },
+      "lookTitle": "Aspecto",
+      "look": "aspecto {{look}}",
+      "looks": {
+        "none": "Como está modelado",
+        "toon": "Toon (anime cel)",
+        "n64": "N64"
+      },
+      "templateObject": "objeto de la plantilla",
+      "plays": "hace {{clips}}",
+      "held": "en la mano {{hand}} de {{carrier}}",
+      "hands": {
+        "left": "izquierda",
+        "right": "derecha"
+      },
+      "moves": "se mueve a {{to}}",
+      "appears": "aparece",
+      "rotation": "Giro (rad)",
+      "scale": "Escala",
+      "grounded": "En el suelo",
+      "advanced": "Clips, mano, movimiento y aparición (JSON)",
+      "openEditor": "Editar en Vídeo 3D",
+      "hint": "Editar en Vídeo 3D abre la escena de este plano (su plantilla y sus objetos) en el editor de Vídeo 3D; al guardar allí se escribe de vuelta en este plano.",
+      "editedScene": "su escena, editada en Vídeo 3D"
+    },
+    "video": {
+      "title": "Toma de vídeo",
+      "source": "Clip original",
+      "generator": "Hecho con",
+      "ownSound": "Sonido propio",
+      "yes": "sí",
+      "no": "no",
+      "prompt": "Prompt",
+      "startFrame": "Fotograma inicial",
+      "seed": "Semilla",
+      "noTake": "Aún sin clip.",
+      "noRecipe": "El clip original no guarda su prompt.",
+      "replace": "Otro clip como toma de este plano",
+      "import": "Usar como toma",
+      "hint": "Sus efectos de sonido, su música y su foley se ponen sobre el clip en el montaje; un clip nuevo entra como toma nueva para aprobar.",
+      "audioTitle": "El sonido propio del clip",
+      "audio": {
+        "keep": "con su propio sonido",
+        "drop": "sin su propio sonido"
+      },
+      "volume": "Volumen del clip (0–2)",
+      "volumeShort": "volumen del clip {{volume}}",
+      "fitTitle": "Ajuste al encuadre del episodio",
+      "fit": {
+        "auto": "Automático",
+        "cover": "llena el encuadre",
+        "contain": "cabe dentro del encuadre"
+      }
+    },
+    "takes": {
+      "title": "Tomas ({{count}})",
+      "empty": "Aún no hay toma: renderiza el plano.",
+      "failed": "{{count}} fallidas",
+      "failed_one": "1 fallida",
+      "take": "Toma {{number}}",
+      "watch": "Ver la toma {{number}}",
+      "rejected": "rechazada",
+      "edited": "editada en el editor",
+      "approved": "la toma del plano",
+      "use": "Usar esta toma",
+      "open2d": "Abrir en Vídeo 2D",
+      "open3d": "Abrir en Vídeo 3D",
+      "editorHint": "Abrir en Vídeo 2D / 3D abre la escena de la que salió esa toma; expórtala allí para traerla de vuelta como toma nueva."
+    }
+  },
+  "scripts": {
+    "title": "Guiones de los que salió este capítulo",
+    "description": "Cada guion enviado a series.episode.from_script (por un agente, el Wizard o una persona) se guarda tal como llegó. Míralo, descárgalo o vuelve a escribir el capítulo a partir de él.",
+    "revision": "Revisión {{revision}}",
+    "by": {
+      "user": "de una persona",
+      "agent": "de un agente (MCP)",
+      "wizard": "del Wizard",
+      "server": "del servidor"
+    },
+    "shots_one": "{{count}} plano",
+    "shots_other": "{{count}} planos",
+    "created": "creó el capítulo",
+    "restoredFrom": "reescrito desde la revisión {{revision}}",
+    "applied": "escrito {{count}} veces",
+    "view": "Ver",
+    "hide": "Ocultar",
+    "download": "Descargar",
+    "rewrite": "Reescribir desde este guion",
+    "viewerLabel": "Guion de la revisión {{revision}}",
+    "confirmTitle": "¿Reescribir el capítulo desde la revisión {{revision}}?",
+    "confirmMessage": "El capítulo vuelve a ser este guion. Los planos cuyo contenido cambie pierden sus tomas y vuelven a revisión pendiente; los demás conservan las suyas. Antes se comprueba el guion contra la serie.",
+    "confirm": "Reescribir",
+    "rewritten": "Capítulo reescrito desde la revisión {{revision}} (ahora revisión {{current}})."
   }
 }

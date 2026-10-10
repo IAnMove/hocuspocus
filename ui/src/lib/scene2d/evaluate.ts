@@ -48,7 +48,8 @@ export function createSceneEvaluator(scene: AnimatorScene) {
     const dy = state.y - 50 - (view.y - 50) * parallax
     const radians = view.rotation * Math.PI / 180
     const cos = Math.cos(radians); const sin = Math.sin(radians)
-    const zoom = Math.max(.05, view.scale)
+    // A depth layer (parallaxZoom) also takes its share of the zoom: a push grows near layers more than far ones.
+    const zoom = Math.max(.05, layer.parallaxZoom === true ? 1 + (view.scale - 1) * parallax : view.scale)
     const aspect = scene.width / Math.max(1, scene.height)
     return {
       ...state,

@@ -4,7 +4,7 @@ import shutil
 import pytest
 
 from services.series_shot_plan import (
-    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, language_key, normalize_layout2d, plan_cast,
+    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, frame_size, language_key, normalize_layout2d, plan_cast,
     plan_timing, sound_tracks, spread,
 )
 
@@ -64,6 +64,15 @@ def test_cast_uses_homes_explicit_layout_and_character_scale():
     assert plan_cast(series(), {"visibleCharacterIds": ["kevin"]}, "close", 4)[0]["x"] == 50.0, "a lone close-up is centred"
 
 
+def test_a_cast_entry_can_keep_its_cut_edges_in_the_frame():
+    layout = normalize_layout2d({"cast": [{"characterId": "kevin", "x": 46, "edgeSnap": False}, {"characterId": "gary", "edgeSnap": True},
+                                          {"characterId": "gary", "edgeSnap": "no"}]})
+    assert layout["cast"] == [{"characterId": "kevin", "x": 46.0, "edgeSnap": False}, {"characterId": "gary"}, {"characterId": "gary"}], \
+        "snapping is the default, so only false is kept"
+    cast = plan_cast(series(), {"locationId": "garage", "layout2d": layout}, "medium", 4)
+    assert [item.get("edgeSnap") for item in cast] == [False, None, None]
+
+
 def test_cards_and_sound():
     titles = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
     assert [text["id"] for text in titles] == ["card-title", "card-body"] and titles[0]["font"] == "marker"
@@ -87,6 +96,16 @@ def test_the_series_library_keeps_a_shot_layout():
     assert "layout2d" not in _normalize_shot({"id": "s2", "productionMethod": "animation_2d", "layout2d": {}}, 1)
 
 
+def test_the_series_library_keeps_stop_motion_in_its_ranges():
+    from services.series_library import _normalize_shot
+    held = _normalize_shot({"id": "s1", "productionMethod": "animation_3d",
+                            "layout2d": {"framing": "wide", "motionStep": 3, "stopMotionJitter": 1.5}}, 0)
+    assert held["layout2d"] == {"framing": "wide", "motionStep": 3, "stopMotionJitter": 1.5}
+    assert normalize_layout2d({"motionStep": 2.0, "stopMotionJitter": 0}) == {"motionStep": 2}, "0 px is no shake"
+    assert normalize_layout2d({"framing": "wide", "motionStep": 5, "stopMotionJitter": 2.5}) == {"framing": "wide"}
+    assert normalize_layout2d({"motionStep": True, "stopMotionJitter": "1"}) is None
+
+
 def test_a_full_shot_spec_with_lines_card_and_focus():
     shot = {"id": "s1", "sceneId": "a", "framing": "two-shot", "camera": "static", "locationId": "garage", "visibleCharacterIds": ["kevin", "gary"],
             "dialogueBeats": [{"id": "b1", "characterId": "kevin", "text": "Hola."}, {"id": "b2", "characterId": "boss", "text": "(off)"},
@@ -100,6 +119,77 @@ def test_a_full_shot_spec_with_lines_card_and_focus():
     card = build_shot_spec(series(), {"id": "ep1"}, {"id": "s0", "durationSeconds": 6, "layout2d": {"card": {"kind": "title", "title": "VALLE"}}},
                            workspace="cast", recorded={})
     assert card["framing"] == "title" and card["cast"] == [] and card["duration"] == 6 and card["texts"][0]["text"] == "VALLE"
+
+
+def test_a_line_keeps_cast_index_only_when_the_beat_has_a_real_one():
+    shot = {"id": "s1", "visibleCharacterIds": ["kevin", "kevin"], "dialogueBeats": [
+        {"id": "b1", "characterId": "kevin", "text": "Hola.", "castIndex": 1},
+        {"id": "b2", "characterId": "kevin", "text": "Otra.", "castIndex": True}]}
+    recorded = {"b1": {"filename": "l1.wav", "duration": 1.0}, "b2": {"filename": "l2.wav", "duration": 1.0}}
+    lines = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded=recorded)["lines"]
+    assert lines[0]["castIndex"] == 1 and lines[1]["castIndex"] == 0, "a bool is no index: the first kevin speaks"
+
+
+def _two_speakers(cast, beats):
+    """A shot planned from ``layout2d.cast`` as from_script writes it. ``twin`` is another character on Kevin's kit."""
+    shared = series(characters=[*series()["characters"], {"id": "twin", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}}])
+    shot = {"id": "s1", "framing": "two-shot", "locationId": "garage", "layout2d": {"cast": cast}, "dialogueBeats": beats}
+    recorded = {beat["id"]: {"filename": f"{beat['id']}.wav", "duration": 1.0} for beat in beats}
+    return shared, shot, build_shot_spec(shared, {"id": "ep1"}, shot, workspace="cast", recorded=recorded)
+
+
+def test_cast_index_counts_in_the_planned_cast_and_a_name_picks_its_own_copy():
+    """castIndex is a position in the script's cast; the plan drops a member without a kit, so it moves with it."""
+    _series, _shot, spec = _two_speakers([{"characterId": "nokit"}, {"characterId": "kevin", "x": 30}, {"characterId": "kevin", "x": 70}], [
+        {"id": "b1", "characterId": "kevin", "text": "Uno.", "castIndex": 2},
+        {"id": "b2", "characterId": "kevin", "text": "Dos."},
+        {"id": "b3", "characterId": "kevin", "text": "Tres.", "castIndex": 0}])
+    assert [item["x"] for item in spec["cast"]] == [30.0, 70.0]
+    assert [line["castIndex"] for line in spec["lines"]] == [1, 0, 0], "the nokit entry is no copy: its index falls back to the name"
+    _series, _shot, shared = _two_speakers([{"characterId": "kevin"}, {"characterId": "twin"}], [
+        {"id": "b1", "characterId": "twin", "text": "Soy el otro."}, {"id": "b2", "characterId": "kevin", "text": "Y yo."},
+        {"id": "b3", "characterId": "gary", "text": "(off)"}])
+    assert [item["kitId"] for item in shared["cast"]] == ["kit-kevin", "kit-kevin"]
+    assert [line.get("castIndex") for line in shared["lines"]] == [1, 0, None]
+    assert [line["visible"] for line in shared["lines"]] == [True, True, False]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node required")
+def test_two_characters_on_one_kit_each_move_their_own_mouth(tmp_path):
+    from PIL import Image
+    from services.series_shot_bridge import run_series_shot, with_pose_sizes
+    from services.video2d_compile import TSX
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    Image.new("RGBA", (300, 600), (255, 0, 0, 255)).save(tmp_path / "k.png")
+    asset = lambda aid, kind="overlay": {"id": aid, "name": aid, "kind": kind, "alphaStatus": "transparent", "reviewState": "approved",
+                                         "source": "/api/v1/file/k.png?workspace=cast" if kind == "image" else f"/api/v1/file/{aid}.png?workspace=cast"}
+    states = ["closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue"]
+    kit = {"version": 1, "id": "kit-kevin", "name": "Kevin", "style": "cutout", "base": asset("base", "image"), "poses": {},
+           "mouth": {state: asset(f"m-{state}") for state in states}, "eyes": {}, "provenance": [],
+           "mouthMapping": {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small", "O": "round", "U": "pucker", "F": "bite", "L": "tongue"},
+           "anchors": {"base": {"mouth": {"offsetX": 0, "offsetY": -10, "scale": 0.1, "rotation": 0}}}}
+    cues = [{"start": 0, "end": 0.6, "value": "D"}]
+    _series, _shot, spec = _two_speakers([{"characterId": "kevin"}, {"characterId": "twin"}], [
+        {"id": "b1", "characterId": "twin", "text": "Soy el otro."}, {"id": "b2", "characterId": "kevin", "text": "Y yo."}])
+    for line in spec["lines"]:
+        line["cues"] = cues
+    document = run_series_shot({"mode": "shot", "kits": {"kit-kevin": with_pose_sizes(kit, str(tmp_path))}, "shot": spec})
+    twin, kevin = (beat["mouthLayerIds"] for beat in document["dialogueBeats"])
+    assert twin and all(layer.startswith("kit-kit-kevin-1-") for layer in twin), twin
+    assert kevin and all(layer.startswith("kit-kit-kevin-0-") for layer in kevin), kevin
+
+
+def test_a_vertical_series_plans_1080x1920_with_wider_spacing_and_smaller_cards():
+    vertical = {**series(), "provider": {"videoSettings": {"orientation": "portrait"}}}
+    assert frame_size(vertical) == (1080, 1920) and frame_size(series()) == (1920, 1080)
+    assert spread(2, portrait=True) == [25.0, 75.0] and spread(3, portrait=True) == [18.0, 50.0, 82.0]
+    shot = {"id": "s1", "framing": "two-shot", "visibleCharacterIds": ["kevin", "gary"], "dialogueBeats": []}
+    spec = build_shot_spec(vertical, {"id": "ep1"}, shot, workspace="cast", recorded={})
+    assert (spec["width"], spec["height"]) == (1080, 1920) and [item["x"] for item in spec["cast"]] == [25.0, 75.0]
+    wide = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
+    tall = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5, portrait=True)
+    assert [text["size"] for text in tall] == [round(text["size"] * 0.6, 2) for text in wide] and tall[0]["maxWidth"] == 90
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node required")
@@ -139,3 +229,100 @@ def test_props_stand_on_background_anchors_and_follow_the_framing_zoom():
     assert (wide[0]["x"], wide[0]["y"], wide[0]["scale"]) == (70.0, 80.0 - 10.0, 0.2)
     assert close[0]["scale"] == 0.3 and close[0]["x"] == background_point("close", 50, 0.7, 0.8)[0]
     assert (wide[1]["x"], wide[1]["y"]) == (30.0, 70.0)
+
+
+def test_a_volume_of_zero_means_silent_not_the_default():
+    layout = normalize_layout2d({"music": {"file": "music/theme.wav", "volume": 0, "start": 0}})
+    assert layout["music"] == {"file": "music/theme.wav", "volume": 0, "start": 0}
+    assert normalize_layout2d({"music": {"file": "theme.wav"}})["music"]["volume"] == 0.5
+
+
+def test_a_document_card_keeps_its_fields_and_old_cards_stay_kinetic():
+    stored = normalize_layout2d({"card": {"kind": "document", "style": "file", "reveal": "pan", "title": "Exp",
+                                          "body": "Nota", "date": "1888", "signature": "Ana"}})
+    assert stored["card"] == {"kind": "document", "style": "file", "reveal": "pan", "title": "Exp", "body": "Nota",
+                              "date": "1888", "signature": "Ana"}
+    assert normalize_layout2d({"card": {"kind": "document", "style": "poster"}}) is None
+    assert card_texts({"kind": "document", "title": "Carta", "body": "Hola"}, 5) == []
+    titles = card_texts({"kind": "title", "title": "VALLE", "body": "Episodio 1"}, 5)
+    end = card_texts({"kind": "end", "title": "FIN", "body": "Gracias"}, 5)
+    disclaimer = card_texts({"kind": "disclaimer", "title": "Aviso", "body": "Parodia."}, 5)
+    assert titles[0]["font"] == "marker" and titles[1]["font"] == "hand"
+    assert end[0]["font"] == "marker" and end[1]["font"] == "sans" and disclaimer[0]["font"] == "condensed"
+
+
+def test_document_text_fits_down_to_the_1080p_minimum_and_the_reveal_is_exact():
+    from services.series_document_card import layout_document, minimum_body_px, pan_offset, render_frame, revealed_characters
+    assert minimum_body_px(1080) == 28
+    short = layout_document({"style": "letter", "title": "Carta", "body": "Hoy el río iba alto.", "signature": "Ana"},
+                            width=1920, height=1080)
+    assert short["fits"] and short["bodyPx"] >= 28
+    long = layout_document({"style": "letter", "title": "Carta", "body": ("palabra " * 200)[:1200],
+                            "date": "1888", "signature": "Ana"}, width=1920, height=1080)
+    assert not long["fits"] and long["bodyPx"] == 28
+    assert [revealed_characters(10, frame, 10) for frame in range(10)] == list(range(1, 11))
+    assert [pan_offset(80, frame, 5) for frame in range(5)] == [0, 20, 40, 60, 80]
+    frame = render_frame({"style": "letter", "title": "Carta", "body": "Hola.", "reveal": "static"}, 0, 1, width=320, height=180)
+    assert frame.size == (320, 180) and len(frame.getcolors(maxcolors=200000)) > 20
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required")
+def test_a_document_shot_hides_the_set_and_can_attach_its_plate(tmp_path):
+    from services.series_document_card import document_plate
+    shot = {"id": "s0", "durationSeconds": 2, "locationId": "garage", "visibleCharacterIds": ["kevin"],
+            "layout2d": {"card": {"kind": "document", "style": "typed", "reveal": "static", "title": "Nota", "body": "Puente."}}}
+    spec = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded={})
+    assert spec["framing"] == "title" and spec["cast"] == [] and spec["texts"] == [] and "background" not in spec
+    plate = document_plate(str(tmp_path), shot, {**spec, "duration": 0.5, "width": 320, "height": 180, "fps": 8, "workspace": "cast"})
+    assert plate["kind"] == "video" and plate["source"].startswith("/api/v1/file/series-documents/")
+    assert list((tmp_path / "series-documents").glob("*.mp4"))
+
+
+def _fake_ffmpeg(folder, code):
+    """A stand-in ffmpeg: keeps the raw frames it is sent in ``frames.raw``, writes a partial file and exits with ``code``."""
+    fake = folder / "ffmpeg"
+    fake.write_text(f'#!/bin/sh\nfor last; do :; done\ncat > "{folder}/frames.raw"\nprintf partial > "$last"\nexit {code}\n')
+    fake.chmod(0o755)
+    return str(fake)
+
+
+def test_a_failed_document_write_leaves_nothing_the_cache_would_reuse(tmp_path, monkeypatch):
+    from services import series_document_card as cards
+    shot = {"id": "s0", "layout2d": {"card": {"kind": "document", "style": "typed", "reveal": "static", "title": "Nota", "body": "Puente."}}}
+    spec = {"duration": 0.5, "width": 64, "height": 36, "fps": 4, "workspace": "cast"}
+    monkeypatch.setattr(cards.shutil, "which", lambda _name: _fake_ffmpeg(tmp_path, 1))
+    with pytest.raises(cards.DocumentCardError):
+        cards.document_plate(str(tmp_path / "ws"), shot, spec)
+    assert not list((tmp_path / "ws" / "series-documents").glob("*.mp4")), "neither the clip nor its partial file is left"
+    monkeypatch.undo()
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg is required for the retry")
+    plate = cards.document_plate(str(tmp_path / "ws"), shot, spec)
+    written = [path.name for path in (tmp_path / "ws" / "series-documents").iterdir()]
+    assert plate["source"].split("?")[0].endswith(written[0]) and written == [written[0]] and not written[0].startswith(".")
+
+
+def test_a_document_clip_paints_its_paper_and_layout_once_and_the_same_frames(tmp_path, monkeypatch):
+    from services import series_document_card as cards
+    card = {"kind": "document", "style": "letter", "reveal": "typewriter", "title": "Carta", "body": "Hoy el río iba alto, muy alto.",
+            "date": "1888", "signature": "Ana"}
+    counted = {"paper": 0, "layout": 0}
+    paper, layout = cards._paper, cards.layout_document
+
+    def counting(name, real):
+        def call(*args, **kwargs):
+            counted[name] += 1
+            return real(*args, **kwargs)
+        return call
+
+    monkeypatch.setattr(cards.shutil, "which", lambda _name: _fake_ffmpeg(tmp_path, 0))
+    monkeypatch.setattr(cards, "_paper", counting("paper", paper))
+    monkeypatch.setattr(cards, "layout_document", counting("layout", layout))
+    cards.write_clip(card, tmp_path / "card.mp4", width=96, height=54, duration=1.0, fps=6)
+    assert counted == {"paper": 1, "layout": 1}
+    assert (tmp_path / "card.mp4").read_text() == "partial", "the finished file replaced the target"
+    assert not list(tmp_path.glob(".card-*")), "the hidden file was moved onto the target"
+    raw = (tmp_path / "frames.raw").read_bytes()
+    monkeypatch.undo()
+    expected = b"".join(cards.render_frame(card, frame, 6, width=96, height=54).tobytes() for frame in range(6))
+    assert raw == expected

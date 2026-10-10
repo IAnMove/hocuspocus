@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, CheckCircle2, ImagePlus, Loader2, Sparkles, Square } from 'lucide-react'
 import * as api from '../../api/client'
+import { useJobAction } from './useJobAction'
 import { generateSeriesReferenceImage, seriesReferencePrompt } from './referenceImages'
 import { useStore } from '../../stores/useStore'
 import { SeriesField, SectionCard, seriesStatusLabel } from './components'
@@ -37,6 +38,7 @@ export function SeriesSetupPanel({
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const jobAction = useJobAction(setError)
   const adoptedKnownSeriesJob = useRef('')
   const patch = (value: Partial<SeriesProject>) => update(current => ({ ...current, ...value }))
   const patchProvider = (value: Partial<SeriesProject['provider']>) => update(current => ({
@@ -181,7 +183,7 @@ export function SeriesSetupPanel({
             disabled={knownSeriesRequest.trim().length < 3 || busy || jobBusy}
             onClick={() => void startKnownSeries()}
           ><Sparkles size={13} />{t('setup.knownBuild')}</button>
-          {job?.bootstrapKnownSeries && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}
+          {job?.bootstrapKnownSeries && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.cancelSeriesPlanJob(job.jobId), setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}
         </div>
         <p className="mt-2 text-[10px] leading-relaxed text-amber-200">{t('setup.knownDisclaimer')}</p>
         {job?.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3">
@@ -201,16 +203,16 @@ export function SeriesSetupPanel({
             <p className="mt-1 text-[10px] text-text-muted">{t('setup.draftReview')}</p>
             <details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectGenerated')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details>
           </div>}
-          {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(setJob)}>{t('setup.resumeKnown')}</button>}
+          {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), setJob)}>{t('setup.resumeKnown')}</button>}
         </div>}
       </SectionCard>
 
       <SectionCard title={t('setup.prepareTitle')} description={t('setup.prepareDescription')}>
         <textarea className={textareaClass} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder={t('setup.preparePlaceholder')} />
-        <div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!complete || busy || jobBusy} onClick={() => void startCanon(false)}><Sparkles size={13} />{t('setup.prepareText')}</button><button className={greenButton} disabled={!complete || busy || (series.provider.imageProvider === 'maestro' && !series.provider.imageModel) || jobBusy} onClick={() => void startCanon(true)}><ImagePlus size={13} />{t('setup.prepareImages')}</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}</div>
+        <div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!complete || busy || jobBusy} onClick={() => void startCanon(false)}><Sparkles size={13} />{t('setup.prepareText')}</button><button className={greenButton} disabled={!complete || busy || (series.provider.imageProvider === 'maestro' && !series.provider.imageModel) || jobBusy} onClick={() => void startCanon(true)}><ImagePlus size={13} />{t('setup.prepareImages')}</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.cancelSeriesPlanJob(job.jobId), setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}</div>
         {series.provider.imageProvider === 'maestro' && !series.provider.imageModel && <p className="mt-2 text-[10px] text-amber-300">{t('setup.needImageModel')}</p>}
         {progress && <p className="mt-2 flex items-center gap-2 text-[11px] text-violet-200"><Loader2 size={12} className="animate-spin" />{progress}</p>}
-        {job && !job.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<span>{jobLine}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{job.status === 'completed' && job.seriesResult && <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3"><p className="text-[11px] text-green-200">{t('setup.proposalSummary', { characters: job.seriesResult.characters.length, locations: job.seriesResult.locations.length, rules: job.seriesResult.canon.immutableRules.length })}</p><details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectProposal')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details><button className={`mt-3 ${greenButton}`} disabled={busy} onClick={() => void applyCanon()}><Check size={13} />{imageMode ? t('setup.applyCanonImages') : t('setup.applyCanon')}</button></div>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(setJob)}>{t('setup.resumeCanon')}</button>}</div>}
+        {job && !job.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<span>{jobLine}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{job.status === 'completed' && job.seriesResult && <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3"><p className="text-[11px] text-green-200">{t('setup.proposalSummary', { characters: job.seriesResult.characters.length, locations: job.seriesResult.locations.length, rules: job.seriesResult.canon.immutableRules.length })}</p><details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectProposal')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details><button className={`mt-3 ${greenButton}`} disabled={busy} onClick={() => void applyCanon()}><Check size={13} />{imageMode ? t('setup.applyCanonImages') : t('setup.applyCanon')}</button></div>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), setJob)}>{t('setup.resumeCanon')}</button>}</div>}
       </SectionCard>
 
       <SectionCard title={t('identity.title')} description={t('identity.description')}>

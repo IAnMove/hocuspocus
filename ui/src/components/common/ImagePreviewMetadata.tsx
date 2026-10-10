@@ -4,6 +4,7 @@ import { useUiTranslation } from '../../i18n'
 import { formatAppTimestamp } from '../../lib/locale'
 import { formatGenerationDuration } from '../../lib/generationTiming'
 import { formatBytes } from '../../lib/format'
+import { outputProvenance } from '../../lib/outputProvenance'
 import type { PreviewImage } from './ImagePreview'
 
 export interface PreviewMetadataState {
@@ -17,6 +18,32 @@ function InfoField({ label, children }: { label: string; children: ReactNode }) 
     <dt className="mb-1 text-text-muted">{label}</dt>
     <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{children}</dd>
   </div>
+}
+
+type ProvenanceKey = 'made_by' | 'style' | 'voice' | 'voice_reference' | 'language' | 'tool' | 'made_from' | 'scene_file' | 'montage'
+
+/** Who made it (an agent or the Wizard), an audio file's style or voice, and what it was made from. */
+function ProvenanceFields({ metadata }: { metadata: OutputMetadata }) {
+  const { t } = useUiTranslation('common')
+  const found = outputProvenance(metadata)
+  const fields: Array<[ProvenanceKey, string]> = [
+    ['made_by', found.maker ? t(`imagePreview.madeBy.${found.maker.origin}`, { capability: found.maker.capability || '—' }) : ''],
+    ['style', found.style],
+    ['voice', found.voice],
+    ['voice_reference', found.voiceReference],
+    ['language', found.language],
+    ['tool', found.tool],
+    ['made_from', found.parents.join('\n')],
+    ['scene_file', found.sceneFile],
+    ['montage', found.montageFile],
+  ]
+  const shown = fields.filter(([, value]) => value)
+  if (!shown.length) return null
+  return <dl className="min-w-0 space-y-3 text-sm" data-testid="output-provenance">
+    {shown.map(([key, value]) => <InfoField key={key} label={t(`imagePreview.fields.${key}`)}>
+      {key === 'made_by' ? <span data-origin={found.maker?.origin} className="text-fuchsia-200">{value}</span> : value}
+    </InfoField>)}
+  </dl>
 }
 
 function ImageMetadata({ metadata }: { metadata: OutputMetadata }) {
@@ -36,6 +63,7 @@ function ImageMetadata({ metadata }: { metadata: OutputMetadata }) {
       {(['prompt', 'negative_prompt'] as const).map(key => typeof params[key] === 'string' && params[key] !== '' &&
         <InfoField key={key} label={t(`imagePreview.fields.${key}`)}>{params[key]}</InfoField>)}
     </dl>
+    <ProvenanceFields metadata={metadata} />
     <dl className="min-w-0 space-y-3 border-t border-border pt-4 text-xs">
       {metadata.source !== 'none' && <InfoField label={t('imagePreview.fields.source')}>{t(`imagePreview.sources.${metadata.source}`)}</InfoField>}
       {provenance.map(key => metadata[key] && <InfoField key={key} label={t(`imagePreview.fields.${key}`)}>{metadata[key]}</InfoField>)}

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchOutputs, type ApiOutput } from '../../api/outputs'
 import { AssetExplorerDialog } from '../../components/common/AssetExplorerDialog'
 import { useUiTranslation } from '../../i18n'
-import { isWorld3DOutput, loadWorld3DOutput, saveWorld3DOutput } from './sceneLibrary'
+import { listWorld3DWorkingScenes } from '../../api/world3dWorkspace'
+import { isWorld3DOutput, saveWorld3DOutput } from './sceneLibrary'
+import { loadLibraryItem, workingSceneItem } from './workingScenes'
 import type { Scene3DDocumentRef } from './documentHistory.ts'
 import type { Scene3DDocument } from './types'
 
@@ -31,17 +33,24 @@ export function Scene3DLibraryControls({ document, workspace, disabled, preview,
     const abort = new AbortController()
     setStatus('loading')
     void fetchOutputs(0, 0, { mediaType: 'scene', workspace, signal: abort.signal }).then(result => {
-      if (!abort.signal.aborted) { setItems(result.outputs.filter(isWorld3DOutput)); setStatus('ready') }
+      if (abort.signal.aborted) return
+      setItems(result.outputs.filter(isWorld3DOutput)); setStatus('ready')
+      // Then the working scenes an agent made and did not publish: they open too.
+      void listWorld3DWorkingScenes(workspace, abort.signal).then(working => {
+        if (abort.signal.aborted || !working.length) return
+        setItems(current => [...current, ...working.map(scene => workingSceneItem(scene,
+          t(scene.published ? 'library.workingChanged' : 'library.workingScene', { title: scene.title, revision: scene.revision })))])
+      }).catch(() => undefined)
     }).catch(() => { if (!abort.signal.aborted) setStatus('error') })
     return () => abort.abort()
-  }, [open, workspace, retry])
+  }, [open, workspace, retry, t])
   const choose = async (item: ApiOutput | null) => {
     if (!item) return
     const captured = current.current, abort = new AbortController()
     loading.current?.abort(); loading.current = abort
     setBusy(true); setError('')
     try {
-      const next = await loadWorld3DOutput(item, captured.workspace, abort.signal)
+      const next = await loadLibraryItem(item, captured.workspace, abort.signal)
       if (abort.signal.aborted) return
       if (current.current.document !== captured.document || current.current.workspace !== captured.workspace || current.current.disabled) {
         setError(t('library.changed')); return

@@ -118,7 +118,8 @@ def _public(job: dict[str, Any]) -> dict[str, Any]:
     payload.update(status_output_fields(
         payload["output_files"], workspace=workspace, workspace_dir=workspace_directory,
     ))
-    return payload
+    from services.output_names import annotate_generation_view
+    return annotate_generation_view(payload, job)
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -266,6 +267,7 @@ def _run(job_id: str) -> None:
         _patch(
             job_id, status="completed", phase="completed", progress=100, step=1,
             message="Image ready", output_files=[result["name"]], finished_at=time.time(),
+            output_name_requested=result.get("requested_name"),
         )
     except MiniMaxImageError as exc:
         _patch(job_id, status="failed", phase="failed", message=str(exc), error=str(exc), finished_at=time.time())

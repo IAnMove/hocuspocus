@@ -119,7 +119,7 @@ export function outputToPickerItem(item: ApiOutput, workspaceId: string): Picker
     ref,
     kind,
     filename: item.name,
-    title: displayAssetTitle(kind, createdAt, item.name),
+    title: item.display_title || displayAssetTitle(kind, createdAt, item.name),
     createdAt,
     sizeBytes: item.size,
     url: item.url,

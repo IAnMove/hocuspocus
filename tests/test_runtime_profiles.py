@@ -16,6 +16,12 @@ from services.runtime_environment import isolated_environment, python_path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def isolated_cuda_visibility(monkeypatch):
+    monkeypatch.delenv('CUDA_VISIBLE_DEVICES', raising=False)
+    monkeypatch.delenv('CUDA_DEVICE_ORDER', raising=False)
+
+
 def test_windows_and_linux_choose_distinct_main_abis():
     win = profiles.select_profiles("win32", "AMD64", "nvidia", "581.15")
     linux = profiles.select_profiles("linux", "x86_64", "nvidia", "580.82.09")
@@ -151,6 +157,175 @@ def test_missing_driver_is_explicitly_unverified():
     result = profiles.select_profiles("win32", "x64", "nvidia")
     assert result["engines"]["wangp"]["warning"]
     assert result["driver"] is None
+    assert result["computeCapability"] is None
+
+
+def test_pre_turing_gpu_installs_core_with_an_explicit_reason():
+    pascal = profiles.select_profiles("linux", "x64", "nvidia", "580.82.09", "6.1")
+    assert pascal["supported"] and pascal["engines"]["core"]["supported"]
+    assert pascal["computeCapability"] == "6.1"
+    for engine in pascal["engines"].values():
+        if engine.get("cuda"):
+            assert not engine["supported"]
+            assert "older than Turing" in engine["reason"] and "6.1" in engine["reason"]
+    turing = profiles.select_profiles("win32", "x64", "nvidia", "580.82.09", "7.5")
+    assert turing["engines"]["wangp"]["supported"] and not turing["engines"]["core"]["supported"]
+    # A driver below the floor still reports the driver when the GPU itself is fine.
+    old_driver = profiles.select_profiles("linux", "x64", "nvidia", "470.10", "8.9")
+    assert "driver" in old_driver["engines"]["wangp"]["reason"]
+
+
+def test_detect_profiles_reads_compute_capability_from_nvidia_smi(monkeypatch):
+    monkeypatch.setenv('CUDA_VISIBLE_DEVICES', 'GPU-selected')
+    def nvidia_smi(command, **_kwargs):
+        field = command[1].split("=", 1)[1]
+        if field == "compute_cap" and nvidia_smi.legacy:
+            raise subprocess.CalledProcessError(2, command, stderr="Field \"compute_cap\" is not a valid field")
+        output = {"driver_version": "580.82.09\n", "compute_cap": "8.9\n"}[field]
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    nvidia_smi.legacy = False
+    with patch.object(profiles.subprocess, "run", side_effect=nvidia_smi), \
+            patch.object(profiles, "installation_current", return_value=False):
+        result = profiles.detect_profiles(platform="linux", arch="x64")
+    assert result["gpu"] == "nvidia" and result["driver"] == "580.82.09"
+    assert result["computeCapability"] == "8.9"
+    assert result["cudaDevice"] == "GPU-selected"
+    assert result["engines"]["wangp"]["supported"]
+    assert not result["engines"]["core"]["supported"]
+    nvidia_smi.legacy = True
+    with patch.object(profiles.subprocess, "run", side_effect=nvidia_smi), \
+            patch.object(profiles, "installation_current", return_value=False):
+        legacy = profiles.detect_profiles(platform="linux", arch="x64")
+    assert legacy["driver"] == "580.82.09" and legacy["computeCapability"] is None
+    assert legacy["engines"]["wangp"]["supported"]
+    assert 'compute capability is unverified' in legacy['engines']['wangp']['warning']
+
+
+@pytest.mark.parametrize('visible,device,capability', [
+    (None, 'GPU-selected', '8.9'), ('0,1', 'GPU-selected', '8.9'), ('1,0', 'GPU-old', '6.1'),
+    ('GPU-selected', 'GPU-selected', '8.9'), ('', None, None), ('-1', None, None),
+])
+def test_detect_profiles_gates_the_first_visible_cuda_device(monkeypatch, visible, device, capability):
+    monkeypatch.setenv('CUDA_DEVICE_ORDER', 'PCI_BUS_ID')
+    if visible is None:
+        monkeypatch.delenv('CUDA_VISIBLE_DEVICES', raising=False)
+    else:
+        monkeypatch.setenv('CUDA_VISIBLE_DEVICES', visible)
+    calls = []
+
+    def nvidia_smi(command, **_kwargs):
+        calls.append(command)
+        selected = next((value.split('=', 1)[1] for value in command if value.startswith('--id=')), None)
+        field = command[1].split('=', 1)[1]
+        if field == 'uuid,pci.bus_id':
+            output = 'GPU-old, 00000000:65:00.0\nGPU-selected, 00000000:01:00.0'
+        else:
+            output = '580.82.09' if field == 'driver_version' else ('6.1' if selected == 'GPU-old' else '8.9')
+        return subprocess.CompletedProcess(command, 0, stdout=output + '\n', stderr='')
+
+    monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
+    monkeypatch.setattr(profiles, 'installation_current', lambda *_args: False)
+    result = profiles.detect_profiles(platform='linux', arch='x64', gpu='nvidia')
+    assert result['cudaDevice'] == device
+    assert result['computeCapability'] == capability
+    assert result['engines']['wangp']['supported'] == (capability == '8.9')
+    if device is None:
+        assert not calls
+    else:
+        assert all('--id=' + device in command for command in calls if '--query-gpu=uuid,pci.bus_id' not in command)
+
+
+@pytest.mark.parametrize('order,visible,expected_device,capability', [
+    (None, None, None, None), ('FASTEST_FIRST', '0,1', None, None),
+    ('FASTEST_FIRST', '1,0', None, None), ('PCI_BUS_ID', '0,1', 'GPU-new', '8.9'),
+    ('PCI_BUS_ID', '1,0', 'GPU-old', '6.1'), (None, 'GPU-new', 'GPU-new', '8.9'),
+])
+def test_cuda_ordinal_is_not_assumed_to_be_the_nvml_index(monkeypatch, order, visible, expected_device, capability):
+    if order is not None:
+        monkeypatch.setenv('CUDA_DEVICE_ORDER', order)
+    if visible is not None:
+        monkeypatch.setenv('CUDA_VISIBLE_DEVICES', visible)
+    calls = []
+
+    def nvidia_smi(command, **_kwargs):
+        calls.append(command)
+        field = command[1].split('=', 1)[1]
+        selected = next((part.split('=', 1)[1] for part in command if part.startswith('--id=')), None)
+        if field == 'uuid,pci.bus_id':
+            output = 'GPU-old, 00000000:65:00.0\nGPU-new, 00000000:01:00.0'
+        elif field == 'driver_version':
+            output = '580.82.09'
+        else:
+            output = '8.9' if selected in ('1', 'GPU-new') else '6.1'
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
+
+    monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
+    result = profiles.detect_profiles(platform='linux', arch='x64', gpu='nvidia', inspect_engines=set())
+    assert result['cudaDevice'] == expected_device
+    assert result['computeCapability'] == capability
+    assert result['engines']['wangp']['supported'] == (capability != '6.1')
+    if expected_device is None:
+        assert 'CUDA_DEVICE_ORDER' in result['engines']['wangp']['warning']
+        assert not any('--query-gpu=compute_cap' in command for command in calls)
+
+
+@pytest.mark.parametrize('selector', ['99', 'GPU-missing'])
+def test_an_out_of_range_cuda_selector_does_not_enable_the_nvidia_recipe(monkeypatch, selector):
+    monkeypatch.setenv('CUDA_VISIBLE_DEVICES', selector)
+
+    def nvidia_smi(command, **_kwargs):
+        if '--query-gpu=uuid,pci.bus_id' in command:
+            return subprocess.CompletedProcess(command, 0, stdout='GPU-only, 00000000:01:00.0', stderr='')
+        raise subprocess.CalledProcessError(6, command)
+
+    monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
+    result = profiles.detect_profiles(platform='linux', arch='x64', gpu='nvidia', inspect_engines=set())
+    assert not result['engines']['wangp']['supported']
+    assert result['engines']['core']['supported']
+    assert 'not available' in result['engines']['wangp']['warning']
+
+
+def test_unavailable_nvidia_smi_keeps_a_known_nvidia_machine_explicitly_unverified(monkeypatch):
+    def unavailable(*_args, **_kwargs):
+        raise OSError('nvidia-smi unavailable')
+
+    monkeypatch.setattr(profiles.subprocess, 'run', unavailable)
+    result = profiles.detect_profiles(platform='linux', arch='x64', gpu='nvidia', inspect_engines=set())
+    assert result['engines']['wangp']['supported']
+    assert result['cudaDevice'] is None and result['computeCapability'] is None
+    assert 'could not be verified' in result['engines']['wangp']['warning']
+
+
+def test_incomplete_inventory_does_not_claim_one_gpu_is_the_only_gpu(monkeypatch):
+    def nvidia_smi(command, **_kwargs):
+        field = command[1].split('=', 1)[1]
+        assert field != 'compute_cap', 'an incomplete inventory cannot identify CUDA lane 0'
+        output = '580.82.09' if field == 'driver_version' else 'GPU-known, 00000000:01:00.0\nGPU-other, [N/A]'
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
+
+    monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
+    result = profiles.detect_profiles(platform='linux', arch='x64', inspect_engines=set())
+    assert result['cudaDevice'] is None and result['computeCapability'] is None
+    assert 'identity could not be verified' in result['engines']['wangp']['warning']
+
+
+@pytest.mark.parametrize('order', [None, 'FASTEST_FIRST', 'PCI_BUS_ID'])
+def test_a_single_gpu_has_unambiguous_identity_in_every_cuda_order(monkeypatch, order):
+    if order:
+        monkeypatch.setenv('CUDA_DEVICE_ORDER', order)
+
+    def nvidia_smi(command, **_kwargs):
+        field = command[1].split('=', 1)[1]
+        if field != 'uuid,pci.bus_id':
+            assert '--id=GPU-only' in command
+        output = {'uuid,pci.bus_id': 'GPU-only, 00000000:01:00.0', 'driver_version': '580.82.09', 'compute_cap': '8.9'}[field]
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
+
+    monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
+    result = profiles.detect_profiles(platform='linux', arch='x64', inspect_engines=set())
+    assert result['cudaDevice'] == 'GPU-only' and result['computeCapability'] == '8.9'
+    assert result['engines']['wangp']['warning'] is None
 
 
 def test_conda_and_venv_windows_interpreters_are_not_confused(tmp_path):
@@ -397,6 +572,7 @@ def test_package_helper_ignores_inherited_destinations_and_configuration(monkeyp
     assert "--no-config" in args
     assert str(ROOT / profile["constraintFile"]) in args
     assert args.count("--constraint") == 2
+    assert args[args.index("--build-constraint") + 1] == str(ROOT / profile["constraintFile"])
     assert "PIP_TARGET" not in env and "UV_PYTHON" not in env
     assert env["PIP_CONFIG_FILE"] == os.devnull
     for override in ["--python=/foreign", "--target", "--prefix", "--system", "--user"]:
@@ -651,6 +827,9 @@ def test_install_summary_names_missing_features_and_why():
     old_driver = summary("win32", "x64", "nvidia", "470.1")
     # Engines blocked by the same driver floor share one line.
     assert any("(WanGP)" in line and "(Hunyuan3D)" in line and "528.33" in line for line in old_driver)
+    pascal = summary("linux", "x64", "nvidia", "580.82.09", "6.1")
+    assert "editing studio" in pascal[0]
+    assert any("(WanGP)" in line and "older than Turing" in line and "6.1" in line for line in pascal)
     nvidia = summary("linux", "x64", "nvidia", "580.82.09")
     assert nvidia[0].startswith("Installs the full studio")
     assert not any(line.startswith("Not available") for line in nvidia)

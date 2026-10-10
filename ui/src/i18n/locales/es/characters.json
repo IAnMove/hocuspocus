@@ -449,7 +449,8 @@
       "minimaxDescribe": "MiniMax está describiendo la imagen…",
       "llmDescribe": "El LLM interno está describiendo la imagen…",
       "orbitQueued": "Órbita H3 en cola…",
-      "hunyuanQueued": "Hunyuan3D en cola…"
+      "hunyuanQueued": "Hunyuan3D en cola…",
+      "orbitInterrupted": "Un reinicio del servidor interrumpió la órbita. Reanudar vuelve a ejecutar la cola guardada; descartar la vacía."
     },
     "errors": {
       "autoDescribe": "La descripción automática solo funciona con MiniMax o el LLM interno. Escribe un A Prompt o cambia Ajustes → LLM.",
@@ -618,7 +619,19 @@
     "generating": "Creando…",
     "keying": "Quitando el fondo…",
     "option": "Opción {{number}}",
+    "rigReady": "Lista para el rig",
+    "rigReasons": {
+      "eyes_small": "Los ojos son demasiado pequeños para el rig",
+      "eyes_not_found": "No se encontraron los ojos",
+      "sclera_dark": "Los ojos no tienen esclerótica clara",
+      "mouth_not_found": "No se encontró la boca",
+      "face_low_confidence": "La cara no se leyó con claridad",
+      "not_keyed": "No se quitó el fondo",
+      "face_too_light": "La cara es tan clara como los ojos",
+      "face_keyed_out": "La cara se fue con el fondo"
+    },
     "failed": "Esta opción falló: {{error}}",
+    "haze": "Queda un velo en el {{percent}} % de la imagen: el fondo no se quitó limpio. Elige otra opción o genérala de nuevo.",
     "pick": "Elige la opción que más te guste.",
     "noneReady": "Ninguna opción terminó. Vuelve a intentarlo o cambia la descripción.",
     "empty": "Aquí aparecerán las tres opciones.",
@@ -626,6 +639,9 @@
     "ready": "Listo para hablar. Revisa las bocas y el parpadeo abajo.",
     "reviewAlt": "Revisión de bocas y parpadeo",
     "unwiped": "No se encontró boca pintada en: {{poses}}. Se colocó una boca bajo los ojos.",
+    "warpReview": "Estas bocas son del propio dibujo: el labio de arriba se queda y el de abajo y la barbilla se mueven. En la revisión, comprueba que cada pose abre la boca entre los labios, no en la nariz ni en un bigote.",
+    "mouthLine": "Revisa la línea de la boca de {{poses}}: el rig no estaba seguro de dónde se juntan los labios. Abre Preparar habla 2D (abajo), elige a {{name}} y, en Línea de la boca, arrastra el punto a la línea entre los labios.",
+    "checkPoses": "Mira {{poses}} en la revisión antes de usar a {{name}}: puede que los ojos o una marca se hayan encontrado en otro sitio.",
     "designVoice": "Diseñar su voz",
     "newPose": "Pose nueva",
     "posePlaceholder": "Saludando, brazos arriba con pánico, señalando…",
@@ -640,11 +656,15 @@
     }
   },
   "voiceDesigner": {
-    "hint": "Describe la voz por sus rasgos. Empieza con «Male voice.» o «Female voice.» y sigue con edad, tono, ritmo y carácter. Una frase de muestra tranquila da una voz más estable.",
+    "hint": "Describe la voz por sus rasgos. Empieza con «Male voice.» o «Female voice.» y sigue con edad, tono, ritmo y carácter. Una frase de muestra tranquila da una voz más estable. La comprobación de tono sigue a la primera palabra que nombra a un hombre, una mujer o un niño: 75–175 Hz para un hombre, 150–320 para una mujer y 220–400 para un niño.",
     "missing": "El diseño de voz necesita estos modelos: {{models}}.",
     "download": "Descargar",
     "downloading": "Descarga iniciada. Vuelve a intentarlo cuando termine.",
     "language": "Idioma",
+    "accent": "Comprobación de acento",
+    "accentNone": "Ninguna",
+    "accentCastilian": "Castellano (θ)",
+    "accentSeseo": "θ castellana en el {{rate}}% de {{positions}} posiciones. La voz se conserva.",
     "description": "Descripción de la voz",
     "placeholder": "Male voice. Unos 28 años, algo nasal, rápido y nervioso, simpático.",
     "text": "Frase de muestra (se guarda como transcripción de referencia)",
@@ -669,5 +689,50 @@
       "chinese": "chino",
       "russian": "ruso"
     }
+  },
+  "mouthLine": {
+    "title": "Línea de la boca · {{pose}}",
+    "intro": "Estas bocas son del propio dibujo: el labio de arriba se queda y el de abajo, la barbilla y la barba bajan. Arrastra el punto a la línea entre los labios y los dos extremos a las comisuras; las bocas lo siguen mientras mueves.",
+    "notWarp": "Al guardar, este personaje pasa a usar estas bocas y se vuelven a riggear todas sus poses.",
+    "noOwn": "Esta pose aún no tiene bocas propias: coloca la línea y guarda para crearlas.",
+    "zoomAlt": "La boca de {{name}}, ampliada",
+    "stateAlt": "{{name}} diciendo {{sound}}",
+    "dot": "Punto de la línea de la boca",
+    "left": "Comisura izquierda",
+    "right": "Comisura derecha",
+    "nudge": {
+      "up": "Arriba",
+      "down": "Abajo",
+      "left": "Izquierda",
+      "right": "Derecha",
+      "narrower": "Más estrecha",
+      "wider": "Más ancha"
+    },
+    "zoomOut": "Ver más cara",
+    "zoomIn": "Más cerca",
+    "loading": "Deformando las bocas…",
+    "snapped": "La línea está sobre la línea pintada entre los labios.",
+    "free": "Aquí no hay línea pintada: la boca se abre justo en el punto.",
+    "sounds": {
+      "rest": "reposo",
+      "i": "i",
+      "e": "e",
+      "a": "a",
+      "o": "o",
+      "u": "u"
+    },
+    "undo": "Deshacer cambios",
+    "save": "Guardar boca",
+    "saving": "Riggeando…",
+    "saved": "Boca de {{pose}} guardada. Los planos que usan esta pose conservan la boca anterior hasta que se vuelvan a renderizar.",
+    "previewOnly": "Para guardar la línea, abre este personaje en Personajes › Preparar habla 2D.",
+    "errors": {
+      "preview": "No se pudieron previsualizar las bocas.",
+      "unsaved": "Guarda antes los demás cambios del personaje: la línea se guarda riggeando de nuevo el personaje guardado.",
+      "save": "No se pudo guardar la línea de la boca."
+    },
+    "unsure": "Los puntos de la cara no eran seguros aquí (bigote, barba, cara vista desde abajo): comprueba que la línea esté entre los labios.",
+    "smallFace": "Cara pequeña (cabeza de {{head}} px): las bocas se deforman sobre la cara ampliada {{times}}×, se devuelven a la pose y se abren un poco más, para que se lean cuando la figura sale pequeña.",
+    "headPass": "Sus puntos de la cara se leyeron sobre la cabeza sola."
   }
 }

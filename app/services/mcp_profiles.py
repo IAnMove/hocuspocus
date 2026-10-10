@@ -11,23 +11,43 @@ SERIES_TOOLS = frozenset({
     # Start here, then the series itself.
     "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",
-    "series.episode.from_script", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
+    "series.episode.from_script", "series.episode.script.get", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
     "series.episode.produce.resume",
     "series.episode.create", "series.episode.update", "series.episode.language_version.set", "series.episode.translate",
     "series.episode.render_native", "series.episode.render_native.status", "series.episode.render_native.cancel",
     "series.episode.render_native.resume", "series.asset.import", "series.take.approve",
     "series.assembly.start", "series.assembly.status", "series.location.plate3d", "series.location.plate3d.status",
+    # The user's staged review: production mode, plan/preview approvals and notes per shot.
+    "series.episode.review.get", "series.episode.review.set", "series.shot.review.set",
+    "series.episode.kits.pin", "series.episode.kits.update",
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.rig.flat",
+    "characters.rig.flat.preview", "characters.rig.check",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
-    "studio.key", "qa.speech", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
+    "jobs.cancel",
+    "studio.key", "qa.speech", "qa.accent", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
+    # One shot by its number or id, and the media steps that used to need scripts outside the app.
+    "series.shot.get", "series.shot.update", "series.shot.voices", "series.shot.voice", "series.shot.voice.status", "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
     # Editing a take's scene and Video 3D.
     "scenes.document.get", "scenes.document.save", "scenes.effects.catalog", "scenes.effects.apply",
     "scenes.video2d.export", "scenes.video2d.export.receipt", "scenes.video2d.preview",
     "world3d.templates.list", "world3d.templates.get", "world3d.templates.user.put", "world3d.scene.instantiate",
     "world3d.scene.inspect", "world3d.scene.patch", "world3d.scene.talk", "world3d.scene.preview", "world3d.scene.publish",
     "scenes.world3d.export", "scenes.world3d.export.receipt",
+})
+
+GAME_TOOLS = frozenset({
+    "game.guide", "game.presets", "game.list", "game.get", "game.create", "game.update",
+    "game.style.sheet", "game.style.approve", "game.assets.from_list", "game.asset.update",
+    "game.asset.approve", "game.asset.reject", "game.asset.lock",
+    "game.produce", "game.produce.status", "game.produce.cancel", "game.produce.resume", "game.export",
+    "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
+    "studio.key", "qa.accent",
+    "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
+    "characters.list", "characters.get", "characters.save", "characters.rig.check",
+    "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
+    "media.options", "scenes.assets.inspect",
 })
 
 PROFILES: dict[str, dict] = {
@@ -39,6 +59,19 @@ PROFILES: dict[str, dict] = {
             "the shot format, the house conventions and the series bible (characters with their kits, poses and voices, "
             "locations, music and sound files, episodes). Write the episode with series.episode.from_script and make it with "
             "series.episode.produce. Long jobs return an id: poll their status tool. Reuse intent_id on retries."
+        ),
+    },
+    "game": {
+        "tools": GAME_TOOLS,
+        "instructions": (
+            "HocusPocus game assets: a local pack of sprites, animation, tiles, UI, audio and meshes for one game. "
+            "Call game.guide first. Never approve a style or an asset unless the user asked. "
+            "Describe the look by traits, not by a brand, console, studio or artist. "
+            "Measure one asset before a large batch. game.assets.from_list with check true does not write; "
+            "replace true deletes the assets the list leaves out. "
+            "game.produce renders pending work; rerender only stale assets. Poll game.produce.status, not jobs.wait; "
+            "409 already_running means a job for that game is still active. "
+            "game.export packs approved assets only."
         ),
     },
 }

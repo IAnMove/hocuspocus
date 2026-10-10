@@ -1,15 +1,19 @@
 """Authored clips for the standard humanoid. Each recipe fills a ``Pose``.
 
 ``u`` runs from 0 to 1 over one loop. Every curve returns to its start value,
-so the first and last keys match and the loop has no seam. Distances are in
-leg lengths; angles follow the conventions in ``motion``.
+so the first and last keys match and the loop has no seam. The clips in
+``HOLDS`` are the exception: they go down into a pose and stay there, so their
+last key is that pose and a slot plays them once. Distances are in leg lengths;
+angles follow the conventions in ``motion``.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from services.humanoid_rig.motion import Pose
+from services.humanoid_rig import rotation as rot
+from services.humanoid_rig.motion import Pose, bake_with_frames, sole_lift
+from services.humanoid_rig.names import BONE_NAMES
 
 TAU = 2.0 * np.pi
 
@@ -320,6 +324,248 @@ def shrug(pose: Pose, u: np.ndarray) -> None:
     _plant_both(pose)
 
 
+def _rest_in_chest(pose: Pose, bone: str) -> np.ndarray:
+    """A joint's T-pose position in metres from the chest joint, in the chest frame (x left, y up, z forward)."""
+    rig = pose.rig
+    positions, _worlds = rig.forward(np.tile(rot.IDENTITY, (1, len(BONE_NAMES), 1)), rig.root[None])
+    return rot.rotate(rot.inverse(rig.facing), positions[0, rig.index(bone)] - positions[0, rig.index("Spine2")])
+
+
+def _mirror(side: str) -> np.ndarray:
+    return np.array([1.0 if side == "Left" else -1.0, 1.0, 1.0])
+
+
+def _hanging(pose: Pose, side: str) -> np.ndarray:
+    """Where the wrist hangs in the relaxed stance, in the chest frame (x mirrored), so a reach can start there."""
+    rig = pose.rig
+    _local, _root, positions, worlds = bake_with_frames(Pose(rig, np.zeros(1)))
+    chest = rig.index("Spine2")
+    return rot.rotate(rot.inverse(worlds[0, chest]), positions[0, rig.index(f"{side}Hand")] - positions[0, chest]) * _mirror(side)
+
+
+def _step(amount: np.ndarray) -> np.ndarray:
+    """A foot's lift while ``amount`` carries it from one spot to the next: 0 at both ends."""
+    return np.sin(np.pi * amount) ** 1.3
+
+
+def _reach_world(pose: Pose, side: str, goal: np.ndarray, chest_at: np.ndarray, chest: np.ndarray, pole) -> None:
+    """Wrist goals in model space, held in the chest frame of an earlier bake so the floor contact cannot move them."""
+    local = rot.rotate(rot.inverse(chest), goal - chest_at)
+    pose.reach(side, local * _mirror(side), pole=pole)
+
+
+def _within_reach(goal: np.ndarray, shoulder: np.ndarray, reach: float) -> np.ndarray:
+    """Pull each goal toward the shoulder until it is no farther than ``reach``.
+
+    A straight arm turns a small move of its goal into a big jump of the elbow, so a short-armed body
+    stops a little short of a goal it cannot reach instead of locking the elbow.
+    """
+    offset = goal - shoulder
+    distance = np.linalg.norm(offset, axis=1, keepdims=True)
+    return shoulder + offset * np.minimum(1.0, reach / np.maximum(distance, 1e-9))
+
+
+def _recoil(u: np.ndarray, beats: int) -> np.ndarray:
+    """A kick on every beat: up within a frame, then eased back over half a beat."""
+    beat = np.mod(u * beats, 1.0)
+    rise, fall = 0.04, 0.45
+    back = np.clip((beat - rise) / fall, 0.0, 1.0)
+    return np.where(beat < rise, np.sin(0.5 * np.pi * beat / rise), (1.0 - back) ** 2)
+
+
+def _rifle(pose: Pose, u: np.ndarray, kick: np.ndarray) -> None:
+    """Right-handed two-handed rifle aim, left foot forward; ``kick`` (0..1) is the recoil."""
+    breath = pulse(u)
+    sway = wave(u, 1, 0.3)
+    pose.move_root(up=-0.05 - 0.006 * breath - 0.012 * kick, forward=-0.015 * kick, side=0.006 * sway)
+    pose.plant("Left", forward=0.14, out=0.03, yaw=-12.0)
+    pose.plant("Right", forward=-0.14, out=0.06, yaw=-35.0)
+    pose.hips(yaw=-14.0, roll=-1.0 * sway)
+    pose.spine(pitch=5.0 - 1.5 * breath - 4.0 * kick, yaw=-12.0 - 3.0 * kick, roll=-1.5)
+    # Cheek down on the stock, eyes back on the target over the turned shoulders.
+    pose.head(pitch=8.0 - 1.0 * breath - 4.0 * kick, yaw=22.0 + 2.0 * kick, roll=-9.0)
+    pose.clavicle("Right", shrug=1.5 * breath, forward=4.0 - 9.0 * kick)
+    pose.clavicle("Left", shrug=1.0 * breath, forward=6.0)
+    rig = pose.rig
+    _local, _root, positions, worlds = bake_with_frames(pose)
+    chest_at, chest = positions[:, rig.index("Spine2")], worlds[:, rig.index("Spine2")]
+    # The barrel points at the target whatever the stance; breathing and each kick lift the muzzle a little.
+    climb = np.radians(0.8 * breath - 0.4 + 5.0 * kick)
+    drift = np.radians(0.6 * wave(u, 1, 0.1))
+    ahead = rot.rotate(rig.facing, np.stack((np.sin(drift) * np.cos(climb), np.sin(climb), np.cos(drift) * np.cos(climb)), axis=1))
+    up = rot.rotate(rig.facing, np.stack((np.zeros_like(climb), np.cos(climb), -np.sin(climb)), axis=1))
+    left = np.cross(up, ahead)
+    arm = rig.arm
+    stock = positions[:, rig.index("RightArm")] + arm * (0.10 * left + 0.04 * ahead + 0.03 * up)
+    _reach_world(pose, "Right", stock + arm * (0.42 * ahead - 0.14 * up), chest_at, chest, (0.4, -1.0, -0.3))  # trigger elbow down
+    support = _within_reach(stock + arm * (0.92 * ahead - 0.07 * up + 0.02 * left), positions[:, rig.index("LeftArm")], 0.92 * arm)
+    _reach_world(pose, "Left", support, chest_at, chest, (0.1, -1.0, 0.2))
+    pose.palm("Right", -10.0)  # the grip: palm in, fingers forward round it
+    pose.wrist("Right", wave=-45.0)
+    pose.palm("Left", 60.0)  # the support hand cups the barrel from below
+    pose.wrist("Left", flex=-30.0)
+
+
+def aim(pose: Pose, u: np.ndarray) -> None:
+    _rifle(pose, u, np.zeros_like(u))
+
+
+def shoot(pose: Pose, u: np.ndarray) -> None:
+    _rifle(pose, u, _recoil(u, RECIPES["shoot"][0]))
+
+
+_SLASH = (0.02, 0.20, 0.29, 0.36, 0.62)  # wind-up starts, swipe starts, swipe ends, recovery starts, back on guard
+
+
+def _slash_target(pose: Pose, side: str, phase: np.ndarray) -> np.ndarray:
+    """The wrist path of one claw swipe, in the chest frame (x mirrored): guard, wind-up high and out, across, back."""
+    start, swing, end, back, guard_at = _SLASH
+    rig = pose.rig
+    arm, front = rig.arm, rig.limits["chest_front"]
+    shoulder = _rest_in_chest(pose, f"{side}Arm") * _mirror(side)
+    raise_to = np.radians(min(50.0, rig.limits["arm_up"] - 15.0))
+    height = min(0.45, np.tan(raise_to) * 0.39)
+    guard = shoulder + np.array([-0.05 * arm, -0.22 * arm, front + 0.30 * arm - shoulder[2]])
+    windup = shoulder + arm * np.array([0.38, height, -0.10])
+    across = shoulder + np.array([-0.55 * arm, -0.42 * arm, front + 0.35 * arm - shoulder[2]])
+    bend = shoulder + arm * np.array([0.10, 0.10, 1.10])  # pulls the swipe out in front of the body
+    gather = keys(phase, [(0.0, 0.0), (start, 0.0), (swing, 1.0), (1.0, 1.0)])[:, None]
+    s = keys(phase, [(0.0, 0.0), (swing, 0.0), (end, 1.0), (1.0, 1.0)])[:, None]
+    settle = keys(phase, [(0.0, 0.0), (back, 0.0), (guard_at, 1.0), (1.0, 1.0)])[:, None]
+    arc = (1.0 - s) ** 2 * windup + 2.0 * s * (1.0 - s) * bend + s * s * across
+    return np.where(phase[:, None] < swing, guard + (windup - guard) * gather,
+                    np.where(phase[:, None] < back, arc, across + (guard - across) * settle))
+
+
+def claw(pose: Pose, u: np.ndarray) -> None:
+    start, swing, end, back, guard_at = _SLASH
+    turn, lunge = np.zeros_like(u), np.zeros_like(u)
+    for side, shift, sign in (("Right", 0.0, 1.0), ("Left", 0.5, -1.0)):
+        phase = np.mod(u + 1.0 - shift, 1.0)
+        twist = keys(phase, [(0.0, 0.0), (start, 0.0), (swing, -1.0), (end, 1.0), (back, 1.0), (guard_at, 0.0), (1.0, 0.0)])
+        strike = keys(phase, [(0.0, 0.0), (swing - 0.05, 0.0), (end, 1.0), (back + 0.04, 1.0), (guard_at, 0.0), (1.0, 0.0)])
+        gather = keys(phase, [(0.0, 0.0), (start, 0.0), (swing, 1.0), (end, 0.0), (1.0, 0.0)])
+        turn += sign * twist
+        lunge += strike
+        pose.reach(side, _slash_target(pose, side, phase), pole=(1.0, -0.5, -0.5))
+        pose.clavicle(side, shrug=9.0 * gather, forward=-6.0 * gather + 10.0 * strike)
+        pose.wrist(side, flex=-30.0 + 15.0 * strike)  # claws bent back, then leading the swipe
+        pose.palm(side, -30.0 * strike)
+    pose.move_root(up=-0.09 - 0.03 * lunge, forward=0.03 * lunge)
+    pose.plant("Left", forward=0.08, out=0.06, yaw=8.0)
+    pose.plant("Right", forward=-0.08, out=0.06, yaw=-8.0)
+    pose.hips(yaw=9.0 * turn, pitch=4.0 + 4.0 * lunge)
+    pose.spine(pitch=14.0 + 8.0 * lunge, yaw=22.0 * turn)
+    pose.head(pitch=-16.0 - 6.0 * lunge, yaw=-20.0 * turn)  # eyes stay on the prey
+
+
+def hit(pose: Pose, u: np.ndarray) -> None:
+    blow = keys(u, [(0.0, 0.0), (0.035, 1.0), (0.12, 0.75), (0.3, 0.25), (0.55, 0.0), (1.0, 0.0)])
+    step = keys(u, [(0.0, 0.0), (0.05, 0.0), (0.2, 1.0), (0.52, 1.0), (0.68, 0.0), (1.0, 0.0)])
+    give = keys(u, [(0.0, 0.0), (0.16, 0.0), (0.3, 1.0), (0.48, 0.4), (0.7, 0.0), (1.0, 0.0)])
+    lift = 0.07 * _step(np.clip((u - 0.05) / 0.15, 0.0, 1.0)) + 0.05 * _step(np.clip((u - 0.52) / 0.16, 0.0, 1.0))
+    pose.plant("Right", forward=-0.3 * step, out=0.02 * step, up=lift, pitch=10.0 * lift / 0.07)
+    pose.plant("Left")
+    pose.move_root(forward=-0.15 * step - 0.05 * blow, up=-0.02 - 0.07 * give)
+    pose.hips(pitch=-6.0 * blow, yaw=5.0 * blow)
+    pose.spine(pitch=-20.0 * blow + 10.0 * give, yaw=8.0 * blow, roll=-3.0 * blow)
+    # The head lags the snap of the chest, then whips back past it.
+    whip = keys(u, [(0.0, 0.0), (0.02, 6.0), (0.07, -22.0), (0.15, -8.0), (0.32, 6.0), (0.6, 0.0), (1.0, 0.0)])
+    pose.head(pitch=whip + 4.0 * give, yaw=-6.0 * blow)
+    down = pose.rig.limits["arm_down"]
+    for side, shift in (("Left", 0.0), ("Right", 0.02)):
+        fling = keys(u, [(0.0, 0.0), (0.03 + shift, 1.0), (0.2, 0.7), (0.45, 0.2), (0.75, 0.0), (1.0, 0.0)])
+        pose.arm(side, lift=-down + 22.0 * fling, swing=6.0 + 50.0 * fling, sweep=10.0 * fling)
+        pose.elbow(side, 14.0 + 35.0 * fling)
+        pose.clavicle(side, shrug=6.0 * fling)
+
+
+def hover(pose: Pose, u: np.ndarray) -> None:
+    pose.grounded = False
+    beat = TAU * 2.0 * u  # a wing beat per beat lifts the body on the downstroke
+    pose.move_root(up=0.32 + 0.05 * np.sin(beat), forward=0.01 * np.sin(beat - 0.6), side=0.012 * wave(u))
+    pose.hips(pitch=10.0 + 2.0 * np.sin(beat - 0.5), roll=-2.0 * wave(u))
+    pose.spine(pitch=12.0 + 3.0 * np.sin(beat + 0.4), roll=1.5 * wave(u))
+    pose.head(pitch=-16.0 - 3.0 * np.sin(beat + 0.8), yaw=6.0 * wave(u, 1, 0.2))
+    for side, lag in (("Left", 1.2), ("Right", 1.45)):
+        # Legs hang loose and trail behind, swinging a little after each beat.
+        pose.leg(side, swing=-12.0 + 5.0 * np.sin(beat - lag), spread=4.0, knee=26.0 + 9.0 * np.sin(beat - lag - 0.5),
+                 toes=-35.0 + 8.0 * np.sin(beat - lag - 0.9))
+        pose.arm(side, lift=-52.0 + 6.0 * np.sin(beat - lag + 0.3), swing=30.0 + 4.0 * np.sin(beat - lag), sweep=0.0)
+        pose.elbow(side, 30.0 + 8.0 * np.sin(beat - lag - 0.2))
+
+
+def _kneeling(pose: Pose, side: str, tilt: float) -> tuple[float, float, float, float]:
+    """``(hips drop, ankle forward, ankle out, toe pitch)`` that put this knee on the floor; lengths in leg lengths.
+
+    The thigh leans ``tilt`` degrees forward from the vertical under a hip kept where it stands, and the shin
+    reaches back from the knee to an ankle under the hip, so legs modeled apart still kneel with the knees
+    together. The foot rests on its tucked toes, tucked less when a big foot would lift the ankle above the knee.
+    """
+    rig = pose.rig
+    hip, ankle = (rot.rotate(rot.inverse(rig.facing), rig.rest_positions[rig.index(f"{side}{part}")]) for part in ("UpLeg", "Foot"))
+    thigh, shin = rig.length(f"{side}UpLeg", f"{side}Leg") / rig.leg, rig.length(f"{side}Leg", f"{side}Foot") / rig.leg
+    rest_ankle = (ankle[1] - rig.floor) / rig.leg
+    knee_up = float(np.clip(0.8 * rest_ankle, 0.03, 0.18))  # the knee joint sits about half the knee's depth above the floor
+    pitches = np.arange(-60.0, -4.0, 5.0)
+    rises = rest_ankle + sole_lift(rig, side, pitches) / rig.leg - knee_up
+    pick = int(np.argmax(rises <= 0.6 * shin)) if np.any(rises <= 0.6 * shin) else len(pitches) - 1
+    lean = np.radians(tilt)
+    drop = (hip[1] - rig.floor) / rig.leg - (knee_up + thigh * np.cos(lean))
+    knee_ahead = (hip[2] - ankle[2]) / rig.leg + thigh * np.sin(lean)
+    behind = np.sqrt(max(shin * shin - float(rises[pick]) ** 2, 1e-6))
+    apart = (1.0 if side == "Left" else -1.0) * (ankle[0] - hip[0]) / rig.leg
+    return float(drop), float(knee_ahead - behind), float(-apart), float(pitches[pick])
+
+
+def kneel_pray(pose: Pose, u: np.ndarray) -> None:
+    drop, right_back, right_in, right_toes = _kneeling(pose, "Right", 8.0)
+    _drop, left_back, left_in, left_toes = _kneeling(pose, "Left", 8.0)
+    first = keys(u, [(0.0, 0.0), (0.02, 0.0), (0.11, 1.0), (1.0, 1.0)])   # right foot back, right knee down
+    second = keys(u, [(0.0, 0.0), (0.11, 0.0), (0.19, 1.0), (1.0, 1.0)])  # then the left
+    ball = keys(u, [(0.0, 0.0), (0.04, 0.0), (0.11, 1.0), (0.13, 1.0), (0.19, 0.0), (1.0, 0.0)])
+    hands = keys(u, [(0.0, 0.0), (0.12, 0.0), (0.23, 1.0), (1.0, 1.0)])
+    bowed = keys(u, [(0.0, 0.0), (0.16, 0.0), (0.26, 1.0), (1.0, 1.0)])
+    breath = pulse(u, 4) * keys(u, [(0.0, 0.0), (0.22, 0.0), (0.3, 1.0), (1.0, 1.0)])
+    pose.move_root(up=-0.015 * (1.0 - first) - drop * first - 0.02 * _step(first), forward=-0.08 * _step(first) - 0.04 * _step(second))
+    pose.plant("Right", forward=right_back * first, out=right_in * first, up=0.06 * _step(first), pitch=right_toes * first)
+    # The front foot rolls onto its ball while its knee folds, then steps back beside the other.
+    pose.plant("Left", forward=left_back * second, out=left_in * second, up=0.05 * _step(second), pitch=-30.0 * ball + left_toes * second)
+    pose.spine(pitch=10.0 * _step(first) + 6.0 * bowed - 2.0 * breath)
+    pose.head(pitch=26.0 * bowed - 2.0 * breath)
+    arm, front = pose.rig.arm, pose.rig.limits["chest_front"]
+    joined = np.array([0.04 * arm, -0.1 * arm, front + 0.2 * arm])
+    lift = np.outer(np.sin(np.pi * hands), [0.0, 0.0, 0.15 * arm])  # the hands come up clear of the belly
+    for side in ("Left", "Right"):
+        rest = _hanging(pose, side)
+        pose.reach(side, rest[None] + (joined - rest)[None] * hands[:, None] + lift, pole=(0.4, -1.0, -0.6))
+        pose.clavicle(side, shrug=3.0 * breath, forward=4.0 * hands)
+        pose.palm(side, -60.0 * hands)
+        pose.wrist(side, flex=-40.0 * hands, wave=40.0 * hands)  # fingers up, palm to palm
+
+
+def crouch(pose: Pose, u: np.ndarray) -> None:
+    down = keys(u, [(0.0, 0.0), (0.02, 0.0), (0.1, 1.0), (1.0, 1.0)])
+    peek = keys(u, [(0.0, 0.0), (0.3, 0.0), (0.38, 1.0), (0.5, 1.0), (0.57, 0.0), (1.0, 0.0)])
+    breath = pulse(u, 4) * keys(u, [(0.0, 0.0), (0.1, 0.0), (0.16, 1.0), (1.0, 1.0)])
+    low = down * (1.0 - 0.55 * peek)
+    pose.move_root(up=-0.015 - 0.43 * low - 0.004 * breath, forward=-0.12 * low)
+    for side in ("Left", "Right"):
+        pose.plant(side, pitch=-10.0 * low)
+    pose.hips(pitch=8.0 * low)
+    pose.spine(pitch=22.0 * low - 1.5 * breath)
+    pose.head(pitch=-18.0 * low, yaw=10.0 * peek * wave(u, 2, 0.1))  # face up over the cover, a glance each way when peeking
+    arm, front = pose.rig.arm, pose.rig.limits["chest_front"]
+    ready = np.array([0.12 * arm, -0.05 * arm, front + 0.5 * arm])
+    for side in ("Left", "Right"):
+        rest = _hanging(pose, side)
+        pose.reach(side, rest[None] + (ready - rest)[None] * down[:, None], pole=(0.4, -1.0, -0.6))
+        pose.clavicle(side, shrug=2.0 * breath + 4.0 * down)
+
+
+# Clips that go down into a pose and keep it: their last key is that pose, so a slot plays them once.
+HOLDS = frozenset({"kneel_pray", "crouch"})
+
 RECIPES = {
     "idle": (4, idle),
     "breathe": (4, breathe),
@@ -341,4 +587,11 @@ RECIPES = {
     "bow": (4, bow),
     "point": (2, point),
     "shrug": (2, shrug),
+    "aim": (4, aim),
+    "shoot": (2, shoot),
+    "claw": (4, claw),
+    "hit": (4, hit),
+    "hover": (2, hover),
+    "kneel_pray": (16, kneel_pray),
+    "crouch": (8, crouch),
 }

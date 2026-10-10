@@ -348,14 +348,17 @@
       "short_arms": "Short arms: gestures are scaled to them.",
       "neck_not_found": "No clear neck: the head turns from where it meets the body.",
       "facing_back": "The model faced backwards; the skeleton was turned to match.",
-      "on_a_base": "The model stands on a base: the feet were placed on its top and the base follows the hips."
+      "on_a_base": "The model stands on a base: the feet were placed on its top and the base follows the hips.",
+      "covered_arms": "A cape or loose cloth covers the shoulders: the arms were found on the body under it, and the cloth follows the shoulders smoothly.",
+      "covered_legs": "A cape, coat or open robe hangs over the legs: the legs were found behind it, and the cloth hangs from the hips.",
+      "legs_hidden": "A long robe or skirt hides the legs: they were placed from the feet under the hem, and the robe hangs from the hips and thighs."
     },
     "refusal": {
       "hands_stuck": "The arms touch the body or hang straight down. It needs a gap under each arm (T or A pose).",
       "arms_raised": "The arms are raised well above the shoulders. Use a T or A pose.",
       "turned": "The model is turned at an angle. Use a model facing the camera straight on.",
-      "single_leg": "There is no gap between the legs (legs together, a dress or a robe).",
-      "legs_too_short": "The legs are too short to rig, or hidden.",
+      "single_leg": "There is no gap between the legs (legs together, or a dress or robe down to the floor that hides the feet).",
+      "legs_too_short": "The legs are too short to rig, or hidden (not even the feet show under a robe).",
       "asymmetry": "The left and right sides differ too much. Use a symmetric pose.",
       "not_upright": "The model is not standing upright (Y up).",
       "degenerate": "The mesh is empty or broken."
@@ -387,7 +390,14 @@
       "look_around": "Look Around",
       "bow": "Bow",
       "point": "Point",
-      "shrug": "Shrug"
+      "shrug": "Shrug",
+      "aim": "Aim",
+      "shoot": "Shoot",
+      "claw": "Claw",
+      "hit": "Hit",
+      "hover": "Hover",
+      "kneel_pray": "Kneel Pray",
+      "crouch": "Crouch"
     },
     "humanoidClipHelp": {
       "idle": "Relaxed standing: breathing, a slow weight shift and a glance.",
@@ -409,7 +419,14 @@
       "look_around": "Turns the head and chest left, then right.",
       "bow": "A polite bow from the hips and back up.",
       "point": "Points forward with the right arm and holds.",
-      "shrug": "Shoulders up with open palms: I don't know."
+      "shrug": "Shoulders up with open palms: I don't know.",
+      "aim": "Two-handed rifle aim at shoulder height, feet in a stance, breathing sway.",
+      "shoot": "Rifle aim with a recoil kick on every beat.",
+      "claw": "A creature's claw slashes, wind-up and swipe across, alternating arms.",
+      "hit": "Staggers back a step from a blow and recovers.",
+      "hover": "Hovers in the air: body bob on each beat, legs dangling behind, arms out.",
+      "kneel_pray": "Kneels down, joins the hands in prayer, bows the head and stays. Play once.",
+      "crouch": "Crouches into cover, peeks up over it and stays down. Play once."
     },
     "animateSaved_one": "Saved {{file}} with 1 new clip",
     "animateSaved_other": "Saved {{file}} with {{count}} new clips"

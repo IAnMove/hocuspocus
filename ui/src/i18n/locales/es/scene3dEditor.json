@@ -364,7 +364,8 @@
     "creative": "Creativas",
     "perspective": "Perspectivas",
     "animated": "Fondos vivos",
-    "pixel": "Mundos pixel"
+    "pixel": "Mundos pixel",
+    "anime": "Anime"
   },
   "setting": {
     "sea": "Mar",
@@ -3399,6 +3400,74 @@
     "cine-ultraviolet": {
       "title": "Ultravioleta",
       "description": "Estilo. Una luz violeta y un rostro cercano, un poco desde arriba."
+    },
+    "anime-speedline-charge": {
+      "title": "Carga con líneas de velocidad",
+      "description": "Una figura sobre líneas de concentración animadas; la cámara salta de plano medio a la cara y tiembla al llegar."
+    },
+    "anime-impact-frame": {
+      "title": "Fotograma de impacto",
+      "description": "Llega el golpe: dos fotogramas en negativo, tres en blanco con líneas de tinta, un estallido y una sacudida que se apaga."
+    },
+    "anime-snap-zoom": {
+      "title": "Zoom relámpago",
+      "description": "Figura entera y, en menos de un tercio de segundo, empujón brusco hasta los ojos, con líneas de velocidad durante el movimiento."
+    },
+    "anime-sword-clash": {
+      "title": "Choque de espadas",
+      "description": "Dos luchadores entran a la carrera por los lados y se cruzan en el centro: tajo, onda expansiva, fotograma blanco y sacudida fuerte."
+    },
+    "anime-face-off": {
+      "title": "Duelo de miradas",
+      "description": "Dos rivales se miran en primer plano, uno en cada mitad, sobre líneas oscuras; empuje lento y un destello final."
+    },
+    "anime-airship-flyby": {
+      "title": "Pasada de aeronave",
+      "description": "Un vehículo cruza un cielo pintado en un arco suave; la cámara lo sigue y las nubes pasan de largo."
+    },
+    "anime-fleet-approach": {
+      "title": "Llegada de la flota",
+      "description": "Cuatro copias de un mismo vehículo salen de un banco de nubes en formación escalonada y vienen hacia la cámara."
+    },
+    "anime-eyecatch": {
+      "title": "Eyecatch (cortinilla)",
+      "description": "Cortinilla breve de cambio de escena: la figura llega girando desde el fondo sobre un fondo gráfico de líneas y estrellas."
+    },
+    "anime-code-rain": {
+      "title": "Lluvia de código",
+      "description": "Código verde cae sobre negro detrás de una figura, que toma un tinte verde; empuje lento. Sin figura, el plano es un fondo que se repite sin corte."
+    },
+    "motion-bouncing-ball": {
+      "title": "Salto a compás",
+      "description": "Una bola 3D cae sobre plataformas afinadas: cada contacto visible coincide con una nota sintetizada localmente."
+    },
+    "motion-music-machine": {
+      "title": "Máquina musical de contactos",
+      "description": "Un mecanismo 3D golpea barras y tambores. Las notas originales siguen el mismo calendario de contactos."
+    },
+    "motion-sunset-flight": {
+      "title": "Vuelo al atardecer",
+      "description": "Aviones originales se inclinan sobre un océano 3D con islas y nubes en movimiento."
+    },
+    "motion-seasonal-carriage": {
+      "title": "Vagón de las cuatro estaciones",
+      "description": "Interior volumétrico de tren con taza, mesa y ventana; el paisaje móvil cambia por las cuatro estaciones."
+    },
+    "motion-data-assembly": {
+      "title": "Montaje del centro de datos",
+      "description": "Racks, procesadores y refrigeración se montan por fases, con flujos de datos en un escenario completamente 3D."
+    },
+    "motion-lighthouse-story": {
+      "title": "El viaje del farero",
+      "description": "Un farero geométrico sube al faro costero; la baliza gira sobre un mar y una isla volumétricos."
+    },
+    "motion-poster-breakout": {
+      "title": "Más allá del marco",
+      "description": "Letras con volumen, anillos y una esfera atraviesan un marco físico. Título editable."
+    },
+    "motion-particle-morph": {
+      "title": "Tipografía de partículas",
+      "description": "Una nube de puntos 3D se transforma entre esfera, toro, corazón y letras editables."
     }
   },
   "atmos": {
@@ -3532,7 +3601,10 @@
   "holdOffsetX": "Desplazamiento X",
   "holdOffsetY": "Desplazamiento Y",
   "holdOffsetZ": "Desplazamiento Z",
-  "holdHelp": "El objeto sigue la mano entera en el mismo fotograma. El desplazamiento está en metros de ese hueso. El gizmo descansa mientras está sostenido.",
+  "holdTurnX": "Giro en la mano X (°)",
+  "holdTurnY": "Giro en la mano Y (°)",
+  "holdTurnZ": "Giro en la mano Z (°)",
+  "holdHelp": "El objeto sigue la mano entera en el mismo fotograma. El desplazamiento está en metros de ese hueso. El giro en la mano lo alinea: grados sobre el eje X del hueso, luego el Y y luego el Z; con un giro en la mano, el Giro Y del objeto deja de aplicarse. El gizmo descansa mientras está sostenido.",
   "geometryReview": "Revisar geometría",
   "geometryUnavailable": "Carga los modelos antes de revisar la geometría.",
   "geometryOk": "La geometría no tiene avisos.",
@@ -3674,12 +3746,14 @@
     "name": "Nombre de la escena",
     "save": "Guardar escena en galería",
     "open": "Abrir escena",
-    "help": "Elige una escena de Vídeo 3D guardada. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
+    "help": "Elige una escena de Vídeo 3D guardada, o una escena de trabajo que un agente hizo y no publicó. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
     "saved": "Escena guardada en esta carpeta. Usa Abrir escena para recuperarla.",
     "changed": "La escena cambió mientras se cargaba. Vuelve a elegirla para reemplazar la actual.",
     "previewUnavailable": "Espera a que cargue la vista 3D antes de guardar.",
     "saveFailed": "No se pudo guardar la escena.",
-    "cancelLoad": "Cancelar carga"
+    "cancelLoad": "Cancelar carga",
+    "workingScene": "{{title}} · escena de trabajo sin publicar (revisión {{revision}})",
+    "workingChanged": "{{title}} · escena de trabajo cambiada desde que se publicó (revisión {{revision}})"
   },
   "cinematic": {
     "title": "Entorno cinematográfico",
@@ -3705,6 +3779,16 @@
     "road_speed": "Velocidad (m/s)",
     "road_slope": "Pendiente (°)",
     "road_offset": "Continuidad (s)"
+  },
+  "renderLook": {
+    "title": "Aspecto de render",
+    "none": "Materiales del modelo",
+    "n64": "Nintendo 64",
+    "toon": "Anime (cel)",
+    "steps": "Bandas de luz",
+    "outline": "Grosor de tinta (px a 1080p)",
+    "ink": "Color de tinta",
+    "help": "Anime (cel) da a los modelos 3D bandas planas de luz y un contorno de tinta, para que convivan con recortes planos y fondos pintados. Las imágenes y los recortes no cambian. La vista previa y la exportación coinciden."
   },
   "imageLook": {
     "title": "Aspecto de la imagen",
@@ -3941,5 +4025,33 @@
     "current": "Actual",
     "pickOne": "Elige un plano para verlo aquí.",
     "hint": "Doble clic o Intro para usar un plano directamente"
+  },
+  "workspaceTemplates": {
+    "title": "Guardadas en este workspace",
+    "help": "Plantillas que un agente, el Wizard o tú guardasteis en este workspace (world3d.templates.user.put). Elige una y pulsa «Usar este plano»: se abre como un plano editable.",
+    "objects_one": "{{count}} objeto",
+    "objects_other": "{{count}} objetos",
+    "pending_one": "{{count}} hueco vacío",
+    "pending_other": "{{count}} huecos vacíos",
+    "by": {
+      "agent": "Agente",
+      "wizard": "Wizard"
+    },
+    "invalid": "Esta plantilla del workspace no es un documento de Video 3D válido.",
+    "shotTitle": "Plantilla del workspace · {{id}}"
+  },
+  "motionLab": {
+    "controls": "Escenas de movimiento nativas",
+    "bpm": "Tempo (BPM)",
+    "speed": "Velocidad de movimiento",
+    "amplitude": "Tamaño del movimiento",
+    "color": "Color principal",
+    "secondaryColor": "Color de acento",
+    "seed": "Semilla de variación",
+    "title": "Título de bloques (24 caracteres)",
+    "density": "Número de partículas",
+    "sound": "Música local por contactos",
+    "volume": "Volumen de música",
+    "audioBlocked": "Permite el audio del navegador y vuelve a pulsar Reproducir."
   }
 }

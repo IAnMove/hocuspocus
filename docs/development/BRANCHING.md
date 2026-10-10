@@ -7,8 +7,8 @@ during transition, but new work must not use that ambiguous legacy name.
 
 ## Ordinary agent work
 
-1. Read local AGENTS instructions when present, CURRENT_WORK, SLICE_QUEUE and the
-   assigned acceptance criteria. Inspect branches, PRs and ownership before editing.
+1. Read local AGENTS instructions when present, docs/README.md, the production
+   board and the assigned acceptance criteria. Inspect branches, PRs and ownership before editing.
 2. Fetch origin and create an isolated feature/fix worktree from origin/development.
    Never switch the branch in another agent's shared checkout or carry untracked
    outputs into a new PR.
@@ -75,7 +75,7 @@ committed checklist. Mutable transition evidence belongs in the PR/handoff.
 
 ```text
 HocusPocus now integrates ordinary work in development; main is the published line.
-Fetch origin, read docs/development/CURRENT_WORK.md, docs/development/BRANCHING.md and SLICE_QUEUE.md,
+Fetch origin, read docs/README.md, docs/development/PRODUCTION_WORK_BOARD.md and docs/development/BRANCHING.md,
 plus any local AGENTS.md instructions. Create feature/fix work in isolated worktrees
 from origin/development; open PRs with --base development. Use the actual PR base
 for ratchet (explicit BASE_REF or BASE_SHA while wrappers are transitioning).

@@ -32,3 +32,9 @@ def speech_language_code(value: str) -> str:
         if head in names:
             return code
     return value
+
+
+def spoken_language_code(value: str, text: str) -> str:
+    """``speech_language_code(value)``; with no value, the es/en the exact words show (``""`` when they cannot tell)."""
+    from services.lyrics_language import detect_language
+    return speech_language_code(value) or detect_language(text)

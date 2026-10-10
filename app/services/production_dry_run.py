@@ -7,6 +7,7 @@ images, the longest hold) with warnings for a static video, a long hold, a still
 three times, ``max_takes`` 1 and fewer than three song seeds. Each window carries
 ``hold_after_clip``. A title-card on an h3 or still shot warns ``title_card_on_image``.
 Scene documents are compiled in-process so a bad style is ``scene_invalid`` here.
+``blocking`` lists what production.run refuses in a new spec (see ``production_quality_gate``).
 It never calls the client passed as ``mcp``.
 ``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``.
 """
@@ -16,6 +17,7 @@ from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
 from services.production_preview import preview_extras
+from services.production_quality_gate import blocking_problems, plan_warnings
 from services.production_quality import expand_quality, profile_of
 from services.production_treatment import treatment_warnings
 from services.production_style_presets import expand_style_preset
@@ -31,7 +33,7 @@ REUSED_STILL = 3
 MIN_SONG_SEEDS = 3
 
 
-def dry_run(spec: Any, mcp: Any = None, *, root: Any = None) -> dict[str, Any]:
+def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str | None = None) -> dict[str, Any]:
     """Report the spec. ``mcp`` is accepted so tests can pass a spy and is never called."""
     _ = mcp
     spec = spec if isinstance(spec, dict) else {}
@@ -66,7 +68,9 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None) -> dict[str, Any]:
         "estimate_source": source,
         "resolution": _crop(spec),
         "motion": motion,
-        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra + treatment_warnings(spec, usable),
+        "blocking": blocking_problems(spec),
+        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
+        + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id),
     }
 
 

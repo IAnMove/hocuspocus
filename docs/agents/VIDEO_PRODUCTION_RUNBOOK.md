@@ -35,7 +35,7 @@ Call `production.plan` with the eight-field brief when you do not already have a
 
 The agent makes these calls for a finished video:
 
-`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. `lyrics` (or `letra`) is required: the plan does not write placeholder lines that a singer would perform (`invalid_brief` without it). An optional `footer` (or `aviso`) is the small print on every scene. Reading rules: an explicit look word beats a subject word ("zine riso sobre Omarchy" is `riso-zine`), `124 BPM` or `110-125 bpm` is the tempo (decades such as `2000s` are not), `1:30`, `90 s` and `2 minutos` are lengths, and accents survive in titles. What the non-sung shots are follows the look: your `stills`, the native desktop for `omarchy-desktop` (nobody sings on screen), otherwise short H3 clips of the protagonist. Then start at step 1.
+`production.plan` `{brief}` returns the spec when the agent has a brief and no spec yet. The brief fields are `tema`, `publico`, `duracion`, `musica`, `estilo`, `protagonista`, `cta` and `limites`. `lyrics` (or `letra`) is required: the plan does not write placeholder lines that a singer would perform (`invalid_brief` without it). An optional `footer` (or `aviso`) is the small print on every scene. An optional `idioma` (or `language`) sets `song.language`; without it the plan tells the language from the lyrics, then from the brief's own text (a Spanish brief gives `es`). Reading rules: an explicit look word beats a subject word ("zine riso sobre Omarchy" is `riso-zine`), `124 BPM` or `110-125 bpm` is the tempo (decades such as `2000s` are not), `1:30`, `90 s` and `2 minutos` are lengths, and accents survive in titles. What the non-sung shots are follows the look: your `stills`, the native desktop for `omarchy-desktop` (nobody sings on screen), otherwise short H3 clips of the protagonist. Then start at step 1.
 
 1. `production.run` `{workspace, production_id, spec}` — starts in the background and returns at once (`production_id`, `running: true`). It does not return a job id.
 2. `production.status` `{workspace, production_id, wait_s}` until `status` is `completed` or `failed`. `jobs.wait` is a real command and blocks on a generation `job_id` until that job is `completed`, `failed`, `cancelled` or `discarded`. This run does not return a job id, so do not call `jobs.wait` to wait for it. Poll `production.status` with `wait_s` 300 instead of many short polls. Do not save tokens at the expense of the result: opening `frames_sheet` before the clips and one real-size frame of each sung shot and of the first caption before delivering costs a few thousand tokens, and it is what catches a duplicated character, an unreadable caption or a title that covers the picture. A retake with a stricter action is cheaper than a video that is delivered wrong.
@@ -44,7 +44,7 @@ The agent makes these calls for a finished video:
 
 Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
 
-- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
+- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Without `image_model` they use the run's default (Qwen Image 2.1, at its own steps). Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
 - `{workspace, production_id, spec, through:"frames"}` stops after cast and frames (`status` `frames_ready`). Restart the isolated runtime if a large image model would slow H3, then resume with `production.run` `{workspace, production_id}` and continue at step 2.
 - `{workspace, production_id, spec, through:"animatic"}` builds a CPU preview after those frames: the start frames play as stills with the lyrics, titles and the song (`status` `animatic_ready`). `production.status` reports the preview as `animatic` (not `video`) plus `contact_sheet` and `animatic_warnings` (a title card covering the picture, the same image used twice, a still stretch over 10 seconds, or an unreadable caption). A restart does not treat `animatic_ready` as `running`, so it does not start a GPU run by itself. Resume with `production.run` `{workspace, production_id}` and the run continues at the clips, reuses the frames, and re-exports a scene once its clip is different from the still it previewed.
 
@@ -57,6 +57,32 @@ face-embedding model is already loaded; do not invent that answer.
 A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
 `production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check. Each window includes `hold_after_clip`: how many seconds that H3 shot would sit still after its clip (the longest H3 bucket is 345 frames, 14.375 s), or 0 when the shot is not H3 or a moving fill (`h3`, `clip`, `scene3d`, `screen`) covers the tail. A hand-written `title-card` on an `h3` or `still` shot is `title_card_on_image` and still validates; the planner rewrites that template to `lower-third-date` on those kinds. The same check compiles every scene document in-process, so a style the editor would reject (`scene_invalid`, for example a text field out of range) shows up here. Before the scenes stage the run measures the busiest caption against its start frame and stops with `caption_unreadable` (the scene and the ratio) when contrast is under 3:1. An opaque caption box is measured against the box; text with no box is measured against the picture.
+
+**One at a time.** Productions on one instance take the GPU in the order they
+were sent: a `production.run` sent while another production runs answers
+`running: true` and waits with status `queued` (`production.status` shows it;
+a cancel still stops it). Plan and dry-run every piece of a batch first, then
+send them all: the GPU works through them without gaps, and no two pieces
+interleave their jobs (that made each job reload a model and one piece take 7 h).
+
+**Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
+`quality_gate` (and `problems`) when one still picture fills three or more shots
+that are not marked deliberate (`allow: ["still"]`), when still pictures take
+more of the runtime than the `quality` bar, or when a `title-card` or
+`trailer-slam` title sits on a moving shot (`h3`, `clip`, `scene3d`, `screen`):
+both paint an opaque plate over the whole frame and the clip under it is never
+seen (`title_card_hides_shot`; `allow: ["title_card"]` keeps a deliberate card),
+or when a 3D shot asks a `spec.models` model for a clip its rig will not bake
+(`clip_not_baked`: add it to the model's `animations`; a humanoid with a
+`fallback` is exempt, its clips stand in).
+A resume of an unchanged spec is never refused. `dry_run` lists the same items under `blocking`, and warns about shot
+fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
+puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
+H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
+(`procedural_model`: use `spec.models`), rigged models that never play a clip
+(`model_not_animated`), one 3D template in more than four shots
+(`template_reused`), and the same sequence of shot kinds or the same lyric look as
+another production in the workspace (`same_shot_pattern`, `same_lyric_look`).
 
 ## Edit it by hand, shot by shot
 
@@ -122,9 +148,9 @@ Use `treatment.moments[].at` with a beat name to say what the reveal or the tens
 
 | Step | Tool it uses | Decision made by code |
 |---|---|---|
-| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL) | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
+| song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL, or `song.model`) in `song.language` | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
-| cast | `generation.image` (Flux 2 Klein) | one reference sheet per cast member, then a plain full-body portrait of that one person |
+| cast | `generation.image` (`style.image_model`, Qwen Image 2.1 by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
 | frames | `generation.image` with that portrait as the reference (the sheet if the portrait failed) | one start frame per `h3` shot |
 | clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
@@ -230,6 +256,13 @@ The four code questions:
 }
 ```
 
+`song.language` is the sung language: a code or a name (`es`, `en`, `Spanish`, `español`, `fr`). Without it the run tells
+Spanish or English from the lyrics, and uses English only when the lyrics cannot tell. The music model gets it as
+`lyrics_language` (ACE-Step also as its `language` setting) and the lyric transcription that picks the best candidate and
+times the captions listens for it (an unknown language is detected by Whisper, not forced to English). Declare it when a
+lyric mixes languages. An unknown name fails with `invalid_spec`. `song.model` picks the music model
+(default `ace_step_v1_5_xl_sft_lm_4b`; `minimax_music3` takes no bpm/key settings, the caption carries them).
+
 `style` may be only a preset. That stands in for the long image, video, finish and lyric block (about 2k tokens when the prompts are written out). `production.run` expands `style.preset` before it checks the spec. The expansion fills `image`, `video`, `finish`, `lyric_template`, `theme` and `image_model`, plus the other style fields from the production that already rendered that look. A key you set next to `preset` replaces that field. Presets live in `app/shared/style_presets.json` and carry no person or project names: put a footer, a name or a lip-sync rule for one production in the spec (for example `footer`).
 
 | preset | look it copies |
@@ -247,10 +280,22 @@ An unknown id fails with code `unknown_style_preset`. The full style block in th
 
 Style fields beyond the example:
 
-- `image_model` (default `flux2_klein_9b`) and `image_params`: model for cast sheets and frames. Flux 2 Klein does not
-  recognise public figures; `qwen_image_21` does (it takes ~40 steps from `app/defaults`; do not run it next to H3 on one GPU:
-  generate all images first). `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
+- `image_model` (default `qwen_image_21`, or `qwen_image_21_gguf_q4_k` on a 10–16 GB card) and `image_params`: model for
+  cast sheets and frames. Qwen takes 40 steps from `app/defaults`. `flux2_klein_9b` stays selectable (4 steps, fast; it does not
+  recognise public figures). A model chosen without `image_steps` runs at its own steps from `app/defaults`, never at the
+  steps a preset set for another model. Do not run Qwen next to H3 on one GPU: `production.run` already makes every cast
+  sheet, portrait and start frame before it submits the first H3 clip. `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
 - `lyric_template`: any text template; the lyric goes in its `caption`/`line` field (`ransom`, `dymo`, `social-caption`, ...).
+- `lyric_look` / `lyric_looks`: designed lyric type instead of a template's stock box. A look sets font, weight,
+  colour, outline or shadow, a box only where it belongs to the design, entrance, loop and place
+  (`app/shared/lyric_looks.json`): `cinema`, `storybook`, `marker-pop`, `neon`, `big-word`, `typewriter`,
+  `paper-strip`, `comic-caption`, `riso-offset`, `quiet-left`, `engraved`, `arcade`, `wave-chant`.
+  `lyric_looks` maps song sections (`default`, `intro`, `verse`, `pre-chorus`, `chorus`, `bridge`, `outro`, read
+  from the lyric tags) to looks, so a chorus can land big while verses stay quiet:
+  `{"verse": "quiet-left", "chorus": "big-word"}`. Word, letter and typewriter entrances last until the line's
+  last sung word. `lyric_style` still overrides single fields. With no lyric template, style, theme or look, a
+  finish preset picks its look (warmCinema cinema, oldDoc typewriter, nightNeon neon, paperComic comic-caption,
+  risoPress riso-offset). Give each piece its own treatment (`same_lyric_look` warns).
 - `theme`: an Omarchy colour theme (`tokyo-night`, `catppuccin`, `gruvbox`, `nord`, `rose-pine`, `kanagawa`): lyrics become
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
@@ -263,7 +308,8 @@ Shot fields:
   `screen` (a tiling-window-manager desktop painted natively, no GPU: `desktop` = `{layout: single|split|triple|quad|master,
   apps: dev|system|mixed, focus, workspace, switch: none|left|right}`; windows open one after another and `switch` slides
   the desktop in like a workspace change).
-- Timing: `line` (index of a lyric line; the shot starts 0.25 s before it and spans `span` lines), `t0` (seconds) or `after` (starts 0.3 s after that line ends). Shots are cut at the next shot's start.
+- Timing: `line` (index of a lyric line; the shot starts 0.25 s before it and spans `span` lines), `t0` (seconds) or `after` (starts 0.3 s after that line ends). Shots are cut at the next shot's start. A cut shorter than one beat (at least 0.5 s) would flash: that shot is left out, the shot before it holds, and the log says so. Put an `after` shot only where the song leaves an instrumental gap.
+- Changing an H3 shot's `frame` redraws its start frame and reshoots its clip on the next `production.run`; changing only `action`, `camera` or `sing` reshoots the clip. Shots made before this release keep what they have until `production.shot.redo`.
 - `h3`: `frame` (start-frame prompt), `action` (what moves; use `(S1)` for the singer), `sing: true` for lip-sync, `cast` ids used as image references.
 - `still`: `focus` {x, y} (percent of the image kept centred while zooming), `zoom` [start, end], `camera` preset.
 - `title`: a text template (`lower-third-date`, `end-card`, `title-card`, …) with its fields. Lyric captions are added automatically.
@@ -273,7 +319,7 @@ Shot fields:
 
 Style fields for native Video 2D finishing:
 
-- `image_model` chooses the Studio image model for cast and frames (default `flux2_klein_9b`; `qwen_image_21` is useful for a recognizable public-person caricature). `image_steps` sets its step count; individual cast members or H3 shots may override either field.
+- `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21`; `flux2_klein_9b` is the fast alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
 - `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate.
 - `lyric_template` may be `ransom` or `dymo` as well as `social-caption`. `title_style` and `lyric_style` are Video 2D text patches, for example `{"font":"mono","color":"#A9B1D6"}`.
 - `footer` adds a persistent small-print line to every scene. `footer_style` can set its color, font and background through the Video 2D text patch fields.
@@ -340,6 +386,174 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
+**Template + cast + painted set.** Prefer this over writing a `document`: pick a
+template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
+and a `setting` such as `sea` or `city`) and assign only what changes.
+`cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
+picture; `background` puts a picture in the template's background slot. The
+template keeps its camera, props, lights and moves. With a painted background on
+a plane, the floor becomes `backdrop`: the picture is projected onto a real floor,
+so models stand on the painted ground and the camera gets parallax. `floor`
+(`backdrop`, `none`, `tiles`, `mirror`, `road`) overrides it. Sources may be URLs,
+workspace file names or `stills` names. A cast clip may be given by its GLB
+animation name.
+
+```json
+{"key": "dance", "kind": "scene3d",
+ "scene3d": {"template": "dance-stage", "background": "fairground-night",
+   "cast": {"subject_1": {"source": "hero-rigged.glb", "clip": "dance"},
+            "subject_2": {"source": "friend-rigged.glb", "clip": "wave"}}}}
+```
+
+A role that more than one object has must be bound by object id
+(`cast_role_ambiguous`); a role the template lacks fails (`cast_slot_missing`)
+unless the entry sets `add: true`, which adds it as a prop. A template without a
+background slot fails with `background_slot_missing`: choose another template.
+
+**Models.** Do not build characters or objects from boxes. `spec.models` makes
+textured Hunyuan3D models once, in one batch after the cast sheets, and rigs them
+with clips on the song's tempo:
+
+```json
+{"models": {
+  "hero": {"from": "hero", "animations": ["idle", "walk", "dance_bounce", "wave"]},
+  "boat": {"from": "boat-picture", "rig": "vehicle"},
+  "kite": {"prompt": "a red paper kite with a long tail"}
+}}
+```
+
+`from` is a cast id (its plain portrait), a `stills` name or a picture URL; an
+object without a picture gives a `prompt`. A cast id defaults to `rig: "humanoid"`:
+the portrait is redrawn in a T-pose first, because the humanoid rig needs one,
+with both legs and feet showing (a floor-length robe or gown is drawn above the
+knees: the rig refuses a figure whose legs it cannot find, and a rig failure
+leaves a rigid model whose named clips fail at their 3D shots).
+Any other model made from a picture is redrawn alone on a plain background first
+(no base, stand or scenery): Hunyuan3D meshes everything in the picture, and a
+diorama-style portrait stands the figure on a little village.
+Humanoid clips: idle, breathe, walk, run, jump, wave, cheer, dance_bounce,
+dance_side, dance_arms, clap, punch, sit_down, victory, talk, nod, look_around,
+bow, point, shrug, kneel_pray, crouch. Procedural profiles (`prop`, `vehicle`,
+`quadruped`, `flying`, `serpentine`) take their own clips (hover, bounce, spin,
+wobble, strafe…); `none` keeps a rigid model that moves along `motion` paths.
+A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dance_bounce"}`.
+
+Models you already have (a pack of GLBs in the workspace) skip the picture and
+the mesh: `{"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop",
+"animations": ["idle", "dance_bounce"], "height": 1.9}`. The humanoid rig needs a
+T or A pose with the legs apart and a gap under each arm (one hand held forward,
+with a cane or a lantern, is fine while the shoulders stay level); when it refuses the
+body (legs together, arms down, a tail) `fallback` rigs it with that procedural
+profile instead, and a shot that asks that model for a humanoid clip gets the
+profile's nearest one (a dance wobbles or bounces, a still pose hovers). A GLB
+whose vertex colours are really normals (game rips: rainbow tints that follow
+the surface), or whose textures were decoded into confetti (every texel a random
+vivid colour), is rigged from a `.clean-<hash>.glb` copy without them (named by the
+original's content and the clean-up, so a changed clean-up remakes its rig and clips); real vertex colours
+and textures are kept. A `humanoid` model that came with a held thing hung under
+its feet instead of in its hand (a wooden gun that reads as a column between the
+legs and stands the body on its end) loses that part: a part reaching a fifth of
+the height below the feet hangs under the floor. The original GLB is untouched.
+Every model stands 1.7 m tall in a scene unless it gives its real `height` in
+metres (`"moto": {"prompt": "...", "rig": "vehicle", "height": 1.1}`); a cast
+entry's own `scale` wins, and a new height does not remake the model.
+`production.status` times the stage as `models`; a failed model stops the run
+and a resume retries it with a new picture.
+
+**Sets.** `spec.sets` paints the backgrounds for those templates in the same image
+batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. Each
+is drawn eye-level, with an open floor across the lower third, a clear horizon and
+nobody in it, so the projected floor has ground for the cast to stand on. A shot
+names it as its `background`: `{"template": "dance-stage", "background": "harbour",
+"cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
+
+**Worlds.** `world` plays the shot's template (its camera, cast, props and moves)
+in the place of another template: its dressing, atmosphere, environment, light
+and world effects. `{"template": "cine-dolly-in", "world": "atmos-reef-wide"}`
+dollies in under the sea; `dance-orbit` in `atmos-sky-islands-wide` orbits over
+floating islands. The template's own background plate and uncast placeholders
+go unless the shot binds a `background`; `atmos`, `light` and the other overrides
+still apply on top. Worlds include the procedural `atmos-*` places (temple,
+waterfall, crystal cave, reef, volcano, sky islands, beach, snow, neon rain,
+synthwave grid, retro room...), the `pixel-*` places and the action sets. Vary
+them: one place for a whole video reads as one set.
+
+**Parallax sets.** A painted place in depth without building it: `{"kind": "parallax"}`
+draws a far view, one or two cutout layers and a ground in the same batch:
+
+```json
+{"sets": {"temple": {"kind": "parallax", "prompt": "the ruins of a forest temple at dusk",
+  "far": "mountains and a castle silhouette under a violet sunset sky",
+  "mid": "broken stone arches and tall pines", "near": "ferns and a mossy branch",
+  "ground": "mossy flagstones"}}}
+```
+
+`far` wraps the scene as the sky, `ground` is a seamless slab under the cast, and
+`mid` and `near` are drawn on a flat chroma-key green, keyed out in the renderer
+and stood as cutouts across the camera's line of sight: `mid` some metres
+behind the cast, `near` (optional) a short way in front of the camera with its
+middle empty, so a dolly, an arc or a crane slides the layers at different speeds.
+A shot whose camera would cross the near layer (an orbit, a crash zoom) leaves
+it out. Name the set as the shot's `background`, like a diorama. Ask the layers
+for pieces that stand on their own (arches, trees, rocks, posts); the far view
+and the ground get neither the place nor the production's look.
+
+**Composition.** Three controls work on any template, with or without a `world`:
+
+- `frame` moves the template's camera nearer or farther, keeping its angle and
+  its move: `close` (0.6 of the template's distance), `medium` (0.8), `wide`
+  (1.35), `far` (1.8), or a number 0.25–4. A `dance-orbit` over the sky islands
+  with `"frame": "close"` fills the frame with the dancer; a two-shot with
+  `"frame": "wide"` shows the place.
+- `light` may be a named light instead of a light object: `noon`, `golden`
+  (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
+  from the side), `stage` (hard white from the front), `campfire` (warm from
+  low). It replaces the template's or the world's sun and sets the ambient
+  share; the rest of the lighting stays.
+- A cast **group** stands several models in a formation with one entry:
+  `{"crowd": {"sources": ["klump", "kasplat", "kremling"], "clip": "dance_side",
+  "formation": "arc", "spacing": 1.4}}`. Every member is added as a prop at its
+  own height, placed around the group's `position` (2.2 m behind the subject
+  unless given) and facing the camera. Formations: `line` (side by side), `arc`
+  (the ends come forward and turn in), `wedge` (a leader in front, pairs
+  behind), `circle` (around the position, facing it, with a gap at the camera)
+  and `scatter` (a line with a fixed jitter). Members are named `crowd_1`,
+  `crowd_2`... in the resolved cast; a shot holds at most 16 models and
+  pictures, groups counted by member.
+
+**Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
+sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
+drawn in the same batch:
+
+```json
+{"sets": {"plaza": {"kind": "diorama", "prompt": "a village square on a summer night",
+  "houses": ["a pale yellow two-storey house with a green door and a flowered balcony",
+             "a terracotta townhouse with blue shutters and string lights",
+             "a white-washed bakery with a striped awning",
+             "an ochre three-storey building with iron balconies"],
+  "ground": "worn terracotta floor tiles", "sky": "a deep blue summer night with a big moon"}}}
+```
+
+Each house facade is drawn as its flat front wall, cropped to the wall (studio
+backdrop and sky above a small house are trimmed), and becomes a textured block
+6–10 m tall; the ground is a tiled
+slab and the sky the shot's environment. The facades get the place and the
+production's look; the ground and the sky get neither (with them the image model
+paints a street or rooftops in perspective instead of a texture or an empty sky),
+so put any style words in `ground` and `sky` themselves. Avoid asking for signs:
+the image model writes letters on them. A shot that names the set as its
+`background` stands the houses in a plaza around what its camera looks at,
+outside every place the camera and the cast go, so an orbit, a crane or a dolly
+gets real parallax and the cast stands on the ground with its shadow. Fronts
+are staggered, with an alley every third house. `{"source": "plaza", "layout":
+"open"}` puts the houses behind the cast far away, a skyline 3.5 times further
+than the plaza, so the view runs out to a horizon with depth in it. A
+camera looking down from above the roofs (an aerial, a bird's-eye, a tilt-shift)
+sees the plaza from above: the houses close in around the ground it sees, just
+clear of the cast, and its own side stays open. The houses and the ground
+are ordinary objects in the saved Video 3D document (`set-house-N`,
+`set-ground`), so they can be moved or removed in the editor.
+
 For a musical performance, set the document's `rhythm` to
 `{"bpm":120,"offset":24,"cameraPulse":0.025,"lightPulse":0.3}` and add
 `"rhythm":{"beats":1,"phase":0,"bounce":0.12,"sway":0.06,"yaw":0.12,"pulse":0.025}`
@@ -367,6 +581,14 @@ montage adds the song normally. Empty `cast` and all-3D shots request no cast
 images, start frames or H3 generation. Both template and full-document shots
 are supported in `fill`.
 
+Named exports retain one `.previous` version. New receipts include a SHA-256
+identity and resolve their exact bytes at read time; a displaced version that
+is no longer retained has no downloadable artifact. Keep the receipt's URL,
+including its `sha256` query: the file endpoint verifies the open handle before
+streaming and returns HTTP 410 if that saved URL now names another version.
+An ordinary stable-name layer URL continues to show the latest render. Receipts
+created before hashes were recorded cannot verify a historical version.
+
 Cuts containing native 3D use the montage's 24 fps grid: round each absolute
 boundary to its nearest frame, then subtract boundaries for each shot's length.
 The native export, Video 2D wrapper and montage share those lengths. Rounding
@@ -386,13 +608,27 @@ changes. A retake updates its revision so the following resume keeps the new cli
 
 An isolated runtime can set `HOCUS_PRODUCTION_MIN_FREE_GB=15` and
 `HOCUS_PRODUCTION_EXTERNAL_VRAM_MB=2048` in its process environment. Before each
-music/image/H3 or native video export admission, the runner invokes `df -h` and
+music/image/speech/SFX/H3 or native video export admission, the runner invokes `df -h` and
 `nvidia-smi`. It waits in 30-second intervals while another GPU process exceeds
-the limit; its own resident model is excluded. A disk shortfall stops the
-resumable production with `resource_disk_low`, without deleting files. The agent
+the limit; its own resident model is excluded. The wait lasts at most
+`HOCUS_PRODUCTION_GPU_WAIT_SECONDS` (default 3600; `0` waits without a limit).
+After that the resumable production stops with `resource_gpu_busy`, naming the
+processes that still hold the GPU. A cancel ends the wait at once. A disk
+shortfall stops the resumable production with `resource_disk_low`, without
+deleting files. The agent
 must propose a cleanup and wait for the user's approval before resuming.
 These opt-in checks leave other instances untouched. They require the named
 local commands when enabled; absent commands fail before admission.
+
+Series Lab's native renderer applies the same checks to each speech and export
+call in `series.episode.render_native` and the render stage of
+`series.episode.produce`. The UI, MCP and wizard share that renderer. Disk is
+measured on the episode workspace, including every speech retry. Status polling
+and CPU speech checks do not wait for the GPU. CPU video exports check disk
+without waiting for an unrelated GPU generation. A `resource_gpu_busy` or
+`resource_disk_low` stops the render job at that shot (the next shot would wait
+for the same machine), and `series.episode.render_native.cancel` interrupts a
+GPU wait; both leave the job resumable.
 
 
 ### Rig an existing model through MCP
@@ -443,6 +679,21 @@ nearest texture sampling; linear fog starts at 4 m and closes at 28 m in the
 background color. Camera motion, model motion and GLB geometry stay fully 3D.
 The flag survives scene save/load and applies to both preview and server export.
 Removing it restores authored shading, texture filters and atmosphere fog.
+
+### Toon / cel render look
+
+Set `scene3d.renderLook: "toon"` (or `document.renderLook`, or `renderLook` in
+`world3d.scene.patch`) to draw 3D model slots as cels: flat light bands and an
+ink outline, so GLB characters, vehicles and props match flat anime cutouts and
+painted backgrounds. Image slots and cutouts are not changed. Optional
+`toon: {"steps": 2-4, "outline": 0-8, "ink": "#rrggbb"}` sets the number of
+light bands (default 3), the ink width in pixels of a 1080p frame (default 3;
+0 draws no line) and the ink colour (default `#141018`). Rigged models keep
+their clips: the outline follows the skeleton. Transparent and alpha-cut
+materials get no ink, and a materializing model gets its ink once it has
+arrived. Preview and export match. `renderLook: "none"` in a patch returns to
+the authored materials and keeps the `toon` settings. An unknown look or an
+out-of-range toon value is refused (`invalid_render_look`).
 
 ### Publish a completed production locally
 
@@ -500,6 +751,7 @@ Queue and memory settings (2026-10-04):
 
 - `HOCUS_QUEUE_MAX_WAIT_SECONDS` (default 300). A generation job that has waited this long is overtaken only by a higher `priority`. `0` turns it off. `tools/list` shows `priority` on every `generation.*` tool.
 - `HOCUS_GPU_WAITER_MAX_WAIT_SECONDS` (default 120). A Video 3D export, or another coordinator ticket on the local GPU, gets the next turn when it has waited longer than the generation queue head, or this long. `0` turns it off.
+- `HOCUS_GPU_MACHINE_LOCK` (default off). `1` makes the generation queue head of this instance wait its turn for a machine-wide lock (`~/.cache/hocuspocus/gpu.lock`, or `HOCUS_GPU_LOCK_PATH`) before it takes the local GPU. Waiters are served in arrival order. Every instance that shares `HOME` shares the lock, so turn it on for all of them or for none. `scripts/hocus_instances.py` shows who holds it.
 - `HOCUS_MALLOC_TRIM` (default on). Freed model memory goes back to the system after a model release and after each GPU job. `0` turns it off. Large releases are logged as `[Memory] Returned … GiB`.
 - `app/settings/server-endpoint.json` holds the bound `url`, `mcp_url` and `pid` while the server runs. Check `pid` before you trust it.
 - After a restart, `jobs.leftovers` also lists interrupted Video 2D/3D exports. Use `jobs.resume` to retry the same task and `jobs.discard` to cancel it.
@@ -601,6 +853,145 @@ real registration/review HTTP and simulated media generation. It requires only
 the CPU packages in `scripts/ci-production-browser-requirements.txt`, downloads
 no models and uses isolated test ports. It does not assess visual quality.
 
+## Flat rigs for full-body cel characters
+
+`characters.rig.flat` also checks small cream-coloured eyes inside warm-toned
+face regions when its large white-eye detector finds fewer than two eyes.
+This fallback joins sclera fragments around the pupil and excludes goggles
+above the face and bright body props. Painted-mouth selection prefers a
+horizontal seed wide enough for the face, so a short nose stroke is preserved.
+Without one, a small round «o» or short line in the middle of the face, below
+the nose's place right under the eyes, is taken as the mouth.
+Review every pose's mouth and blink before production; an unsupported face or
+an ambiguous result still needs a regenerated pose.
+
+## Flat rigs for realistic and graphic-novel faces
+
+On a face with realistic proportions the mouth is much lower than on a
+cartoon, and eye bags, wrinkles and spectacle rims are dark marks right under
+the eyes. The rig used to take one of those marks for the mouth. It wiped it
+into a smudge under an eye and placed the mouth there. `characters.rig.flat`
+now measures the face first. The face is realistic when the taller eye opening
+is at most 0.1 of the head's width at the eye rows and at most 0.3 of the eye
+pair's width. The eyes are measured on their whole whites, shaded parts
+included. On the poses at hand, realistic faces measure 0.058–0.079 and every
+cartoon or anime face measures 0.123 or more, big eyes behind round spectacles
+included. On a realistic face the mouth is the thin, roughly level pen stroke,
+0.45–1.35 eye-pair widths under the eye line, nearest the row at 0.9. Big flat
+shadows, moustaches, nostrils and beard strands are not thin strokes and are
+never taken. A cartoon face keeps the earlier search unchanged.
+
+For this art use `style.mouthStyle: "ink"`. The painted mouth is not wiped and
+is the rest shape: `closed` and `pressed` draw nothing. The other shapes are
+hard-edged openings in the painted mouth's own ink. They hang from the painted
+line and are sized from its width. Only `wide` shows a hint of teeth and
+tongue. The default stays `paper`.
+
+When a pose's eyes or mouth are still found in the wrong place, give `hints`:
+`{"<pose id>": {"mouth": [x, y], "eyes": [x, y]}}`, in % of that pose's keyed
+image before cropping. With a mouth hint, the rig takes the mark nearest that
+point, within a fifth of the eye pair. If there is no mark there, the mouth is
+placed at the point and nothing is wiped. With an eyes hint, the rig takes the
+pair of light eyes at that point anywhere in the figure, not only in its top
+half. If there is no pair there, it reports `eyes_not_found`. The kit
+provenance keeps the hints and later rigs reuse them. A pose's new hints
+replace its saved ones, and `null` clears them. The result reports per pose
+`face` (`realistic` or `cartoon`) and `mouthFound`. `unwipedPoses` lists the
+poses whose painted mouth was not found; an ink rig wipes nothing on purpose.
+
+### Warp mouths: each pose talks with its own drawing
+
+Ink openings on painted busts still look drawn on. `style.mouthStyle: "warp"`
+moves the drawing itself (`app/services/flat_rig_warp.py`). The upper lip
+stays. The lower lip, the chin and the beard move down with the jaw: whole in
+the middle third of the jaw, then easing back to still at its sides and down
+the neck, so a beard moves and is never smeared. The gap between the lips is a
+flat opening in the line's own ink, with muted teeth only in `wide` and `bite`
+and a dark tongue in `tongue`. `round` and `pucker` also gather the lips toward
+the middle. Each state is a square patch of that pose's lower face; `closed` is
+the drawing's pixels unchanged, and every patch fades out at its edge where
+nothing moves, so no seam shows.
+
+The patches are per pose. The kit stores them as
+`anchors.<pose>.mouthSources: {state: url}`, placed at `anchors.<pose>.mouth`
+(the patch square), and `kit.mouth` holds the base pose's. Every consumer
+(Video 2D mounting, the Series shot compiler, native lip sync, Video 3D
+talking cutouts, the rig review sheet) shows a pose its own patches while
+`kit.mouth` is still the base pose's; a pose without patches shows no mouth,
+never another pose's face, and a drawing put on the kit later is shared by
+every pose again. Switch a kit to warp mouths by rigging every pose with
+`mouthStyle: "warp"`.
+
+The mouth line is placed from a hint point (a point on the line between the
+lips), else the DWPose outer-lip points, else the rig's painted mouth. It is
+then snapped onto the darkest thin stroke along it: a stroke with light above
+and below, so a moustache's edge or a shadow is never taken, and following the
+mouth's slant across its middle, so a nose fold is not either. A hint is only
+snapped a little; with no stroke there the mouth opens exactly at the point.
+`hints.<pose>.mouthWidth` (corner to corner, in % of the pose image's width)
+sets the mouth's width. Per pose the result gives `mouthLine` (`mouth`,
+`mouthWidth`, `found`, `from`), and warnings `mouth_line_guessed` (no painted
+line there) or `mouth_line_unsure` (the landmarks scored under 0.5, as on a
+mouth under a moustache seen from below).
+
+Place a line by hand in the Face Rig's **Mouth line** editor (Characters ›
+Prepare 2D speech): drag the dot onto the line and the two ends to the
+corners. The warped rest, i, e, a, o, u update as you move, from
+`POST /api/v1/character-kits/library/kits/{id}/flat-rig/preview` (MCP
+`characters.rig.flat.preview`, which returns one sheet image). Nothing is saved
+until **Save mouth**, which re-rigs that pose and the base with the point and
+width as the pose's hint. Shots already rendered with that pose keep the old
+mouth until they are rendered again.
+
+A kit keeps its look. Every `style` key a rig leaves out is the kit's: the
+last rig's look, else the `rig` of the character style preset the kit was
+made in (its `character-style-create` provenance). A pose added later or an
+agent's re-rig without `style` stays warp; only `style.mouthStyle` changes it.
+The rig result's `style` is the look used. The `graphic-novel` preset
+(Character Creator › Graphic novel (painted), `characters.styles`) makes
+painted characters for this rig: clear white eyes out of the shadow, the rest
+mouth painted as one line, and `rig: {"mouthStyle": "warp"}`. A bust pose reads
+better in dialogue than a full figure with a small face.
+
+#### Small faces: enlarged, placed and put back
+
+On a full figure the head is 70–150 px of an 896×1152 pose and the mouth
+20–45 px. DWPose sees the whole figure squeezed into 288×384 pixels, so it put
+a small mouth's upper lip on the philtrum and its corners past the painted
+ones, and an opening a few pixels deep did not read in a wide shot. A head
+under 160 px (`face_enlarge.SMALL_HEAD`: the larger of the jaw's width and the
+brows-to-chin height; busts and three-quarter shots measure 174 px and up) is
+handled as a small face:
+
+- **Landmarks on the head alone** (`face_landmarks.detect`): the head and
+  shoulders, a square 4.4 heads across, are cut out with white round them and
+  given to the pose model as the person's box (enlarged with Lanczos when that
+  view is narrower than the model's input), and the points are mapped back to
+  the pose image. A small face keeps this pass whenever it is not a guess
+  (score 0.35 and up); its self-scores are lower than the whole pass's, but the
+  lips and eyes land on the painted ones. A larger face is read again only when
+  the whole pass was unsure (under 0.5) and kept when the head pass is surer:
+  this fixed a bust whose beard had been taken for the mouth.
+- **Warp at a bust's size, then put back** (`flat_rig_warp.enlarged_state`,
+  `face_enlarge.put_back`): the face is enlarged to a ~400 px head (2–6×,
+  premultiplied Lanczos), the line is snapped there (sub-pixel in the pose) and
+  every state is warped there. Each patch is brought back to the pose's own
+  pixels: the k×k average where something moved, the drawing's exact pixels
+  where nothing did (`closed` is still the drawing unchanged) and a whole-pixel
+  copy where the jaw moved by whole pose pixels. The patch square and anchor
+  are the same as without enlarging.
+- **Readable openings** (`flat_rig_warp.drop_pixels`): `wide` drops at least
+  9 pose pixels and the other openings in proportion (at least 2), never more
+  than 1.5 times their own drop. A bust's mouth (55 px and up) already drops
+  more, so busts are unchanged.
+
+Per pose the rig result gives `faceSize` (`size` small or normal, `head` px,
+landmark `pass` head or whole, `upscale`), also inside `mouthLine` and the
+provenance's `mouthLines`; the review sheet captions each pose with it, and the
+Face Rig's Mouth line editor says when a face was read on the head alone and
+warped enlarged. A kit rigged before this change keeps its mouths until it is
+rigged again.
+
 ## Comic film PRE after a restart
 
 A comic PRE that was ready before the lab stopped is still ready afterwards.
@@ -610,3 +1001,33 @@ canvas of 1280×704. A deterministic render that fails reports the end of the
 ffmpeg log and keeps the full log on the pipeline. Accepting a reviewed test
 clip records the person who requested that acceptance, the channel, and the
 attestation note. The review checkbox is not filled in by playback.
+
+## Native Series requires acoustic mouth cues
+
+Native Series analyses each recorded line with `audio.mouth_cues` and
+`engine: "auto"`: the shared CPU phoneme engine when it is installed, Rhubarb
+otherwise. If analysis fails or returns no cues, rendering stops before
+building the scene; it does not silently replace audio alignment with text
+rhythm. Each line in `series.episode.render_native.status` reports its
+`engine`, its `cueCount` and, when Rhubarb drew it, `fallbackReason:
+phoneme_not_installed`. For sung or vowel-heavy lines install the phoneme
+engine with `audio.phonemes.setup` and resume the job: recorded voices are
+reused. Inspect `cueCount` before approving the visual result.
+
+## Publishing a reviewed take with an exact resource name
+
+A script can retain its original resource names after an audio or image retake.
+Use `assets.upload` with `source`, `copy_to_workspace: true` and
+`destination_filename` in the same workspace. The extension must match the
+source. To replace an existing resource, supply its current
+`expected_destination_sha256`; a stale or missing hash returns
+`destination_conflict` without replacing it. Reuse the same `intent_id` on a
+transport retry. The source remains available, bytes are copied without media
+conversion, and a generation sidecar retains provenance with the destination
+asset name. Only a sidecar that names the source is copied: `clip.meta.json`
+written for `clip.mp4` is not the metadata of `clip.wav`. Sidecars are keyed by
+the name before the extension, so a destination that would share one with
+another output (`song.wav` beside `song.png`) returns `sidecar_conflict` and
+nothing is written when that sidecar holds the other output's metadata or the
+copy would create it; choose another name. This is a CPU
+operation and downloads no models.

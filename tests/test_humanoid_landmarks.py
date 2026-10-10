@@ -61,7 +61,67 @@ def test_big_ears_belong_to_the_head_and_not_to_the_arms():
     assert found["points"]["left_shoulder"][1] < region["y"]
 
 
-@pytest.mark.parametrize("kind,reason", [("arms_down", "hands_stuck"), ("legs_together", "single_leg"), ("penguin", "single_leg")])
+def test_long_hair_and_a_skirt_do_not_put_the_neck_at_the_waist():
+    item = body("long_hair_skirt")
+    found = _found(item)
+    for side in ("left", "right"):
+        for joint in ARM_JOINTS:
+            # The torso width is measured at the skirt, which pushes the shoulder out a little.
+            assert _error(found, item, f"{side}_{joint}") < (0.04 if joint == "shoulder" else 0.03), (side, joint)
+    assert found["pose"] == "t"
+    assert found["points"]["neck"][1] > item["joints"]["left_shoulder"][1], "the neck is above the arms, not at the waist"
+
+
+def test_a_cape_over_the_shoulders_does_not_hide_the_arms():
+    item = body("cape")
+    found = _found(item)
+    assert "covered_arms" in found["warnings"] and found["confidence"] == 1.0
+    for side in ("left", "right"):
+        for joint in ARM_JOINTS:
+            # Without looking under the cape, the shoulder sat at the cape's edge, 0.12 of the height out.
+            assert _error(found, item, f"{side}_{joint}") < (0.04 if joint == "shoulder" else 0.03), (side, joint)
+    cloth, points = found["cloth"], item["positions"]
+    assert cloth.sum() > 500, "the sheets hanging beside the torso are cloth"
+    assert not cloth[np.abs(points[:, 0]) > 0.45].any(), "the forearms and hands are not"
+    assert not cloth[points[:, 1] < 1.1].any(), "nor is anything below the cape"
+
+
+def test_a_cape_behind_the_legs_is_looked_behind():
+    item = body("back_cape")
+    found = _found(item)
+    assert {"covered_legs", "covered_arms"} <= set(found["warnings"]) and found["confidence"] == 1.0
+    for side in ("left", "right"):
+        for joint in ARM_JOINTS + LEG_JOINTS:
+            assert _error(found, item, f"{side}_{joint}") < 0.03, (side, joint)
+        assert _error(found, item, f"{side}_hip") < 0.08
+    assert abs(found["points"]["crotch"][2]) < 0.02, "the cape behind does not pull the hips back"
+    cloth, points = found["cloth"], item["positions"]
+    cape = (points[:, 2] < -0.2) & (points[:, 1] < 1.0)
+    assert cloth[cape].mean() > 0.95 and cloth[points[:, 2] > -0.15].mean() < 0.01
+
+
+def test_legs_hidden_by_a_robe_are_placed_from_the_feet():
+    item = body("robe")
+    found = _found(item)
+    assert "legs_hidden" in found["warnings"] and found["confidence"] < 1.0
+    for side in ("left", "right"):
+        for joint in ARM_JOINTS + LEG_JOINTS:
+            assert _error(found, item, f"{side}_{joint}") < 0.03, (side, joint)
+        assert _error(found, item, f"{side}_hip") < 0.08
+    hem = found["robe"]["hem"]
+    assert found["points"]["left_ankle"][1] < hem < found["points"]["left_knee"][1]
+    assert _found(body("human_a"))["robe"] is None
+
+
+@pytest.mark.parametrize("kind", ["human_t", "human_a", "long_hair_skirt"])
+def test_a_body_without_cloth_has_none(kind):
+    found = _found(body(kind))
+    assert not found["cloth"].any()
+    assert not {"covered_arms", "covered_legs", "legs_hidden"} & set(found["warnings"])
+
+
+@pytest.mark.parametrize("kind,reason", [("arms_down", "hands_stuck"), ("legs_together", "single_leg"), ("penguin", "single_leg"),
+                                         ("robe_to_floor", "single_leg")])
 def test_bodies_that_cannot_be_rigged_are_refused(kind, reason):
     with pytest.raises(NotHumanoid) as caught:
         _found(body(kind))
@@ -90,6 +150,17 @@ def test_a_lying_body_is_not_upright():
     lying = item["positions"][:, [0, 2, 1]] * np.array([1.0, 1.0, -1.0])
     with pytest.raises(NotHumanoid) as caught:
         detect_landmarks(lying, item["indices"])
+    assert caught.value.reason == "not_upright"
+
+
+def test_a_cape_and_a_tail_as_deep_as_the_body_is_tall_still_stand_upright():
+    from services.humanoid_rig.landmarks import _require_upright
+
+    def box(depth):
+        return np.array([[[0.0, 0.0, 0.0], [0.6, 2.0, 0.0], [0.3, 1.0, -depth]]])
+    _require_upright(box(2.4), 2.0)                     # a king with a cape and a belly, a monkey with a long tail
+    with pytest.raises(NotHumanoid) as caught:
+        _require_upright(box(6.0), 2.0)                 # lying down: three times deeper than tall
     assert caught.value.reason == "not_upright"
 
 
@@ -169,6 +240,19 @@ def test_a_body_turned_away_from_the_camera_is_refused():
     with pytest.raises(NotHumanoid) as caught:
         _found(transformed(body("human_t"), yaw_degrees=45.0))
     assert caught.value.reason == "turned"
+
+
+def test_level_shoulders_with_one_hand_forward_hold_something_and_are_not_turned():
+    from services.humanoid_rig.landmarks import _require_facing_front
+
+    def pose(shoulder_depth, hand_depth):
+        return {"left_shoulder": [-0.3, 1.5, 0.0], "right_shoulder": [0.3, 1.5, shoulder_depth],
+                "left_wrist": [-0.6, 1.0, 0.0], "right_wrist": [0.6, 1.0, hand_depth]}
+    _require_facing_front(pose(0.002, 0.36), 2.0)          # an old man leaning on his cane
+    for shoulders, hands in ((0.002, 0.7), (0.06, 0.3)):   # a hand too far out, or shoulders a little turned too
+        with pytest.raises(NotHumanoid) as caught:
+            _require_facing_front(pose(shoulders, hands), 2.0)
+        assert caught.value.reason == "turned"
 
 
 def test_an_empty_face_list_is_degenerate():

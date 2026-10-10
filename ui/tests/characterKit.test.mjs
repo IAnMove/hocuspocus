@@ -261,3 +261,20 @@ test('calibrated mouths align with source pixels in portrait, landscape and rota
     }
   }
 })
+
+
+test('a pose that has its own blink uses it, the others keep the kit blink', () => {
+  const asset = (id, source = `/api/v1/file/${id}.png?workspace=w`) => ({ id, name: id, source, kind: 'image', alphaStatus: 'transparent', reviewState: 'approved' })
+  const kit = {
+    ...createCharacterKit('Lola', 'cutout'), id: 'lola', base: asset('base'), poses: { shout: asset('shout') },
+    mouth: { closed: { ...asset('closed'), kind: 'overlay' } }, eyes: { blink: { ...asset('blink'), kind: 'overlay' } },
+    anchors: {
+      base: { mouth: { offsetX: 0, offsetY: -20, scale: .05, rotation: 0 }, eyes: { offsetX: 0, offsetY: -28, scale: .1, rotation: 0 } },
+      shout: { mouth: { offsetX: 0, offsetY: -20, scale: .05, rotation: 0 }, eyes: { offsetX: 0, offsetY: -26, scale: .1, rotation: 0 },
+               blinkSource: '/api/v1/file/kit-lola-shout-blink-1.png?workspace=w' },
+    },
+  }
+  const blinkOf = pose => mountCharacterKitLayers(kit, pose).find(layer => layer.id.endsWith('eyes-blink')).source
+  assert.equal(blinkOf('shout'), '/api/v1/file/kit-lola-shout-blink-1.png?workspace=w')
+  assert.equal(blinkOf('base'), '/api/v1/file/blink.png?workspace=w')
+})

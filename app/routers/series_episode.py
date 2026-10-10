@@ -6,7 +6,26 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from services.series_library import SeriesConflictError, update_series_episode
+from services.series_library import EpisodeNumberTaken, SeriesConflictError, create_series_episode, update_series_episode
+
+
+def _number_taken(exc: EpisodeNumberTaken) -> HTTPException:
+    return HTTPException(status_code=409, detail={
+        "code": "episode_number_taken", "message": str(exc), "episodeId": exc.holder_id,
+    })
+
+
+def create_checked_episode(series: dict, body: Any) -> dict:
+    """Create one episode. An explicit ``episode.number`` that another episode holds is HTTP 409."""
+    payload = body if isinstance(body, dict) else {}
+    episode = payload.get("episode") if isinstance(payload.get("episode"), dict) else {}
+    season = str(payload.get("seasonId") or "") or None
+    try:
+        return create_series_episode(series, season, **episode)
+    except EpisodeNumberTaken as exc:
+        raise _number_taken(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def apply_series_episode_update(
@@ -44,5 +63,7 @@ def apply_series_episode_update(
                 "currentEpisodeUpdatedAt": current.get("updatedAt"),
             },
         ) from exc
+    except EpisodeNumberTaken as exc:
+        raise _number_taken(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

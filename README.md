@@ -46,7 +46,7 @@ Selected images (single inputs, batch inputs and image references) show a small 
 
 ### Optional example media
 
-The initial installation does not include example media. **Video 3D → Shot library** keeps all advanced shot types and all 57 Pixel worlds in the main catalog (243 templates). Only 45 additional looks from eight repeated example families live under **Examples and variants**. Template availability is independent of whether its optional media is installed. Choose a collection and press **Download** after checking its size. Browsing does not download media. Downloads support progress, cancellation and offline reuse in `app/cache/examples/`; saved projects keep their existing example references. You can remove this cache while HocusPocus is stopped to reclaim space. See [optional collections](docs/development/OPTIONAL_EXAMPLES.md) for details.
+The initial installation does not include example media. **Video 3D → Shot library** keeps all advanced shot types and all 57 Pixel worlds in the main catalog (716 templates). Only 45 additional looks from eight repeated example families live under **Examples and variants**. Template availability is independent of whether its optional media is installed. Choose a collection and press **Download** after checking its size. Browsing does not download media. Downloads support progress, cancellation and offline reuse in `app/cache/examples/`; saved projects keep their existing example references. You can remove this cache while HocusPocus is stopped to reclaim space. See [optional collections](docs/development/OPTIONAL_EXAMPLES.md) for details.
 
 See [example distribution](docs/development/OPTIONAL_EXAMPLES.md) for the pinned source, integrity checks and lightweight installation options.
 
@@ -230,7 +230,7 @@ Gandalf speaking in that world (image lips on the mesh, not a baked video):
 
 ### Talk to the studio
 
-The **Wizard** is an in-app director: “open the concert scene”, “prepare a 3D showcase”, “make a 5-second clip of the cube in the rain”. **MCP** exposes the same jobs to external agents (image, video, SFX, scenes, receipts). Switching the footer workspace while a Wizard scene is still loading will **not** stomp the compositor or wipe undo.
+The **Wizard** is an in-app director: “open the concert scene”, “prepare a 3D showcase”, “make a 5-second clip of the cube in the rain”. **MCP** exposes most of the same jobs to external agents (image, video, SFX, scenes, series, receipts). The two surfaces are not identical: Comics, Story Lab, Director, Video Editor, the style sheet and Revoice are driven from the UI, while `media.options`, `jobs.wait`, `studio.key`, `qa.*` and `clip.align` exist only over MCP. Switching the footer workspace while a Wizard scene is still loading will **not** stomp the compositor or wipe undo.
 
 Connect through **Settings → Integrations → Hocuspocus MCP**, using the app's address plus `/api/v1/mcp` and the MCP Bearer token. This is Hocuspocus's shared tool server, including generation, assets, collections and scenes supported by the installation. The historical `/api/v1/wangp/mcp` URL remains an alias for existing clients. See the [MCP connection guide](docs/development/SCENE_EFFECTS_AND_MCP.md#enable-and-connect-mcp).
 
@@ -242,7 +242,7 @@ In **Series Lab → Canon**, generate reference images from each character or lo
 
 For 2D/3D animation, prepare both environments and characters. Each shot shows its environment selector and reference previews, and opens the editor once the episode has approved images for the environment and every visible character. Preparation shortcuts lead directly to the corresponding Bible cards. An establishing shot can use just its environment.
 
-**Generate all / Regenerate all** in **Series Lab → Shots** prepares editable 2D scenes and MP4 takes. Each shot also has **Regenerate this shot**. The app removes character backgrounds, uses saved voices and synchronizes mouths to each isolated recording with the offline Rhubarb engine. English recordings also use the script; other languages use phonetic recognition. New speaking-shot preparation requires all nine mouth positions; previously rendered clips and imported four-mouth scenes remain usable. The **20 mouth styles** provide complete nine-position packs, and Character Creator shows missing slots before generation. Download individual styles or all 20 as PNG packs from Character Creator. Saving a character creates a reusable resting still with the selected mouth while retaining the mouthless animation base. Configured listeners and silent shots use that resting mouth too.
+**Generate all / Regenerate all** in **Series Lab → Shots** prepares editable 2D scenes and MP4 takes. Each shot also has **Regenerate this shot**. The app removes character backgrounds, uses saved voices and synchronizes mouths to each isolated recording with the offline Rhubarb engine. English recordings also use the script; other languages use phonetic recognition. New speaking-shot preparation requires all nine mouth positions; previously rendered clips and imported four-mouth scenes remain usable. The **26 mouth styles** provide complete nine-position packs, and Character Creator shows missing slots before generation. Download individual styles or all 26 as PNG packs from Character Creator. Saving a character creates a reusable resting still with the selected mouth while retaining the mouthless animation base. Configured listeners and silent shots use that resting mouth too.
 
 Regeneration preserves saved motion and audio and appends unapproved versions; approved takes remain available. Save the character workshop, return to Shots and click **Regenerate all** to update existing scenes. Missing setup links directly to the character. Keep the tab open during the batch. Completed shots release their temporary recovery copies after the editable scene and video are saved; unsaved editor changes and failed preparations retain their backups. Install/Update prepares the pinned offline engine; **Pinokio → Advanced → Repair offline lip sync** repairs it separately. See [2D speech quality and mouth packs](docs/character-kits/SPEECH_QUALITY.md).
 
@@ -272,7 +272,7 @@ Each **Canon → Characters** card also shows voice, 2D lip-sync and 3D lip-sync
 - **Workspace collections** group projects without moving files. The gallery **Workspaces** tab is the Director thread dashboard for the *active* folder — [guide](docs/workspaces/HOWUSEIT.md).
 - **CivitAI LoRA browser** with one-click install, update badges, and auto-written prompting guides from CivitAI / Hugging Face cards.
 - **Local LLM** (Gemma 4 / Qwen GGUF via llama.cpp) or external OpenAI / Anthropic / compatible endpoints. Unloads after idle so VRAM goes back to generation.
-- **Themes:** Golden Hour, Classic, Onyx.
+- **Themes:** 17 families (HocusPocus Blue, Classic, Onyx, Everforest, Gruvbox, Nord, Tokyo Night, Catppuccin, Rosé Pine, Studio, Phosphor, Amiga Workbench, Solarized, One, Ayu, Dracula, Kanagawa), each with a dark and a light variant, plus an automatic mode that follows the OS.
 - **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`). Creating series drafts, characters and speech clips also works from plain HTTP network URLs. After updating, reload the browser; Wizard can continue an empty series draft with the same title after a failed creation attempt.
 - **NSFW** and experimental gates are opt-in.
 
@@ -297,8 +297,8 @@ Every step can also start from an existing image, video, audio file or GLB.
 
 | | Minimum | Recommended |
 |---|---|---|
-| **OS** | Windows 10/11 or Linux | Windows 11 or Linux |
-| **GPU** (local AI) | NVIDIA, 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
+| **OS** | Windows 10/11, Linux, or macOS on Apple Silicon (core studio only, no local AI engines) | Windows 11 or Linux with an NVIDIA GPU |
+| **GPU** (local AI) | NVIDIA Turing or newer (compute capability 7.5: GTX 16xx / RTX 20xx and up), 6 GB VRAM | RTX 3090 / 4090 / 5090, 24 GB+ |
 | **RAM** | 16 GB | 32 GB+ |
 | **Disk** | 150 GB free | 500 GB free for a full model shelf |
 | **Python** | Installed by Pinokio | — |
@@ -309,7 +309,7 @@ Every step can also start from an existing image, video, audio file or GLB.
 | 12–16 GB | auto-tune offloads; slower |
 | 6–8 GB | works with heavy offload; keep clips short |
 
-Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D is optional and not part of the main Install, because it compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Its installer (Advanced menu) selects a compatible MSVC toolset or stops with setup instructions; Update refreshes it only where it is installed. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
+Local AI engines use CUDA kernels, so they install only on NVIDIA x64 Windows/Linux. Install checks each computer and installs only what it can run: on AMD, Intel or CPU-only PCs, Apple Silicon, Linux ARM, NVIDIA GPUs older than Turing (compute capability below 7.5, such as the GTX 10xx series), or NVIDIA drivers older than the recipe minimum, it installs the core studio (projects, editors, 3D worlds, comics, remote LLM/image/music/3D providers) without Torch, and the studio hides the local engines. Intel Macs are not supported. First launch downloads weights on demand (often 50–100 GB; the full set can pass 300 GB). Hunyuan3D is optional and not part of the main Install, because it compiles native extensions: Windows needs CUDA Toolkit 12.8 and Visual Studio 2019/2022 C++ Build Tools. Its installer (Advanced menu) selects a compatible MSVC toolset or stops with setup instructions; Update refreshes it only where it is installed. Its pinned 2.1 rasterizer receives Windows integer-type fixes; Update restores only those exact patches and stops if the same files contain custom edits.
 
 For Windows Hunyuan3D, use **CUDA Toolkit 12.8** and a compatible x64 MSVC
 toolset: VS 2022 v143 (14.3x/14.4x) or VS 2019 v142, with a Windows SDK.
@@ -330,11 +330,11 @@ Local AMD ROCm, Intel and Apple MPS engines are not available yet.
 2. Discover → paste `https://github.com/IAnMove/hocuspocus`, or download from this repo.
 3. **Install**, then **Start**. The first job on each model fetches its weights.
 
-Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md). Windows WanGP pins xformers 0.0.31.post1 and Flash Attention 2.7.4.post1 (with a SHA-256 pinned wheel) for the Torch 2.7.1 / CUDA 12.8 environment.
+Pinokio **Install** and **Update** share Windows/Linux recipes with separate Python environments and pinned dependencies per engine. Update also rebuilds the UI. SAM (Inpaint) and UniRig are optional menu installs; UniRig currently has a Linux recipe. See [runtime profiles and recovery](docs/development/RUNTIME_PROFILES.md). Windows WanGP pins xformers 0.0.31.post1, triton-windows 3.3.1.post19 and a prebuilt SageAttention 2.2.0 wheel for its Torch 2.7.1 / CUDA 12.8 environment; Flash Attention and torchcodec are excluded there (Linux installs a prebuilt Flash Attention 2.7.4 wheel). The per-platform locks pin exact versions, not SHA-256 hashes.
 
 **Start** verifies and repairs the React build before loading the backend. For a missing or incomplete interface, stop Start, use **Repair Web UI**, then Start again; models are preserved. Startup logs show the app version, commit, OS and React build ID for bug reports. See [React recovery and manual commands](docs/development/REACT_INSTALLATION.md).
 
-**Reset** removes the managed environments, vendor checkouts and UI build, including the Hunyuan model cache in `app/ckpts/model3d`. Use Install/Update to retry a failed setup; Reset is destructive.
+**Reset** removes the managed environments, vendor checkouts and UI build, including the Hunyuan model cache in `app/ckpts/model3d`, the Seed-VC checkout, SAM checkpoints and any third-party 3D runtimes under `app/services/model3d_runtimes`. Use Install/Update to retry a failed setup; Reset is destructive.
 
 To inspect the selected runtime recipes, use the URL shown by Start (replace the example host and port, including when connecting over LAN):
 

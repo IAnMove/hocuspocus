@@ -128,6 +128,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_document_origin.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "symbol_importable",
+      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
       "file": "tests/test_download_state.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -192,6 +198,12 @@
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
+      "file": "tests/test_jobs_cancel.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
       "file": "tests/test_krea2_features.py",
@@ -356,6 +368,12 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
+      "file": "tests/test_series_assembly_router.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
+    },
+    {
       "file": "tests/test_series_jobs.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -378,6 +396,12 @@
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
+      "file": "tests/test_speech_reference_pauses.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
       "file": "tests/test_story_lab_audio_ui.py",
@@ -566,6 +590,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/comicPreflightPreviewRace.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/criticalFlows.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -609,6 +639,12 @@
     },
     {
       "file": "ui/tests/galleryRefresh.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/gameAssetsPanel.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
@@ -674,6 +710,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/jobRecoveryPolling.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/lipsCreatorWizard.test.ts",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -728,6 +770,18 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/recoverabilityFollowups.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/recoverabilityLast.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/sceneOutputOpen.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -746,6 +800,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/seriesFaceRigNavigation.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/seriesProduction.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -759,6 +819,18 @@
     },
     {
       "file": "ui/tests/seriesResponsive.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/seriesShotEditBanner.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/seriesShotInspector.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."

@@ -1,6 +1,8 @@
 import { ExampleDownloads } from './ExampleDownloads'
-import { exampleCollections } from './templateCatalog'
-import { CinematicControls, AppearanceControls } from './CinematicControls'
+import { useDocumentRoundtrip } from './documentRoundtrip'
+import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
+import { exampleCollections, isBuiltinScene3DTemplate } from './templateCatalog'
+import { CinematicControls, AppearanceControls, RenderLookControls } from './CinematicControls'
 import { PixelWorldControls } from './PixelWorldControls'
 import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
 import { useSceneDocumentHandoff } from '../sceneFx/handoff'
@@ -23,6 +25,8 @@ import { useSpeechProfiles } from './speech/useSpeechProfiles'
 import { SPEECH_HANDOFF_EVENT, takeSpeechProduction, preserveSpeechDraft } from './speech/production'
 import { Scene3DSoundtrackControls } from './speech/Scene3DSoundtrackControls'
 import { SceneSpeechAudio } from './speech/preview'
+import { MotionLabAudio } from './motionlab/previewAudio'
+import { MotionLabControls } from './motionlab/controls'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
@@ -176,7 +180,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       applyScene(adopted.document)
       return
     }
-    sessionStorage.setItem('hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
+    safeStorageSet('session', 'hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
     bumpGeneration(); applyScene(adopted.document); setFrame(0)
     selectSlot(adopted.document.slots[0]?.id ?? 'subject_1'); setSpeechOpen(adopted.document.slots.some(slot => Boolean(slot.speech)))
   })
@@ -318,7 +322,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     const receive = () => {
       if (exportingRef.current) return
       try {
-        const next = takeSpeechProduction(workspace, sessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
+        const next = takeSpeechProduction(workspace, safeSessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
         if (!next) return
         bumpGeneration()
         setPlaying(false); setFrame(0)
@@ -353,7 +357,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     adoptMountedScene(remountUserTemplate(pack, sceneDoc, keepAssets), pack.id)
   }
 
-  const roundtrip = Boolean(parseScene3DDocument(JSON.parse(JSON.stringify(sceneDoc))))
+  const roundtrip = useDocumentRoundtrip(sceneDoc)
 
   const exportScene = async () => {
     const target = session.captureForSave()
@@ -377,12 +381,13 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     <div className="flex w-full flex-col gap-2" data-testid="scene3d-workspace">
       <ExampleDownloads required={exampleCollections(sceneDoc)} disabled={editingLocked} onInstalled={() => { if (!exportingRef.current) bumpGeneration() }} />
       <SceneSpeechAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} />
+      <MotionLabAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} speed={speed} />
       {sceneDoc.production && <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm" data-testid="speech-production-origin">
         {editorT(`speech.kind.${sceneDoc.production.kind}`)} · {sceneDoc.production.title}
         <span className="mt-1 block text-xs text-text-muted">{editorT('speech.productionReady')}</span>
         <button className="mt-2 underline" disabled={editingLocked} onClick={() => {
           try {
-            const raw = sessionStorage.getItem('hocuspocus:world3d-before-speech:' + workspace)
+            const raw = safeStorageGet('session', 'hocuspocus:world3d-before-speech:' + workspace)
             const previous = raw && parseScene3DDocument(JSON.parse(raw))
             if (!previous) return
             preserveSpeechDraft(workspace, sceneDoc)
@@ -417,6 +422,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSpeechSelector slots={sceneDoc.slots} selected={selected} open={speechOpen}
         onToggle={() => { setPickTarget(undefined); setSpeechOpen(open => !open) }} onSelect={selectSlot} />
       <CinematicControls environment={sceneDoc.environment} disabled={editingLocked} onChange={environment => applyScene(current => ({ ...current, environment }))} />
+      <RenderLookControls document={sceneDoc} disabled={editingLocked} onChange={look => applyScene(current => ({ ...current, ...look }))} />
+      <MotionLabControls document={sceneDoc} disabled={editingLocked} onChange={motionLab => applyScene(current => ({ ...current, motionLab }))} />
       <PixelWorldControls pixelWorld={sceneDoc.pixelWorld} dressing={sceneDoc.dressing} tvs={sceneDoc.slots.filter(slot => slot.screen?.style === 'crt').length} slots={sceneDoc.slots.length} disabled={editingLocked}
         onChange={patch => applyScene(current => ({ ...current, ...patch }))} onAddTv={() => applyScene(current => addTv(current))} />
       <SceneFxControls cues={sceneDoc.sfx} duration={sceneDoc.duration} disabled={editingLocked} onChange={sfx => applyScene(current => ({ ...current, sfx }))} onShowcase={collection => applyScene(current => withFxShowcase(current, collection))} />
@@ -641,7 +648,8 @@ function WorkspaceStageColumn({
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
             onReset={() => {
-              const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id)
+              const pose = isBuiltinScene3DTemplate(sceneDoc.templateId)
+                ? applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id) : undefined
               if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
             }} />}
         </div>

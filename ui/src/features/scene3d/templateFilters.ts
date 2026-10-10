@@ -1,5 +1,6 @@
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
+import { animeCard } from './animeTemplates'
 import { atmosSet, isAtmosDressing } from './atmos/registry.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
 import type { Scene3DDressing } from './types.ts'
@@ -9,8 +10,15 @@ export const TEMPLATE_SETTINGS = [
   'jungle', 'forest', 'snow', 'casino', 'studio', 'street', 'stage', 'canyon', 'cave', 'volcano', 'islands', 'room', 'grid', 'circuit', 'mainframe',
 ] as const
 export type TemplateSetting = typeof TEMPLATE_SETTINGS[number]
+const MOTION_SETTINGS: Partial<Record<Scene3DDressing, TemplateSetting>> = {
+  'motion-seasonal-carriage': 'train', 'motion-data-assembly': 'mainframe',
+  'motion-sunset-flight': 'sea', 'motion-lighthouse-story': 'sea',
+  'motion-bouncing-ball': 'stage', 'motion-music-machine': 'stage',
+}
 
 export function settingFromDressing(dressing: Scene3DDressing | undefined): TemplateSetting {
+  const motion = MOTION_SETTINGS[dressing ?? 'none']
+  if (motion) return motion
   if (dressing === 'open-sea') return 'sea'
   if (dressing === 'lunar') return 'moon'
   if (dressing === 'rooftop') return 'rooftop'
@@ -42,7 +50,7 @@ function templateSearchText(item: Scene3DTemplate, input: {
   locale: 'en' | 'es'
   titleOf: (id: Scene3DTemplateId) => string
 }) {
-  const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale)
+  const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale) ?? animeCard(item.id, input.locale)
   return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)}`
 }
 

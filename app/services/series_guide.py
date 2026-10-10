@@ -3,26 +3,34 @@
 ``series.guide`` returns ``shared/series_agent_guide.md`` (how to work with the
 tools, the shot format, the house conventions, the pitfalls) and a bible built
 from the live data: characters with their kits, poses and voices, locations
-with variants, anchors and plates, the music and sound files in the
+with variants, anchors, set layers and plates, the music and sound files in the
 workspace, and the episodes so far. ``compact_episode`` gives one episode
 without the render history noise, for copying an earlier episode's style.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from services.pose_facing import kit_facings
+from services.series_duration_estimate import estimate_episode
 
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SHOT_FIELDS = ("id", "order", "sceneId", "locationId", "locationVariantId", "productionMethod", "durationSeconds",
-               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "approvedAttemptId")
+               "visibleCharacterIds", "speakingCharacterIds", "layout2d", "scene3d", "foley", "approvedAttemptId",
+               "transitionIn")
+# Detecting the facing of poses not read before stops after this many seconds; the rest are read by later calls.
+FACING_BUDGET = 20.0
 
 
 def guide_text() -> str:
     return GUIDE_PATH.read_text(encoding="utf-8")
 
 
-def _character(character: dict[str, Any], kits: dict[str, Any]) -> dict[str, Any]:
+def _character(character: dict[str, Any], kits: dict[str, Any], root: str | None = None,
+               late: Callable[[], bool] = lambda: False) -> dict[str, Any]:
     ref = ((character.get("voiceProfile") or {}).get("characterKitRef") or {}).get("id")
     kit = kits.get(ref) or {}
     voices = kit.get("voicesByLanguage") or {}
@@ -34,6 +42,10 @@ def _character(character: dict[str, Any], kits: dict[str, Any]) -> dict[str, Any
              "rigged": bool(kit.get("mouth"))}
     if isinstance(character.get("layout2d"), dict) and character["layout2d"]:
         entry["layout2d"] = character["layout2d"]
+    # Which way each pose looks (left, right, front): stand it on the other side of the frame (look room).
+    facing = kit_facings(kit, root, late) if kit else {}
+    if facing:
+        entry["facing"] = facing
     if not ref or not kit:
         entry["missing"] = "no Character Kit yet: make one before rendering a shot with this character"
     return entry
@@ -44,7 +56,7 @@ def _location(location: dict[str, Any]) -> dict[str, Any]:
     entry = {"id": location["id"], "name": location.get("name"), "description": location.get("description"),
              "variants": [variant.get("id") for variant in location.get("variants") or [] if variant.get("id")],
              "hasImage": bool(location.get("referenceAssetIds") or layout.get("backgroundAssetId") or layout.get("plateAssetId"))}
-    for key in ("homes", "anchors"):
+    for key in ("homes", "anchors", "layers", "castDepth"):
         if layout.get(key):
             entry[key] = layout[key]
     if layout.get("plateAssetId"):
@@ -60,14 +72,15 @@ def _episode_summary(episode: dict[str, Any]) -> dict[str, Any]:
             "approvedShots": sum(1 for shot in shots if shot.get("approvedAttemptId")),
             "languageVersions": {lang: {"title": version.get("title"), "approvedShots": len(version.get("approvedAttemptIds") or {}),
                                         "cut": bool(version.get("latestAssemblyAssetId"))} for lang, version in versions.items()},
-            "cut": bool(episode.get("latestAssemblyAssetId"))}
+            "cut": bool(episode.get("latestAssemblyAssetId")),
+            **({"reviewMode": episode["review"].get("mode")} if isinstance(episode.get("review"), dict) else {})}
 
 
 def audio_files(names: list[str]) -> dict[str, list[str]]:
     """Workspace audio a shot can use, by kind: music (mus-*), sound effects (sfx*) and the rest."""
     found: dict[str, list[str]] = {"music": [], "sfx": [], "other": []}
     for name in sorted(names):
-        if not name.lower().endswith(AUDIO) or name.startswith((".", "_", "ln-", "voice-", "uv2-", "e2e-")):
+        if not name.lower().endswith(AUDIO) or name.startswith((".", "_", "ln-", "foley-", "voice-", "uv2-", "e2e-")):
             continue
         kind = "music" if name.startswith("mus") else "sfx" if name.startswith("sfx") else "other"
         if kind != "other" or len(found["other"]) < 40:
@@ -84,12 +97,15 @@ def _series_summary(series: dict[str, Any]) -> dict[str, Any]:
             "themes": canon.get("themes") or []}
 
 
-def build_bible(series: dict[str, Any], kits: dict[str, Any], workspace_files: list[str]) -> dict[str, Any]:
+def build_bible(series: dict[str, Any], kits: dict[str, Any], workspace_files: list[str], root: str | None = None) -> dict[str, Any]:
+    """The series bible; with the workspace ``root`` the poses' images are read for which way they look."""
     episodes = sorted((series.get("episodesById") or {}).values(), key=lambda item: item.get("number") or 0)
     next_number = max([episode.get("number") or 0 for episode in episodes] + [0]) + 1
+    deadline = time.monotonic() + FACING_BUDGET
     return {
         "series": _series_summary(series),
-        "characters": [_character(character, kits) for character in series.get("characters") or []],
+        "characters": [_character(character, kits, root, lambda: time.monotonic() > deadline)
+                       for character in series.get("characters") or []],
         "locations": [_location(location) for location in series.get("locations") or []],
         "soundDesign": series.get("soundDesign") or {},
         "audio": audio_files(workspace_files),
@@ -122,6 +138,18 @@ def compact_episode(series: dict[str, Any], episode: dict[str, Any]) -> dict[str
     versions = {lang: {key: value for key, value in version.items() if key in VERSION_FIELDS}
                 for lang, version in (episode.get("languageVersions") or {}).items()}
     script = [{key: scene.get(key) for key in ("id", "order", "locationId", "purpose")} for scene in episode.get("script") or []]
+    shots = episode.get("shots") or []
     return {"id": episode["id"], "number": episode.get("number"), "title": episode.get("title"), "premise": episode.get("premise"),
-            "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in episode.get("shots") or []],
-            "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId")}
+            "status": episode.get("status"), "script": script, "shots": [_compact_shot(assets, shot) for shot in shots],
+            "languageVersions": versions, "latestAssemblyAssetId": episode.get("latestAssemblyAssetId"),
+            "estimate": estimate_episode(series, shots),
+            **({"score": episode["score"]} if episode.get("score") else {}), **_review(episode)}
+
+
+def _review(episode: dict[str, Any]) -> dict[str, Any]:
+    """A staged episode says so: its mode and next step (the notes are in series.episode.review.get)."""
+    from services.series_review import episode_mode, summary
+    if episode_mode(episode) == "direct" and not episode.get("review"):
+        return {}
+    found = summary(episode)
+    return {"review": {"mode": found["mode"], "steps": found["steps"], "nextStep": found["nextStep"]}}

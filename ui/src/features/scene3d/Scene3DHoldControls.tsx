@@ -1,5 +1,5 @@
 import { useUiTranslation } from '../../i18n'
-import { parseHold } from './handHold.ts'
+import { MAX_HOLD_TURN, parseHold, type Scene3DHold } from './handHold.ts'
 import type { Scene3DSlot } from './types.ts'
 
 const fieldClass = 'ml-2 min-h-10 w-20 rounded border border-border bg-bg-tertiary px-2'
@@ -48,9 +48,35 @@ export function Scene3DHoldControls({ slot, slots, disabled, onChange }: {
             onChange({ hold: { ...hold, offset } })
           }} />
       </label>)}
+      {([0, 1, 2] as const).map(axis => <HandTurnField key={axis} axis={axis} slot={slot} hold={hold} disabled={disabled} onChange={onChange} />)}
       <p className="w-full text-xs text-text-muted">{t('holdHelp')}</p>
     </div>}
   </div>
+}
+
+const TURN_LABELS = ['holdTurnX', 'holdTurnY', 'holdTurnZ'] as const
+
+/** One axis of `hold.rotation`, shown in degrees. The first turn starts from the slot's yaw, so the prop does not jump. */
+function HandTurnField({ axis, slot, hold, disabled, onChange }: {
+  axis: 0 | 1 | 2
+  slot: Scene3DSlot
+  hold: Scene3DHold
+  disabled: boolean
+  onChange: (patch: Partial<Scene3DSlot>) => void
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  const label = t(TURN_LABELS[axis])
+  const current = hold.rotation ?? [0, slot.rotationY || 0, 0]
+  return <label className="text-xs">{label}
+    <input aria-label={`${label} ${slot.id}`} type="number" min={-360} max={360} step={5} disabled={disabled}
+      value={Number((current[axis] * 180 / Math.PI).toFixed(1))} className={fieldClass}
+      onChange={event => {
+        const rotation = [...current] as [number, number, number]
+        const raw = event.target.valueAsNumber * Math.PI / 180
+        rotation[axis] = Number.isFinite(raw) ? Math.min(MAX_HOLD_TURN, Math.max(-MAX_HOLD_TURN, raw)) : 0
+        onChange({ hold: { ...hold, rotation } })
+      }} />
+  </label>
 }
 
 function canHold(slot: Scene3DSlot) {

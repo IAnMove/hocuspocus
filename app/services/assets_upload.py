@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import base64
 import binascii
+import glob
 import hashlib
+from contextlib import ExitStack
 import json
 import os
 import re
@@ -22,6 +24,8 @@ from services.asset_catalog import _stable_unmanaged_id
 from services.core_upload import MAX_UPLOAD_BYTES, extract_upload, save_upload, unique_upload_name
 from services.media_paths import MediaPathNotAllowed, _KIND_EXTENSIONS, resolve_permitted_media_path
 from services.wangp_submission import wangp_media_url
+from services.workspace_store_lock import workspace_store_lock
+from services.media_publication import file_sha256 as _file_sha256, publication_lock, publication_transaction
 
 
 MAX_ASSETS_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -29,6 +33,7 @@ MAX_ASSETS_UPLOAD_CHARS = 4 * ((MAX_ASSETS_UPLOAD_BYTES + 2) // 3)
 _JOURNAL_NAME = ".assets-upload-intents.json"
 _DATA_KEYS = frozenset({"workspace", "filename", "data_base64"})
 _SOURCE_KEYS = frozenset({"workspace", "source"})
+_COPY_OPTIONS = frozenset({"copy_to_workspace", "destination_filename", "expected_destination_sha256"})
 _WORKSPACE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)")
 _TOO_LARGE = f"Payload exceeds {MAX_ASSETS_UPLOAD_BYTES} bytes"
 
@@ -59,6 +64,8 @@ def command_catalog() -> list[dict]:
             "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
             "source": {"type": "string", "minLength": 1, "maxLength": 2000},
             "copy_to_workspace": {"type": "boolean", "const": True},
+            "destination_filename": {"type": "string", "minLength": 1, "maxLength": 240},
+            "expected_destination_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         },
         "required": ["workspace", "source"],
     }
@@ -73,6 +80,8 @@ def command_catalog() -> list[dict]:
             f"Send filename and data_base64 (at most {MAX_ASSETS_UPLOAD_BYTES} decoded bytes) "
             "or source, a file already inside this workspace or the uploads root. "
             "For source, optional copy_to_workspace:true imports a copy (at most 500 MB) into the selected workspace. "
+            "destination_filename selects an exact name; replacing an existing file requires its current "
+            "expected_destination_sha256. Named copies preserve generation sidecars and the source file. "
             "The URL is accepted directly by image_refs, image_start, image_end, and audio_guide. "
             "Reuse intent_id on transport retries. Does not call POST /api/v1/upload and does not use the GPU."
         ),
@@ -222,9 +231,13 @@ def _payload_mode(payload: dict) -> str:
     keys = set(payload)
     if keys == _DATA_KEYS:
         return "data"
-    if keys == _SOURCE_KEYS or keys == _SOURCE_KEYS | {"copy_to_workspace"}:
+    if _SOURCE_KEYS <= keys <= _SOURCE_KEYS | _COPY_OPTIONS:
         if "copy_to_workspace" in payload and payload["copy_to_workspace"] is not True:
             raise AssetsUploadError("invalid_command", "copy_to_workspace must be true or omitted", 422)
+        if keys & {"destination_filename", "expected_destination_sha256"} and payload.get("copy_to_workspace") is not True:
+            raise AssetsUploadError("invalid_command", "Named copies require copy_to_workspace:true", 422)
+        if "expected_destination_sha256" in keys and "destination_filename" not in keys:
+            raise AssetsUploadError("invalid_command", "A destination hash requires destination_filename", 422)
         return "source"
     raise AssetsUploadError(
         "invalid_command",
@@ -283,26 +296,130 @@ def _remember(folder: str, intent_id: str, digest: str, result: dict) -> None:
     current = _read_journal(folder)
     current[intent_id] = {"digest": digest, "result": result}
     temporary = path + ".tmp"
-    Path(temporary).write_text(json.dumps(current, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-    os.replace(temporary, path)
+    try:
+        Path(temporary).write_text(json.dumps(current, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
-def _copy_into_workspace(source: str, folder: str) -> str:
+def _named_copy_target(source: str, folder: str, payload: dict) -> Path:
+    name = _original_name(payload["destination_filename"])
+    if _extension(name) != _extension(source):
+        raise AssetsUploadError("invalid_filename", "A copy must keep the source extension", 422)
+    target = Path(folder) / name
+    if target.is_symlink() or target.is_dir():
+        raise AssetsUploadError("path_not_allowed", "Destination must be a regular workspace file", 422)
+    expected = payload.get("expected_destination_sha256")
+    if expected is not None and (type(expected) is not str or not re.fullmatch(r"[0-9a-f]{64}", expected)):
+        raise AssetsUploadError("invalid_command", "Use the destination's current SHA-256", 422)
+    current = _file_sha256(target) if target.exists() else None
+    if current != expected:
+        raise AssetsUploadError("destination_conflict", "Destination changed; inspect its SHA-256 before replacing it", 409)
+    return target
+
+
+def _same_stem_files(media: Path) -> list[str]:
+    """Other files whose sidecar is ``media``'s too: sidecars are keyed by stem, so ``song.wav`` and ``song.png``
+    both use ``song.meta.json``."""
+    return sorted(entry.name for entry in media.parent.glob(f"{glob.escape(media.stem)}.*")
+                  if entry.stem == media.stem and entry.name != media.name and entry.is_file())
+
+
+def _sidecar_owner(metadata: object, media: Path) -> str | None:
+    """The file a stem-keyed sidecar describes: the ``asset.filename`` it records. A sidecar that records none is
+    ``media``'s when no other file shares the stem; otherwise whose it is cannot be told (None)."""
+    asset = metadata.get("asset") if isinstance(metadata, dict) else None
+    recorded = asset.get("filename") if isinstance(asset, dict) else None
+    if isinstance(recorded, str) and recorded.strip():
+        return os.path.basename(recorded)
+    return None if _same_stem_files(media) else media.name
+
+
+def _sidecar_holders(meta: Path, target: Path, others: list[str]) -> list[str]:
+    """The existing files other than ``target`` whose metadata ``meta`` is."""
+    try:
+        metadata = json.loads(meta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        metadata = None
+    owner = _sidecar_owner(metadata, target)
+    if owner is None:
+        return others
+    return [owner] if owner != target.name and (target.parent / owner).is_file() else []
+
+
+def _refuse_shared_sidecar(target: Path, content: str | None) -> None:
+    """The copy writes ``content`` as ``target``'s sidecar, or removes it when None. Neither may touch the metadata
+    of another existing output with the same stem, nor create a sidecar that output would read as its own. A
+    sidecar whose output is gone is replaced."""
+    meta = target.with_suffix(".meta.json")
+    others = _same_stem_files(target)
+    if meta.is_file():
+        holders = _sidecar_holders(meta, target, others)
+    else:
+        holders = others if content is not None else []
+    if holders:
+        raise AssetsUploadError("sidecar_conflict", f"{meta.name} is also the metadata file of {', '.join(holders)}; "
+                                "choose a destination_filename with another name before the extension", 409)
+
+
+def _sidecar_content(source: str, target: Path, workspace: str) -> str | None:
+    source_meta = Path(source).with_suffix(".meta.json")
+    if source_meta.is_symlink():
+        raise AssetsUploadError("path_not_allowed", "Generation sidecar must be a regular file", 422)
+    if not source_meta.exists():
+        return None
+    try:
+        if source_meta.stat().st_size > MAX_ASSETS_UPLOAD_BYTES:
+            raise ValueError("Sidecar too large")
+        metadata = json.loads(source_meta.read_text(encoding="utf-8"))
+        if type(metadata) is not dict or type(metadata.get("asset", {})) is not dict:
+            raise ValueError("Invalid generation sidecar")
+    except (OSError, ValueError) as error:
+        raise AssetsUploadError("invalid_sidecar", "Generation sidecar is unreadable", 422) from error
+    if _sidecar_owner(metadata, Path(source)) != Path(source).name:
+        return None  # It was written for another output with the same stem (clip.mp4 for clip.wav).
+    metadata["asset"] = {**metadata.get("asset", {}), "filename": target.name, "uri": target.name,
+                         "id": _stable_unmanaged_id(workspace, target.name)}
+    metadata["copied_from"] = Path(source).name
+    return json.dumps(metadata, ensure_ascii=False, indent=2)
+
+
+def _publish_sidecar(target: Path, content: str | None) -> None:
+    target_meta = target.with_suffix(".meta.json")
+    if content is None:
+        target_meta.unlink(missing_ok=True)
+        return
+    temporary = target_meta.with_name(f".{target_meta.name}-{os.urandom(8).hex()}.tmp")
+    try:
+        temporary.write_text(content, encoding="utf-8")
+        temporary.replace(target_meta)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _copy_into_workspace(source: str, folder: str, payload: dict) -> str:
     if os.path.getsize(source) > MAX_UPLOAD_BYTES:
         raise AssetsUploadError("payload_too_large", "File too large (max 500 MB)", 413)
-    target = Path(folder) / unique_upload_name(Path(source).name)
-    temporary = target.with_suffix(target.suffix + ".tmp")
+    named = "destination_filename" in payload
+    target = _named_copy_target(source, folder, payload) if named else Path(folder) / unique_upload_name(Path(source).name)
+    content = _sidecar_content(source, target, payload["workspace"]) if named else None
+    if named:
+        _refuse_shared_sidecar(target, content)
+    temporary = target.with_name(f".{target.name}-{os.urandom(8).hex()}.tmp")
     try:
         shutil.copyfile(source, temporary)
         if temporary.stat().st_size > MAX_UPLOAD_BYTES:
             raise AssetsUploadError("payload_too_large", "File too large (max 500 MB)", 413)
         temporary.replace(target)
+        if named:
+            _publish_sidecar(target, content)
     finally:
         temporary.unlink(missing_ok=True)
     return str(target)
 
 
-def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
+def _upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
     intent_id, payload = _invocation(arguments)
     mode = _payload_mode(payload)
     workspace = _workspace_name(payload.get("workspace"))
@@ -313,15 +430,28 @@ def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
     prior = _recall(folder, intent_id, _digest(payload))
     if prior is not None:
         return prior
-    if mode == "data":
-        path = _store_upload(folder, _decode_base64(payload["data_base64"]), _original_name(payload["filename"]))
-    else:
-        path = _existing_file(payload["source"], workspace, uploads_root, folder)
-        if payload.get("copy_to_workspace"):
-            path = _copy_into_workspace(path, folder)
-    result = _canonical(path, workspace, uploads_root, folder)
-    _remember(folder, intent_id, _digest(payload), result)
-    return result
+    with ExitStack() as publication:
+        if mode == "data":
+            path = _store_upload(folder, _decode_base64(payload["data_base64"]), _original_name(payload["filename"]))
+        else:
+            path = _existing_file(payload["source"], workspace, uploads_root, folder)
+            if payload.get("copy_to_workspace"):
+                if "destination_filename" in payload:
+                    target = _named_copy_target(path, folder, payload)
+                    publication.enter_context(publication_transaction(
+                        (target, target.with_suffix(".meta.json"), Path(folder) / _JOURNAL_NAME)))
+                path = _copy_into_workspace(path, folder, payload)
+        result = _canonical(path, workspace, uploads_root, folder)
+        _remember(folder, intent_id, _digest(payload), result)
+        return result
+
+
+def upload_asset(arguments, *, workspace_dir, uploads_dir) -> dict:
+    _, payload = _invocation(arguments)
+    _payload_mode(payload)
+    folder = _folder(workspace_dir, _workspace_name(payload.get("workspace")))
+    with workspace_store_lock(Path(folder) / _JOURNAL_NAME), publication_lock(folder):
+        return _upload_asset(arguments, workspace_dir=workspace_dir, uploads_dir=uploads_dir)
 
 
 def command_handlers(workspace_dir, uploads_dir):

@@ -3,6 +3,8 @@ import { canResumeCanonicalTask, canonicalTaskVisualState } from '../../lib/cano
 import { formatAppAction, formatAppTimestamp } from '../../lib/locale'
 import { useUiTranslation } from '../../i18n'
 import { ActivityReferenceImages } from './ActivityReferenceImages'
+import { AgentChangeDetail, OriginBadge } from './AgentChangeDetail'
+import { agentChangeTitle, initiatorText, targetFiles } from './agentOrigin'
 import type { CanonicalTask } from '../../api/client'
 import {
   isLiveStatus,
@@ -17,7 +19,6 @@ import {
   estimatedRemainingSeconds,
   formatElapsed,
   formatEta,
-  generationInitiator,
   generationPrompt,
   generationRecipe,
   resourceSummary,
@@ -141,11 +142,11 @@ function JobMeta({
 }) {
   const recipe = generationRecipe(child)
   const resources = resourceSummary(child)
-  const initiator = generationInitiator(child)
+  const initiator = initiatorText(t, child)
   return (
     <p className="flex flex-wrap gap-x-2 text-[8px] text-text-muted">
       {recipe ? <span className="text-amber-300">{recipe}</span> : null}
-      {initiator ? <span className="text-violet-300">{t('startedBy', { name: initiator })}</span> : null}
+      {initiator ? <span className="text-violet-300">{initiator}</span> : null}
       {child.server_origin ? <span>{t('server', { origin: child.server_origin })}</span> : null}
       {resources ? <span className="text-accent-blue">{t(`resources.${resources.kind}`, { value: resources.value })}</span> : null}
       <span>{t('attempt', { current: child.attempt || 1, max: child.max_attempts || 1 })}</span>
@@ -271,9 +272,12 @@ function GroupTitleRow({
   const taskEta = formatEta(estimatedRemainingSeconds(task, clock))
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <button type="button" onClick={onSelect} className="min-w-0 text-left font-medium text-text-primary">
-        {task.title}
-      </button>
+      <span className="flex min-w-0 items-center gap-1">
+        <OriginBadge task={task} />
+        <button type="button" onClick={onSelect} className="min-w-0 text-left font-medium text-text-primary">
+          {agentChangeTitle(t, task) || task.title}
+        </button>
+      </span>
       <div className="flex items-center gap-2">
         <span className={`capitalize ${readingClass(group.readingState)}`}>{t(`lineage.reading.${group.readingState}`)}</span>
         <span className="tabular-nums text-text-muted" title={updatedAt ? `${formatAppAction('updated')}: ${updatedAt}` : undefined}>{formatElapsed(task, clock)}</span>
@@ -382,9 +386,11 @@ function GroupActions({
   t: Translate
 }) {
   const canToggle = group.jobs.length > 1 || Boolean(group.previousAttempt) || group.artifacts.length > 0
+  // An agent change opens its documents in their editor (AgentChangeDetail); keep one button per result.
+  const opened = targetFiles(group.primary)
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {group.artifacts.map(name => (
+      {group.artifacts.filter(name => !opened.has(name)).map(name => (
         <button key={name} type="button" onClick={() => onOpenArtifact(name)} className="rounded border border-emerald-400/30 px-1.5 py-0.5 text-[9px] text-emerald-300">
           {t('lineage.openArtifact', { name })}
         </button>
@@ -442,7 +448,7 @@ function GroupCopy({
   return (
     <>
       {recipe ? <p className="mt-0.5 break-words text-[9px] text-amber-300">{recipe}</p> : null}
-      {initiator ? <p className="mt-0.5 text-[9px] text-violet-300">{t('startedBy', { name: initiator })}</p> : null}
+      {initiator ? <p className="mt-0.5 text-[9px] text-violet-300">{initiator}</p> : null}
       {resources ? <p className="text-[9px] text-accent-blue">{t(`resources.${resources.kind}`, { value: resources.value })}</p> : null}
     </>
   )
@@ -517,8 +523,9 @@ function GroupBody(props: ActivityExecutionDetailProps & { task: CanonicalTask; 
       <p className={failed ? 'text-red-400' : 'text-text-secondary'} title={task.detail || task.message}>
         {task.error?.message || task.detail || task.message}
       </p>
-      <GroupCopy recipe={generationRecipe(task)} initiator={generationInitiator(task)} resources={resourceSummary(task)} t={t} />
+      <GroupCopy recipe={generationRecipe(task)} initiator={initiatorText(t, task)} resources={resourceSummary(task)} t={t} />
       <GroupPrompt task={task} t={t} onCopyPrompt={props.onCopyPrompt} />
+      <AgentChangeDetail task={task} workspace={props.group.workspace} />
       <ActivityReferenceImages task={task} />
       {active ? <GroupActiveChild child={activeChild} clock={props.clock} t={t} /> : null}
       {props.group.recoveryReason ? <p role="status" className="mt-1 text-[9px] text-red-300">{t('lineage.recoveryReason', { reason: props.group.recoveryReason })}</p> : null}

@@ -171,6 +171,30 @@ try:
 except Exception as _sweep_err:
     print(f"[Workspace] Trash sweep skipped: {_sweep_err}")
 
+def _save_server_config() -> None:
+    """Write wgp.server_config atomically with owner-only permissions.
+
+    The file holds API keys and the workspace list. open("w") truncated it
+    before writing, so a crash or two concurrent saves could leave it empty,
+    and the next start failed to import wgp.
+    """
+    path = wgp.server_config_filename
+    folder = os.path.dirname(os.path.abspath(path)) or "."
+    temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(wgp.server_config, indent=4))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
+
+
+
 # Performance auto-tune migration: pre-existing installs (config file
 # was loaded from disk, not freshly created) have no auto_performance
 # key in services. Default those to False so we never silently overwrite
@@ -186,8 +210,7 @@ _services = wgp.server_config.setdefault("services", {})
 if "auto_performance" not in _services:
     _services["auto_performance"] = False
     try:
-        with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
-            _f.write(json.dumps(wgp.server_config, indent=4))
+        _save_server_config()
         print("[HocusPocus Lab] Migration: existing config detected, auto_performance set to False (manual mode preserved)")
     except Exception as _e:
         print(f"[HocusPocus Lab] Migration: failed to persist auto_performance default: {_e}")
@@ -211,8 +234,7 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
                 if _k in _rec:
                     wgp.server_config[_k] = _rec[_k]
             _services["auto_performance_applied"] = True
-            with open(wgp.server_config_filename, "w", encoding="utf-8") as _f:
-                _f.write(json.dumps(wgp.server_config, indent=4))
+            _save_server_config()
             print(f"[HocusPocus Lab] First-boot auto-tune applied: {_rec.get('_recommendation_label', 'recommended profile')} "
                   f"(video_profile={_rec.get('video_profile')}, vram_safety_coefficient={_rec.get('vram_safety_coefficient')})")
         else:
@@ -340,6 +362,8 @@ def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
 # https://<port>.localhost). Do NOT loosen this to `*`: browser access stays
 # intentionally same-origin even when LAN session authentication is enabled.
 _cors_origin_regex = r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$"
+from services.host_guard import install_host_guard
+install_host_guard(api)
 api.add_middleware(
     CORSMiddleware,
     allow_origin_regex=_cors_origin_regex,
@@ -430,6 +454,12 @@ async def trace_user_mutations(request: Request, call_next):
         )
     return response
 
+
+# Who a loopback call (an MCP tool through these routes) or the Wizard says it is
+# for, in the caller scope: what a route records (take approvals, rig sidecars)
+# names it. Attribution only (services/agent_activity.py).
+from services.agent_activity import ActorHeaderMiddleware
+api.add_middleware(ActorHeaderMiddleware)
 
 # Registered after decorator-based middleware so Starlette places LAN auth at
 # the outside of the stack. Unauthenticated remote requests are rejected
@@ -1148,8 +1178,7 @@ def _persist_active_workspace(name: str, apply_save_paths: bool = True) -> str:
     services = wgp.server_config.setdefault("services", {})
     services["active_workspace"] = name
     wgp.server_config["services"] = services
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
     ws_dir = _workspace_dir(name)
     if apply_save_paths:
         wgp.save_path = ws_dir
@@ -6959,8 +6988,7 @@ async def update_system_config(request: Request):
         raise HTTPException(status_code=400, detail="No valid fields to update")
 
     # Persist to disk
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
 
     # Apply runtime side effects where possible
     if "attention_mode" in updated:
@@ -7145,8 +7173,7 @@ async def apply_system_detect():
     services["auto_performance_applied"] = True
 
     # Persist to disk
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
 
     # Apply runtime side effects where possible (matches update_system_config)
     if "attention_mode" in rec:
@@ -7569,8 +7596,7 @@ async def update_services_config(request: Request):
         except ValueError:
             pass
 
-    with open(wgp.server_config_filename, "w", encoding="utf-8") as f:
-        f.write(json.dumps(wgp.server_config, indent=4))
+    _save_server_config()
 
     return {"status": "ok", "updated": updated}
 
@@ -7644,7 +7670,7 @@ async def generate_model3d(request: Request):
     from services.generation_provenance import normalize_submission_provenance
 
     body = await request.json()
-    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None))
+    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
     collection_id = body["provenance"].get("workspace_id")
     if collection_id and not _workspace_collection_registry.get(collection_id):
         raise HTTPException(status_code=400, detail="Unknown Workspace collection")
@@ -7739,7 +7765,11 @@ def rig_capabilities():
 @api.post("/api/v1/rig/generate")
 async def generate_rig(request: Request):
     from services import rig_service
+    from services.generation_provenance import normalize_submission_provenance
     body = await request.json()
+    raw_provenance, trusted = body.pop("provenance", None), getattr(request, "trusted_tool", None)
+    # A UI rig keeps its historical "rig" origin; an agent or Wizard request carries who asked.
+    provenance = normalize_submission_provenance(raw_provenance, trusted_tool=trusted) if raw_provenance or trusted else None
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
     source_name = str(body.get("source") or "").strip()
@@ -7759,6 +7789,7 @@ async def generate_rig(request: Request):
             source_path=source_path,
             output_dir=_workspace_dir(workspace),
             workspace=workspace,
+            provenance=provenance,
         )
         publisher = globals().get("_publish_generic_legacy_task")
         if callable(publisher):
@@ -24633,6 +24664,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                         try:
                             expected_args = set(inspect.signature(wgp.generate_video).parameters.keys())
                             filtered_params = {k: v for k, v in params.items() if k in expected_args}
+                            # A cloned voice hears its reference with long pauses shortened
+                            # (a cached copy; the job and the user's file keep the original).
+                            from services.speech_reference_pauses import tighten_clone_references
+                            tighten_clone_references(filtered_params, base_model_type=wgp.get_base_model_type)
                             plugin_data = task.get('plugin_data', {})
                             # Model downloads are blocking inside hf-hub. Bind
                             # their byte-progress loop to this exact job's
@@ -26375,12 +26410,13 @@ def get_status(job_id: str):
     }
     from services.generation_output_name import status_output_fields
     from services.generation_memory import include_performance
+    from services.output_names import annotate_generation_view
     payload.update(status_output_fields(
         payload.get("output_files"),
         workspace=str(j.get("workspace") or ""),
         workspace_dir=str(j.get("out_dir") or ""),
     ))
-    return include_performance(payload, j)
+    return annotate_generation_view(include_performance(payload, j), j)
 
 
 @api.post("/api/v1/cancel/{job_id}")
@@ -26675,6 +26711,10 @@ def save_scene_output(body: dict):
             except OSError:
                 pass
         raise HTTPException(status_code=500, detail=f"Failed to save scene: {exc}") from exc
+
+    from pathlib import Path
+    from services.document_origin import write_document_origin
+    write_document_origin(Path(scene_path), "scenes.save")
 
     return {
         "name": scene_name,
@@ -28385,7 +28425,7 @@ api.include_router(create_series_library_router())
 
 @api.put("/api/v1/series/{series_id}")
 def put_series_project_endpoint(series_id: str, body: dict):
-    from services.series_library import normalize_series_project, series_canon_inputs_changed
+    from services.series_library import normalize_series_project, series_canon_inputs_changed, series_put_payload
 
     workspace = _series_library_workspace(body.get("workspace"))
     raw_series = body.get("series")
@@ -28403,7 +28443,7 @@ def put_series_project_endpoint(series_id: str, body: dict):
                     status_code=409,
                     detail=f"Series revision changed to {current.get('revision')}; reload before saving",
                 )
-            updated = normalize_series_project({**raw_series, "id": series_id}, series_id, workspace)
+            updated = normalize_series_project({**series_put_payload(current, raw_series), "id": series_id}, series_id, workspace)
             if series_canon_inputs_changed(current, updated):
                 updated["canon"]["approval"] = "draft"
                 updated["canon"]["approvedAt"] = ""
@@ -28521,7 +28561,7 @@ def import_story_as_series_endpoint(body: dict):
 
 @api.post("/api/v1/series/{series_id}/episodes")
 def create_series_episode_endpoint(series_id: str, body: dict):
-    from services.series_library import create_series_episode
+    from routers.series_episode import create_checked_episode
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -28529,10 +28569,7 @@ def create_series_episode_endpoint(series_id: str, body: dict):
         series = copy.deepcopy(_series_project_or_404(library, series_id))
         if series.get("canon", {}).get("approval") != "approved":
             raise HTTPException(status_code=400, detail="Approve the reviewed Series canon before creating an episode")
-        episode = create_series_episode(
-            series, str(body.get("seasonId") or "") or None,
-            **(body.get("episode") if isinstance(body.get("episode"), dict) else {}),
-        )
+        episode = create_checked_episode(series, body)
         series["episodesById"][episode["id"]] = episode
         season = next(item for item in series["seasons"] if item["id"] == episode["seasonId"])
         season["episodeOrder"].append(episode["id"])
@@ -28600,6 +28637,7 @@ def delete_series_episode_endpoint(series_id: str, episode_id: str, workspace: s
 def import_series_asset_endpoint(series_id: str, body: dict):
     """Copy a Maestro upload into the authoritative workspace asset tree."""
     import shutil
+    from services.series_plate_checks import with_plate_warning
     from services.series_production import attach_series_import, existing_generated_reference
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -28670,7 +28708,9 @@ def import_series_asset_endpoint(series_id: str, body: dict):
         series["updatedAt"] = now
         library["seriesById"][series_id] = series
         stored = _write_series_workspace(workspace, library)
-    return {"asset": stored["seriesById"][series_id]["assets"][asset_id], "series": stored["seriesById"][series_id]}
+    stored_series = stored["seriesById"][series_id]
+    return with_plate_warning(
+        {"asset": stored_series["assets"][asset_id], "series": stored_series}, source, body, stored_series)
 
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
@@ -30571,12 +30611,12 @@ def discard_series_render_job(job_id: str):
 
 
 def _approve_series_version_take(workspace: str, library: dict, series: dict, episode: dict, shot_index: int, language: str,
-                                 attempt_id: str) -> dict:
+                                 attempt_id: str, approved_by: str = "user") -> dict:
     """Approve a take for a language version (its own approval and length); the original's stays as it was."""
     from services.series_language_versions import set_version_take
     shot = episode["shots"][shot_index]
     try:
-        set_version_take(episode, language, shot["id"], attempt_id)
+        set_version_take(episode, language, shot["id"], attempt_id, approved_by)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     now = _series_iso_now()
@@ -30596,9 +30636,12 @@ def _approve_series_version_take(workspace: str, library: dict, series: dict, ep
 def approve_series_shot_attempt_endpoint(
     series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
 ):
+    from services.agent_activity import current_actor
     from services.series_library import approve_shot_render_attempt
 
     body = body if isinstance(body, dict) else {}
+    # Who approves: a person, an agent or the Wizard, or the server render (X-Hocus-Actor, see ActorHeaderMiddleware).
+    approved_by = current_actor()
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
         library = _read_series_workspace(workspace)
@@ -30616,10 +30659,11 @@ def approve_series_shot_attempt_endpoint(
         if isinstance(language, str) and language:
             from services.series_shot_plan import language_key
             if language != language_key(series):
-                return _approve_series_version_take(workspace, library, series, episode, shot_index, language, attempt_id)
+                return _approve_series_version_take(workspace, library, series, episode, shot_index, language, attempt_id,
+                                                    approved_by)
         try:
             episode["shots"][shot_index] = approve_shot_render_attempt(
-                episode["shots"][shot_index], attempt_id,
+                episode["shots"][shot_index], attempt_id, approved_by,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -30642,6 +30686,7 @@ def approve_series_shot_attempt_endpoint(
 def approve_series_episode_attempts_endpoint(
     series_id: str, episode_id: str, body: dict,
 ):
+    from services.agent_activity import current_actor
     from services.series_library import approve_episode_render_attempts
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -30652,7 +30697,7 @@ def approve_series_episode_attempts_endpoint(
         if not isinstance(episode, dict):
             raise HTTPException(status_code=404, detail="Series episode not found")
         try:
-            episode = approve_episode_render_attempts(episode, body.get("selections"))
+            episode = approve_episode_render_attempts(episode, body.get("selections"), current_actor())
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         now = _series_iso_now()
@@ -30677,6 +30722,7 @@ def approve_series_episode_attempts_endpoint(
 
 
 from routers.series_assembly import control_series_assembly_job, create_series_assembly_router
+from services.core_series_assembly import with_transitions as _series_join_with_transitions
 
 api.include_router(create_series_assembly_router(
     resolve_workspace=_series_library_workspace,
@@ -30688,7 +30734,7 @@ api.include_router(create_series_assembly_router(
     find_series=_series_project_or_404,
     asset_local_path=_series_asset_local_path,
     available_filename=wgp.get_available_filename,
-    concatenate_clips=wgp.concatenate_multi_clip_videos,
+    concatenate_clips=_series_join_with_transitions(wgp.concatenate_multi_clip_videos),
     iso_now=_series_iso_now,
 ))
 
@@ -30756,6 +30802,7 @@ api.include_router(create_style_library_router(_style_library))
 def reject_series_shot_attempt_endpoint(
     series_id: str, episode_id: str, shot_id: str, attempt_id: str, body: dict | None = None,
 ):
+    from services.agent_activity import current_actor
     from services.series_library import reject_shot_render_attempt
 
     body = body if isinstance(body, dict) else {}
@@ -30774,7 +30821,7 @@ def reject_series_shot_attempt_endpoint(
             raise HTTPException(status_code=404, detail="Series shot not found")
         try:
             episode["shots"][shot_index] = reject_shot_render_attempt(
-                episode["shots"][shot_index], attempt_id,
+                episode["shots"][shot_index], attempt_id, current_actor(),
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -33383,8 +33430,11 @@ def _resolve_output_file(filename: str, workspace: str | None = None) -> str | N
 
 
 @api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = ""):
+def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = "", origin: str = ""):
     """List generated output files (newest first) from the active workspace.
+
+    Each row carries ``origin`` ({actor: agent | wizard, capability}) when an agent or the Wizard asked for the file,
+    and ``origin=agent`` keeps only those (``mcp`` or ``wizard`` one of them; services/output_origin.py).
 
     Supports pagination via limit/offset query params.
     Returns {outputs, total} where total is the full count before pagination.
@@ -33517,10 +33567,15 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
         sidecar_cache: dict[str, dict] = {}
         clip_groups: dict[str, dict] = {}
         try:
-            from services.output_result_kind import classify_output_result_kind
+            from services.output_result_kind import classify_output_result_kind, production_cuts, production_result_kind
+            cuts = production_cuts(out_dir)
         except Exception:
             def classify_output_result_kind(name, params=None, metadata=None):
                 return None
+            def production_result_kind(name, params, cuts):
+                return None
+            cuts = {}
+        from services.output_origin import output_origin
         for name, filepath, ext, mtime in raw_entries:
             meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
             if not os.path.isfile(meta_path):
@@ -33532,11 +33587,12 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
                 continue
             params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
             sidecar_cache[name] = {
+                "origin": output_origin(meta),
                 "mode": meta.get("generation_mode"),
                 "edit_sub_mode": params.get("edit_sub_mode"),
                 "multi_clip_info": params.get("multi_clip_info"),
                 "resolution": params.get("resolution"),
-                "result_kind": classify_output_result_kind(name, params, meta),
+                "result_kind": classify_output_result_kind(name, params, meta) or production_result_kind(name, params, cuts),
                 "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
                 # Output sidecars are written only after the generated asset
                 # has been published.  Their historical ``created_at`` field
@@ -33612,6 +33668,7 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             # identify retake/inpaint/outpaint/restyle/edit_anything outputs.
             "edit_sub_mode": edit_sub_mode,
             "result_kind": cached.get("result_kind"),
+            "origin": cached.get("origin"),
             "favorite": name in favs,
             "size": size,
             "created_at": mtime,
@@ -33642,6 +33699,8 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
 
     if media_type:
         files = [item for item in files if item["type"] == media_type]
+    from services.output_origin import filter_by_origin
+    files = filter_by_origin(files, origin)
     # Ordered before paging so every page follows the gallery's chosen order.
     if order == "oldest":
         files.reverse()
@@ -33777,7 +33836,7 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None, size: st
 
 
 @api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None):
+def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
     """Serve an output file from the explicit or active workspace.
 
     Uses share_delete_file_response so that on Windows the file can be
@@ -33789,7 +33848,7 @@ def serve_file(filename: str, workspace: str | None = None):
     from services.win_safe_files import share_delete_file_response
     filepath = _resolve_output_file(filename, workspace)
     if filepath:
-        return share_delete_file_response(filepath)
+        return share_delete_file_response(filepath, expected_sha256=sha256)
     # Uploads folder — the gallery's virtual "Uploads" view lists these
     #    files with the same /api/v1/file/ URLs every other gallery flow
     #    builds (thumbnails, playback, send-to-input). Upload names are
@@ -33797,7 +33856,7 @@ def serve_file(filename: str, workspace: str | None = None):
     #    an output name can never be shadowed by an upload.
     filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
     if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath)
+        return share_delete_file_response(filepath, expected_sha256=sha256)
     raise HTTPException(status_code=404, detail="File not found")
 
 
@@ -34883,7 +34942,9 @@ def capture_video_editor_frame(body: dict):
     ).strip("_")
     safe_name = safe_name[:60] or "video_frame"
     timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    out_dir = _workspace_dir()
+    # Save beside the source workspace, not whichever one is active now.
+    workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
+    out_dir = _workspace_dir(workspace)
     os.makedirs(out_dir, exist_ok=True)
     output_name = f"{timestamp}_{safe_name}_frame.png"
     output_path = os.path.join(out_dir, output_name)
@@ -34911,11 +34972,12 @@ def capture_video_editor_frame(body: dict):
             "created_at": time.time(),
         }
         _write_video_editor_screenshot_sidecar(
-            output_path, sidecar, body.get("workspace"),
+            output_path, sidecar, workspace,
         )
         return {
             "filename": output_name,
-            "url": f"/api/v1/file/{output_name}",
+            "url": f"/api/v1/file/{output_name}?workspace={quote(workspace, safe='')}",
+            "workspace": workspace,
             **result,
         }
     except Exception as exc:
@@ -34959,6 +35021,8 @@ def _write_video_editor_export_sidecar(output_path, sidecar, workspace_id):
 
 
 def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
+    from services.agent_activity import requested_by as export_requested_by
+    from services.montage_documents import montage_link
     from services.video_editor import build_source_provenance_manifest, render_project
 
     job = _video_editor_job_snapshot(job_id)
@@ -35165,6 +35229,8 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
                         for key, value in (body.get("soundtrack") or {}).items()
                         if key in {"name", "source", "trim_start", "trim_end", "volume", "loop"}
                     } or None,
+                    # The saved montage it was made from: the video's "Edit montage" opens it again.
+                    **({"montage": montage} if (montage := montage_link(body.get("montage"))) else {}),
                 },
                 "source": "video_editor",
             },
@@ -35174,6 +35240,7 @@ def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path:
             "root_task_id": str(job["root_task_id"]),
             "workspace": workspace,
             "created_at": time.time(),
+            **export_requested_by(body.get("requested_by")),
         }
         _write_video_editor_export_sidecar(output_path, sidecar, workspace)
 
@@ -35341,6 +35408,7 @@ def start_video_editor_export(body: dict):
     except LayerValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     clean_body = dict(body)
+    from services.agent_activity import agent_attribution
     clean_body.update({
         "width": width,
         "height": height,
@@ -35348,6 +35416,8 @@ def start_video_editor_export(body: dict):
         "clips": clean_clips,
         "soundtrack": clean_soundtrack,
         "layers": clean_layers,
+        # Only an MCP agent's montages.export is attributed; a body cannot claim it.
+        "requested_by": agent_attribution("montages.export"),
     })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
@@ -35880,6 +35950,13 @@ def delete_output(name: str, workspace: str | None = None):
     return {"deleted": name}
 
 
+UPLOAD_EXTENSIONS = frozenset({
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif",
+    ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus",
+    ".glb", ".gltf", ".obj", ".fbx", ".json", ".txt", ".srt", ".vtt", ".lrc", ".csv", ".md", ".pdf", ".zip", ".safetensors", ".pt",
+})
+
+
 @api.post("/api/v1/upload")
 async def upload_image(file: UploadFile = File(...)):
     """Upload an image or audio/video asset. Image was the original use;
@@ -35894,6 +35971,8 @@ async def upload_image(file: UploadFile = File(...)):
     os.makedirs(upload_dir, exist_ok=True)
 
     ext = os.path.splitext(file.filename or "img.png")[1].lower() or ".png"
+    if ext not in UPLOAD_EXTENSIONS:
+        ext = ".bin"  # keeps the bytes; never a name a browser would run
     unique_name = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(upload_dir, unique_name)
 
@@ -36166,6 +36245,7 @@ def _generation_task_fields(job: dict) -> dict:
         "command_id": command.get("command_id"),
         "workflow_id": command.get("workflow_id"),
         "run_id": command.get("run_id"),
+        "output_name_requested": params.get("output_filename") or params.get("output_name") or None,
     }
     task_metadata.update(task_identity.pop("metadata", {}))
     task_metadata.update(performance_fields(job.get("performance")))
@@ -36931,11 +37011,19 @@ _mcp_oauth = McpOAuth(os.path.join(os.path.dirname(__file__), 'settings', 'mcp-o
 api.include_router(create_mcp_access_router(_mcp_access, on_change=_mcp_oauth.revoke_all))
 api.include_router(create_mcp_oauth_router(_mcp_oauth))
 from routers.music_productions import create_music_productions_router
+from services.local_mcp import LocalMcp
+_local_mcp = LocalMcp(lambda: _mcp_handlers)
+
+async def _bind_local_mcp() -> None:
+    _local_mcp.bind_loop(asyncio.get_running_loop())
+
+api.add_event_handler("startup", _bind_local_mcp)
 api.include_router(create_music_productions_router(
     workspace_dir=_workspace_dir,
     uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
     app_url=lambda: _scene2d_export.app_url or "",
     token=_mcp_access.token,
+    mcp=_local_mcp.call,
 ))
 
 _image_generation_commands = create_image_generation_commands(globals())
@@ -36980,9 +37068,12 @@ api.include_router(create_publish_router(
     workspace_dir=_workspace_dir,
 ))
 from services.jobs_wait import command_catalog as jobs_wait_catalog, command_handlers as jobs_wait_handlers
+from services.jobs_cancel import command_catalog as jobs_cancel_catalog, command_handlers as jobs_cancel_handlers
 from services.song_analysis import command_catalog as audio_analysis_catalog, command_handlers as audio_analysis_handlers
 from services.lipsync_qa import command_catalog as lipsync_qa_catalog, command_handlers as lipsync_qa_handlers
 from services.speech_qa import command_catalog as speech_qa_catalog, command_handlers as speech_qa_handlers
+from services.qa_accent import command_catalog as qa_accent_catalog, command_handlers as qa_accent_handlers
+_qa_accent_handlers = qa_accent_handlers(_workspace_dir)
 from services.export_qa import command_catalog as export_qa_catalog, command_handlers as export_qa_handlers
 from services.export_qa import remember_on_task as remember_export_qa
 
@@ -36993,13 +37084,21 @@ _export_qa_handlers = export_qa_handlers(_workspace_dir, _remember_export_qa)
 from services.music_production import command_catalog as music_production_catalog, command_handlers as music_production_handlers
 from services.production_review import command_catalog as production_review_catalog, command_handlers as production_review_handlers
 from services.series_commands import command_catalog as series_command_catalog, command_handlers as series_command_handlers
+from services.game_commands import command_catalog as game_command_catalog, command_handlers as game_command_handlers
 _jobs_wait_handlers = jobs_wait_handlers(get_status, lambda job_id: _jobs.get(job_id))
+_jobs_cancel_handlers = jobs_cancel_handlers(_control_canonical_task, _task_registry, _list_workspaces, lambda job_id: _jobs.get(job_id), _sync_canonical_tasks)
 from services.studio_key import command_catalog as studio_key_catalog, command_handlers as studio_key_handlers
 _studio_key_handlers = studio_key_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
+# media.frame, media.compose, audio.trim, assets.import_from_workspace (services/production_media_commands.py).
+from services.production_media_commands import command_catalog as production_media_catalog, command_handlers as production_media_handlers
+_production_media_handlers = production_media_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
+from routers.production_media import create_production_media_router
+api.include_router(create_production_media_router({**_production_media_handlers, "studio.key": _studio_key_handlers["studio.key"]}))
 from routers.character_tools import create_character_tools_router
 
 api.include_router(create_character_tools_router(
     studio_key=_studio_key_handlers["studio.key"], speech_qa=speech_qa_handlers(_workspace_dir)["qa.speech"],
+    accent=_qa_accent_handlers["qa.accent"],
 ))
 from services.clip_align import command_catalog as clip_align_catalog, command_handlers as clip_align_handlers
 _clip_align_handlers = clip_align_handlers(_workspace_dir)
@@ -37042,6 +37141,17 @@ _job_leftovers = JobLeftovers(
     ),
 )
 _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
+
+
+def _release_intermediates_at_startup() -> None:
+    """Frames of published exports, raw voice takes and stale temp folders go; live and resumable work is kept."""
+    from services.workspace_cleanup import startup_cleanup
+    from services.world3d_export import staging_token
+    names = [item.get("name") for item in _list_workspaces() if isinstance(item, dict) and item.get("name")]
+    startup_cleanup(names, _workspace_dir, _task_registry, {_world3d_export.operation, _scene2d_export.operation}, staging_token)
+
+
+threading.Thread(target=_release_intermediates_at_startup, name="workspace-cleanup", daemon=True).start()
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 # qa.people C3 duplicate-person flag: register beside the MCP router (feat/qa-people).
 from services.qa_people import command_catalog as qa_people_catalog, command_handlers as qa_people_handlers
@@ -37062,7 +37172,6 @@ api.include_router(create_model3d_compose_router(_model3d_compose_handlers))
 from routers.model3d_animate import command_catalog as model3d_animate_catalog, command_handlers as model3d_animate_handlers, create_model3d_animate_router
 _model3d_animate_handlers = model3d_animate_handlers(_workspace_dir, os.path.join(os.getcwd(), "settings", "model3d-animate.sqlite3"))
 api.include_router(create_model3d_animate_router(_model3d_animate_handlers, _workspace_dir))
-from services.local_mcp import LocalMcp
 from services.series_native_render import NativeRenderDeps, SeriesNativeRender
 from routers.series_native_render import create_series_native_render_router
 from services.character_kit_library import read_character_kit_library as _read_kit_library
@@ -37102,7 +37211,9 @@ def _set_series_shot_duration(workspace: str, series_id: str, episode_id: str, s
 def _set_series_version_take(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, attempt_id: str) -> None:
     """Approve a take in a language version; the original's approval is untouched."""
     from services.series_language_versions import set_version_take
-    _change_series_episode(workspace, series_id, episode_id, lambda _series, episode: set_version_take(episode, language, shot_id, attempt_id))
+    # Only the server render approves through here (``approve: true``): the take says so.
+    _change_series_episode(workspace, series_id, episode_id,
+                           lambda _series, episode: set_version_take(episode, language, shot_id, attempt_id, "server"))
 
 
 def _set_series_version_duration(workspace: str, series_id: str, episode_id: str, language: str, shot_id: str, seconds: float) -> None:
@@ -37120,6 +37231,11 @@ from routers.series_language_versions import create_series_language_versions_rou
 api.include_router(create_series_language_versions_router(
     change_episode=_change_series_episode, read_episode=_read_series_episode, translate=_translate_series_version,
 ))
+from routers.series_review import create_series_review_router
+api.include_router(create_series_review_router(
+    resolve_workspace=_series_library_workspace, lock=_series_library_lock, read_library=_read_series_workspace,
+    write_library=_write_series_workspace, iso_now=_series_iso_now,
+))
 
 
 def _character_kit_for_scene(workspace: str, kit_id: str) -> dict | None:
@@ -37132,7 +37248,6 @@ from services.video2d_character_ops import bind_kit_reader as _bind_scene_kit_re
 _bind_scene_kit_reader(_character_kit_for_scene)
 
 # Server jobs call the same tool handlers as MCP clients, in process (no token needed).
-_local_mcp = LocalMcp(lambda: _mcp_handlers)
 _series_native_render = SeriesNativeRender(NativeRenderDeps(
     call=_local_mcp.call, workspace_dir=_workspace_dir,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
@@ -37142,6 +37257,20 @@ _series_native_render = SeriesNativeRender(NativeRenderDeps(
     set_version_duration=_set_series_version_duration,
 ))
 api.include_router(create_series_native_render_router(_series_native_render, _local_mcp.bind_loop))
+from routers.series_shot_edit import create_series_shot_edit_router
+api.include_router(create_series_shot_edit_router(
+    change_series=_change_series, read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
+    read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,
+    call=_local_mcp.call, bind_loop=_local_mcp.bind_loop,
+    plan_changes=lambda prompt, system, schema: _generate_comic_director_json(
+        prompt=prompt, system_prompt=system, schema=schema, max_new_tokens=3000, stage="Series Lab shot edit", llm_override=None)))
+from services.series_line_voice import SeriesLineVoice
+from routers.series_shot_inspector import create_series_shot_inspector_router
+api.include_router(create_series_shot_inspector_router(
+    voices=SeriesLineVoice(_series_native_render, read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
+                           read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}),
+    read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)), workspace_dir=_workspace_dir,
+    call=_local_mcp.call, bind_loop=_local_mcp.bind_loop))
 from routers.series_guide import create_series_guide_router
 api.include_router(create_series_guide_router(
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
@@ -37151,7 +37280,8 @@ from services.series_produce import ProduceDeps, SeriesProduce
 from routers.series_produce import create_series_produce_router
 api.include_router(create_series_produce_router(
     SeriesProduce(ProduceDeps(call=_local_mcp.call, workspace_dir=_workspace_dir,
-                              read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)))),
+                              read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
+                              stale_shots=_series_native_render.stale_shots, review_blockers=_series_native_render.review_blockers)),
     call=_local_mcp.call, bind_loop=_local_mcp.bind_loop,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,
@@ -37180,21 +37310,32 @@ api.include_router(create_series_plates_router(SeriesPlates(PlateDeps(
     change_series=_change_series, read_scene=_read_world3d_scene,
 )), _local_mcp.bind_loop))
 
+from services.agent_activity import AgentActivity
+from routers.wizard_activity import create_wizard_activity_router
+_agent_activity = AgentActivity(_task_registry, _get_active_workspace)
+api.include_router(create_wizard_activity_router(_agent_activity))
 api.include_router(create_wangp_mcp_router(
-    token_getter=_mcp_access.token,
+    token_getter=_mcp_access.token, on_mutation=_agent_activity.record, local_mcp=_local_mcp,
     handlers=(_mcp_handlers := {"models": mcp_model_list, "models.list": mcp_model_list, "processors": wangp_capabilities, "status": get_status,
               "generate": generate, "recast": recast_endpoint, "upscale": tools_upscale,
-              **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_qa_people_handlers, **_studio_key_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_export_qa_handlers,
-              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token), **production_review_handlers(_workspace_dir), **series_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers}),
+              **wangp_agent_handlers(api), **lips_creator_handlers(_workspace_dir), **image_command_handlers(_image_generation_commands), **wizard_workflow_command_handlers(_wizard_workflow_executor), **world3d_export_handlers(_world3d_export), **world3d_template_handlers(_workspace_dir), **_scene_commands.handlers(), **_montage_commands.handlers(), **_template_commands.handlers(), **media_options_handlers(_media_options_sources), **scene_document_handlers(_workspace_dir), **scene_asset_facts_handlers(_workspace_dir), **scene2d_export_handlers(_scene2d_export), **scene2d_validate_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **video2d_catalog_handlers(), **video2d_query_handlers(), **video2d_compile_handlers(), **video2d_preview_handlers(lambda: _scene2d_export.app_url, _workspace_dir), **video2d_edit_handlers(), **_audio_shorten_handlers, **_assets_upload_handlers, **_job_leftover_handlers, **_jobs_wait_handlers, **_jobs_cancel_handlers, **_qa_people_handlers, **_studio_key_handlers, **_production_media_handlers, **_clip_align_handlers, **_montage_preview_handlers, **audio_analysis_handlers(_workspace_dir), **lipsync_qa_handlers(_workspace_dir), **speech_qa_handlers(_workspace_dir), **_qa_accent_handlers, **_export_qa_handlers,
+              **music_production_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or "", _mcp_access.token, mcp=_local_mcp.call), **production_review_handlers(_workspace_dir), **series_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **game_command_handlers(lambda: _scene2d_export.app_url or "", _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads")), **_model3d_command_handlers, **_model3d_rig_handlers, **_model3d_compose_handlers, **_model3d_animate_handlers}),
     journal_path=os.path.join(os.path.dirname(__file__), "settings", "wangp-mcp-requests.sqlite3"),
     profiles=_MCP_PROFILES, oauth=_mcp_oauth,
     command_operations=[*lips_creator_catalog(), *scene_command_catalog(), *workspace_command_catalog()["operations"], *image_command_catalog(
-        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *world3d_template_catalog(), *montage_command_catalog(), *template_command_catalog(), *media_options_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *qa_people_catalog(), *studio_key_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *speech_qa_catalog(), *export_qa_catalog(), *music_production_catalog(), *production_review_catalog(), *series_command_catalog(), *model3d_command_catalog(), *model3d_rig_catalog(), *model3d_compose_catalog(), *model3d_animate_catalog()],
+        adapter.catalog for adapter in _image_generation_commands.operations.values()), *wizard_workflow_catalog(), *world3d_export_catalog(), *world3d_template_catalog(), *montage_command_catalog(), *template_command_catalog(), *media_options_catalog(), *scene_document_catalog(), *scene_asset_facts_catalog(), *scene2d_export_catalog(), *scene2d_validate_catalog(), *video2d_catalog(), video2d_query_operation(), *video2d_compile_catalog(), *video2d_preview_catalog(), *video2d_edit_catalog(), *audio_shorten_catalog(), *assets_upload_catalog(), *job_leftover_catalog(), *jobs_wait_catalog(), *jobs_cancel_catalog(), *qa_people_catalog(), *studio_key_catalog(), *production_media_catalog(), *clip_align_catalog(), *montage_preview_catalog(), *audio_analysis_catalog(), *lipsync_qa_catalog(), *speech_qa_catalog(), *qa_accent_catalog(), *export_qa_catalog(), *music_production_catalog(), *production_review_catalog(), *series_command_catalog(), *game_command_catalog(), *model3d_command_catalog(), *model3d_rig_catalog(), *model3d_compose_catalog(), *model3d_animate_catalog()],
 ))
 from routers.system_capabilities import create_system_capabilities_router
 api.include_router(create_system_capabilities_router())
 from routers.about import create_about_router
 api.include_router(create_about_router(os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))))
+from routers.game_library import create_game_library_router
+_game_library_lock = threading.RLock()
+api.include_router(create_game_library_router(workspace_dir=_workspace_dir, lock=_game_library_lock))
+from services.game_produce import build_produce
+from routers.game_produce import create_game_produce_router
+_game_produce = build_produce(_local_mcp.call, lambda: _scene2d_export.app_url or "", _mcp_access.token, _workspace_dir, _game_library_lock)
+api.include_router(create_game_produce_router(_game_produce, call=_local_mcp.call, bind_loop=_local_mcp.bind_loop, read_game=_game_produce.deps.read_game))
 
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a
@@ -37270,29 +37411,13 @@ def run_server():
 
     # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
     # stale prior instance or another app can still be holding it by the time
-    # we bind — and an uncaught bind failure makes the launcher report a
-    # blank "server failed to start" with no clue. Probe the requested port
-    # and fall forward to the next free one, printing what happened so the
-    # captured URL (below) matches the actual bind.
-    def _first_bindable_port(bind_host: str, preferred: int, span: int = 20):
-        import socket as _socket
-        probe_host = "127.0.0.1" if bind_host == "0.0.0.0" else bind_host
-        for candidate in [preferred] + [preferred + i for i in range(1, span + 1)]:
-            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-            try:
-                # No SO_REUSEADDR — a plain bind fails iff the port is truly
-                # in use right now, which is exactly the check we want (and
-                # avoids the Windows REUSEADDR hijack-a-live-port behavior).
-                s.bind((probe_host, candidate))
-                return candidate
-            except OSError:
-                continue
-            finally:
-                s.close()
-        return None
-
-    resolved_port = _first_bindable_port(host, port)
-    if resolved_port is None:
+    # we bind. Bind now (falling forward to the next free port) and hand the
+    # socket to Uvicorn: the URL printed below is then already ours, so the
+    # LAN proxy Pinokio starts on reading it cannot take the port first.
+    from services.server_lifecycle import bind_listener
+    try:
+        listener, resolved_port = bind_listener(host, port)
+    except OSError:
         print(
             f"\n[HocusPocus Lab] ERROR: could not find a free port in "
             f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
@@ -37338,11 +37463,14 @@ def run_server():
     # Confirm the polling filter immediately before Uvicorn configures logging.
     install_quiet_access_filter()
     from services.production_resume import resume_on_startup
-    resume_on_startup(_list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"), lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token)
+    # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
+    api.add_event_handler("startup", lambda: resume_on_startup(
+        _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
+        lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
 
     try:
         from services.server_lifecycle import run_until_stopped
-        run_until_stopped(api, host=host, port=port)
+        run_until_stopped(api, host=host, port=port, sockets=[listener])
     except OSError as e:
         # The probe above narrows this to a genuine race (port taken in the
         # window between probe and uvicorn's own bind). Still fail loudly and

@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Greedy two-bin pack by pytest --collect-only nodeids on 780d3915 (3107 tests in 14.06s locally). CI #320 had no per-test durations; this is a count proxy, not wall-clock.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07. Language detection fallbacks add +8 (python-b, test_language_detection_fallbacks), 2026-10-07. Golden shots add +9 (python-a, test_golden_shots), 2026-10-08. Production models add +5 (python-a, test_production_models), 2026-10-08. The production quality gate adds +6 (python-b, test_production_quality_gate), 2026-10-08. Production turns add +3 (python-a, test_production_turn), 2026-10-08. Lyric looks add +8 (python-b, test_production_lyric_looks), 2026-10-08. Diorama sets add +2 (python-a, test_production_models) and +6 (python-b, test_diorama_set and test_production_scene3d), 2026-10-09. GLB cleanup adds +1 (python-b, test_glb_cleanup), 2026-10-10.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 1575,
+      "weight": 3196,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -20,6 +20,14 @@
         "tests/test_architecture_factory.py",
         "tests/test_asset_catalog.py",
         "tests/test_assets_upload.py",
+        "tests/test_core_media_parity.py",
+        "tests/test_production_media_concurrency.py",
+        "tests/test_workspace_publication_lock.py",
+        "tests/test_export_download_identity.py",
+        "tests/test_workspace_asset_import.py",
+        "tests/test_audio_trim.py",
+        "tests/test_media_frame.py",
+        "tests/test_series_take_sound.py",
         "tests/test_audio_analysis_cleanup.py",
         "tests/test_audio_analysis_jobs.py",
         "tests/test_audio_word_timestamps.py",
@@ -31,6 +39,7 @@
         "tests/test_client_task_identity.py",
         "tests/test_code_quality_score.py",
         "tests/test_comic_director_json_recovery.py",
+        "tests/test_comic_film_pass_addendum.py",
         "tests/test_comic_movie_cinematic_adapter.py",
         "tests/test_comic_plan_resume_contract.py",
         "tests/test_comic_story_reference.py",
@@ -48,14 +57,21 @@
         "tests/test_director_stop_endpoint.py",
         "tests/test_director_v2_story_refs.py",
         "tests/test_execution_mode.py",
+        "tests/test_flat_rig.py",
         "tests/test_generation_memory.py",
         "tests/test_generation_output_name.py",
+        "tests/test_output_names.py",
         "tests/test_generation_provenance_submission.py",
         "tests/test_generation_queue_priority.py",
         "tests/test_generation_record.py",
         "tests/test_generation_runtime.py",
         "tests/test_example_assets.py",
+        "tests/test_krea2_features.py",
+        "tests/test_music_submission.py",
+        "tests/test_optional_imports_guarded.py",
         "tests/test_secure_download.py",
+        "tests/test_security_local.py",
+        "tests/test_host_guard.py",
         "tests/test_asset_library.py",
         "tests/test_inpaint_preparation.py",
         "tests/test_h3_benchmark_client.py",
@@ -67,6 +83,7 @@
         "tests/test_h3_studio_policy_request.py",
         "tests/test_h3_extended_duration.py",
         "tests/test_image_generation_commands.py",
+        "tests/test_generation_contract.py",
         "tests/test_image_edit_workflow.py",
         "tests/test_qwen_image_21.py",
         "tests/test_qwen_viggle_turbo.py",
@@ -77,8 +94,10 @@
         "tests/test_job_lifecycle_wiring.py",
         "tests/test_job_leftovers.py",
         "tests/test_jobs_wait.py",
+        "tests/test_jobs_cancel.py",
         "tests/test_labs_wizard_action_matrix.py",
         "tests/test_lan_auth.py",
+        "tests/test_audio_mix.py",
         "tests/test_language_intent.py",
         "tests/test_launcher_compatibility.py",
         "tests/test_llm_request_cancellation.py",
@@ -132,6 +151,11 @@
         "tests/test_memory_trim.py",
         "tests/test_series_assembly.py",
         "tests/test_episode_finishing.py",
+        "tests/test_episode_av_sync.py",
+        "tests/test_series_ambience.py",
+        "tests/test_series_voice_rooms.py",
+        "tests/test_series_score.py",
+        "tests/test_series_shot_foley.py",
         "tests/test_series_assembly_contract.py",
         "tests/test_series_episode_update_router.py",
         "tests/test_series_lab_ui.py",
@@ -166,9 +190,7 @@
         "tests/test_ui_distribution.py",
         "tests/test_validate_local_wrapper.py",
         "tests/test_video2d_catalog_query.py",
-        "tests/test_video2d_compile.py",
         "tests/test_video2d_mcp_guide.py",
-        "tests/test_video2d_title_parity.py",
         "tests/test_video2d_preview.py",
         "tests/test_video_decode_metadata.py",
         "tests/test_video_editor_replacement_ui.py",
@@ -192,7 +214,6 @@
         "tests/test_world3d_talk.py",
         "tests/test_mcp_oauth.py",
         "tests/test_series_plates.py",
-        "tests/test_world3d_templates.py",
         "tests/test_production_review.py",
         "tests/test_lipsync_span.py",
         "tests/test_production_disk.py",
@@ -213,6 +234,7 @@
         "tests/test_production_shot_actions.py",
         "tests/test_production_shot_view.py",
         "tests/test_production_smoothness.py",
+        "tests/test_humanoid_action_clips.py",
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
         "tests/test_humanoid_compatibility.py",
@@ -226,17 +248,56 @@
         "tests/test_production_generation_link.py",
         "tests/test_production_shot_regeneration.py",
         "tests/test_series_language_versions.py",
-        "tests/test_local_mcp.py"
+        "tests/test_local_mcp.py",
+        "tests/test_agent_activity.py",
+        "tests/test_recoverable_artifacts.py",
+        "tests/test_verify_clean_repo.py",
+        "tests/test_series_review.py",
+        "tests/test_series_review_router.py",
+        "tests/test_recoverability_last.py",
+        "tests/test_document_origin.py",
+        "tests/test_game_library.py",
+        "tests/test_game_inputs.py",
+        "tests/test_game_library_router.py",
+        "tests/test_game_tools.py",
+        "tests/test_game_prompts.py",
+        "tests/test_game_pixel.py",
+        "tests/test_game_image_ops.py",
+        "tests/test_game_tiles.py",
+        "tests/test_series_line_voice.py",
+        "tests/test_series_shot3d_editor.py",
+        "tests/test_game_gen_animation.py",
+        "tests/test_game_gen_vfx.py",
+        "tests/test_game_gen_audio.py",
+        "tests/test_game_gen_3d.py",
+        "tests/test_game_export.py",
+        "tests/test_game_qa.py",
+        "tests/test_golden_shots.py",
+        "tests/test_production_models.py",
+        "tests/test_production_turn.py"
       ]
     },
     {
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 1586,
+      "weight": 3179,
       "paths": [
         "tests/test_series_agent_fixes.py",
+        "tests/test_series_entrances.py",
+        "tests/test_game_commands.py",
+        "tests/test_game_profile.py",
         "tests/test_series_templates.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_media_compose.py",
+        "tests/test_export_output_name.py",
+        "tests/test_production_media_router.py",
+        "tests/test_production_media_agent_trail.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_hints.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",
         "tests/test_api_workspace_security.py",
@@ -251,7 +312,6 @@
         "tests/test_character_speech_definition.py",
         "tests/test_ci_shards.py",
         "tests/test_code_health.py",
-        "tests/test_comic_film_pass_addendum.py",
         "tests/test_core_mcp.py",
         "tests/test_core_runtime.py",
         "tests/test_core_series_assembly.py",
@@ -284,7 +344,6 @@
         "tests/test_humanoid_animation.py",
         "tests/test_image_command_restart_boundaries.py",
         "tests/test_image_generation_spec.py",
-        "tests/test_krea2_features.py",
         "tests/test_live_stats.py",
         "tests/test_llm_activity_tracking.py",
         "tests/test_llm_resource_scheduling.py",
@@ -309,7 +368,6 @@
         "tests/test_model3d_rig_task_identity.py",
         "tests/test_music_finalization.py",
         "tests/test_music_p5_http.py",
-        "tests/test_music_submission.py",
         "tests/test_music_video_pacing.py",
         "tests/test_nightly_wizard_report.py",
         "tests/test_openai_compatible_comic_llm.py",
@@ -344,6 +402,7 @@
         "tests/test_recipes_router.py",
         "tests/test_remove_background_tool.py",
         "tests/test_video2d_catalogs.py",
+        "tests/test_video2d_compile.py",
         "tests/test_video2d_edit.py",
         "tests/test_video2d_character_ops.py",
         "tests/test_video2d_graphics.py",
@@ -351,9 +410,9 @@
         "tests/test_production_wait.py",
         "tests/test_export_receipts.py",
         "tests/test_export_qa.py",
+        "tests/test_video2d_title_parity.py",
         "tests/test_video_background_removal.py",
         "tests/test_resource_scheduler.py",
-        "tests/test_safety_scan.py",
         "tests/test_scail2_workflows.py",
         "tests/test_scene3d_speech.py",
         "tests/test_speech_alignment_parity.py",
@@ -367,12 +426,17 @@
         "tests/test_series_assembly_router.py",
         "tests/test_series_commands.py",
         "tests/test_series_native_render.py",
+        "tests/test_series_scene_inputs.py",
+        "tests/test_series_video_produce.py",
         "tests/test_series_shot_plan.py",
+        "tests/test_series_layers.py",
+        "tests/test_series_cutouts.py",
         "tests/test_series_shot_extras.py",
         "tests/test_series_script_produce.py",
+        "tests/test_mcp_error_messages.py",
         "tests/test_audio_levels.py",
+        "tests/test_workspace_cleanup.py",
         "tests/test_series_native_render_router.py",
-        "tests/test_flat_rig.py",
         "tests/test_speech_qa.py",
         "tests/test_character_styles.py",
         "tests/test_character_tools.py",
@@ -383,6 +447,7 @@
         "tests/test_shared_api_bootstrap.py",
         "tests/test_speech_analysis_cache.py",
         "tests/test_speech_quality.py",
+        "tests/test_speech_reference_pauses.py",
         "tests/test_story_asset_import.py",
         "tests/test_story_lab_audio_ui.py",
         "tests/test_story_lab_resume_provider.py",
@@ -454,11 +519,372 @@
         "tests/test_humanoid_weights.py",
         "tests/test_model3d_animate.py",
         "tests/test_lips_creator.py",
-        "tests/test_lips_creator_commands.py"
+        "tests/test_lips_creator_commands.py",
+        "tests/test_world3d_templates.py",
+        "tests/test_world3d_motionlab.py",
+        "tests/test_series_episode_replace.py",
+        "tests/test_owned_browser_watchdog.py",
+        "tests/test_h3_frame_lattice.py",
+        "tests/test_llm_resilience.py",
+        "tests/test_series_review_gate.py",
+        "tests/test_recoverability_followups.py",
+        "tests/test_game_gen_still.py",
+        "tests/test_game_gen_tiles.py",
+        "tests/test_game_list.py",
+        "tests/test_game_estimate.py",
+        "tests/test_game_produce.py",
+        "tests/test_game_frames.py",
+        "tests/test_game_sheet.py",
+        "tests/test_game_audio.py",
+        "tests/test_game_sfxr.py",
+        "tests/test_pose_facing.py",
+        "tests/test_series_look_room.py",
+        "tests/test_production_song_language.py",
+        "tests/test_language_detection_fallbacks.py",
+        "tests/test_series_video_shots.py",
+        "tests/test_series_kit_pins.py",
+        "tests/test_production_quality_gate.py",
+        "tests/test_production_lyric_looks.py",
+        "tests/test_diorama_set.py",
+        "tests/test_glb_cleanup.py"
       ]
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/gpu_machine_lock.py",
+      "paths": [
+        "tests/test_job_lifecycle.py",
+        "tests/test_job_lifecycle_wiring.py",
+        "tests/test_generation_queue_priority.py",
+        "tests/test_resource_scheduler.py"
+      ]
+    },
+    {
+      "prefix": "app/services/job_lifecycle.py",
+      "paths": [
+        "tests/test_job_lifecycle.py",
+        "tests/test_job_lifecycle_wiring.py",
+        "tests/test_generation_queue_priority.py",
+        "tests/test_resource_scheduler.py",
+        "tests/test_director_cancellation.py",
+        "tests/test_jobs_wait.py",
+        "tests/test_jobs_cancel.py",
+        "tests/test_generation_contract.py",
+        "tests/test_tools_upscale_contract.py",
+        "tests/test_remove_background_tool.py",
+        "tests/test_studio_sfx_native_worker.py",
+        "tests/test_series_agent_fixes.py",
+        "tests/test_comic_film_pass_addendum.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py",
+        "tests/test_pose_facing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_metrics.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_series_commands.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/character_kit_library.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_character_kit_library_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_base.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_ink.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_take_sound.py",
+      "paths": [
+        "tests/test_series_take_sound.py",
+        "tests/test_series_assembly_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_sound_cuts.py",
+      "paths": [
+        "tests/test_series_take_sound.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_video_foley.py",
+      "paths": [
+        "tests/test_series_shot_foley.py",
+        "tests/test_series_take_sound.py",
+        "tests/test_series_video_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_eyes.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_small.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_hints.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_canon_snapshot.py",
+      "paths": [
+        "tests/test_series_library.py",
+        "tests/test_series_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_export.py",
+      "paths": [
+        "tests/test_world3d_export.py",
+        "tests/test_world3d_motionlab.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_frame_encoder.py",
+      "paths": [
+        "tests/test_world3d_export.py",
+        "tests/test_export_output_name.py",
+        "tests/test_scene2d_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_scene_inputs.py",
+      "paths": [
+        "tests/test_series_scene_inputs.py",
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
+      "prefix": "app/services/media_publication.py",
+      "paths": [
+        "tests/test_assets_upload.py",
+        "tests/test_export_output_name.py",
+        "tests/test_production_media_concurrency.py"
+      ]
+    },
+    {
+      "prefix": "app/services/workspace_store_lock.py",
+      "paths": [
+        "tests/test_workspace_publication_lock.py",
+        "tests/test_production_media_concurrency.py",
+        "tests/test_assets_upload.py"
+      ]
+    },
+    {
+      "prefix": "app/services/win_safe_files.py",
+      "paths": [
+        "tests/test_export_download_identity.py",
+        "tests/test_output_move_security.py",
+        "tests/test_director_cancellation.py",
+        "tests/test_output_delete_workspace.py",
+        "tests/test_security_local.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot_edit.py",
+      "paths": [
+        "tests/test_series_shot_edit.py",
+        "tests/test_series_look_room.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot_instruction.py",
+      "paths": [
+        "tests/test_series_shot_edit.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/series_shot_edit.py",
+      "paths": [
+        "tests/test_series_shot_edit.py",
+        "tests/test_series_look_room.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_line_voice.py",
+      "paths": [
+        "tests/test_series_line_voice.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot3d_editor.py",
+      "paths": [
+        "tests/test_series_shot3d_editor.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/series_shot_inspector.py",
+      "paths": [
+        "tests/test_series_line_voice.py",
+        "tests/test_series_shot3d_editor.py"
+      ]
+    },
+    {
+      "prefix": "app/services/studio_key_clean.py",
+      "paths": [
+        "tests/test_studio_key.py",
+        "tests/test_production_media_agent_trail.py"
+      ]
+    },
+    {
+      "prefix": "app/services/export_output_name.py",
+      "paths": [
+        "tests/test_export_output_name.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_media_common.py",
+      "paths": [
+        "tests/test_media_frame.py",
+        "tests/test_media_compose.py",
+        "tests/test_audio_trim.py",
+        "tests/test_workspace_asset_import.py",
+        "tests/test_production_media_agent_trail.py",
+        "tests/test_production_media_concurrency.py",
+        "tests/test_core_media_parity.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_media_commands.py",
+      "paths": [
+        "tests/test_media_frame.py",
+        "tests/test_media_compose.py",
+        "tests/test_audio_trim.py",
+        "tests/test_workspace_asset_import.py",
+        "tests/test_production_media_agent_trail.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/production_media.py",
+      "paths": [
+        "tests/test_production_media_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/media_frame.py",
+      "paths": [
+        "tests/test_media_frame.py"
+      ]
+    },
+    {
+      "prefix": "app/services/media_compose.py",
+      "paths": [
+        "tests/test_media_compose.py"
+      ]
+    },
+    {
+      "prefix": "app/services/audio_trim.py",
+      "paths": [
+        "tests/test_audio_trim.py"
+      ]
+    },
+    {
+      "prefix": "app/services/workspace_asset_import.py",
+      "paths": [
+        "tests/test_workspace_asset_import.py"
+      ]
+    },
+    {
+      "prefix": "app/services/face_landmarks.py",
+      "paths": [
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py",
+        "tests/test_pose_facing.py"
+      ]
+    },
+    {
+      "prefix": "app/services/face_enlarge.py",
+      "paths": [
+        "tests/test_flat_rig_small.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_guided.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_hints.py",
+      "paths": [
+        "tests/test_flat_rig_hints.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_warp.py",
+      "paths": [
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_small.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_preview.py",
+      "paths": [
+        "tests/test_flat_rig_warp.py",
+        "tests/test_flat_rig_small.py"
+      ]
+    },
+    {
+      "prefix": "app/services/flat_rig_look.py",
+      "paths": [
+        "tests/test_flat_rig.py",
+        "tests/test_flat_rig_realistic.py",
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_character_styles.py"
+      ]
+    },
+    {
+      "prefix": "app/services/character_styles.py",
+      "paths": [
+        "tests/test_character_styles.py",
+        "tests/test_series_commands.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/character_styles.json",
+      "paths": [
+        "tests/test_character_styles.py",
+        "tests/test_series_commands.py",
+        "tests/test_flat_rig_warp.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/series_agent_guide.md",
+      "paths": [
+        "tests/test_character_styles.py",
+        "tests/test_series_agent_fixes.py"
+      ]
+    },
     {
       "prefix": "app/services/secure_download.py",
       "paths": [
@@ -503,62 +929,238 @@
     },
     {
       "prefix": "app/services/speech_alignment.py",
-      "paths": ["tests/test_speech_alignment_parity.py"]
+      "paths": [
+        "tests/test_speech_alignment_parity.py",
+        "tests/test_language_detection_fallbacks.py"
+      ]
+    },
+    {
+      "prefix": "app/services/speech_qa.py",
+      "paths": [
+        "tests/test_speech_qa.py",
+        "tests/test_language_detection_fallbacks.py"
+      ]
+    },
+    {
+      "prefix": "app/services/speech_text_es.py",
+      "paths": [
+        "tests/test_speech_qa.py",
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
+      "prefix": "app/services/voice_pitch.py",
+      "paths": [
+        "tests/test_speech_qa.py",
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
+      "prefix": "app/services/qa_accent.py",
+      "paths": [
+        "tests/test_speech_qa.py",
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/character_tools.py",
+      "paths": [
+        "tests/test_character_tools.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_native_render.py",
+      "paths": [
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_ambience.py",
+      "paths": [
+        "tests/test_series_ambience.py",
+        "tests/test_series_voice_rooms.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_assembly_router.py",
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_score.py"
+      ]
+    },
+    {
+      "prefix": "app/services/episode_av_sync.py",
+      "paths": [
+        "tests/test_episode_av_sync.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_assembly_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_score.py",
+      "paths": [
+        "tests/test_series_score.py",
+        "tests/test_series_ambience.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_assembly_router.py",
+        "tests/test_series_library.py",
+        "tests/test_series_episode_update_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot_foley.py",
+      "paths": [
+        "tests/test_series_shot_foley.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_library.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_voice_rooms.py",
+      "paths": [
+        "tests/test_series_voice_rooms.py",
+        "tests/test_series_ambience.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_cutouts.py",
+      "paths": [
+        "tests/test_series_cutouts.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_shot_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_entrances.py",
+      "paths": [
+        "tests/test_series_entrances.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_layers.py",
+      "paths": [
+        "tests/test_series_layers.py",
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_library.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_voice_rooms.py",
+        "tests/test_series_agent_fixes.py"
+      ]
+    },
+    {
+      "prefix": "app/services/speech_reference_pauses.py",
+      "paths": [
+        "tests/test_speech_reference_pauses.py"
+      ]
     },
     {
       "prefix": "app/services/production_generation_link.py",
-      "paths": ["tests/test_production_generation_link.py"]
+      "paths": [
+        "tests/test_production_generation_link.py"
+      ]
     },
     {
       "prefix": "app/services/production_shot_regeneration.py",
-      "paths": ["tests/test_production_shot_regeneration.py"]
+      "paths": [
+        "tests/test_production_shot_regeneration.py"
+      ]
     },
     {
       "prefix": "app/services/production_project_link.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_generation_link.py", "tests/test_production_work_commands.py", "tests/test_production_journey.py", "tests/test_production_producer_link.py"]
+      "paths": [
+        "tests/test_production_project_link.py",
+        "tests/test_production_generation_link.py",
+        "tests/test_production_work_commands.py",
+        "tests/test_production_journey.py",
+        "tests/test_production_producer_link.py"
+      ]
     },
     {
       "prefix": "app/services/production_producer_link.py",
-      "paths": ["tests/test_production_producer_link.py"]
+      "paths": [
+        "tests/test_production_producer_link.py"
+      ]
     },
     {
       "prefix": "app/services/production_work_commands.py",
-      "paths": ["tests/test_production_work_commands.py", "tests/test_production_journey.py"]
+      "paths": [
+        "tests/test_production_work_commands.py",
+        "tests/test_production_journey.py"
+      ]
     },
     {
       "prefix": "app/services/production_work_catalog.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_generation_link.py"]
+      "paths": [
+        "tests/test_production_project_link.py",
+        "tests/test_production_generation_link.py"
+      ]
     },
     {
       "prefix": "app/routers/production_projects.py",
-      "paths": ["tests/test_production_project_link.py", "tests/test_production_work_commands.py", "tests/test_production_shot_view.py", "tests/test_production_shot_actions.py"]
+      "paths": [
+        "tests/test_production_project_link.py",
+        "tests/test_production_work_commands.py",
+        "tests/test_production_shot_view.py",
+        "tests/test_production_shot_actions.py"
+      ]
     },
     {
       "prefix": "app/services/production_shot_view.py",
-      "paths": ["tests/test_production_shot_view.py"]
+      "paths": [
+        "tests/test_production_shot_view.py"
+      ]
     },
     {
       "prefix": "app/services/production_shot_actions.py",
-      "paths": ["tests/test_production_shot_actions.py", "tests/test_production_shot_view.py", "tests/test_production_journey.py"]
+      "paths": [
+        "tests/test_production_shot_actions.py",
+        "tests/test_production_shot_view.py",
+        "tests/test_production_journey.py"
+      ]
     },
     {
       "prefix": "app/services/world3d_template_catalog.py",
       "paths": [
         "tests/test_world3d_templates.py",
-        "tests/test_mcp_coverage.py"
+        "tests/test_mcp_coverage.py",
+        "tests/test_mcp_error_messages.py"
       ]
     },
     {
       "prefix": "app/services/world3d_template_commands.py",
       "paths": [
+        "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py",
-        "tests/test_mcp_coverage.py"
+        "tests/test_mcp_coverage.py",
+        "tests/test_mcp_error_messages.py"
       ]
     },
     {
       "prefix": "app/services/world3d_scenes.py",
       "paths": [
+        "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_slot_fields.py",
+      "paths": [
+        "tests/test_world3d_templates.py",
+        "tests/test_series_shot_extras.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot3d.py",
+      "paths": [
+        "tests/test_series_shot_extras.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_shot3d_editor.py"
       ]
     },
     {
@@ -570,6 +1172,7 @@
     {
       "prefix": "app/shared/world3d_templates.json",
       "paths": [
+        "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py",
         "tests/test_mcp_coverage.py"
       ]
@@ -595,7 +1198,9 @@
         "tests/test_character_kit_library_router.py",
         "tests/test_character_language_voices.py",
         "tests/test_lips_creator.py",
-        "tests/test_lips_creator_commands.py"
+        "tests/test_lips_creator_commands.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_pose_facing.py"
       ]
     },
     {
@@ -608,7 +1213,9 @@
     {
       "prefix": "app/services/series_commands.py",
       "paths": [
-        "tests/test_series_commands.py"
+        "tests/test_series_commands.py",
+        "tests/test_series_line_voice.py",
+        "tests/test_mcp_error_messages.py"
       ]
     },
     {
@@ -651,6 +1258,12 @@
       ]
     },
     {
+      "prefix": "scripts/golden_shots.py",
+      "paths": [
+        "tests/test_golden_shots.py"
+      ]
+    },
+    {
       "prefix": "scripts/ci_test_groups.json",
       "paths": [
         "tests/test_ci_shards.py",
@@ -659,6 +1272,12 @@
     },
     {
       "prefix": "scripts/ci-python-requirements.txt",
+      "paths": [
+        "tests/test_ci_shards.py"
+      ]
+    },
+    {
+      "prefix": "scripts/ci-production-browser-requirements.txt",
       "paths": [
         "tests/test_ci_shards.py"
       ]
@@ -731,7 +1350,8 @@
     {
       "prefix": "app/services/scene_documents.py",
       "paths": [
-        "tests/test_scene2d_export.py"
+        "tests/test_scene2d_export.py",
+        "tests/test_document_origin.py"
       ]
     },
     {
@@ -1173,7 +1793,33 @@
     {
       "prefix": "app/services/production_song.py",
       "paths": [
+        "tests/test_music_production.py",
+        "tests/test_production_song_language.py",
+        "tests/test_production_song_switch.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_image_defaults.py",
+      "paths": [
+        "tests/test_production_song_language.py",
+        "tests/test_production_style_presets.py",
+        "tests/test_production_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/song_analysis.py",
+      "paths": [
+        "tests/test_production_song_language.py",
         "tests/test_music_production.py"
+      ]
+    },
+    {
+      "prefix": "app/services/lyrics_language.py",
+      "paths": [
+        "tests/test_lyrics_language.py",
+        "tests/test_production_song_language.py",
+        "tests/test_studio_music_preparation.py",
+        "tests/test_language_detection_fallbacks.py"
       ]
     },
     {
@@ -1197,7 +1843,8 @@
       "prefix": "app/services/production_publication.py",
       "paths": [
         "tests/test_production_publication.py",
-        "tests/test_production_phase.py"
+        "tests/test_production_phase.py",
+        "tests/test_language_detection_fallbacks.py"
       ]
     },
     {
@@ -1232,6 +1879,7 @@
     {
       "prefix": "app/services/humanoid_rig/",
       "paths": [
+        "tests/test_humanoid_action_clips.py",
         "tests/test_humanoid_animate.py",
         "tests/test_humanoid_clips.py",
         "tests/test_humanoid_compatibility.py",
@@ -1265,11 +1913,516 @@
     },
     {
       "prefix": "app/services/export_qa.py",
-      "paths": ["tests/test_export_qa.py"]
+      "paths": [
+        "tests/test_export_qa.py"
+      ]
     },
     {
       "prefix": "app/services/export_receipts.py",
-      "paths": ["tests/test_export_receipts.py", "tests/test_export_qa.py"]
+      "paths": [
+        "tests/test_export_receipts.py",
+        "tests/test_export_qa.py",
+        "tests/test_export_output_name.py",
+        "tests/test_export_download_identity.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_review.py",
+      "paths": [
+        "tests/test_series_review.py",
+        "tests/test_series_review_gate.py",
+        "tests/test_series_review_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_review_gate.py",
+      "paths": [
+        "tests/test_series_review_gate.py",
+        "tests/test_series_review.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/series_review.py",
+      "paths": [
+        "tests/test_series_review_router.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_script_history.py",
+      "paths": [
+        "tests/test_recoverability_last.py"
+      ]
+    },
+    {
+      "prefix": "app/services/output_origin.py",
+      "paths": [
+        "tests/test_recoverability_last.py",
+        "tests/test_output_completion_time.py"
+      ]
+    },
+    {
+      "prefix": "app/services/document_origin.py",
+      "paths": [
+        "tests/test_document_origin.py"
+      ]
+    },
+    {
+      "prefix": "app/services/minimax_h3_service.py",
+      "paths": [
+        "tests/test_minimax_h3_service.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_library.py",
+      "paths": [
+        "tests/test_game_library.py",
+        "tests/test_game_library_router.py",
+        "tests/test_game_qa.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_inputs.py",
+      "paths": [
+        "tests/test_game_inputs.py",
+        "tests/test_game_library.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/game_library.py",
+      "paths": [
+        "tests/test_game_library_router.py",
+        "tests/test_game_export.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/game_actions.json",
+      "paths": [
+        "tests/test_game_library.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/game_style_presets.json",
+      "paths": [
+        "tests/test_game_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_pixel.py",
+      "paths": [
+        "tests/test_game_pixel.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_image_ops.py",
+      "paths": [
+        "tests/test_game_image_ops.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_tiles.py",
+      "paths": [
+        "tests/test_game_tiles.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_tools.py",
+      "paths": [
+        "tests/test_game_tools.py",
+        "tests/test_game_gen_3d.py",
+        "tests/test_language_detection_fallbacks.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_prompts.py",
+      "paths": [
+        "tests/test_game_prompts.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/still.py",
+      "paths": [
+        "tests/test_game_gen_still.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/tiles.py",
+      "paths": [
+        "tests/test_game_gen_tiles.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/background.py",
+      "paths": [
+        "tests/test_game_gen_tiles.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/base.py",
+      "paths": [
+        "tests/test_game_tools.py",
+        "tests/test_game_gen_still.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/__init__.py",
+      "paths": [
+        "tests/test_game_gen_still.py",
+        "tests/test_game_gen_animation.py",
+        "tests/test_game_gen_vfx.py",
+        "tests/test_game_gen_audio.py",
+        "tests/test_game_gen_3d.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_list.py",
+      "paths": [
+        "tests/test_game_list.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_estimate.py",
+      "paths": [
+        "tests/test_game_estimate.py",
+        "tests/test_game_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_jobs.py",
+      "paths": [
+        "tests/test_game_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_produce.py",
+      "paths": [
+        "tests/test_game_produce.py",
+        "tests/test_game_qa.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_qa.py",
+      "paths": [
+        "tests/test_game_qa.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/game_produce.py",
+      "paths": [
+        "tests/test_game_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_frames.py",
+      "paths": [
+        "tests/test_game_frames.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_sheet.py",
+      "paths": [
+        "tests/test_game_sheet.py",
+        "tests/test_game_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_export.py",
+      "paths": [
+        "tests/test_game_export.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_commands.py",
+      "paths": [
+        "tests/test_game_commands.py",
+        "tests/test_game_profile.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_guide.py",
+      "paths": [
+        "tests/test_game_profile.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/game_agent_guide.md",
+      "paths": [
+        "tests/test_game_profile.py"
+      ]
+    },
+    {
+      "prefix": "app/services/mcp_profiles.py",
+      "paths": [
+        "tests/test_game_profile.py",
+        "tests/test_series_agent_fixes.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/animation.py",
+      "paths": [
+        "tests/test_game_gen_animation.py",
+        "tests/test_game_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/vfx.py",
+      "paths": [
+        "tests/test_game_gen_vfx.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/audio.py",
+      "paths": [
+        "tests/test_game_gen_audio.py",
+        "tests/test_game_library.py",
+        "tests/test_language_detection_fallbacks.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_generators/three_d.py",
+      "paths": [
+        "tests/test_game_gen_3d.py"
+      ]
+    },
+    {
+      "prefix": "app/services/procedural_3d/glb_inspector.py",
+      "paths": [
+        "tests/test_procedural_glb_inspector.py",
+        "tests/test_game_gen_3d.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_audio.py",
+      "paths": [
+        "tests/test_game_audio.py"
+      ]
+    },
+    {
+      "prefix": "app/services/game_sfxr.py",
+      "paths": [
+        "tests/test_game_sfxr.py"
+      ]
+    },
+    {
+      "prefix": "app/services/pose_facing.py",
+      "paths": [
+        "tests/test_pose_facing.py",
+        "tests/test_series_look_room.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_look_room.py",
+      "paths": [
+        "tests/test_series_look_room.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_script.py",
+      "paths": [
+        "tests/test_series_script_produce.py",
+        "tests/test_series_look_room.py",
+        "tests/test_mcp_error_messages.py",
+        "tests/test_series_video_shots.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_script_problems.py",
+      "paths": [
+        "tests/test_mcp_error_messages.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_script_warnings.py",
+      "paths": [
+        "tests/test_series_script_produce.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_series_video_shots.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_plate_checks.py",
+      "paths": [
+        "tests/test_series_commands.py",
+        "tests/test_series_shot_extras.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_duration_estimate.py",
+      "paths": [
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_take_inputs.py",
+      "paths": [
+        "tests/test_series_native_render.py",
+        "tests/test_series_voice_rooms.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_native_render.py",
+      "paths": [
+        "tests/test_series_native_render.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/series_produce.py",
+      "paths": [
+        "tests/test_mcp_error_messages.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/job_leftovers.py",
+      "paths": [
+        "tests/test_job_leftovers.py",
+        "tests/test_mcp_error_messages.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_produce.py",
+      "paths": [
+        "tests/test_series_script_produce.py",
+        "tests/test_series_review_gate.py",
+        "tests/test_series_video_produce.py",
+        "tests/test_series_video_shots.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/series_produce.py",
+      "paths": [
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_library.py",
+      "paths": [
+        "tests/test_series_library.py",
+        "tests/test_series_episode_replace.py",
+        "tests/test_series_review.py",
+        "tests/test_series_review_gate.py",
+        "tests/test_series_video_shots.py",
+        "tests/test_document_origin.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/series_episode.py",
+      "paths": [
+        "tests/test_series_library.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_shot_plan.py",
+      "paths": [
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_look_room.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_guide.py",
+      "paths": [
+        "tests/test_series_agent_fixes.py",
+        "tests/test_series_look_room.py"
+      ]
+    },
+    {
+      "prefix": "app/services/jobs_cancel.py",
+      "paths": [
+        "tests/test_jobs_cancel.py"
+      ]
+    },
+    {
+      "prefix": "app/services/output_names.py",
+      "paths": [
+        "tests/test_output_names.py"
+      ]
+    },
+    {
+      "prefix": "app/routers/image_generation_commands.py",
+      "paths": [
+        "tests/test_image_generation_commands.py",
+        "tests/test_generation_contract.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_transitions.py",
+      "paths": [
+        "tests/test_mix_concat.py",
+        "tests/test_core_series_assembly.py",
+        "tests/test_episode_av_sync.py",
+        "tests/test_episode_finishing.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_shot_edit.py",
+        "tests/test_series_assembly.py",
+        "tests/test_series_episode_replace.py",
+        "tests/test_series_agent_fixes.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_document_card.py",
+      "paths": [
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_hearing.py",
+      "paths": [
+        "tests/test_series_voice_rooms.py",
+        "tests/test_series_script_produce.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_stop_motion.py",
+      "paths": [
+        "tests/test_series_script_produce.py",
+        "tests/test_series_shot_plan.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_video_shots.py",
+      "paths": [
+        "tests/test_series_video_shots.py",
+        "tests/test_series_script_produce.py",
+        "tests/test_series_library.py",
+        "tests/test_series_shot_edit.py"
+      ]
+    },
+    {
+      "prefix": "app/services/character_kit_library.py",
+      "paths": [
+        "tests/test_character_kit_library.py",
+        "tests/test_character_kit_library_router.py",
+        "tests/test_character_language_voices.py",
+        "tests/test_lips_creator.py",
+        "tests/test_lips_creator_commands.py",
+        "tests/test_flat_rig_warp.py",
+        "tests/test_pose_facing.py",
+        "tests/test_series_kit_pins.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_kit_pins.py",
+      "paths": [
+        "tests/test_series_kit_pins.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_commands.py",
+      "paths": [
+        "tests/test_series_commands.py",
+        "tests/test_series_line_voice.py",
+        "tests/test_series_kit_pins.py"
+      ]
+    },
+    {
+      "prefix": "app/services/mcp_profiles.py",
+      "paths": [
+        "tests/test_game_profile.py",
+        "tests/test_series_agent_fixes.py",
+        "tests/test_series_kit_pins.py"
+      ]
     }
   ]
 }

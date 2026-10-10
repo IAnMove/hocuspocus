@@ -1,8 +1,10 @@
 import { atmosEye, atmosFallbackLook, isAtmosDressing } from './atmos/index.ts'
 import { cylinderUvOffset, isCylinderBackdrop, wrapUnit } from './backdrop.ts'
 import { cameraEyeAtTime, cameraLookAtTime, projectPoint } from './camera.ts'
+import { shakeCamera } from './cameraShake.ts'
 import { scene3dSlotColor } from './document.ts'
 import type { Scene3DDocument, Scene3DLoop } from './types.ts'
+import { renderMotionLabSoftware } from './motionlab/software'
 
 export type SoftwareFrame = {
   width: number
@@ -49,30 +51,34 @@ function fillScrollingWorld(frame: SoftwareFrame, sceneSeconds: number, loop: Sc
 }
 
 export function renderScene3DSoftware(document: Scene3DDocument, sceneSeconds: number): SoftwareFrame {
+  const native = renderMotionLabSoftware(document, sceneSeconds)
   const width = 160
   const height = Math.max(1, Math.round(160 * document.height / Math.max(1, document.width)))
   const pixels = new Uint8Array(width * height * 4)
   pixels.fill(18)
   for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255
-  const frame = { width, height, pixels }
+  const frame = native ?? { width, height, pixels }
   const cylinder = document.slots.find(isCylinderBackdrop)
   const fallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos, document.dressing) : null
-  if (cylinder?.loop) fillScrollingWorld(frame, sceneSeconds, cylinder.loop)
+  if (native) { /* Native sets already rasterized their geometry and sky. */ }
+  else if (cylinder?.loop) fillScrollingWorld(frame, sceneSeconds, cylinder.loop)
   else if (fallback) {
     fillRect(frame, 0, 0, width, height, fallback.sky)
     fillRect(frame, 0, height * 0.62, width, height, fallback.ground)
   } else fillRect(frame, 0, height * 0.62, width, height, [32, 34, 38])
   const rawEye = cameraEyeAtTime(document.camera, sceneSeconds, document.duration, document.slots)
-  const eye = fallback ? atmosEye(rawEye, sceneSeconds, document.duration, document.camera.family) : rawEye
-  const look = cameraLookAtTime(document.camera, sceneSeconds, document.duration, document.slots)
+  const posed = fallback ? atmosEye(rawEye, sceneSeconds, document.duration, document.camera.family) : rawEye
+  const { eye, look, roll } = shakeCamera(document.camera.shake, sceneSeconds, posed, cameraLookAtTime(document.camera, sceneSeconds, document.duration, document.slots))
   const aspect = width / height
   for (const slot of document.slots) {
     if (slot.media === 'image') continue
     const projected = projectPoint(slot.position, eye, look, document.camera.fov, aspect)
     if (!projected) continue
     const size = Math.max(6, 28 * slot.scale / Math.max(0.4, projected.depth))
-    const cx = projected.x * width
-    const cy = projected.y * height
+    // The camera rolls with the shake, so the picture turns the other way around its centre.
+    const dx = (projected.x - 0.5) * width, dy = (projected.y - 0.5) * height
+    const cx = width / 2 + dx * Math.cos(roll) - dy * Math.sin(roll)
+    const cy = height / 2 + dx * Math.sin(roll) + dy * Math.cos(roll)
     fillRect(frame, cx - size, cy - size * 1.6, cx + size, cy + size * 0.4, scene3dSlotColor(slot.slot))
   }
   return frame

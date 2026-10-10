@@ -17,6 +17,9 @@ CATALOG_OPERATION = "world3d.templates.catalog"
 USER_FILE = "world3d-user-templates.json"
 DEFAULT_LIMIT = 8
 MAX_LIMIT = 24
+# A plain listing (no query) pages by id; a query stays the bounded search above.
+LIST_DEFAULT_LIMIT = 50
+LIST_MAX_LIMIT = 50
 _GROUPS = (
     frozenset({"orbit", "orbita", "girar", "alrededor", "around", "360"}),
     frozenset({"lluvia", "rain", "llueve"}),
@@ -43,14 +46,52 @@ def builtin_cards() -> tuple[dict, ...]:
 
 
 def search_templates(query: str = "", *, category: str | None = None, language: str | None = None,
-                     limit: int | None = None, workspace_dir=None, workspace: str | None = None) -> list[dict]:
+                     limit: int | None = None, workspace_dir=None, workspace: str | None = None,
+                     roles: list[str] | None = None, setting: str | None = None) -> list[dict]:
     """Return at most ``limit`` short cards. Both languages are always searched."""
-    if language not in (None, "es", "en"):
-        raise World3DTemplateError("invalid_language", "language must be es or en")
+    _require_language(language)
     bounded = _limit(limit)
+    ranked = _ranked(query, _fitting(_cards(workspace_dir, workspace), roles, setting), category)
+    return [_public_card(card, score) for score, _index, card in ranked[:bounded]]
+
+
+def page_templates(query: str = "", *, category: str | None = None, language: str | None = None,
+                   limit: int | None = None, offset: int | None = None, workspace_dir=None,
+                   workspace: str | None = None, roles: list[str] | None = None, setting: str | None = None) -> dict:
+    """One page of ``world3d.templates.list``. No query keeps id order."""
+    _require_language(language)
+    queried = bool(str(query or "").strip())
+    bounded = _limit(limit) if queried else _list_limit(limit)
+    start = _offset(offset)
+    cards = _fitting(_cards(workspace_dir, workspace), roles, setting)
+    if queried:
+        chosen = [(score, card) for score, _index, card in _ranked(query, cards, category)]
+    else:
+        filtered = [card for card in cards if not category or card.get("category") == category]
+        filtered.sort(key=lambda card: str(card.get("id") or ""))
+        chosen = [(0, card) for card in filtered]
+    page = chosen[start:start + bounded]
+    return {"templates": [_public_card(card, score) for score, card in page], "total": len(chosen)}
+
+
+def _fitting(cards: list[dict], roles: list[str] | None, setting: str | None) -> list[dict]:
+    """Templates that have every asked role (subject_1, subject_2, background, prop) and the asked setting."""
+    if roles is not None and (not isinstance(roles, list) or not all(isinstance(role, str) for role in roles)):
+        raise World3DTemplateError("invalid_roles", "roles must be a list of role names")
+    wanted = set(roles or ())
+    place = _fold(setting or "")
+    return [card for card in cards if wanted <= set(card.get("roles") or ())
+            and (not place or _fold(str(card.get("setting") or "")) == place)]
+
+
+def _cards(workspace_dir, workspace: str | None) -> list[dict]:
     cards = list(builtin_cards())
     if workspace_dir is not None and workspace:
         cards.extend(_user_cards(workspace_dir, workspace))
+    return cards
+
+
+def _ranked(query: str, cards: list[dict], category: str | None) -> list[tuple]:
     ranked = []
     for index, card in enumerate(cards):
         if category and card.get("category") != category:
@@ -60,7 +101,12 @@ def search_templates(query: str = "", *, category: str | None = None, language: 
             continue
         ranked.append((score, index, card))
     ranked.sort(key=lambda item: (-item[0], item[1]))
-    return [_public_card(card, score) for score, _index, card in ranked[:bounded]]
+    return ranked
+
+
+def _require_language(language: str | None) -> None:
+    if language not in (None, "es", "en"):
+        raise World3DTemplateError("invalid_language", "language must be es or en")
 
 
 def require_card(template_id: str, *, workspace_dir=None, workspace: str | None = None) -> dict:
@@ -83,7 +129,23 @@ def _limit(value: int | None) -> int:
     return value
 
 
-def _user_cards(workspace_dir, workspace: str) -> list[dict]:
+def _list_limit(value: int | None) -> int:
+    if value is None:
+        return LIST_DEFAULT_LIMIT
+    if type(value) is not int or not 1 <= value <= LIST_MAX_LIMIT:
+        raise World3DTemplateError("invalid_limit", f"limit must be an integer from 1 to {LIST_MAX_LIMIT}")
+    return value
+
+
+def _offset(value: int | None) -> int:
+    if value is None:
+        return 0
+    if type(value) is not int or value < 0:
+        raise World3DTemplateError("invalid_offset", "offset must be an integer from 0")
+    return value
+
+
+def _user_rows(workspace_dir, workspace: str) -> list[dict]:
     path = Path(workspace_dir(workspace)) / USER_FILE
     if not path.is_file():
         return []
@@ -94,7 +156,40 @@ def _user_cards(workspace_dir, workspace: str) -> list[dict]:
     rows = data.get("templates") if isinstance(data, dict) else None
     if not isinstance(rows, list):
         raise World3DTemplateError("user_templates_unreadable", "Personal Video 3D templates are unreadable", 409)
-    return [_user_card(row) for row in rows if isinstance(row, dict)]
+    return [row for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)]
+
+
+def _user_cards(workspace_dir, workspace: str) -> list[dict]:
+    return [_user_card(row) for row in _user_rows(workspace_dir, workspace)]
+
+
+def list_user_templates(workspace_dir, workspace: str) -> list[dict]:
+    """Every personal template of the workspace (newest first) for the Video 3D editor, without documents."""
+    summaries = [_template_summary(row) for row in _user_rows(workspace_dir, workspace)]
+    return sorted(summaries, key=lambda item: str(item.get("updatedAt") or ""), reverse=True)
+
+
+def _template_summary(row: dict) -> dict:
+    document = row.get("document") if isinstance(row.get("document"), dict) else {}
+    slots = [slot for slot in document.get("slots") or [] if isinstance(slot, dict)]
+    width, height = document.get("width") or 1280, document.get("height") or 720
+    base = document.get("templateId")
+    return {
+        "id": row["id"], "title": row.get("title") or row["id"], "description": str(row.get("description") or ""),
+        "createdAt": row.get("createdAt"), "updatedAt": row.get("updatedAt") or row.get("createdAt"),
+        "createdBy": row.get("createdBy"), "baseTemplateId": base if isinstance(base, str) and not base.startswith("user-") else None,
+        "duration": document.get("duration") or 0, "width": width, "height": height,
+        "format": "portrait" if height > width else "landscape",
+        "slots": len(slots), "pending": sum(1 for slot in slots if not slot.get("sourceUrl")),
+    }
+
+
+def user_template_row(template_id: str, workspace_dir, workspace: str) -> dict:
+    """One stored personal template with its document exactly as saved (the editor keeps its base shot id)."""
+    for row in _user_rows(workspace_dir, workspace):
+        if row.get("id") == template_id and isinstance(row.get("document"), dict):
+            return deepcopy(row)
+    raise World3DTemplateError("unknown_template", f"unknown_template:{template_id}", 404)
 
 
 def _user_card(row: dict) -> dict:

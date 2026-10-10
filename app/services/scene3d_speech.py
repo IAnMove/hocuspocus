@@ -86,8 +86,12 @@ def _analyze_uncached(data: bytes, duration: float, isolate_vocals: bool, execut
 
 
 def _rhubarb_mouth_cues(executable: str, data: bytes, duration: float, recognizer: str = "phonetic", dialogue: str = "") -> list:
-    # Keep diagnostic files: never delete user audio or imported assets.
-    folder = Path(tempfile.mkdtemp(prefix="hocuspocus-speech-"))
+    # The WAV here is a copy of audio the caller already holds; the folder goes away with the analysis.
+    with tempfile.TemporaryDirectory(prefix="hocuspocus-speech-") as temporary:
+        return _run_rhubarb(executable, Path(temporary), data, duration, recognizer, dialogue)
+
+
+def _run_rhubarb(executable: str, folder: Path, data: bytes, duration: float, recognizer: str, dialogue: str) -> list:
     source, output = folder / "voice.wav", folder / "cues.json"
     source.write_bytes(data)
     arguments = []

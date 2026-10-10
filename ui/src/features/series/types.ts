@@ -56,6 +56,9 @@ export interface SeriesVoiceProfile {
   pronunciationDictionary?: Record<string, string>
   pace?: number
   pitch?: number
+  gender?: string
+  pitchRange?: [number, number] | null
+  accent?: 'castilian'
   emotionalDefaults?: string
   approvedSampleAssetId?: string
   consentSourceNote?: string
@@ -84,6 +87,22 @@ export interface SeriesCharacter {
   approval: SeriesApproval
 }
 
+/** A layer of a 2D set (series_layers.py): a PNG with alpha or a looping video at a depth, 0 the background's far
+ * plane (moves least), 1 the nearest. `front` draws it over the cast. x/y (%) put its centre on the background;
+ * scale is a fraction of the frame height. A camera push moves each layer by its depth. */
+export interface SeriesSetLayer {
+  assetId?: string
+  file?: string
+  depth: number
+  front: boolean
+  opacity: number
+  x: number
+  y: number
+  scale: number
+  /** Idle drift in frame pixels per second, negative to the left (fog, smoke). */
+  drift?: number
+}
+
 export interface SeriesLocation {
   id: string
   name: string
@@ -93,8 +112,10 @@ export interface SeriesLocation {
   variants: SeriesVisualVariant[]
   currentState: Record<string, unknown>
   approval: SeriesApproval
-  /** 2D series layout: a background or 3D plate asset, character homes (x %), and the plate render state. */
-  layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown> }
+  /** 2D series layout: a background or 3D plate asset, character homes (x %), the plate render state, and set layers
+   * with the depth the cast stands at among them (default 0.6). */
+  layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown>
+    layers?: SeriesSetLayer[]; castDepth?: number }
 }
 
 export interface SeriesProp {
@@ -136,6 +157,8 @@ export interface SeriesDialogueBeat {
   text: string
   emotion: string
   delivery: string
+  /** The room this line alone is heard in, on screen or off (`none` keeps it dry); else the shot's, for its cast. */
+  voiceRoom?: SeriesVoiceRoom
 }
 
 export interface SeriesScene {
@@ -193,8 +216,93 @@ export interface SeriesRenderAttempt {
   outputAssetIds: string[]
   error?: string
   retryCount: number
+  /** Who approved or reviewed the take: a person, an MCP agent, Ask to the Wizard or the server render's own approval. */
+  approvedBy?: 'user' | 'agent' | 'wizard' | 'server'
+  reviewedBy?: 'user' | 'agent' | 'wizard' | 'server'
   reviewDecision?: 'approved' | 'rejected'
   reviewedAt?: string
+  /** Set by the server render in a staged production: a cheap preview to review, or the final take. */
+  reviewStage?: 'preview' | 'final'
+}
+
+/** How an episode is produced: everything at once, plan approval first, or plan + preview approval before the final. */
+export type SeriesProductionMode = 'direct' | 'plan' | 'preview'
+export type SeriesReviewStatus = 'pending' | 'approved' | 'changes'
+export type SeriesReviewStage = 'plan' | 'preview' | 'final'
+
+export interface SeriesReviewNote {
+  id: string
+  at: string
+  stage: SeriesReviewStage
+  text: string
+  by: SeriesReviewAuthor
+}
+
+/** Who decided or wrote: a person, an MCP agent, Ask to the Wizard, or a production approving on its own. */
+export type SeriesReviewAuthor = 'user' | 'agent' | 'wizard' | 'server'
+
+/** One shot's review (server-owned). A shot without an entry is pending at every stage. */
+export interface SeriesShotReview {
+  plan: SeriesReviewStatus
+  planAt?: string
+  planDigest?: string
+  planBy?: SeriesReviewAuthor
+  preview: SeriesReviewStatus
+  previewAt?: string
+  previewDigest?: string
+  previewBy?: SeriesReviewAuthor
+  /** The take the preview decision is about. */
+  previewAttemptId?: string
+  notes: SeriesReviewNote[]
+}
+
+export interface SeriesEpisodeReview {
+  mode: SeriesProductionMode
+  updatedAt?: string
+  shots: Record<string, SeriesShotReview>
+}
+
+/** One change sent to POST /review; the server validates it and owns the stored state. */
+export interface SeriesShotReviewChange {
+  shotId: string
+  plan?: SeriesReviewStatus
+  preview?: SeriesReviewStatus
+  attemptId?: string
+  note?: { id?: string; text: string; stage?: SeriesReviewStage; by?: 'user' | 'agent' }
+  removeNoteId?: string
+}
+
+export interface SeriesReviewChange {
+  baseRevision?: number
+  mode?: SeriesProductionMode
+  shots?: SeriesShotReviewChange[]
+}
+
+export interface SeriesReviewReply {
+  revision: number
+  episodeId: string
+  episodeUpdatedAt: string
+  review: SeriesEpisodeReview
+  noteIds?: Record<string, string>
+  summary?: Record<string, unknown>
+}
+
+/** A Video 3D shot (series_shot3d.normalize_scene3d): a template or a saved scene, its cast and objects. */
+export interface SeriesShotScene3D {
+  template?: string
+  scene?: string
+  cast?: Array<{ characterId: string; objectId?: string; poseId?: string }>
+  objects?: Array<Record<string, unknown>>
+  quality?: 'draft' | 'final'
+  renderLook?: string
+  [key: string]: unknown
+}
+
+/** Sound generated from the shot's rendered picture (MMAudio) and mixed under its take; volume is relative to the dialogue. */
+export interface SeriesShotFoley {
+  prompt: string
+  /** Above 0 and up to 2; default 0.5. */
+  volume?: number
 }
 
 export interface SeriesShot {
@@ -251,6 +359,30 @@ export interface SeriesShot {
   sourceDialogueIds?: string[]
   dialogueOrigin?: 'script' | 'manual'
   scriptDialogueStatus?: 'in_sync' | 'stale' | 'manual_conflict'
+  foley?: SeriesShotFoley
+  layout2d?: SeriesShotLayout2D
+  scene3d?: SeriesShotScene3D
+}
+
+/** A shot's 2D plan (series_shot_plan.normalize_layout2d); only the set layers are typed here. Its `layers` replace the
+ * location's and `[]` turns them off for this shot; `castDepth` overrides the location's. */
+export interface SeriesShotLayout2D {
+  layers?: SeriesSetLayer[]
+  castDepth?: number
+  framing?: 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
+  camera?: 'static' | 'push'
+  cast?: SeriesShotCastEntry[]
+  timing?: { intro?: number; gap?: number; tail?: number }
+  [key: string]: unknown
+}
+
+/** A cast member of a 2D shot: the character, its Character Kit pose and where it stands (x % of the frame). */
+export interface SeriesShotCastEntry {
+  characterId: string
+  poseId?: string
+  x?: number
+  scale?: number
+  [key: string]: unknown
 }
 
 export interface SeriesCanonDeltaItem extends CanonFact {
@@ -267,15 +399,50 @@ export interface SeriesLanguageVersion {
   assemblyAssetIds: string[]
   latestAssemblyAssetId?: string
   thumbnailAssetId?: string
+  /** What the LLM translated (`series.episode.translate`) and no person has checked yet; a person's edit clears it. */
+  machineTranslated?: SeriesMachineTranslation
+}
+
+/** The lines (beat ids), cards (shot ids) and title of a language version that are machine translations. */
+export interface SeriesMachineTranslation {
+  dialogue?: string[]
+  cards?: string[]
+  title?: boolean
+  translatedAt?: string
+  /** Who asked for the translation: user, agent, wizard or server. */
+  requestedBy?: string
+}
+
+/**
+ * One cue of an episode's score: music the assembly lays from the cut before `fromShotId` to the cut after
+ * `toShotId` (or over the shots of `sceneId`), looped if shorter and faded in and out inside the cue. With `duck` it
+ * dips 9 dB under every recorded line; it is silent under a shot with its own `layout2d.music`. Cues never overlap.
+ */
+export type SeriesScoreCue = ({ fromShotId: string; toShotId?: string; sceneId?: never } | { sceneId: string; fromShotId?: never; toShotId?: never }) & {
+  /** Workspace audio file. */
+  file: string
+  /** Level relative to the dialogue, 0–2 (default 0.18). */
+  volume?: number
+  /** Seconds, 0–30 (defaults 1.5 and 2.0). */
+  fadeIn?: number
+  fadeOut?: number
+  /** Lower it under the lines (default true). */
+  duck?: boolean
 }
 
 export interface SeriesEpisode {
+  /** Music laid under runs of shots at assembly; no take depends on it. */
+  score?: SeriesScoreCue[]
+  /** Character Kit revisions this episode renders. Absent means the latest kit. */
+  kitPins?: Record<string, number>
   /** Dubbed versions by spoken language (english, spanish...); the series language is the original. */
   languageVersions?: Record<string, SeriesLanguageVersion>
   latestAssemblyAssetId?: string
   assemblyAssetIds?: string[]
   /** A frame of the latest cut (after its title card), set by the assembly. */
   thumbnailAssetId?: string
+  /** Staged production and per-shot approvals (server-owned; absent means direct, everything pending). */
+  review?: SeriesEpisodeReview
   id: string
   seasonId: string
   number: number
@@ -322,6 +489,30 @@ export interface SeriesProviderSettings {
   videoCapabilities?: Record<string, unknown>
 }
 
+/** A workspace sound and its level relative to the dialogue (0–2). */
+export interface SeriesSoundCue {
+  file: string
+  volume?: number
+}
+
+/** A room the recorded voices are heard in: a processed copy of each line (the dry recording is kept). `none` is dry. */
+export type SeriesVoiceRoom = 'none' | 'small_room' | 'room' | 'hall' | 'cathedral' | 'cockpit' | 'outdoor' | 'radio'
+
+/**
+ * Sound every shot gets without the script naming it. `ambienceMode` `shot` (default) mixes the location's ambience
+ * into each shot; `episode` leaves it out of the shots and the assembly lays one continuous bed per location run.
+ * `roomByLocation` makes the voices of the people in a shot sound like the place; a shot's `layout2d.voiceRoom`
+ * overrides it and a line's `voiceRoom` overrides both.
+ */
+export interface SeriesSoundDesign {
+  stinger?: SeriesSoundCue
+  ambienceByLocation?: Record<string, SeriesSoundCue>
+  ambienceMode?: 'shot' | 'episode'
+  roomByLocation?: Record<string, SeriesVoiceRoom>
+  /** dB the episode-mode beds dip while someone speaks, 0–24 (default 0: off). */
+  ambienceDuckDb?: number
+}
+
 export interface SeriesProject {
   allowedProductionMethods?: SeriesProductionMethod[]
   version: 1
@@ -365,6 +556,7 @@ export interface SeriesProject {
   episodesById: Record<string, SeriesEpisode>
   assets: Record<string, SeriesAsset>
   provider: SeriesProviderSettings
+  soundDesign?: SeriesSoundDesign
   createdAt: string
   updatedAt: string
   [key: string]: unknown

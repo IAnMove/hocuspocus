@@ -16,12 +16,17 @@ from typing import Any
 
 from .character_face_patch import normalize_character_face_patch
 from .character_speech_definition import normalize_speech3d, normalize_character_voice, normalize_character_voices_by_language
+from .pose_facing import normalize_facing
 
 
 CHARACTER_KIT_LIBRARY_FILENAME = ".character-kit-library-v1.json"
 LIPS_CREATOR_LIBRARY_FILENAME = ".lips-creator-library-v1.json"
 MAX_CHARACTER_KITS = 100
 MAX_LIBRARY_BYTES = 20 * 1024 * 1024
+# Snapshots of earlier revisions kept next to the library (one file per save).
+HISTORY_REVISIONS = 10
+# Per-kit documents (series_kit_pins). Each library has its own folder, so a lips pack never shares a kit's id space.
+_KIT_HISTORY = {CHARACTER_KIT_LIBRARY_FILENAME: ".character-kit-revisions", LIPS_CREATOR_LIBRARY_FILENAME: ".lips-creator-revisions"}
 _LOCK = threading.RLock()
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _STYLES = {"cutout", "children-illustration", "anime-2d"}
@@ -99,6 +104,10 @@ def _asset(value: Any, label: str) -> dict[str, Any]:
     }
     if face_patch is not None:
         result["facePatch"] = face_patch
+    # Which way the figure looks (left, right or front): set by hand or by the flat rig, used for look room.
+    facing = normalize_facing(value.get("facing"), f"{label} facing")
+    if facing:
+        result["facing"] = facing
     result.update(_asset_dimensions(value, label))
     for key, maximum in (("prompt", 4000), ("model", 240), ("workspace", 120)):
         text = _text(value.get(key), f"{label} {key}", maximum)
@@ -162,6 +171,57 @@ def _anchor(value: Any, label: str) -> dict[str, float]:
     return result
 
 
+def _pose_mouth_sources(value: Any, pose_id: str) -> dict[str, str]:
+    """A pose's own mouth drawings by state (flat-rig warp mouths, cut from that pose): they replace the kit's
+    ``mouth`` sources on this pose and share their review state."""
+    if not isinstance(value, dict) or not value or any(key not in _MOUTH_STATES for key in value):
+        raise ValueError(f"Anchors for {pose_id} have invalid mouth sources")
+    sources: dict[str, str] = {}
+    for state, raw in value.items():
+        source = _text(raw, f"{pose_id} mouth {state} source", 1200, required=True)
+        if source.lower().startswith(("blob:", "data:")):
+            raise ValueError(f"{pose_id} mouth {state} source must be persistent, not a browser blob or data URL")
+        sources[state] = source
+    return sources
+
+
+def _pose_anchors(anchors_raw: Any) -> dict[str, dict[str, Any]]:
+    """Mouth, eye and blink anchors for each pose. Missing input is an empty set."""
+    if not anchors_raw:
+        anchors_raw = {}
+    if not isinstance(anchors_raw, dict) or len(anchors_raw) > 32:
+        raise ValueError("Character Kit anchors must be an object with at most 32 poses")
+    anchors: dict[str, dict[str, Any]] = {}
+    for raw_pose_id, raw_group in anchors_raw.items():
+        pose_id = _token(raw_pose_id, "Anchor pose")
+        if not isinstance(raw_group, dict) or "mouth" not in raw_group:
+            raise ValueError(f"Anchors for {pose_id} need a mouth anchor")
+        group = {"mouth": _anchor(raw_group["mouth"], f"{pose_id} mouth anchor")}
+        mouth_states_raw = raw_group.get("mouthStates")
+        if mouth_states_raw is not None:
+            if not isinstance(mouth_states_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_states_raw):
+                raise ValueError(f"Anchors for {pose_id} have invalid mouth states")
+            group["mouthStates"] = {
+                key: _anchor(anchor, f"{pose_id} mouth {key} anchor")
+                for key, anchor in mouth_states_raw.items()
+            }
+        if raw_group.get("mouthSources") is not None:
+            group["mouthSources"] = _pose_mouth_sources(raw_group["mouthSources"], pose_id)
+        if raw_group.get("eyes") is not None:
+            group["eyes"] = _anchor(raw_group["eyes"], f"{pose_id} eyes anchor")
+        # A pose whose eyes are hidden (sunglasses) keeps them still: no blink.
+        if raw_group.get("blink") is False:
+            group["blink"] = False
+        elif raw_group.get("blinkSource") is not None:
+            # The pose's own closed eyes (flat rig); without it the kit's blink is scaled onto the pose.
+            source = _text(raw_group["blinkSource"], f"{pose_id} blink source", 1200, required=True)
+            if source.startswith("blob:"):
+                raise ValueError(f"{pose_id} blink source must be persistent, not a browser blob URL")
+            group["blinkSource"] = source
+        anchors[pose_id] = group
+    return anchors
+
+
 def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("Character Kit must be a JSON object")
@@ -187,26 +247,7 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
         raise ValueError("Character Kit eye states are invalid")
     eyes = {key: _asset(asset, f"Eyes {key}") for key, asset in eyes_raw.items()}
 
-    anchors_raw = value.get("anchors") or {}
-    if not isinstance(anchors_raw, dict) or len(anchors_raw) > 32:
-        raise ValueError("Character Kit anchors must be an object with at most 32 poses")
-    anchors: dict[str, dict[str, Any]] = {}
-    for raw_pose_id, raw_group in anchors_raw.items():
-        pose_id = _token(raw_pose_id, "Anchor pose")
-        if not isinstance(raw_group, dict) or "mouth" not in raw_group:
-            raise ValueError(f"Anchors for {pose_id} need a mouth anchor")
-        group = {"mouth": _anchor(raw_group["mouth"], f"{pose_id} mouth anchor")}
-        mouth_states_raw = raw_group.get("mouthStates")
-        if mouth_states_raw is not None:
-            if not isinstance(mouth_states_raw, dict) or any(key not in _MOUTH_STATES for key in mouth_states_raw):
-                raise ValueError(f"Anchors for {pose_id} have invalid mouth states")
-            group["mouthStates"] = {
-                key: _anchor(anchor, f"{pose_id} mouth {key} anchor")
-                for key, anchor in mouth_states_raw.items()
-            }
-        if raw_group.get("eyes") is not None:
-            group["eyes"] = _anchor(raw_group["eyes"], f"{pose_id} eyes anchor")
-        anchors[pose_id] = group
+    anchors = _pose_anchors(value.get("anchors"))
 
     result: dict[str, Any] = {
         "version": 1,
@@ -241,6 +282,11 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
             raise ValueError("Character rest pose must be an object")
         result["restPose"] = {"asset": _asset(rest.get("asset"), "Character rest pose"),
                               "fingerprint": _text(rest.get("fingerprint"), "Rest pose fingerprint", 8000, required=True)}
+    # Per-kit counter (series_kit_pins). Absent on kits saved before pinning; readers treat that as 0.
+    # A client cannot choose it: patch_character_kit overwrites it after normalize.
+    revision = value.get("revision")
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision >= 0:
+        result["revision"] = revision
     for key in ("identityReference", "base"):
         if value.get(key) is not None:
             result[key] = _asset(value[key], f"Character Kit {key}")
@@ -289,6 +335,100 @@ def _revision(value: Any) -> int:
     return value
 
 
+def kit_revision(kit: Any) -> int:
+    """The kit's own revision. A kit saved before per-kit history has none, which is revision 0."""
+    if not isinstance(kit, dict):
+        return 0
+    value = kit.get("revision", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
+
+
+def kit_revision_path(workspace_dir: str, kit_id: str, revision: int, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> str:
+    return os.path.join(workspace_dir, _KIT_HISTORY[library_filename], f"{kit_id}.v{revision}.json")
+
+
+def read_kit_revision(workspace_dir: str, kit_id: str, revision: int) -> dict[str, Any] | None:
+    """One stored kit document. Missing history is absence, not the live kit."""
+    path = kit_revision_path(workspace_dir, kit_id, revision)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        document = json.load(handle)
+    return document if isinstance(document, dict) else None
+
+
+def _highest_kept(workspace_dir: str, kit_id: str, library_filename: str) -> int:
+    """The highest revision of ``kit_id`` in the history, or -1 when none is kept."""
+    folder = os.path.join(workspace_dir, _KIT_HISTORY[library_filename])
+    pattern = re.compile(re.escape(kit_id) + r"\.v(\d+)\.json")
+    try:
+        names = os.listdir(folder)
+    except FileNotFoundError:
+        return -1
+    return max((int(match.group(1)) for match in map(pattern.fullmatch, names) if match), default=-1)
+
+
+def _remember_kit(workspace_dir: str, kit: dict[str, Any], library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> None:
+    """Store this kit document before a newer one replaces it or it is deleted.
+
+    The write is a temp file plus replace. Image files named by the kit stay
+    where they are: a revision points at them, and this function never deletes
+    a pose, a mouth or a blink. A revision already kept as another document is
+    refused, so a pin never finds a document it was not made with.
+    """
+    path = kit_revision_path(workspace_dir, str(kit.get("id") or ""), kit_revision(kit), library_filename)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as handle:
+            if json.load(handle) == json.loads(json.dumps(kit, ensure_ascii=False, allow_nan=False)):
+                return
+        raise ValueError(f"Character Kit {kit.get('id')} revision {kit_revision(kit)} is already kept as another document")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(kit, handle, ensure_ascii=False, allow_nan=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            if os.path.isfile(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
+
+
+def _stamp_kit_revision(workspace_dir: str, current: dict[str, Any], token: str, candidate: dict[str, Any],
+                        library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> None:
+    """Bump this kit only. characters.save, a re-rig and a voice edit all arrive here.
+
+    The number goes on after the highest kept revision too, so a kit made again with a deleted kit's id never
+    takes a number that a pin to the deleted kit still means."""
+    previous = (current.get("kits") or {}).get(token)
+    if isinstance(previous, dict):
+        _remember_kit(workspace_dir, previous, library_filename)
+    latest = kit_revision(previous) if isinstance(previous, dict) else 0
+    candidate["revision"] = max(latest, _highest_kept(workspace_dir, token, library_filename)) + 1
+
+
+def _prune_history(path: str, keep: int = HISTORY_REVISIONS) -> None:
+    """Drop the oldest ``<library>.v<N>.json`` snapshots beyond the last ``keep`` revisions."""
+    folder, base = os.path.dirname(path) or ".", os.path.basename(path)
+    pattern = re.compile(re.escape(base) + r"\.v(\d+)\.json$")
+    found = []
+    for name in os.listdir(folder):
+        match = pattern.fullmatch(name)
+        if match:
+            found.append((int(match.group(1)), name))
+    for _revision, name in sorted(found)[:-keep] if keep > 0 else sorted(found):
+        try:
+            os.remove(os.path.join(folder, name))
+        except OSError:
+            pass
+
+
 def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision: int, library_filename: str = CHARACTER_KIT_LIBRARY_FILENAME) -> dict[str, Any]:
     expected = _revision(base_revision)
     library = normalize_character_kit_library(value)
@@ -303,12 +443,13 @@ def write_character_kit_library(workspace_dir: str, value: Any, *, base_revision
         os.makedirs(workspace_dir, exist_ok=True)
         path = character_kit_library_path(workspace_dir, library_filename)
         temporary = f"{path}.{uuid.uuid4().hex}.tmp"
-        # Keep the previous authored revision; never silently discard calibration.
+        # Keep the previous authored revisions (the last HISTORY_REVISIONS); calibration is never lost silently.
         if current["revision"] > 0:
             history = f"{path}.v{current['revision']}.json"
             if not os.path.exists(history):
                 with open(history, "x", encoding="utf-8") as handle:
                     json.dump(current, handle, ensure_ascii=False, allow_nan=False)
+            _prune_history(path)
         try:
             with open(temporary, "w", encoding="utf-8") as handle:
                 handle.write(encoded)
@@ -334,6 +475,7 @@ def patch_character_kit(workspace_dir: str, kit_id: str, kit: Any, *, base_revis
         expected = _revision(base_revision)
         if expected != current["revision"]:
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
+        _stamp_kit_revision(workspace_dir, current, token, candidate, library_filename)
         next_library = {**current, "kits": {**current["kits"], token: candidate}}
         if make_active or not current.get("activeId"):
             next_library["activeId"] = token
@@ -349,6 +491,8 @@ def delete_character_kit(workspace_dir: str, kit_id: str, *, base_revision: int,
             raise CharacterKitRevisionConflict(expected, int(current["revision"]))
         if token not in current["kits"]:
             raise KeyError(token)
+        # A pin to the deleted kit's last revision still finds its document.
+        _remember_kit(workspace_dir, current["kits"][token], library_filename)
         kits = dict(current["kits"])
         del kits[token]
         next_library = {**current, "kits": kits, "activeId": current["activeId"] if current.get("activeId") in kits else next(iter(kits), "")}

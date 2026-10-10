@@ -28,7 +28,8 @@ def test_saved_scene_roundtrip_has_workspace_identity_and_immutable_revisions(tm
     assert first['url'].endswith('?workspace=my-film')
     assert first['thumbnail_url'].endswith('?workspace=my-film')
     assert json.loads((tmp_path / 'my-film' / first['name']).read_text()) == body['document']
-    assert len(list((tmp_path / 'my-film').iterdir())) == 4
+    # Two revisions, each a JSON and its preview (hidden files such as the scene digest index aside).
+    assert len([path for path in (tmp_path / 'my-film').iterdir() if not path.name.startswith('.')]) == 4
 
 
 @pytest.mark.parametrize('patch', [{'workspace': '../elsewhere'}, {'workspace': ''}, {'preview': 'data:image/png;base64,bad'}, {'document': {'version': 1}}])

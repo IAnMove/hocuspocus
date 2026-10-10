@@ -7,12 +7,22 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
+from functools import wraps
 from typing import Any, Callable, Iterator
 
 USE_TAKE = "production.shot.use_take"
 SHOT_UPDATE = "production.shot.update"
 SONG_USE = "production.song.use"
 CANCEL = "production.cancel"
+
+
+def threaded_command(run):
+    """Keep blocking production edits off the event loop their LocalMcp tools run on."""
+    @wraps(run)
+    async def execute(arguments):
+        from starlette.concurrency import run_in_threadpool
+        return await run_in_threadpool(run, arguments)
+    return execute
 
 
 def _envelope(properties: dict, required: list[str]) -> dict:
@@ -102,13 +112,13 @@ def holding_edit(module: Any, workspace: str, production_id: str) -> Iterator[No
         release_edit(module, key)
 
 
-def _open(module: Any, data: dict, workspace_dir: Callable, uploads_dir: Callable, app_url: Callable, token: Callable):
+def _open(module: Any, data: dict, workspace_dir: Callable, uploads_dir: Callable, app_url: Callable, token: Callable, *, mcp: Callable | None = None):
     from fastapi import HTTPException
-    if not token() or not app_url():
+    if mcp is None and (not token() or not app_url()):
         raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the shot can be re-exported", "retryable": False})
     return module.Production(
         data["workspace"], data["production_id"], workspace_dir=workspace_dir, uploads_dir=uploads_dir,
-        mcp=module.loopback_mcp(app_url, token),
+        mcp=mcp or module.loopback_mcp(app_url, token),
     )
 
 
@@ -126,7 +136,7 @@ def _edit_error(error: Exception) -> None:
     raise HTTPException(422, {"code": code, "message": str(error), "retryable": False}) from error
 
 
-def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str]) -> dict:
+def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str], app_url: Callable[[], str], token: Callable[[], str], *, mcp: Callable[[str, dict], dict] | None = None) -> dict:
     from services.production_control import request_cancel
     from services.production_shot_edit import ShotEditError, update_shot, use_take
     from services.production_song_switch import SongSwitchError, use_candidate
@@ -135,7 +145,8 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
         from services import music_production
         return music_production
 
-    async def use_take_command(arguments: Any) -> dict:
+    @threaded_command
+    def use_take_command(arguments: Any) -> dict:
         from fastapi import HTTPException
         data = _input(arguments)
         runner = module()
@@ -143,14 +154,15 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
         if not isinstance(shot, str) or not isinstance(take_file, str):
             raise HTTPException(422, {"code": "invalid_command", "message": "shot and take_file are required", "retryable": False})
         with holding_edit(runner, data["workspace"], data["production_id"]):
-            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
+            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token, mcp=mcp)
             try:
                 result = use_take(production, _spec(production), shot, take_file)
             except ShotEditError as error:
                 _edit_error(error)
         return _ok(USE_TAKE, result)
 
-    async def update_command(arguments: Any) -> dict:
+    @threaded_command
+    def update_command(arguments: Any) -> dict:
         from fastapi import HTTPException
         data = _input(arguments)
         runner = module()
@@ -158,14 +170,15 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
         if not isinstance(shot, str):
             raise HTTPException(422, {"code": "invalid_command", "message": "shot is required", "retryable": False})
         with holding_edit(runner, data["workspace"], data["production_id"]):
-            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
+            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token, mcp=mcp)
             try:
                 result = update_shot(production, _spec(production), shot, lyric_style=data.get("lyric_style"), title=data.get("title"), camera=data.get("camera"))
             except ShotEditError as error:
                 _edit_error(error)
         return _ok(SHOT_UPDATE, result)
 
-    async def song_command(arguments: Any) -> dict:
+    @threaded_command
+    def song_command(arguments: Any) -> dict:
         from fastapi import HTTPException
         from services.music_production import ProductionError
         data = _input(arguments)
@@ -174,7 +187,7 @@ def extra_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[[]
         if not isinstance(candidate, str) or not candidate:
             raise HTTPException(422, {"code": "invalid_command", "message": "candidate is required", "retryable": False})
         with holding_edit(runner, data["workspace"], data["production_id"]):
-            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token)
+            production = _open(runner, data, workspace_dir, uploads_dir, app_url, token, mcp=mcp)
             try:
                 result = use_candidate(production, _spec(production), candidate)
             except (SongSwitchError, ProductionError) as error:

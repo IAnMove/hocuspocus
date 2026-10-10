@@ -199,6 +199,18 @@ def test_windows_segments_and_instrumental_fill():
     assert segs[-1][2] == 30.0 and all(abs(segs[i][2] - segs[i + 1][1]) < 1e-6 for i in range(len(segs) - 1))
 
 
+def test_a_shot_squeezed_between_two_sung_lines_is_left_out_instead_of_flashing():
+    from services.production_windows import dropped_flashes
+    score = {"duration": 12.0, "beat": 0.48, "lines": [{"t0": 1.0, "t1": 4.0}, {"t0": 4.7, "t1": 7.0}, {"t0": 9.5, "t1": 11.0}]}
+    spec = {"shots": [{"key": "a", "kind": "still", "line": 0}, {"key": "flash", "kind": "still", "after": 0},
+                      {"key": "b", "kind": "still", "line": 1}, {"key": "gap", "kind": "still", "after": 1},
+                      {"key": "c", "kind": "still", "line": 2}]}
+    windows = shot_windows(spec, score)
+    segs = segments(windows, score, lambda key: False, [])
+    assert [(shot["key"], a, b) for shot, a, b in segs] == [("a", 0.0, 4.45), ("b", 4.45, 7.3), ("gap", 7.3, 9.25), ("c", 9.25, 12.0)]
+    assert dropped_flashes(windows, segs) == ["flash"], "0.15 s after line 0 is a flash; 1.95 s after line 1 is a shot"
+
+
 def test_status_summary_is_short():
     state = {"status": "running", "song": {"file": "s.wav"}, "clips": {"a": {"qa": {"verdict": "ok"}}}, "scenes": {"a": {"file": "x.mp4"}},
              "log": [f"line {i}" for i in range(30)], "final": "v.mp4"}
@@ -257,6 +269,9 @@ def test_title_and_lyric_spans_fit_the_scene():
     assert title_span(0.0) is None
     assert lyric_span({"t0": 1.0, "t1": 2.0, "text": "x"}, 1.0, 1.2, 0.2) == (0.0, 0.2)
     assert lyric_span({"t0": 5.0, "t1": 6.0, "text": "x"}, 0.0, 1.0, 1.0) is None
+    line = {"t0": 1.0, "t1": 2.0, "text": "x"}
+    assert lyric_span(line, 0.0, 4.0, 4.0) == (1.0, 1.15), "a line stays 0.15 s after its last word"
+    assert lyric_span(line, 0.0, 4.0, 4.0, until=2.05) == (1.0, 1.05), "but gives way to the next line"
 
 
 def test_a_long_lyric_scene_is_edited_in_batches(tmp_path):
@@ -485,6 +500,27 @@ def test_a_resumed_run_does_not_reuse_the_failed_intent_of_the_earlier_run(tmp_p
     production.state["frame_failures"] = {"a": "out of GPU memory"}
     production.frames({"style": {}, "cast": []}, [{"key": "a", "kind": "h3", "frame": "wide shot"}])
     assert calls[0]["intent_id"].endswith("-r1")
+
+
+def test_a_changed_h3_shot_is_drawn_or_shot_again_and_an_unchanged_one_is_kept(tmp_path):
+    production, calls = _image_production(tmp_path, [("a1.png", None), ("b1.png", None), ("a2.png", None)])
+    spec = {"style": {"image": "look"}, "cast": []}
+    shots = [{"key": "a", "kind": "h3", "frame": "wide shot", "action": "waves", "camera": "camera-dolly"},
+             {"key": "b", "kind": "h3", "frame": "close shot", "action": "sings", "camera": "camera-push-in"}]
+    production.frames(spec, shots)
+    production.state["clips"] = {"a": {"file": "a.mp4"}, "b": {"file": "b.mp4"}}
+    production.frames(spec, shots)
+    assert len(calls) == 2 and not any(clip.get("obsolete") for clip in production.state["clips"].values()), "a resume redoes nothing"
+    production.frames(spec, [{**shots[0], "frame": "head and shoulders close-up"}, {**shots[1], "camera": "camera-handheld"}])
+    assert production.state["frames"] == {"a": "a2.png", "b": "b1.png"}, "a new picture is drawn again"
+    assert production.state["clips"]["a"]["obsolete"] and production.state["clips"]["b"]["obsolete"], "both are shot again"
+
+
+def test_frames_made_before_their_source_was_recorded_are_kept(tmp_path):
+    production, calls = _image_production(tmp_path, [])
+    production.state.update(frames={"a": "old.png"}, clips={"a": {"file": "old.mp4"}})
+    production.frames({"style": {}, "cast": []}, [{"key": "a", "kind": "h3", "frame": "anything", "action": "x"}])
+    assert calls == [] and production.state["frames"] == {"a": "old.png"} and "obsolete" not in production.state["clips"]["a"]
 
 
 def test_frames_that_never_arrive_stop_the_run_with_their_reasons(tmp_path):

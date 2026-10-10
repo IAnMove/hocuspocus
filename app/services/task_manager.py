@@ -58,6 +58,11 @@ _ALLOWED_TRANSITIONS = {
 # persisted ``updated_at`` is only a change-ordering/index field; it is not
 # part of the task state delivered by an adapter.
 _VOLATILE_UPDATE_FIELDS = frozenset({"updated_at"})
+# Work an MCP agent or the Wizard asked for: agent change entries, and tasks whose provenance names them.
+AGENT_ORIGIN_SQL = (
+    "(kind = 'agent' OR json_extract(snapshot, '$.metadata.tool') IN ('external_agent', 'wizard')"
+    " OR json_extract(snapshot, '$.metadata.actor') IN ('agent', 'wizard'))"
+)
 
 _registry_lock = threading.RLock()
 _registries: dict[str, "TaskRegistry"] = {}
@@ -713,6 +718,7 @@ class TaskRegistry(TaskCommandAdmission):
         statuses: set[str] | None = None,
         root_id: str = "",
         limit: int = 200,
+        origin: str = "",
     ) -> list[dict]:
         requested_statuses = set(ALL_STATUSES)
         if statuses:
@@ -732,6 +738,8 @@ class TaskRegistry(TaskCommandAdmission):
             if root_id:
                 clauses.append("root_id = ?")
                 params.append(str(root_id))
+            if origin == "agent":
+                clauses.append(AGENT_ORIGIN_SQL)
             limit_sql = ""
             if row_limit is not None:
                 limit_sql = " LIMIT ?"
@@ -856,6 +864,7 @@ class TaskRegistry(TaskCommandAdmission):
         statuses: set[str] | None = None,
         root_id: str = "",
         limit: int = 200,
+        origin: str = "",
     ) -> tuple[list[dict], int]:
         """Read tasks and their event high-water mark without a writer gap.
 
@@ -865,7 +874,7 @@ class TaskRegistry(TaskCommandAdmission):
         be replayed by SSE.
         """
         with self._write_lock:
-            tasks = self.list(statuses=statuses, root_id=root_id, limit=limit)
+            tasks = self.list(statuses=statuses, root_id=root_id, limit=limit, origin=origin)
             return tasks, self.latest_event_id()
 
     def _notify(self) -> None:

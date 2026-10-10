@@ -160,7 +160,8 @@ test('shot library filters by action category, set and search', () => {
   assert.equal(templateSetting('casino-heist'), 'casino')
   const titleOf = (id: typeof ACTION_TEMPLATE_IDS[number]) => id
   const action = filterScene3DTemplates({ category: 'action', setting: 'all', query: '', locale: 'en', titleOf })
-  assert.equal(action.length, 35)
+  assert.equal(action.filter(item => isActionTemplateId(item.id)).length, 35)
+  assert.equal(action.length, 43, 'seven anime shots and native flight share the action category')
   const sea = filterScene3DTemplates({ category: 'action', setting: 'sea', query: '', locale: 'en', titleOf })
   assert.ok(sea.some(item => item.id === 'sea-deck'))
   assert.ok(sea.every(item => templateSetting(item.id) === 'sea'))

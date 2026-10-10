@@ -1,7 +1,16 @@
 import { AdditiveBlending, Color, DoubleSide, ShaderMaterial } from 'three'
 
+/** Value noise for the effect shaders. `hash` takes the lattice cell (`floor(p)`) and mixes its integer coordinates,
+ * so the corner two cells share gets one value in both. A sine hash, `fract(sin(dot(p, k)) * 43758.5453)`, does not
+ * on every GPU: the compiler may compute `dot(i + vec2(1, 0), k)` as `dot(i, k) + k.x`, the sine turns that last-bit
+ * difference into an unrelated value, and the noise breaks into square blocks along the cells. */
 export const ENERGY_NOISE = `
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float hash(vec2 p) {
+  highp uvec2 q = uvec2(ivec2(floor(p)));
+  q = 1103515245u * ((q >> 1u) ^ q.yx);
+  highp uint n = 1103515245u * (q.x ^ (q.y >> 3u));
+  return float(n >> 8u) * (1. / 16777216.);
+}
 float noise2(vec2 p) {
   vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
@@ -56,8 +65,10 @@ const BODIES: Record<EnergySurface, string> = {
   aura: `
     vec2 p=vUv; float edge=pow(max(0.,1.-abs(p.x-.5)*2.),1.5);
     float n=fbm(vec2(p.x*8.,p.y*5.-uTime*1.7+uSeed));
-    float flame=smoothstep(.28,.72,n)*edge*(1.-smoothstep(.35,.95,p.y));
-    float shell=pow(max(0.,1.-abs(length((p-vec2(.5,.38))*vec2(2.,1.3))-.5)*12.),2.);
+    // Faded in from the bottom edge of the card, so the flames never end on a straight cut.
+    float base=smoothstep(0.,.16,p.y);
+    float flame=smoothstep(.28,.72,n)*edge*(1.-smoothstep(.35,.95,p.y))*base;
+    float shell=pow(max(0.,1.-abs(length((p-vec2(.5,.38))*vec2(2.,1.3))-.5)*12.),2.)*base;
     gl_FragColor=vec4(uColor*(flame*2.+shell*.25)*uPower,(flame*.7+shell*.12)*uPower);`,
   shock: `
     float r=length((vUv-.5)*2.), radius=.08+uProgress*.82;
@@ -269,7 +280,8 @@ export function shieldMaterial(color: string) {
 
 export type SparkStyle = 'spark' | 'streak' | 'flake'
 
-/** Round glowing sparks, thin falling streaks (rain) or soft unlit flakes. */
+/** Round glowing sparks, thin falling streaks (rain) or soft unlit flakes. `size` is at scale 1: a point grows with
+ * the scale of its effect like the effect's sheets, so a rain cue scaled up to fill a set keeps visible streaks. */
 export function softSparkMaterial(color: string, size = .045, style: SparkStyle = 'spark') {
   const shape = style === 'streak'
     ? 'max(0.,1.-abs(q.x)*24.)*pow(max(0.,1.-abs(q.y)*2.),.7)*.45'
@@ -280,7 +292,7 @@ export function softSparkMaterial(color: string, size = .045, style: SparkStyle 
     uniforms: { uColor: { value: new Color(color) }, uSize: { value: size }, uPower: { value: 1 } },
     vertexShader: `uniform float uSize;
       void main() { vec4 p=modelViewMatrix*vec4(position,1.);
-      gl_PointSize=clamp(uSize*700./max(.1,-p.z),1.,${style === 'streak' ? 30 : 24}.);
+      gl_PointSize=clamp(uSize*length(modelMatrix[0].xyz)*700./max(.1,-p.z),1.,${style === 'streak' ? 30 : 24}.);
       gl_Position=projectionMatrix*p; }`,
     fragmentShader: `uniform vec3 uColor; uniform float uPower;
       void main() { vec2 q=gl_PointCoord-.5; float a=${shape};

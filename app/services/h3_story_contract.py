@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from .h3_prompt_policy import planning_style, tagged_dialogue, writing_contract
-from .director.spoken_language import infer_h3_spoken_language, h3_language_tag
+from .director.spoken_language import h3_language_tag, spoken_language_of
 
 _TAG = re.compile(r"<d>\s*\[([^\]]+)\]\s*(.*?)</d>", re.I | re.S)
 _QUOTE = re.compile(r'"([^"\n]+)"|“([^”\n]+)”|«([^»\n]+)»')
@@ -70,7 +70,7 @@ def extract_locked_lines(prompt: str) -> list[dict[str, str]]:
             continue
         words = next(group for group in m.groups() if group is not None)
         requested = re.search(r"\b(?:en|in)\s+(español|Spanish|English|inglés|French|francés|German|alemán|Italian|italiano|Portuguese|portugués)\b", source, re.I)
-        language = h3_language_tag(requested.group(1)) if requested else infer_h3_spoken_language(words)
+        language = h3_language_tag(requested.group(1)) if requested else spoken_language_of(words)
         matches.append((m.start(), words, language))
     for index, (offset, words, language) in enumerate(sorted(matches)):
         result.append({"id": f"D{index+1}", "text": words, "language": language,
@@ -141,7 +141,7 @@ def reconcile_window_dialogue(
         if not text:
             return True
         speaker = str((literal or {}).get("speaker") or line.get("speaker") or "Speaker").strip()
-        language = str((literal or line).get("language") or infer_h3_spoken_language(text))
+        language = str((literal or line).get("language") or spoken_language_of(text))
         seconds = max(0.5, len(re.findall(r"\w+(?:['’-]\w+)*", text)) / 2)
         if used[index] + seconds > budgets[index] + 0.001:
             return False

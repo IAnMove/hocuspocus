@@ -45,18 +45,19 @@ URLs include the workspace query. A generated mesh has no skeleton until
 `model3d.rig` accepts `engine: "humanoid"` on a GLB of one person standing in
 a T or A pose. The pose is detected (`pose` is an ignored hint). Set
 `animations` to ids from `humanoid_animations` in `/api/v1/rig/capabilities`
-(`idle`, `walk`, `wave`, `talk`, `dance_side` and the rest of that list) and,
+(`idle`, `walk`, `wave`, `talk`, `dance_side`, the action clips `aim`, `shoot`, `claw`, `hit`, `hover`, `kneel_pray`,
+`crouch` and the rest of that list) and,
 optionally, `animation_bpm` (60–180; every loop lasts whole beats). Procedural
 ids such as `spin` are rejected. The job is CPU-only and takes about a second.
 
 The clips are baked for that body: feet stay on the floor, arms stay clear of
 a big head or belly, and an A-pose character plays the same motion as a T-pose
 one. A finished job lists `humanoid: {pose, arm_drop, confidence, warnings,
-clips}`, where `clips` is `[{index, name, duration, contacts}]` (`contacts`: foot landings, see the [humanoid rig guide](HUMANOID_RIG.md)). A mesh the engine cannot
+clips}`, where `clips` is `[{index, name, duration, loop, contacts}]` (`contacts`: foot landings; `loop: false` marks a hold such as Kneel Pray that a slot plays once, see the [humanoid rig guide](HUMANOID_RIG.md)). A mesh the engine cannot
 rig safely fails with `error_code: "not_humanoid"` and `error_reason` one of
 `hands_stuck` (arms against the body or straight down), `arms_raised` (arms
 well above the shoulders), `turned` (the body is at an angle to the front
-view), `single_leg` (no gap between the legs), `legs_too_short`, `asymmetry`,
+view), `single_leg` (no gap between the legs, and no feet under a robe), `legs_too_short`, `asymmetry`,
 `not_upright` or `degenerate`. A source the engine cannot read, such as a
 Draco or meshopt compressed GLB, fails with `error_code: "invalid_input"`.
 Nothing is written in either case.

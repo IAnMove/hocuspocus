@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.production_image_defaults import default_image_model, image_choice
+
 
 def _host():
     import services.music_production as host
@@ -40,8 +42,7 @@ def cast_sheets(production: Any, spec: dict) -> None:
     settings = spec.get("style") or {}
     style = settings.get("image", "")
     jobs = {c["id"]: production.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
-                                 c.get("image_model", settings.get("image_model", "flux2_klein_9b")), c.get("image_steps", settings.get("image_steps")),
-                                 production._attempt("cast_attempts", c["id"]))
+                                 *image_choice(c, settings), production._attempt("cast_attempts", c["id"]))
             for c in spec.get("cast") or [] if c["id"] not in cast and not c.get("group")}
     for cid, name in production.wait(jobs).items():
         if name:
@@ -60,11 +61,39 @@ def cast_sheets(production: Any, spec: dict) -> None:
         raise host.ProductionError("cast_incomplete", "no reference sheet for " + ", ".join(f"{cid} ({production.failures.get(cid, 'no output')})" for cid in absent))
 
 
+def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> None:
+    """An H3 shot whose spec changed is shot again: a new frame prompt drops its frame and its clip, a new action,
+    camera or singing only its clip. A shot seen for the first time (or made before this was recorded) keeps what
+    it has."""
+    import hashlib
+    import json
+
+    def digest(*parts: Any) -> str:
+        return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+    sources = production.state.setdefault("h3_sources", {})
+    frames, clips = production.state.setdefault("frames", {}), production.state.setdefault("clips", {})
+    for window in windows:
+        if window["kind"] != "h3":
+            continue
+        key = window["key"]
+        frame = digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
+        clip = digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
+        known = sources.get(key) or {"frame": frame, "clip": clip}
+        if known["frame"] != frame and frames.pop(key, None):
+            production.log(f"frame {key}: the shot's picture changed, drawing it again")
+        if known["clip"] != clip and isinstance(clips.get(key), dict):
+            clips[key]["obsolete"] = True
+            production.log(f"clip {key}: the shot changed, shooting it again")
+        sources[key] = {"frame": frame, "clip": clip}
+
+
 def shoot_frames(production: Any, spec: dict, windows: list[dict]) -> None:
     """One start frame per H3 shot. A missing frame is asked for again (new job; a smaller picture after an
     out-of-memory) up to FRAME_ATTEMPTS times; what still fails is reported in ``frame_failures``."""
     host = _host()
     windows = production._unlocked(windows)
+    forget_changed_shots(production, spec, windows)
     frames = production.state.setdefault("frames", {})
     failures = production.state.setdefault("frame_failures", {})
     settings = spec.get("style") or {}
@@ -80,7 +109,7 @@ def shoot_frames(production: Any, spec: dict, windows: list[dict]) -> None:
             res = frame_resolution(spec, attempt, failures.get(w["key"], ""))
             refs = frame_references(w, production.state.get("cast") or {}, production.state.get("cast_single") or {})
             jobs[w["key"]] = production.image("frame-" + w["key"], production.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
-                                        w.get("image_model", settings.get("image_model", "flux2_klein_9b")), w.get("image_steps", settings.get("image_steps")), attempt)
+                                        *image_choice(w, settings), attempt)
         for key, name in production.wait(jobs).items():
             if name:
                 frames[key] = name
@@ -107,7 +136,7 @@ def run_preview(production: Any, request: dict) -> None:
     production.state.update(status="running", preview_frames={})
     production.save()
     try:
-        model = request.get("image_model", "flux2_klein_9b")
+        model = request.get("image_model") or default_image_model()     # the look test uses the model the run will use
         jobs = {str(index): production.image(f"preview-{index}", prompt, None, request.get("resolution", "1280x704"),
                                        (request.get("seeds") or [101, 102, 103])[index], model,
                                        request.get("image_steps"))

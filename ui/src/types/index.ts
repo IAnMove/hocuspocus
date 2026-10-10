@@ -343,7 +343,9 @@ export interface GenerationJob {
   /** Canonical Activity identity; distinct from the backend polling job id. */
   taskId?: string
   rootTaskId?: string
-  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  /** `leftover`/`interrupted`: saved by a previous server process and not
+   *  running; the tile offers resume or discard. */
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'leftover' | 'interrupted'
   progress: number
   step: number
   totalSteps: number
@@ -374,6 +376,13 @@ export interface GenerationTaskTiming {
   phase_timings: Array<{ phase: string; seconds: number }>
 }
 
+/** The listing's `origin` of a file an agent made (`GET /api/v1/outputs`, services/output_origin.py). */
+export interface OutputOrigin {
+  actor: 'agent' | 'wizard'
+  /** The MCP tool or Wizard capability that made it. */
+  capability?: string
+}
+
 export interface OutputFile {
   name: string
   url: string
@@ -395,6 +404,8 @@ export interface OutputFile {
   thumbnail_url?: string | null
   /** Assembled production result, never a component clip. */
   result_kind?: VideoResultKind | null
+  /** Who asked for it, from its sidecar: an MCP agent or the Wizard (absent for a person's work). */
+  origin?: OutputOrigin | null
   /** Pixel size when the listing knows it. The gallery sizes rows from it. */
   width?: number
   height?: number
@@ -454,6 +465,9 @@ export interface SceneAnimationEvent {
   payload?: string
 }
 
+export type SceneVideoLoop = 'loop' | 'hold' | 'pingpong'
+export interface SceneVideoPlayback { start: number; loop: SceneVideoLoop; speed: number }
+
 export interface SceneLayer {
   characterKitRef?: import('../lib/characterVoice').CharacterKitRef
   id: string
@@ -475,6 +489,11 @@ export interface SceneLayer {
   /** Layer-frame point, 0–100, that stays on the anchor while scale changes.
    *  Absent or 50,50 keeps scaling around the center. Camera and effect layers ignore it. */
   focus?: { x: number; y: number }
+  /** Video layers only: the clip plays on its own clock, apart from the layer's motion timing. `start` is the clip
+   *  second shown at the scene's start, `speed` its rate, and `loop` what happens at the clip's end: play it again
+   *  (`loop`), keep its last frame (`hold`) or play it back and forth (`pingpong`). Absent, the clip follows the
+   *  layer's motion time, as older scenes do. */
+  playback?: SceneVideoPlayback
   /** Deterministic full-frame procedural particles, shared by preview,
    * scene JSON and browser capture. Only used by effect layers. */
   atmosphere?: {
@@ -488,8 +507,11 @@ export interface SceneLayer {
   }
   /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
    *  and values above 1 create foreground parallax. Camera zoom/roll still
-   *  affect every visual layer. Ignored by camera layers. */
+   *  affect every visual layer unless `parallaxZoom` is set. Ignored by camera layers. */
   parallax?: number
+  /** A depth layer: the camera zoom also follows `parallax` (zoom 1 + (camera zoom - 1) * parallax),
+   *  so a push grows near layers more than far ones. Off, the layer takes the full camera zoom. */
+  parallaxZoom?: boolean
   beatPulse?: { amount: number; on: 'beats' | 'downbeats' }
   sequence?: import('../lib/scene2d/motion').FrameSequence
   /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
@@ -622,6 +644,10 @@ export interface Scene {
   height: number
   /** Preview, timeline and browser capture sampling rate. Defaults to 30 for legacy scenes. */
   fps?: SceneFrameRate
+  /** Stop-motion hold: the picture changes every 2, 3 or 4 frames. Absent, export time is unchanged. */
+  motionStep?: 2 | 3 | 4
+  /** Deterministic shake of one hold, in pixels, from 0 to 2. */
+  stopMotionJitter?: number
   duration: number
   layers: SceneLayer[]
   /** Real generated/imported audio assets mixed into the exported scene MP4. */
@@ -701,7 +727,7 @@ export interface SceneCatalogAssetReference {
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
-export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
+export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'agents' | 'gameAssets' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'

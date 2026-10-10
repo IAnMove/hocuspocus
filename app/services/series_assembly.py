@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from services.series_transitions import normalize_transition
+
 
 def _scene_filename(asset: dict[str, Any]) -> str:
     """A 2D take's scene document, which holds the exact line timing for subtitles."""
@@ -19,6 +21,13 @@ def _inline_beats(asset: dict[str, Any]) -> list[dict[str, Any]]:
     beats = metadata.get("dialogueBeats")
     return [{"text": str(beat.get("text") or ""), "start": beat.get("start"), "end": beat.get("end")}
             for beat in beats if isinstance(beat, dict)] if isinstance(beats, list) else []
+
+
+def _shot_beats(shot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The shot's own lines, without timing, for a take that recorded none."""
+    beats = shot.get("dialogueBeats")
+    return [{"text": str(beat.get("text") or "").strip()} for beat in beats
+            if isinstance(beat, dict) and str(beat.get("text") or "").strip()] if isinstance(beats, list) else []
 
 
 def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> list[dict[str, Any]]:
@@ -57,5 +66,11 @@ def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> li
             item["sceneFilename"] = scene_filename
         if _inline_beats(asset):
             item["dialogueBeats"] = _inline_beats(asset)
+        elif not scene_filename and _shot_beats(shot):
+            # An H3 or imported take has no line timing: its shot's lines are spread over the clip at finishing.
+            item["dialogueBeats"] = _shot_beats(shot)
+        transition = normalize_transition(shot.get("transitionIn"))
+        if transition:
+            item["transitionIn"] = transition
         plan.append(item)
     return copy.deepcopy(plan)

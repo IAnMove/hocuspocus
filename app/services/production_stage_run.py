@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from services.production_control import Cancelled, arm, checkpoint, disarm
-from services.production_disk import release_completed
+from services.production_disk import release_completed, release_uploads
 
 _IDENTITY_KEYS = ("project", "intent_id", "origin", "format")
 
@@ -60,6 +60,9 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
         watch.call("song", production.song, spec)
         watch.call("analyze", production.analyze, spec)
         watch.call("cast", production.cast, spec)
+        if spec.get("models") or spec.get("sets"):
+            from services.production_models import make_models
+            watch.call("models", make_models, production, spec)
         windows = host.shot_windows(spec, production.score())
         watch.call("frames", production.frames, spec, windows)
         if through == "frames":
@@ -105,4 +108,5 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
         from services.production_close import close_run
         close_run(production, retake)
         release_completed(production.root, production.state, production.id)
+        release_uploads(production.uploads, production.state)
         production.save()

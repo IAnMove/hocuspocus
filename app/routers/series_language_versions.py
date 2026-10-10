@@ -1,4 +1,6 @@
-"""HTTP for an episode's language versions: write lines by hand, translate with the LLM, remove."""
+"""HTTP for an episode's language versions: write lines by hand, translate with the LLM, remove.
+
+What the LLM translates is marked ``machineTranslated`` until a person edits it (services/series_language_versions.py)."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -8,8 +10,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from services.agent_activity import current_actor
 from services.series_language_versions import (
-    LANGUAGES, missing_lines, translation_request, version_from_translation,
+    LANGUAGES, missing_lines, record_writer, translation_request, version_from_translation,
 )
 from services.series_shot_plan import language_key
 
@@ -59,13 +62,19 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
 
     @router.put("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}")
     def put_language_version(series_id: str, episode_id: str, language: str, body: VersionWrite):
-        """Set a version's title, lines ({beatId: text}), cards or music ({shotId: file}); takes, lengths and cuts are kept."""
+        """Set a version's title, lines ({beatId: text}), cards or music ({shotId: file}); takes, lengths and cuts are kept.
+
+        A person's write clears the machine-translation mark of what it wrote. An agent's or the Wizard's write marks
+        the lines, cards and title it wrote. The server leaves those marks unchanged."""
+        actor = current_actor()
+
         def merge(current: dict, _episode: dict) -> dict:
             update = body.version
-            return {**current, **({"title": update["title"]} if isinstance(update.get("title"), str) else {}),
-                    "dialogue": {**current.get("dialogue", {}), **(update.get("dialogue") or {})},
-                    "cards": {**current.get("cards", {}), **(update.get("cards") or {})},
-                    "music": {**current.get("music", {}), **(update.get("music") or {})}}
+            merged = {**current, **({"title": update["title"]} if isinstance(update.get("title"), str) else {}),
+                      "dialogue": {**current.get("dialogue", {}), **(update.get("dialogue") or {})},
+                      "cards": {**current.get("cards", {}), **(update.get("cards") or {})},
+                      "music": {**current.get("music", {}), **(update.get("music") or {})}}
+            return record_writer(merged, update, actor)
         return write(body.workspace, series_id, episode_id, language, merge)
 
     @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}/translate")
@@ -76,13 +85,15 @@ def create_series_language_versions_router(*, change_episode: EpisodeChange, rea
         except KeyError as error:
             raise HTTPException(status_code=404, detail={"code": "not_found", "message": "Series episode not found"}) from error
         check(series, language)
+        requested_by = current_actor()
         prompt, system, schema = translation_request(series, episode, language)
         try:
             result = await run_in_threadpool(translate, prompt, system, schema)
         except (RuntimeError, ValueError) as error:
             raise HTTPException(status_code=503, detail={"code": "llm_unavailable", "message": str(error)}) from error
         return await run_in_threadpool(write, body.workspace, series_id, episode_id, language,
-                                       lambda current, current_episode: version_from_translation(result, current_episode, current))
+                                       lambda current, current_episode: version_from_translation(
+                                           result, current_episode, current, requested_by=requested_by))
 
     @router.delete("/api/v1/series/{series_id}/episodes/{episode_id}/language-versions/{language}")
     def delete_language_version(series_id: str, episode_id: str, language: str, body: VersionAction):

@@ -1,7 +1,7 @@
 # Labs ↔ Wizard action matrix (L0)
 
 Status: detailed L0 fixture/reference with L5–L12 updates; not the startup checklist.
-For current delivery state and remaining QA, read [CURRENT_WORK](CURRENT_WORK.md).
+For current delivery state, read [CHANGELOG](../../CHANGELOG.md) and the pull requests on `development`.
 The machine fixture preserves historical classifications: a frozen defect ID is
 not proof that its defect is still present after the linked fixes.
 
@@ -1348,3 +1348,34 @@ start a generator. The same intent reuses the production. `production.works.link
 attaches one existing production id to an existing project and does not match
 titles. `production.review` stays the vision QA tool. Coverage is in
 `ui/tests/productionWorksWizard.test.ts` and `tests/test_production_journey.py`.
+
+## Series shots by instruction
+
+`series.shots.edit_by_instruction` edits one shot of the open (or named) episode by
+its number (`#N`, "the fifth shot" is 5) or id through `seriesShots.edit`,
+registered by `registerSeriesShotEditCapabilities` in
+`ui/src/features/agent/seriesShotEditCapabilities.ts`. The Wizard passes the user's
+words as `instruction`; the server route behind the MCP tool `series.shot.update`
+has its LLM write the edit against the real shot, cast, poses, files and effects,
+checks it like a `series.episode.from_script` shot and writes only the changed
+fields. Takes are kept; a shot whose take no longer fits loses its approval.
+`series.shots.rerender_one` (`rerender_series_shot`, confirm=true) renders just that
+shot on the server, or with `produce` renders what changed and recuts. Coverage is
+in `ui/tests/seriesShotEditWizard.test.ts` and `tests/test_series_shot_edit.py`.
+`series.shots.record_line_voice` (`regenerate_series_line_voice`, confirm=true)
+records one line of a shot now through `seriesShots.voice`, the route behind the MCP
+tool `series.shot.voice`: the same speech path as the server render, so the next render
+of the shot reuses the recording; `retake` records another take and replaces the old one
+only when it is good. The shot inspector's Dialogue part (Record voice, New take) calls
+the same route. Coverage is in `ui/tests/seriesShotEditWizard.test.ts` and
+`tests/test_series_line_voice.py`.
+
+## Media tools
+
+`media.tools.run` (`media_tool`) runs one media step through `mediaTools.command`,
+registered by `registerMediaToolCapabilities` in
+`ui/src/features/agent/mediaToolCapabilities.ts`: `media.frame`, `media.compose`,
+`audio.trim`, `assets.import_from_workspace` or `studio.key`, posted to
+`/api/v1/media/commands`, the handlers the MCP tools of the same names run. Each
+result is a workspace file with a provenance sidecar. Coverage is in
+`ui/tests/mediaToolWizard.test.ts` and `tests/test_production_media_router.py`.

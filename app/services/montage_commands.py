@@ -97,6 +97,13 @@ def _payload(arguments: Any, name: str) -> dict[str, Any]:
     return payload
 
 
+def _linked_export(saved: dict[str, Any], workspace: str) -> dict[str, Any]:
+    """The export request of a saved montage, naming that montage for the video's sidecar ("Edit montage")."""
+    body = export_body(saved["montage"], workspace)
+    body["montage"] = {"file": saved["file"], "revision": saved["montage"].get("revision")}
+    return body
+
+
 class MontageCommands:
     def __init__(self, store: MontageStore, *, start_export: Callable[[dict], dict],
                  get_export: Callable[[str], dict], shots: ShotBoard | None = None) -> None:
@@ -141,7 +148,7 @@ class MontageCommands:
             raise MontageError("montages.shot.regenerate is asynchronous; use execute_async", code="invalid_command")
         elif name == "montages.export":
             saved = self.store.get(payload["workspace"], payload["file"])
-            result = {"file": saved["file"], "job": self.start_export(export_body(saved["montage"], payload["workspace"]))}
+            result = {"file": saved["file"], "job": self.start_export(_linked_export(saved, payload["workspace"]))}
         elif name == "montages.derive":
             from services.montage_derive import derive_saved
             result = derive_saved(self.store, payload)

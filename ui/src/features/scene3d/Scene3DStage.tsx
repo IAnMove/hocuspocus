@@ -338,8 +338,8 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       return () => { gone = true }
     }
     world.dressingReady = true
-    syncDressing(world, document.dressing, undefined, document.atmos)
-  }, [document.dressing, document.atmos])
+    syncDressing(world, document.dressing, undefined, document.atmos, document.motionLab)
+  }, [document.dressing, document.atmos, document.motionLab])
 
   useEffect(() => {
     const world = worldRef.current

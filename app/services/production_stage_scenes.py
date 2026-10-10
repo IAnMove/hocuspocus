@@ -81,6 +81,9 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
     clips = production.state.get("clips", {})
     segs = host.segments(windows, score, lambda key: key in clips, spec.get("fill") or [])
     production.state["segments"] = [[shot["key"], start, end] for shot, start, end in segs]
+    from services.production_windows import dropped_flashes
+    for key in dropped_flashes(windows, segs):
+        production.log(f"shot {key} left out: its cut was shorter than a beat; the shot before it holds")
     done = production.state.setdefault("scenes", {})
     style, stills = spec.get("style") or {}, spec.get("stills") or {}
     docs: dict[str, dict] = {}

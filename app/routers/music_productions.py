@@ -55,9 +55,10 @@ def _read_json(path: Path) -> dict | None:
     return body if isinstance(body, dict) else None
 
 
-def production_card(workspace: str, production_id: str, state: dict) -> dict[str, Any]:
-    """The list row: status, title, duration and the montage contact sheet."""
+def production_card(workspace: str, production_id: str, state: dict, root: Path | None = None) -> dict[str, Any]:
+    """The list row: status, title, duration, the montage contact sheet and its published page (``publication``)."""
     from services.production_package import editable_summary
+    from services.production_publication import latest_publication
     spec = state.get("spec") if isinstance(state.get("spec"), dict) else {}
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
     return {
@@ -69,6 +70,7 @@ def production_card(workspace: str, production_id: str, state: dict) -> dict[str
         "montage": state.get("montage_file"),
         "video": _file_url(workspace, state.get("final")),
         "editable": editable_summary(state),
+        "publication": latest_publication(root, production_id) if root is not None else None,
     }
 
 
@@ -95,6 +97,7 @@ def create_music_productions_router(
     uploads_dir: Callable[[], str] | None = None,
     app_url: Callable[[], str] | None = None,
     token: Callable[[], str] | None = None,
+    mcp: Callable[[str, dict], dict] | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -108,10 +111,10 @@ def create_music_productions_router(
         return root, state
 
     def studio():
-        if uploads_dir is None or app_url is None or token is None or not token() or not app_url():
+        if uploads_dir is None or (mcp is None and (app_url is None or token is None or not token() or not app_url())):
             raise HTTPException(status_code=503, detail={"code": "mcp_unavailable", "message": "Shot editing needs the studio runtime"})
         from services.music_production import Production, loopback_mcp
-        return Production, loopback_mcp(app_url, token)
+        return Production, mcp or loopback_mcp(app_url, token)
 
     def hold_edit(workspace: str, production_id: str):
         """Occupy the production so a retake or another edit cannot overwrite the state file."""
@@ -127,7 +130,7 @@ def create_music_productions_router(
             production_id = _production_id(path.name)
             state = _read_json(path)
             if production_id and state is not None:
-                cards.append(production_card(workspace, production_id, state))
+                cards.append(production_card(workspace, production_id, state, root))
         return {"productions": cards}
 
     @router.get("/api/v1/music-productions/{production_id}")
@@ -135,7 +138,7 @@ def create_music_productions_router(
         from services.music_production import status_summary
         root, state = state_of(workspace, production_id)
         return {
-            "production": production_card(workspace, production_id, state),
+            "production": production_card(workspace, production_id, state, root),
             "status": status_summary(state, workspace, str(root), production_id),
             "shots": shots_of(root, production_id),
         }
@@ -157,7 +160,7 @@ def create_music_productions_router(
         from services.music_production import RUN, command_handlers
         studio()
         state_of(workspace, production_id)
-        handlers = command_handlers(workspace_dir, uploads_dir, app_url, token)
+        handlers = command_handlers(workspace_dir, uploads_dir, app_url, token, mcp=mcp)
         return await handlers[RUN]({"version": 1, "input": {"workspace": workspace, "production_id": production_id, "retake": [shot]}})
 
     @router.post("/api/v1/music-productions/{production_id}/shots/{shot}")

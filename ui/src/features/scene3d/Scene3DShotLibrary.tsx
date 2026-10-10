@@ -4,9 +4,10 @@ import { useUiTranslation } from '../../i18n'
 import { ModalShell } from '../../components/common/ModalShell'
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
+import { animeCard } from './animeTemplates'
 import { SCENE3D_TEMPLATES, type Scene3DTemplate, type Scene3DTemplateId } from './templates'
 import { filterScene3DTemplates, settingsIn, type TemplateSetting } from './templateFilters'
-import { CORE_TEMPLATES, isCoreTemplate, templateCollections } from './templateCatalog'
+import { CORE_TEMPLATES, isBuiltinScene3DTemplate, isCoreTemplate, templateCollections } from './templateCatalog'
 import { ExampleDownloads } from './ExampleDownloads'
 import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
 import { Scene3DUserTemplates } from './Scene3DUserTemplates'
@@ -61,7 +62,9 @@ function ShotLibraryBody(props: ShotLibraryProps) {
   const [view, setViewState] = useState<LibraryView>(readLibraryView)
   const [recent, setRecent] = useState(readRecentShots)
   const current: Pick = { kind: 'template', id: props.document.templateId }
-  const [picked, setPicked] = useState<Pick | undefined>(props.userTemplateId ? undefined : current)
+  // A scene built from a workspace template (an agent's user-… id) has no built-in shot to preselect.
+  const currentId = !props.userTemplateId && isBuiltinScene3DTemplate(props.document.templateId) ? props.document.templateId : undefined
+  const [picked, setPicked] = useState<Pick | undefined>(currentId ? current : undefined)
   const setView = (next: Partial<LibraryView>) => setViewState(before => { const view = { ...before, ...next }; saveLibraryView(view); return view })
   const titleOf = (id: Scene3DTemplateId) => `${t(`template.${id}.title`)} ${t(`template.${id}.description`)}`
   const filter = { query: view.query, locale, titleOf } as const
@@ -101,11 +104,11 @@ function ShotLibraryBody(props: ShotLibraryProps) {
         {view.category === 'mine'
           ? <Scene3DUserTemplates document={props.document} workspace={props.workspace} preview={props.preview} disabled={props.editingLocked} selectedId={picked?.kind === 'user' ? picked.pack.id : undefined}
             onApply={pack => setPicked({ kind: 'user', pack })} />
-          : <ShotGrid templates={shown} picked={picked?.kind === 'template' ? picked.id : undefined} current={props.userTemplateId ? undefined : props.document.templateId}
+          : <ShotGrid templates={shown} picked={picked?.kind === 'template' ? picked.id : undefined} current={currentId}
             onPick={id => setPicked({ kind: 'template', id })} onUse={id => use({ kind: 'template', id })} />}
       </main>
       <aside className="hidden min-h-0 overflow-y-auto border-l border-border p-3 lg:block">
-        <ShotPreview picked={picked} current={props.userTemplateId ? undefined : props.document.templateId} locale={locale} />
+        <ShotPreview picked={picked} current={currentId} locale={locale} />
       </aside>
     </div>
     <footer className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-3">
@@ -184,7 +187,7 @@ function ShotPreview({ picked, current, locale }: { picked?: Pick; current?: Sce
     <p className="text-sm leading-5 text-text-secondary">{picked.pack.description || t('userTemplates.noDescription')}</p>
   </div>
   const item = SCENE3D_TEMPLATES.find(template => template.id === picked.id)
-  const card = campaignCard(picked.id, locale) ?? actionCard(picked.id, locale)
+  const card = campaignCard(picked.id, locale) ?? actionCard(picked.id, locale) ?? animeCard(picked.id, locale)
   return <div className="space-y-3" data-testid="world3d-shot-preview">
     <Scene3DTemplateThumb id={picked.id} portrait={item?.frameFormat === 'portrait'} fill />
     <h3 className="text-base font-semibold text-text-primary">{t(`template.${picked.id}.title`)}</h3>

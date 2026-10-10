@@ -3,9 +3,10 @@ import { Loader2, Mic, Plus, WandSparkles } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { cancelJob } from '../../api/client'
-import { fetchCharacterKitLibrary, rigFlatCharacter, saveCharacterKit } from '../../api/characters'
+import { fetchCharacterKitLibrary, rigFlatCharacter, saveCharacterKit, type FlatRigResult } from '../../api/characters'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../../lib/characterKit'
 import type { CharacterStyle } from '../../lib/characterStyles'
+import { flaggedRigPoses, isWarpRigged } from '../../lib/flatRigMouth'
 import { randomUuid } from '../../lib/uuid'
 import { generateKeyedCandidates, type KeyedCandidate } from './characterCandidates'
 import { CharacterVoiceDesigner } from './CharacterVoiceDesigner'
@@ -28,6 +29,16 @@ function Candidates({ candidates, picked, onPick, disabled }: {
   candidates: KeyedCandidate[]; picked?: string; onPick: (candidate: KeyedCandidate) => void; disabled: boolean
 }) {
   const { t } = useUiTranslation('characters')
+  const rigReasons: Record<string, string> = {
+    eyes_small: t('styleCreator.rigReasons.eyes_small'),
+    eyes_not_found: t('styleCreator.rigReasons.eyes_not_found'),
+    sclera_dark: t('styleCreator.rigReasons.sclera_dark'),
+    mouth_not_found: t('styleCreator.rigReasons.mouth_not_found'),
+    face_low_confidence: t('styleCreator.rigReasons.face_low_confidence'),
+    not_keyed: t('styleCreator.rigReasons.not_keyed'),
+    face_too_light: t('styleCreator.rigReasons.face_too_light'),
+    face_keyed_out: t('styleCreator.rigReasons.face_keyed_out'),
+  }
   return <div className="grid grid-cols-3 gap-2" data-testid="character-candidates">
     {candidates.map((candidate, index) => <button key={candidate.id} type="button" disabled={disabled || candidate.status !== 'ready'}
       onClick={() => onPick(candidate)} aria-pressed={picked === candidate.id} aria-label={t('styleCreator.option', { number: index + 1 })}
@@ -41,19 +52,31 @@ function Candidates({ candidates, picked, onPick, disabled }: {
         : null}
       {candidate.status === 'failed' && <span role="alert" className="absolute inset-x-1 bottom-1 rounded bg-red-950/80 p-1 text-[11px] text-red-100">
         {t('styleCreator.failed', { error: candidate.error })}</span>}
+      {candidate.status === 'ready' && candidate.rig && <span className="absolute inset-x-1 top-1 rounded bg-slate-950/80 p-1 text-[11px] text-white">
+        {candidate.rig.ready ? t('styleCreator.rigReady') : candidate.rig.reasons.map(code => rigReasons[code] ?? code).join(', ')}</span>}
+      {candidate.status === 'ready' && candidate.haze !== undefined && <span className="absolute inset-x-1 bottom-1 rounded bg-amber-950/80 p-1 text-[11px] text-amber-100">
+        {t('styleCreator.haze', { percent: Math.round(candidate.haze * 100) })}</span>}
     </button>)}
   </div>
 }
 
-function RigReview({ workspace, kit, review, unwiped, blocked, onUseVoice }: {
-  workspace: string; kit: CharacterKit; review: string; unwiped: string[]; blocked: boolean
+type RigShown = Pick<FlatRigResult, 'review' | 'unwipedPoses' | 'warnings'>
+
+/** The rig's review sheet and what to look at: warp mouths (their mouth line) or painted mouths not found. */
+function RigReview({ workspace, kit, rig, blocked, onUseVoice }: {
+  workspace: string; kit: CharacterKit; rig: RigShown; blocked: boolean
   onUseVoice: (language: SpokenLanguage, voice: CustomCharacterVoice) => Promise<void>
 }) {
   const { t } = useUiTranslation('characters')
   const [designing, setDesigning] = useState(false)
+  const warp = isWarpRigged(kit), flagged = flaggedRigPoses(rig.warnings)
+  const note = 'text-xs text-amber-200'
   return <div className="space-y-2" data-testid="character-rig-review">
-    <img src={review} alt={t('styleCreator.reviewAlt')} className="max-h-72 rounded-lg border border-border bg-white object-contain" />
-    {unwiped.length > 0 && <p className="text-xs text-amber-200">{t('styleCreator.unwiped', { poses: unwiped.join(', ') })}</p>}
+    <img src={rig.review} alt={t('styleCreator.reviewAlt')} className="max-h-72 rounded-lg border border-border bg-white object-contain" />
+    {warp && <p className="text-xs text-text-muted">{t('styleCreator.warpReview')}</p>}
+    {!warp && rig.unwipedPoses.length > 0 && <p className={note}>{t('styleCreator.unwiped', { poses: rig.unwipedPoses.join(', ') })}</p>}
+    {flagged.mouthLine.length > 0 && <p className={note} data-testid="character-rig-mouth-line">{t('styleCreator.mouthLine', { poses: flagged.mouthLine.join(', '), name: kit.name })}</p>}
+    {flagged.other.length > 0 && <p className={note}>{t('styleCreator.checkPoses', { poses: flagged.other.join(', '), name: kit.name })}</p>}
     <button type="button" disabled={blocked} aria-expanded={designing} onClick={() => setDesigning(open => !open)} className={`${control} inline-flex items-center gap-2`}><Mic size={15} />{t('styleCreator.designVoice')}</button>
     {designing && <CharacterVoiceDesigner workspace={workspace} characterName={kit.name} disabled={blocked} onUse={onUseVoice} />}
   </div>
@@ -90,7 +113,7 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
   const { t } = useUiTranslation('characters')
   const [name, setName] = useState(''), [description, setDescription] = useState('')
   const [candidates, setCandidates] = useState<KeyedCandidate[]>([]), [picked, setPicked] = useState<string>()
-  const [kit, setKit] = useState<CharacterKit>(), [review, setReview] = useState(''), [unwiped, setUnwiped] = useState<string[]>([])
+  const [kit, setKit] = useState<CharacterKit>(), [rig, setRig] = useState<RigShown>()
   const [pose, setPose] = useState(''), [poseCandidates, setPoseCandidates] = useState<KeyedCandidate[]>([]), [pickedPose, setPickedPose] = useState<string>()
   const [busy, setBusy] = useState<'' | Step>(''), [error, setError] = useState(''), [message, setMessage] = useState('')
   const operation = useRef<AbortController | null>(null), jobs = useRef<string[]>([])
@@ -117,7 +140,7 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
     })
 
   const createOptions = () => run('options', async signal => {
-    setPicked(undefined); setKit(undefined); setReview('')
+    setPicked(undefined); setKit(undefined); setRig(undefined)
     await options('character', description.trim(), undefined, setCandidates)(signal)
     void useStore.getState().loadOutputs().catch(() => {})
   })
@@ -133,7 +156,7 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
     const library = await fetchCharacterKitLibrary(workspace); signal.throwIfAborted()
     const saved = await saveCharacterKit(workspace, library, draft); signal.throwIfAborted()
     const rigged = await rigFlatCharacter({ workspace, kitId: draft.id, baseRevision: saved.revision, style: style.rig }); signal.throwIfAborted()
-    setKit(rigged.character); setReview(rigged.review); setUnwiped(rigged.unwipedPoses); setMessage(t('styleCreator.ready'))
+    setKit(rigged.character); setRig(rigged); setMessage(t('styleCreator.ready'))
   })
   const createPoseOptions = () => run('pose', async signal => {
     if (!kit) return
@@ -152,7 +175,7 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
     const saved = await saveCharacterKit(workspace, library, next); signal.throwIfAborted()
     const rigged = await rigFlatCharacter({ workspace, kitId: kit.id, baseRevision: saved.revision, style: style.rig, poses: ['base', id] })
     signal.throwIfAborted()
-    setKit(rigged.character); setReview(rigged.review); setUnwiped(rigged.unwipedPoses)
+    setKit(rigged.character); setRig(rigged)
     setPose(''); setPoseCandidates([]); setMessage(t('styleCreator.poseAdded'))
   })
 
@@ -183,7 +206,7 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
       {candidates.length ? <Candidates candidates={candidates} picked={picked} onPick={item => setPicked(item.id)} disabled={blocked || Boolean(kit)} />
         : <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-muted">{t('styleCreator.empty')}</div>}
     </div>
-    {kit && review && <RigReview workspace={workspace} kit={kit} review={review} unwiped={unwiped} blocked={blocked} onUseVoice={saveVoice} />}
+    {kit && rig && <RigReview workspace={workspace} kit={kit} rig={rig} blocked={blocked} onUseVoice={saveVoice} />}
     {kit && <NewPose pose={pose} onPose={setPose} candidates={poseCandidates} picked={pickedPose} onPick={setPickedPose} blocked={blocked}
       onCreate={() => void createPoseOptions()} onAdd={() => void addPose()} />}
     <Status busy={busy} message={message} error={error} />

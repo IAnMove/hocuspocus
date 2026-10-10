@@ -12,11 +12,14 @@ import numpy as np
 from scipy import ndimage
 
 from services.humanoid_rig.errors import NotHumanoid
+from services.humanoid_rig.robe_legs import robe_regions
 from services.humanoid_rig.silhouette import Silhouette, centerline, components, disk, geodesic, run_at, runs
 
 _GAP_SEARCH = 0.10
 _MIN_LEG = 0.08
 _NECK_DEPTH = 0.15
+# A row this many lower-torso widths wide is the T-pose arm line; the neck is above it.
+_ARM_SPAN = 2.5
 _ARM_CLEAR = 0.05
 _MAX_DROP = 72.0
 _SHOULDER_INSET = 0.5
@@ -65,6 +68,18 @@ def body_rows(mask: np.ndarray) -> tuple[int, int]:
 
 def find_legs(mask: np.ndarray) -> dict:
     """Track the background gap between the feet up to the crotch."""
+    floor, top, best = leg_gap(mask)
+    tall = top - floor + 1
+    if best is None:
+        raise NotHumanoid("single_leg")
+    if best["top"] - floor < tall * _MIN_LEG:
+        raise NotHumanoid("legs_too_short")
+    return {"floor": floor, "top": top, "crotch_row": best["top"] + 1, "crotch_col": best["col"], "gap": best["gap"],
+            "feet_row": best["start"]}
+
+
+def leg_gap(mask: np.ndarray) -> tuple[int, int, dict | None]:
+    """The floor and top rows, and the tallest gap that starts between the feet."""
     floor, top = body_rows(mask)
     tall = top - floor + 1
     best = None
@@ -73,12 +88,7 @@ def find_legs(mask: np.ndarray) -> dict:
             found = _track_gap(mask, row, gap, top)
             if best is None or found["rows"] > best["rows"]:
                 best = found
-    if best is None:
-        raise NotHumanoid("single_leg")
-    if best["top"] - floor < tall * _MIN_LEG:
-        raise NotHumanoid("legs_too_short")
-    return {"floor": floor, "top": top, "crotch_row": best["top"] + 1, "crotch_col": best["col"], "gap": best["gap"],
-            "feet_row": best["start"]}
+    return floor, top, best
 
 
 def _gaps(row: np.ndarray) -> list[tuple[int, int]]:
@@ -99,13 +109,15 @@ def _track_gap(mask: np.ndarray, row: int, gap: tuple[int, int], top: int) -> di
 
 
 def leg_regions(mask: np.ndarray, legs: dict) -> dict:
-    """Both leg components below the crotch, split at the gap."""
+    """Both leg components below the crotch, split at the gap. Legs hidden by a robe are straight bands."""
     below = mask.copy()
     below[legs["crotch_row"]:] = False
     labels, _count = components(below)
     floor_rows = slice(legs["floor"], legs["floor"] + 3)
     touching = np.unique(labels[floor_rows][labels[floor_rows] > 0])
     region = np.isin(labels, touching)
+    if "robe" in legs:
+        return {**robe_regions(mask, legs), "all": region}
     cols = np.arange(mask.shape[1])[None, :]
     return {"left": region & (cols > legs["crotch_col"]), "right": region & (cols < legs["crotch_col"]), "all": region}
 
@@ -131,7 +143,8 @@ def find_neck(mask: np.ndarray, legs: dict) -> dict:
     widths, centers = central_widths(mask, crotch, top, legs["crotch_col"])
     smooth = np.convolve(widths, np.ones(3) / 3.0, mode="same")
     span = top - crotch
-    low, high = crotch + int(span * 0.25), top - max(2, int((top - legs["floor"]) * 0.04))
+    arms = _above_arms(widths, crotch, top)
+    low, high = max(crotch + int(span * 0.25), arms), top - max(2, int((top - legs["floor"]) * 0.04))
     best_row, best_depth = None, 0.0
     for row in range(low, high):
         above = float(smooth[row:top + 1].max())
@@ -140,10 +153,33 @@ def find_neck(mask: np.ndarray, legs: dict) -> dict:
         if depth > best_depth:
             best_row, best_depth = row, depth
     found = best_row is not None and best_depth >= _NECK_DEPTH
-    row = best_row if found else crotch + int(span * 0.72)
+    row = best_row if found else max(crotch + int(span * 0.72), min(arms, high))
     head_width = float(widths[row:top + 1].max()) if top >= row else float(widths[row])
     return {"row": int(row), "col": float(centers[row]), "width": float(widths[row]), "found": bool(found), "widths": widths,
             "head_width": head_width}
+
+
+def _above_arms(widths: np.ndarray, crotch: int, top: int) -> int:
+    """The first row above a T-pose arm line, or ``crotch`` when there is none (an A pose).
+
+    Long hair can hide the neck notch while a skirt or a belt makes the waist the deepest one; the
+    waist was then taken for the neck and the arms for part of the head (``hands_stuck``).
+    """
+    span = top - crotch
+    torso = [float(width) for width in widths[crotch + int(span * 0.1):crotch + max(int(span * 0.35), int(span * 0.1) + 1)] if width > 0]
+    if not torso:
+        return crotch
+    limit = float(np.median(torso)) * _ARM_SPAN
+    wide = [row for row in range(crotch + int(span * 0.25), top + 1) if widths[row] > limit]
+    if not wide:
+        return crotch
+    # The lowest wide band only: big ears or a hat brim higher up are part of the head.
+    end = wide[0]
+    for row in wide[1:]:
+        if row - end > 2:
+            break
+        end = row
+    return end + 1
 
 
 def torso_half(widths: np.ndarray, legs: dict, neck: dict) -> float:

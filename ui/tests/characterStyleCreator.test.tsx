@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { type TestContext } from 'node:test'
 import React from 'react'
 import { JSDOM } from 'jsdom'
-import { characterStyle, characterStylePrompt, screenFor } from '../src/lib/characterStyles'
+import { characterStyle, characterStyleLabel, characterStylePrompt, screenFor } from '../src/lib/characterStyles'
+import { flaggedRigPoses } from '../src/lib/flatRigMouth'
 import { generateKeyedCandidates, type KeyedCandidate } from '../src/features/characters/characterCandidates'
 import { designVoiceCandidates, expectedPitch, referenceVoice, VOICE_DESIGN_MODEL } from '../src/features/characters/voiceDesign'
 
@@ -38,6 +39,7 @@ test('three candidates are generated with distinct seeds and keyed as they arriv
       return { source: `/api/v1/file/raw-${options?.seed}.png?workspace=cast` } as never
     },
     key: async details => { keyed.push(details); return { file: 'k.png', url: `/api/v1/file/keyed-${String(details.source).slice(17, 23)}?workspace=cast`, sha256: 'x' } },
+    check: async () => ({ ready: true, reasons: [], face: { box: null, confidence: 0 } }),
   })
   assert.equal(call, 3)
   assert.deepEqual(found.map(item => [item.seed, item.status]), [[10, 'ready'], [11, 'failed'], [12, 'ready']])
@@ -46,10 +48,53 @@ test('three candidates are generated with distinct seeds and keyed as they arriv
   assert.ok(updates.some(items => items.some(item => item.status === 'keying')))
 })
 
+test('a candidate whose key left a haze says so', async () => {
+  const found = await generateKeyedCandidates({
+    workspace: 'cast', style, kind: 'character', description: 'Ines', model: 'qwen_image_21',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 7,
+    generate: async () => ({ source: '/api/v1/file/raw-7.png?workspace=cast' }) as never,
+    key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x',
+                        report: { semiTransparentShare: 0.42, transparentShare: 0.1, haze: true } }),
+    check: async () => ({}) as never,
+  })
+  assert.ok(found.every(item => item.status === 'ready' && item.haze === 0.42 && item.rig === undefined))
+})
+
+test('a keyed candidate records a rig check that says the eyes are small, and a failed check still leaves it ready', async () => {
+  const small = await generateKeyedCandidates({
+    workspace: 'cast', style, kind: 'character', description: 'Ines', model: 'qwen_image_21',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 4,
+    generate: async () => ({ source: '/api/v1/file/raw.png?workspace=cast' }) as never,
+    key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x' }),
+    check: async () => ({ ready: false, reasons: ['eyes_small'], face: { box: [1, 2, 3, 4], confidence: 0.2 } }),
+  })
+  assert.ok(small.every(item => item.status === 'ready' && item.rig?.ready === false && item.rig.reasons.join() === 'eyes_small'))
+  const failed = await generateKeyedCandidates({
+    workspace: 'cast', style, kind: 'character', description: 'Ines', model: 'qwen_image_21',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 5,
+    generate: async () => ({ source: '/api/v1/file/raw.png?workspace=cast' }) as never,
+    key: async () => ({ file: 'k.png', url: '/api/v1/file/k.png?workspace=cast', sha256: 'x' }),
+    check: async () => { throw new Error('down') },
+  })
+  assert.ok(failed.every(item => item.status === 'ready' && item.rig === undefined))
+})
+
 test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
   assert.deepEqual(expectedPitch('Male voice. Calm.'), [75, 175])
   assert.deepEqual(expectedPitch('Voz de mujer joven'), [150, 320])
+  assert.deepEqual(expectedPitch('A small boy'), [220, 400])
+  assert.deepEqual(expectedPitch('chica joven'), [150, 320])
   assert.equal(expectedPitch('A robot'), undefined)
+  // The first word names the voice; a later one names someone else.
+  assert.deepEqual(expectedPitch('Voz de hombre maduro, casado con una mujer'), [75, 175])
+  assert.deepEqual(expectedPitch('Male voice. Hoarse; he has smoked since he was a boy.'), [75, 175])
+  assert.deepEqual(expectedPitch('Voz de niña. Imita a su madre, una mujer seria.'), [220, 400])
   const submitted: Record<string, unknown>[] = [], checked: unknown[] = []
   let seed = 1
   const voices = await designVoiceCandidates({
@@ -73,11 +118,12 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
     referenceAudio: '/api/v1/file/job-1.wav?workspace=cast', transcript: 'Hola. Esta es mi voz.', language: 'spanish' })
 })
 
-test('description to a saved, rigged kit in the Character Creator', async t => {
-  const { render, fireEvent, cleanup, waitFor, screen } = await import('@testing-library/react')
-  const { CharacterStyleCreator } = await import('../src/features/characters/CharacterStyleCreator')
-  t.after(cleanup)
-  const requests: { method: string; url: string; body?: Record<string, unknown> }[] = []
+type CreatorRequest = { method: string; url: string; body?: Record<string, unknown> }
+
+/** The server a Character Creator run talks to: image jobs, keying, the kit library and the flat rig, whose reply
+ * `rig` can extend (warnings, a provenance). */
+function creatorServer(t: TestContext, rig: (kit: Record<string, unknown>) => Record<string, unknown> = () => ({})): CreatorRequest[] {
+  const requests: CreatorRequest[] = []
   let job = 0
   const reply = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } })
   const originalFetch = globalThis.fetch
@@ -93,23 +139,45 @@ test('description to a saved, rigged kit in the Character Creator', async t => {
     if (url.endsWith('/api/v1/studio/key')) return reply({ result: { file: 'k.png', url: `/api/v1/file/keyed-${String(body?.source).split('/').pop()}`, sha256: 'x' } })
     if (url.includes('/api/v1/character-kits/library?')) return reply({ version: 1, revision: 4, activeKitId: null, kits: {} })
     if (method === 'PATCH') return reply({ version: 1, revision: 5, kits: { [String((body?.kit as { id: string }).id)]: body?.kit } })
-    if (url.endsWith('/flat-rig')) return reply({ revision: 6, character: { ...(requests.find(item => item.method === 'PATCH')!.body!.kit as object) },
-      review: '/api/v1/file/review.png?workspace=cast', unwipedPoses: [], poses: {} })
+    if (url.endsWith('/api/v1/character-kits/rig-check')) {
+      return reply({ ready: true, reasons: [], face: { box: [0, 0, 10, 10], confidence: 0.9 } })
+    }
+    if (url.endsWith('/flat-rig')) {
+      const kit = requests.find(item => item.method === 'PATCH')!.body!.kit as Record<string, unknown>
+      const extra = rig(kit)
+      return reply({ revision: 6, review: '/api/v1/file/review.png?workspace=cast', unwipedPoses: [], poses: {}, ...extra,
+        character: { ...kit, ...(extra.character as object | undefined) } })
+    }
     return reply({})
   }) as typeof fetch
+  return requests
+}
 
-  const view = render(<CharacterStyleCreator workspace="cast" style={style} model="qwen_image_21" />)
+/** Name and describe a character, create three options, pick the second and save it: the rig's review appears. */
+async function createAndRig(creatorStyle: typeof style) {
+  const { render, fireEvent, waitFor, screen } = await import('@testing-library/react')
+  const { CharacterStyleCreator } = await import('../src/features/characters/CharacterStyleCreator')
+  const view = render(<CharacterStyleCreator workspace="cast" style={creatorStyle} model="qwen_image_21" />)
   fireEvent.change(view.getByLabelText('Character name'), { target: { value: 'Kevin' } })
   fireEvent.change(view.getByLabelText('Character description'), { target: { value: 'Nervous founder, red hair' } })
   fireEvent.click(view.getByRole('button', { name: 'Create 3 options' }))
   const second = await waitFor(() => {
     const option = view.getByRole('button', { name: 'Option 2' }) as HTMLButtonElement
     assert.equal(option.disabled, false)
+    assert.match(option.textContent ?? '', /Ready for the rig/)
     return option
   }, { timeout: 8000 })
   fireEvent.click(second)
   fireEvent.click(view.getByRole('button', { name: 'Save and make it talk' }))
   await waitFor(() => assert.ok(screen.getByTestId('character-rig-review')), { timeout: 4000 })
+  return view
+}
+
+test('description to a saved, rigged kit in the Character Creator', async t => {
+  const { cleanup } = await import('@testing-library/react')
+  t.after(cleanup)
+  const requests = creatorServer(t)
+  const view = await createAndRig(style)
 
   const saved = requests.find(item => item.method === 'PATCH')!.body!
   const kit = saved.kit as { base: { source: string; alphaStatus: string }; style: string }
@@ -121,6 +189,43 @@ test('description to a saved, rigged kit in the Character Creator', async t => {
   assert.deepEqual(rig, { workspace: 'cast', baseRevision: 5, style: style.rig })
   assert.equal(requests.filter(item => item.url.endsWith('/api/v1/studio/key')).length, 3)
   assert.ok(view.getByTestId('character-new-pose'))
+})
+
+test('the graphic novel style is generated for the warp rig and rigged with warp mouths', () => {
+  const painted = characterStyle('graphic-novel')!
+  assert.deepEqual(painted.rig, { mouthStyle: 'warp' })
+  for (const kind of ['character', 'pose'] as const) {
+    const built = characterStylePrompt(painted, kind, 'Brother Anselmo')
+    assert.match(built.prompt, /WHITE sclera.*closed mouth painted as one short dark line.*Brother Anselmo.*chroma-key green/s)
+  }
+  assert.deepEqual(flaggedRigPoses({ busto: ['mouth_line_guessed'], base: ['mouth_line_unsure', 'eyes_low'], wave: ['stray_mark'] }),
+    { mouthLine: ['base', 'busto'], other: ['base', 'wave'] })
+  assert.deepEqual(flaggedRigPoses(undefined), { mouthLine: [], other: [] })
+})
+
+test('the Wizard names the graphic novel style as the Character Creator shows it', async () => {
+  const { HOCUSPOCUS_AGENT_SYSTEM_PROMPT } = await import('../src/features/agent/agentKnowledge')
+  assert.ok(HOCUSPOCUS_AGENT_SYSTEM_PROMPT.includes(`«${characterStyleLabel(characterStyle('graphic-novel')!, 'en')}»`))
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /warp mouths.*Prepare 2D speech › Mouth line/s)
+})
+
+test('a painted character is rigged with warp mouths and the poses whose mouth line needs a hand are named', async t => {
+  const { cleanup } = await import('@testing-library/react')
+  t.after(cleanup)
+  const painted = characterStyle('graphic-novel')!
+  const requests = creatorServer(t, kit => ({
+    unwipedPoses: ['base'], warnings: { base: ['mouth_line_unsure'] },
+    character: { provenance: [...(kit.provenance as object[]), { method: 'flat-rig', style: { mouthStyle: 'warp' } }] },
+  }))
+  const view = await createAndRig(painted)
+
+  const kit = requests.find(item => item.method === 'PATCH')!.body!.kit as { provenance: { method: string; style: string }[] }
+  assert.deepEqual(kit.provenance.map(entry => [entry.method, entry.style]), [['character-style-create', 'graphic-novel']],
+    'the kit records its style, so a later rig with no style keeps warp mouths')
+  assert.deepEqual(requests.find(item => item.url.endsWith('/flat-rig'))!.body!.style, { mouthStyle: 'warp' })
+  assert.match(view.getByTestId('character-rig-mouth-line').textContent ?? '', /mouth line of base.*Prepare 2D speech.*Kevin.*Mouth line/)
+  assert.match(view.getByTestId('character-rig-review').textContent ?? '', /the drawing's own/)
+  assert.doesNotMatch(view.getByTestId('character-rig-review').textContent ?? '', /No painted mouth/, 'a warp mouth is placed by its line')
 })
 
 test('a language voice is designed in place, in that language', async t => {
