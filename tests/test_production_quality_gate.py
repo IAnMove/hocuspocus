@@ -133,9 +133,11 @@ def test_a_3d_shot_asking_a_model_for_a_clip_its_rig_will_not_bake_is_refused():
              shot3d("b", {"subject_1": {"source": "lia", "clip": "wave"}}),
              shot3d("c", {"subject_1": {"source": "kite", "clip": "Strafe Loop"}}),
              shot3d("d", {"subject_1": {"source": "ape", "clip": "dance_bounce"}}),
-             shot3d("e", {"subject_1": {"source": "/api/v1/file/x.glb?workspace=w", "clip": "anything"}})]
+             shot3d("e", {"subject_1": {"source": "/api/v1/file/x.glb?workspace=w", "clip": "anything"}}),
+             shot3d("f", {"subject_1": {"source": "ape", "clip": "look_around"}})]
     problems = blocking_problems({"song": SONG, "models": models, "shots": shots})
-    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 wave"])]
+    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 wave", "f:subject_1 look_around"])], \
+        "a humanoid with a fallback still only bakes its animations"
 
 
 def test_a_glb_played_as_it_is_passes_the_gate_with_the_clips_it_brought(tmp_path):
