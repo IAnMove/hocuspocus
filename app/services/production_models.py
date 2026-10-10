@@ -104,18 +104,24 @@ def check_models(spec: dict) -> None:
 def _check_model(name: Any, entry: Any, cast: set) -> None:
     if not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) or set(entry) - FIELDS:
         raise ModelError(f"models.{name}: a lower-case name and only {', '.join(sorted(FIELDS))}")
-    if sum(bool(_text(entry.get(field))) for field in ("from", "prompt", "glb")) == 0 or (entry.get("glb") and (entry.get("from") or entry.get("prompt"))):
-        raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL), a prompt, or a glb in the workspace")
-    if rig_of(entry, cast) not in RIGS:
-        raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
-    if entry.get("fallback") is not None and (rig_of(entry, cast) != "humanoid" or entry["fallback"] not in PROFILE_CLIPS):
-        raise ModelError(f"models.{name}.fallback is a procedural profile ({', '.join(PROFILE_CLIPS)}) for a humanoid rig")
+    _check_origin_and_rig(name, entry, cast)
     height = entry.get("height")
     if height is not None and not (isinstance(height, (int, float)) and not isinstance(height, bool) and 0.05 <= height <= 60):
         raise ModelError(f"models.{name}.height is the model's size in metres (0.05-60)")
     clips = entry.get("animations")
     if clips is not None and (not isinstance(clips, list) or not 0 < len(clips) <= 8 or not all(_text(c) for c in clips)):
         raise ModelError(f"models.{name}.animations is a list of 1-8 clip names")
+
+
+def _check_origin_and_rig(name: str, entry: dict, cast: set) -> None:
+    origins = [field for field in ("from", "prompt", "glb") if _text(entry.get(field))]
+    if not origins or ("glb" in origins and len(origins) > 1):
+        raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL), a prompt, or a glb in the workspace")
+    rig = rig_of(entry, cast)
+    if rig not in RIGS:
+        raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
+    if entry.get("fallback") is not None and (rig != "humanoid" or entry["fallback"] not in PROFILE_CLIPS):
+        raise ModelError(f"models.{name}.fallback is a procedural profile ({', '.join(PROFILE_CLIPS)}) for a humanoid rig")
 
 
 def rig_of(entry: dict, cast: set) -> str:
@@ -319,19 +325,31 @@ def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, ma
             mesh = record["filename"]
             rigs[name] = lambda name=name, mesh=mesh, entry=entry, rig=rig: _submit(
                 production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
-    for name, (entry, _source_url, rig) in todo.items():
-        if entry.get("glb"):
-            made[name].update(mesh=entry["glb"], file=entry["glb"])
-            if rig != "none":
-                rigs[name] = lambda name=name, entry=entry, rig=rig: _submit(
-                    production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(entry['glb'])}", _rig_request(entry, rig, entry["glb"], bpm))
+    rigs.update(_glb_rigs(production, todo, made, bpm))
     production.save()
     _land_rigs(production, made, _in_waves(production, "model3d.rig.status", rigs, sleep))
-    refused = [name for name in rigs if made[name].get("rig_error") and todo[name][0].get("fallback")]
+    _fall_back(production, todo, made, [name for name in rigs if made[name].get("rig_error")], bpm, sleep)
+
+
+def _glb_rigs(production: Any, todo: dict, made: dict, bpm: int) -> dict[str, Callable[[], tuple[str | None, str | None]]]:
+    """A model given as a workspace GLB is its own mesh: only its rig is asked for."""
+    rigs = {}
+    for name, (entry, _source_url, rig) in todo.items():
+        if not entry.get("glb"):
+            continue
+        made[name].update(mesh=entry["glb"], file=entry["glb"])
+        if rig != "none":
+            rigs[name] = lambda name=name, entry=entry, rig=rig: _submit(
+                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(entry['glb'])}", _rig_request(entry, rig, entry["glb"], bpm))
+    return rigs
+
+
+def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: int, sleep) -> None:
+    """A refused humanoid rig is done again with the model's fallback profile."""
+    refused = [name for name in failed if todo[name][0].get("fallback")]
     for name in refused:
-        profile = todo[name][0]["fallback"]
-        production.log(f"model {name}: humanoid rig refused ({made[name].pop('rig_error')}), using the {profile} profile")
-        made[name]["rigged_as"] = profile
+        made[name]["rigged_as"] = todo[name][0]["fallback"]
+        production.log(f"model {name}: humanoid rig refused ({made[name].pop('rig_error')}), using the {made[name]['rigged_as']} profile")
     fallbacks = {name: (lambda name=name, profile=made[name]["rigged_as"]: _submit(
         production, "model3d.rig", f"{production.id}-rig-{name}-{profile}-{_digest(made[name]['mesh'])}",
         _rig_request({}, profile, made[name]["mesh"], bpm))) for name in refused}
