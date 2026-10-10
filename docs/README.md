@@ -36,6 +36,8 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 
 ## Series Lab y agentes
 
+- [story-lab/WRITING_GUIDE.md](story-lab/WRITING_GUIDE.md) — guía · preguntas, ejemplos y propuestas editables para historias y series.
+
 - [series-lab/CHATGPT_MCP.md](series-lab/CHATGPT_MCP.md) — guía · hacer una serie con ChatGPT conectado por MCP y OAuth.
 - [series-lab/IMPLEMENTATION.md](series-lab/IMPLEMENTATION.md) — contrato vivo · modelo, persistencia, superficie HTTP y MCP de Series Lab.
 - [series-lab/PHASE0_ARCHITECTURE.md](series-lab/PHASE0_ARCHITECTURE.md) — histórico · arquitectura aprobada de la fase 0.

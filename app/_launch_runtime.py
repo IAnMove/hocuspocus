@@ -28248,6 +28248,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
 
 def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
+    from services.writing_guide import accepted_guidance
     overview_keys = (
         "title", "projectType", "creativeBrief", "language", "spokenLanguage", "languageIntent", "locationVariety",
         "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience", "premise",
@@ -28255,6 +28256,7 @@ def _story_project_prompt_context(project: dict, scope: str) -> str:
         "characterVisualStyle", "enforceVisualStyle", "allowClipText",
     )
     compact = {key: project.get(key) for key in overview_keys if key in project}
+    compact["writingDecisions"] = accepted_guidance(project)
     # Characters are useful grounding for every downstream phase and are
     # required for relationship IDs. The active section keeps its full facts;
     # other stages only need a concise identity summary.
@@ -37363,6 +37365,10 @@ from routers.example_assets import create_example_assets_router
 api.include_router(create_example_assets_router())
 from routers.asset_library import create_asset_library_router
 api.include_router(create_asset_library_router())
+from routers.writing_guide import create_writing_guide_router
+api.include_router(create_writing_guide_router(
+    ensure_llm_loaded=_ensure_llm_loaded, writing_override=_comic_writing_llm,
+))
 
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 from services.ui_distribution import build_status as _ui_build_status, recovery_html as _ui_recovery_html

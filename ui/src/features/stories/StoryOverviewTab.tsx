@@ -1,3 +1,4 @@
+import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { Palette, RefreshCcw, Sparkles } from 'lucide-react'
 import { EditableLanguageInput } from '../../components/common/EditableLanguageInput'
 import { useUiTranslation } from '../../i18n'
@@ -86,6 +87,7 @@ export function StoryOverviewTab({
       : project.projectType === 'quick_video' ? t('overview.descriptionQuick') : t('overview.descriptionStory')
   return (
     <>
+      <StoryWritingGuide projectId={project.id} scope="story" />
       <div id="story-review-overview" className="scroll-mt-4">
         <SectionHeader
           title={title}

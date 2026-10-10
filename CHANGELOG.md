@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Story Lab and Series Lab add optional **Help me write** panels with essential
+questions, examples, missing-answer suggestions, section development and editorial
+review. Answers share existing story fields; editable proposals persist until
+reviewed, apply by field and support guarded undo. Episode advice respects frozen
+canon. See the [writing guide](docs/story-lab/WRITING_GUIDE.md).
+
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
 journey, volumetric poster lettering and particle morph typography. Editor, MCP

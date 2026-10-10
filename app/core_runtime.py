@@ -133,6 +133,10 @@ _world3d_export = World3DExportService(
 bind_world3d_renderer_origin(api, _world3d_export)
 api.include_router(create_world3d_export_router(_world3d_export))
 api.include_router(create_core_labs_router())
+from routers.writing_guide import create_writing_guide_router
+api.include_router(create_writing_guide_router(
+    ensure_llm_loaded=core_production.ensure_llm_loaded, writing_override=core_production.comic_writing_llm,
+))
 api.include_router(create_series_assembly_router(
     resolve_workspace=labs._series_workspace,
     workspace_dir=core.workspace_dir,

@@ -145,6 +145,9 @@ def _canon_input(series: dict, key: str) -> Any:
 
 def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
     """Compare durable production inputs without coupling canon to chat language."""
+    from services.writing_guide import accepted_guidance
+    if accepted_guidance(current) != accepted_guidance(updated):
+        return True
     current_canon = copy.deepcopy(current.get("canon") or {})
     updated_canon = copy.deepcopy(updated.get("canon") or {})
     for value in (current_canon, updated_canon):
@@ -1163,6 +1166,7 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
 
 def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     """Create a new draft series without mutating its Story Lab source."""
+    from services.writing_guide import import_guidance
     if not isinstance(story, dict):
         raise ValueError("Story import requires one Story Lab project")
     now = _now()
@@ -1236,6 +1240,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     ]
     series = {
         "version": 1, "id": series_id, "revision": 1,
+        "writingGuide": import_guidance(story),
         "title": _text(story.get("title"), "Imported series"),
         "logline": _text(story.get("logline")), "premise": _text(story.get("premise")),
         "format": "episodic",

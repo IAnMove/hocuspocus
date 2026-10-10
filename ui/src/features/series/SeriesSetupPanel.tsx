@@ -1,3 +1,4 @@
+import { SeriesWritingGuide } from '../writing-guide/SeriesWritingGuide'
 import { useEffect, useRef, useState } from 'react'
 import { Check, CheckCircle2, ImagePlus, Loader2, Sparkles, Square } from 'lucide-react'
 import * as api from '../../api/client'
@@ -215,6 +216,8 @@ export function SeriesSetupPanel({
         {job && !job.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<span>{jobLine}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{job.status === 'completed' && job.seriesResult && <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3"><p className="text-[11px] text-green-200">{t('setup.proposalSummary', { characters: job.seriesResult.characters.length, locations: job.seriesResult.locations.length, rules: job.seriesResult.canon.immutableRules.length })}</p><details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectProposal')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details><button className={`mt-3 ${greenButton}`} disabled={busy} onClick={() => void applyCanon()}><Check size={13} />{imageMode ? t('setup.applyCanonImages') : t('setup.applyCanon')}</button></div>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), setJob)}>{t('setup.resumeCanon')}</button>}</div>}
       </SectionCard>
 
+      <SeriesWritingGuide seriesId={series.id} scope="series" />
+      {series.seasons.map(season => <div key={season.id}><p className="text-xs text-text-muted">{season.title}</p><SeriesWritingGuide seriesId={series.id} scope="season" targetId={season.id} /></div>)}
       <SectionCard title={t('identity.title')} description={t('identity.description')}>
         <div className="grid gap-3 lg:grid-cols-2">
           <SeriesField label={t('identity.titleField')} required><input className={inputClass} value={series.title} onChange={event => patch({ title: event.target.value })} /></SeriesField>

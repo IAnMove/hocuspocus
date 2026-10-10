@@ -514,6 +514,7 @@ export interface SeriesSoundDesign {
 }
 
 export interface SeriesProject {
+  writingGuide?: import('../writing-guide/model').WritingGuideState
   allowedProductionMethods?: SeriesProductionMethod[]
   version: 1
   id: string
