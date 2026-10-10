@@ -94,8 +94,10 @@ def check_models(spec: dict) -> None:
     models = spec.get("models")
     if models is None:
         return
-    if not isinstance(models, dict) or len(models) > 12:
-        raise ModelError("spec.models maps up to 12 names to {from or prompt, rig, animations}")
+    made = [entry for entry in models.values() if not (isinstance(entry, dict) and entry.get("glb"))] if isinstance(models, dict) else []
+    if not isinstance(models, dict) or len(made) > 12 or len(models) > 40:
+        raise ModelError("spec.models maps up to 40 names to {from, prompt or glb, rig, animations}, at most 12 of them "
+                         "made from a picture or a prompt")
     cast = _cast_ids(spec)
     for name, entry in models.items():
         _check_model(name, entry, cast)

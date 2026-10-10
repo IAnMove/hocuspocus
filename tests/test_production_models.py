@@ -331,3 +331,12 @@ def test_a_glb_in_the_workspace_is_only_rigged_and_a_refused_humanoid_falls_back
     for bad in ({"glb": "pack/none.glb"}, {"glb": "pack/ape.glb", "prompt": "an ape"}, {"glb": "pack/ape.glb", "rig": "prop", "fallback": "prop"}):
         with pytest.raises(ModelError):
             check_models({"models": {"x": bad}}) if "none" not in bad.get("glb", "") else make_models(Production(tmp_path), {"style": {}, "models": {"x": bad}}, sleep=lambda _: None)
+
+
+def test_up_to_twelve_models_are_made_and_up_to_forty_counting_glbs(tmp_path):
+    glbs = {f"g{n}": {"glb": f"pack/g{n}.glb", "rig": "prop"} for n in range(28)}
+    made = {f"m{n}": {"prompt": "a lamp"} for n in range(12)}
+    check_models({"models": {**glbs, **made}})
+    for too_many in ({**made, "m12": {"prompt": "a lamp"}}, {**glbs, **made, "g28": {"glb": "pack/x.glb"}}):
+        with pytest.raises(ModelError):
+            check_models({"models": too_many})
