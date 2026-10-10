@@ -153,7 +153,7 @@ def _check_diorama(entry):
 
 def _check_parallax(entry):
     """A parallax set spelled out: the far picture as source, cutout layers at depths, the key colour, a ground slab."""
-    layers, key = entry.get("layers"), entry.get("key", "#00ff00")
+    layers, key = entry.get("layers"), entry.get("key", "#ff00ff")
     if not isinstance(layers, list) or not 0 < len(layers) <= 3 or not all(
             isinstance(layer, dict) and set(layer) == {"source", "depth"} and _source(layer["source"]) and layer["depth"] in LAYER_DEPTHS
             for layer in layers):

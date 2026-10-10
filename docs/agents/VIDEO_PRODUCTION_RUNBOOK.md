@@ -489,10 +489,12 @@ draws a far view, one or two cutout layers and a ground in the same batch:
 ```
 
 `far` wraps the scene as the sky, `ground` is a seamless slab under the cast, and
-`mid` and `near` are drawn on a flat chroma-key green, keyed out in the renderer
+`mid` and `near` are drawn on a flat chroma-key magenta (a colour foliage, sky, rock and
+water never have), keyed out in the renderer
 and stood as cutouts across the camera's line of sight: `mid` some metres
 behind the cast, `near` (optional) a short way in front of the camera with its
-middle empty, so a dolly, an arc or a crane slides the layers at different speeds.
+middle third empty so the cast shows through, so a dolly, an arc or a crane slides the
+layers at different speeds.
 A shot whose camera would cross the near layer (an orbit, a crash zoom) leaves
 it out. Name the set as the shot's `background`, like a diorama. Ask the layers
 for pieces that stand on their own (arches, trees, rocks, posts); the far view

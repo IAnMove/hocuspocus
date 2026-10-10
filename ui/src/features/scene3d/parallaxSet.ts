@@ -59,7 +59,7 @@ function layerSlot(layer: ParallaxLayer, at: Vec3, ahead: Vec3, height: number, 
   return {
     id: `set-layer-${layer.depth}`, slot: 'prop', media: 'image', surface: 'cutout', sourceUrl: layer.source, clip: null,
     position: [at[0], centreY === undefined ? 0 : centreY - height / 2, at[2]], rotationY: Math.atan2(-ahead[0], -ahead[2]), scale, grounded: false,
-    imageLook: { unlit: true, colorKey: { color: key ?? '#00ff00', tolerance: KEY_TOLERANCE, softness: KEY_SOFTNESS } },
+    imageLook: { unlit: true, colorKey: { color: key ?? '#ff00ff', tolerance: KEY_TOLERANCE, softness: KEY_SOFTNESS } },
   } as Scene3DSlot
 }
 
