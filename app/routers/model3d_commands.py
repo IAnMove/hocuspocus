@@ -82,6 +82,22 @@ def _result(operation: str, job: dict) -> dict:
     return {"version": 1, "operation": operation, "status": job.get("status", "accepted"), "result": job}
 
 
+async def _job_known(status, stored: dict) -> bool:
+    """Whether the server still knows the job a stored submission names: only a status that answers "not found"
+    (a restart, an evicted record) says it does not. A stored refusal names no job and stands."""
+    job_id = (stored.get("result") or {}).get("job_id") if isinstance(stored.get("result"), dict) else None
+    if not job_id or status is None:
+        return True
+    try:
+        job = status(job_id)
+        job = await job if inspect.isawaitable(job) else job
+    except HTTPException as error:
+        if error.status_code == 404:
+            return False
+        raise
+    return job is not None
+
+
 def command_handlers(*, generate, status, journal_path, operations=("model3d.generate", "model3d.status")) -> dict:
     journal = RequestJournal(journal_path)
     submit_operation, status_operation = operations
@@ -99,8 +115,12 @@ def command_handlers(*, generate, status, journal_path, operations=("model3d.gen
         except UncertainRequest as error:
             raise HTTPException(409, {"code": "submission_uncertain", "message": str(error),
                                       "retryable": False}) from error
-        if stored is not None:
+        if stored is not None and await _job_known(status, stored):
             return stored
+        if stored is not None:
+            # The job the stored answer names is gone (a restart, an evicted record): the same intent runs again.
+            journal.forget(identity)
+            journal.reserve(identity, digest)
         provenance.update(actor="user", capability=submit_operation)
         provenance["command"]["command_id"] = intent
         payload["provenance"] = provenance
