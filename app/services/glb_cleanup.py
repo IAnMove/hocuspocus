@@ -7,6 +7,10 @@ the NORMAL attribute and how saturated it is, and dropped; real vertex colours a
 
 Rips also carry textures decoded with the wrong format: confetti where every texel is a random vivid colour (an
 old ape's beard, a fish's fins). A material painted with one loses that texture and shows its vertex colours.
+
+A ripped character may come with a held thing hung under its feet instead of in its hand (a wooden gun, a club):
+it reads as a column between the legs and stands the body on the gun's end. For a body that stands on two feet,
+a part hanging well below the feet is dropped.
 """
 from __future__ import annotations
 
@@ -20,7 +24,9 @@ SATURATED = 0.4         # mean (max - min) of the colour channels: encoded direc
 NOISY = 0.45            # median colour jump between neighbouring texels (summed over RGB, 0..3): garbage ~0.55-1.3, art < 0.35
 VIVID = 0.35            # mean texel saturation: the garbage is confetti, while grain, static and stripes are mostly grey
 SAMPLE = 256            # texels on a side of the corner of a texture that is measured
-CLEANUP = 2             # version of this cleanup, part of a model's fingerprint
+FEET = 10               # the lowest tenth of a standing body's vertices are its feet
+UNDER_FEET = 0.2        # a part reaching this share of the height below the feet hangs under the floor
+CLEANUP = 3             # version of this cleanup, part of a model's fingerprint
 
 _TYPES = {5126: np.float32, 5121: np.uint8, 5123: np.uint16}
 _WIDTH = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
@@ -108,9 +114,32 @@ def _drop_noisy_textures(gltf) -> int:
     return changed
 
 
-def clean_glb(source: str | Path, target: str | Path) -> list[str]:
-    """Write ``target`` without vertex colours that are really normals and without garbage textures, and say what
-    was fixed. Empty (and nothing written) when the model is fine or unreadable."""
+def parts_under_feet(gltf) -> list[tuple[int, int]]:
+    """``(mesh, primitive)`` of the parts hanging under a standing body's feet: not its largest part, and reaching
+    far below the level that its lowest tenth of vertices (the feet) reach."""
+    parts = [(mesh, index, _read(gltf, primitive.attributes.POSITION)[:, 1])
+             for mesh, item in enumerate(gltf.meshes) for index, primitive in enumerate(item.primitives)
+             if primitive.attributes.POSITION is not None]
+    if len(parts) < 2:
+        return []
+    heights = np.concatenate([part[2] for part in parts])
+    floor = np.percentile(heights, FEET) - UNDER_FEET * (heights.max() - heights.min())
+    body = max(range(len(parts)), key=lambda index: len(parts[index][2]))
+    return [(mesh, index) for at, (mesh, index, ys) in enumerate(parts) if at != body and ys.min() < floor]
+
+
+def _drop_parts_under_feet(gltf) -> int:
+    """Parts hanging under the feet leave their meshes; the count of parts dropped."""
+    hanging = parts_under_feet(gltf)
+    for mesh, index in sorted(hanging, reverse=True):
+        del gltf.meshes[mesh].primitives[index]
+    return len(hanging)
+
+
+def clean_glb(source: str | Path, target: str | Path, *, standing: bool = False) -> list[str]:
+    """Write ``target`` without vertex colours that are really normals, without garbage textures and, for a body
+    that stands on two feet (``standing``), without parts hung under them; say what was fixed. Empty (and nothing
+    written) when the model is fine or unreadable."""
     import struct
 
     import pygltflib
@@ -127,6 +156,8 @@ def clean_glb(source: str | Path, target: str | Path) -> list[str]:
             fixes.append("its vertex colours were normals (rainbow tints)")
         if painted := _drop_noisy_textures(gltf):
             fixes.append(f"{painted} of its materials were painted with decoding noise, now dropped")
+        if standing and (hung := _drop_parts_under_feet(gltf)):
+            fixes.append(f"{hung} of its parts hung under its feet (a held thing the rip misplaced), now dropped")
     except (OSError, ValueError, KeyError, IndexError, TypeError, struct.error):
         return []            # not a GLB this can read: the rig service says what is wrong with it
     if fixes:

@@ -340,7 +340,7 @@ def _glb_rigs(production: Any, todo: dict, made: dict, bpm: int) -> dict[str, Ca
     for name, (entry, _source_url, rig) in todo.items():
         if not entry.get("glb"):
             continue
-        mesh = _cleaned(production, name, entry["glb"])
+        mesh = _cleaned(production, name, entry["glb"], standing=rig == "humanoid")
         made[name].update(mesh=mesh, file=mesh)
         if rig != "none":
             rigs[name] = _rig_job(production, name, _rig_request(entry, rig, mesh, bpm))
@@ -354,11 +354,11 @@ def _rig_job(production: Any, name: str, request: dict) -> Callable[[], tuple[st
     return lambda: _submit(production, "model3d.rig", intent, request)
 
 
-def _cleaned(production: Any, name: str, glb: str) -> str:
+def _cleaned(production: Any, name: str, glb: str, *, standing: bool) -> str:
     from pathlib import PurePosixPath
     from services.glb_cleanup import clean_glb
     target = str(PurePosixPath(glb).with_suffix(".clean.glb"))
-    if fixes := clean_glb(production.root / glb, production.root / target):
+    if fixes := clean_glb(production.root / glb, production.root / target, standing=standing):
         production.log(f"model {name}: {'; '.join(fixes)}; rigging {target}")
         return target
     return glb
