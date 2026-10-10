@@ -120,3 +120,23 @@ def test_run_refuses_a_new_thin_plan_but_resumes_one_already_running(tmp_path, m
     (tmp_path / "faro.production.json").write_text(json.dumps({"spec": pattern_spec(), "status": "failed"}))
     assert asyncio.run(handlers["production.run"](body))["result"]["running"] is True
     assert len(started) == 1
+
+
+def test_a_3d_shot_asking_a_model_for_a_clip_its_rig_will_not_bake_is_refused():
+    models = {"lia": {"prompt": "a girl", "rig": "humanoid", "animations": ["idle", "cheer"]},
+              "kite": {"prompt": "a kite", "rig": "flying"},
+              "ape": {"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop"}}
+
+    def shot3d(key, cast):
+        return {"key": key, "kind": "scene3d", "t0": 0, "scene3d": {"template": "cine-medium-shot", "cast": cast}}
+    shots = [shot3d("a", {"subject_1": {"source": "lia", "clip": "cheer"}}),
+             shot3d("b", {"subject_1": {"source": "lia", "clip": "wave"}}),
+             shot3d("c", {"subject_1": {"source": "kite", "clip": "Strafe Loop"}}),
+             shot3d("d", {"subject_1": {"source": "ape", "clip": "dance_bounce"}}),
+             shot3d("e", {"subject_1": {"source": "/api/v1/file/x.glb?workspace=w", "clip": "anything"}})]
+    problems = blocking_problems({"song": SONG, "models": models, "shots": shots})
+    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 wave"])]
+
+
+def test_two_shots_starting_together_do_not_break_the_gate():
+    assert blocking_problems({"song": SONG, "shots": [h3("a", 0), h3("b", 0)]}) == []

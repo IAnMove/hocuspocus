@@ -71,7 +71,10 @@ that are not marked deliberate (`allow: ["still"]`), when still pictures take
 more of the runtime than the `quality` bar, or when a `title-card` or
 `trailer-slam` title sits on a moving shot (`h3`, `clip`, `scene3d`, `screen`):
 both paint an opaque plate over the whole frame and the clip under it is never
-seen (`title_card_hides_shot`; `allow: ["title_card"]` keeps a deliberate card).
+seen (`title_card_hides_shot`; `allow: ["title_card"]` keeps a deliberate card),
+or when a 3D shot asks a `spec.models` model for a clip its rig will not bake
+(`clip_not_baked`: add it to the model's `animations`; a humanoid with a
+`fallback` is exempt, its clips stand in).
 A resume of an unchanged spec is never refused. `dry_run` lists the same items under `blocking`, and warns about shot
 fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
 puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
