@@ -6,8 +6,7 @@ import { cameraPath, castPoints, type DioramaGround } from './dioramaSet.ts'
 export interface ParallaxLayer { source: string; depth: 'mid' | 'near' }
 export interface ParallaxSet { layers: ParallaxLayer[]; ground?: DioramaGround; key?: string }
 
-const PLANE_HEIGHT = 1.125     // an image slot is a 2 x 1.125 m plane at scale 1 (gpu.ts), raised 2.2 m
-const PLANE_LIFT = 2.2
+const CUTOUT_HEIGHT = 2        // an image cutout is 2 m tall at scale 1 and stands on its position (imageCutout.ts)
 const MODEL_HEIGHT = 1.7       // the ground slab is a model: fitGltf scales it to this height times its scale
 const MID_BEHIND = 9           // metres the mid layer stands behind the furthest the cast goes from the camera
 const NEAR_ALONG = 0.3         // the near layer stands this share of the way from the camera to what it looks at
@@ -53,13 +52,13 @@ function viewHeight(document: Scene3DDocument, distance: number): number {
   return 2 * distance * Math.tan((document.camera.fov * Math.PI) / 360) * SPREAD
 }
 
-/** A layer facing the camera, ``scale`` from the view height it must cover, its bottom on the floor unless ``centreY``
+/** A layer facing the camera, scaled to the view height it must cover, its bottom on the floor unless ``centreY``
  * puts its middle on the line of sight. */
-function layerSlot(layer: ParallaxLayer, at: Vec3, ahead: Vec3, scale: number, key: string | undefined, centreY?: number): Scene3DSlot {
-  const middle = centreY ?? (PLANE_HEIGHT * scale) / 2
+function layerSlot(layer: ParallaxLayer, at: Vec3, ahead: Vec3, height: number, key: string | undefined, centreY?: number): Scene3DSlot {
+  const scale = height / CUTOUT_HEIGHT
   return {
     id: `set-layer-${layer.depth}`, slot: 'prop', media: 'image', surface: 'cutout', sourceUrl: layer.source, clip: null,
-    position: [at[0], middle - PLANE_LIFT, at[2]], rotationY: Math.atan2(-ahead[0], -ahead[2]), scale, grounded: false,
+    position: [at[0], centreY === undefined ? 0 : centreY - height / 2, at[2]], rotationY: Math.atan2(-ahead[0], -ahead[2]), scale, grounded: false,
     imageLook: { unlit: true, colorKey: { color: key ?? '#00ff00', tolerance: KEY_TOLERANCE, softness: KEY_SOFTNESS } },
   } as Scene3DSlot
 }
@@ -67,7 +66,7 @@ function layerSlot(layer: ParallaxLayer, at: Vec3, ahead: Vec3, scale: number, k
 function midSlot(layer: ParallaxLayer, document: Scene3DDocument, pose: Pose, centre: Vec3, ahead: Vec3, reach: number, key?: string): Scene3DSlot {
   const at: Vec3 = [centre[0] + ahead[0] * reach, 0, centre[2] + ahead[2] * reach]
   const distance = Math.hypot(at[0] - pose.eye[0], at[2] - pose.eye[2])
-  return layerSlot(layer, at, ahead, viewHeight(document, distance) / PLANE_HEIGHT, key)
+  return layerSlot(layer, at, ahead, viewHeight(document, distance), key)
 }
 
 /** The near layer stands a short way in front of the camera, centred on its line of sight; none when the camera
@@ -78,7 +77,7 @@ function nearSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[],
   const at: Vec3 = [pose.eye[0] + ahead[0] * distance, 0, pose.eye[2] + ahead[2] * distance]
   if (path.some(step => along(step.eye, at, ahead) > -NEAR_CLEARANCE || along(step.look, at, ahead) < NEAR_CLEARANCE)) return null
   const centreY = pose.eye[1] + (pose.look[1] - pose.eye[1]) * NEAR_ALONG
-  return layerSlot(layer, at, ahead, viewHeight(document, distance) / PLANE_HEIGHT, key, centreY)
+  return layerSlot(layer, at, ahead, viewHeight(document, distance), key, centreY)
 }
 
 function groundSlot(ground: DioramaGround, centre: Vec3, reach: number): Scene3DSlot {
