@@ -10,6 +10,7 @@ import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
 const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
 const SET_COVER = 2
+const WORLD_KEYS = ['dressing', 'atmos', 'environment', 'light', 'worldSfx', 'screenBackdrop', 'pixelWorld']
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
@@ -19,6 +20,7 @@ if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
 if (config.background) bindBackground(document, sourced(config.background))
+if (config.world) takeWorld(document, config)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
   if (config[key] !== undefined) document[key] = structuredClone(config[key])
@@ -105,6 +107,21 @@ function bindBackground(document, entry) {
 function withoutLoop(slot, surface) {
   if (surface === 'environment') delete slot.loop
   return slot
+}
+
+/** The place of another template (its dressing, atmosphere, environment, light and world effects): this template keeps
+ * its camera, cast, props and moves and plays them there. The template's own background plate and any object nobody
+ * cast go, unless the shot binds a background of its own. */
+function takeWorld(document, config) {
+  const world = documentFromTemplate(config.world)
+  for (const key of WORLD_KEYS) {
+    if (world[key] === undefined) delete document[key]
+    else document[key] = structuredClone(world[key])
+  }
+  if (config.background) return
+  document.slots = document.slots.filter(slot => slot.slot !== 'background' && (slot.sourceUrl || slot.screen?.sourceUrl))
+  const plates = world.slots.filter(slot => slot.slot === 'background' && (slot.sourceUrl || slot.surface === 'environment'))
+  document.slots = [...document.slots, ...plates.map(slot => structuredClone(slot))]
 }
 
 /** An explicit floor wins; a painted background on a plane gets the projected floor unless the template chose one. */

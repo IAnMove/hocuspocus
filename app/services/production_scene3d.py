@@ -21,7 +21,7 @@ EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
-               "fps", "playbackSpeed", "cast", "background", "floor"}
+               "fps", "playbackSpeed", "cast", "background", "floor", "world"}
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add"}
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
@@ -39,6 +39,8 @@ def validate_scene3d_shot(shot):
         raise ValueError("scene3d.template must be a native template id")
     if "document" in config and not isinstance(config["document"], dict):
         raise ValueError("scene3d.document must be an object")
+    if "world" in config and (not isinstance(config["world"], str) or not config["world"].strip()):
+        raise ValueError("scene3d.world is the id of the template whose place the shot plays in")
     _check_looks(config)
     _check_cast(config.get("cast"))
     _check_background(config)
@@ -216,7 +218,9 @@ def compile_document(shot, duration):
         capture_output=True, text=True, cwd=ROOT / "ui", timeout=30, check=False,
     )
     if result.returncode:
-        raise ValueError(f"scene3d {shot['key']}: native document compilation failed: {result.stderr[-500:]}")
+        # Node prints the error before its stack; the stack alone hides what went wrong.
+        error = next((line.strip() for line in result.stderr.splitlines() if "Error:" in line), "")
+        raise ValueError(f"scene3d {shot['key']}: native document compilation failed: {error or result.stderr[-500:]}")
     document = json.loads(result.stdout)
     if not isinstance(document, dict) or "slots" not in document:
         raise ValueError("Native compiler did not return a Video 3D document")

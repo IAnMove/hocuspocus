@@ -461,6 +461,17 @@ nobody in it, so the projected floor has ground for the cast to stand on. A shot
 names it as its `background`: `{"template": "dance-stage", "background": "harbour",
 "cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
 
+**Worlds.** `world` plays the shot's template (its camera, cast, props and moves)
+in the place of another template: its dressing, atmosphere, environment, light
+and world effects. `{"template": "cine-dolly-in", "world": "atmos-reef-wide"}`
+dollies in under the sea; `dance-orbit` in `atmos-sky-islands-wide` orbits over
+floating islands. The template's own background plate and uncast placeholders
+go unless the shot binds a `background`; `atmos`, `light` and the other overrides
+still apply on top. Worlds include the procedural `atmos-*` places (temple,
+waterfall, crystal cave, reef, volcano, sky islands, beach, snow, neon rain,
+synthwave grid, retro room...), the `pixel-*` places and the action sets. Vary
+them: one place for a whole video reads as one set.
+
 **Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
 sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
 drawn in the same batch:
