@@ -137,7 +137,12 @@ worker dispatch/seed/export with test doubles, existing GPU admission,
 cancellation/provenance regressions, launcher plans and UI availability.
 No real TRELLIS GLB was generated: the local Hugging Face account lacks access
 to both auxiliary repositories (HEAD requests return `GatedRepoError`).
-The installer smoke was started after refreshing a stale Pinokio recipe cache;
-the clean installation and CUDA build are not yet claimed verified. Keep the PR
-in draft until clean installation and real GLB/PBR checks from
+The isolated runtime was provisioned on Linux with an RTX 4090 and 64 GB RAM.
+After correcting the utils3d checkout check and CUDA link-stub path, the optional
+Pinokio installer completed: native extensions, the concrete pipeline import,
+dependency checks and real CUDA/FlashAttention calculations passed. The receipt
+records CUDA 12.4 and `modelsExecuted: false`; this proves runtime readiness,
+not model generation. Native installs preserve the pinned vendors rather than
+following O-Voxel's floating Git dependencies. Keep the PR in draft until a
+fresh one-pass installation and real GLB/PBR checks from
 [MODEL3D_ENGINES.md](MODEL3D_ENGINES.md#validation-and-release-acceptance) pass.
