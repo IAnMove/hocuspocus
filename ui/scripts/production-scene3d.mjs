@@ -11,6 +11,18 @@ const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
 const SET_COVER = 2
 const WORLD_KEYS = ['dressing', 'atmos', 'environment', 'light', 'worldSfx', 'screenBackdrop', 'pixelWorld']
+/** The camera's distance to its subject, as a share of the template's. */
+const FRAMES = { close: 0.6, medium: 0.8, wide: 1.35, far: 1.8 }
+/** Named lights: the sun (direction it travels, strength, colour) and the ambient share. */
+const LIGHTS = {
+  noon: { direction: [-0.2, -1, -0.3], intensity: 1.5, color: '#fffaf0', ambient: 0.35 },
+  golden: { direction: [-0.85, -0.3, -0.4], intensity: 1.35, color: '#ffc98a', ambient: 0.28 },
+  overcast: { direction: [-0.15, -1, -0.2], intensity: 0.75, color: '#e6edf5', ambient: 0.6 },
+  night: { direction: [0.35, -0.75, -0.45], intensity: 0.5, color: '#9fb6ff', ambient: 0.12 },
+  neon: { direction: [0.55, -0.5, -0.65], intensity: 1.0, color: '#ff6fd8', ambient: 0.3 },
+  stage: { direction: [0, -0.8, -0.6], intensity: 1.8, color: '#ffffff', ambient: 0.08 },
+  campfire: { direction: [0.25, -0.35, -0.9], intensity: 1.1, color: '#ff9b45', ambient: 0.1 },
+}
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
@@ -22,8 +34,11 @@ for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document,
 if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
+if (config.frame !== undefined) reframe(document, config.frame)
+if (typeof config.light === 'string') lightPreset(document, config.light)
 for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
-  if (config[key] !== undefined) document[key] = structuredClone(config[key])
+  if (config[key] === undefined || (key === 'light' && typeof config.light === 'string')) continue
+  document[key] = structuredClone(config[key])
 }
 applyFloor(document, config)
 applyRequestedFrame(document, config)
@@ -101,6 +116,29 @@ function bindBackground(document, entry) {
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
     : withoutLoop({ ...slot, sourceUrl: entry.source, media: 'image', ...(surface ? { surface } : {}) }, surface))
   if (entry.houses) document.environment = { reflectiveFloor: false, platform: false, bloom: 0, ...document.environment, floorStyle: 'none' }
+}
+
+/** The camera nearer to or farther from what it looks at, keeping its angle: a framed camera scales its offsets
+ * across and ahead (not its height), an orbit its radius, a fixed eye its distance to the look point. */
+function reframe(document, frame) {
+  const factor = FRAMES[frame] ?? Number(frame)
+  if (!(factor > 0)) throw new Error(`unknown_frame:${frame}`)
+  const camera = document.camera
+  const nearer = ([x, y, z]) => [x * factor, y, z * factor]
+  if (camera.framing) camera.framing = { ...camera.framing, from: nearer(camera.framing.from), to: nearer(camera.framing.to) }
+  else if (camera.eyeOffset) camera.eyeOffset = nearer(camera.eyeOffset)
+  else if (['orbit', 'product', 'musical', 'follow'].includes(camera.family)) camera.orbitRadius = (camera.orbitRadius ?? 4.2) * factor
+  else camera.eye = camera.look.map((at, axis) => at + (camera.eye[axis] - at) * factor)
+}
+
+/** A named light replaces the template's sun and sets the ambient share; the rest of the lighting stays. */
+function lightPreset(document, name) {
+  const preset = LIGHTS[name]
+  if (!preset) throw new Error(`unknown_light:${name}`)
+  const { ambient, ...sun } = preset
+  document.light = { kind: 'directional', ...sun }
+  const environment = { source: 'room', rotation: 0, background: 'set', blur: 0, ...document.lighting?.environment, intensity: ambient }
+  document.lighting = { ...document.lighting, environment }
 }
 
 /** A picture moved to the sky no longer scrolls round a cylinder. */

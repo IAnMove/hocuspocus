@@ -477,6 +477,29 @@ waterfall, crystal cave, reef, volcano, sky islands, beach, snow, neon rain,
 synthwave grid, retro room...), the `pixel-*` places and the action sets. Vary
 them: one place for a whole video reads as one set.
 
+**Composition.** Three controls work on any template, with or without a `world`:
+
+- `frame` moves the template's camera nearer or farther, keeping its angle and
+  its move: `close` (0.6 of the template's distance), `medium` (0.8), `wide`
+  (1.35), `far` (1.8), or a number 0.25–4. A `dance-orbit` over the sky islands
+  with `"frame": "close"` fills the frame with the dancer; a two-shot with
+  `"frame": "wide"` shows the place.
+- `light` may be a named light instead of a light object: `noon`, `golden`
+  (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
+  from the side), `stage` (hard white from the front), `campfire` (warm from
+  low). It replaces the template's or the world's sun and sets the ambient
+  share; the rest of the lighting stays.
+- A cast **group** stands several models in a formation with one entry:
+  `{"crowd": {"sources": ["klump", "kasplat", "kremling"], "clip": "dance_side",
+  "formation": "arc", "spacing": 1.4}}`. Every member is added as a prop at its
+  own height, placed around the group's `position` (2.2 m behind the subject
+  unless given) and facing the camera. Formations: `line` (side by side), `arc`
+  (the ends come forward and turn in), `wedge` (a leader in front, pairs
+  behind), `circle` (around the position, facing it, with a gap at the camera)
+  and `scatter` (a line with a fixed jitter). Members are named `crowd_1`,
+  `crowd_2`... in the resolved cast; a shot holds at most 16 models and
+  pictures, groups counted by member.
+
 **Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
 sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
 drawn in the same batch:

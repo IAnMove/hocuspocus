@@ -1,6 +1,8 @@
 """Native 3D clip admission, resume, retake and failure propagation."""
 from pathlib import Path
 
+import math
+
 import pytest
 
 from services.production_scene3d import compile_document, export_scene3d_clips, validate_scene3d_shot
@@ -643,3 +645,66 @@ def test_real_compiler_plays_a_templates_camera_in_another_templates_world():
         compile_document(cast_shot(template="cine-dolly-in", world="nowhere", cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
     with pytest.raises(ValueError):
         validate_scene3d_shot(cast_shot(world=3, cast={"subject_1": "a.glb"}))
+
+
+def test_a_cast_group_spreads_its_members_in_a_formation_and_is_checked():
+    from services.production_scene3d import formation_places, spread_groups
+
+    crowd = {"sources": ["/api/v1/file/a.glb?workspace=t", "/api/v1/file/b.glb?workspace=t", "/api/v1/file/c.glb?workspace=t"],
+             "clip": "dance_side", "formation": "arc", "spacing": 2}
+    spread = spread_groups({"subject_1": "/api/v1/file/h.glb?workspace=t", "crowd": crowd})
+    assert list(spread) == ["subject_1", "crowd_1", "crowd_2", "crowd_3"]
+    assert all(member["add"] and member["clip"] == "dance_side" and "sources" not in member for member in list(spread.values())[1:])
+    assert spread["crowd_1"]["position"] == [-2, 0, -1.3] and spread["crowd_2"]["position"] == [0, 0, -2.2] and spread["crowd_3"]["position"] == [2, 0, -1.3]
+    assert spread["crowd_1"]["rotationY"] > 0 > spread["crowd_3"]["rotationY"], "the ends turn in toward the middle"
+    ring = formation_places("circle", 4, 1.5)
+    assert all(abs(math.hypot(dx, dz) - math.hypot(*ring[0][:2])) < 1e-9 for dx, dz, _yaw in ring), "a circle"
+    assert all(dz < 0.4 for _dx, dz, _yaw in ring), "nobody stands between the camera and the middle"
+    assert all(abs(math.atan2(-dx, -dz) - yaw) < 1e-9 for dx, dz, yaw in ring), "everyone faces the middle"
+    wedge = formation_places("wedge", 5, 1)
+    assert wedge[0] == (0, 0, 0) and wedge[1][0] < 0 < wedge[2][0] and wedge[3][1] < wedge[1][1] < 0, "the leader in front, pairs behind"
+    assert formation_places("scatter", 3, 1) == formation_places("scatter", 3, 1) != formation_places("line", 3, 1)
+    silent = {field: value for field, value in crowd.items() if field != "clip"}       # no GLB on disk to read clips from
+    resolved = resolve_media(cast_shot(cast={"subject_1": "/api/v1/file/h.glb?workspace=t", "crowd": silent})["scene3d"],
+                             stills={}, root="/nonexistent", workspace="t")
+    assert set(resolved["cast"]) == {"subject_1", "crowd_1", "crowd_2", "crowd_3"}
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb", "crowd": {"sources": ["a.glb", "b.glb"], "formation": "line"}}))
+    for bad in ({"sources": ["a.glb"]}, {"sources": ["a.glb", "b.glb"], "source": "c.glb"}, {"sources": ["a.glb", "b.glb"], "formation": "pile"},
+                {"sources": ["a.glb", "b.glb"], "spacing": 0.1}):
+        with pytest.raises(ValueError, match="scene3d.cast.crowd"):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb", "crowd": bad}))
+    eight = {"sources": [f"{letter}.glb" for letter in "abcdefgh"]}
+    with pytest.raises(ValueError, match="at most 16"):
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb", "one": eight, "two": eight, "three": {"sources": ["x.glb", "y.glb"]}}))
+
+
+def test_frame_and_a_named_light_are_checked():
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, frame="close", light="golden"))
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, frame=1.5, light={"kind": "directional", "direction": [0, -1, 0], "intensity": 1, "color": "#fff"}))
+    with pytest.raises(ValueError, match="scene3d.frame"):
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, frame="huge"))
+    with pytest.raises(ValueError, match="scene3d.frame"):
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, frame=9))
+    with pytest.raises(ValueError, match="scene3d.light"):
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, light="disco"))
+
+
+@NODE
+def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
+    hero = {"subject_1": "/api/v1/file/a.glb?workspace=t"}
+    plain = compile_document(cast_shot(template="cine-dolly-in", cast=hero), 4)["camera"]["framing"]
+    close = compile_document(cast_shot(template="cine-dolly-in", cast=hero, frame="close"), 4)["camera"]["framing"]
+    assert close["from"] == [plain["from"][0] * 0.6, plain["from"][1], plain["from"][2] * 0.6] and close["to"][2] == plain["to"][2] * 0.6
+    orbit = compile_document(cast_shot(template="dance-orbit", cast=hero, frame="wide"), 4)["camera"]
+    assert abs(orbit["orbitRadius"] - 5.4 * 1.35) < 1e-9
+    crane = compile_document(cast_shot(template="crane-reveal", cast=hero, frame=0.5), 4)["camera"]
+    assert crane["eye"] == [0.6, 2.25, 2.8] and crane["look"] == [0, 1, 0], "a fixed eye halfway to what it looks at"
+    with pytest.raises(ValueError, match="scene3d.frame"):
+        compile_document(cast_shot(template="cine-dolly-in", cast=hero, frame="huge"), 4)
+    golden = compile_document(cast_shot(template="cine-dolly-in", cast=hero, light="golden"), 4)
+    assert golden["light"] == {"kind": "directional", "direction": [-0.85, -0.3, -0.4], "intensity": 1.35, "color": "#ffc98a"}
+    assert golden["lighting"]["environment"]["intensity"] == 0.28 and golden["lighting"]["environment"]["source"] == "room"
+    night = compile_document(cast_shot(template="cine-dolly-in", world="atmos-beach-wide", cast=hero, light="night"), 4)
+    assert night["light"]["color"] == "#9fb6ff" and night["dressing"] == "atmos-beach", "a named light wins over the world's"
+    with pytest.raises(ValueError, match="scene3d.light"):
+        compile_document(cast_shot(template="cine-dolly-in", cast=hero, light="disco"), 4)
