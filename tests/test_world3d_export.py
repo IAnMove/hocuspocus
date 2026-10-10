@@ -193,6 +193,27 @@ def test_short_voiced_scene_is_admitted_with_its_audio_frozen_as_a_ref():
                      "filename": "voice.wav", "workspace": WORKSPACE}]
 
 
+def test_a_model_in_a_folder_of_the_workspace_is_found_where_it_is(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    slots = [{"id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0, "scale": 1, "media": "model3d", "clip": None,
+              "sourceUrl": f"/api/v1/file/pack/horse.glb?workspace={WORKSPACE}"}]
+    refs = freeze_export_command(_command(document=_document(slots=slots)))["effective"]["input"]["snapshot"]["refs"]
+    assert refs == [{"slotId": "subject_1", "url": slots[0]["sourceUrl"], "kind": "model3d", "filename": "horse.glb", "path": "pack/horse.glb",
+                     "workspace": WORKSPACE}]
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="horse-missing", document=_document(slots=slots)))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+    pack = Path(service.workspace_dir(WORKSPACE)) / "pack"
+    pack.mkdir()
+    (pack / "horse.glb").write_bytes(b"glTF")
+    assert service.submit(_command(intent_id="horse-present", document=_document(slots=slots)))["replayed"] is False
+    forget_task_registry(service._registry(WORKSPACE).workspace_dir)
+    climbing = [{**slots[0], "sourceUrl": f"/api/v1/file/pack/../secret.glb?workspace={WORKSPACE}"}]
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="horse-climbing", document=_document(slots=climbing)))
+    assert error.value.detail["code"] == "missing_ref"
+
+
 def test_voiced_admission_requires_the_audio_file(tmp_path):
     service = _service(tmp_path, renderer=_paint)
     with pytest.raises(Exception) as error:
