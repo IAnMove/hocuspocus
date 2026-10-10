@@ -87,8 +87,11 @@ def test_characters_get_a_t_pose_from_their_portrait_then_a_mesh_and_a_tempo_rig
     production = Production(tmp_path)
     make_models(production, SPEC, sleep=lambda _: None)
     pictures = {image["key"]: image for image in production.images}
-    assert set(pictures) == {"model-hero", "model-kite"}        # the boat already has its picture
+    assert set(pictures) == {"model-hero", "model-kite", "model-boat"}
     assert pictures["model-hero"]["refs"] == ["/api/v1/uploads/hero-single.png"]
+    boat = pictures["model-boat"]
+    assert boat["refs"] == ["/api/v1/uploads/boat.png"] and "no base, no stand, no scenery" in boat["prompt"], \
+        "a picture with a base or scenery would be meshed with it: the subject is redrawn alone"
     hero, kite = pictures["model-hero"]["prompt"], pictures["model-kite"]["prompt"]
     assert "T-pose" in hero and "isolated" in hero and "felt puppets" not in hero, "the portrait carries the look; the prompt is the staging"
     assert pictures["model-kite"]["refs"] is None and kite.startswith("a paper kite") and "felt puppets" in kite and kite.endswith("no shadow")
@@ -146,7 +149,7 @@ def test_sets_are_painted_in_the_same_batch_with_the_floor_recipe_and_named_as_b
     plain_wait = production.wait
     production.wait = lambda jobs: waited.append(sorted(jobs)) or plain_wait(jobs)
     make_models(production, spec, sleep=lambda _: None)
-    assert waited == [["hero", "kite", "set:harbour"]]
+    assert waited == [["boat", "hero", "kite", "set:harbour"]]
     painted = next(image for image in production.images if image["key"] == "set-harbour")
     assert painted["res"] == "1664x928" and "large open EMPTY floor" in painted["prompt"]
     assert painted["prompt"].startswith("An EMPTY set with nobody in it") and "a night harbour" in painted["prompt"]
@@ -276,3 +279,14 @@ def test_a_models_height_sizes_its_cast_entries_without_remaking_it(tmp_path):
     assert len(production.calls) == calls and scale() == 2.0, "a new height resizes the model, it does not remake it"
     with pytest.raises(ModelError):
         check_models({**SPEC, "models": {"boat": {"from": "boat-pic", "height": "tall"}}})
+
+
+def test_a_model_meshed_straight_from_its_picture_is_made_again_and_the_others_are_kept(tmp_path):
+    from services.production_models import _fingerprint
+    production = Production(tmp_path)
+    make_models(production, SPEC, sleep=lambda _: None)
+    boat = SPEC["models"]["boat"]
+    production.state["models"]["boat"]["fingerprint"] = _fingerprint(boat, "/api/v1/uploads/boat.png", SPEC)   # made the old way
+    before = len(production.images)
+    make_models(production, SPEC, sleep=lambda _: None)
+    assert [image["key"] for image in production.images[before:]] == ["model-boat"]
