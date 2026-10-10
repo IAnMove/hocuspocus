@@ -4,6 +4,7 @@ imageio
 imageio-ffmpeg
 tqdm
 easydict
+einops
 opencv-python-headless
 ninja
 trimesh

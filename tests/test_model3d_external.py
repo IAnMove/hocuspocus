@@ -149,6 +149,8 @@ def test_official_download_builds_complete_local_pipeline_and_repairs_truncation
 
 
 def _catalog_routes(monkeypatch):
+    # Only trusted functions from this repository are executed against doubles;
+    # request data never provides source code or the extraction path.
     import ast
     import threading
     from fastapi import HTTPException

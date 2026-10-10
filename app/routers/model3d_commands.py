@@ -42,8 +42,9 @@ def command_catalog() -> list[dict]:
     entries = []
     for name, payload, mutation, description in (
         ("model3d.generate", generate, True,
-         "Submit image or text to Hunyuan3D using the native GPU lane and workspace publisher. "
-         "Text requires the existing MiniMax reference-image configuration. Poll model3d.status."),
+         "Submit to a selected native 3D generator using the GPU lane and workspace publisher. "
+         "TRELLIS.2 and Pixal3D require one front image; Hunyuan text uses the existing "
+         "MiniMax reference-image configuration. Poll model3d.status."),
         ("model3d.status", status, False,
          "Read a native Model3D job in its exact workspace, including the published GLB URL."),
     ):

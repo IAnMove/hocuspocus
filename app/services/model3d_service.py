@@ -842,7 +842,9 @@ def start_job(
         "status": "queued",
         "progress": 0.0,
         "phase": "queued",
-        "message": "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation",
+        "message": (f"Queued {request_data['model']['label']} generation"
+                    if request_data["model"]["id"] in model3d_external.EXTERNAL_IDS
+                    else "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation"),
         "error": None,
         "filename": None,
         "url": None,
@@ -1158,7 +1160,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message=(
                 "Starting isolated Hunyuan3D retexture worker"
                 if operation == "retexture"
-                else "Starting isolated Hunyuan3D worker"
+                else f"Starting isolated {request_data['model']['label']} worker"
+                if model_id in model3d_external.EXTERNAL_IDS else "Starting isolated Hunyuan3D worker"
             ),
         )
         if process is None:

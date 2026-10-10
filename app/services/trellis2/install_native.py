@@ -45,7 +45,10 @@ def main() -> None:
                 str(vendor / "nvdiffrec"), str(vendor / "CuMesh"), str(vendor / "FlexGEMM"),
                 str(vendor / "TRELLIS.2/o-voxel")]
     for package in packages:
-        cmd, env = command("trellis2", ["install", "--no-build-isolation", package])
+        # All dependencies are installed from the Python lock or pinned vendors.
+        # O-Voxel declares floating Git dependencies for CuMesh/FlexGEMM; do not
+        # let its metadata replace the checkouts selected by our vendor catalog.
+        cmd, env = command("trellis2", ["install", "--no-build-isolation", "--no-deps", package])
         subprocess.run(cmd, env=env, check=True, cwd=ROOT)
 
 
