@@ -13,7 +13,8 @@ from typing import Any
 
 EXTERNAL_MODELS = [
     {
-        "id": "trellis2", "label": "TRELLIS.2", "engine": "trellis2", "provider": "trellis2",
+        "id": "trellis2", "label": "TRELLIS.2 · Official Microsoft 4B", "engine": "trellis2", "provider": "trellis2",
+        "official": True, "optional": True, "minimum_vram_gb": 24, "supported_platforms": ["linux"],
         "repo": "microsoft/TRELLIS.2-4B", "subfolder": "", "parameters": "4B",
         "multiview": False, "supports_text": False, "turbo": False,
         "recommended_vram_gb": 24,
@@ -41,6 +42,8 @@ def runtime_paths(engine: str) -> tuple[Path, Path]:
     prefix = f"HOCUSPOCUS_{engine.upper()}"
     root = Path(os.environ.get(f"{prefix}_ROOT") or Path(__file__).parent / "model3d_runtimes" / engine).resolve()
     python = Path(os.environ.get(f"{prefix}_PYTHON") or root / "env" / "bin" / "python").resolve()
+    if engine == "trellis2" and not os.environ.get(f"{prefix}_ROOT"):
+        root = root / "vendor/TRELLIS.2"
     return root, python
 
 
@@ -48,14 +51,25 @@ def installation_status(engine: str) -> dict[str, Any]:
     root, python = runtime_paths(engine)
     entry = root / ("trellis2/pipelines/__init__.py" if engine == "trellis2" else "inference.py")
     configured = sys.platform == "linux" and entry.is_file() and python.is_file() and os.access(python, os.X_OK)
+    compatible, reason, weights = True, None, None
+    if engine == "trellis2":
+        from .runtime_profiles import detect_profiles, managed_ready
+        from .trellis2.assets import downloaded
+        support = detect_profiles(inspect_engines=set())["engines"][engine]
+        compatible, reason = support["supported"], support["reason"]
+        configured = configured and managed_ready(engine)
+        weights = downloaded()
     return {
         "installed": configured,
+        "compatible": compatible, "compatibility_reason": reason, "weights_downloaded": weights,
         "validation": "configured_not_gpu_validated" if configured else "not_configured",
         "isolated_runtime": True, "releases_vram_after_job": True,
-        "install_hint": None if configured else (
+        "install_hint": reason if not compatible else (None if configured and weights is not False else (
+            "Optional TRELLIS.2: run Advanced > Install TRELLIS.2, restart HocusPocus, then download its weights in Settings > Model Visibility > 3D. Requires Hugging Face access to DINOv3 and RMBG-2.0."
+            if engine == "trellis2" else
             f"Configure HOCUSPOCUS_{engine.upper()}_ROOT and HOCUSPOCUS_{engine.upper()}_PYTHON "
             "for an isolated Linux/CUDA installation. See docs/development/MODEL3D_ENGINES.md."
-        ),
+        )),
     }
 
 

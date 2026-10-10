@@ -128,6 +128,7 @@ function vendorSteps(id) {
         `python "{{path.resolve(cwd, 'app/services/hunyuan3d/patch_windows_sources.py')}}" --restore`,
       ] : []),
       `git fetch --depth 1 origin ${vendor.revision}`, `git checkout --detach ${vendor.revision}`,
+      ...(vendor.recursive ? ['git submodule update --init --recursive'] : []),
       `python "{{path.resolve(cwd, 'scripts/runtime_vendor.py')}}" ${id}`,
     ]}},
   ]
@@ -149,6 +150,10 @@ function engineSteps(engine, platform) {
     .map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
   const removals = engine === 'wangp' && platform === 'win32'
     ? [pip(engine, platform, 'uninstall torchcodec')] : []
+  if (engine === 'trellis2') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    message: 'conda install -y -c nvidia/label/cuda-12.4.1 -c conda-forge cuda-toolkit=12.4 gcc_linux-64=12 gxx_linux-64=12 make',
+  }})
   const packages = [
     ...removals,
     ...(torch ? [pip(engine, platform, `install ${torch}`)] : []),
@@ -164,6 +169,11 @@ function engineSteps(engine, platform) {
     message: guarded('conda install -y -c conda-forge ffmpeg'),
   }})
   if (engine === 'wangp') run.push(...call('torch.js', {managed: true}))
+  if (engine === 'trellis2') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    env: {...shell(engine, platform).env, MAX_JOBS: '2'},
+    message: 'python app/services/trellis2/install_native.py',
+  }})
   if (engine === 'hunyuan3d') {
     // Windows builds load the CUDA-compatible MSVC toolset chosen by the probe
     // (runtime_profiles.find_msvc); DISTUTILS_USE_SDK makes setuptools use it

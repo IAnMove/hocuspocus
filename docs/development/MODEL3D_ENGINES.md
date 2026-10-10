@@ -10,13 +10,15 @@ model visibility preferences are preserved rather than overwritten.
 
 ## Status and scope
 
-Implemented: adapters, per-engine configuration detection, strict request
-validation, UI capability controls and provider-free contract tests.
-Not claimed: GPU validation, clean-machine one-click installation, calibrated
-multi-view support or independent dependency/license auditing.
-`runtime.installed` means the configured executable and source entry exist;
-`validation=configured_not_gpu_validated` explicitly distinguishes this from
-a successful model load. Weights may download on the first real generation.
+TRELLIS.2 now has an opt-in Pinokio installer and explicit, pinned weight
+management; see [TRELLIS2.md](TRELLIS2.md) for supported hardware and the API.
+Pixal3D remains a manual adapter. Both retain strict input validation and
+isolated subprocess execution. Contract tests do not establish real GPU
+quality or clean-machine installation validation.
+`runtime.installed` describes the runtime, not downloaded weights or a
+successful generation. TRELLIS reports compatibility and `weights_downloaded`
+separately and refuses generation until both are ready. It never downloads
+weights during generation. Pixal3D still downloads on first use.
 
 | Input | TRELLIS.2 | Pixal3D |
 |---|---|---|
@@ -32,7 +34,13 @@ a successful model load. Weights may download on the first real generation.
 Disabled view selections are retained in the UI but never included in a
 single-image request. This is not a promise that hidden views are consumed.
 
-## Isolated installation (manual, outside the main app environment)
+## Isolated installation
+
+For managed TRELLIS.2 installation, use Advanced > Install TRELLIS.2 and
+follow [TRELLIS2.md](TRELLIS2.md). The following manual configuration is
+retained for Pixal3D and administrator-owned upstream checkouts. TRELLIS
+manual configurations must still download the pinned offline bundle through
+the catalog; an administrator path never authorizes automatic weight downloads.
 
 Do **not** install these dependencies into `app/env` or the Hunyuan environment.
 Use a separate environment and upstream checkout for each engine. The default

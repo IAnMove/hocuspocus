@@ -19,7 +19,8 @@ module.exports = {
     const filterOptional = items => items.filter(item =>
       item.href === 'sam_install.js' ? optionalAvailable('sam')
         : item.href === 'rigging_install.js' ? optionalAvailable('rigging')
-        : item.href === 'hunyuan3d_install.js' ? optionalAvailable('hunyuan3d') : true
+        : item.href === 'hunyuan3d_install.js' ? optionalAvailable('hunyuan3d')
+        : item.href === 'trellis2_install.js' ? optionalAvailable('trellis2') : true
     ).map(item => item.menu ? {...item, menu: filterOptional(item.menu)} : item)
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would
@@ -131,6 +132,12 @@ module.exports = {
               ? "Update 3D Generation (Hunyuan3D)"
               : "Install 3D Generation (Hunyuan3D)",
             href: "hunyuan3d_install.js",
+          }, {
+            icon: "fa-solid fa-cube",
+            text: info.exists("app/services/model3d_runtimes/trellis2/env")
+              ? "Update TRELLIS.2 (optional, Linux NVIDIA 24GB)"
+              : "Install TRELLIS.2 (optional, Linux NVIDIA 24GB)",
+            href: "trellis2_install.js",
           }, {
             icon: "fa-solid fa-vector-square",
             text: info.exists("app/services/sam/env")

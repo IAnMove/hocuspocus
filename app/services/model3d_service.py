@@ -295,6 +295,9 @@ def installation_status() -> dict[str, Any]:
 
 def is_model_downloaded(model_id: str) -> bool:
     """Return whether the selected Hugging Face snapshot is cached locally."""
+    if model_id == "trellis2":
+        from .trellis2.assets import downloaded
+        return downloaded()
     model = MODEL_BY_ID.get(model_id)
     if model is None:
         return False
@@ -370,6 +373,12 @@ def delete_model_cache(model_id: str) -> list[str]:
     model = MODEL_BY_ID.get(model_id)
     if model is None:
         raise ValueError(f"Unknown Hunyuan3D model: {model_id}")
+    if model_id == "trellis2":
+        from .trellis2.assets import CACHE
+        if not CACHE.exists():
+            return []
+        shutil.rmtree(CACHE)
+        return [model["repo"]]
     repo_cache = HF_CACHE_DIR / "hub" / f"models--{model['repo'].replace('/', '--')}"
     if not repo_cache.exists():
         return []
@@ -815,7 +824,7 @@ def start_job(
         runtime = (model3d_external.installation_status(request_data["model"]["id"])
                    if request_data["model"]["id"] in model3d_external.EXTERNAL_IDS
                    else installation_status())
-        if not runtime["installed"]:
+        if not runtime["installed"] or runtime.get("compatible") is False or runtime.get("weights_downloaded") is False:
             raise RuntimeError(runtime["install_hint"])
 
     with _lock:
@@ -833,7 +842,9 @@ def start_job(
         "status": "queued",
         "progress": 0.0,
         "phase": "queued",
-        "message": "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation",
+        "message": (f"Queued {request_data['model']['label']} generation"
+                    if request_data["model"]["id"] in model3d_external.EXTERNAL_IDS
+                    else "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation"),
         "error": None,
         "filename": None,
         "url": None,
@@ -1135,6 +1146,9 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         "TOKENIZERS_PARALLELISM": "false",
         "PYTORCH_CUDA_ALLOC_CONF": env.get("PYTORCH_CUDA_ALLOC_CONF") or "expandable_segments:True",
     })
+    if model_id == "trellis2":
+        # Generation consumes only the explicitly downloaded pinned bundle.
+        env.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", ATTN_BACKEND="flash_attn")
     lines: list[str] = []
     generation_committed = False
     try:
@@ -1146,7 +1160,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message=(
                 "Starting isolated Hunyuan3D retexture worker"
                 if operation == "retexture"
-                else "Starting isolated Hunyuan3D worker"
+                else f"Starting isolated {request_data['model']['label']} worker"
+                if model_id in model3d_external.EXTERNAL_IDS else "Starting isolated Hunyuan3D worker"
             ),
         )
         if process is None:
