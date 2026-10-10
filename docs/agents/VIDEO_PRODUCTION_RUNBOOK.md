@@ -434,6 +434,14 @@ bow, point, shrug, kneel_pray, crouch. Procedural profiles (`prop`, `vehicle`,
 `quadruped`, `flying`, `serpentine`) take their own clips (hover, bounce, spin,
 wobble, strafe…); `none` keeps a rigid model that moves along `motion` paths.
 A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dance_bounce"}`.
+
+Models you already have (a pack of GLBs in the workspace) skip the picture and
+the mesh: `{"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop",
+"animations": ["idle", "dance_bounce"], "height": 1.9}`. The humanoid rig needs a
+T or A pose with the legs apart and a gap under each arm; when it refuses the
+body (legs together, arms down, a tail) `fallback` rigs it with that procedural
+profile instead, and a shot that asks that model for a humanoid clip gets the
+profile's nearest one (a dance wobbles or bounces, a still pose hovers).
 Every model stands 1.7 m tall in a scene unless it gives its real `height` in
 metres (`"moto": {"prompt": "...", "rig": "vehicle", "height": 1.1}`); a cast
 entry's own `scale` wins, and a new height does not remake the model.

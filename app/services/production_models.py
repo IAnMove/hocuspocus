@@ -7,6 +7,9 @@
 - A character (``rig: "humanoid"``, the default for a cast id) is first redrawn in a T-pose from its portrait,
   because the humanoid rig needs one; a rigged model's clips follow the song's tempo.
 - ``rig`` is ``humanoid``, a procedural profile (prop, vehicle, quadruped, flying, serpentine) or ``none``.
+- ``glb`` is a model already in the workspace (a file name): it skips the picture and the mesh and is only rigged.
+  ``fallback`` is the procedural profile a humanoid rig falls back to when the body is not one it can rig
+  (legs together, arms down, a tail).
 
 ``height`` (metres) is the model's real size in a scene; without it every model stands 1.7 m tall. It does not
 remake the model.
@@ -33,9 +36,9 @@ from services.production_diorama import (
 )
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
-FIELDS = {"from", "prompt", "rig", "animations", "seed", "height"}
+FIELDS = {"from", "prompt", "glb", "rig", "fallback", "animations", "seed", "height"}
 HUMANOID_CLIPS = ["idle", "walk", "dance_bounce", "wave"]
-PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin"], "vehicle": ["bounce", "wobble"], "quadruped": ["idle", "walk", "run"],
+PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin", "wobble"], "vehicle": ["bounce", "wobble"], "quadruped": ["idle", "walk", "run"],
                  "flying": ["hover", "strafe"], "serpentine": ["idle", "wobble"]}
 # Pictures for Hunyuan3D are isolated: a busy background gets meshed into the model. The reference portrait
 # already carries the look, so a character's T-pose prompt is only the staging.
@@ -46,8 +49,11 @@ CHARACTER_STAGING = ("The same character as the reference, full body, T-pose, fr
 OBJECT_STAGING = "single object, three-quarter view, isolated on a plain light grey studio background, nothing else in the picture, no shadow"
 # A cast portrait often stands the figure on a base or in its scenery (a diorama style draws little houses under
 # it). Hunyuan3D meshes all of that, so a model that is not a humanoid is redrawn alone from its picture too.
-REFERENCE_STAGING = ("The same character or object as the reference, alone and whole, three-quarter view, isolated on a plain "
-                     "light grey studio background, no base, no stand, no scenery, nothing else in the picture, no shadow")
+# Worded as an edit: told to draw "the same subject alone", the image model kept the base of the reference picture;
+# told to keep only the subject and remove the base, it did.
+REFERENCE_STAGING = ("Keep only the main character or object from the reference picture: remove the base, stand, pedestal, "
+                     "ground and any scenery under or around it. Show it alone and whole, standing directly on a plain light "
+                     "grey studio background, three-quarter view, nothing else in the picture, no shadow")
 PICTURE_SIZE = "1024x1024"
 # A set must leave the cast room and company to nobody: figures painted into it stand where the cast stands
 # and stretch across the projected floor. The rule goes first and last, and the look loses its sentences about people.
@@ -88,8 +94,10 @@ def check_models(spec: dict) -> None:
     models = spec.get("models")
     if models is None:
         return
-    if not isinstance(models, dict) or len(models) > 12:
-        raise ModelError("spec.models maps up to 12 names to {from or prompt, rig, animations}")
+    made = [entry for entry in models.values() if not (isinstance(entry, dict) and entry.get("glb"))] if isinstance(models, dict) else []
+    if not isinstance(models, dict) or len(made) > 12 or len(models) > 40:
+        raise ModelError("spec.models maps up to 40 names to {from, prompt or glb, rig, animations}, at most 12 of them "
+                         "made from a picture or a prompt")
     cast = _cast_ids(spec)
     for name, entry in models.items():
         _check_model(name, entry, cast)
@@ -98,16 +106,24 @@ def check_models(spec: dict) -> None:
 def _check_model(name: Any, entry: Any, cast: set) -> None:
     if not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) or set(entry) - FIELDS:
         raise ModelError(f"models.{name}: a lower-case name and only {', '.join(sorted(FIELDS))}")
-    if not (_text(entry.get("from")) or _text(entry.get("prompt"))):
-        raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL) or a prompt")
-    if rig_of(entry, cast) not in RIGS:
-        raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
+    _check_origin_and_rig(name, entry, cast)
     height = entry.get("height")
     if height is not None and not (isinstance(height, (int, float)) and not isinstance(height, bool) and 0.05 <= height <= 60):
         raise ModelError(f"models.{name}.height is the model's size in metres (0.05-60)")
     clips = entry.get("animations")
     if clips is not None and (not isinstance(clips, list) or not 0 < len(clips) <= 8 or not all(_text(c) for c in clips)):
         raise ModelError(f"models.{name}.animations is a list of 1-8 clip names")
+
+
+def _check_origin_and_rig(name: str, entry: dict, cast: set) -> None:
+    origins = [field for field in ("from", "prompt", "glb") if _text(entry.get(field))]
+    if not origins or ("glb" in origins and len(origins) > 1):
+        raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL), a prompt, or a glb in the workspace")
+    rig = rig_of(entry, cast)
+    if rig not in RIGS:
+        raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
+    if entry.get("fallback") is not None and (rig != "humanoid" or entry["fallback"] not in PROFILE_CLIPS):
+        raise ModelError(f"models.{name}.fallback is a procedural profile ({', '.join(PROFILE_CLIPS)}) for a humanoid rig")
 
 
 def rig_of(entry: dict, cast: set) -> str:
@@ -222,7 +238,9 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
     for name, entry in (spec.get("models") or {}).items():
         source, rig = _source(production, spec, entry), rig_of(entry, cast)
         # A model meshed straight from its picture before REFERENCE_STAGING is made again.
-        restaged = {**entry, "staging": "isolated"} if source and rig != "humanoid" else entry
+        restaged = {**entry, "staging": "isolated-2"} if source and rig != "humanoid" else entry
+        if entry.get("glb"):
+            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name)}
         fingerprint = _fingerprint(restaged, source, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and kept.get("file") and not kept.get("rig_error"):
@@ -232,12 +250,20 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
     return todo
 
 
+def _size(path: Any, name: str) -> int:
+    if not path.is_file():
+        raise ModelError(f"models.{name}.glb: no file {path.name} in the workspace")
+    return path.stat().st_size
+
+
 def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, str], dict[str, str | None]]:
     """Image jobs for every model's picture: a T-pose from a character's portrait, the subject of any other picture
     alone on a plain background, or an object drawn from its prompt."""
     from services.production_image_defaults import image_choice
     look, pictures, jobs = scenery_look(style.get("image", "")), {}, {}
     for name, (entry, source, rig) in todo.items():
+        if entry.get("glb"):
+            continue
         if rig == "humanoid":
             staged = CHARACTER_STAGING
         elif source:
@@ -301,8 +327,39 @@ def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, ma
             mesh = record["filename"]
             rigs[name] = lambda name=name, mesh=mesh, entry=entry, rig=rig: _submit(
                 production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
+    rigs.update(_glb_rigs(production, todo, made, bpm))
     production.save()
-    for name, record in _in_waves(production, "model3d.rig.status", rigs, sleep).items():
+    _land_rigs(production, made, _in_waves(production, "model3d.rig.status", rigs, sleep))
+    _fall_back(production, todo, made, [name for name in rigs if made[name].get("rig_error")], bpm, sleep)
+
+
+def _glb_rigs(production: Any, todo: dict, made: dict, bpm: int) -> dict[str, Callable[[], tuple[str | None, str | None]]]:
+    """A model given as a workspace GLB is its own mesh: only its rig is asked for."""
+    rigs = {}
+    for name, (entry, _source_url, rig) in todo.items():
+        if not entry.get("glb"):
+            continue
+        made[name].update(mesh=entry["glb"], file=entry["glb"])
+        if rig != "none":
+            rigs[name] = lambda name=name, entry=entry, rig=rig: _submit(
+                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(entry['glb'])}", _rig_request(entry, rig, entry["glb"], bpm))
+    return rigs
+
+
+def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: int, sleep) -> None:
+    """A refused humanoid rig is done again with the model's fallback profile."""
+    refused = [name for name in failed if todo[name][0].get("fallback")]
+    for name in refused:
+        made[name]["rigged_as"] = todo[name][0]["fallback"]
+        production.log(f"model {name}: humanoid rig refused ({made[name].pop('rig_error')}), using the {made[name]['rigged_as']} profile")
+    fallbacks = {name: (lambda name=name, profile=made[name]["rigged_as"]: _submit(
+        production, "model3d.rig", f"{production.id}-rig-{name}-{profile}-{_digest(made[name]['mesh'])}",
+        _rig_request({}, profile, made[name]["mesh"], bpm))) for name in refused}
+    _land_rigs(production, made, _in_waves(production, "model3d.rig.status", fallbacks, sleep))
+
+
+def _land_rigs(production: Any, made: dict, records: dict[str, dict]) -> None:
+    for name, record in records.items():
         if record.get("status") == "completed" and record.get("filename"):
             made[name]["file"] = record["filename"]
         else:
