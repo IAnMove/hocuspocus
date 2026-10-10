@@ -15,6 +15,19 @@ from app.services.runtime_profiles import select_profiles
 from app.services.trellis2 import assets
 
 
+def test_cuda_link_stubs_never_leak_into_the_runtime_loader_path(tmp_path):
+    from app.services.trellis2.install_native import build_environment
+    stubs = tmp_path / "lib/stubs"
+    stubs.mkdir(parents=True)
+    (stubs / "libcuda.so").touch()
+    original = {"LD_LIBRARY_PATH": "/host/driver", "LIBRARY_PATH": "/other/build/libs"}
+    result = build_environment(tmp_path, original)
+    assert result["LD_LIBRARY_PATH"] == original["LD_LIBRARY_PATH"]
+    assert str(stubs) in result["LIBRARY_PATH"]
+    assert result["CUDA_HOME"] == str(tmp_path)
+    assert "CUDA_HOME" not in original
+
+
 @pytest.mark.parametrize("platform,gpu,compute,memory,supported", [
     ("linux", "nvidia", "8.9", 24564, True),
     ("linux", "nvidia", "8.0", 81920, True),
