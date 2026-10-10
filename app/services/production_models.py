@@ -326,8 +326,7 @@ def _meshes_and_rigs(production: Any, spec: dict, todo: dict, pictures: dict, ma
         entry, _source_url, rig = todo[name]
         if rig != "none":
             mesh = record["filename"]
-            rigs[name] = lambda name=name, mesh=mesh, entry=entry, rig=rig: _submit(
-                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
+            rigs[name] = _rig_job(production, name, _rig_request(entry, rig, mesh, bpm))
     rigs.update(_glb_rigs(production, todo, made, bpm))
     production.save()
     _land_rigs(production, made, _in_waves(production, "model3d.rig.status", rigs, sleep))
@@ -344,9 +343,15 @@ def _glb_rigs(production: Any, todo: dict, made: dict, bpm: int) -> dict[str, Ca
         mesh = _cleaned(production, name, entry["glb"])
         made[name].update(mesh=mesh, file=mesh)
         if rig != "none":
-            rigs[name] = lambda name=name, entry=entry, rig=rig, mesh=mesh: _submit(
-                production, "model3d.rig", f"{production.id}-rig-{name}-{_digest(mesh)}", _rig_request(entry, rig, mesh, bpm))
+            rigs[name] = _rig_job(production, name, _rig_request(entry, rig, mesh, bpm))
     return rigs
+
+
+def _rig_job(production: Any, name: str, request: dict) -> Callable[[], tuple[str | None, str | None]]:
+    """The rig submission, its intent named after the whole request: the journal refuses an intent used again with
+    other parameters, so new animations on the same mesh need their own intent."""
+    intent = f"{production.id}-rig-{name}-{_digest(json.dumps(request, sort_keys=True))}"
+    return lambda: _submit(production, "model3d.rig", intent, request)
 
 
 def _cleaned(production: Any, name: str, glb: str) -> str:
@@ -365,9 +370,7 @@ def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: 
     for name in refused:
         made[name]["rigged_as"] = todo[name][0]["fallback"]
         production.log(f"model {name}: humanoid rig refused ({made[name].pop('rig_error')}), using the {made[name]['rigged_as']} profile")
-    fallbacks = {name: (lambda name=name, profile=made[name]["rigged_as"]: _submit(
-        production, "model3d.rig", f"{production.id}-rig-{name}-{profile}-{_digest(made[name]['mesh'])}",
-        _rig_request({}, profile, made[name]["mesh"], bpm))) for name in refused}
+    fallbacks = {name: _rig_job(production, name, _rig_request({}, made[name]["rigged_as"], made[name]["mesh"], bpm)) for name in refused}
     _land_rigs(production, made, _in_waves(production, "model3d.rig.status", fallbacks, sleep))
 
 

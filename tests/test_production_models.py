@@ -340,3 +340,16 @@ def test_up_to_twelve_models_are_made_and_up_to_forty_counting_glbs(tmp_path):
     for too_many in ({**made, "m12": {"prompt": "a lamp"}}, {**glbs, **made, "g28": {"glb": "pack/x.glb"}}):
         with pytest.raises(ModelError):
             check_models({"models": too_many})
+
+
+def test_new_animations_on_the_same_mesh_get_their_own_rig_intent(tmp_path):
+    """The journal refuses an intent used again with other parameters: re-rigging K. Rool with new clips failed."""
+    (tmp_path / "pack").mkdir()
+    (tmp_path / "pack" / "king.glb").write_bytes(b"glb king")
+    production = Production(tmp_path)
+    spec = {"song": {"bpm": 100}, "style": {}, "models": {"king": {"glb": "pack/king.glb", "rig": "humanoid", "animations": ["idle"]}}}
+    make_models(production, spec, sleep=lambda _: None)
+    spec["models"]["king"]["animations"] = ["idle", "dance_bounce"]
+    make_models(production, spec, sleep=lambda _: None)
+    intents = [args["intent_id"] for op, args in production.calls if op == "model3d.rig"]
+    assert len(intents) == 2 and intents[0] != intents[1]
