@@ -355,10 +355,14 @@ def _rig_job(production: Any, name: str, request: dict) -> Callable[[], tuple[st
 
 
 def _cleaned(production: Any, name: str, glb: str, *, standing: bool) -> str:
+    """The model's cleaned copy, named by the original's content and the clean-up: a clean-up that changes the mesh
+    changes the file name, so rigs and clips made from an earlier copy are not taken for this one."""
     from pathlib import PurePosixPath
     from services.glb_cleanup import clean_glb
-    target = str(PurePosixPath(glb).with_suffix(".clean.glb"))
-    if fixes := clean_glb(production.root / glb, production.root / target, standing=standing):
+    source = production.root / glb
+    digest = _digest(f"{hashlib.sha256(source.read_bytes()).hexdigest()}:{GLB_CLEANUP}:{standing}")
+    target = str(PurePosixPath(glb).with_name(f"{PurePosixPath(glb).stem}.clean-{digest}.glb"))
+    if fixes := clean_glb(source, production.root / target, standing=standing):
         production.log(f"model {name}: {'; '.join(fixes)}; rigging {target}")
         return target
     return glb
