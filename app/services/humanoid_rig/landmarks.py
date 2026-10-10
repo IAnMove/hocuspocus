@@ -256,10 +256,12 @@ def _row_span(row: np.ndarray) -> int:
 
 
 def _require_facing_front(points: dict, height: float) -> None:
-    """A body turned away from the camera puts one shoulder and one hand far behind the other."""
+    """A body turned away from the camera puts one shoulder and one hand far behind the other. Level shoulders
+    with one hand well forward are a body holding something out (an old man's cane, a lantern), not a turn."""
     hands = abs(float(points["left_wrist"][2]) - float(points["right_wrist"][2]))
     shoulders = abs(float(points["left_shoulder"][2]) - float(points["right_shoulder"][2]))
-    if hands > height * 0.12 or shoulders > height * 0.06:
+    reach = 0.3 if shoulders <= height * 0.02 else 0.12
+    if hands > height * reach or shoulders > height * 0.06:
         raise NotHumanoid("turned")
 
 
