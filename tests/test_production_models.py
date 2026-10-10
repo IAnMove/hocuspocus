@@ -353,3 +353,27 @@ def test_new_animations_on_the_same_mesh_get_their_own_rig_intent(tmp_path):
     make_models(production, spec, sleep=lambda _: None)
     intents = [args["intent_id"] for op, args in production.calls if op == "model3d.rig"]
     assert len(intents) == 2 and intents[0] != intents[1]
+
+
+def test_a_cleaned_copy_is_named_by_the_originals_content_and_the_clean_up(tmp_path, monkeypatch):
+    from services import production_models
+
+    (tmp_path / "pack").mkdir()
+    (tmp_path / "pack" / "ape.glb").write_bytes(b"glb one")
+    written = []
+
+    def fake_clean(source, target, *, standing=False):
+        written.append((str(target), standing))
+        return ["its vertex colours were normals (rainbow tints)"]
+
+    monkeypatch.setattr("services.glb_cleanup.clean_glb", fake_clean)
+    production = Production(tmp_path)
+    first = production_models._cleaned(production, "ape", "pack/ape.glb", standing=True)
+    assert first.startswith("pack/ape.clean-") and first.endswith(".glb") and written[-1] == (str(tmp_path / first), True)
+    assert production_models._cleaned(production, "ape", "pack/ape.glb", standing=True) == first, "the same content keeps its name"
+    assert production_models._cleaned(production, "ape", "pack/ape.glb", standing=False) != first, "a different clean-up is another file"
+    (tmp_path / "pack" / "ape.glb").write_bytes(b"glb two")
+    assert production_models._cleaned(production, "ape", "pack/ape.glb", standing=True) != first, "new content is another file"
+    assert "rainbow" in production.state["log"][-1]
+    monkeypatch.setattr("services.glb_cleanup.clean_glb", lambda source, target, *, standing=False: [])
+    assert production_models._cleaned(production, "ape", "pack/ape.glb", standing=True) == "pack/ape.glb", "a clean model is rigged as it is"
