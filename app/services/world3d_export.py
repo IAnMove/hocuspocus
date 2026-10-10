@@ -541,18 +541,33 @@ def _ref_from_url(slot: dict, url: str, workspace: str) -> dict:
     # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
     # and media picked from another workspace folder.
     path, scoped = parse_media_ref(url)
-    filename = os.path.basename((path or "").replace("\\", "/"))
+    inside = _inside_root((path or "").replace("\\", "/"))
+    filename = os.path.basename(inside)
     if not filename:
         raise http_error(422, "missing_ref", "Each used slot needs a durable media ref")
     record = {
         "slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d",
         "filename": filename,
     }
+    if inside != filename:
+        record["path"] = inside      # a file in a folder of the workspace (a model pack): looked up where it is
     if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
         record["root"] = "uploads"
     else:
         record["workspace"] = scoped or workspace
     return record
+
+
+def _inside_root(path: str) -> str:
+    """The file's path inside its root (the workspace or the uploads), without the API prefix."""
+    for prefix in ("/api/v1/file/", "/api/v1/uploads/"):
+        if prefix in path:
+            path = path.split(prefix, 1)[1]
+            break
+    parts = [part for part in path.strip("/").split("/") if part]
+    if any(part in ("..", ".") for part in parts) or "\x00" in path:
+        raise http_error(422, "missing_ref", "Use a media path inside the workspace")
+    return "/".join(parts)
 
 
 def _index_refs(refs) -> dict:
@@ -751,7 +766,7 @@ class World3DExportService:
         workspace_root = Path(self.workspace_dir(workspace))
         uploads_root = Path(self.uploads_dir())
         for ref in refs:
-            name = ref.get("filename")
+            name = ref.get("path") or ref.get("filename")
             if not name:
                 continue
             named = ref.get("workspace", workspace)
