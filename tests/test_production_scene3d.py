@@ -627,3 +627,19 @@ def test_real_compiler_closes_a_plaza_seen_from_above_around_the_ground_in_view(
     toward_camera = math.atan2(framing["from"][0], framing["from"][2])
     assert all(abs(math.atan2(math.sin(angle - toward_camera), math.cos(angle - toward_camera))) > 0.9 for _, angle in places), \
         "no house between the camera and the cast"
+
+
+@NODE
+def test_real_compiler_plays_a_templates_camera_in_another_templates_world():
+    plain = compile_document(cast_shot(template="cine-dolly-in", cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    reef = compile_document(cast_shot(template="cine-dolly-in", world="atmos-reef-wide", cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    assert reef["dressing"] == "atmos-reef" and reef["atmos"]["timeOfDay"] == "shallows" and reef["environment"]["floorStyle"] == "none"
+    assert reef["camera"] == plain["camera"], "the shot keeps its own camera"
+    assert [slot["id"] for slot in reef["slots"]] == ["subject_1"], "no empty background plate or uncast placeholder"
+    clear = compile_document(cast_shot(template="cine-dolly-in", world="atmos-reef-wide", atmos={"timeOfDay": "shallows", "fogDensity": 0.05},
+                                       cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    assert clear["atmos"]["fogDensity"] == 0.05, "an explicit override still wins"
+    with pytest.raises(ValueError, match="unknown_template"):
+        compile_document(cast_shot(template="cine-dolly-in", world="nowhere", cast={"subject_1": "/api/v1/file/a.glb?workspace=t"}), 4)
+    with pytest.raises(ValueError):
+        validate_scene3d_shot(cast_shot(world=3, cast={"subject_1": "a.glb"}))
