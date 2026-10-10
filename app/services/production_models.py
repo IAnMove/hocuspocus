@@ -38,7 +38,7 @@ from services.production_diorama import (
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
 FIELDS = {"from", "prompt", "glb", "rig", "fallback", "animations", "seed", "height"}
 HUMANOID_CLIPS = ["idle", "walk", "dance_bounce", "wave"]
-PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin"], "vehicle": ["bounce", "wobble"], "quadruped": ["idle", "walk", "run"],
+PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin", "wobble"], "vehicle": ["bounce", "wobble"], "quadruped": ["idle", "walk", "run"],
                  "flying": ["hover", "strafe"], "serpentine": ["idle", "wobble"]}
 # Pictures for Hunyuan3D are isolated: a busy background gets meshed into the model. The reference portrait
 # already carries the look, so a character's T-pose prompt is only the staging.

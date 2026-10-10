@@ -318,12 +318,12 @@ def test_a_glb_in_the_workspace_is_only_rigged_and_a_refused_humanoid_falls_back
     assert [(rig["source"], rig["engine"], rig.get("rig_profile")) for rig in rigs] == [
         ("pack/ape.glb", "humanoid", None), ("pack/parrot.glb", "procedural", "flying"), ("pack/ape.glb", "procedural", "prop")]
     ape = production.state["models"]["ape"]
-    assert ape["rigged_as"] == "prop" and "rig_error" not in ape and ape["clips"] == ["hover", "bounce", "spin"]
+    assert ape["rigged_as"] == "prop" and "rig_error" not in ape and ape["clips"] == ["hover", "bounce", "spin", "wobble"]
     assert any("humanoid rig refused" in line for line in production.state["log"])
     resolved = resolve_media({"template": "dance-stage", "cast": {"subject_1": {"source": "ape", "clip": "dance_bounce"},
                                                                   "subject_2": {"source": "ape", "clip": "idle"}}},
                              stills={}, root=tmp_path, workspace="w", models=production.state["models"])
-    assert resolved["cast"]["subject_1"]["clip"] == {"index": 1, "name": "bounce"}, "a dance stands in as the profile's bounce"
+    assert resolved["cast"]["subject_1"]["clip"] == {"index": 3, "name": "wobble"}, "a dance stands in as the profile's wobble"
     assert resolved["cast"]["subject_2"]["clip"] == {"index": 0, "name": "hover"} and resolved["cast"]["subject_1"]["scale"] == round(1.9 / 1.7, 4)
     calls = len(production.calls)
     make_models(production, spec, sleep=lambda _: None)
