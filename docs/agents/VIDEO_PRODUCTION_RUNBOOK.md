@@ -444,7 +444,10 @@ the mesh: `{"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop",
 T or A pose with the legs apart and a gap under each arm; when it refuses the
 body (legs together, arms down, a tail) `fallback` rigs it with that procedural
 profile instead, and a shot that asks that model for a humanoid clip gets the
-profile's nearest one (a dance wobbles or bounces, a still pose hovers).
+profile's nearest one (a dance wobbles or bounces, a still pose hovers). A GLB
+whose vertex colours are really normals (game rips: rainbow tints that follow
+the surface) is rigged from a `.clean.glb` copy without them; real vertex colours
+are kept.
 Every model stands 1.7 m tall in a scene unless it gives its real `height` in
 metres (`"moto": {"prompt": "...", "rig": "vehicle", "height": 1.1}`); a cast
 entry's own `scale` wins, and a new height does not remake the model.
