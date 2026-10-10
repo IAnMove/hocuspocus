@@ -153,6 +153,17 @@ def test_a_lying_body_is_not_upright():
     assert caught.value.reason == "not_upright"
 
 
+def test_a_cape_and_a_tail_as_deep_as_the_body_is_tall_still_stand_upright():
+    from services.humanoid_rig.landmarks import _require_upright
+
+    def box(depth):
+        return np.array([[[0.0, 0.0, 0.0], [0.6, 2.0, 0.0], [0.3, 1.0, -depth]]])
+    _require_upright(box(2.4), 2.0)                     # a king with a cape and a belly, a monkey with a long tail
+    with pytest.raises(NotHumanoid) as caught:
+        _require_upright(box(6.0), 2.0)                 # lying down: three times deeper than tall
+    assert caught.value.reason == "not_upright"
+
+
 def test_detection_is_deterministic_and_a_soup_matches_indexed():
     item = body("human_a")
     first = _found(item)
