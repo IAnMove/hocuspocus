@@ -138,5 +138,24 @@ def test_a_3d_shot_asking_a_model_for_a_clip_its_rig_will_not_bake_is_refused():
     assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 wave"])]
 
 
+def test_a_glb_played_as_it_is_passes_the_gate_with_the_clips_it_brought(tmp_path):
+    import struct
+
+    body = json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": "zelda_armature_zelda_wait_a"}]}).encode()
+    body += b" " * (-len(body) % 4)
+    (tmp_path / "pack").mkdir()
+    (tmp_path / "pack" / "zelda.glb").write_bytes(b"glTF" + struct.pack("<II", 2, 20 + len(body)) + struct.pack("<II", len(body), 0x4E4F534A) + body)
+    models = {"zelda": {"glb": "pack/zelda.glb", "rig": "none"}, "ghost": {"prompt": "a ghost", "rig": "none"}}
+
+    def shot3d(key, cast):
+        return {"key": key, "kind": "scene3d", "t0": 0, "scene3d": {"template": "cine-medium-shot", "cast": cast}}
+    shots = [shot3d("a", {"subject_1": {"source": "zelda", "clip": "zelda_armature_zelda_wait_a"}}),
+             shot3d("b", {"subject_1": {"source": "zelda", "clip": "dance_side"}}),
+             shot3d("c", {"subject_1": {"source": "ghost", "clip": "hover"}})]
+    problems = blocking_problems({"song": SONG, "models": models, "shots": shots}, tmp_path)
+    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 dance_side", "c:subject_1 hover"])]
+    assert blocking_problems({"song": SONG, "models": models, "shots": shots[:1]}) == [], "with no workspace at hand the file is trusted"
+
+
 def test_two_shots_starting_together_do_not_break_the_gate():
     assert blocking_problems({"song": SONG, "shots": [h3("a", 0), h3("b", 0)]}) == []

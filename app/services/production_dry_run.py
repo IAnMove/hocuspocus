@@ -68,7 +68,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
         "estimate_source": source,
         "resolution": _crop(spec),
         "motion": motion,
-        "blocking": blocking_problems(spec),
+        "blocking": blocking_problems(spec, root),
         "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
         + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id),
     }
