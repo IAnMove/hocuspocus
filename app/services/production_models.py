@@ -358,8 +358,8 @@ def _cleaned(production: Any, name: str, glb: str) -> str:
     from pathlib import PurePosixPath
     from services.glb_cleanup import clean_glb
     target = str(PurePosixPath(glb).with_suffix(".clean.glb"))
-    if clean_glb(production.root / glb, production.root / target):
-        production.log(f"model {name}: its vertex colours were normals (rainbow tints); rigging {target} without them")
+    if fixes := clean_glb(production.root / glb, production.root / target):
+        production.log(f"model {name}: {'; '.join(fixes)}; rigging {target}")
         return target
     return glb
 

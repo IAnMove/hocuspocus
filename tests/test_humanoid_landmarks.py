@@ -242,6 +242,19 @@ def test_a_body_turned_away_from_the_camera_is_refused():
     assert caught.value.reason == "turned"
 
 
+def test_level_shoulders_with_one_hand_forward_hold_something_and_are_not_turned():
+    from services.humanoid_rig.landmarks import _require_facing_front
+
+    def pose(shoulder_depth, hand_depth):
+        return {"left_shoulder": [-0.3, 1.5, 0.0], "right_shoulder": [0.3, 1.5, shoulder_depth],
+                "left_wrist": [-0.6, 1.0, 0.0], "right_wrist": [0.6, 1.0, hand_depth]}
+    _require_facing_front(pose(0.002, 0.36), 2.0)          # an old man leaning on his cane
+    for shoulders, hands in ((0.002, 0.7), (0.06, 0.3)):   # a hand too far out, or shoulders a little turned too
+        with pytest.raises(NotHumanoid) as caught:
+            _require_facing_front(pose(shoulders, hands), 2.0)
+        assert caught.value.reason == "turned"
+
+
 def test_an_empty_face_list_is_degenerate():
     item = body("human_t")
     with pytest.raises(NotHumanoid) as caught:

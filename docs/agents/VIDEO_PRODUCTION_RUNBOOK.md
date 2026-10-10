@@ -441,13 +441,15 @@ A `cast` entry then names the model and a clip: `{"source": "hero", "clip": "dan
 Models you already have (a pack of GLBs in the workspace) skip the picture and
 the mesh: `{"glb": "pack/ape.glb", "rig": "humanoid", "fallback": "prop",
 "animations": ["idle", "dance_bounce"], "height": 1.9}`. The humanoid rig needs a
-T or A pose with the legs apart and a gap under each arm; when it refuses the
+T or A pose with the legs apart and a gap under each arm (one hand held forward,
+with a cane or a lantern, is fine while the shoulders stay level); when it refuses the
 body (legs together, arms down, a tail) `fallback` rigs it with that procedural
 profile instead, and a shot that asks that model for a humanoid clip gets the
 profile's nearest one (a dance wobbles or bounces, a still pose hovers). A GLB
 whose vertex colours are really normals (game rips: rainbow tints that follow
-the surface) is rigged from a `.clean.glb` copy without them; real vertex colours
-are kept.
+the surface), or whose textures were decoded into confetti (every texel a random
+vivid colour), is rigged from a `.clean.glb` copy without them; real vertex colours
+and textures are kept.
 Every model stands 1.7 m tall in a scene unless it gives its real `height` in
 metres (`"moto": {"prompt": "...", "rig": "vehicle", "height": 1.1}`); a cast
 entry's own `scale` wins, and a new height does not remake the model.
