@@ -421,7 +421,10 @@ with clips on the song's tempo:
 
 `from` is a cast id (its plain portrait), a `stills` name or a picture URL; an
 object without a picture gives a `prompt`. A cast id defaults to `rig: "humanoid"`:
-the portrait is redrawn in a T-pose first, because the humanoid rig needs one.
+the portrait is redrawn in a T-pose first, because the humanoid rig needs one,
+with both legs and feet showing (a floor-length robe or gown is drawn above the
+knees: the rig refuses a figure whose legs it cannot find, and a rig failure
+leaves a rigid model whose named clips fail at their 3D shots).
 Any other model made from a picture is redrawn alone on a plain background first
 (no base, stand or scenery): Hunyuan3D meshes everything in the picture, and a
 diorama-style portrait stands the figure on a little village.

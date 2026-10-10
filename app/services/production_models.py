@@ -39,7 +39,9 @@ PROFILE_CLIPS = {"prop": ["hover", "bounce", "spin"], "vehicle": ["bounce", "wob
                  "flying": ["hover", "strafe"], "serpentine": ["idle", "wobble"]}
 # Pictures for Hunyuan3D are isolated: a busy background gets meshed into the model. The reference portrait
 # already carries the look, so a character's T-pose prompt is only the staging.
-CHARACTER_STAGING = ("The same character as the reference, full body, T-pose, front view, arms horizontal, isolated on a "
+# The humanoid rig needs legs: a robe or gown down to the ground failed it ("not_humanoid ... hidden by a robe").
+CHARACTER_STAGING = ("The same character as the reference, full body, T-pose, front view, arms horizontal, legs slightly apart "
+                     "with both legs and feet clearly visible (a long robe, gown or cloak ends above the knees), isolated on a "
                      "plain light grey studio background, nothing else in the picture, no shadow")
 OBJECT_STAGING = "single object, three-quarter view, isolated on a plain light grey studio background, nothing else in the picture, no shadow"
 # A cast portrait often stands the figure on a base or in its scenery (a diorama style draws little houses under
