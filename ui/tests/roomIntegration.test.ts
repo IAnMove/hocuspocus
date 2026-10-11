@@ -9,8 +9,9 @@ function compile(scene3d: unknown) {
   return r.stdout
 }
 test('legacy compiler output matches the pre-integration snapshot',()=>{
+  // Since RENDER_RECIPE 3 the picture in the model's place is a grounded cutout as tall as the model (pictureStandIn.ts).
   const result=compile({template:'two-shot',cast:{subject_1:'/api/v1/file/person.png?workspace=test'}})
-  assert.equal(createHash('sha256').update(result).digest('hex'),'e708c002b4058f13d0e74d3902826a14d291415b358d38b23d3f7bf1f9d243e1')
+  assert.equal(createHash('sha256').update(result).digest('hex'),'16e5961b29a37b5f54335a1c4415371d276ae6db79615460eb763589c575bdf0')
 })
 test('production room camera and prop metadata survive compilation',()=>{
   const mold=JSON.parse(readFileSync('../app/shared/set_molds/despacho.json','utf8'));mold.dimensions=mold.sizes.medium;mold.size='medium'

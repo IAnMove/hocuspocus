@@ -69,3 +69,9 @@ def test_stage_cards_are_searchable_with_the_rest():
     assert search_templates('azotea', limit=3)[0]['id'] == 'stage-azotea'
     assert search_templates('sala', limit=5)[0]['id'] == 'stage-sala'
     assert search_templates('plano de dos', limit=3)[0]['id'] == 'two-shot', 'the stages do not outrank the shot they are built on'
+
+
+def test_every_furniture_block_has_words_in_both_languages():
+    from services.world3d_stage_cards import BLOCK_WORDS
+    kinds = {block["kind"] for mold in catalog() for block in mold.get("blocks", [])}
+    assert kinds <= set(BLOCK_WORDS), sorted(kinds - set(BLOCK_WORDS))

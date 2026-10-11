@@ -5,30 +5,40 @@ import type { Scene3DFraming, Vec3 } from './types'
 type AnchorPoints = Record<Scene3DFraming['anchor'], Vector3>
 
 const headBones = new WeakMap<Object3D, Object3D | null>()
+const crownMarks = new WeakMap<Object3D, Object3D | null>()
 /** Each mounted model's points at rest, in the model's own space. */
 const restPoints = new WeakMap<Object3D, AnchorPoints>()
+/** Where a rig marks its crown (HeadTop_End), the head point is at most this share of the figure's height below it.
+ * A realistic rig's head bone already sits there (1.53 m under a 1.70 m crown); an auto-rig that put the bone at the
+ * chest of a doll in a dress, or a big-headed figure, would otherwise frame the chest and cut the face at the top. */
+export const HEAD_BELOW_CROWN = .15
 
-/** The head bone a skin moves. A rigged rip keeps its former skeleton next to the new one (`previous:head`), loose and
- * still: framing that one aimed the camera beside the character. A loose head is used only when no skin has one. */
-function headBone(root: Object3D) {
-  if (!headBones.has(root)) {
+/** The first bone whose name matches, preferring one a skin moves. A rigged rip keeps its former skeleton next to the
+ * new one (`previous:head`), loose and still: framing that one aimed the camera beside the character. A loose bone is
+ * used only when no skin has one. */
+function skinnedFirst(cache: WeakMap<Object3D, Object3D | null>, root: Object3D, wanted: (node: Object3D) => boolean) {
+  if (!cache.has(root)) {
     const skinned = new Set<Object3D>()
     root.traverse(node => {
       if ((node as SkinnedMesh).isSkinnedMesh) for (const bone of (node as SkinnedMesh).skeleton.bones) skinned.add(bone)
     })
-    let head: Object3D | null = null
+    let moved: Object3D | null = null
     let loose: Object3D | null = null
     root.traverse(node => {
-      if (!('isBone' in node) || !/head$/i.test(node.name)) return
-      if (skinned.has(node)) head ??= node
+      if (!wanted(node)) return
+      if (skinned.has(node)) moved ??= node
       else loose ??= node
     })
-    headBones.set(root, head ?? loose)
+    cache.set(root, moved ?? loose)
   }
-  return headBones.get(root) ?? null
+  return cache.get(root) ?? null
 }
 
-/** The points of the model as it stands now, in world space: the head bone when there is one, else its bounding box. */
+const headBone = (root: Object3D) => skinnedFirst(headBones, root, node => 'isBone' in node && /head$/i.test(node.name))
+const crownMark = (root: Object3D) => skinnedFirst(crownMarks, root, node => /headtop(_end)?$/i.test(node.name))
+
+/** The points of the model as it stands now, in world space: the head bone when there is one (raised toward a crown
+ * mark far above it), else its bounding box. */
 function posedPoints(root: Object3D): AnchorPoints {
   const box = new Box3().setFromObject(root, true)
   const origin = root.getWorldPosition(new Vector3())
@@ -37,6 +47,8 @@ function posedPoints(root: Object3D): AnchorPoints {
   const bone = headBone(root)
   const head = bone ? bone.getWorldPosition(new Vector3())
     : box.isEmpty() ? origin.clone() : new Vector3(center.x, box.min.y + (box.max.y - box.min.y) * .86, center.z)
+  const crown = bone && !box.isEmpty() ? crownMark(root) : null
+  if (crown) head.y = Math.max(head.y, crown.getWorldPosition(new Vector3()).y - HEAD_BELOW_CROWN * (box.max.y - box.min.y))
   return { center, feet, head }
 }
 

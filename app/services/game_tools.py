@@ -141,12 +141,27 @@ def _job_id(submitted: dict) -> str:
     return str(job)
 
 
+def _job_missing(reply: dict) -> bool:
+    """``jobs.wait`` on a job the queue does not know: the journal replayed the id of a job that died with the
+    previous server process. In-process calls carry ``status: 404``; the MCP envelope only says "not found"."""
+    error = reply.get("error") if isinstance(reply, dict) else None
+    if not isinstance(error, dict) or error.get("job_id") or reply.get("job_id"):    # a job's own failure names it
+        return False
+    if not (reply.get("_is_error") or reply.get("_http_error") or reply.get("status") == "failed"):
+        return False
+    return error.get("status") == 404 or error.get("code") == "not_found" or "not found" in str(error.get("message") or "").lower()
+
+
 def _wait_job(ctx: GenContext, job_id: str, intent_id: str | None = None) -> dict:
-    """Wait until the image job finishes. A restart leaves it interrupted: resume that same job once."""
+    """Wait until the image job finishes. A restart leaves it interrupted: resume that same job once.
+    A job the server does not know raises ``not_found`` so the caller can admit the request again."""
     resumed = False
     while True:
         _check(ctx)
-        payload = _status_payload(ctx.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 110}}))
+        reply = ctx.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 110}})
+        if _job_missing(reply):
+            raise GameToolError("not_found", f"job {job_id} is not known to the server")
+        payload = _status_payload(reply)
         status = str(payload.get("status") or "")
         if status in _TERMINAL:
             return payload

@@ -287,10 +287,10 @@
   ],
   "defaultSkin": {
     "floor": {
-      "color": "#8e8a84"
+      "color": "#5f5c58"
     },
     "wall_back": {
-      "color": "#93a7bf"
+      "color": "#1c2946"
     },
     "parapet_front": {
       "color": "#a39c90"

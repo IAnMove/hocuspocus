@@ -1,4 +1,4 @@
-import { previewTemplateDocument } from './templateCatalog.ts'
+import { previewSceneDocument, previewTemplateDocument } from './templateCatalog.ts'
 import { dropDressing, syncDressing } from './dressing.ts'
 import {
   applyLight,
@@ -11,7 +11,9 @@ import {
   type GpuWorld,
 } from './gpu.ts'
 import { createPixelWorldCache, isPixelDressing } from './pixel/pixelWorldSet'
-import type { Scene3DDressing, Scene3DLight, Scene3DSlot, Scene3DTemplateId } from './types.ts'
+import { RoomSetRuntime } from './roomSetRuntime.ts'
+import type { RoomSet } from './roomSet'
+import type { Scene3DDocument, Scene3DDressing, Scene3DLight, Scene3DSlot, Scene3DTemplateId } from './types.ts'
 import type { MotionLabSettings } from './motionlab/types'
 
 const WIDTH = 320
@@ -19,8 +21,11 @@ const HEIGHT = 180
 const PREVIEW_SLOT_CAP = 8
 const FALLBACK_LIGHT: Scene3DLight = { kind: 'directional', direction: [-0.5, -1, -0.3], intensity: 1.6, color: '#fff0d9' }
 const previewPixels = createPixelWorldCache(8)
+const ROOM_CACHE = 8
+const previewRooms = new Map<string, RoomSetRuntime>()
 
-type Watcher = { id: Scene3DTemplateId; canvas: HTMLCanvasElement }
+/** `read` throws for a template with no built-in preview; the loop then drops that watcher. */
+type Watcher = { read: () => Scene3DDocument; canvas: HTMLCanvasElement }
 
 let world: GpuWorld | null | undefined
 let lastDressing: string | undefined
@@ -50,6 +55,30 @@ function attachPreviewDressing(pack: GpuWorld, kind: Scene3DDressing | undefined
     return
   }
   syncDressing(pack, kind, undefined, undefined, motionLab)
+}
+
+/** Stage thumbs take turns on the shared renderer: keep each room's meshes instead of rebuilding them every frame.
+ *  Exported for tests. */
+export function attachPreviewRoom(pack: Pick<GpuWorld, 'scene' | 'room' | 'roomKey'>, room: RoomSet | undefined) {
+  const key = JSON.stringify(room)
+  if (pack.roomKey === key) return
+  pack.room?.root.removeFromParent()
+  pack.room = undefined
+  pack.roomKey = key
+  if (!room || key === undefined) return
+  let runtime = previewRooms.get(key)
+  if (runtime) previewRooms.delete(key)
+  else {
+    runtime = new RoomSetRuntime(room)
+    const oldest = previewRooms.keys().next().value
+    if (previewRooms.size >= ROOM_CACHE && oldest !== undefined) {
+      previewRooms.get(oldest)?.dispose()
+      previewRooms.delete(oldest)
+    }
+  }
+  previewRooms.set(key, runtime)
+  pack.room = runtime
+  pack.scene.add(runtime.root)
 }
 
 function ensure(): GpuWorld | null {
@@ -86,9 +115,9 @@ function tick(now: number) {
   }
   const watcher = list[cursor % list.length]
   cursor++
-  let doc: ReturnType<typeof previewTemplateDocument>
+  let doc: Scene3DDocument
   try {
-    doc = previewTemplateDocument(watcher.id)
+    doc = watcher.read()
   } catch {
     // A shot based on a workspace template (user-…, often an agent's) has no built-in preview.
     // Drop that watcher and keep the shared loop alive for every other thumbnail.
@@ -98,6 +127,7 @@ function tick(now: number) {
   }
   const slots = visibleSlots(doc.slots)
   attachPreviewDressing(pack, doc.dressing, doc.motionLab)
+  attachPreviewRoom(pack, doc.room)
   applyLight(pack.dir, doc.light)
   pruneSlots(pack, slots)
   for (const slot of slots) {
@@ -113,7 +143,25 @@ function tick(now: number) {
 }
 
 export function subscribeTemplateThumb(id: Scene3DTemplateId, canvas: HTMLCanvasElement) {
-  const watcher: Watcher = { id, canvas }
+  return subscribe(() => previewTemplateDocument(id), canvas)
+}
+
+/** A document built elsewhere (a stage card from the server) in the same shared loop. Nothing is fetched where
+ *  no renderer can draw; `load` runs once and the thumb starts when it resolves. */
+export function subscribeDocumentThumb(load: () => Promise<Scene3DDocument>, canvas: HTMLCanvasElement) {
+  if (!ensure()) return () => {}
+  let stop: (() => void) | undefined
+  let cancelled = false
+  load().then(loaded => {
+    if (cancelled) return
+    const preview = previewSceneDocument(loaded)
+    stop = subscribe(() => preview, canvas)
+  }).catch(() => { /* the canvas stays blank; the shelf reports the failed request when the card is opened */ })
+  return () => { cancelled = true; stop?.() }
+}
+
+function subscribe(read: () => Scene3DDocument, canvas: HTMLCanvasElement) {
+  const watcher: Watcher = { read, canvas }
   const start = () => {
     if (!ensure()) return
     watchers.add(watcher)

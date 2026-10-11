@@ -124,6 +124,8 @@ export type GpuWorld = {
   exportRender?: ExportRenderQuality
   /** Set while an export paints frames (any quality); the editor preview leaves it unset. */
   exporting?: boolean
+  /** A template thumbnail export keeps the editor's placeholders for empty slots. */
+  exportPlaceholders?: boolean
   /** Environment light of scenes that ask for it (`document.lighting`). */
   lighting?: EnvironmentLighting
   /** Cel shading and ink of model slots (`renderLook: 'toon'`), created on the first scene that asks for it. */
@@ -628,9 +630,10 @@ function restoreExportCutouts(world: GpuWorld) {
 }
 
 /** An image cutout with no picture is an editor placeholder. An export draws nothing in its
- * place, so a shot whose figure was left empty still renders as a clean plate. */
+ * place, so a shot whose figure was left empty still renders as a clean plate. A template
+ * thumbnail (`exportPlaceholders`) keeps the placeholder, so the picture shows where the cast stands. */
 export function hideEmptyCutoutsInExport(world: GpuWorld, slots: readonly Scene3DSlot[]) {
-  if (!world.exporting) { restoreExportCutouts(world); return }
+  if (!world.exporting || world.exportPlaceholders) { restoreExportCutouts(world); return }
   let hidden = exportCutoutVisibility.get(world)
   if (!hidden) { hidden = new Map(); exportCutoutVisibility.set(world, hidden) }
   for (const slot of slots) {
@@ -775,6 +778,7 @@ function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
 export function setWorldExportQuality(world: GpuWorld, enabled: boolean, render: ExportRenderQuality = DRAFT_RENDER) {
   world.exportRender = enabled && (render.samples > 0 || render.supersample > 1) ? { ...render } : undefined
   world.exporting = enabled
+  world.exportPlaceholders = enabled && render.placeholders === true
   if (!enabled) restoreExportCutouts(world)
   world.cinema?.setRenderQuality(world.exportRender)
   world.renderer.shadowMap.enabled = enabled

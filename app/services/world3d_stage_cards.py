@@ -22,6 +22,13 @@ BLOCK_WORDS = {
     "landing": ("rellano", "a landing"), "jamb": ("jambas", "door jambs"), "platform": ("tarima", "a platform"),
     "audience": ("público", "audience seats"), "seat": ("asientos", "seats"), "dashboard": ("salpicadero", "a dashboard"),
     "parapet": ("pretil", "a parapet"), "stairhead": ("caseta", "a stairhead"), "fountain": ("fuente", "a fountain"), "rock": ("roca", "a rock"),
+    "table": ("mesa", "a table"), "chair": ("sillas", "chairs"), "stool": ("taburetes", "stools"), "sofa": ("sofá", "a sofa"),
+    "coffee": ("mesa baja", "a coffee table"), "tv": ("televisor", "a TV"), "bed": ("cama", "a bed"), "bedside": ("mesilla", "a bedside table"),
+    "nightstand": ("mesilla", "a nightstand"), "wardrobe": ("armario", "a wardrobe"), "curtain": ("cortina", "a curtain"),
+    "shelf": ("estantería", "a shelf"), "bottles": ("botellero", "bottle shelves"), "glass": ("cristalera", "a glass wall"),
+    "board": ("pizarra", "a board"), "teacher": ("mesa del profesor", "a teacher's desk"), "lectern": ("atril", "a lectern"),
+    "tribune": ("tribuna", "a tribune"), "judges": ("estrado", "a judges' bench"), "party": ("mesas de las partes", "party tables"),
+    "logo": ("panel de logos", "a logo wall"), "video": ("pantalla", "a video screen"), "workstation": ("puestos de trabajo", "workstations"),
 }
 
 

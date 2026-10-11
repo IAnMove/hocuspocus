@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { DUST_ID, keyLightBreath, OPENING_DEPTH, OPENING_MARGIN, roomPanels, stageRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
+import { DUST_ID, keyLightBreath, OPENING_DEPTH, OPENING_MARGIN, roomPanels, roomSky, stageRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
-import { AmbientLight, PointLight } from 'three'
-import { RoomSetRuntime } from '../src/features/scene3d/roomSetRuntime.ts'
+import { AmbientLight, Color, Mesh, MeshBasicMaterial, PointLight } from 'three'
+import { RoomSetRuntime, SKY_DOME } from '../src/features/scene3d/roomSetRuntime.ts'
 type AuthoredMold = RoomMold & { sizes: { medium: RoomMold['dimensions'] } }
 function authored(name: string): AuthoredMold {
   const loaded = JSON.parse(readFileSync(new URL(`../../app/shared/set_molds/${name}.json`, import.meta.url), 'utf8')) as AuthoredMold
@@ -135,4 +135,34 @@ test('a painted furniture front leaves its ends in the mold colour', () => {
   assert.equal(shelf.filter(p => p.material.image).length, 1)
   assert(shelf.filter(p => !p.material.image).every(p => p.material.color === mold.defaultSkin.shelf_front.color))
   assert(desk.every(p => p.material.color === '#112233'))
+})
+
+test('an exterior closes its view with a sky dome in its preset colours; an interior has none', () => {
+  const plaza = authored('plaza'), roof = authored('azotea')
+  assert.equal(roomSky({ mold: mold }), undefined)
+  assert.deepEqual(roomSky({ mold: plaza }), { zenith: '#79aedf', horizon: '#dfe9f1' })
+  assert.deepEqual(roomSky({ mold: roof }), { zenith: '#050a1a', horizon: '#1d2b50' })
+  const outside = new RoomSetRuntime({ mold: plaza }), inside = new RoomSetRuntime({ mold })
+  const dome = outside.root.getObjectByName(SKY_DOME) as Mesh
+  assert.ok(dome, 'the exterior has a dome')
+  assert.equal(inside.root.getObjectByName(SKY_DOME), undefined)
+  const [w, d, h] = plaza.dimensions
+  const radius = Math.min(150, 6 * Math.max(w, d, h))
+  assert.ok((dome.geometry as unknown as { parameters: { radius: number } }).parameters.radius === radius && radius < 200, 'inside the camera far plane')
+  assert.ok(dome.material instanceof MeshBasicMaterial && !(dome.material as MeshBasicMaterial).depthWrite)
+  const colours = dome.geometry.getAttribute('color'), positions = dome.geometry.getAttribute('position')
+  let top = 0, bottom = 0
+  for (let i = 1; i < positions.count; i++) {
+    if (positions.getY(i) > positions.getY(top)) top = i
+    if (positions.getY(i) < positions.getY(bottom)) bottom = i
+  }
+  const near = (i: number, hex: string) => { const c = new Color(hex); return Math.abs(colours.getX(i) - c.r) < 0.02 && Math.abs(colours.getY(i) - c.g) < 0.02 && Math.abs(colours.getZ(i) - c.b) < 0.02 }
+  assert.ok(near(top, '#79aedf'), 'zenith overhead')
+  assert.ok(near(bottom, '#dfe9f1'), 'horizon colour below eye level, never black')
+  outside.dispose(); inside.dispose()
+})
+
+test('night and dusk exteriors default to a view that matches their light', () => {
+  assert.equal(authored('azotea').defaultSkin.wall_back.color, '#1c2946')
+  assert.equal(authored('orilla').defaultSkin.wall_back.color, '#d6a58f')
 })

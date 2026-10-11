@@ -5,7 +5,7 @@ import copy
 from pathlib import Path
 from urllib.parse import quote
 from services.set_molds import defaults, resolve_mold, validate_mold
-from services.set_skins import build_skin, image_requests, validate_skin
+from services.set_skins import build_skin, image_requests, skin_warnings, validate_skin
 from services.prop_library import get_prop
 from services.scene3d_items import change_items
 from services.set_generation import image_model
@@ -71,7 +71,17 @@ def build(production,name,record):
                     call=production.mcp,provided=record.get('pictures',{}))
     record.update(room={'mold':resolve_mold(entry['mold'],entry.get('size','medium')),'skin':skin,'camera':entry.get('camera','two_shot')},objects=prop_objects(entry,production.root))
     record.pop('pictures',None)
+    record['warnings']=skin_warnings(skin)
+    if not record['warnings']: record.pop('warnings')
     production.log(f'set {name}: room {entry["mold"]}')
+    for warning in record.get('warnings',[]):
+        production.log(f"set {name}: seam_fallback {warning['surface']} (seam {warning['seam_error']} > {warning['limit']}): painted once, not tiled")
+
+
+def set_warnings(state):
+    """What ``production.status`` shows of the sets: each warning with its set name."""
+    sets=state.get('sets') if isinstance(state,dict) and isinstance(state.get('sets'),dict) else {}
+    return [{**warning,'set':name} for name,record in sets.items() if isinstance(record,dict) for warning in record.get('warnings') or []]
 
 
 def resolved_background(entry,made):

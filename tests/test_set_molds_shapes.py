@@ -80,3 +80,13 @@ def test_the_catalog_lists_kind_and_title_for_every_mold():
     assert all(set(mold['title']) == {'es', 'en'} for mold in result['molds'])
     description = command_catalog()[0]['description']
     assert 'exterior' in description and 'kind' in description and 'title' in description
+
+
+def test_every_exterior_preset_has_a_sky_and_no_light_carries_it():
+    presets = light_presets()
+    assert presets['skies'].keys() == presets['exterior'].keys()
+    for sky in presets['skies'].values():
+        assert set(sky) == {'zenith', 'horizon'} and all(value.startswith('#') and len(value) == 7 for value in sky.values())
+    for kind in ('interior', 'exterior'):
+        for light in presets[kind].values():
+            assert set(light) == {'color', 'intensity', 'direction'}

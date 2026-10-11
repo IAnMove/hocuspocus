@@ -4179,6 +4179,40 @@
     "invalid": "Esta plantilla del workspace no es un documento de Video 3D válido.",
     "shotTitle": "Plantilla del workspace · {{id}}"
   },
+  "stages": {
+    "title": "Escenarios",
+    "help": "Habitaciones y lugares abiertos con marcas para el reparto y cámaras con nombre. Elige uno y pulsa «Usar este plano»: se abre con su sala; después asigna tus personajes y elige una cámara de la sala.",
+    "loading": "Cargando los escenarios",
+    "noWorkspace": "Abre un workspace para ver los escenarios.",
+    "error": "No se pudieron cargar los escenarios: {{reason}}",
+    "retry": "Reintentar",
+    "empty": "La biblioteca no tiene escenarios.",
+    "openError": "No se pudo abrir el escenario: {{reason}}",
+    "invalid": "Este escenario no es un documento de Video 3D válido con sala.",
+    "shape": {
+      "interior": "Interior",
+      "exterior": "Exterior"
+    },
+    "marks_one": "{{count}} marca",
+    "marks_other": "{{count}} marcas",
+    "cameras_one": "{{count}} cámara",
+    "cameras_other": "{{count}} cámaras",
+    "cameraList": "Cámaras: {{cameras}}",
+    "shotTitle": "Escenario · {{id}}"
+  },
+  "roomCamera": {
+    "label": "Cámara de la sala",
+    "custom": "Personalizada",
+    "names": {
+      "two_shot": "Plano a dos",
+      "ots_a": "Sobre el hombro A",
+      "ots_b": "Sobre el hombro B",
+      "wide": "General",
+      "close_1": "Primer plano 1",
+      "close_2": "Primer plano 2",
+      "entrance": "Entrada"
+    }
+  },
   "motionLab": {
     "controls": "Escenas de movimiento nativas",
     "bpm": "Tempo (BPM)",

@@ -1,4 +1,4 @@
-import { stageRoomSet } from '../src/features/scene3d/roomSet.ts'
+import { DUST_ID, stageRoomSet } from '../src/features/scene3d/roomSet.ts'
 // Native template compilation for the production runner. The window is exported length.
 import { readFileSync } from 'node:fs'
 import { applyScene3DTemplate, SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/templates.ts'
@@ -10,6 +10,7 @@ import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
 import { stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
 import { applyGrade, applyLens, applyNamedLight, copyCamera } from '../src/features/scene3d/modifiers.ts'
 import { isCameraTechnique } from '../src/features/scene3d/techniqueTemplates.ts'
+import { pictureInModelSlot, turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
 
 const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
@@ -19,6 +20,8 @@ const WORLD_KEYS = ['dressing', 'atmos', 'environment', 'light', 'worldSfx', 'sc
 const FRAMES = { close: 0.6, medium: 0.8, wide: 1.35, far: 1.8 }
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
+/** Ids of the pictures cast where the template authored a model. */
+const standIns = new Set()
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
 // A template drawn for a painted set already hangs its plate where its camera needs it.
 const drawnAsSet = document.environment?.floorStyle === 'backdrop'
@@ -44,11 +47,14 @@ const authored = Number(request.duration) * speed
 if (!(authored > 0) || authored > 600) throw new Error(`duration_exceeds_clock:${request.duration}`)
 document.playbackSpeed = speed
 document.duration = authored
+// The room was staged at the template's length: its dust spans the whole shot.
+for (const cue of document.worldSfx ?? []) if (cue.id === DUST_ID) cue.end = authored
 if (config.grade) applyGrade(document, config.grade)
 document.fps = config.fps ?? document.fps
 delete document.soundtrack
 retargetFraming(document)
 if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
+turnPicturesToCamera(document, standIns)
 if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
 if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll })]
 // A runner on a scrolling set runs on the spot: the place moves, the cast stays under the camera.
@@ -74,7 +80,10 @@ function explicitSlot(binding, index) {
 function bindSubject(document, config) {
   const current = document.slots.find(slot => slot.slot === 'subject_1' || slot.id === 'subject_1')
   if (!current) throw new Error('subject_slot_missing')
-  const next = { ...current, sourceUrl: config.subject, media: subjectMedia(config.subject, current.media), clip: config.clip ?? current.clip ?? null }
+  const bound = { ...current, sourceUrl: config.subject, media: subjectMedia(config.subject, current.media), clip: config.clip ?? current.clip ?? null }
+  const picture = current.media === 'model3d' && bound.media === 'image'
+  const next = picture ? pictureInModelSlot(bound, config) : bound
+  if (picture && config.rotationY === undefined) standIns.add(next.id)
   if (config.motion !== undefined) next.motion = config.motion
   if (config.position !== undefined) next.position = config.position
   if (config.scale !== undefined) next.scale = config.scale
@@ -94,11 +103,15 @@ function bindCast(document, key, entry) {
   const current = document.slots.find(slot => slot.id === key) ?? (byRole.length === 1 ? byRole[0] : null)
   if (!current && !entry.add) throw new Error(byRole.length > 1 ? `cast_role_ambiguous:${key}` : `cast_slot_missing:${key}`)
   const base = current ?? { id: key, slot: 'prop', position: [0, 0, 0], rotationY: 0, scale: 1, media: 'model3d', clip: null }
-  const next = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
+  const bound = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
+  // A picture in a model's place stands in as a grounded cutout as tall as the model; its scale and look are settled there.
+  const picture = base.media === 'model3d' && bound.media === 'image'
+  const next = picture ? pictureInModelSlot(bound, entry) : bound
+  if (picture && entry.rotationY === undefined) standIns.add(next.id)
   // A generated model is centred on its origin; standing it on its feet keeps its animated legs above the floor.
   if (next.media === 'model3d' && entry.grounded === undefined) next.grounded = true
   for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard', 'inPlace']) {
-    if (entry[field] !== undefined) next[field] = structuredClone(entry[field])
+    if (entry[field] !== undefined && !(picture && (field === 'scale' || field === 'imageLook'))) next[field] = structuredClone(entry[field])
   }
   document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]
 }

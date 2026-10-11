@@ -20,6 +20,7 @@ import unicodedata
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 
 from services.template_search import stem
 from services.world3d_stage_cards import stage_cards
@@ -55,6 +56,9 @@ _FIELD_POINTS = (("id", 8, 4), ("title", 6, 3), ("traits", 6, 4), ("line", 2, 1)
 _NAME_FIELDS = ("id", "title")
 _SHORT_TOKEN = 3
 _MIN_STEM = 4
+# Our own render of a shipped card (app/services/world3d_thumbnails.py). The JSON keeps ``preview: null``: the URL is
+# added when a card is read, so the file stays free of URLs and the exporter's --check is unchanged.
+THUMBNAIL_PATH = "/api/v1/world3d/templates/{template_id}/thumbnail"
 
 
 class World3DTemplateError(ValueError):
@@ -490,8 +494,17 @@ def _user_card(row: dict) -> dict:
     }
 
 
+def thumbnail_url(card: dict) -> str | None:
+    """The relative URL of our mid-shot render of a shipped or stage card; a personal template has none."""
+    template_id = card.get("id")
+    if card.get("source") == "workspace" or not isinstance(template_id, str) or not template_id:
+        return None
+    return THUMBNAIL_PATH.format(template_id=quote(template_id, safe=""))
+
+
 def _public_card(card: dict, score: int, match: str = "full") -> dict:
     shown = {key: card.get(key, TRAIT_DEFAULTS.get(key)) for key in CARD_KEYS}
+    shown["preview"] = thumbnail_url(card)
     shown["score"] = score
     shown["match"] = match
     return shown

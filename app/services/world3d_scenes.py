@@ -6,6 +6,7 @@ save as the editor, so export reads that document rather than a second library.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -24,7 +25,7 @@ from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
 from services.world3d_stage_cards import is_stage
-from services.world3d_stage_documents import BASE as STAGE_BASE, stage_document
+from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -466,15 +467,44 @@ def _bind(document: dict, binding: dict) -> list[str]:
         document["slots"].remove(slot)
         return []
     warnings = _clip_warning(slot, binding)
+    was_model = (slot.get("media") or "model3d") == "model3d"
     for key in _SLOT_FIELDS:
         snake = _snake(key)
         if key in binding:
             slot[key] = deepcopy(binding[key])
         elif snake in binding:
             slot[key] = deepcopy(binding[snake])
+    if was_model and slot.get("media") == "image":
+        _picture_for_model(slot, binding)
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     return warnings
+
+
+PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
+
+
+def _picture_for_model(slot: dict, binding: dict) -> None:
+    """A picture bound in a model's place stands in as a cutout, as ``pictureInModelSlot`` does for a production cast:
+    an image with no surface is drawn as a flat backdrop card, not a figure. It stands on its feet unless the binding
+    says ``grounded: false``, is as tall as the model unless the binding gives a scale or the marker was already sized
+    as a cutout, and a path the model would travel nose first faces the camera instead (mirrored to the left), since a
+    flat picture turned along it vanishes."""
+    sized = slot.get("surface") == "cutout"     # a marker the template already sized for a picture (a Series room)
+    slot["surface"] = "cutout"
+    look = slot.get("imageLook") if isinstance(slot.get("imageLook"), dict) and _given(binding, "imageLook") else {}
+    slot["imageLook"] = {**({} if binding.get("grounded") is False else {"grounded": True}), **look}
+    if not sized and not _given(binding, "scale"):
+        slot["scale"] = round(float(slot.get("scale", 1)) * PICTURE_SCALE, 4)
+    motion = slot.get("motion")
+    if isinstance(motion, dict) and motion.get("faceTravel") and not _given(binding, "motion"):
+        slot["motion"] = {key: value for key, value in motion.items() if key not in ("faceTravel", "headingOffset")}
+        start, end = slot.get("position") or [0, 0, 0], motion.get("to") or [0, 0, 0]
+        slot["rotationY"] = math.pi if end[0] < start[0] else 0
+
+
+def _given(binding: dict, key: str) -> bool:
+    return key in binding or _snake(key) in binding
 
 
 _CHECKED_FIELDS = ("clips", "hold", "appearance")
@@ -551,6 +581,10 @@ def _set_duration(document: dict, changes: dict) -> None:
     if changes.get("retime") is True:
         _retime(document, duration)
     document["duration"] = duration
+    # A staged room's dust spans the whole shot (roomDust), whatever the new length and with or without retime.
+    for cue in _dicts(document.get("worldSfx")):
+        if cue.get("id") == DUST_ID:
+            cue["end"] = duration
 
 
 def _retime(document: dict, duration) -> None:

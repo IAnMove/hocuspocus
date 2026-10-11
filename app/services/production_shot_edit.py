@@ -270,6 +270,9 @@ def _assign_override(overrides: dict, name: str, value: Any) -> None:
     if name == "camera":
         if not isinstance(value, str) or not value:
             raise ShotEditError("invalid_update", "camera must be a preset name")
+        from services.production_camera import is_camera
+        if not is_camera(value):
+            raise ShotEditError("unknown_camera", f"camera {value} is not a kind: camera preset of motion_presets.json")
     elif not isinstance(value, dict):
         raise ShotEditError("invalid_update", f"{name} must be an object")
     overrides[name] = value

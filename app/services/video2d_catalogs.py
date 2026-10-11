@@ -1,13 +1,22 @@
-"""Read-only Video 2D catalogs shared with the UI. No GPU, save or export."""
+"""Read-only Video 2D catalogs shared with the UI. No GPU, save or export.
+
+``scenes.catalog`` searches by words, not by a substring of the id: a writer's «plano general», «persecución» or
+«rótulo con el nombre» goes through ``template_search.match`` over the id words, title, ``visualIntent``, family and
+the ES/EN name and line of ``video2d_lines.json``, with the shared 3D vocabulary as synonyms. Words no entry knows
+come back as ``unknown_words`` and do not count against a match.
+"""
 
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
 from services.mcp_compact import summarize_entry
+from services.template_search import match, query_words
+from services.world3d_template_vocabulary import QUERY_STOP, expand
 
 ROOT = Path(__file__).resolve().parents[1] / "shared"
 
@@ -26,7 +35,7 @@ BLURBS = {
     "scenes.finish.catalog": "List finish presets from finish_presets.json with clamp ranges.",
     "scenes.fonts.catalog": "List Video 2D font families from fonts.json (weights and license).",
     "scenes.atmospheres.catalog": "List atmosphere kinds from atmospheres.json with parameter defaults and ranges.",
-    "scenes.motion.catalog": "List recipe motion and camera presets from motion_presets.json.",
+    "scenes.motion.catalog": "List recipe motion and camera presets from motion_presets.json (a kind camera preset on a camera layer moves the view).",
 }
 
 
@@ -72,14 +81,26 @@ def load_catalog(name: str) -> Any:
     return data
 
 
+def _lyric_looks() -> dict[str, Any]:
+    """lyric_looks.json keeps its looks under ``looks`` (production_lyric_looks reads it as it is)."""
+    looks = {"entries": json.loads((ROOT / "lyric_looks.json").read_text(encoding="utf-8"))["looks"]}
+    _require_ids(_entries(looks, "lyric_looks.json"), "lyric_looks.json")
+    return looks
+
+
 CATALOGS = {operation: load_catalog(filename) for operation, filename in CATALOG_FILES.items()}
 EFFECTS_CATALOG = load_catalog("scene_effects.json")
 GRAPHICS_CATALOG = load_catalog("scene_graphics.json")
+LYRIC_LOOKS_CATALOG = _lyric_looks()
+# One ES/EN name and line per text template, motion or camera preset, finish and lyric look, keyed by kind and id.
+LINES = json.loads((ROOT / "video2d_lines.json").read_text(encoding="utf-8"))
+LINE_KEYS = ("titleEs", "titleEn", "lineEs", "lineEn")
 
 OPERATION = "scenes.catalog"
-KINDS = ("templates", "text", "finish", "fonts", "atmospheres", "motion", "effects", "graphics")
+KINDS = ("templates", "text", "finish", "fonts", "atmospheres", "motion", "effects", "graphics", "lyric_looks")
 PAGE_LIMIT = 200
 QUERY_LIMIT = 80
+MATCH_LIMIT = 20
 _KIND_SOURCE = {
     "templates": "scenes.templates.catalog",
     "text": "scenes.text.catalog",
@@ -88,6 +109,7 @@ _KIND_SOURCE = {
     "atmospheres": "scenes.atmospheres.catalog",
     "motion": "scenes.motion.catalog",
 }
+_SOURCE_KIND = {source: kind for kind, source in _KIND_SOURCE.items()}
 
 
 def command_catalog() -> list[dict[str, Any]]:
@@ -135,7 +157,7 @@ def execute(command: Any) -> dict[str, Any]:
         "version": 1,
         "status": "completed",
         "operation": name,
-        "result": _project_catalog(CATALOGS[name], detail=detail, identity=identity),
+        "result": _project_catalog(CATALOGS[name], detail=detail, identity=identity, kind=_SOURCE_KIND[name]),
     }
 
 
@@ -162,29 +184,95 @@ def _kind_data(kind: str) -> Any:
         return EFFECTS_CATALOG
     if kind == "graphics":
         return GRAPHICS_CATALOG
+    if kind == "lyric_looks":
+        return LYRIC_LOOKS_CATALOG
     return CATALOGS[_KIND_SOURCE[kind]]
 
 
-def _field(entry: dict, key: str) -> str:
-    value = entry.get(key)
-    return value if isinstance(value, str) else ""
+def lines_for(kind: str | None, identity: Any) -> dict[str, str]:
+    """The ES/EN name and line of one entry, or {} when the kind has none."""
+    found = (LINES.get(kind) or {}).get(identity) if kind and isinstance(identity, str) else None
+    return found if isinstance(found, dict) else {}
 
 
-def _haystack(entry: dict) -> str:
-    return f"{_field(entry, 'id')}\n{_field(entry, 'name')}".casefold()
+def summary_row(kind: str | None, entry: dict) -> dict[str, Any]:
+    """The short row: id, name, one-line description and counts, plus the ES/EN copy and ``covers`` when known."""
+    row = summarize_entry(entry)
+    copy = lines_for(kind, entry.get("id"))
+    if copy:
+        row.update({key: copy[key] for key in LINE_KEYS if key in copy})
+        row["name"] = copy.get("titleEn") or row["name"]
+        row["description"] = row["description"] or copy.get("lineEn", "")
+    if entry.get("covers") is True:
+        row["covers"] = True
+    return row
 
 
-def _selected(kind: str, family: str, needle: str) -> list[dict]:
-    entries = _entries(_kind_data(kind), kind)
-    if family:
-        entries = [item for item in entries if item.get("family") == family]
-    if needle:
-        entries = [item for item in entries if needle in _haystack(item)]
-    return entries
+def _texts(entry: dict, keys: tuple[str, ...], copy: dict, extra: tuple[str, ...]) -> str:
+    values = [entry.get(key) for key in keys] + [copy.get(key) for key in extra]
+    return " ".join(value for value in values if isinstance(value, str))
 
 
-def _visible(kind: str, family: str, needle: str) -> list[dict]:
-    return _selected(kind, family if kind == "templates" else "", needle)
+def _id_words(identity: str) -> list[str]:
+    """«camera-pan-right» → camera pan right; «warmCinema» → warm Cinema."""
+    return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", identity).replace("-", " ").replace("_", " ").split()
+
+
+def _search_fields(kind: str, entry: dict) -> dict[str, Any]:
+    copy = lines_for(kind, entry.get("id"))
+    tags = _id_words(str(entry.get("id") or "")) + [entry[key] for key in ("family", "kind", "collection") if isinstance(entry.get(key), str)]
+    return {"title": _texts(entry, ("title", "name", "label"), copy, ("titleEs", "titleEn")),
+            "description": _texts(entry, ("visualIntent", "description"), copy, ("lineEs", "lineEn")), "tags": tags}
+
+
+def _in_family(kind: str, entry: dict, family: str) -> bool:
+    return kind != "templates" or not family or entry.get("family") == family
+
+
+def _query_words(query: str) -> list[str]:
+    """The query's words without filler and without one- or two-letter words («up» in «close-up»)."""
+    return list(dict.fromkeys(word for word in query_words(query) if len(word) > 2 or word.isdigit()))
+
+
+def _pool(kinds: tuple[str, ...]) -> list[tuple[str, dict]]:
+    return [(kind, entry) for kind in kinds for entry in _entries(_kind_data(kind), kind)]
+
+
+def _scored(kinds: tuple[str, ...], family: str, wanted: list[str]) -> tuple[list[tuple[set[str], int, int, str, dict]], set[str]]:
+    """``[(words found, points, catalogue order, kind, entry)]`` of the entries in ``family``, and every word any entry
+    of these kinds knows (another family included)."""
+    known: set[str] = set()
+    scored = []
+    for order, (kind, entry) in enumerate(_pool(kinds)):
+        found, points = match(wanted, **_search_fields(kind, entry), synonyms=expand)
+        known.update(found)
+        if found and _in_family(kind, entry, family):
+            scored.append((set(found), points, order, kind, entry))
+    return scored, known
+
+
+def _ranked(kinds: tuple[str, ...], family: str, query: str) -> tuple[list[tuple[str, dict, int]], list[str], bool]:
+    """``[(kind, entry, points)]`` best first, the unknown words, and whether the rows are only partial matches.
+
+    A word no entry of these kinds knows is unknown and dropped. A word that names the thing searched («plano»,
+    «cámara», «shot»: the 3D ``QUERY_STOP``) adds points but is not needed, unless the query has nothing else. Rows
+    that have every needed word come first; when none does, the rows with at least half of them come back as partial.
+    An empty query keeps catalogue order."""
+    wanted = _query_words(query)
+    if not wanted:
+        return [(kind, entry, 0) for kind, entry in _pool(kinds) if _in_family(kind, entry, family)], [], False
+    scored, known = _scored(kinds, family, wanted)
+    chosen, partial = _chosen(scored, {word for word in known if word not in QUERY_STOP} or known)
+    return chosen, [word for word in wanted if word not in known], partial
+
+
+def _chosen(scored: list[tuple[set[str], int, int, str, dict]], needed: set[str]) -> tuple[list[tuple[str, dict, int]], bool]:
+    """The rows with every needed word, best first, else those with at least half of them (partial)."""
+    rows = sorted(((len(found & needed), points, order, kind, entry) for found, points, order, kind, entry in scored if found & needed),
+                  key=lambda row: (-row[0], -row[1], row[2]))
+    full = [row for row in rows if row[0] == len(needed)]
+    chosen = full or [row for row in rows if row[0] * 2 >= len(needed)]
+    return [(kind, entry, points) for _hits, points, _order, kind, entry in chosen], bool(chosen) and not full
 
 
 def _require_text(value: Any, field: str, limit: int) -> str:
@@ -216,17 +304,26 @@ def _query_fields(data: Any) -> tuple[str, str, str, bool, str]:
     return kind, family, query.casefold(), detail, identity
 
 
-def _summary(family: str, needle: str) -> dict[str, Any]:
-    rows = [{"kind": kind, "count": len(_visible(kind, family, needle))} for kind in KINDS]
-    return {"kinds": rows}
+def _summary(family: str, query: str) -> dict[str, Any]:
+    rows, unknown, partial = _ranked(KINDS, family, query)
+    result: dict[str, Any] = {"kinds": [{"kind": kind, "count": sum(1 for row in rows if row[0] == kind)} for kind in KINDS]}
+    if _query_words(query):
+        result.update(matches=[{"kind": kind, **summary_row(kind, entry), "score": points} for kind, entry, points in rows[:MATCH_LIMIT]],
+                      unknown_words=unknown, partial=partial)
+    return result
 
 
-def _page(kind: str, family: str, needle: str, detail: bool) -> dict[str, Any]:
-    entries = _visible(kind, family, needle)
-    total = len(entries)
-    page = entries[:PAGE_LIMIT]
-    shown = deepcopy(page) if detail else [summarize_entry(item) for item in page]
-    return {"kind": kind, "entries": shown, "total": total, "truncated": total > PAGE_LIMIT}
+def _page(kind: str, family: str, query: str, detail: bool) -> dict[str, Any]:
+    rows, unknown, partial = _ranked((kind,), family, query)
+    total = len(rows)
+    page = rows[:PAGE_LIMIT]
+    searched = bool(_query_words(query))
+    shown = [deepcopy(entry) if detail else {**summary_row(kind, entry), **({"score": points} if searched else {})}
+             for _kind, entry, points in page]
+    result: dict[str, Any] = {"kind": kind, "entries": shown, "total": total, "truncated": total > PAGE_LIMIT}
+    if searched:
+        result.update(unknown_words=unknown, partial=partial)
+    return result
 
 
 def _catalog_options(data: Any) -> tuple[bool, str]:
@@ -245,44 +342,38 @@ def _catalog_options(data: Any) -> tuple[bool, str]:
     return detail, identity
 
 
-def _project_catalog(data: Any, *, detail: bool, identity: str) -> Any:
+def _project_catalog(data: Any, *, detail: bool, identity: str, kind: str | None = None) -> Any:
     entries = _entries(data, "catalog")
     if identity:
-        match = next((item for item in entries if item.get("id") == identity), None)
-        if match is None:
+        found = next((item for item in entries if item.get("id") == identity), None)
+        if found is None:
             raise CatalogError("catalog_unknown_id", identity)
-        return {"entry": deepcopy(match)}
+        return {"entry": deepcopy(found)}
     if detail:
         return deepcopy(data)
-    return {"entries": [summarize_entry(item) for item in entries], "counts": {"entries": len(entries)}}
+    return {"entries": [summary_row(kind, item) for item in entries], "counts": {"entries": len(entries)}}
 
 
-def _find_entry(identity: str, kind: str, family: str, needle: str) -> tuple[str, dict]:
+def _find_entries(identity: str, kind: str, family: str) -> list[tuple[str, dict]]:
+    """Every entry with this id; nine atmosphere ids are also effects and ``space-cruise`` is a template and a motion."""
     kinds = (kind,) if kind else KINDS
-    found: dict | None = None
-    found_kind = ""
-    for item_kind in kinds:
-        for entry in _visible(item_kind, family, needle):
-            if entry.get("id") != identity:
-                continue
-            if found is not None:
-                raise CatalogError("catalog_ambiguous_id", identity)
-            found = entry
-            found_kind = item_kind
-    if found is None:
+    found = [(item_kind, entry) for item_kind in kinds for entry in _entries(_kind_data(item_kind), item_kind)
+             if entry.get("id") == identity and _in_family(item_kind, entry, family)]
+    if not found:
         raise CatalogError("catalog_unknown_id", identity)
-    return found_kind, found
+    return found
 
 
 def query_catalog(data: Any) -> dict[str, Any]:
-    kind, family, needle, detail, identity = _query_fields(data)
+    kind, family, query, detail, identity = _query_fields(data)
     if identity:
-        found_kind, entry = _find_entry(identity, kind, family, needle)
-        result: dict[str, Any] = {"kind": found_kind, "entry": deepcopy(entry)}
+        found = _find_entries(identity, kind, family)
+        result: dict[str, Any] = ({"kind": found[0][0], "entry": deepcopy(found[0][1])} if len(found) == 1
+                                  else {"matches": [{"kind": item_kind, "entry": deepcopy(entry)} for item_kind, entry in found]})
     elif kind:
-        result = _page(kind, family, needle, detail)
+        result = _page(kind, family, query, detail)
     else:
-        result = _summary(family, needle)
+        result = _summary(family, query)
     return {"version": 1, "status": "completed", "operation": OPERATION, "result": result}
 
 
@@ -304,8 +395,15 @@ def query_operation() -> dict[str, Any]:
             f"Query Video 2D catalogs ({kinds}). Omit kind for counts only "
             "({kinds:[{kind, count}]}, no entry dump). With kind, entries are summaries "
             "(id, name, one-line description, counts) unless detail is true. "
-            "id returns that one full entry. family filters templates. "
-            "q matches id and name, case-insensitive, at most 80 characters. "
+            "id returns that one full entry (q is ignored); an id found in several kinds (rain is an atmosphere and an "
+            "effect) returns matches, one {kind, entry} each. family filters templates. "
+            "q is a few words in Spanish or English, at most 80 characters: case, accents, plurals and filler words are "
+            "forgiven and the Video 3D synonyms count («plano general», «persecución», «rótulo», «cámara en mano»). It "
+            "scores id words, title, visualIntent, family and the ES/EN name and line, best first, each row with its "
+            "score; unknown_words lists the words no entry knows, and partial is true when no row has all the others. "
+            f"Without kind, q returns the counts plus the best {MATCH_LIMIT} matches of every kind. "
+            "Rows carry titleEs, titleEn, lineEs and lineEn when the entry has them, and covers true for a text template "
+            "that paints an opaque plate over the whole frame. lyric_looks are the production.run lyric styles. "
             f"At most {PAGE_LIMIT} entries; truncated and total when over the cap. "
             "Effects entries are scene_effects.json; world kinds stay on scenes.effects.catalog. "
             "Graphics entries are scene_graphics.json: parameterized drawings timed in beats, no custom code. "
@@ -354,12 +452,16 @@ __all__ = [
     "EFFECTS_CATALOG",
     "GRAPHICS_CATALOG",
     "KINDS",
+    "LINES",
+    "LYRIC_LOOKS_CATALOG",
     "command_catalog",
     "command_handlers",
     "execute",
     "execute_query",
+    "lines_for",
     "load_catalog",
     "query_catalog",
     "query_handlers",
     "query_operation",
+    "summary_row",
 ]
