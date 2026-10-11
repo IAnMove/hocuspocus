@@ -34,7 +34,9 @@ test('scroll slides every layer and the ground past the cast, turning the ground
   const slots = stageParallaxSet(doc, SET, { scroll: 2 })
   for (const slot of slots) assert.ok(typeof slot.drift === 'number' && slot.drift > 0, slot.id)
   const ground = slots.find(slot => slot.id === 'set-ground'), mid = layer(slots, 'mid'), near = layer(slots, 'near')
-  assert.ok(ground.drift < mid.drift && mid.drift < near.drift, 'the same speed turns a wide slab less than a near tile')
+  const metres = (slot, width) => slot.drift * width
+  assert.ok(Math.abs(metres(ground, 3 * Math.max(1, 80 / 80) * (ground.scale * 1.7 / 0.2)) - 2) < 1e-3, 'the ground moves 2 m/s: its picture repeats every 3 m, stretched with the slab')
+  assert.ok(Math.abs(metres(mid, mid.scale * 2 * 1664 / 928) - 2) < 1e-3 && Math.abs(metres(near, near.scale * 2 * 1664 / 928) - 2) < 1e-3, 'every layer moves at the same speed in metres')
   assert.ok(Math.abs(ground.rotationY - mid.rotationY) < 1e-9, 'the slab faces the camera so its texture runs along the view')
   assert.ok(stageParallaxSet(doc, SET, { scroll: -2 }).find(slot => slot.id === 'set-ground').drift < 0)
   doc.slots = [...doc.slots, ...slots]
@@ -42,6 +44,13 @@ test('scroll slides every layer and the ground past the cast, turning the ground
   assert.equal(layer(parsed.slots, 'mid').drift, mid.drift)
   assert.equal(layer(parsed.slots, 'mid').imageLook.tiles, mid.imageLook.tiles)
   assert.equal(parsed.slots.find(slot => slot.id === 'set-ground').drift, ground.drift)
+})
+
+test('a scrolled cutout that is not tiled still repeats its picture mirrored', () => {
+  const texture = new Texture(); texture.image = { width: 1664, height: 928 }
+  imageCutoutMesh({ id: 'x', slot: 'prop', media: 'image', surface: 'cutout', sourceUrl: '/layer.png', clip: null, position: [0, 0, 0], rotationY: 0, scale: 1,
+    imageLook: { unlit: true }, drift: 0.1 }, texture)
+  assert.equal(texture.wrapS, MirroredRepeatWrapping)
 })
 
 test('a tiled cutout is as wide as its tiles, keeps the original copy in the middle and wraps its texture mirrored', () => {

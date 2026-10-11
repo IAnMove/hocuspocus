@@ -24,6 +24,7 @@ const MAX_TILES = 9
 const KEY_TOLERANCE = 0.2
 const KEY_SOFTNESS = 0.12
 const GROUND_MARGIN = 8
+const GROUND_TILE = 3          // metres the ground picture covers before it repeats (diorama_set.GROUND_TILE)
 
 type Pose = { eye: Vec3; look: Vec3 }
 
@@ -125,7 +126,7 @@ function groundSlot(ground: DioramaGround, centre: Vec3, ahead: Vec3, reach: num
     id: 'set-ground', slot: 'prop', media: 'model3d', sourceUrl: ground.source, clip: null,
     position: [centre[0], 0, centre[2]], rotationY: scroll ? Math.atan2(-ahead[0], -ahead[2]) : 0, scale: (ground.height * stretch) / MODEL_HEIGHT, grounded: false,
   }
-  if (scroll) slot.drift = round(scroll / (ground.size * stretch))
+  if (scroll) slot.drift = round(scroll / ((ground.tile ?? GROUND_TILE) * stretch))   // the slab is stretched with its picture
   return slot
 }
 
