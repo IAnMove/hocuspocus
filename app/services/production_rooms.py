@@ -61,7 +61,7 @@ def picture_jobs(production,name,entry,look,choice):
     if not requests:
         build(production,name,record);production.save();return {}
     model=image_model(production.mcp)
-    return {f'set:{name}:{surface}':production.image(f'set-{name}-{surface}',asked['prompt'],None,asked['resolution'],index+1,model,None,production._attempt('set_attempts',name))
+    return {f'set:{name}:{surface}':production.image(f'set-{name}-{surface}',asked['prompt'],None,asked['resolution'],index+1,model,defaults()['imageParams'][model]['num_inference_steps'],production._attempt('set_attempts',name))
             for index,(surface,asked) in enumerate(requests.items())}
 
 

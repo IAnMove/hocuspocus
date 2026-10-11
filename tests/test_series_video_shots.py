@@ -472,3 +472,30 @@ def test_a_resume_right_after_a_failure_starts_a_new_run_once_the_old_thread_end
     service._launch("ws", {"jobId": "job-1", "workspace": "ws", "status": "queued", "steps": []})
     service._threads["job-1"].join(5)
     assert ran == ["job-1"] and not closing.is_alive()
+
+
+def test_cancel_preserves_worker_checkpoint_when_child_cancel_returns_late(tmp_path):
+    """The child cancellation can acknowledge after the production worker has already stopped."""
+    import threading
+    clip = _png(tmp_path / 'clip.png', (196, 180, 154))
+    tools = _Server(tmp_path, clip, outcomes=['running'])
+    library, _ = _episode(_request())
+    service = _produce(tmp_path, tools, library)
+    call = service.deps.call
+    def delayed_cancel(name, arguments):
+        result = call(name, arguments)
+        if name == 'jobs.cancel':
+            thread = service._threads[job_id]
+            if thread is not threading.current_thread():
+                thread.join(timeout=5)
+                assert not thread.is_alive()
+        return result
+    service.deps.call = delayed_cancel
+    job_id = service.start('cast', 'uv', 'ep1')['jobId']
+    for _ in range(300):
+        if service.status('cast', job_id)['steps'][0].get('jobId') == 'vid-1': break
+        time.sleep(.01)
+    service.cancel('cast', job_id)
+    stopped = service.status('cast', job_id)
+    assert stopped['status'] == 'cancelled'
+    assert stopped['steps'][0]['failedTakes']['s00']['takes'] == [1]

@@ -5,14 +5,14 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 
 | Bloque | Rama | PR | Estado | Archivos (exclusivos) |
 |---|---|---|---|---|
-| A4 | feat/set-molds-format | #969 | 6 tests nuevos OK; borrador | set_molds.py, set_commands.py, roomSet.ts, roomSetRuntime.ts, set_defaults.json, test_set_molds.py, roomSet.test.ts |
-| A1 | feat/mcp-remove-background | #970 | 4 tests nuevos OK; borrador | image_remove_background.py |
-| A2 | feat/prop-library | #971 | 4 tests nuevos OK; borrador | prop_library.py |
-| A3 | feat/scene3d-add-items | #972 | 5 tests nuevos OK; borrador | scene3d_items.py |
-| A5 | feat/set-skins | #973 | 4 tests nuevos OK; borrador | set_skins.py |
-| A6 | feat/set-molds-v1 | #974 | 16 tests nuevos OK; borrador | set_molds/*.json |
-| A7 | feat/sets-room-integration | #975 | 6 tests nuevos OK; borrador | production_rooms.py, series_sets.py |
-| A8 | docs/sets-agent-guide | pendiente | 3 tests nuevos OK; borrador | guías de agentes |
+| A4 | feat/set-molds-format | #969 | Z1 local OK: 6677 Python + 55 cancelación; UI; ratchet; docs | set_molds.py, set_commands.py, roomSet.ts, roomSetRuntime.ts, set_defaults.json |
+| A1 | feat/mcp-remove-background | #970 | Z1 local OK: 6682 Python + 55 cancelación; UI; ratchet; docs | image_remove_background.py |
+| A2 | feat/prop-library | #971 | Z1 local OK: 6685 Python + 55 cancelación; UI; ratchet; docs | prop_library.py |
+| A3 | feat/scene3d-add-items | #972 | Z1 local OK: 6691 Python + 12 escala/GLB/editor; UI; ratchet; docs | scene3d_items.py |
+| A5 | feat/set-skins | #973 | Z1 local OK: 6697 Python; UI; ratchet; docs | set_skins.py |
+| A6 | feat/set-molds-v1 | #974 | Z1 local OK: 6713 Python; UI; ratchet; docs | set_molds/*.json |
+| A7 | feat/sets-room-integration | #975 | Z1 local OK: 6720 Python + 20 contrato/catálogo; UI; ratchet; docs | production_rooms.py, series_sets.py |
+| A8 | docs/sets-agent-guide | #976 | Z1 en curso | guías de agentes |
 | Z1 | ramas anteriores | pendiente | pendiente | comprobaciones completas |
 | Z2 | docs/sets-trial | pendiente | pendiente | defaults medidos e informe |
 | Z3 | ramas anteriores | pendiente | pendiente | evidencias por bloque |

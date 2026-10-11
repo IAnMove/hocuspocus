@@ -37,5 +37,24 @@
     "borderShare": 0.9,
     "colorDistance": 70,
     "cropMargin": 0.02
+  },
+  "imageParams": {
+    "qwen_image_21_turbo": {
+      "num_inference_steps": 8,
+      "guidance_scale": 1
+    },
+    "qwen_image_21_viggle_turbo": {
+      "num_inference_steps": 6,
+      "guidance_scale": 1
+    },
+    "qwen_image_21": {
+      "num_inference_steps": 40,
+      "guidance_scale": 1
+    }
+  },
+  "imageNegativePrompt": {
+    "qwen_image_21_turbo": true,
+    "qwen_image_21_viggle_turbo": false,
+    "qwen_image_21": true
   }
 }

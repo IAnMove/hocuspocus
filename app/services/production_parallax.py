@@ -34,7 +34,8 @@ NEAR_STAGING = ("Wide shot, a few separate pieces only in the left and right thi
                 "middle, the central third of the picture pure key colour from top to bottom")
 FIELDS = {"kind", "prompt", "far", "mid", "near", "ground", "seed"}
 DEPTHS = ("mid", "near")
-RECIPE = 2      # the picture recipe above; a change draws every parallax set again
+RECIPE = 3      # the picture recipe above; a change draws every parallax set again
+KEY_NEAR = 0.2  # a texel this close to the key (RGB distance over sqrt(3)) is key colour, as in the renderer
 
 
 def is_parallax(entry: Any) -> bool:
@@ -84,10 +85,27 @@ def build(production: Any, name: str, record: dict) -> None:
     try:
         record["ground"] = {"source": f"/api/v1/file/{ground}?workspace={production.ws}",
                             **build_ground(production.root / ground, production.root / pictures["ground"])}
-        record["layers"] = [{"source": production.upload(pictures[depth])[1], "depth": depth} for depth in DEPTHS if depth in pictures]
+        record["layers"] = [{"source": production.upload(pictures[depth])[1], "depth": depth, "foot": foot(production.root / pictures[depth])}
+                            for depth in DEPTHS if depth in pictures]
         record["sky"] = production.upload(pictures["far"])[1]
     except (OSError, ValueError, KeyError) as error:
         record["error"] = f"parallax build failed: {error}"
         return
     record["key"] = KEY
     production.log(f"set {name}: parallax of {len(record['layers'])} layers")
+
+
+def foot(picture: Any) -> float:
+    """The share of the picture's height that is empty key colour under its lowest piece: the renderer stands the
+    layer that much lower, so the pieces touch the ground."""
+    import numpy as np
+    from PIL import Image
+
+    with Image.open(picture) as image:
+        rgb = np.asarray(image.convert("RGB"), dtype=np.float32) / 255
+    key = np.array([int(KEY[index:index + 2], 16) / 255 for index in (1, 3, 5)], dtype=np.float32)
+    painted = np.linalg.norm(rgb - key, axis=2) / np.sqrt(3) > KEY_NEAR
+    rows = np.flatnonzero(painted.any(axis=1))
+    if not len(rows):
+        return 0.0
+    return round(float(rgb.shape[0] - 1 - rows[-1]) / rgb.shape[0], 4)

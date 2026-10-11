@@ -1,5 +1,6 @@
 """Room sets in production batches and Series, without GPU or server."""
 import copy
+import pytest
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -80,3 +81,81 @@ def test_set_props_resolve_into_every_shot_without_overwriting_own_props():
     assert first==second
     legacy={'background':'old'};before=copy.deepcopy(legacy)
     assert not resolve_background(legacy,sets,'test') and before==legacy
+
+
+def test_inherited_items_count_move_hide_and_keep_new_set_skin(tmp_path):
+    import pytest
+    from PIL import Image
+    from services.scene3d_items import ItemService
+    from services.series_shot3d import normalize_scene3d
+    Image.new('RGBA',(4,4),'red').save(tmp_path/'lamp.png')
+    objects=[{'objectId':f'prop-lamp-{i}','media':'image','file':'lamp.png','add':True,'scale':.2,'position':[0,0,0]} for i in range(12)]
+    location={'id':'office','set3d':{'mold':'despacho'},'set3dBuilt':{'objects':objects,'templates':{'two_shot':'user-room-test'}}}
+    series={'locations':[location]};script={'location':'office','scene3d':{'template':'two-shot','cast':[]}}
+    def call(name,args):
+        if name=='series.get':return {'result':{'series':series}}
+        if name=='series.shot.get':return {'result':{'script':script}}
+        if name=='series.shot.update':
+            script['scene3d']=normalize_scene3d(args['input']['changes']['scene3d'])
+            return {'result':{}}
+        raise AssertionError(name)
+    service=ItemService(lambda _:str(tmp_path),lambda:str(tmp_path/'uploads'),call)
+    target={'workspace':'test','target':{'series_id':'s','episode_id':'e','shot':1}}
+    def edit(action,**fields):return service.execute('scene3d.item.'+action,{'version':1,'intent_id':action,'input':{**target,**fields}})['result']
+    assert len(edit('list')['items'])==12
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException,match='13 requested; maximum 12'):
+        edit('add',item={'image':'lamp.png'},heightM=.4,at={'anchor':'desk_left'})
+    edit('update',id='prop-lamp-0',at={'anchor':'desk_left'})
+    assert script['scene3d']['objects'][0]['position']==[-.6,.75,-.8]
+    edit('remove',id='prop-lamp-1')
+    assert script['scene3d']['removedSetObjects']==['prop-lamp-1']
+    assert len(edit('list')['items'])==11 and len(location['set3dBuilt']['objects'])==12
+    shot={'productionMethod':'animation_3d','locationId':'office','scene3d':script['scene3d']}
+    assert len(inherit_shot(series,shot)['scene3d']['objects'])==11
+
+
+def test_room_listener_uses_approved_kit_review_state():
+    from services.series_sets import bind_silent_cast
+    calls=[]
+    def call(name,args):calls.append(args['input']);return {'result':{'scene':{'sceneId':'scene','revision':2}}}
+    result=bind_silent_cast(call,'test','trial',{'sceneId':'scene','revision':1},
+        {'roomSet':{},'cast':[]},[],{}, {})
+    assert result['revision']==1
+    result=bind_silent_cast(call,'test','trial',{'sceneId':'scene','revision':1},
+        {'roomSet':{'mold':'despacho'},'cast':[{'characterId':'a','objectId':'subject_1'}]},[],
+        {'kit':{'base':{'source':'a.png','reviewState':'approved'}}},{'a':'kit'})
+    assert result['revision']==2 and calls[0]['bindings'][0]['source_url'].endswith('a.png?workspace=test')
+
+
+def test_room_rest_binds_running_event_loop():
+    import asyncio
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers.series_sets import create_series_sets_router
+    class Service:
+        def handlers(self):
+            async def status(args):return {'loop':asyncio.get_running_loop().is_running()}
+            return {'series.location.set3d.status':status}
+    loops=[];app=FastAPI();app.include_router(create_series_sets_router(Service(),loops.append))
+    with TestClient(app) as client:
+        result=client.post('/api/v1/series/sets/commands',json={'operation':'series.location.set3d.status'})
+    assert result.status_code==200 and result.json()['loop'] and len(loops)==1
+
+
+@pytest.mark.skipif(not (Path(__file__).resolve().parents[1]/'ui/node_modules').is_dir(), reason='UI compiler dependencies are not installed')
+def test_actual_room_compiler_persists_all_seven_templates(tmp_path):
+    from services.world3d_scenes import put_user_template
+    from services.series_review import content_digest
+    series={'locations':[{'id':'office'}],'episodesById':{'e':{'shots':[{'id':'shot','productionMethod':'animation_3d','locationId':'office','scene3d':{'template':'two-shot'},'approvedAttemptId':'take'}]}}}
+    stored=series['episodesById']['e']['shots'][0];before=content_digest(stored)
+    def call(name,args):
+        assert name=='world3d.templates.user.put'
+        return {'result':put_user_template('test',lambda _:str(tmp_path),args['input'])}
+    service=SeriesSets(lambda _:str(tmp_path),lambda *a:series,lambda ws,sid,fn:fn(series),call,inline=True)
+    args={'version':1,'intent_id':'actual-room','input':{'workspace':'test','series_id':'s','location_id':'office','mold':'despacho'}}
+    service.execute('series.location.set3d',args)
+    loc=series['locations'][0]
+    assert loc['set3dStatus']['status']=='completed',loc['set3dStatus']
+    assert len(loc['set3dBuilt']['templates'])==7
+    assert 'approvedAttemptId' not in stored and content_digest(stored)!=before
