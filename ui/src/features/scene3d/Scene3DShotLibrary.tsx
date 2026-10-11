@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import { Search, X } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { ModalShell } from '../../components/common/ModalShell'
@@ -13,13 +13,15 @@ import { filterScene3DTemplates, kindsIn, settingsIn, type TemplateSetting } fro
 import type { TemplateKind } from './templateTraits.ts'
 import { CORE_TEMPLATES, isBuiltinScene3DTemplate, isCoreTemplate, templateCollections } from './templateCatalog'
 import { ExampleDownloads } from './ExampleDownloads'
-import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
+import { Scene3DDocumentThumb, Scene3DTemplateThumb } from './Scene3DTemplateThumb'
 import { Scene3DUserTemplates } from './Scene3DUserTemplates'
+import { Scene3DStageShelf, type StageChoice } from './Scene3DStageShelf'
+import { stageLine, stageMarks, stageShape, stageTitle } from './stageShelf'
 import { gridFocusTarget, LIBRARY_CATEGORIES, readLibraryView, readRecentShots, rememberRecentShot, saveLibraryView, type LibraryCategory, type LibraryView } from './shotLibraryState'
 import type { Scene3DDocument } from './types.ts'
 import type { World3DUserTemplate } from './userTemplates.ts'
 
-type Pick = { kind: 'template'; id: Scene3DTemplateId } | { kind: 'user'; pack: World3DUserTemplate }
+type Pick = { kind: 'template'; id: Scene3DTemplateId } | { kind: 'user'; pack: World3DUserTemplate } | ({ kind: 'stage' } & StageChoice)
 
 export type ShotLibraryProps = {
   document: Scene3DDocument
@@ -80,7 +82,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
   const candidates = view.category === 'recent' ? SCENE3D_TEMPLATES : mode === 'templates' ? CORE_TEMPLATES : SCENE3D_TEMPLATES.filter(item => !isCoreTemplate(item.id))
   const allowed = new Set(candidates.map(item => item.id))
   const inCatalog = (items: Scene3DTemplate[]) => items.filter(item => allowed.has(item.id))
-  const browsed = view.category === 'recent' || view.category === 'mine' ? undefined : view.category
+  const browsed = view.category === 'recent' || view.category === 'mine' || view.category === 'stages' ? undefined : view.category
   const shown = view.category === 'recent'
     ? recentTemplates(recent, filterScene3DTemplates({ ...filter, category: 'all', setting: 'all' }))
     : !browsed ? [] : inCatalog(filterScene3DTemplates({ ...filter, category: browsed, setting: view.setting, kind }))
@@ -95,7 +97,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
   return <div className="flex h-full max-h-[56rem] w-full max-w-[96rem] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl" data-testid="world3d-shot-library">
     <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
       <h2 className="mr-auto text-base font-semibold text-text-primary">{t('templates')}
-        {view.category !== 'mine' && <span className="ml-2 text-sm font-normal text-text-muted">{t('filterCount', { shown: shown.length, total: candidates.length })}</span>}
+        {view.category !== 'mine' && view.category !== 'stages' && <span className="ml-2 text-sm font-normal text-text-muted">{t('filterCount', { shown: shown.length, total: candidates.length })}</span>}
       </h2>
       <label className="flex min-h-10 min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-border bg-bg-primary px-3 text-text-muted sm:max-w-md"><Search size={16} />
         <input type="search" value={view.query} onChange={event => setView({ query: event.target.value })} placeholder={t('search')} aria-label={t('search')}
@@ -116,6 +118,9 @@ function ShotLibraryBody(props: ShotLibraryProps) {
         {view.category === 'mine'
           ? <Scene3DUserTemplates document={props.document} workspace={props.workspace} preview={props.preview} disabled={props.editingLocked} selectedId={picked?.kind === 'user' ? picked.pack.id : undefined}
             onApply={pack => setPicked({ kind: 'user', pack })} />
+          : view.category === 'stages'
+          ? <Scene3DStageShelf workspace={props.workspace} query={view.query} locale={locale} selectedId={picked?.kind === 'stage' ? picked.card.id : undefined}
+            onPick={choice => setPicked({ kind: 'stage', ...choice })} onUse={choice => use({ kind: 'stage', ...choice })} />
           : <ShotGrid templates={shown} picked={picked?.kind === 'template' ? picked.id : undefined} current={currentId}
             onPick={id => setPicked({ kind: 'template', id })} onUse={id => use({ kind: 'template', id })} />}
       </main>
@@ -145,8 +150,9 @@ function LibrarySidebar({ available, view, hasRecent, settings, onView, kinds, k
   kinds: TemplateKind[]; kind: 'all' | TemplateKind; onKind: (kind: 'all' | TemplateKind) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
-  const categories: LibraryCategory[] = [...(hasRecent ? ['recent' as const] : []), 'all', ...available, 'mine']
-  const label = (item: LibraryCategory) => item === 'all' ? t('all') : item === 'recent' ? t('shotLibrary.recent') : item === 'mine' ? t('userTemplates.title') : t(`category.${item}`)
+  const categories: LibraryCategory[] = [...(hasRecent ? ['recent' as const] : []), 'all', ...available, 'stages', 'mine']
+  const label = (item: LibraryCategory) => item === 'all' ? t('all') : item === 'recent' ? t('shotLibrary.recent') : item === 'mine' ? t('userTemplates.title')
+    : item === 'stages' ? t('stages.title') : t(`category.${item}`)
   return <nav className="flex flex-col gap-3 border-b border-border p-3 md:min-h-0 md:overflow-y-auto md:border-b-0 md:border-r" aria-label={t('filterCategory')}>
     <div className="flex flex-wrap gap-1 md:flex-col" role="group" aria-label={t('filterCategory')}>
       {categories.map(item => <button key={item} type="button" onClick={() => onView({ category: item, setting: 'all' })} aria-pressed={view.category === item}
@@ -201,6 +207,7 @@ function ShotGrid({ templates, picked, current, onPick, onUse }: {
 function ShotPreview({ picked, current, locale }: { picked?: Pick; current?: Scene3DTemplateId; locale: 'en' | 'es' }) {
   const { t } = useUiTranslation('scene3dEditor')
   if (!picked) return <p className="text-sm text-text-muted">{t('shotLibrary.pickOne')}</p>
+  if (picked.kind === 'stage') return <StagePreview choice={picked} locale={locale} />
   if (picked.kind === 'user') return <div className="space-y-2" data-testid="world3d-shot-preview">
     <h3 className="text-base font-semibold text-text-primary">{picked.pack.title}</h3>
     <p className="text-sm leading-5 text-text-secondary">{picked.pack.description || t('userTemplates.noDescription')}</p>
@@ -214,5 +221,18 @@ function ShotPreview({ picked, current, locale }: { picked?: Pick; current?: Sce
     <p className="text-xs tabular-nums text-text-muted">{current === picked.id ? `${t('shotLibrary.current')} · ` : ''}{item?.duration} s</p>
     <p className="text-sm leading-5 text-text-secondary">{t(`template.${picked.id}.description`)}</p>
     {card?.requirements.map(req => <p key={req} className="text-xs leading-4 text-text-muted">{req}</p>)}
+  </div>
+}
+
+function StagePreview({ choice, locale }: { choice: StageChoice; locale: 'en' | 'es' }) {
+  const { t } = useUiTranslation('scene3dEditor')
+  const { card, pack } = choice
+  const load = useCallback(() => Promise.resolve(pack.document), [pack])
+  return <div className="space-y-3" data-testid="world3d-shot-preview">
+    <Scene3DDocumentThumb id={`preview-${card.id}`} load={load} fill />
+    <h3 className="text-base font-semibold text-text-primary">{stageTitle(card, locale)}</h3>
+    <p className="text-xs tabular-nums text-text-muted">{t(`stages.shape.${stageShape(card)}`)} · {t('stages.marks', { count: stageMarks(card) })} · {card.duration} s</p>
+    <p className="text-sm leading-5 text-text-secondary">{stageLine(card, locale)}</p>
+    <p className="text-xs leading-4 text-text-muted">{t('stages.cameraList', { cameras: card.cameras.map(id => t(`roomCamera.names.${id}`, { defaultValue: id })).join(', ') })}</p>
   </div>
 }

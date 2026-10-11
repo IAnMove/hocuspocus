@@ -32,6 +32,8 @@ import { MotionLabControls } from './motionlab/controls'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
+import { Scene3DRoomCameraPicker } from './Scene3DRoomCameraPicker'
+import { withRoomCamera } from './roomCamera'
 import { AtmosClearingControls } from './AtmosClearingControls.tsx'
 import { KineticTextControls } from '../../components/common/KineticTextControls'
 import { KineticTextOverlay } from '../../components/common/KineticTextOverlay'
@@ -493,6 +495,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             {FAMILIES.map(family => <option key={family} value={family}>{t(`stage.family.${family}`)}</option>)}
           </select>
         </label>
+        <Scene3DRoomCameraPicker document={sceneDoc} disabled={exporting} onChange={id => applyScene(current => withRoomCamera(current, id))} />
         <button
           type="button"
           data-testid="world3d-export"

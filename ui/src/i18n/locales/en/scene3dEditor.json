@@ -4179,6 +4179,40 @@
     "invalid": "This workspace template is not a valid Video 3D document.",
     "shotTitle": "Workspace template · {{id}}"
   },
+  "stages": {
+    "title": "Stages",
+    "help": "Rooms and open places with marks for the cast and named cameras. Pick one and press “Use this shot”: it opens with its room, then bind your characters and choose a room camera.",
+    "loading": "Loading the stages",
+    "noWorkspace": "Open a workspace to see the stages.",
+    "error": "Could not load the stages: {{reason}}",
+    "retry": "Retry",
+    "empty": "The library has no stages.",
+    "openError": "Could not open the stage: {{reason}}",
+    "invalid": "This stage is not a valid Video 3D document with a room.",
+    "shape": {
+      "interior": "Interior",
+      "exterior": "Exterior"
+    },
+    "marks_one": "{{count}} mark",
+    "marks_other": "{{count}} marks",
+    "cameras_one": "{{count}} camera",
+    "cameras_other": "{{count}} cameras",
+    "cameraList": "Cameras: {{cameras}}",
+    "shotTitle": "Stage · {{id}}"
+  },
+  "roomCamera": {
+    "label": "Room camera",
+    "custom": "Custom",
+    "names": {
+      "two_shot": "Two-shot",
+      "ots_a": "Over the shoulder A",
+      "ots_b": "Over the shoulder B",
+      "wide": "Wide",
+      "close_1": "Close-up 1",
+      "close_2": "Close-up 2",
+      "entrance": "Entrance"
+    }
+  },
   "motionLab": {
     "controls": "Native motion scenes",
     "bpm": "Tempo (BPM)",
