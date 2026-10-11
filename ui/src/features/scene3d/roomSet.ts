@@ -12,6 +12,9 @@ export type RoomMold = {
   defaultSkin: Record<string, RoomMaterial>; lights: string
 }
 export type RoomSet = { mold: RoomMold; skin?: Record<string, RoomMaterial>; camera?: string }
+/** A view sits this far behind its wall and overlaps the hole by this margin, so oblique cameras never see past its edge. */
+export const OPENING_DEPTH = 0.015, OPENING_MARGIN = 0.08
+const FALLBACK: RoomMaterial = { color: '#d8d2c4' }
 export type RoomPanel = { id: string; surface: string; position: Vec3; rotation: Vec3; size: [number, number]; uv: [number, number, number, number]; fullSize: [number, number]; material: RoomMaterial }
 const LIGHTS: Record<string, { color: string; intensity: number; direction: Vec3 }> = {
   office_day: { color: '#fff6e5', intensity: 1.1, direction: [-0.6, -1, -0.4] },
@@ -60,8 +63,8 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
   const { mold } = room, [w, d, h] = mold.dimensions
   const panels: RoomPanel[] = []
   const skin = { ...mold.defaultSkin, ...room.skin }
-  const add = (surface: string, position: Vec3, rotation: Vec3, size: [number, number], uv: RoomPanel['uv'] = [0, 0, 1, 1], fullSize = size) => {
-    panels.push({ id: `room-${surface}-${panels.length}`, surface, position, rotation, size, uv, fullSize, material: skin[surface] ?? { color: '#d8d2c4' } })
+  const add = (surface: string, position: Vec3, rotation: Vec3, size: [number, number], uv: RoomPanel['uv'] = [0, 0, 1, 1], fullSize = size, material = skin[surface] ?? FALLBACK) => {
+    panels.push({ id: `room-${surface}-${panels.length}`, surface, position, rotation, size, uv, fullSize, material })
   }
   add('floor', [0, 0, 0], [-Math.PI / 2, 0, 0], [w, d])
   add('ceiling', [0, h, 0], [Math.PI / 2, 0, 0], [w, d])
@@ -73,23 +76,29 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     const ys = [...new Set([0, h, ...rects.flatMap(o => [o.low, o.high])])].sort((a, b) => a - b)
     const yaw = wall === 'left' ? Math.PI / 2 : wall === 'right' ? -Math.PI / 2 : wall === 'front' ? Math.PI : 0
     const at = (u: number, y: number, offset = 0): Vec3 => side ? [wall === 'left' ? -w/2-offset : w/2+offset, y, u-span/2] : [u-span/2, y, wall === 'back' ? -d/2-offset : d/2+offset]
+    // Seen from inside, the front and left walls run their span against the panel's local x, so their image strips count from the far end.
+    const mirrored = wall === 'front' || wall === 'left'
+    const strip = (a: number, b: number): [number, number] => mirrored ? [1-b/span, 1-a/span] : [a/span, b/span]
     for (let i = 1; i < xs.length; i++) for (let j = 1; j < ys.length; j++) {
       const x = (xs[i-1]+xs[i])/2, y = (ys[j-1]+ys[j])/2
       if (rects.some(o => x > o.a && x < o.b && y > o.low && y < o.high)) continue
-      add(`wall_${wall}`, at(x, y), [0, yaw, 0], [xs[i]-xs[i-1], ys[j]-ys[j-1]], [xs[i-1]/span, ys[j-1]/h, xs[i]/span, ys[j]/h], [span, h])
+      const [left, right] = strip(xs[i-1], xs[i])
+      add(`wall_${wall}`, at(x, y), [0, yaw, 0], [xs[i]-xs[i-1], ys[j]-ys[j-1]], [left, ys[j-1]/h, right, ys[j]/h], [span, h])
     }
-    for (const o of rects) add(o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), at(o.x*span, o.low+o.height/2, 0.015), [0, yaw, 0], [o.width, o.height])
+    for (const o of rects) add(o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], [o.width+2*OPENING_MARGIN, o.height+2*OPENING_MARGIN])
   }
   for (const block of mold.blocks) {
     const [x, y, z, bw, bh, bd] = block.box
     const front = block.surfaces.find(s => s.endsWith('_front')) ?? block.surfaces[0]
     const top = block.surfaces.find(s => s.endsWith('_top')) ?? front
+    // A painting drawn for the front would stretch over the ends; they keep the mold's own colour instead.
+    const faced = skin[front] ?? FALLBACK, side = faced.image ? mold.defaultSkin[front] ?? FALLBACK : faced
     add(front, [x,y+bh/2,z+bd/2], [0,0,0], [bw,bh])
-    add(front, [x,y+bh/2,z-bd/2], [0,Math.PI,0], [bw,bh])
-    add(front, [x-bw/2,y+bh/2,z], [0,-Math.PI/2,0], [bd,bh])
-    add(front, [x+bw/2,y+bh/2,z], [0,Math.PI/2,0], [bd,bh])
-    add(top, [x,y+bh,z], [-Math.PI/2,0,0], [bw,bd])
-    add(front, [x,y,z], [Math.PI/2,0,0], [bw,bd])
+    add(front, [x,y+bh/2,z-bd/2], [0,Math.PI,0], [bw,bh], undefined, undefined, side)
+    add(front, [x-bw/2,y+bh/2,z], [0,-Math.PI/2,0], [bd,bh], undefined, undefined, side)
+    add(front, [x+bw/2,y+bh/2,z], [0,Math.PI/2,0], [bd,bh], undefined, undefined, side)
+    add(top, [x,y+bh,z], [-Math.PI/2,0,0], [bw,bd], undefined, undefined, top === front ? side : undefined)
+    add(front, [x,y,z], [Math.PI/2,0,0], [bw,bd], undefined, undefined, side)
   }
   return panels
 }
