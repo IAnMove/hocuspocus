@@ -22,3 +22,5 @@ Los pequeños ganchos, el registro de tests y este tablero son compartidos secue
 Coste fase 1: 0 tokens LLM externos; 0 generaciones; tokens Codex N/A.
 
 Entrega Z4: dos MP4 de ocho planos; cambio exclusivo a piel anime verificado por hashes y cuatro tomas del plató reutilizadas. Total local: 77 imágenes / 44 trabajos, 684 s de inferencia; 75 exports 3D y cuatro montajes. :42042 actualizado a b9435598; :42070 detenido.
+
+Revisión de Claude (2026-10-11), aplicada en la pila y propagada hasta #978: tiras de imagen en orden en las paredes frontal e izquierda con huecos (#969); vistas de ventana y puerta solapan el hueco para que las cámaras oblicuas no vean el fondo negro (#969); los frentes de mueble pintados dejan sus cantos en el color del molde (#969); el suelo conserva el color del molde bajo el tono automático de las paredes (#973, `skin.floorShade` en `set_defaults.json`); puerta visible en los 15 moldes (#969, #974); encabezado «Atrezo» en el inspector (#972). Sin renders nuevos: los MP4 de Z4 son anteriores a estas correcciones.
