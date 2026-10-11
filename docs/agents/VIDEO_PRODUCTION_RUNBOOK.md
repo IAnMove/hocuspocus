@@ -515,15 +515,26 @@ draws a far view, one or two cutout layers and a ground in the same batch:
 `mid` and `near` are drawn on a flat chroma-key magenta (a colour foliage, sky, rock and
 water never have), keyed out in the renderer
 and stood as cutouts across the camera's line of sight: `mid` some metres
-behind the cast, standing on the ground (the empty key under its pieces is
-measured when the set is built), `near` (optional) a short way in front of the
-camera, a little under the line of sight so its pieces frame the bottom and the
-sides with the middle empty, so a dolly, an arc or a crane slides the
-layers at different speeds.
-A shot whose camera would cross the near layer (an orbit, a crash zoom) leaves
-it out. Name the set as the shot's `background`, like a diorama. Ask the layers
-for pieces that stand on their own (arches, trees, rocks, posts); the far view
-and the ground get neither the place nor the production's look.
+behind the cast and `near` (optional) a short way in front of the camera, both
+standing on the ground (the empty key under their pieces is measured when the
+set is built, and each layer sinks 5 % of its height into the ground so its
+pieces stand on it rather than float), so a dolly, an arc or a crane slides the
+layers at different speeds. A layer is tiled with mirrored copies of itself
+until it covers everything the camera sweeps over during the shot, so an arc or
+an orbit never shows its edge. A shot whose camera would cross the near layer
+(an orbit, a crash zoom) leaves it out. Name the set as the shot's
+`background`, like a diorama. Ask the layers for pieces that stand on their own
+(arches, trees, rocks, posts); the far view and the ground get neither the
+place nor the production's look.
+
+**Running through a place.** A character playing `walk` or `run` on the spot
+reads as running when the place moves: `"scroll": 2.5` on a shot with a
+parallax `background` slides its layers and its ground past the cast at that
+many metres per second (to the camera's left; negative to the right), with the
+nearer layers crossing the frame faster. Pair it with a camera that stays with
+the cast (`cine-two-shot`, `cine-medium-shot`, `tracking`) and turn the runner
+to face the way the place comes from. For a closed corridor use the `run-loop`
+template (an endless treadmill set) instead.
 
 **Composition.** These controls work on any template, with or without a `world`:
 
@@ -547,6 +558,7 @@ and the ground get neither the place nor the production's look.
   or `200mm`. It sets the camera's field of view (the same numbers as the
   `cine-*mm` cards) and scales a framing's zoom (`fovFrom`/`fovTo`) by the same
   ratio, so a slow zoom on a `135mm` still zooms.
+- `scroll` (−10..10 m/s) slides a parallax set past the cast, for a run (above).
 - `light` may be a named light instead of a light object: `noon`, `golden`
   (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
   from the side), `stage` (hard white from the front), `campfire` (warm from

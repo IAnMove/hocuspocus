@@ -2,7 +2,9 @@ import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMateri
 import { parseImageWindows, type ImageWindow } from './imageWindows'
 import { parseImageColorKey, type ImageColorKey } from './imageColorKey'
 
-export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey }
+export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey;
+  /** Mirrored copies of the picture side by side (1–9): a set layer wide enough for a camera that turns. */
+  tiles?: number }
 
 function isPositiveFinite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -22,6 +24,7 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (value.grounded === true) look.grounded = true
   if (isPositiveFinite(value.shadow)) look.shadow = Math.min(1, value.shadow)
   if (isPositiveFinite(value.psx)) look.psx = Math.max(.5, Math.min(2, value.psx))
+  if (isPositiveFinite(value.tiles) && value.tiles >= 2) look.tiles = Math.min(9, Math.round(value.tiles))
   return Object.keys(look).length ? look : undefined
 }
 

@@ -24,6 +24,10 @@ function textureRepeat(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(16, Math.max(1, value)) : undefined
 }
 
+function drift(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value !== 0 ? Math.min(10, Math.max(-10, value)) : undefined
+}
+
 function parseSlotMedia(media: Scene3DSlot['media']): Scene3DSlot['media'] {
   return media === 'image' || media === 'screen' ? media : 'model3d'
 }
@@ -62,7 +66,7 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     appearance: parseAppearance(slot.appearance),
     imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
     surface: parseSurface(slot.surface),
-    grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
+    grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat), drift: drift(slot.drift),
     performance: parsePerformance(slot.performance),
     rhythm: parseSlotRhythm(slot.rhythm),
   }

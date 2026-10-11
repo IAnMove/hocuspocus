@@ -85,6 +85,8 @@ export type SlotGpu = {
   loopTexture: Texture | null
   loopSpeed: number
   looping: boolean
+  /** Texture scroll in uv per second (a set sliding past a running cast). */
+  drift: number
   loaded: boolean
   contactShadow?: Mesh
   appearance?: MaterializationRuntime
@@ -372,6 +374,7 @@ export function placeSlot(
     loopTexture: firstMap(root),
     loopSpeed: slot.loop?.speed ?? 0,
     looping: isCylinderBackdrop(slot),
+    drift: slot.drift ?? 0,
     loaded,
   })
 }
@@ -716,7 +719,7 @@ export function setWorldSize(world: GpuWorld, width: number, height: number) {
 export function applyLoopOffset(world: GpuWorld, sceneSeconds: number) {
   for (const gpu of world.slots.values()) {
     if (!gpu.loopTexture) continue
-    gpu.loopTexture.offset.x = gpu.looping ? cylinderUvOffset(sceneSeconds, gpu.loopSpeed) : 0
+    gpu.loopTexture.offset.x = gpu.looping ? cylinderUvOffset(sceneSeconds, gpu.loopSpeed) : gpu.drift ? sceneSeconds * gpu.drift : 0
   }
 }
 
@@ -844,6 +847,7 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
   }
   current.loopSpeed = slot.loop?.speed ?? 0
   current.looping = isCylinderBackdrop(slot)
+  current.drift = slot.drift ?? 0
   const scale = Math.max(0.05, slot.scale)
   if (current.kind === 'image' && isCylinderBackdrop(slot)) {
     current.root.position.set(0, CYLINDER_HEIGHT * 0.35 * scale, 0)

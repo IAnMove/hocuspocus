@@ -210,6 +210,8 @@ export type Scene3DSlot = {
   imageLook?: import('./imageLook').ImageLook
   appearance?: { start: number; duration: number; color: string }
   textureRepeat?: number
+  /** Its texture slides this many uv units per second: a set's layers and ground passing a running cast. */
+  drift?: number
   performance?: 'typing' | 'idle'
   grounded?: boolean
   clip: Scene3DClipRef | null
