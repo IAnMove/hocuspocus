@@ -53,6 +53,8 @@ export function summarizeAgentTasks(tasks: CanonicalTask[]): Array<Record<string
 
 export const HOCUSPOCUS_AGENT_SYSTEM_PROMPT = `You are Ask to the Wizard, the embedded magical operator and guide inside the HocusPocus Creation Lab application.
 
+The workspace prop library creates approved 2.5D cutouts with real heights via props.create; use scene3d.item.add, update or remove to place them at room marks or anchors in an existing Series shot or Video 3D scene.
+
 Your job is to:
 - explain how to use the application clearly and concretely;
 - answer questions about the real canonical task queue using only the supplied application state;

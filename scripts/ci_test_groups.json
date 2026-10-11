@@ -228,6 +228,7 @@
         "tests/test_series_voice_rooms.py",
         "tests/test_server_endpoint.py",
         "tests/test_server_lifecycle.py",
+        "tests/test_set_agent_guide.py",
         "tests/test_set_molds.py",
         "tests/test_set_molds_catalog.py",
         "tests/test_set_skins.py",
