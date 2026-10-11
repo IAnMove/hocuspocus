@@ -1,4 +1,4 @@
-"""Interior molds in metres. Authored coordinates use the medium size and scale per axis."""
+"""Interior and exterior molds in metres. Authored coordinates use the medium size and scale per axis."""
 from __future__ import annotations
 
 import copy
@@ -10,12 +10,22 @@ from pathlib import Path
 SHARED = Path(__file__).resolve().parents[1] / "shared"
 MOLDS = SHARED / "set_molds"
 WALLS = {"back", "front", "left", "right"}
+KINDS = ("interior", "exterior")
 CAMERAS = ("two_shot", "ots_a", "ots_b", "wide", "close_1", "close_2", "entrance")
 
 
 def defaults() -> dict:
     """Read on every request so measured defaults do not require code changes."""
     return json.loads((SHARED / "set_defaults.json").read_text(encoding="utf-8"))
+
+
+def light_presets() -> dict[str, dict[str, dict]]:
+    """The named lights by mold kind, shared with the editor (``roomSet.ts`` reads the same file)."""
+    return json.loads((SHARED / "set_lights.json").read_text(encoding="utf-8"))
+
+
+def light_preset(mold: dict) -> dict:
+    return light_presets()[mold["kind"]][mold["lights"]]
 
 
 def _number(value) -> bool:
@@ -94,16 +104,31 @@ def _surfaces(mold):
     return surfaces
 
 
+def _kind(mold, surfaces):
+    """An interior is closed by a ceiling; an exterior has none, keeps its view on the back wall and is lit by a sun."""
+    exterior = mold["kind"] == "exterior"
+    if exterior and ("ceiling" in surfaces or "back" not in mold["walls"]):
+        raise ValueError("exterior: no ceiling, and a back wall to hold the view")
+    if not exterior and "ceiling" not in surfaces:
+        raise ValueError("interior requires a ceiling")
+    presets = light_presets()[mold["kind"]]
+    if mold.get("lights") not in presets:
+        raise ValueError(f"{mold['kind']} lights: one of {', '.join(presets)}")
+    if "ambient" in mold and not isinstance(mold["ambient"], bool):
+        raise ValueError("ambient must be true or false")
+
+
 def validate_mold(mold: dict) -> dict:
     """Reject impossible geometry before compilation or generation."""
     if not isinstance(mold, dict) or not re.fullmatch(r"[a-z][a-z0-9_]{0,79}", str(mold.get("id", ""))):
         raise ValueError("invalid mold id")
-    if mold.get("kind") != "interior" or set(mold.get("sizes", {})) != {"small", "medium", "large"}:
-        raise ValueError("interior requires small, medium and large sizes")
+    if mold.get("kind") not in KINDS or set(mold.get("sizes", {})) != {"small", "medium", "large"}:
+        raise ValueError("interior or exterior requires small, medium and large sizes")
     for dims in mold["sizes"].values():
         if not _vector(dims) or not all(0.5 <= n <= 30 for n in dims):
             raise ValueError("room dimensions must be between 0.5 and 30 metres")
     surfaces = _surfaces(mold)
+    _kind(mold, surfaces)
     dims = mold["sizes"]["medium"]
     _places(mold, dims, surfaces)
     _openings(mold, dims)

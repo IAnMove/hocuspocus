@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { OPENING_DEPTH, OPENING_MARGIN, roomPanels, stageRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
+import { DUST_ID, keyLightBreath, OPENING_DEPTH, OPENING_MARGIN, roomPanels, stageRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
+import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
 import { AmbientLight, PointLight } from 'three'
 import { RoomSetRuntime } from '../src/features/scene3d/roomSetRuntime.ts'
-const mold = JSON.parse(readFileSync(new URL('../../app/shared/set_molds/despacho.json', import.meta.url), 'utf8')) as RoomMold & { sizes: { medium: RoomMold['dimensions'] } }
-mold.dimensions = mold.sizes.medium; mold.size = 'medium'
+type AuthoredMold = RoomMold & { sizes: { medium: RoomMold['dimensions'] } }
+function authored(name: string): AuthoredMold {
+  const loaded = JSON.parse(readFileSync(new URL(`../../app/shared/set_molds/${name}.json`, import.meta.url), 'utf8')) as AuthoredMold
+  loaded.dimensions = loaded.sizes.medium; loaded.size = 'medium'
+  return loaded
+}
+const mold = authored('despacho'), street = authored('calle')
 test('room panels leave holes in walls and put views behind them', () => {
   const panels = roomPanels({ mold })
   assert.equal(panels.length, 31)
@@ -65,6 +71,64 @@ test('image strips on the front and left walls keep their order as seen from ins
   const left = roomPanels({ mold }).filter(p => p.surface === 'wall_left' && p.position[1] > .9 && p.position[1] < 2.3).sort((a, b) => a.position[2] - b.position[2])
   assert(left[0].uv[0] > left[left.length - 1].uv[0])
 })
+test('an exterior has no ceiling panel, keeps only the walls it lists and is lit by its sun preset', () => {
+  const panels = roomPanels({ mold: street })
+  assert(!panels.some(p => p.surface === 'ceiling'))
+  assert.deepEqual([...new Set(panels.map(p => p.surface).filter(s => s.startsWith('wall_')))].sort(), ['wall_back', 'wall_left', 'wall_right'])
+  assert.equal(panels.filter(p => p.surface === 'floor').length, 1)
+  const doc = stageRoomSet(createDefaultScene3DDocument(), { mold: street })
+  assert.deepEqual(doc.light, { kind: 'directional', color: '#fff4dc', intensity: 1.25, direction: [-0.55, -1, -0.35] })
+  assert.equal(doc.room?.mold.kind, 'exterior')
+})
+
+test('a staged room carries low dust for the whole shot unless the mold turns its ambient life off', () => {
+  const doc = stageRoomSet(createDefaultScene3DDocument(), { mold })
+  const dust = doc.worldSfx?.find(cue => cue.id === DUST_ID)
+  assert(dust && dust.kind === 'dust' && dust.start === 0 && dust.end === doc.duration && dust.intensity < 0.5 && dust.scale === 2)
+  assert.equal(templateTraits(doc).still, false)
+  assert.deepEqual(templateTraits(doc).moving, ['effects'])
+  assert(parseScene3DDocument(doc)?.worldSfx?.some(cue => cue.id === DUST_ID))
+  const twice = stageRoomSet(stageRoomSet(createDefaultScene3DDocument(), { mold }), { mold })
+  assert.equal(twice.worldSfx?.filter(cue => cue.id === DUST_ID).length, 1)
+  const quiet = stageRoomSet(createDefaultScene3DDocument(), { mold: { ...mold, ambient: false } })
+  assert.equal(quiet.worldSfx, undefined)
+  assert.equal(templateTraits(quiet).still, true)
+})
+
+test('the key light breathes 8 % over 6 s as a pure function of scene time, so an export replays a frame', async () => {
+  assert.equal(keyLightBreath(0), 1)
+  assert(Math.abs(keyLightBreath(1.5) - 1.08) < 1e-9 && Math.abs(keyLightBreath(4.5) - 0.92) < 1e-9 && Math.abs(keyLightBreath(6) - 1) < 1e-9)
+  const room = new RoomSetRuntime({ mold })
+  await Promise.resolve()
+  const base = room.key!.intensity
+  await room.seek(1.5)
+  const lit = room.key!.intensity
+  assert(Math.abs(lit / base - 1.08) < 1e-9)
+  await room.seek(4.5)
+  assert(Math.abs(room.key!.intensity / base - 0.92) < 1e-9)
+  await room.seek(1.5)
+  assert.equal(room.key!.intensity, lit)
+  assert.equal(room.sunBreath(1.5), 1)
+  room.dispose()
+  const outside = new RoomSetRuntime({ mold: street })
+  await Promise.resolve()
+  assert.equal(outside.key, undefined)
+  assert(!outside.root.children.some(child => child instanceof PointLight))
+  assert(outside.root.children.some(child => child instanceof AmbientLight))
+  assert.equal(outside.sunBreath(1.5), keyLightBreath(1.5))
+  outside.dispose()
+  const still = new RoomSetRuntime({ mold: { ...mold, ambient: false } })
+  await Promise.resolve()
+  await still.seek(1.5)
+  assert.equal(still.key!.intensity, base)
+  still.dispose()
+})
+
+test('a stage-* template id survives parsing like a personal one', () => {
+  assert.equal(parseScene3DDocument({ ...createDefaultScene3DDocument(), templateId: 'stage-sala' })?.templateId, 'stage-sala')
+  assert.equal(parseScene3DDocument({ ...createDefaultScene3DDocument(), templateId: 'nowhere' })?.templateId, 'two-shot')
+})
+
 test('a painted furniture front leaves its ends in the mold colour', () => {
   const panels = roomPanels({ mold, skin: { shelf_front: { image: { asset: '/shelf.png' } }, desk_front: { color: '#112233' } } })
   const shelf = panels.filter(p => p.surface === 'shelf_front'), desk = panels.filter(p => p.surface === 'desk_front')

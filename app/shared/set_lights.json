@@ -1,0 +1,13 @@
+{
+  "interior": {
+    "office_day": {"color": "#fff6e5", "intensity": 1.1, "direction": [-0.6, -1, -0.4]},
+    "bar_warm": {"color": "#ffd6a2", "intensity": 0.85, "direction": [0.3, -1, -0.4]},
+    "studio": {"color": "#ffffff", "intensity": 1.3, "direction": [-0.3, -1, -0.7]},
+    "clinical": {"color": "#eaf3ff", "intensity": 1.1, "direction": [-0.2, -1, 0.2]}
+  },
+  "exterior": {
+    "daylight": {"color": "#fff4dc", "intensity": 1.25, "direction": [-0.55, -1, -0.35]},
+    "dusk": {"color": "#ffb37c", "intensity": 0.9, "direction": [-0.9, -0.35, -0.3]},
+    "night_sky": {"color": "#9fb4e0", "intensity": 0.45, "direction": [0.3, -0.8, -0.5]}
+  }
+}

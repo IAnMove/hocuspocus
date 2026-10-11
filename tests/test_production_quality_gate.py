@@ -161,3 +161,36 @@ def test_a_glb_played_as_it_is_passes_the_gate_with_the_clips_it_brought(tmp_pat
 
 def test_two_shots_starting_together_do_not_break_the_gate():
     assert blocking_problems({"song": SONG, "shots": [h3("a", 0), h3("b", 0)]}) == []
+
+
+def stage(key, template="stage-sala", **more):
+    return {"key": key, "kind": "scene3d", "t0": 0, "scene3d": {"template": template, "cast": {"subject_1": "hero"}, **more}}
+
+
+def test_a_stage_in_its_mold_colours_is_warned_once_per_set_or_template(tmp_path):
+    sets = {"office": {"kind": "room", "mold": "despacho", "skin": {"wall_back": {"image": "shelves"}}},
+            "plain": {"kind": "room", "mold": "sala", "skin": {"wall_left": {"color": "#112233"}}},
+            "bare": {"kind": "room", "mold": "cocina"}}
+    shots = [stage("a"), stage("b", roomCamera="ots_a"), stage("c", "stage-plaza"), stage("d", "two-shot", background="office"),
+             stage("e", "two-shot", background="plain"), stage("f", "two-shot", background="bare"), stage("g", "two-shot", background="bare"),
+             stage("h", "two-shot", background={"room": {"mold": {"id": "sala"}, "skin": {"floor": {"texture": {"asset": "t.png"}}}}})]
+    spec = {"song": SONG, "cast": [{"id": "hero", "sheet_prompt": "x"}], "models": {"hero": {"from": "hero"}}, "sets": sets, "shots": shots}
+    found = [(item["set"], item["shots"]) for item in plan_warnings(spec, tmp_path) if item["code"] == "stage_unskinned"]
+    assert found == [("stage-sala", ["a", "b"]), ("stage-plaza", ["c"]), ("plain", ["e"]), ("bare", ["f", "g"])]
+    hint = next(item["hint"] for item in plan_warnings(spec, tmp_path) if item["code"] == "stage_unskinned")
+    assert "sets" in hint and "skin" in hint
+
+
+def test_the_same_template_and_place_in_more_than_four_shots_in_a_row_looks_samey(tmp_path):
+    spec = {"song": SONG, "cast": [{"id": "hero", "sheet_prompt": "x"}], "models": {"hero": {"from": "hero"}},
+            "shots": [stage(f"s{i}", roomCamera=("ots_a", "ots_b")[i % 2]) for i in range(5)]}
+    samey = [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"]
+    assert len(samey) == 1 and samey[0]["template"] == "stage-sala" and samey[0]["background"] is None
+    assert samey[0]["shots"] == ["s0", "s1", "s2", "s3", "s4"] and "roomCamera" in samey[0]["hint"]
+    spec["shots"][2] = h3("cut", 8)
+    assert not [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"], "a cut away ends the run"
+    spec["shots"] = [stage(f"o{i}", "two-shot", background="office") for i in range(4)] + [stage("p", "two-shot", background="park")]
+    assert not [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"], "four in a row is a scene"
+    spec["shots"].append(stage("q", "two-shot", background="park"))
+    spec["shots"] += [stage(f"r{i}", "two-shot", background="park") for i in range(4)]
+    assert [item["shots"] for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"] == [["p", "q", "r0", "r1", "r2", "r3"]]

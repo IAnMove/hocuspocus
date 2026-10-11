@@ -16,19 +16,22 @@ from urllib.parse import quote, unquote, urlparse, parse_qs
 
 from services.production_scene_retry import receipt_action, _artifact_name
 from services import production_rooms as rooms
+from services.world3d_grades import GRADE_NAMES
 from services.world3d_look import check_document_look
+from services.world3d_modifiers import LENS_NAMES, LIGHT_NAMES, check_camera_template
+from services.world3d_stage_documents import resolve_production_stage
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
-               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera"}
+               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera", "grade", "lens", "camera_template"}
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add",
                "sources", "formation", "spacing", "imageLook", "setItem", "billboard"}
 GROUP_FIELDS = {"sources", "formation", "spacing", "position", "rotationY"}
 FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camera's distance to the subject, as a share of the template's
-LIGHTS = ("noon", "golden", "overcast", "night", "neon", "stage", "campfire")
+LIGHTS = LIGHT_NAMES     # app/shared/world3d_modifiers.json, the table the compiler and world3d.scene.patch read
 FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
 # Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
@@ -42,7 +45,7 @@ MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scal
 
 
 def validate_scene3d_shot(shot):
-    config = shot.get("scene3d")
+    config = resolve_production_stage(shot.get("scene3d"))
     if not isinstance(config, dict) or set(config) - CONFIG_KEYS:
         raise ValueError("scene3d needs a native template or document and supported overrides")
     if ("template" in config) == ("document" in config):
@@ -113,13 +116,21 @@ def _check_group(key, entry):
 
 
 def _check_composition(config):
-    """frame moves the template's camera nearer or farther; a light may be a named preset."""
+    """frame moves the template's camera nearer or farther; light, grade and lens may be named presets; camera_template
+    is a camera card whose camera this shot takes."""
     frame = config.get("frame")
     if frame is not None and frame not in FRAMES and not _measure(frame, 0.25, 4):
         raise ValueError(f"scene3d.frame is {', '.join(FRAMES)} or the camera distance as a share of the template's (0.25-4)")
     light = config.get("light")
     if isinstance(light, str) and light not in LIGHTS:
         raise ValueError(f"scene3d.light is a light object or one of {', '.join(LIGHTS)}")
+    for key, names, what in (("grade", GRADE_NAMES, "a colour grade"), ("lens", LENS_NAMES, "a full-frame lens")):
+        if key in config and config[key] not in names:
+            raise ValueError(f"scene3d.{key} is {what}: one of {', '.join(names)}")
+    if "camera_template" in config:
+        if not isinstance(config["camera_template"], str) or not config["camera_template"].strip():
+            raise ValueError("scene3d.camera_template is the id of the camera card whose camera and framing the shot takes")
+        check_camera_template(config["camera_template"])
 
 
 def _check_background(config):
@@ -253,7 +264,7 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
                               for cue in entry["clips"]]
         return entry
 
-    resolved = json.loads(json.dumps(config))
+    resolved = resolve_production_stage(json.loads(json.dumps(config)))
     if resolved.get("cast"):
         resolved["cast"] = {key: member(key, value) for key, value in spread_groups(resolved["cast"]).items()}
     if _source(resolved.get("subject")):
@@ -328,7 +339,7 @@ def compile_document(shot, duration):
         raise ValueError("Native Video 3D template compilation requires the app's installed UI dependencies")
     result = subprocess.run(
         [node, "--import", str(loader), str(ROOT / "ui/scripts/production-scene3d.mjs")],
-        input=json.dumps({"scene3d": shot["scene3d"], "duration": duration}),
+        input=json.dumps({"scene3d": resolve_production_stage(shot["scene3d"]), "duration": duration}),
         capture_output=True, text=True, cwd=ROOT / "ui", timeout=30, check=False,
     )
     if result.returncode:
