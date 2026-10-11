@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Story Lab and Series Lab add optional **Help me write** panels with essential
+questions, examples, missing-answer suggestions, section development and editorial
+review. Answers share existing story fields; editable proposals persist until
+reviewed, apply by field and support guarded undo. Episode advice respects frozen
+canon. See the [writing guide](docs/story-lab/WRITING_GUIDE.md).
+
 Every Video 3D shot card now tells an agent what the built shot does, read from
 the document itself: `shot` (close, medium, wide, far, plate) with the camera
 distance, `moves` (push, pull, slide, rise, descend, arc, orbit, zoom, roll,

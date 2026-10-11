@@ -1,3 +1,5 @@
+import writingGuideEn from './locales/en/writingGuide.json'
+import writingGuideEs from './locales/es/writingGuide.json'
 import sceneFxEn from './locales/en/sceneFx.json'
 import sceneFxEs from './locales/es/sceneFx.json'
 import kineticTextEn from './locales/en/kineticText.json'
@@ -51,7 +53,7 @@ import productionShotsEs from './locales/es/productionShots.json'
 import productionCatalogEs from './locales/es/productionCatalog.json'
 import gameAssetsEs from './locales/es/gameAssets.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets', 'writingGuide'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -82,6 +84,7 @@ export const resources = {
     productionShots: productionShotsEn,
     productionCatalog: productionCatalogEn,
     gameAssets: gameAssetsEn,
+    writingGuide: writingGuideEn,
   },
   es: {
     sceneFx: sceneFxEs,
@@ -110,6 +113,7 @@ export const resources = {
     productionShots: productionShotsEs,
     productionCatalog: productionCatalogEs,
     gameAssets: gameAssetsEs,
+    writingGuide: writingGuideEs,
   },
 } as const
 

@@ -8,6 +8,7 @@ import {
 } from '../../types/index.ts'
 import { normalizeStoryMusicModel } from './musicModel'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { extraDecisions, normalizeGuide } from '../writing-guide/model'
 import { defaultStoryProductionRecipe, normalizeStoryProductionRecipe } from './storyProductionRecipe'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
@@ -562,6 +563,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     id: text(project.id) || fallback.id,
     revision: Math.max(1, Number(project.revision) || 1),
     sectionVersions,
+    ...(project.writingGuide ? { writingGuide: normalizeGuide(project.writingGuide) } : {}),
     title: text(project.title, fallback.title),
     projectType: project.projectType === 'music_video'
       ? 'music_video'
@@ -721,13 +723,13 @@ export function changedSections(before: StoryProject, after: StoryProject): Stor
     before.title, before.projectType, before.creativeBrief, before.language, before.spokenLanguage, before.languageIntent, before.locationVariety, before.protagonistConsistency, before.protagonistCharacterId, before.genre, before.tone, before.audience,
     before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
     before.musicVideoGenerationMode, before.directVideoMasterPromptMode, before.directVideoMasterPrompt,
-    before.premise, before.logline, before.synopsis, before.theme, before.ending,
+    before.premise, before.logline, before.synopsis, before.theme, before.ending, extraDecisions(before.writingGuide),
   ]
   const overviewAfter = [
     after.title, after.projectType, after.creativeBrief, after.language, after.spokenLanguage, after.languageIntent, after.locationVariety, after.protagonistConsistency, after.protagonistCharacterId, after.genre, after.tone, after.audience,
     after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
     after.musicVideoGenerationMode, after.directVideoMasterPromptMode, after.directVideoMasterPrompt,
-    after.premise, after.logline, after.synopsis, after.theme, after.ending,
+    after.premise, after.logline, after.synopsis, after.theme, after.ending, extraDecisions(after.writingGuide),
   ]
   const changed: StorySection[] = []
   if (JSON.stringify(overviewBefore) !== JSON.stringify(overviewAfter)) changed.push('overview')

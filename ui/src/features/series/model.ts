@@ -3,6 +3,7 @@ import type {
 } from './types'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
 import { randomUuid } from '../../lib/uuid'
+import { normalizeGuide } from '../writing-guide/model'
 
 export const seriesId = (prefix: string): string =>
   `${prefix}_${randomUuid().replaceAll('-', '')}`
@@ -27,6 +28,7 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     ? project.episodesById : {}
   return {
     ...project,
+    ...(project.writingGuide ? { writingGuide: normalizeGuide(project.writingGuide) } : {}),
     version: 1,
     id: text(project.id),
     revision: Math.max(1, Number(project.revision) || 1),

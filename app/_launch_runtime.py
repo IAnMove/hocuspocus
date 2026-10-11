@@ -28248,6 +28248,7 @@ def _story_stage_problem(result: dict, scope: str, project: dict) -> str | None:
 
 def _story_project_prompt_context(project: dict, scope: str) -> str:
     """Return bounded, valid JSON with editorial facts but no heavy runtime data."""
+    from services.writing_guide import accepted_guidance
     overview_keys = (
         "title", "projectType", "creativeBrief", "language", "spokenLanguage", "languageIntent", "locationVariety",
         "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience", "premise",
@@ -28255,6 +28256,7 @@ def _story_project_prompt_context(project: dict, scope: str) -> str:
         "characterVisualStyle", "enforceVisualStyle", "allowClipText",
     )
     compact = {key: project.get(key) for key in overview_keys if key in project}
+    compact["writingDecisions"] = accepted_guidance(project)
     # Characters are useful grounding for every downstream phase and are
     # required for relationship IDs. The active section keeps its full facts;
     # other stages only need a concise identity summary.
@@ -37352,6 +37354,15 @@ from routers.game_produce import create_game_produce_router
 _game_produce = build_produce(_local_mcp.call, lambda: _scene2d_export.app_url or "", _mcp_access.token, _workspace_dir, _game_library_lock)
 api.include_router(create_game_produce_router(_game_produce, call=_local_mcp.call, bind_loop=_local_mcp.bind_loop, read_game=_game_produce.deps.read_game))
 
+from routers.example_assets import create_example_assets_router
+api.include_router(create_example_assets_router())
+from routers.asset_library import create_asset_library_router
+api.include_router(create_asset_library_router())
+from routers.writing_guide import create_writing_guide_router
+api.include_router(create_writing_guide_router(
+    ensure_llm_loaded=_ensure_llm_loaded, writing_override=_comic_writing_llm,
+))
+
 # Optional production renderer: pass a callable that drives the existing
 # Video 3D exportFlow through a process-owned headless browser. Closing a
 # user tab must not join or kill that worker.
@@ -37373,11 +37384,6 @@ _mimetypes.add_type("text/javascript", ".js")
 _mimetypes.add_type("text/javascript", ".mjs")
 _mimetypes.add_type("text/css", ".css")
 _mimetypes.add_type("image/svg+xml", ".svg")
-
-from routers.example_assets import create_example_assets_router
-api.include_router(create_example_assets_router())
-from routers.asset_library import create_asset_library_router
-api.include_router(create_asset_library_router())
 
 _ui_dist = os.path.normpath(os.path.join(_app_dir, "..", "ui", "dist"))
 from services.ui_distribution import build_status as _ui_build_status, recovery_html as _ui_recovery_html
