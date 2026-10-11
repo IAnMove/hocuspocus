@@ -8,11 +8,14 @@ three times, ``max_takes`` 1 and fewer than three song seeds. Each window carrie
 ``hold_after_clip``. A title-card on an h3 or still shot warns ``title_card_on_image``.
 Scene documents are compiled in-process so a bad style is ``scene_invalid`` here.
 ``blocking`` lists what production.run refuses in a new spec (see ``production_quality_gate``).
+With ``song.file`` in the workspace, windows, ``gaps`` and ``motion`` use that file's length (the montage runs all
+of it), with ``song_duration_mismatch`` and ``held_tail`` when it outlasts the plan.
 It never calls the client passed as ``mcp``.
 ``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
@@ -32,6 +35,8 @@ _CAPTION_FIELDS = ("caption", "sub", "cta")
 LONG_SHOT_S = 10.0
 REUSED_STILL = 3
 MIN_SONG_SEEDS = 3
+MISMATCH_S = 1.0       # song.file against song.duration
+HELD_TAIL_S = 2.0      # the pilot's song ran 115 s under 30 s of shots: the last one was held 85 s
 
 
 def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str | None = None) -> dict[str, Any]:
@@ -41,7 +46,8 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
     spec, expanded, pending = _expand_shots(spec)
     shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
     usable = [shot for shot in shots if isinstance(shot, dict)]
-    score = _score(spec)
+    file_s = _song_file_seconds(spec, root)
+    score = _score(spec, file_s)
     windows = shot_windows({**spec, "shots": usable}, score) if expanded else []
     rows = _rows(windows)
     holds, extra = preview_extras({**spec, "shots": usable}, score, windows, usable)
@@ -72,7 +78,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
         "motion": motion,
         "blocking": blocking_problems(spec, root),
         "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
-        + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id),
+        + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id) + _song_warnings(spec, file_s, windows),
     }
 
 
@@ -93,9 +99,37 @@ def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:
     return merged, isinstance(merged.get("shots"), list), []
 
 
-def _score(spec: dict) -> dict[str, Any]:
+def _song_file_seconds(spec: dict, root: Any) -> float | None:
+    """The length of ``song.file``: the run analyses that file and the montage runs all of it, whatever
+    ``song.duration`` says. None without a workspace or a readable file."""
     song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
-    duration = max(0.0, float(song.get("duration") or 0))
+    if not song.get("file") or root is None:
+        return None
+    from services.montage_shots import media_duration
+    path = Path(root) / str(song["file"])
+    seconds = media_duration(path) if path.is_file() else 0.0
+    return round(seconds, 3) if seconds > 0 else None
+
+
+def _song_warnings(spec: dict, file_s: float | None, windows: list[dict]) -> list[dict]:
+    """``song_duration_mismatch`` when the file and the spec disagree by more than a second; ``held_tail`` when the
+    last shot ends more than 2 s before the song (an H3 tail is ``gap_without_fill``'s)."""
+    song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
+    found = []
+    if file_s is not None and abs(float(song.get("duration") or 0) - file_s) > MISMATCH_S:
+        found.append({"code": "song_duration_mismatch", "spec_s": song.get("duration"), "file_s": file_s,
+                      "hint": "the video runs the file's length: trim the song or plan shots to its end"})
+    end = file_s if file_s is not None else float(song.get("duration") or 0)
+    last = windows[-1] if windows else None
+    if last and last.get("kind") != "h3" and end - float(last["t1"]) > HELD_TAIL_S:
+        found.append({"code": "held_tail", "key": last.get("key"), "shot_end": last["t1"], "song_end": end,
+                      "seconds": round(end - float(last["t1"]), 1), "hint": "add shots up to the end of the song"})
+    return found
+
+
+def _score(spec: dict, file_s: float | None = None) -> dict[str, Any]:
+    song = spec.get("song") if isinstance(spec.get("song"), dict) else {}
+    duration = file_s if file_s is not None else max(0.0, float(song.get("duration") or 0))
     bpm = float(song.get("bpm") or 120) or 120.0
     return {"duration": duration, "beat": 60.0 / bpm, "bpm": bpm,
             "lines": _place(lyric_lines(str(song.get("lyrics") or "")), duration)}

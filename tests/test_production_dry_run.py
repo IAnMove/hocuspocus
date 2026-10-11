@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
 import time
 import types
+
+import pytest
 
 from services.music_production import RUN, command_handlers, h3_frames_for
 from services.production_dry_run import dry_run
@@ -167,3 +170,51 @@ def test_a_native_look_with_no_generated_clips_is_not_told_it_has_too_few():
     shots = [{"key": f"s{i}", "kind": "screen", "line": i, "desktop": {"layout": "single", "apps": "mixed"}} for i in range(8)]
     codes = {item["code"] for item in dry_run(_quality_spec(shots=shots, quality="max"))["warnings"]}
     assert "few_clips" not in codes and "too_static" not in codes
+
+
+def _wav(path, seconds):
+    import wave
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(1)
+        out.setframerate(8000)
+        out.writeframes(b"\x80" * int(8000 * seconds))
+
+
+def _pilot_spec():
+    """The pilot: six shots planned for 30 s over a song file that runs 115 s."""
+    shots = [{"key": f"s{i}", "kind": "scene3d", "t0": i * 5, "scene3d": {"template": "two-shot"}} for i in range(5)]
+    shots.append({"key": "title", "kind": "scene3d", "t0": 25, "t1": 30, "scene3d": {"template": "two-shot"}})
+    return {"title": "Pilot", "quality": "draft", "song": {"file": "song.wav", "lyrics": "", "caption": "instrumental", "duration": 30, "bpm": 100},
+            "style": {}, "shots": shots}
+
+
+@pytest.mark.skipif(shutil.which("ffprobe") is None, reason="ffprobe reads the song file")
+def test_song_file_length_drives_the_windows_and_warns_the_held_tail(tmp_path):
+    _wav(tmp_path / "song.wav", 115)
+    report = dry_run(_pilot_spec(), root=str(tmp_path))
+    codes = {item["code"]: item for item in report["warnings"]}
+    assert codes["song_duration_mismatch"]["spec_s"] == 30 and abs(codes["song_duration_mismatch"]["file_s"] - 115) < 0.1
+    held = codes["held_tail"]
+    assert held["key"] == "title" and held["shot_end"] == 30 and abs(held["seconds"] - 85) < 0.2
+    assert report["motion"]["longest_shot"] == "title" and abs(report["motion"]["longest_shot_s"] - 90) < 0.2
+    _wav(tmp_path / "song.wav", 30.4)
+    fitted = {item["code"] for item in dry_run(_pilot_spec(), root=str(tmp_path))["warnings"]}
+    assert not {"song_duration_mismatch", "held_tail"} & fitted
+
+
+def test_without_a_readable_file_the_spec_duration_is_used(tmp_path):
+    spec = _pilot_spec()
+    for root in (None, str(tmp_path)):                      # no workspace, or no such file
+        report = dry_run(spec, root=root)
+        codes = {item["code"] for item in report["warnings"]}
+        assert "song_duration_mismatch" not in codes and "held_tail" not in codes
+        assert report["motion"]["longest_shot_s"] == 5.0
+    spec["song"]["duration"] = 40
+    assert {item["code"]: item for item in dry_run(spec)["warnings"]}["held_tail"]["seconds"] == 10.0
+
+
+def test_an_h3_tail_is_left_to_gap_without_fill():
+    shot = {"key": "s0", "kind": "h3", "t0": 0, "t1": 6, "frame": "f", "action": "a"}
+    codes = {item["code"] for item in dry_run(_spec(title="Short", shots=[shot]))["warnings"]}
+    assert "gap_without_fill" in codes and "held_tail" not in codes
