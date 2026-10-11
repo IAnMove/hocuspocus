@@ -6,7 +6,7 @@ OPERATION = "scene3d.sets.catalog"
 
 def command_catalog():
     return [{"name": OPERATION, "version": 1, "domain": "scenes", "mutation": False, "destructive": False,
-             "description": "List interior molds with sizes, surfaces, character marks, cameras and prop anchors.",
+             "description": "List the interior and exterior molds (kind, title) with sizes, surfaces, character marks, cameras and prop anchors.",
              "inputSchema": {"type": "object", "required": ["version", "input"], "additionalProperties": False,
                              "properties": {"version": {"const": 1}, "input": {"type": "object", "additionalProperties": False,
                                  "properties": {"workspace": {"type": "string"}}}}}}]

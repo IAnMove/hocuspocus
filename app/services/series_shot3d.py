@@ -382,6 +382,9 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
     """What the length patch also sets: retiming, the look, the scene's sound, the screen effects and the objects."""
     setup: dict[str, Any] = {"retime": True} if config.get("retime", True) else {}
     setup.update({key: config[key] for key in ("renderLook", "toon") if key in config})
+    from services.world3d_stage_documents import stage_camera
+    if stage_camera(config):
+        setup["camera"] = stage_camera(config)
     if effects:
         setup["screenFx"] = effects
     if sound:

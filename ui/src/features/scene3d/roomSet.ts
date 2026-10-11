@@ -1,10 +1,17 @@
-/** Interior geometry, authored in metres; surfaces retain wall UVs across opening cuts. */
+/** Interior and exterior geometry, authored in metres; surfaces retain wall UVs across opening cuts. */
+import presets from '../../../../app/shared/set_lights.json' with { type: 'json' }
+import type { WorldSfx } from '../sceneFx/world'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
 export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number }
 export type RoomOpening = { wall: string; kind: string; x: number; width: number; height: number; sill?: number; surface?: string }
+export type RoomKind = 'interior' | 'exterior'
 export type RoomMold = {
   id: string; size: string; dimensions: Vec3; walls: string[]; surfaces: string[]
+  /** An exterior has no ceiling panel, may list fewer walls, keeps its view on the back wall and is lit by a sun preset. */
+  kind?: RoomKind
+  /** `false` switches off the ambient life: the dust motes and the breathing key light. */
+  ambient?: boolean
   openings: RoomOpening[]; blocks: { id: string; box: [number, number, number, number, number, number]; surfaces: string[] }[]
   marks: { id: string; pose: string; position: Vec3; facing: number }[]
   propAnchors: { id: string; on: string; position: Vec3; maxHeight: number }[]
@@ -16,15 +23,32 @@ export type RoomSet = { mold: RoomMold; skin?: Record<string, RoomMaterial>; cam
 export const OPENING_DEPTH = 0.015, OPENING_MARGIN = 0.08
 const FALLBACK: RoomMaterial = { color: '#d8d2c4' }
 export type RoomPanel = { id: string; surface: string; position: Vec3; rotation: Vec3; size: [number, number]; uv: [number, number, number, number]; fullSize: [number, number]; material: RoomMaterial }
-const LIGHTS: Record<string, { color: string; intensity: number; direction: Vec3 }> = {
-  office_day: { color: '#fff6e5', intensity: 1.1, direction: [-0.6, -1, -0.4] },
-  bar_warm: { color: '#ffd6a2', intensity: 0.85, direction: [0.3, -1, -0.4] },
-  studio: { color: '#ffffff', intensity: 1.3, direction: [-0.3, -1, -0.7] },
-  clinical: { color: '#eaf3ff', intensity: 1.1, direction: [-0.2, -1, 0.2] },
+type RoomLight = { color: string; intensity: number; direction: Vec3 }
+/** Shared with the Python library through app/shared/set_lights.json (see services/set_molds.py). */
+const LIGHTS: Record<string, RoomLight> = Object.fromEntries(Object.entries({ ...presets.interior, ...presets.exterior })
+  .map(([name, light]) => [name, { color: light.color, intensity: light.intensity, direction: [light.direction[0], light.direction[1], light.direction[2]] }]))
+/** The key light breathes this much over this many seconds, as a pure function of scene time. */
+export const BREATH_DEPTH = 0.08, BREATH_PERIOD = 6
+export const DUST_ID = 'room-dust'
+
+export const isExterior = (mold: Pick<RoomMold, 'kind'>) => mold.kind === 'exterior'
+export const hasAmbientLife = (mold: Pick<RoomMold, 'ambient'>) => mold.ambient !== false
+
+export function roomLightPreset(room: RoomSet): RoomLight {
+  return LIGHTS[room.mold.lights] ?? LIGHTS.office_day
 }
 
-export function roomLightPreset(room: RoomSet) {
-  return LIGHTS[room.mold.lights] ?? LIGHTS.office_day
+/** ±8 % over 6 s: the same scene second always gives the same light, so an export paints a frame the same way twice. */
+export function keyLightBreath(seconds: number) {
+  return 1 + BREATH_DEPTH * Math.sin((2 * Math.PI * seconds) / BREATH_PERIOD)
+}
+
+/** Low motes over the whole shot, sized to the room, so a staged room is never a still picture. */
+export function roomDust(room: RoomSet, duration: number): WorldSfx {
+  const [w, d] = room.mold.dimensions
+  const scale = Math.min(6, Math.max(1.4, Math.floor((Math.max(w, d) / 3) * 100 + 0.5) / 100))
+  return { id: DUST_ID, kind: 'dust', start: 0, end: duration, position: { x: 0, y: 0.03, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
+    scale, intensity: 0.3, color: '#c4a574', seed: 7, sound: false, volume: 0 }
 }
 
 function roomImage(slot: Scene3DSlot): Scene3DSlot {
@@ -38,6 +62,7 @@ export function validRoomSet(value: unknown): value is RoomSet {
   const room = value as RoomSet, mold = room.mold
   const vector = (p: unknown) => Array.isArray(p) && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n))
   if (!mold || !vector(mold.dimensions) || !mold.dimensions.every(n => n >= 0.5 && n <= 30)) return false
+  if (mold.kind !== undefined && mold.kind !== 'interior' && mold.kind !== 'exterior') return false
   if (![mold.walls, mold.openings, mold.blocks, mold.cameras, mold.surfaces, mold.marks, mold.propAnchors].every(Array.isArray)) return false
   if (mold.blocks.length > 128 || mold.openings.length > 64 || !mold.defaultSkin) return false
   if (!mold.cameras.every(c => vector(c.position) && vector(c.lookAt) && c.fov > 0 && c.fov < 180)) return false
@@ -56,6 +81,9 @@ export function stageRoomSet(document: Scene3DDocument, room?: RoomSet): Scene3D
   document.environment = { reflectiveFloor: false, platform: false, bloom: 0, floorStyle: 'none' }
   document.camera = { family: 'fixed', eye: [...named.position], look: [...named.lookAt], fov: named.fov }
   document.light = { kind: 'directional', ...roomLightPreset(room) }
+  const cues = [...(document.worldSfx ?? []).filter(cue => cue.id !== DUST_ID), ...(hasAmbientLife(room.mold) ? [roomDust(room, document.duration)] : [])]
+  if (cues.length) document.worldSfx = cues
+  else delete document.worldSfx
   return document
 }
 
@@ -67,7 +95,7 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     panels.push({ id: `room-${surface}-${panels.length}`, surface, position, rotation, size, uv, fullSize, material })
   }
   add('floor', [0, 0, 0], [-Math.PI / 2, 0, 0], [w, d])
-  add('ceiling', [0, h, 0], [Math.PI / 2, 0, 0], [w, d])
+  if (!isExterior(mold)) add('ceiling', [0, h, 0], [Math.PI / 2, 0, 0], [w, d])
   for (const wall of mold.walls) {
     const side = wall === 'left' || wall === 'right', span = side ? d : w
     const openings = mold.openings.filter(o => o.wall === wall)

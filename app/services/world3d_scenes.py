@@ -23,6 +23,8 @@ from services.scene_documents import get_document, save_document
 from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_stage_cards import is_stage
+from services.world3d_stage_documents import BASE as STAGE_BASE, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -429,12 +431,15 @@ def compile_template_document(template_id: str) -> dict:
     if cached is not None:
         return deepcopy(cached)
     require_card(template_id)
-    try:
-        document = _run_tool("document", None, template_id)
-    except World3DSceneError as error:
-        if "unknown_template:" in str(error):
-            raise World3DSceneError("unknown_template", f"unknown_template:{template_id}", 404) from error
-        raise
+    if is_stage(template_id):
+        document = stage_document(template_id, compile_template_document(STAGE_BASE))
+    else:
+        try:
+            document = _run_tool("document", None, template_id)
+        except World3DSceneError as error:
+            if "unknown_template:" in str(error):
+                raise World3DSceneError("unknown_template", f"unknown_template:{template_id}", 404) from error
+            raise
     _COMPILED[template_id] = document
     return deepcopy(document)
 

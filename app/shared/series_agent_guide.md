@@ -338,6 +338,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    The back wall's straight-on painting supplies the detail; keep its style consistent with the series canon.
    Use real heights and the mold's anchors so objects rest on their surfaces; a tall object at a low anchor warns `item_too_tall`.
    Keep at most 12 objects per shot, including inherited set props; inspect previews before approving the result.
+7. Molds carry a `kind` and `title`. Shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`,
+   `escenario_publico`, `vehiculo`) and exteriors (`calle`, `plaza`, `orilla`, `azotea`: no ceiling, the view on `wall_back`, a sun
+   preset) sit beside the named interiors. A `kind: "3d"` shot may name a stage card, `scene3d: {template: "stage-sala",
+   roomCamera: "ots_a"}`: the mold in its own colours, with dust and a breathing key light; a location set still brings the skin.
 
 ## Edit one shot ("the fifth shot")
 
