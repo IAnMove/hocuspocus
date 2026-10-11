@@ -21,6 +21,7 @@ from services.production_quality_gate import blocking_problems, plan_warnings
 from services.production_quality import expand_quality, profile_of
 from services.production_treatment import treatment_warnings
 from services.production_style_presets import expand_style_preset
+from services.production_rooms import dry_run_images
 from services.song_analysis import lyric_lines
 
 TITLE_LIMIT = 12
@@ -55,6 +56,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
     minutes, source = _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3"), root)
     return {
         "dry_run": True,
+        **dry_run_images(spec),
         "running": False,
         "expanded": expanded,
         "shots": spec.get("shots") if not expanded else "expanded",

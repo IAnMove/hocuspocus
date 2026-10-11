@@ -56,6 +56,8 @@ def _first_of_scene(episode: dict[str, Any], shot: dict[str, Any]) -> bool:
 def editor_scene(call: Callable[[str, dict], dict], workspace: str, root: str | None, series: dict[str, Any],
                  episode: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
     """The shot's working scene to open in the Video 3D editor: ``sceneId``, ``revision``, ``document``."""
+    from services.series_sets import inherit_shot
+    shot = inherit_shot(series, shot)
     config = _config(shot)
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     duration = float(shot.get("durationSeconds") or 5)

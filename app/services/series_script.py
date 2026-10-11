@@ -97,7 +97,7 @@ def _cast_entry(raw: Any) -> dict[str, Any]:
     if isinstance(raw, str):
         return {"characterId": raw}
     if isinstance(raw, (list, tuple)) and raw:
-        entry = {"characterId": raw[0], "poseId": raw[1] if len(raw) > 1 else "base", "x": raw[2] if len(raw) > 2 else None}
+        entry = {"characterId": raw[0], "poseId": raw[1] if len(raw) > 1 else "base", ("mark" if len(raw) > 2 and isinstance(raw[2], str) else "x"): raw[2] if len(raw) > 2 else None}
         if len(raw) > 3 and isinstance(raw[3], dict):
             entry.update(raw[3])
     else:
@@ -213,7 +213,13 @@ class EpisodeScript:
         series_stop_motion.check_shot(shot, where, check.problems)
         reference_problems(shot, check, where)
 
+    def _room_location(self, shot):
+        from services.series_sets import location_for
+        return location_for(self.series, {"locationId": shot.get("location") or self.scenes.get(shot.get("scene"), {}).get("location")})
+
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
+        from services.series_sets import mark_warnings
+        self.warnings.extend({**w, "shot": where} for w in mark_warnings(shot, self._room_location(shot)))
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         for entry in cast:
             self.checker.character(str(entry.get("characterId")), str(entry.get("poseId") or "base"), where)
@@ -271,7 +277,8 @@ class EpisodeScript:
             problems.append(f"{where}: {error}")
         if shot.get("kind") != "3d":
             return
-        config = normalize_scene3d(shot.get("scene3d"))
+        from services.series_sets import script_scene3d
+        config = normalize_scene3d(script_scene3d(shot, self._room_location(shot)))
         if not config:
             problems.append(f"{where}: a 3d shot needs scene3d with a template or a saved scene and its cast")
         elif config.get("scene"):
@@ -371,7 +378,8 @@ class EpisodeScript:
         if not lines:
             body["durationSeconds"] = float(shot.get("duration") or 5)
         if shot.get("kind") == "3d":
-            body["scene3d"] = shot["scene3d"]
+            from services.series_sets import script_scene3d
+            body["scene3d"] = script_scene3d(shot, self._room_location(shot))
         if shot.get("foley") is not None:
             body["foley"] = normalize_foley(shot["foley"])
         # Always present, so a rewritten script clears a transition the new script omits.

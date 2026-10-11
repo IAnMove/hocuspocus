@@ -286,7 +286,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 3215,
+      "weight": 3223,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -553,7 +553,8 @@
         "tests/test_diorama_set.py",
         "tests/test_glb_cleanup.py",
         "tests/test_world3d_template_traits.py",
-        "tests/test_set_molds_catalog.py"
+        "tests/test_set_molds_catalog.py",
+        "tests/test_room_integration.py"
       ]
     }
   ],

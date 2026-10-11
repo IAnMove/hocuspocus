@@ -11,7 +11,7 @@ SERIES_TOOLS = frozenset({
     "scene3d.sets.catalog", "scene3d.item.add", "scene3d.item.update", "scene3d.item.remove", "scene3d.item.list",
     "props.create", "props.import", "props.status", "props.approve", "props.reject", "props.list", "props.get", "props.delete",
     # Start here, then the series itself.
-    "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
+    "series.location.set3d", "series.location.set3d.status", "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",
     "series.episode.from_script", "series.episode.script.get", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
     "series.episode.produce.resume",

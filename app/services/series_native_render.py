@@ -780,10 +780,12 @@ class SeriesNativeRender:
                   "cues": item["lines"][beat["id"]].get("cues") or []} for beat, (start, _end) in zip(beats, timing)]
         characters = {value["id"]: (kit_ref(series, value["id"]) or {}).get("id") for value in series.get("characters") or []}
         lines, tracks = self._scene3d_bed(workspace, series, episode, shot, layout, timing, duration, lines)
-        scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], shot, lines, duration, kits, characters, NativeRenderError,
+        from services.series_sets import inherit_shot
+        room_shot = inherit_shot(series, shot)
+        scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], room_shot, lines, duration, kits, characters, NativeRenderError,
                                           tracks=tracks, root=self.deps.workspace_dir(workspace),
                                           screen_fx=fx_cues(layout, timing, duration),
-                                          plate=location_plate_url(series, shot, workspace))
+                                          plate=None if room_shot.get("scene3d", {}).get("roomSet") else location_plate_url(series, shot, workspace))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['renderDigest']}-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         # A staged review's preview is the cheap faithful look: draft quality, whatever the shot's own.
