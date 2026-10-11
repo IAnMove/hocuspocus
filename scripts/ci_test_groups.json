@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 3196,
+      "weight": 3180,
       "paths": [
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
@@ -286,7 +286,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 3199,
+      "weight": 3215,
       "paths": [
         "tests/test_series_agent_fixes.py",
         "tests/test_series_entrances.py",
@@ -552,7 +552,8 @@
         "tests/test_production_lyric_looks.py",
         "tests/test_diorama_set.py",
         "tests/test_glb_cleanup.py",
-        "tests/test_world3d_template_traits.py"
+        "tests/test_world3d_template_traits.py",
+        "tests/test_set_molds_catalog.py"
       ]
     }
   ],
