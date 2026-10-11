@@ -33,7 +33,7 @@ const drawnAsSet = document.environment?.floorStyle === 'backdrop'
 if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
-if (config.background?.room) stageRoomSet(document, config.background.room)
+if (config.background?.room) stageRoomSet(document, { ...config.background.room, camera: config.roomCamera ?? config.background.room.camera })
 else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
@@ -100,7 +100,7 @@ function bindCast(document, key, entry) {
   const next = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
   // A generated model is centred on its origin; standing it on its feet keeps its animated legs above the floor.
   if (next.media === 'model3d' && entry.grounded === undefined) next.grounded = true
-  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance']) {
+  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard']) {
     if (entry[field] !== undefined) next[field] = structuredClone(entry[field])
   }
   document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]

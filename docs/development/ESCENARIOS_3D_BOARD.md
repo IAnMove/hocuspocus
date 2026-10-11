@@ -10,8 +10,8 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | A2 | feat/prop-library | #971 | 4 tests nuevos OK; borrador | prop_library.py |
 | A3 | feat/scene3d-add-items | #972 | 5 tests nuevos OK; borrador | scene3d_items.py |
 | A5 | feat/set-skins | #973 | 4 tests nuevos OK; borrador | set_skins.py |
-| A6 | feat/set-molds-v1 | pendiente | Código y tests | set_molds/*.json |
-| A7 | feat/sets-room-integration | pendiente | pendiente | production_rooms.py, series_sets.py |
+| A6 | feat/set-molds-v1 | #974 | 16 tests nuevos OK; borrador | set_molds/*.json |
+| A7 | feat/sets-room-integration | pendiente | 6 tests nuevos OK; borrador | production_rooms.py, series_sets.py |
 | A8 | docs/sets-agent-guide | pendiente | pendiente | guías de agentes |
 | Z1 | ramas anteriores | pendiente | pendiente | comprobaciones completas |
 | Z2 | docs/sets-trial | pendiente | pendiente | defaults medidos e informe |

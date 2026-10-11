@@ -70,6 +70,7 @@ def _extras(value: dict[str, Any]) -> dict[str, Any]:
         kept = stored_backdrop(value.get("backdrop"))
         if kept is not None:
             extras["backdrop"] = kept
+    extras.update({key: value[key] for key in ("roomCamera", "roomSet") if key in value})
     extras.update(_look(value))
     return extras
 
@@ -92,7 +93,7 @@ def _valid_id(value: Any) -> bool:
 def _cast_entry(entry: Any) -> dict[str, str] | None:
     if not isinstance(entry, dict) or not (_valid_id(entry.get("characterId")) and _valid_id(entry.get("objectId"))):
         return None
-    return {"characterId": entry["characterId"], "objectId": entry["objectId"], **({"poseId": entry["poseId"]} if _valid_id(entry.get("poseId")) else {})}
+    return {"characterId": entry["characterId"], "objectId": entry["objectId"], **({"mark": entry["mark"]} if _valid_id(entry.get("mark")) else {}), **({"poseId": entry["poseId"]} if _valid_id(entry.get("poseId")) else {})}
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -381,7 +382,8 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
         setup["screenFx"] = effects
     if sound:
         setup["soundtrack"] = sound
-    objects = [_object_binding(workspace, root, entry, error) for entry in config.get("objects") or []]
+    from services.series_sets import room_cast_bindings
+    objects = [*room_cast_bindings(config), *[_object_binding(workspace, root, entry, error) for entry in config.get("objects") or []]]
     if objects:
         setup["bindings"] = objects
     return setup
@@ -496,6 +498,8 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
                             talking=_talking(config, lines, series_characters), template_id=template_id, plate=plate)
+    from services.series_sets import bind_silent_cast
+    scene = bind_silent_cast(call, workspace, stem, scene, config, lines, kits, series_characters)
     scene_id, revision = scene["sceneId"], scene["revision"]
     for entry in config.get("cast") or []:
         spoken = [line for line in lines if line["characterId"] == entry["characterId"]]

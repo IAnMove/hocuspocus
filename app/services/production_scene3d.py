@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse, parse_qs
 
 from services.production_scene_retry import receipt_action, _artifact_name
+from services import production_rooms as rooms
 from services.world3d_look import check_document_look
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,9 +23,9 @@ EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
-               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame"}
+               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera"}
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add",
-               "sources", "formation", "spacing"}
+               "sources", "formation", "spacing", "imageLook", "setItem", "billboard"}
 GROUP_FIELDS = {"sources", "formation", "spacing", "position", "rotationY"}
 FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camera's distance to the subject, as a share of the template's
 LIGHTS = ("noon", "golden", "overcast", "night", "neon", "stage", "campfire")
@@ -50,10 +51,10 @@ def validate_scene3d_shot(shot):
     if "world" in config and (not isinstance(config["world"], str) or not config["world"].strip()):
         raise ValueError("scene3d.world is the id of the template whose place the shot plays in")
     _check_looks(config)
-    _check_cast(config.get("cast"))
+    _check_cast(config.get("cast"), CAST_MEMBERS if rooms.has_room(config) else 8)
     _check_background(config)
     _check_composition(config)
-    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast")):
+    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast") or rooms.has_room(config)):
         raise ValueError("A template shot needs a subject GLB, a cast or explicit slots")
     if shot.get("sing"):
         raise ValueError("scene3d does not promise H3 lip-sync; use rigid object motion or authored GLB clips")
@@ -72,13 +73,13 @@ def _source(value):
     return isinstance(value, str) and 0 < len(value) <= 2000
 
 
-def _check_cast(cast):
+def _check_cast(cast, limit=8):
     """cast maps a template role (subject_1, subject_2, background...) or an object id to a model or picture, or a
     group of models (sources) placed in a formation."""
     if cast is None:
         return
-    if not isinstance(cast, dict) or not 0 < len(cast) <= 8:
-        raise ValueError("scene3d.cast maps 1-8 template roles or object ids to a GLB or picture")
+    if not isinstance(cast, dict) or not 0 < len(cast) <= limit:
+        raise ValueError(f"scene3d.cast maps 1-{limit} template roles or object ids to a GLB or picture")
     members = 0
     for key, value in cast.items():
         entry = value if isinstance(value, dict) else {"source": value}
@@ -119,7 +120,7 @@ def _check_composition(config):
 
 
 def _check_background(config):
-    if "background" in config:
+    if "background" in config and not rooms.check_background(config):
         entry = config["background"] if isinstance(config["background"], dict) else {"source": config["background"]}
         if set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
             raise ValueError("scene3d.background is a picture (URL, workspace file, stills name or set) or "
@@ -254,7 +255,7 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         resolved["cast"] = {key: member(key, value) for key, value in spread_groups(resolved["cast"]).items()}
     if _source(resolved.get("subject")):
         resolved["subject"] = url(resolved["subject"])
-    if "background" in resolved:
+    if "background" in resolved and not rooms.resolve_background(resolved, sets, workspace):
         entry = resolved["background"] if isinstance(resolved["background"], dict) else {"source": resolved["background"]}
         resolved["background"] = _diorama(entry, (sets or {}).get(entry["source"])) or {**entry, "source": url(entry["source"])}
     return resolved
