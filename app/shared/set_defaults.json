@@ -56,5 +56,8 @@
     "qwen_image_21_turbo": true,
     "qwen_image_21_viggle_turbo": false,
     "qwen_image_21": true
+  },
+  "skin": {
+    "floorShade": 0.7
   }
 }
