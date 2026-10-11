@@ -11,6 +11,11 @@ old ape's beard, a fish's fins). A material painted with one loses that texture 
 A ripped character may come with a held thing hung under its feet instead of in its hand (a wooden gun, a club):
 it reads as a column between the legs and stands the body on the gun's end. For a body that stands on two feet,
 a part hanging well below the feet is dropped.
+
+A skinned rip may store each part in its own bone's space (every limb piled at the origin) and leave the skeleton
+to assemble the body: a viewer shows it whole, but anything reading the vertices (the humanoid rig, the clean-ups
+above) sees a heap. Such a model is baked into its rest pose, the parts where the skeleton puts them, and rebound
+so its own clips still play unchanged.
 """
 from __future__ import annotations
 
@@ -26,10 +31,11 @@ VIVID = 0.35            # mean texel saturation: the garbage is confetti, while 
 SAMPLE = 256            # texels on a side of the corner of a texture that is measured
 FEET = 10               # the lowest tenth of a standing body's vertices are its feet
 UNDER_FEET = 0.2        # a part reaching this share of the height below the feet hangs under the floor
-CLEANUP = 3             # version of this cleanup, part of a model's fingerprint
+APART = 0.75            # skinned vertices spanning less than this share of the rest pose's height are stored in parts
+CLEANUP = 4             # version of this cleanup, part of a model's fingerprint
 
 _TYPES = {5126: np.float32, 5121: np.uint8, 5123: np.uint16}
-_WIDTH = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
+_WIDTH = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
 
 
 def _read(gltf, index: int) -> np.ndarray:
@@ -136,10 +142,116 @@ def _drop_parts_under_feet(gltf) -> int:
     return len(hanging)
 
 
+def _local_matrix(node) -> np.ndarray:
+    if node.matrix:
+        return np.array(node.matrix, dtype=np.float64).reshape(4, 4).T
+    shift = np.array(node.translation or [0.0, 0.0, 0.0], dtype=np.float64)
+    x, y, z, w = node.rotation or [0.0, 0.0, 0.0, 1.0]
+    scale = np.array(node.scale or [1.0, 1.0, 1.0], dtype=np.float64)
+    turn = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+    matrix = np.eye(4)
+    matrix[:3, :3] = turn * scale
+    matrix[:3, 3] = shift
+    return matrix
+
+
+def _node_worlds(gltf) -> list[np.ndarray]:
+    """Every node's world matrix in the rest pose (its own transform under its parents')."""
+    parents = {child: index for index, node in enumerate(gltf.nodes) for child in (node.children or [])}
+    worlds: dict[int, np.ndarray] = {}
+
+    def world(index: int) -> np.ndarray:
+        if index not in worlds:
+            local = _local_matrix(gltf.nodes[index])
+            worlds[index] = (world(parents[index]) @ local) if index in parents else local
+        return worlds[index]
+
+    return [world(index) for index in range(len(gltf.nodes))]
+
+
+def _skin_matrices(gltf, skin, worlds: list[np.ndarray]) -> np.ndarray:
+    """Per joint, the matrix that takes a stored vertex to the rest pose: joint world × inverse bind."""
+    if skin.inverseBindMatrices is None:
+        inverse = np.tile(np.eye(4), (len(skin.joints), 1, 1))
+    else:
+        inverse = _read(gltf, skin.inverseBindMatrices).reshape(-1, 4, 4).transpose(0, 2, 1)   # column-major in the file
+    return np.array([worlds[joint] @ inverse[index] for index, joint in enumerate(skin.joints)])
+
+
+def _skinned_parts(gltf):
+    """``(skin index, primitive)`` for every primitive a skin drives."""
+    for node in gltf.nodes:
+        if node.mesh is None or node.skin is None:
+            continue
+        for primitive in gltf.meshes[node.mesh].primitives:
+            attributes = primitive.attributes
+            if attributes.POSITION is not None and attributes.JOINTS_0 is not None and attributes.WEIGHTS_0 is not None:
+                yield node.skin, primitive
+
+
+def _rest_pose(gltf, primitive, matrices: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """``(stored positions, rest-pose positions, rest-pose normals)`` of a skinned primitive."""
+    stored = _read(gltf, primitive.attributes.POSITION)
+    joints = _read(gltf, primitive.attributes.JOINTS_0).astype(int)
+    weights = _read(gltf, primitive.attributes.WEIGHTS_0)
+    weights = weights / np.maximum(weights.sum(axis=1, keepdims=True), 1e-9)
+    influence = matrices[joints]                                                      # (vertex, 4, 4, 4)
+    moved = np.einsum("nkij,nj->nki", influence, np.c_[stored, np.ones(len(stored))])[:, :, :3]
+    rest = (moved * weights[:, :, None]).sum(axis=1)
+    normals = None
+    if primitive.attributes.NORMAL is not None:
+        turn = np.linalg.inv(influence[:, :, :3, :3]).transpose(0, 1, 3, 2)              # inverse transpose per influence
+        turned = (np.einsum("nkij,nj->nki", turn, _read(gltf, primitive.attributes.NORMAL)) * weights[:, :, None]).sum(axis=1)
+        normals = turned / np.maximum(np.linalg.norm(turned, axis=1, keepdims=True), 1e-9)
+    return stored, rest, normals
+
+
+def parts_stored_apart(gltf) -> bool:
+    """True when the skinned vertices as stored span much less height than the body the skeleton assembles."""
+    worlds, matrices, stored, rest = _node_worlds(gltf), {}, [], []
+    for skin, primitive in _skinned_parts(gltf):
+        if skin not in matrices:
+            matrices[skin] = _skin_matrices(gltf, gltf.skins[skin], worlds)
+        before, after, _ = _rest_pose(gltf, primitive, matrices[skin])
+        stored.append(before)
+        rest.append(after)
+    if not stored:
+        return False
+    span = np.vstack(rest)[:, 1]
+    height = float(span.max() - span.min())
+    stored_height = float(np.ptp(np.vstack(stored)[:, 1]))
+    return height > 0 and stored_height < APART * height
+
+
+def bake_rest_pose(gltf) -> int:
+    """Store every skinned vertex where the skeleton puts it at rest and rebind the skins there, so the model reads
+    assembled and its clips play as before; the count of parts baked."""
+    from services.humanoid_rig.gltf_buffers import ARRAY_BUFFER, FLOAT, append_accessor
+
+    worlds, matrices, blob, baked = _node_worlds(gltf), {}, bytearray(gltf.binary_blob()), 0
+    for skin, primitive in _skinned_parts(gltf):
+        if skin not in matrices:
+            matrices[skin] = _skin_matrices(gltf, gltf.skins[skin], worlds)
+        _, rest, normals = _rest_pose(gltf, primitive, matrices[skin])
+        primitive.attributes.POSITION = append_accessor(gltf, blob, rest.astype(np.float32), FLOAT, "VEC3", ARRAY_BUFFER, minmax=True)
+        if normals is not None:
+            primitive.attributes.NORMAL = append_accessor(gltf, blob, normals.astype(np.float32), FLOAT, "VEC3", ARRAY_BUFFER)
+        baked += 1
+    for skin in matrices:
+        inverse = np.array([np.linalg.inv(worlds[joint]) for joint in gltf.skins[skin].joints])
+        gltf.skins[skin].inverseBindMatrices = append_accessor(gltf, blob, inverse.transpose(0, 2, 1).reshape(-1, 16).astype(np.float32), FLOAT, "MAT4")
+    gltf.set_binary_blob(bytes(blob))
+    gltf.buffers[0].byteLength = len(blob)
+    return baked
+
+
 def clean_glb(source: str | Path, target: str | Path, *, standing: bool = False) -> list[str]:
-    """Write ``target`` without vertex colours that are really normals, without garbage textures and, for a body
-    that stands on two feet (``standing``), without parts hung under them; say what was fixed. Empty (and nothing
-    written) when the model is fine or unreadable."""
+    """Write ``target`` with a skinned body that was stored in parts assembled in its rest pose, without vertex
+    colours that are really normals, without garbage textures and, for a body that stands on two feet
+    (``standing``), without parts hung under them; say what was fixed. Empty (and nothing written) when the model
+    is fine or unreadable."""
     import struct
 
     import pygltflib
@@ -149,6 +261,8 @@ def clean_glb(source: str | Path, target: str | Path, *, standing: bool = False)
         gltf = pygltflib.GLTF2().load(str(source))
         if gltf is None:
             return []
+        if parts_stored_apart(gltf) and (baked := bake_rest_pose(gltf)):
+            fixes.append(f"its {baked} skinned parts were stored apart (each in its bone's space), now assembled in its rest pose")
         if colours_are_normals(gltf):
             for mesh in gltf.meshes:
                 for primitive in mesh.primitives:
