@@ -10,7 +10,9 @@ export class RoomSetRuntime {
   error: unknown
   private abort = new AbortController()
   private screens: { runtime: ScreenMediaRuntime; screen: MediaScreen }[] = []
-  constructor(room: RoomSet, private repaint: () => void = () => {}) {
+  private repaint: () => void
+  constructor(room: RoomSet, repaint: () => void = () => {}) {
+    this.repaint = repaint
     void Promise.all(roomPanels(room).map(panel => this.panel(panel))).then(() => { this.ready = !this.abort.signal.aborted; this.repaint() }).catch(error => { this.error = error })
   }
   private async panel(panel: RoomPanel) {
