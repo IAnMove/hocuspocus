@@ -148,7 +148,21 @@ def test_router_rejects_malformed_json_without_spending_a_repair_call():
     with patch("services.llm_service.generate", return_value="not json") as generate:
         response = TestClient(app).post("/api/v1/writing-guide/propose", json=body())
     assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "invalidProposal"
     assert generate.call_count == 1
+
+
+def test_router_returns_localizable_error_codes_without_exposing_provider_details():
+    app = FastAPI()
+    app.include_router(create_writing_guide_router(ensure_llm_loaded=lambda: None, writing_override=lambda _: None))
+    client = TestClient(app)
+    with patch("services.llm_service.generate", side_effect=RuntimeError("PRIVATE PROVIDER DETAIL")) as generate:
+        invalid = client.post("/api/v1/writing-guide/propose", json=body(scope="unknown"))
+        assert invalid.status_code == 400 and invalid.json()["detail"]["code"] == "invalidRequest"
+        generate.assert_not_called()
+        failed = client.post("/api/v1/writing-guide/propose", json=body())
+    assert failed.status_code == 502 and failed.json()["detail"]["code"] == "providerFailed"
+    assert "PRIVATE PROVIDER DETAIL" not in failed.text
 
 
 def test_router_reports_provider_usage_without_estimating_from_text():

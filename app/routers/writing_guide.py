@@ -20,7 +20,7 @@ def create_writing_guide_router(*, ensure_llm_loaded: Callable, writing_override
             prepared = prepare_request(body)
             override = writing_override(body)
         except ValueError as error:
-            raise HTTPException(400, str(error)) from error
+            raise HTTPException(400, {"code": "invalidRequest", "message": str(error)}) from error
         from services import llm_service
         from services.task_manager import CancellationToken
         token = CancellationToken()
@@ -58,13 +58,13 @@ def create_writing_guide_router(*, ensure_llm_loaded: Callable, writing_override
                     token.cancel("Writing guide client disconnected")
             return await job
         except (ValueError, json.JSONDecodeError) as error:
-            raise HTTPException(502, f"Invalid writing proposal: {error}") from error
+            raise HTTPException(502, {"code": "invalidProposal", "message": str(error)}) from error
         except asyncio.CancelledError:
             token.cancel("Writing guide request cancelled")
             raise
         except HTTPException:
             raise
         except Exception as error:
-            raise HTTPException(502, "Writing provider failed; check its configuration and try again") from error
+            raise HTTPException(502, {"code": "providerFailed", "message": "Writing provider failed"}) from error
 
     return router

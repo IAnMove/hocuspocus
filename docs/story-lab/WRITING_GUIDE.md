@@ -82,6 +82,8 @@ La respuesta contiene `suggestions` (campo, valor y motivo), `examples`,
 `usage`. El consumo aparece como desconocido cuando el proveedor no lo comunica.
 No se estima a partir del número de caracteres. No se guardan claves API en
 la propuesta ni se envían medios o propuestas anteriores como contexto.
+Los errores incluyen un código estable en `detail.code`. La interfaz traduce
+ese código al idioma de la UI, independiente del idioma del proyecto.
 
 Cada acción solicita una respuesta estructurada, con un máximo de 2400 tokens
 de salida. Admite hasta 6000 caracteres por respuesta y 24000 de contexto.

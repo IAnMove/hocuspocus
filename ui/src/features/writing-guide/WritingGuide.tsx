@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
-import { proposeWriting, type GuideProvider } from './api'
+import { proposeWriting, WritingGuideError, type GuideErrorCode, type GuideProvider } from './api'
 import { applyChanges, catalog, undoChanges, type GuideAction, type GuideData, type GuideScope, type GuideUpdate } from './model'
 import { WritingProposal } from './WritingProposal'
 import { WritingAnswer } from './WritingAnswer'
@@ -18,7 +18,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
   const [advanced, setAdvanced] = useState(false)
   const [position, setPosition] = useState(0)
   const [busy, setBusy] = useState<GuideAction | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<GuideErrorCode | ''>('')
   const controller = useRef<AbortController | null>(null)
   useEffect(() => () => { controller.current?.abort() }, [])
   const fields = catalog.scopes[scope]
@@ -46,7 +46,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
         selected: result.suggestions.filter(row => !base[row.field]?.trim()).map(row => row.field),
       } } }))
     } catch (reason) {
-      if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : t('failed'))
+      if (!abort.signal.aborted) setError(reason instanceof WritingGuideError ? reason.code : 'failed')
     } finally {
       if (controller.current === abort) { controller.current = null; setBusy(null) }
     }
@@ -94,7 +94,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
           controller.current?.abort(); controller.current = null; setBusy(null)
         }}>{t('cancel')}</button>
       </div>}
-      {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-500">{t(`errors.${error}`)}</p>}
       <WritingProposal data={data} onChange={onChange} onApply={apply} />
     </div>
   </details>

@@ -202,3 +202,41 @@ test('cancelling a request aborts it and ignores a late response while preservin
   assert.equal(data().section.pending, undefined)
   assert.equal(data().values.desire, 'Recover the ship')
 })
+
+test('guide controls, questions, examples and errors follow the UI language independently of the story', async t => {
+  const { fireEvent, waitFor, act } = await import('@testing-library/react')
+  const { setUiLanguage } = await import('../src/i18n')
+  const original = globalThis.fetch
+  let request: Record<string, unknown> = {}
+  globalThis.fetch = (async (_url, init) => {
+    request = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify({ detail: { code: 'invalidProposal', message: 'Invalid writing proposal' } }), { status: 502 })
+  }) as typeof fetch
+  t.after(() => { globalThis.fetch = original })
+  await setUiLanguage('es')
+  t.after(() => setUiLanguage('en'))
+  const { view } = await mount(t)
+  assert.ok(view.getByText('Ayúdame a escribir · Personaje'))
+  assert.ok(view.getByRole('textbox', { name: catalog.questions.desire.question.es }))
+  assert.ok(view.getByText(`Ejemplo orientativo: ${catalog.questions.desire.example.es}`))
+  fireEvent.click(view.getByRole('button', { name: 'Desarrollar con mis respuestas' }))
+  await waitFor(() => assert.match(view.getByRole('alert').textContent || '', /formato no válido/))
+  assert.equal(request.language, 'English', 'content language stays independent from UI language')
+  assert.ok(!view.getByRole('alert').textContent?.includes('Invalid writing proposal'))
+  await act(async () => { await setUiLanguage('en') })
+  assert.ok(view.getByText('Help me write · Character'))
+  assert.match(view.getByRole('alert').textContent || '', /invalid format/)
+})
+
+test('unstructured server and network failures use translatable codes, never raw English errors', async t => {
+  const { proposeWriting, WritingGuideError } = await import('../src/features/writing-guide/api')
+  const original = globalThis.fetch
+  t.after(() => { globalThis.fetch = original })
+  const request = { scope: 'story' as const, action: 'develop' as const, questionId: 'premise',
+    language: 'English', values: {}, context: {}, provider: { provider: 'maestro', model: '', baseUrl: '' } }
+  const signal = new AbortController().signal
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Provider is not configured' }), { status: 503 })
+  await assert.rejects(proposeWriting(request, signal), error => error instanceof WritingGuideError && error.code === 'failed')
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
+  await assert.rejects(proposeWriting(request, signal), error => error instanceof WritingGuideError && error.code === 'network')
+})

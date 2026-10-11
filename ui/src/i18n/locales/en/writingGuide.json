@@ -16,7 +16,13 @@
   "undo": "Undo applied changes",
   "working": "Preparing a proposal… You can keep writing.",
   "cancel": "Cancel",
-  "failed": "Could not prepare the proposal.",
+  "errors": {
+    "invalidRequest": "Check the answers and their length before requesting another proposal.",
+    "invalidProposal": "The model returned a proposal in an invalid format. You can try again.",
+    "providerFailed": "The writing provider failed. Check its configuration and try again.",
+    "network": "Could not connect to HocusPocus. Check the connection and try again.",
+    "failed": "Could not prepare the proposal. You can try again."
+  },
   "proposal": "Editable draft · choose what to apply",
   "current": "Current answer",
   "include": "Apply: {{question}}",

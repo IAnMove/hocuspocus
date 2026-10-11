@@ -16,7 +16,13 @@
   "undo": "Deshacer lo aplicado",
   "working": "Preparando una propuesta… Puedes seguir escribiendo.",
   "cancel": "Cancelar",
-  "failed": "No se pudo preparar la propuesta.",
+  "errors": {
+    "invalidRequest": "Revisa las respuestas y su longitud antes de pedir otra propuesta.",
+    "invalidProposal": "El modelo devolvió una propuesta con un formato no válido. Puedes intentarlo de nuevo.",
+    "providerFailed": "El proveedor de texto falló. Revisa su configuración e inténtalo de nuevo.",
+    "network": "No se pudo conectar con HocusPocus. Comprueba la conexión e inténtalo de nuevo.",
+    "failed": "No se pudo preparar la propuesta. Puedes intentarlo de nuevo."
+  },
   "proposal": "Borrador editable · tú eliges qué incorporar",
   "current": "Respuesta actual",
   "include": "Incorporar: {{question}}",
