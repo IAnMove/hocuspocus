@@ -246,6 +246,9 @@ export type Scene3DFraming = {
   moveEnd?: number
   /** `smooth` (default) eases in and out; `snap` leaves at full speed, like a crash zoom. */
   ease?: 'smooth' | 'snap'
+  /** `rest` (default) frames the point measured when the model mounted and follows only where the slot places it;
+   * `pose` re-reads the head bone or the live bounding box every frame. */
+  track?: 'rest' | 'pose'
 }
 
 export type Scene3DLight = {

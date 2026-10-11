@@ -6,6 +6,26 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+Every Video 3D shot card now tells an agent what the built shot does, read from
+the document itself: `shot` (close, medium, wide, far, plate) with the camera
+distance, `moves` (push, pull, slide, rise, descend, arc, orbit, zoom, roll,
+ride, track, shake), `moving` (what the template animates on its own), `still`,
+`subjects`, `props`, `screens`, `authoredFor`, `floor`, `uses` (dialogue, talk,
+reaction, figure, establishing, action, reveal, product, music, drive,
+transition, title, look, plate) and the authored requirement notes of the
+action, campaign and anime shots. `world3d.templates.list`, `catalog` and
+`apply_query` understand intent words in Spanish or English («diálogo», «plano
+general», «persecución», «girar alrededor») through one shared vocabulary, ignore
+the words that name the search itself, rank a literal word over its synonyms,
+match plurals, take the filters `shot`, `use`, `move`, `subjects` and `format`,
+accept a tag as `category`, and return the best cards marked `partial` when no
+card has every word (never applied, never planned). Lines are no longer cut at
+180 characters, three pairs of shots no longer share a title, the editor's
+gallery search finds shots by the same traits, and a production dry run warns
+`template_still` when a shot uses a template that animates nothing without a
+clip, a motion, a camera or a world. See
+[Video 3D templates for agents](docs/development/WORLD3D_TEMPLATES_AGENTS.md).
+
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
 journey, volumetric poster lettering and particle morph typography. Editor, MCP
