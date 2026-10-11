@@ -12,7 +12,7 @@ from pygltflib import GLTF2
 from services.humanoid_rig import rotation as rot
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import BONE_NAMES
-from services.humanoid_rig.rig import rig_humanoid, RIG_VERSION
+from services.humanoid_rig.rig import RIG_VERSION, rig_humanoid
 from services.procedural_3d.compose import compose_glb
 from services.procedural_3d.glb_inspector import inspect_glb_bytes
 from tests.humanoid_bodies import as_glb, body
