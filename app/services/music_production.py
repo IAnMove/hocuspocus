@@ -269,10 +269,13 @@ def title_cue_count(template: str, fields: dict, start: float, length: float) ->
         return 1
 
 
+SCENE_RECIPE = 2      # 2: camera presets play on a camera layer over the whole shot (production_camera)
+
+
 def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict, start: float, end: float) -> str:
-    """Invalidate a rendered scene when its spec, window, or lyric timing changes on resume."""
+    """Invalidate a rendered scene when its spec, window, lyric timing or the scene recipe changes on resume."""
     source = {"shot": shot, "style": style, "stills": stills, "lines": score.get("lines") or [],
-              "start": round(float(start), 3), "end": round(float(end), 3)}
+              "start": round(float(start), 3), "end": round(float(end), 3), "recipe": SCENE_RECIPE}
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 
