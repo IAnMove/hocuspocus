@@ -386,18 +386,29 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
-**Template + cast + painted set.** Prefer this over writing a `document`: pick a
-template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
-and a `setting` such as `sea` or `city`) and assign only what changes. Every card
-says what the built shot does: `shot` (close, medium, wide, far, plate), `moves`
-(the camera), `moving` (what the template itself animates), `still` (nothing
-moves unless the cast brings a clip), `subjects`, `authoredFor`, `floor` and
-`uses` (dialogue, talk, reaction, figure, establishing, action, reveal...). Ask
-for them as filters (`{"use": "dialogue", "subjects": 2}`, `{"shot": "close",
-"move": "push"}`) or in words in either language («plano general», «persecución»,
-«girar alrededor»); a `still` card needs a `clip`, a `motion`, a `camera` or a
-`world`, or the dry run warns `template_still`. See
-[Video 3D templates for agents](../development/WORLD3D_TEMPLATES_AGENTS.md).
+**Template + cast + painted set.** Prefer this over writing a `document`: ask
+`world3d.templates.suggest` for the shot as the brief phrases it (line, speakers,
+place, mood, beat), or pick a template whose roles fit (`world3d.templates.list`
+with `roles: ["subject_1", "background"]`, a `setting` such as `sea` or `city`,
+or the filters `kind`, `place` and `travel`) and assign only what changes. Every
+card says what the built shot does: `shot` (close, medium, wide, far, plate),
+`moves` (the camera), `moving` (what the template itself animates), `still`
+(nothing moves unless the cast brings a clip), `subjects`, `authoredFor`,
+`floor`, `kind`, `place` and `uses` (dialogue, talk, reaction, figure,
+establishing, action, speed, impact, reveal...). Ask for them as filters
+(`{"use": "dialogue", "subjects": 2}`, `{"shot": "close", "move": "push"}`,
+`{"kind": "stage", "place": "bar"}`) or in words in either language («plano
+general», «persecución», «girar alrededor»). Every reply lists `unknown_words`
+(the query words no card knows; they never count against the match) and, when no
+card has every known word, returns the best cards with at least half of them as
+`match: partial`, which are never applied. A `still` card needs a `clip`, a
+`motion`, a `camera` or a `world`, or the dry run warns `template_still`. See
+[Video 3D templates for agents](../development/WORLD3D_TEMPLATES_AGENTS.md):
+the [search](../development/WORLD3D_TEMPLATES_AGENTS.md#search), the
+[stages](../development/WORLD3D_TEMPLATES_AGENTS.md#stages), the
+[packs](../development/WORLD3D_TEMPLATES_AGENTS.md#packs-by-intent), the
+[modifiers](../development/WORLD3D_TEMPLATES_AGENTS.md#modifiers) and the
+[starter deck](../development/WORLD3D_TEMPLATES_AGENTS.md#starter-deck).
 `cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
 picture; `background` puts a picture in the template's background slot. The
 template keeps its camera, props, lights and moves. With a painted background on
