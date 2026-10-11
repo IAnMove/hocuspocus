@@ -32,6 +32,7 @@ from typing import Any, Callable
 
 from services import production_rooms as rooms
 from services.glb_cleanup import CLEANUP as GLB_CLEANUP
+from services.humanoid_rig.rig import RIG_VERSION
 from services.production_control import sleep_until
 from services.production_diorama import (
     build as build_diorama, check_diorama, is_built as diorama_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
@@ -261,7 +262,8 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
         # A model meshed straight from its picture before REFERENCE_STAGING is made again.
         restaged = {**entry, "staging": "isolated-2"} if source and rig != "humanoid" else entry
         if entry.get("glb"):
-            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name), "cleanup": GLB_CLEANUP}
+            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name), "cleanup": GLB_CLEANUP,
+                        **({"rig_version": RIG_VERSION} if rig == "humanoid" else {})}   # a new rig redoes the rig, not a profile
         fingerprint = _fingerprint(restaged, source, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and kept.get("file") and not kept.get("rig_error"):

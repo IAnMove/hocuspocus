@@ -328,6 +328,14 @@ def test_a_glb_in_the_workspace_is_only_rigged_and_a_refused_humanoid_falls_back
     calls = len(production.calls)
     make_models(production, spec, sleep=lambda _: None)
     assert len(production.calls) == calls, "an unchanged GLB is not rigged again"
+    import services.production_models as module
+    module.RIG_VERSION += 1
+    try:
+        make_models(production, spec, sleep=lambda _: None)
+    finally:
+        module.RIG_VERSION -= 1
+    assert [rig["source"] for rig in submitted(production, "model3d.rig")[3:]] == ["pack/ape.glb", "pack/ape.glb"], \
+        "a new rig version rigs the humanoid again (and it falls back again); the profile rig is kept"
     for bad in ({"glb": "pack/none.glb"}, {"glb": "pack/ape.glb", "prompt": "an ape"}, {"glb": "pack/ape.glb", "rig": "prop", "fallback": "prop"}):
         with pytest.raises(ModelError):
             check_models({"models": {"x": bad}}) if "none" not in bad.get("glb", "") else make_models(Production(tmp_path), {"style": {}, "models": {"x": bad}}, sleep=lambda _: None)

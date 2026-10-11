@@ -191,6 +191,8 @@ _BODIES = {
     "arms_raised": lambda: _human(-20.0),
     "arms_up": lambda: _human(-50.0),
     "with_orb": lambda: _human(0.0, extra=(("sphere", (1.12, 1.18, 0.3), 0.07),)),
+    # Two locks of hair from the head's sides down onto the shoulders: above the neck notch, past the head's width.
+    "mane": lambda: _human(0.0, extra=tuple(("capsule", (side * 0.10, 1.68, 0.0), (side * 0.19, 1.44, 0.0), 0.05, 0.05) for side in (1.0, -1.0))),
     "on_base": lambda: _human(30.0, extra=tuple(("capsule", (-0.38, -0.04, z), (0.38, -0.04, z), 0.035, 0.035) for z in (-0.12, 0.0, 0.12, 0.24))),
     # Hair down to the shoulders hides the neck notch and a flared skirt makes the waist the narrowest row.
     "long_hair_skirt": lambda: _human(0.0, extra=(

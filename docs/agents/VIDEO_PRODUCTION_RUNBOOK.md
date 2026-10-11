@@ -460,7 +460,8 @@ the surface), whose textures were decoded into confetti (every texel a random
 vivid colour), or whose skinned parts are stored apart (each in its bone's space,
 so only the skeleton assembles the body: N64 rips), is rigged from a `.clean-<hash>.glb`
 copy without them, assembled in its rest pose and rebound so its own clips still play (named by the
-original's content and the clean-up, so a changed clean-up remakes its rig and clips); real vertex colours
+original's content and the clean-up, so a changed clean-up remakes its rig and clips; a new
+version of the humanoid rig remakes the rigs too); real vertex colours
 and textures are kept. A `humanoid` model that came with a held thing hung under
 its feet instead of in its hand (a wooden gun that reads as a column between the
 legs and stands the body on its end) loses that part: a part reaching a fifth of

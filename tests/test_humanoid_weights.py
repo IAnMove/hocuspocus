@@ -146,3 +146,32 @@ def test_raising_an_arm_under_a_cape_lifts_its_side_only():
     assert float(moved[far].max()) < 0.002
     assert float(moved[near].mean()) > 0.05, "the cape over the upper arm rises with it"
     assert _stretch(points, raised, indices, cloth & (points[:, 0] > 0.05)) < 2.0
+
+
+def test_hair_down_onto_the_shoulders_never_hangs_from_a_shoulder():
+    item, skeleton, joints, weights = _weighted("mane")
+    points = item["positions"]
+    above = points[:, 1] > skeleton["head_region"]["y"]
+    shoulders = [BONE_BY_NAME["LeftShoulder"], BONE_BY_NAME["RightShoulder"]]
+    assert above.sum() > 200
+    assert not np.any(np.isin(joints[above][weights[above] > 0], shoulders))
+    moved = _posed(skeleton, joints, weights, points, "RightShoulder", 25.0, [0.0, 0.0, 1.0])
+    assert float(moved[above].max()) < 0.002, "a shrug leaves the head, hair and all, where it was"
+
+
+def test_above_the_neck_notch_the_shoulders_let_go_and_a_stranded_cell_keeps_its_weights():
+    from services.humanoid_rig.weights import _DEFORM, _head_mask
+
+    head_, neck, left, right = (_DEFORM.index(name) for name in ("Head", "Neck", "LeftShoulder", "RightShoulder"))
+    table = np.zeros((4, len(_DEFORM)))
+    table[0, [head_, right]] = [0.8, 0.2]          # a fringe past the head's width, pulled by the right shoulder
+    table[1, [neck, left]] = [0.5, 0.5]            # a collar above the notch, half on a shoulder
+    table[2, [right]] = [1.0]                      # a pauldron's spike: only the shoulder reached it
+    table[3, [right, left]] = [0.6, 0.4]           # the shoulders themselves, below the notch
+    head = np.array([True, False, False, False])
+    above = np.array([True, True, True, False])
+    out = _head_mask(table, head, above)
+    assert out[0, right] == 0.0 and out[0, head_] == 0.8
+    assert out[1, left] == 0.0 and out[1, neck] == 0.5
+    assert out[2].tolist() == table[2].tolist(), "a thing only a shoulder reached keeps it"
+    assert out[3].tolist() == table[3].tolist(), "below the notch nothing changes"
