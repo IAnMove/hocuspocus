@@ -1,3 +1,4 @@
+import { PropLibraryPanel, propSlot, PROP_DRAG_TYPE, type LibraryProp } from './PropLibraryPanel'
 import { ExampleDownloads } from './ExampleDownloads'
 import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
@@ -644,6 +645,14 @@ function WorkspaceStageColumn({
           </Scene3DInteraction>
         </Scene3DPreview>
         <div className="min-w-0 space-y-3">
+          <div onDragOver={event => { if (event.dataTransfer.types.includes(PROP_DRAG_TYPE)) event.preventDefault() }} onDrop={event => {
+            const raw = event.dataTransfer.getData(PROP_DRAG_TYPE)
+            if (!raw || editingLocked) return
+            event.preventDefault()
+            try { const prop = JSON.parse(raw) as LibraryProp; if (prop.approved && prop.heightM > 0) applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] })) } catch { /* Ignore foreign drag data. */ }
+          }}>
+          <PropLibraryPanel workspace={workspace} disabled={editingLocked} onAdd={prop => applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))} />
+          </div>
           <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}

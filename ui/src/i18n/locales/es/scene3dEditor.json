@@ -4053,5 +4053,20 @@
     "sound": "Música local por contactos",
     "volume": "Volumen de música",
     "audioBlocked": "Permite el audio del navegador y vuelve a pulsar Reproducir."
+  },
+  "props": {
+    "title": "Atrezo",
+    "search": "Buscar atrezo",
+    "filterStyle": "Filtrar por estilo",
+    "allStyles": "Todos los estilos",
+    "add": "Añadir atrezo",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "new": "Nuevo objeto",
+    "description": "Descripción del objeto",
+    "height": "Altura (metros)",
+    "style": "Estilo",
+    "generate": "Generar candidatos",
+    "generating": "Generando candidatos de atrezo…"
   }
 }

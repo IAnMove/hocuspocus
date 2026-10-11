@@ -4053,5 +4053,20 @@
     "sound": "Local contact music",
     "volume": "Music volume",
     "audioBlocked": "Allow browser audio and press Play again."
+  },
+  "props": {
+    "title": "Props",
+    "search": "Search props",
+    "filterStyle": "Filter by style",
+    "allStyles": "All styles",
+    "add": "Add prop",
+    "approve": "Approve",
+    "reject": "Reject",
+    "new": "New object",
+    "description": "Object description",
+    "height": "Height (metres)",
+    "style": "Style",
+    "generate": "Generate candidates",
+    "generating": "Generating prop candidates…"
   }
 }
