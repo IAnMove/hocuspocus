@@ -129,7 +129,7 @@ test('the editor search finds shots by their traits, kind and place', () => {
   assert.equal(templatePlaceOf('two-shot'), null)
   assert.equal(templateTraitsOf('dance-orbit'), templateTraitsOf('dance-orbit'))
   const cinema = filterScene3DTemplates({ category: 'cinema', setting: 'all', query: '', locale: 'en', titleOf })
-  assert.deepEqual(kindsIn(cinema), ['scene', 'camera', 'look', 'transition'])
+  assert.deepEqual(kindsIn(cinema), ['scene', 'camera', 'look', 'transition', 'title'])
   const looks = filterScene3DTemplates({ category: 'cinema', setting: 'all', kind: 'look', query: '', locale: 'en', titleOf }).map(item => item.id)
   assert.ok(looks.includes('cine-noir') && !looks.includes('cine-dolly-in') && looks.every(id => traitsOf(id).kind === 'look'))
   assert.equal(filterScene3DTemplates({ category: 'cinema', setting: 'all', kind: 'all', query: '', locale: 'en', titleOf }).length, cinema.length)

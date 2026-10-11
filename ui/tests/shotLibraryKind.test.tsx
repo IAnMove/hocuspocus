@@ -40,7 +40,7 @@ test('the kind chips split the cinema shelf into looks, camera techniques and sc
     await openLibrary()
     fireEvent.click(screen.getByRole('button', { name: 'Cinema' }))
     const chips = screen.getByRole('group', { name: 'Kind' })
-    assert.deepEqual(within(chips).getAllByRole('button').map(button => button.textContent), ['Any kind', 'Scenes', 'Camera', 'Looks', 'Transitions'])
+    assert.deepEqual(within(chips).getAllByRole('button').map(button => button.textContent), ['Any kind', 'Scenes', 'Camera', 'Looks', 'Transitions', 'Titles'])
     assert.ok(screen.getByTestId('world3d-template-cine-noir') && screen.getByTestId('world3d-template-cine-dolly-in'))
     fireEvent.click(within(chips).getByRole('button', { name: 'Looks' }))
     assert.ok(screen.getByTestId('world3d-template-cine-noir'))

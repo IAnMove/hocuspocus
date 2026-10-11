@@ -140,7 +140,7 @@ test('every speed shot moves: a travelling subject, or a push or slide, with the
   assert.deepEqual(rush.moves, ['push', 'shake'])
   assert.equal(rush.shot, 'close')
   const dash = traitsOf('speed-side-dash')
-  assert.deepEqual(dash.moves, ['slide'])
+  assert.deepEqual(dash.moves, ['slide', 'track'])
   assert.ok(dash.moving.includes('subjects'))
 })
 
