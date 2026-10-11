@@ -20,8 +20,10 @@ from services.agent_activity import actor_label
 from services.readable_names import ascii_slug
 from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
+from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
-from services.world3d_template_catalog import require_card, user_template_document
+from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
 
 _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
@@ -177,6 +179,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     for binding in bindings:
         warnings.extend(_bind(document, binding))
     _check_carriers(document["slots"], bindings)
+    if "camera_template" in changes:
+        warnings.extend(_set_camera_template(document, changes["camera_template"]))
     if isinstance(changes.get("camera"), dict):
         if "shake" in changes["camera"]:
             _check_shake(changes["camera"]["shake"])
@@ -193,6 +197,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     if "motionLab" in changes:
         _set_motion_lab(document, changes["motionLab"])
     _set_render_look(document, changes)
+    _set_modifiers(document, changes)
     _retarget(document)
     record["revision"] += 1
     record["warnings"] = warnings
@@ -201,6 +206,32 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     viewed = _view(scene_id, record)
     viewed["warnings"] = warnings
     return viewed
+
+
+def _set_camera_template(document: dict, template_id) -> list[str]:
+    """``camera_template``: a ``kind: camera`` card's camera and framing on this scene, which keeps its duration, cast
+    and place. Camera fields patched alongside merge over it."""
+    try:
+        check_camera_template(template_id)
+    except World3DTemplateError:
+        raise
+    except ValueError as error:
+        raise World3DSceneError("invalid_camera_template", str(error)) from error
+    return apply_camera_template(document, compile_template_document(template_id))
+
+
+_MODIFIERS = (("light", set_light, "invalid_light"), ("lens", apply_lens, "invalid_lens"), ("grade", apply_grade, "invalid_grade"))
+
+
+def _set_modifiers(document: dict, changes: dict) -> None:
+    """``light`` (a name or a directional light), ``lens`` and ``grade`` in that order, so a grade tints the light it finds."""
+    for key, apply, code in _MODIFIERS:
+        if key not in changes:
+            continue
+        try:
+            apply(document, changes[key])
+        except ValueError as error:
+            raise World3DSceneError(code, str(error)) from error
 
 
 def _motion_lab_settings(raw) -> dict:
@@ -639,7 +670,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "warnings": record.get("warnings") or [], "traits": _traits(document),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
-                     "renderLook", "toon", "motionLab"],
+                     "renderLook", "toon", "motionLab", "grade", "lens", "camera_template"],
     }
 
 
