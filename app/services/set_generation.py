@@ -37,7 +37,7 @@ def generate_batch(call, workspace: str, requests: list[dict], intent: str) -> l
                   'negative_prompt': request.get('negative', ''), 'resolution': request['resolution'],
                   'batch_size': request.get('candidates', 1)}
         if not defaults()['imageNegativePrompt'][model]:
-            params['prompt'] += f". Avoid {params['negative_prompt']}." if params['negative_prompt'] else ''
+            # Keep the positive prompt literal; unsupported negatives must not become subjects.
             params['negative_prompt'] = ''
         if request.get('refs'):
             params.update(image_refs=request['refs'], video_prompt_type='I')
