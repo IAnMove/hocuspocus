@@ -25,7 +25,8 @@
   "walls": [
     "back",
     "left",
-    "right"
+    "right",
+    "front"
   ],
   "openings": [
     {
@@ -100,6 +101,7 @@
     "wall_back",
     "wall_left",
     "wall_right",
+    "wall_front",
     "window_view",
     "door",
     "bed_front",
@@ -323,6 +325,9 @@
     },
     "curtain_top": {
       "color": "#8fb2ae"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
     }
   }
 }
