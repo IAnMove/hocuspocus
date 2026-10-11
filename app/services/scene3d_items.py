@@ -142,20 +142,24 @@ class ItemService:
         return {'file': path.relative_to(root).as_posix(), 'heightM': height, 'media': media, 'name': path.stem}
 
     def _series_room(self, data, shot):
-        if shot.get('scene3d', {}).get('room'): return shot['scene3d']['room']
         result = require_result(self.call('series.get', {'version':1, 'input':{'workspace':data['workspace'],'series_id':data['target']['series_id']}}))
         series = result.get('series', result)
-        return next((loc.get('set3d') for loc in series.get('locations',[]) if loc['id'] == shot.get('location')),None)
+        from services.series_sets import location_for
+        loc=location_for(series,shot);config=shot.get('scene3d',{})
+        inherited=[] if config.get('scene') else loc.get('set3dBuilt',{}).get('objects',[])
+        return config.get('room') or loc.get('set3d'),inherited
 
     def _shot(self, action, data, intent):
         args = {'workspace':data['workspace'], **data['target']}
         viewed = require_result(self.call('series.shot.get', {'version':1,'input':args}))
         script = viewed.get('script', viewed.get('shot', {}).get('script', {})); config = copy.deepcopy(script.get('scene3d'))
         if not config: raise ValueError('target is not a 3D shot')
-        room = self._series_room(data,script) if (data.get('at') or {}).keys() & {'mark','anchor'} else None
-        rows,warnings = change_items(config.get('objects',[]), action,data,self._item(data, replacing=action=='update'),room)
+        from services.series_set_items import merged_items, store_items
+        room,inherited = self._series_room(data,script)
+        objects=merged_items(config.get('objects',[]),inherited,config.get('removedSetObjects',[]))
+        rows,warnings = change_items(objects, action,data,self._item(data, replacing=action=='update'),room)
         if action != 'list':
-            config['objects']=rows
+            store_items(config,rows,inherited)
             require_result(self.call('series.shot.update',{'version':1,'intent_id':f'{intent}-edit','input':{**args,'changes':{'scene3d':config}}}))
         return {'items':rows,'warnings':warnings}
 

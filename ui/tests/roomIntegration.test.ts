@@ -18,3 +18,14 @@ test('production room camera and prop metadata survive compilation',()=>{
   assert.deepEqual(document.camera.eye,mold.cameras.find((c:{id:string})=>c.id==='ots_b').position)
   assert.equal(document.slots.find((s:{id:string})=>s.id==='lamp').setItem.heightM,.5)
 })
+
+
+test('inspector edits inherited props without freezing untouched set entries', async () => {
+  const { visibleRoomItems, roomItemOverrides } = await import('../src/features/series/inspector/roomItems')
+  const base = [{ objectId: 'lamp', scale: .2 }, { objectId: 'plant', scale: .8 }]
+  const moved = { ...base[0], position: [1, .75, 0] }
+  const overrides = roomItemOverrides(base, [moved])
+  assert.deepEqual(overrides, { objects: [moved], removedSetObjects: ['plant'] })
+  assert.deepEqual(visibleRoomItems(base, overrides.objects, overrides.removedSetObjects), [moved])
+  assert.deepEqual(roomItemOverrides(base, base), { objects: [], removedSetObjects: [] })
+})

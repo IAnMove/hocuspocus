@@ -70,7 +70,9 @@ def _extras(value: dict[str, Any]) -> dict[str, Any]:
         kept = stored_backdrop(value.get("backdrop"))
         if kept is not None:
             extras["backdrop"] = kept
-    extras.update({key: value[key] for key in ("roomCamera", "roomSet") if key in value})
+    from services.series_set_items import hidden_items
+    extras.update(hidden_items(value))
+    extras.update({key: value[key] for key in ("roomCamera", "roomSet", "roomFingerprint") if key in value})
     extras.update(_look(value))
     return extras
 

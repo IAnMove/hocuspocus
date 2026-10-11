@@ -15,6 +15,7 @@ from services.production_rooms import prop_objects, validate_props
 from services.set_molds import resolve_mold
 from services.set_skins import build_skin, validate_skin
 from services.series_shot_edit import reset_approvals
+from services.series_set_items import merged_items
 
 _LOCK=threading.RLock()
 
@@ -34,9 +35,9 @@ def script_scene3d(shot,location):
     config.setdefault('roomCamera','two_shot')
     by_character={entry['characterId']:entry for entry in config.get('cast',[])}
     for index,raw in enumerate(shot.get('cast',[])):
-        if isinstance(raw,list): entry={'characterId':raw[0],'poseId':raw[1] if len(raw)>1 else 'base','mark':raw[2] if len(raw)>2 and isinstance(raw[2],str) else None}
-        elif isinstance(raw,dict): entry=raw
-        else: entry={'characterId':raw}
+        from services.series_script import _cast_entry
+        entry=_cast_entry(raw)
+        if not entry.get('characterId'): continue
         value=by_character.setdefault(entry['characterId'],{'characterId':entry['characterId'],'objectId':f'subject_{index+1}','poseId':entry.get('poseId','base')})
         if entry.get('mark'): value['mark']=entry['mark']
     config['cast']=list(by_character.values())
@@ -62,10 +63,10 @@ def inherit_shot(series,shot):
     if camera not in built['templates']: raise ValueError(f'unknown room camera: {camera}')
     config['template']=built['templates'][camera]
     # Every shot receives the location props once, then its own overrides win by id.
-    own=config.get('objects',[]);rows={p['objectId']:copy.deepcopy(p) for p in built.get('objects',[])}
-    rows.update({p['objectId']:p for p in own})
+    rows=merged_items(config.get('objects',[]),built.get('objects',[]),config.get('removedSetObjects',[]))
     if len(rows)>12: raise ValueError(f'object_limit: {len(rows)} requested; maximum 12')
-    if rows: config['objects']=list(rows.values())
+    if rows: config['objects']=rows
+    else: config.pop('objects',None)
     return result
 
 
@@ -89,7 +90,7 @@ def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
         kit=kits.get(characters.get(entry['characterId']),{})
         pose=entry.get('poseId','base')
         asset=kit.get('base',{}) if pose=='base' else kit.get('poses',{}).get(pose,{})
-        if not asset.get('source') or asset.get('status')!='approved':
+        if not asset.get('source') or asset.get('reviewState')!='approved':
             raise ValueError(f"Character {entry['characterId']} needs an approved {pose} pose")
         source=asset['source']
         if not source.startswith(('/api/','http://','https://')):
@@ -122,7 +123,9 @@ class SeriesSets:
             loc['set3d']=entry;loc.pop('set3dBuilt',None);loc['set3dStatus']={'status':'queued','fingerprint':digest}
             for episode in project.get('episodesById',{}).values():
                 for shot in episode.get('shots',[]):
-                    if shot.get('locationId')==loc['id'] and shot.get('productionMethod')=='animation_3d': reset_approvals(episode,shot['id'])
+                    if shot.get('locationId')==loc['id'] and shot.get('productionMethod')=='animation_3d':
+                        shot.setdefault('scene3d',{})['roomFingerprint']=digest
+                        reset_approvals(episode,shot['id'])
         self.change_series(data['workspace'],data['series_id'],store)
         if self.inline: self._build(data,entry,digest)
         else: threading.Thread(target=self._build,args=(data,entry,digest),daemon=True).start()

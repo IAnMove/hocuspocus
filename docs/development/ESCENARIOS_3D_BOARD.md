@@ -11,7 +11,7 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | A3 | feat/scene3d-add-items | #972 | Z1 local OK: 6691 Python + 12 escala/GLB/editor; UI; ratchet; docs | scene3d_items.py |
 | A5 | feat/set-skins | #973 | Z1 local OK: 6697 Python; UI; ratchet; docs | set_skins.py |
 | A6 | feat/set-molds-v1 | #974 | Z1 local OK: 6713 Python; UI; ratchet; docs | set_molds/*.json |
-| A7 | feat/sets-room-integration | #975 | Z1 en curso | production_rooms.py, series_sets.py |
+| A7 | feat/sets-room-integration | #975 | Z1 local OK: 6720 Python + 20 contrato/catálogo; UI; ratchet; docs | production_rooms.py, series_sets.py |
 | A8 | docs/sets-agent-guide | pendiente | pendiente | guías de agentes |
 | Z1 | ramas anteriores | pendiente | pendiente | comprobaciones completas |
 | Z2 | docs/sets-trial | pendiente | pendiente | defaults medidos e informe |
