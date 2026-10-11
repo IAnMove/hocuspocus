@@ -3,6 +3,7 @@ import { actionCard } from './actionTemplates'
 import { animeCard } from './animeTemplates'
 import { atmosSet, isAtmosDressing } from './atmos/registry.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
+import { templateTraits, templateTraitWords, type TemplateTraits } from './templateTraits.ts'
 import type { Scene3DDressing } from './types.ts'
 
 export const TEMPLATE_SETTINGS = [
@@ -46,12 +47,19 @@ export function templateSetting(id: Scene3DTemplateId): TemplateSetting {
   return settingFromDressing(applyScene3DTemplate(id).dressing)
 }
 
+const traits = new Map<Scene3DTemplateId, TemplateTraits>()
+/** The shot's derived traits (shot size, camera moves, what moves, uses), read once from the built document. */
+export function templateTraitsOf(id: Scene3DTemplateId): TemplateTraits {
+  if (!traits.has(id)) traits.set(id, templateTraits(applyScene3DTemplate(id), { category: TEMPLATE_CATEGORIES[id] }))
+  return traits.get(id)!
+}
+
 function templateSearchText(item: Scene3DTemplate, input: {
   locale: 'en' | 'es'
   titleOf: (id: Scene3DTemplateId) => string
 }) {
   const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale) ?? animeCard(item.id, input.locale)
-  return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)}`
+  return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)} ${templateTraitWords(templateTraitsOf(item.id)).join(' ')}`
 }
 
 function templateMatchesFilter(item: Scene3DTemplate, input: {
