@@ -216,17 +216,20 @@ try {
   await page.waitForFunction(name => !!window[name], bridge, { timeout: 60000 });
   const plan = snapshot.plan;
   const doc = snapshot.document;
+  // A still (a template thumbnail) names its output times; it needs no geometry report and no sound.
+  const times = Array.isArray(plan.times) ? plan.times : null;
+  const count = times ? times.length : plan.count;
   await page.evaluate(({ document: scene, plan: size, bridge: name }) => window[name].load(scene, size), { document: doc, plan, bridge });
   // Geometry warnings first; the stage is a pure function of time, so the frames do not change.
-  const geometry = await page.evaluate(name => (window[name].checkGeometry ? window[name].checkGeometry() : null), bridge).catch(() => null);
+  const geometry = times ? null : await page.evaluate(name => (window[name].checkGeometry ? window[name].checkGeometry() : null), bridge).catch(() => null);
   if (geometry) fs.writeFileSync(`${staging}/geometry.json`, JSON.stringify(geometry));
-  for (let index = 0; index < plan.count; index += 1) {
-    const png = await page.evaluate(({ seconds, bridge: name }) => window[name].frame(seconds), { seconds: Math.min(plan.duration, index / plan.fps), bridge });
+  for (let index = 0; index < count; index += 1) {
+    const png = await page.evaluate(({ seconds, bridge: name }) => window[name].frame(seconds), { seconds: times ? times[index] : Math.min(plan.duration, index / plan.fps), bridge });
     const name = String(index + 1).padStart(6, '0');
     fs.writeFileSync(`${frames}/frame_${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
-    fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: plan.count }));
+    fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: count }));
   }
-  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(error => {
+  const wav = times ? '' : await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(error => {
     fs.writeFileSync(`${staging}/audio-error.txt`, String(error?.message || error).slice(0, 800));
     return '';
   });
@@ -353,6 +356,13 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": MAX_VOICED_SECONDS,
         "qualities": list(QUALITIES), "motionBlur": {"shutterDegrees": [0, 360], "default": 180},
     }
+
+
+def render_lane():
+    """The lane an owned-browser render holds: the GPU, or a CPU lane when the renderer is told to stay on CPU."""
+    if scene_render_device() == "cpu":
+        return resource_scheduler.cpu_lane("world3d-render")
+    return resource_scheduler.local_gpu_lane(0)
 
 
 def renderer_available(app_url: str | None) -> bool:
@@ -1005,9 +1015,7 @@ class World3DExportService:
         return freeze_export_command(command)
 
     def resource_lane(self):
-        if scene_render_device() == "cpu":
-            return resource_scheduler.cpu_lane("world3d-render")
-        return resource_scheduler.local_gpu_lane(0)
+        return render_lane()
 
     def prepare_snapshot(self, snapshot: dict, cancelled) -> dict:
         return prepare_media_snapshot(snapshot, app_root=Path(__file__).resolve().parents[1],
@@ -1076,7 +1084,7 @@ class World3DExportService:
 __all__ = [
     "CANCEL_OPERATION", "OPERATION", "QUALITIES", "QUALITY_PROFILES", "RECEIPT_OPERATION", "World3DExportCancelled",
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
-    "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
+    "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size", "render_lane",
     "freeze_export_command", "http_error", "mux_frame_sequence", "mux_wav_audio", "plan_quality", "playwright_module",
     "staging_dir", "staging_token", "unsupported_capabilities", "write_png", "write_prores_master",
 ]

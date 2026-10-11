@@ -87,6 +87,17 @@ more than four shots in a row, next to `template_still` and `template_reused`.
 The contract behind all of it is
 [TEMPLATE_LIBRARY_MODEL.md](docs/development/TEMPLATE_LIBRARY_MODEL.md).
 
+Every shipped and stage card's `preview` is now the URL of our own picture of
+the shot, `GET /api/v1/world3d/templates/{id}/thumbnail`: the built template at
+mid-shot, 640×360 (portrait 360×640) WebP, painted by the same headless renderer
+as the 3D export with empty slots drawn as the editor's placeholders, and cached
+in the outputs' `.world3d-thumbs` once per template version (the compiled
+document and `RENDER_RECIPE`). One picture renders at a time; when it cannot be
+painted now the route answers 503 `thumbnail_unavailable` with `retryable: true`,
+never a broken image. `world3d.templates.get` returns `previewUrl`; `reference`
+stays a film still for inspiration. `scripts/render_template_thumbnails.py`
+pre-warms the cache of a running instance and reports times and failures.
+
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
 journey, volumetric poster lettering and particle morph typography. Editor, MCP

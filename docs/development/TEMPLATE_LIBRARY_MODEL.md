@@ -35,7 +35,8 @@ Every field is derived from the built document or the mold. Nothing is hand-writ
 | `kind` | enum | `look`: a lighting, colour, lens, genre or viral look (families `lighting`, `color`, `lenses`, `genre-looks`, `viral-looks`, `atmosphere`). `camera`: a camera technique in the generic citadel set (families `camera-movement`, `framing`, `camera-angles`, `composition`, `editing`, `time-and-motion`, `effects`). `transition`: a cut piece of 3 s or less whose effects carry it, or any `transition-*` id. `title`: a `title-*` id, or no subject slot and kinetic texts. `stage`: a `stage-*` card built from a mold. `scene`: everything else. |
 | `place` | string or null | the dressing id for a built template (`citadel`, `chase-street`, `atmos-reef`, `pixel-lake`…), the mold id for a stage. A filter; folded exact match. |
 | `travel` | boolean | a subject slot has a motion path: the figure crosses the set. |
-| `reference` | URL or null | a film still of the real technique, for inspiration only. It is **not** our render. The old `preview` field is null for every shipped card until the library renders its own thumbnails. |
+| `reference` | URL or null | a film still of the real technique, for inspiration only. It is **not** our render. |
+| `preview` | URL or null | our own render of the built shot at mid-shot, `/api/v1/world3d/templates/<id>/thumbnail`, added when a card is read (the JSON keeps `null`). Null on a personal template. |
 | `cameras` | list | stage cards only: the mold's named cameras (`two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2`, `entrance`). |
 
 `uses` gains `speed` and `impact`:

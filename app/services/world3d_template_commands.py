@@ -20,7 +20,7 @@ from services.world3d_scenes import (
 )
 from services.world3d_template_catalog import (
     CATALOG_OPERATION, SUGGEST_BEATS, SUGGEST_MAX_LIMIT, World3DTemplateError, page_templates, require_card,
-    search_report, suggest_templates, user_template_document,
+    search_report, suggest_templates, thumbnail_url, user_template_document,
 )
 from services.world3d_template_vocabulary import FORMATS, KINDS, MOVES, SHOT_SIZES, USES
 
@@ -61,7 +61,10 @@ _CARD_TRAITS = ("Each card also says what the built shot does: shot (close, medi
                 "(diálogo, plano general, persecución, cocina, triste...). Words no card knows come back as unknown_words and do not "
                 "count. match is full when every known word is in the card; when no card has them all, the best cards with at least "
                 "half of them (one of two) come back as partial and the reply says partial: true. Filters: shot, use, move, kind, place, "
-                "travel, subjects (at least that many subject slots, 0-2), format (landscape, portrait).")
+                "travel, subjects (at least that many subject slots, 0-2), format (landscape, portrait). preview is the URL of our own "
+                "render of the built shot at mid-shot (GET it to see the shot; empty slots show as the editor's placeholders; a 503 "
+                "thumbnail_unavailable is retryable) and is null on personal templates; reference is a film still of the real "
+                "technique, for inspiration only, never our render.")
 _FILTERS = {"shot": {"enum": list(SHOT_SIZES)}, "use": {"enum": list(USES)}, "move": {"enum": list(MOVES)},
             "subjects": {"type": "integer", "minimum": 0, "maximum": 2}, "format": {"enum": list(FORMATS)},
             "kind": {"enum": list(KINDS)}, "place": {"type": "string", "maxLength": 120}, "travel": {"type": "boolean"}}
@@ -76,7 +79,7 @@ _SUGGEST = {"line": {"type": "string", "maxLength": 400, "description": "The sho
 _OPERATIONS = {
     "world3d.templates.list": (False, "Search or list Video 3D shots. With a query, limit defaults to 8 and is at most 24. With no query, cards stay in id order and limit defaults to 50, the maximum. offset pages either; the reply includes total. roles keeps templates that have every listed role (for a cast and a painted set: [\"subject_1\", \"background\"]); setting keeps one place (studio, city, sea, stage, space...); category is a category (cinema, action, product, music, space, drive) or a tag (anime, pixel, psx, dark-fantasy, creative, perspective, animated). workspace is required. " + _CARD_TRAITS, {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
     CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles, setting, category and the trait filters (shot, use, move, kind, place, travel, subjects, format) work as in list, and every card carries the same traits and match; the reply lists unknown_words.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
-    "world3d.templates.get": (False, "Return one exact Video 3D template card and its editable document. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
+    "world3d.templates.get": (False, "Return one exact Video 3D template card, its editable document and previewUrl, the URL of our own render of the shot at mid-shot (GET it to see the shot; null on personal templates). The card's reference is a film still, for inspiration only. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
     "world3d.templates.suggest": (False, "Suggest up to limit (default 3, at most 8) Video 3D cards for a shot described as a writer would: line, speakers, place, mood, beat, format, kind. Each card adds a reason in plain words (subjects, shot, moves, uses, place); the reply carries unknown_words and the filters it derived. Read-only: it never instantiates. Same cards and match rule as list.", _SUGGEST, []),
     "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-.", {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
     "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
@@ -193,7 +196,9 @@ def _get(data, workspace_dir):
     template_id = data.get("template_id")
     card = require_card(template_id, workspace_dir=workspace_dir, workspace=data["workspace"])
     document = user_template_document(template_id, workspace_dir, data["workspace"]) if card.get("source") == "workspace" else compile_template_document(template_id)
-    return {"status": "completed", "card": card, "document": document, "objects": [
+    preview = thumbnail_url(card)
+    # A copy: require_card returns the cached catalogue card itself.
+    return {"status": "completed", "card": {**card, "preview": preview}, "previewUrl": preview, "document": document, "objects": [
         {"id": slot.get("id"), "role": slot.get("slot"), "media": slot.get("media"), "sourceUrl": slot.get("sourceUrl") or "",
          "marker": not slot.get("sourceUrl")} for slot in document.get("slots") or [] if isinstance(slot, dict)]}
 
