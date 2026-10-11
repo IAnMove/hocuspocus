@@ -17,6 +17,7 @@ from urllib.parse import quote, unquote, urlparse, parse_qs
 from services.production_scene_retry import receipt_action, _artifact_name
 from services import production_rooms as rooms
 from services.world3d_look import check_document_look
+from services.world3d_stage_documents import resolve_production_stage
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
@@ -42,7 +43,7 @@ MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scal
 
 
 def validate_scene3d_shot(shot):
-    config = shot.get("scene3d")
+    config = resolve_production_stage(shot.get("scene3d"))
     if not isinstance(config, dict) or set(config) - CONFIG_KEYS:
         raise ValueError("scene3d needs a native template or document and supported overrides")
     if ("template" in config) == ("document" in config):
@@ -253,7 +254,7 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
                               for cue in entry["clips"]]
         return entry
 
-    resolved = json.loads(json.dumps(config))
+    resolved = resolve_production_stage(json.loads(json.dumps(config)))
     if resolved.get("cast"):
         resolved["cast"] = {key: member(key, value) for key, value in spread_groups(resolved["cast"]).items()}
     if _source(resolved.get("subject")):
@@ -328,7 +329,7 @@ def compile_document(shot, duration):
         raise ValueError("Native Video 3D template compilation requires the app's installed UI dependencies")
     result = subprocess.run(
         [node, "--import", str(loader), str(ROOT / "ui/scripts/production-scene3d.mjs")],
-        input=json.dumps({"scene3d": shot["scene3d"], "duration": duration}),
+        input=json.dumps({"scene3d": resolve_production_stage(shot["scene3d"]), "duration": duration}),
         capture_output=True, text=True, cwd=ROOT / "ui", timeout=30, check=False,
     )
     if result.returncode:

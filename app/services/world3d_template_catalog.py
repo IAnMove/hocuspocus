@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from services.template_search import stem
+from services.world3d_stage_cards import stage_cards
 from services.world3d_template_vocabulary import FORMATS, MOVES, QUERY_STOP, SHOT_SIZES, USES, expand
 
 CATALOG_FILE = "world3d_templates.json"
@@ -54,7 +55,7 @@ def builtin_cards() -> tuple[dict, ...]:
     cards = data.get("catalog") if isinstance(data, dict) else None
     if not isinstance(cards, list) or not cards:
         raise World3DTemplateError("catalog_unreadable", "Video 3D template catalog is unreadable", 500)
-    return tuple(cards)
+    return (*cards, *stage_cards())
 
 
 def builtin_card(template_id: str) -> dict | None:
