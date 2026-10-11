@@ -20,6 +20,10 @@ const LIGHTS: Record<string, { color: string; intensity: number; direction: Vec3
   clinical: { color: '#eaf3ff', intensity: 1.1, direction: [-0.2, -1, 0.2] },
 }
 
+export function roomLightPreset(room: RoomSet) {
+  return LIGHTS[room.mold.lights] ?? LIGHTS.office_day
+}
+
 export function validRoomSet(value: unknown): value is RoomSet {
   if (!value || typeof value !== 'object') return false
   const room = value as RoomSet, mold = room.mold
@@ -42,7 +46,7 @@ export function stageRoomSet(document: Scene3DDocument, room?: RoomSet): Scene3D
   document.slots = document.slots.filter(slot => slot.slot !== 'background')
   document.environment = { reflectiveFloor: false, platform: false, bloom: 0, floorStyle: 'none' }
   document.camera = { family: 'fixed', eye: [...named.position], look: [...named.lookAt], fov: named.fov }
-  document.light = { kind: 'directional', ...(LIGHTS[room.mold.lights] ?? LIGHTS.office_day) }
+  document.light = { kind: 'directional', ...roomLightPreset(room) }
   return document
 }
 
