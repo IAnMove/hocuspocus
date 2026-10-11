@@ -2,7 +2,7 @@
 from collections import Counter
 
 from services.set_molds import catalog, load_mold, resolve_mold
-from services.world3d_stage_cards import card, measure, stage_card, stage_cards, trait_words
+from services.world3d_stage_cards import card, is_stage, measure, stage_card, stage_cards, trait_words
 from services.world3d_template_catalog import builtin_card, builtin_cards, search_templates
 from services.world3d_template_vocabulary import SHOT_SIZES, USES
 
@@ -75,3 +75,13 @@ def test_every_furniture_block_has_words_in_both_languages():
     from services.world3d_stage_cards import BLOCK_WORDS
     kinds = {block["kind"] for mold in catalog() for block in mold.get("blocks", [])}
     assert kinds <= set(BLOCK_WORDS), sorted(kinds - set(BLOCK_WORDS))
+
+
+def test_only_an_existing_mold_makes_a_stage_id():
+    """``stage-crane`` is a shipped concert scene, not the mold ``crane``: it compiles as the scene it is."""
+    assert builtin_card("stage-crane")["kind"] == "scene" and not is_stage("stage-crane")
+    assert is_stage("stage-bar") and is_stage("stage-cabina_avion")
+    assert not any(is_stage(value) for value in ("stage-", "stage-nope", "stage-../bar", "stage-Bar", None, "bar"))
+    stages = {stage["id"] for stage in stage_cards()}
+    assert not stages & {item["id"] for item in builtin_cards() if item.get("kind") != "stage"}, "a mold shadows a shipped card"
+    assert all(is_stage(stage_id) for stage_id in stages)

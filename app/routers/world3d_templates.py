@@ -14,7 +14,7 @@ from services.scene_documents import WORKSPACE_RE
 from services.world3d_template_catalog import World3DTemplateError, list_user_templates, user_template_row
 from services.world3d_template_commands import command_catalog, command_handlers
 from services.world3d_scenes import working_scenes
-from services.world3d_thumbnails import RETRY_AFTER_SECONDS, ThumbnailUnavailable, World3DThumbnails
+from services.world3d_thumbnails import RETRY_AFTER_SECONDS, ThumbnailNeedsExamples, ThumbnailUnavailable, World3DThumbnails
 
 
 def create_world3d_templates_router(workspace_dir: Callable[[str], str],
@@ -69,12 +69,16 @@ def create_world3d_templates_router(workspace_dir: Callable[[str], str],
     def template_thumbnail(template_id: str, request: Request):
         """Our own render of a shipped or stage card at mid-shot (WebP, else PNG), made once per template version.
 
-        A card's ``preview`` is this URL. 503 ``thumbnail_unavailable`` with ``retryable`` when it cannot be painted now."""
+        A card's ``preview`` is this URL. 503 ``thumbnail_unavailable`` with ``retryable`` when it cannot be painted now;
+        409 ``examples_not_installed`` with the ``collections`` to download when it shows example media not installed."""
         pictures.bind_origin(request.scope.get("server"))
         try:
             picture = pictures.thumbnail(template_id)
         except World3DTemplateError as error:
             raise HTTPException(error.status, detail={"code": error.code, "message": str(error)}) from error
+        except ThumbnailNeedsExamples as error:
+            raise HTTPException(409, detail={"code": "examples_not_installed", "collections": error.collections,
+                                             "files": error.files[:20], "message": str(error), "retryable": False}) from error
         except ThumbnailUnavailable as error:
             raise HTTPException(503, detail={"code": "thumbnail_unavailable", "reason": error.reason, "message": str(error),
                                              "retryable": True},

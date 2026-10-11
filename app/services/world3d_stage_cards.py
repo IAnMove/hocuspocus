@@ -6,8 +6,10 @@ card is built by ``world3d_stage_documents``; the traits here measure the camera
 from __future__ import annotations
 
 import math
+import re
 from functools import lru_cache
 
+from services import set_molds
 from services.set_molds import catalog
 
 PREFIX = "stage-"
@@ -33,7 +35,11 @@ BLOCK_WORDS = {
 
 
 def is_stage(template_id) -> bool:
-    return isinstance(template_id, str) and template_id.startswith(PREFIX)
+    """A ``stage-<mold>`` card of a mold that exists. A shipped scene named ``stage-…`` (``stage-crane``) is not one."""
+    if not isinstance(template_id, str) or not template_id.startswith(PREFIX):
+        return False
+    mold = template_id[len(PREFIX):]
+    return bool(re.fullmatch(r"[a-z][a-z0-9_]{0,79}", mold)) and (set_molds.MOLDS / f"{mold}.json").is_file()
 
 
 def mold_of(template_id: str) -> str:

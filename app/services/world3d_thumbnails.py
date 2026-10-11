@@ -8,7 +8,9 @@ the default workspace's ``.world3d-thumbs`` as ``<id>-<recipe>.webp``; the recip
 
 One render runs at a time and holds the export's render lane, with short waits and a short timeout. When no picture
 can be made now the caller gets ``ThumbnailUnavailable`` (HTTP 503 ``thumbnail_unavailable``, ``retryable``), never
-a broken image.
+a broken image. A card that shows optional example media this installation has not downloaded is refused before any
+render with ``ThumbnailNeedsExamples`` (HTTP 409 ``examples_not_installed``): the browser would wait for files the
+server cannot serve.
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from services import resource_scheduler
+from services.example_assets import ExampleAssets, example_assets
 from services.production_scene3d import RENDER_RECIPE
 from services.world3d_export import (
     World3DExportCancelled,
@@ -55,6 +58,7 @@ RENDER_TIMEOUT_SECONDS = 120.0
 RETRY_AFTER_SECONDS = 5
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,119}")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+EXAMPLES_PREFIX = "/examples/"
 
 
 class ThumbnailUnavailable(Exception):
@@ -63,6 +67,16 @@ class ThumbnailUnavailable(Exception):
     def __init__(self, reason: str, message: str) -> None:
         self.reason = reason
         super().__init__(message)
+
+
+class ThumbnailNeedsExamples(Exception):
+    """The card shows example media that is not installed here; it renders once its collections are downloaded (409)."""
+
+    def __init__(self, collections: list[str], files: list[str]) -> None:
+        self.collections = collections
+        self.files = files
+        what = ", ".join(collections) if collections else ", ".join(files[:3])
+        super().__init__(f"This template shows example media that is not installed: download {what} from the shot library first")
 
 
 @dataclass(frozen=True)
@@ -101,6 +115,28 @@ def thumbnail_recipe(document: dict) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def example_files(node) -> set[str]:
+    """The ``/examples/…`` files a compiled document shows, without query strings."""
+    if isinstance(node, str):
+        return {node[len(EXAMPLES_PREFIX):].split("?", 1)[0]} if node.startswith(EXAMPLES_PREFIX) else set()
+    values = node.values() if isinstance(node, dict) else node if isinstance(node, list) else ()
+    return set().union(*(example_files(value) for value in values))
+
+
+def missing_examples(document: dict, assets: ExampleAssets) -> tuple[list[str], list[str]]:
+    """The collections and files of the document's example media that this installation cannot serve."""
+    missing = set()
+    for name in example_files(document):
+        try:
+            if assets.cached(name) is not None:
+                continue
+        except KeyError:
+            pass                                          # not in the manifest: no download serves it either
+        missing.add(name)
+    collections = sorted(name for name, pack in assets.collections.items() if missing & set(pack["files"]))
+    return collections, sorted(missing)
+
+
 def encode_thumbnail(frame: Path) -> tuple[bytes, str]:
     """The painted PNG as WebP when Pillow can write it, else the PNG itself. A frame that is not a picture fails."""
     data = Path(frame).read_bytes()
@@ -133,8 +169,9 @@ class World3DThumbnails:
                  app_url: Callable[[], str] = lambda: os.environ.get("HOCUS_APP_URL", ""),
                  renderer=None, compile_document: Callable[[str], dict] = compile_template_document,
                  lock_wait: float = LOCK_WAIT_SECONDS, lane_wait: float = LANE_WAIT_SECONDS,
-                 timeout: float = RENDER_TIMEOUT_SECONDS) -> None:
+                 timeout: float = RENDER_TIMEOUT_SECONDS, examples: ExampleAssets = example_assets) -> None:
         self.outputs_dir = outputs_dir
+        self.examples = examples
         self.app_url = app_url
         self.renderer = renderer
         self.compile_document = compile_document
@@ -162,6 +199,9 @@ class World3DThumbnails:
         cached = self._cached(template_id, recipe)
         if cached is not None:
             return Thumbnail(cached, recipe, True)
+        collections, files = missing_examples(document, self.examples)
+        if files:
+            raise ThumbnailNeedsExamples(collections, files)
         if not self._lock.acquire(timeout=self.lock_wait):
             raise ThumbnailUnavailable("busy", "Another template thumbnail is rendering; ask again shortly")
         try:
@@ -263,6 +303,7 @@ class World3DThumbnails:
 
 
 __all__ = [
-    "FOLDER", "RETRY_AFTER_SECONDS", "Thumbnail", "ThumbnailUnavailable", "World3DThumbnails", "encode_thumbnail",
-    "paint_still", "thumbnail_plan", "thumbnail_recipe", "thumbnail_size",
+    "FOLDER", "RETRY_AFTER_SECONDS", "Thumbnail", "ThumbnailNeedsExamples", "ThumbnailUnavailable", "World3DThumbnails",
+    "encode_thumbnail", "example_files", "missing_examples", "paint_still", "thumbnail_plan", "thumbnail_recipe",
+    "thumbnail_size",
 ]
