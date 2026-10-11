@@ -512,7 +512,12 @@ export function patchScene3DSlot(
 ): Scene3DDocument {
   return {
     ...document,
-    slots: document.slots.map(slot => slot.id === slotId ? { ...slot, ...patch } : slot),
+    slots: document.slots.map(slot => {
+      if (slot.id !== slotId) return slot
+      const next = { ...slot, ...patch }
+      if (next.setItem && patch.scale !== undefined) next.setItem = { ...next.setItem, heightM: next.scale * (next.media === 'image' ? 2 : 1.7) }
+      return next
+    }),
   }
 }
 

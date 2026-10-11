@@ -16,6 +16,7 @@ from services.prop_library import get_prop
 from services.scene_documents import WORKSPACE_RE
 from services.set_generation import require_result
 from services.set_molds import resolve_mold
+from services.set_glb_size import glb_height
 from services.series_shot3d import MAX_OBJECTS
 
 _LOCK = threading.RLock()
@@ -25,12 +26,24 @@ def _positive(value):
     return type(value) in (int, float) and math.isfinite(value) and .01 <= value <= 30
 
 
+def _metre_position(point):
+    return isinstance(point, list) and len(point)==3 and all(type(n) in (int,float) and math.isfinite(n) for n in point)
+
+
+def _scene_target(target):
+    if not isinstance(target,dict): raise ValueError('target must be an object')
+    scene='scene_id' in target
+    expected={'scene_id'} if scene else {'series_id','episode_id','shot'}
+    if set(target)!=expected: raise ValueError('target must identify one scene or Series shot')
+    return scene
+
+
 def placement(at: dict, room: dict | None, height: float) -> tuple[list, list]:
     if not isinstance(at, dict) or len(at) != 1:
         raise ValueError('at must contain one mark, anchor or position')
     if 'position' in at:
         point = at['position']
-        if not isinstance(point, list) or len(point) != 3 or not all(type(n) in (int, float) and math.isfinite(n) for n in point):
+        if not _metre_position(point):
             raise ValueError('position must be three finite metre coordinates')
         return point, []
     if not room:
@@ -68,12 +81,25 @@ def change_items(objects, action, data, item=None, room=None, *, limit=MAX_OBJEC
             raise ValueError(f'object_limit: {len(rows)+1} requested; maximum {limit}')
         current = {'objectId': item_id(item['name'], {r['objectId'] for r in rows}), 'add': True}
         rows.append(current)
-    if item:
-        current.update(file=item['file'], media=item['media'])
-    height = data.get('heightM', item.get('heightM') if item else current.get('setItem', {}).get('heightM'))
+    warnings = _modify_item(current, data, item, room, action)
+    return rows, warnings
+
+
+def _item_height(current, data, item):
+    height = data.get('heightM')
+    if height is None and item: height = item.get('heightM')
+    if height is None: height = current.get('setItem', {}).get('heightM')
     if height is None:
         height = current.get('scale', 1) * (2 if current.get('media') == 'image' else 1.7)
     if not _positive(height): raise ValueError('heightM must be between 0.01 and 30 metres')
+    return height
+
+
+def _modify_item(current, data, item, room, action):
+    warnings = []
+    if item:
+        current.update(file=item['file'], media=item['media'])
+    height = _item_height(current, data, item)
     current.update(scale=height/(2 if current['media']=='image' else 1.7), grounded=True)
     meta = {**current.get('setItem', {}), 'heightM': height}
     if item and item.get('prop'): meta['prop'] = item['prop']
@@ -87,25 +113,15 @@ def change_items(objects, action, data, item=None, room=None, *, limit=MAX_OBJEC
         current['imageLook'] = {**current.get('imageLook', {}), 'grounded': True}
         if 'shadow' in data: current['imageLook']['shadow'] = .35 if data['shadow'] else 0
         if 'billboard' in data: current['billboard'] = bool(data['billboard'])
-    return rows, warnings
+    return warnings
 
-
-def glb_height(path):
-    from services.procedural_3d.glb_inspector import inspect_glb
-    if inspect_glb(path).status != 'valid':
-        raise ValueError('GLB inspector rejected this asset')
-    import trimesh
-    scene = trimesh.load(str(path), force='scene', process=False)
-    height = float(scene.bounds[1][1]-scene.bounds[0][1])
-    if not _positive(height): raise ValueError('GLB has no measurable height; provide heightM')
-    return height
 
 
 class ItemService:
     def __init__(self, workspace_dir, uploads_dir, call):
         self.workspace_dir, self.uploads_dir, self.call = workspace_dir, uploads_dir, call
 
-    def _item(self, data):
+    def _item(self, data, *, replacing=False):
         value = data.get('item')
         if value is None: return None
         if not isinstance(value, dict) or len(value) != 1: raise ValueError('item must name one prop, image or glb')
@@ -122,7 +138,7 @@ class ItemService:
             shutil.copy2(path,target);path=target
         height = data.get('heightM')
         if height is None and media == 'model3d': height = glb_height(path)
-        if height is None: raise ValueError('heightM is required for an image')
+        if height is None and not replacing: raise ValueError('heightM is required for an image')
         return {'file': path.relative_to(root).as_posix(), 'heightM': height, 'media': media, 'name': path.stem}
 
     def _series_room(self, data, shot):
@@ -137,7 +153,7 @@ class ItemService:
         script = viewed.get('script', viewed.get('shot', {}).get('script', {})); config = copy.deepcopy(script.get('scene3d'))
         if not config: raise ValueError('target is not a 3D shot')
         room = self._series_room(data,script) if (data.get('at') or {}).keys() & {'mark','anchor'} else None
-        rows,warnings = change_items(config.get('objects',[]), action,data,self._item(data),room)
+        rows,warnings = change_items(config.get('objects',[]), action,data,self._item(data, replacing=action=='update'),room)
         if action != 'list':
             config['objects']=rows
             require_result(self.call('series.shot.update',{'version':1,'intent_id':f'{intent}-edit','input':{**args,'changes':{'scene3d':config}}}))
@@ -148,14 +164,15 @@ class ItemService:
         workspace=data['workspace']; id_=data['target']['scene_id']
         scene=inspect_scene(workspace,id_,self.workspace_dir); slots=scene['document']['slots']
         rows=[{**s,'objectId':s['id'],'file':s.get('sourceUrl','')} for s in slots if s.get('slot')=='prop']
-        rows,warnings=change_items(rows,action,data,self._item(data),scene['document'].get('room'),limit=24-len(slots)+len(rows))
+        rows,warnings=change_items(rows,action,data,self._item(data, replacing=action=='update'),scene['document'].get('room'),limit=24-len(slots)+len(rows))
         if action=='list': return {'items':rows,'warnings':[],'revision':scene['revision']}
         if action=='remove': binding={'object_id':data['id'],'remove':True}
         else:
             updated=next(r for r in rows if r['objectId']==data.get('id')) if action=='update' else rows[-1]
-            binding={k:v for k,v in updated.items() if k not in {'file','objectId','id','add'}}
+            binding={k:v for k,v in updated.items() if k not in {'file','objectId','id','add','sourceUrl'}}
             binding.update(object_id=updated['objectId'],add=action=='add')
             file=updated['file']; binding['source_url']=file if file.startswith('/api/') else f"/api/v1/file/{quote(file)}?workspace={quote(workspace)}"
+            updated['sourceUrl']=binding['source_url']
         changed=patch_scene(workspace,id_,self.workspace_dir,{'bindings':[binding]},data.get('base_revision',scene['revision']))
         return {'items':rows,'warnings':warnings,'revision':changed['revision']}
 
@@ -163,8 +180,7 @@ class ItemService:
         try:
             data=arguments['input']; workspace=data['workspace']; action=operation.rsplit('.',1)[-1]
             if arguments.get('version')!=1 or not WORKSPACE_RE.fullmatch(workspace) or action not in {'add','update','remove','list'}: raise ValueError('invalid item command')
-            target=data.get('target',{}); scene='scene_id' in target
-            if (scene and set(target)!={'scene_id'}) or (not scene and set(target)!={'series_id','episode_id','shot'}): raise ValueError('target must identify one scene or Series shot')
+            scene=_scene_target(data.get('target',{}))
             if action=='add' and not data.get('item'): raise ValueError('item required')
             with _LOCK:
                 intent=check_intent_id(arguments.get('intent_id')) if action!='list' else 'read'

@@ -50,5 +50,35 @@ def test_working_scene_can_add_move_and_remove(tmp_path):
     update={'workspace':'demo','target':data['target'],'id':id_,'at':{'mark':'visitor'}}
     service.execute('scene3d.item.update',{'version':1,'intent_id':'move','input':update})
     assert inspect_scene('demo',scene['sceneId'],directory)['document']['slots'][0]['position'][1]==0
+    Image.new('RGBA',(4,4),(0,0,255,255)).save(tmp_path/'new-lamp.png')
+    service.execute('scene3d.item.update',{'version':1,'intent_id':'new-image','input':{
+        'workspace':'demo','target':data['target'],'id':id_,'item':{'image':'new-lamp.png'}}})
+    slot=inspect_scene('demo',scene['sceneId'],directory)['document']['slots'][0]
+    assert slot['scale']==.2 and slot['setItem']['heightM']==.4
+    assert 'new-lamp.png' in slot['sourceUrl']
     service.execute('scene3d.item.remove',{'version':1,'intent_id':'remove','input':{k:v for k,v in update.items() if k!='at'}})
     assert inspect_scene('demo',scene['sceneId'],directory)['document']['slots']==[]
+
+
+def test_editor_scale_preserves_physical_height_on_next_move():
+    from services.series_shot3d import normalize_scene3d
+    rows,_=change_items([],'add',{'at':{'position':[0,0,0]}},PROP)
+    rows[0]['scale']=.6
+    config=normalize_scene3d({'template':'two-shot','objects':rows})
+    moved,_=change_items(config['objects'],'update',{'id':rows[0]['objectId'],'at':{'position':[1,0,0]}})
+    assert moved[0]['scale']==.6 and moved[0]['setItem']['heightM']==1.2
+
+
+def test_existing_glb_uses_inspected_world_height_without_mesh_engine(tmp_path):
+    import pygltflib
+    from tests.test_glb_cleanup import write_parts_glb
+    from services.set_glb_size import glb_height
+    path=write_parts_glb(tmp_path/'object.glb',[(9,0,1.3)])
+    model=pygltflib.GLTF2().load_binary(str(path))
+    model.nodes.append(pygltflib.Node(children=[0],scale=[1,2,1],translation=[0,10,0]))
+    model.scenes[0].nodes=[1]
+    model.save_binary(str(path))
+    assert glb_height(path)==pytest.approx(2.6)
+    service=ItemService(lambda _:str(tmp_path),lambda:str(tmp_path/'uploads'),lambda *a:None)
+    item=service._item({'workspace':'demo','item':{'glb':'object.glb'}})
+    assert item['heightM']==pytest.approx(2.6)

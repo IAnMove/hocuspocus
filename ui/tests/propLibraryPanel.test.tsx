@@ -7,7 +7,8 @@ Object.assign(globalThis, { React, window: dom.window, document: dom.window.docu
 Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.window.navigator })
 test('prop palette lists, filters and adds approved objects at real height', async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
-  const { PropLibraryPanel, propSlot } = await import('../src/features/scene3d/PropLibraryPanel')
+  const { PropLibraryPanel } = await import('../src/features/scene3d/PropLibraryPanel')
+  const { propSlot } = await import('../src/features/scene3d/propLibrary')
   const original = globalThis.fetch
   const lamp = { id: 'lamp', name: 'Lamp', description: 'Desk light', style: 'paper', approved: true, heightM: .4, file: 'lamp.png' }
   globalThis.fetch = async () => new Response(JSON.stringify({ result: { revision: 1, props: [lamp, { ...lamp, id: 'cup', name: 'Cup', description: 'Mug' }] } }))
