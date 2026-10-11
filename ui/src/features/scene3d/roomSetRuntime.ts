@@ -1,6 +1,6 @@
 /** Shared preview/export room surfaces. Video uses the existing deterministic screen decoder. */
-import { AmbientLight, DoubleSide, Group, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TextureLoader } from 'three'
-import { hasAmbientLife, isExterior, keyLightBreath, roomLightPreset, roomPanels, type RoomPanel, type RoomSet } from './roomSet'
+import { AmbientLight, BackSide, BufferAttribute, Color, DoubleSide, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, PointLight, RepeatWrapping, SphereGeometry, SRGBColorSpace, TextureLoader } from 'three'
+import { hasAmbientLife, isExterior, keyLightBreath, roomLightPreset, roomPanels, roomSky, type RoomPanel, type RoomSet, type RoomSky } from './roomSet'
 import { defaultMediaScreen, type MediaScreen } from './mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from './screenMediaRuntime'
 
@@ -20,8 +20,10 @@ export class RoomSetRuntime {
     this.breathing = hasAmbientLife(room.mold)
     const preset = roomLightPreset(room), [width, depth, height] = room.mold.dimensions
     if (isExterior(room.mold)) {
-      // Open to the sky: the document's sun reaches in, the sky adds a soft fill.
+      // Open to the sky: the document's sun reaches in, the sky adds a soft fill and closes the view past the back wall.
       this.root.add(new AmbientLight('#ffffff', 0.8 * preset.intensity))
+      const sky = roomSky(room)
+      if (sky) this.root.add(skyDome(sky, Math.min(150, 6 * Math.max(width, depth, height))))
     } else {
       // A closed ceiling blocks the outdoor sun; light the interior independently.
       const fill = new AmbientLight('#ffffff', 1.2 * preset.intensity)
@@ -73,4 +75,21 @@ export class RoomSetRuntime {
     this.abort.abort(); this.screens.forEach(({ runtime }) => runtime.dispose()); this.root.removeFromParent()
     this.root.traverse(object => { if (object instanceof Mesh) { object.geometry.dispose(); const mat = object.material as MeshStandardMaterial; mat.map?.dispose(); mat.dispose() } })
   }
+}
+
+export const SKY_DOME = 'room-sky'
+
+/** An unlit dome from the horizon colour at eye level to the zenith colour overhead, centred on the room. */
+export function skyDome(sky: RoomSky, radius: number): Mesh {
+  const geometry = new SphereGeometry(radius, 32, 16)
+  const zenith = new Color(sky.zenith), horizon = new Color(sky.horizon), colour = new Color()
+  const positions = geometry.attributes.position, colours = new Float32Array(positions.count * 3)
+  for (let i = 0; i < positions.count; i++) {
+    const up = Math.max(0, positions.getY(i) / radius)
+    colour.copy(horizon).lerp(zenith, Math.sqrt(up)).toArray(colours, i * 3)
+  }
+  geometry.setAttribute('color', new BufferAttribute(colours, 3))
+  const dome = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, side: BackSide, depthWrite: false, fog: false }))
+  dome.name = SKY_DOME; dome.renderOrder = -1; dome.frustumCulled = false
+  return dome
 }

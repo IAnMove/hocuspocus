@@ -38,6 +38,13 @@ export function roomLightPreset(room: RoomSet): RoomLight {
   return LIGHTS[room.mold.lights] ?? LIGHTS.office_day
 }
 
+export type RoomSky = { zenith: string; horizon: string }
+const SKIES: Record<string, RoomSky> = presets.skies
+/** The sky an exterior opens onto, from its sun preset: without it the camera sees the empty scene past the back view. */
+export function roomSky(room: RoomSet): RoomSky | undefined {
+  return isExterior(room.mold) ? SKIES[room.mold.lights] ?? SKIES.daylight : undefined
+}
+
 /** ±8 % over 6 s: the same scene second always gives the same light, so an export paints a frame the same way twice. */
 export function keyLightBreath(seconds: number) {
   return 1 + BREATH_DEPTH * Math.sin((2 * Math.PI * seconds) / BREATH_PERIOD)

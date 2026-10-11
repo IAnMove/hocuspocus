@@ -9,5 +9,10 @@
     "daylight": {"color": "#fff4dc", "intensity": 1.25, "direction": [-0.55, -1, -0.35]},
     "dusk": {"color": "#ffb37c", "intensity": 0.9, "direction": [-0.9, -0.35, -0.3]},
     "night_sky": {"color": "#9fb4e0", "intensity": 0.45, "direction": [0.3, -0.8, -0.5]}
+  },
+  "skies": {
+    "daylight": {"zenith": "#79aedf", "horizon": "#dfe9f1"},
+    "dusk": {"zenith": "#4a5384", "horizon": "#efab86"},
+    "night_sky": {"zenith": "#050a1a", "horizon": "#1d2b50"}
   }
 }
