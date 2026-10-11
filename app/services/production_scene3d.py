@@ -30,6 +30,9 @@ FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camer
 LIGHTS = ("noon", "golden", "overcast", "night", "neon", "stage", "campfire")
 FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
+# Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
+# of a production is then exported again on its next run instead of reusing the stale file.
+RENDER_RECIPE = 1
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
@@ -153,11 +156,11 @@ def _check_diorama(entry):
 
 def _check_parallax(entry):
     """A parallax set spelled out: the far picture as source, cutout layers at depths, the key colour, a ground slab."""
-    layers, key = entry.get("layers"), entry.get("key", "#00ff00")
+    layers, key = entry.get("layers"), entry.get("key", "#ff00ff")
     if not isinstance(layers, list) or not 0 < len(layers) <= 3 or not all(
-            isinstance(layer, dict) and set(layer) == {"source", "depth"} and _source(layer["source"]) and layer["depth"] in LAYER_DEPTHS
-            for layer in layers):
-        raise ValueError("scene3d.background.layers lists 1-3 {source, depth: mid|near} painted cutouts")
+            isinstance(layer, dict) and {"source", "depth"} <= set(layer) <= {"source", "depth", "foot"} and _source(layer["source"])
+            and layer["depth"] in LAYER_DEPTHS and _measure(layer.get("foot", 0), 0, 0.9) for layer in layers):
+        raise ValueError("scene3d.background.layers lists 1-3 {source, depth: mid|near, foot?} painted cutouts")
     if not (isinstance(key, str) and len(key) == 7 and key[0] == "#" and all(ch in "0123456789abcdefABCDEF" for ch in key[1:])):
         raise ValueError("scene3d.background.key is the layers' chroma-key colour, #rrggbb")
     if "houses" in entry:
@@ -405,7 +408,8 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
         shot = {**shot, "scene3d": resolve_media(shot["scene3d"], stills=spec.get("stills"), root=production.root,
                                                  workspace=production.ws, models=production.state.get("models"),
                                                  sets=production.state.get("sets"))}
-        source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0)}, sort_keys=True)
+        source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0),
+                             "recipe": RENDER_RECIPE}, sort_keys=True)
         fingerprint = hashlib.sha256(source.encode()).hexdigest()[:16]
         if clips.get(key, {}).get("fingerprint") == fingerprint and (production.root / clips[key]["file"]).is_file():
             continue

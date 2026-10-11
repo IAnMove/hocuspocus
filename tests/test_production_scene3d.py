@@ -711,13 +711,14 @@ def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
 
 
 PARALLAX = {"source": "/api/v1/uploads/far.png", "key": "#00ff00",
-            "layers": [{"source": "/api/v1/uploads/mid.png", "depth": "mid"}, {"source": "/api/v1/uploads/near.png", "depth": "near"}],
+            "layers": [{"source": "/api/v1/uploads/mid.png", "depth": "mid", "foot": 0.25}, {"source": "/api/v1/uploads/near.png", "depth": "near"}],
             "ground": {"source": "/api/v1/file/ground.glb?workspace=t", "height": 0.2, "size": 80}}
 
 
 def test_a_parallax_background_is_checked():
     validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX))
     for bad in ({**PARALLAX, "layers": []}, {**PARALLAX, "layers": [{"source": "m.png", "depth": "far"}]}, {**PARALLAX, "key": "green"},
+                {**PARALLAX, "layers": [{"source": "m.png", "depth": "mid", "foot": 2}]},
                 {**PARALLAX, "houses": [{"source": "h.glb", "width": 5, "height": 6}]}):
         with pytest.raises(ValueError):
             validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=bad))
@@ -734,9 +735,23 @@ def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips
     assert all(slot["imageLook"]["colorKey"]["color"] == "#00ff00" and slot["imageLook"]["unlit"] for slot in layers.values())
     camera_z = doc["camera"]["eye"][2]
     assert layers["set-layer-mid"]["position"][2] <= -9, "the mid layer stands well behind the cast, away from the camera"
+    assert layers["set-layer-mid"]["position"][1] == pytest.approx(-0.25 * 2 * layers["set-layer-mid"]["scale"]), "lowered by the empty key under its pieces"
     assert 0 < layers["set-layer-near"]["position"][2] < camera_z, "the near layer stands between the camera and the cast"
     assert layers["set-layer-mid"]["scale"] > layers["set-layer-near"]["scale"] > 0, "each layer covers the view at its distance"
     assert next(slot for slot in doc["slots"] if slot["id"] == "set-ground")["position"][1] == 0
     orbit = compile_document(cast_shot(template="dance-orbit", background=PARALLAX, cast=hero), 4)
     ids = {slot["id"] for slot in orbit["slots"]}
     assert "set-layer-mid" in ids and "set-layer-near" not in ids, "an orbit would cross the near layer"
+
+
+def test_a_renderer_recipe_change_exports_every_clip_again(tmp_path, monkeypatch):
+    from services import production_scene3d
+
+    production = Production(tmp_path)
+    render(production)
+    before = production.state["clips"]["hero"]
+    monkeypatch.setattr(production_scene3d, "RENDER_RECIPE", production_scene3d.RENDER_RECIPE + 1)
+    render(production)
+    after = production.state["clips"]["hero"]
+    assert after["fingerprint"] != before["fingerprint"] and after["file"] != before["file"]
+    assert len(production.calls) == 4

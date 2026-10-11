@@ -85,13 +85,13 @@ def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
 
 
 def _baked(entry: dict, rig: str, root: Any = None) -> list[str] | None:
-    """The clips a spec model's rig bakes, or None when any clip resolves (a humanoid with a fallback stands in).
-    A GLB played as it is (rig none) has the clips it brought, read from the file when the workspace is known."""
+    """The clips a spec model's rig bakes, or None when the gate cannot tell. A GLB played as it is (rig none) has
+    the clips it brought, read from the file when the workspace is known."""
     from services.production_models import HUMANOID_CLIPS, PROFILE_CLIPS
     if rig == "none":
         return _brought(entry, root)
-    if rig == "humanoid" and entry.get("fallback"):
-        return None
+    # A humanoid with a fallback either bakes its animations (the rig takes the body) or stands any of them in
+    # with the profile's clips (it does not): a clip outside its animations is baked in neither case.
     return list(entry.get("animations") or (HUMANOID_CLIPS if rig == "humanoid" else PROFILE_CLIPS.get(rig, [])))
 
 
@@ -209,16 +209,36 @@ def _scene3d_warnings(spec: dict, shots: list[dict], root: Any) -> list[dict]:
     templates: dict[str, list[str]] = {}
     boxes: dict[str, list[str]] = {}
     still: list[str] = []
+    frozen: dict[str, list[str]] = {}
     for shot in shots:
         config = shot.get("scene3d") if shot.get("kind") == "scene3d" and isinstance(shot.get("scene3d"), dict) else None
         if config is not None:
             _scan_scene3d(str(shot.get("key")), config, root, rigged, templates, boxes, still)
+            if _still_template_shot(config):
+                frozen.setdefault(str(config.get("template")), []).append(str(shot.get("key")))
     found = [{"code": "procedural_model", "model": name, "shots": keys,
               "hint": "built from boxes; make it with spec.models (textured Hunyuan3D, rigged)"} for name, keys in boxes.items()]
     if still:
         found.append({"code": "model_not_animated", "objects": still, "hint": "give rigged models a clip or clips"})
     found += [{"code": "template_reused", "template": name, "shots": keys} for name, keys in templates.items() if len(keys) > REUSED_TEMPLATE]
+    found += [{"code": "template_still", "template": name, "shots": keys,
+               "hint": "the template animates nothing: give the cast a clip, add motion or a camera, play it in a world, "
+                       "or pick a card whose moves are not empty"} for name, keys in frozen.items()]
     return found
+
+
+_LIVELY_KEYS = ("motion", "camera", "rhythm", "world", "atmos", "pixelWorld")
+
+
+def _still_template_shot(config: dict) -> bool:
+    """A shipped template whose card is ``still`` with nothing in the shot that moves it: the shot will be a frozen picture."""
+    from services.world3d_template_catalog import builtin_card
+    card = builtin_card(str(config.get("template") or ""))
+    if not card or not card.get("still"):
+        return False
+    if any(config.get(key) for key in _LIVELY_KEYS):
+        return False
+    return not any(entry.get("clip") or entry.get("clips") for _role, entry in _sources(config))
 
 
 def _scan_scene3d(key: str, config: dict, root: Any, rigged: set, templates: dict, boxes: dict, still: list) -> None:

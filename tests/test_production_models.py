@@ -419,20 +419,35 @@ def test_a_parallax_set_draws_its_far_view_layers_and_ground_and_keys_the_layers
     make_models(production, spec, sleep=lambda _: None)
     drawn = {image["key"]: image for image in production.images}
     assert sorted(drawn) == ["set-temple-far", "set-temple-ground", "set-temple-mid", "set-temple-near"]
-    assert "chroma-key green" in drawn["set-temple-mid"]["prompt"] and "open space in the middle" in drawn["set-temple-mid"]["prompt"]
-    assert "chroma-key green" in drawn["set-temple-near"]["prompt"] and "edges" in drawn["set-temple-near"]["prompt"]
+    assert "chroma-key magenta" in drawn["set-temple-mid"]["prompt"] and "middle third of the picture empty" in drawn["set-temple-mid"]["prompt"]
+    assert "chroma-key magenta" in drawn["set-temple-near"]["prompt"] and "left and right thirds" in drawn["set-temple-near"]["prompt"]
     assert "chroma-key" not in drawn["set-temple-far"]["prompt"] and "forest temple" in drawn["set-temple-far"]["prompt"]
     assert "Painted fantasy world" in drawn["set-temple-mid"]["prompt"] and "heroes" not in drawn["set-temple-mid"]["prompt"], "the look, not the cast"
     assert "seamless tileable" in drawn["set-temple-ground"]["prompt"] and drawn["set-temple-mid"]["res"] == "1664x928"
     made = production.state["sets"]["temple"]
-    assert made["kind"] == "parallax" and made["key"] == "#00ff00" and made["sky"].endswith("far.png")
+    assert made["kind"] == "parallax" and made["key"] == "#ff00ff" and made["sky"].endswith("far.png")
     assert [layer["depth"] for layer in made["layers"]] == ["mid", "near"] and made["layers"][0]["source"].endswith("mid.png")
+    assert [layer["foot"] for layer in made["layers"]] == [0.0, 0.0], "painted to the bottom edge: nothing to lift"
     assert (tmp_path / "set-piece-temple-ground.glb").is_file() and made["ground"]["size"] == 80.0
     resolved = resolve_media({"template": "dance-stage", "background": "temple"}, stills={}, root=tmp_path, workspace="w", sets=production.state["sets"])
-    assert resolved["background"] == {"source": made["sky"], "layers": made["layers"], "key": "#00ff00", "ground": made["ground"]}
+    assert resolved["background"] == {"source": made["sky"], "layers": made["layers"], "key": "#ff00ff", "ground": made["ground"]}
     calls = len(production.images)
     make_models(production, spec, sleep=lambda _: None)
     assert len(production.images) == calls, "a built set is not drawn again"
     for bad in ({**PARALLAX, "mid": ""}, {k: v for k, v in PARALLAX.items() if k != "ground"}, {**PARALLAX, "roof": "tiles"}):
         with pytest.raises(ModelError, match="sets.temple"):
             check_models({"style": {}, "sets": {"temple": bad}})
+
+
+def test_a_parallax_layers_foot_is_the_empty_key_under_its_lowest_piece(tmp_path):
+    from PIL import Image
+    from services.production_parallax import foot
+
+    picture = Image.new("RGB", (64, 40), (255, 0, 255))
+    for x in range(10, 30):
+        for y in range(8, 30):
+            picture.putpixel((x, y), (120, 80, 40))
+    picture.save(tmp_path / "mid.png")
+    assert foot(tmp_path / "mid.png") == 0.25, "ten empty rows under the piece, of forty"
+    Image.new("RGB", (64, 40), (255, 0, 255)).save(tmp_path / "empty.png")
+    assert foot(tmp_path / "empty.png") == 0.0
