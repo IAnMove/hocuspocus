@@ -33,9 +33,12 @@ def generate_batch(call, workspace: str, requests: list[dict], intent: str) -> l
     admitted = []
     for index, request in enumerate(requests):
         tag = f'{intent}-{index}'
-        params = {'model_type': model, 'seed': request.get('seed', index+1), 'prompt': request['prompt'],
+        params = {**defaults()['imageParams'][model], 'model_type': model, 'seed': request.get('seed', index+1), 'prompt': request['prompt'],
                   'negative_prompt': request.get('negative', ''), 'resolution': request['resolution'],
                   'batch_size': request.get('candidates', 1)}
+        if not defaults()['imageNegativePrompt'][model]:
+            params['prompt'] += f". Avoid {params['negative_prompt']}." if params['negative_prompt'] else ''
+            params['negative_prompt'] = ''
         if request.get('refs'):
             params.update(image_refs=request['refs'], video_prompt_type='I')
         if request.get('guide'):

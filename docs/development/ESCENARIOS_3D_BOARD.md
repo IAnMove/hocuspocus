@@ -7,7 +7,7 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 |---|---|---|---|---|
 | A4 | feat/set-molds-format | #969 | Z1 local OK: 6677 Python; UI completa; ratchet; docs | set_molds.py, set_commands.py, roomSet.ts, roomSetRuntime.ts, set_defaults.json |
 | A1 | feat/mcp-remove-background | #970 | Z1 local OK: 6682 Python; UI completa; ratchet; docs | image_remove_background.py |
-| A2 | feat/prop-library | #971 | Z1 en curso; correcciones de admisión e interfaz | prop_library.py |
+| A2 | feat/prop-library | #971 | Z1: UI y ratchet OK; 6685 Python OK; carrera CI corregida con 55 tests | prop_library.py |
 | A3 | feat/scene3d-add-items | pendiente | pendiente | scene3d_items.py |
 | A5 | feat/set-skins | pendiente | pendiente | set_skins.py |
 | A6 | feat/set-molds-v1 | pendiente | pendiente | set_molds/*.json |
