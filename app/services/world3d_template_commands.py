@@ -19,9 +19,10 @@ from services.world3d_scenes import (
     publish_scene, put_user_template, talk_scene,
 )
 from services.world3d_template_catalog import (
-    CATALOG_OPERATION, World3DTemplateError, page_templates, require_card, search_templates, user_template_document,
+    CATALOG_OPERATION, SUGGEST_BEATS, SUGGEST_MAX_LIMIT, World3DTemplateError, page_templates, require_card,
+    search_report, suggest_templates, user_template_document,
 )
-from services.world3d_template_vocabulary import FORMATS, MOVES, SHOT_SIZES, USES
+from services.world3d_template_vocabulary import FORMATS, KINDS, MOVES, SHOT_SIZES, USES
 
 _LOCK = threading.RLock()
 _ID = {"type": "string", "minLength": 1, "maxLength": 120}
@@ -53,18 +54,30 @@ _ROLES = {"type": "array", "maxItems": 4, "items": {"enum": ["subject_1", "subje
 _CARD_TRAITS = ("Each card also says what the built shot does: shot (close, medium, wide, far, plate), distance (m), moves (the camera: "
                 "push, pull, slide, rise, descend, arc, orbit, zoom, roll, ride, track, shake), moving (what the template itself animates: "
                 "camera, subjects, props, screens, effects, backdrop, texts), still (true: only the cast's own clip or speech moves the picture), "
-                "subjects, props, screens, authoredFor (model or cutout), floor (none: frame waist-up or against the sky) and uses "
-                "(dialogue, talk, reaction, figure, establishing, action, reveal, product, music, drive, transition, title, look, plate). "
-                "A query is matched word by word in Spanish or English through a shared vocabulary (diálogo, plano general, persecución, "
-                "girar alrededor...). match is full when every word is in the card; when no card has them all, the best cards with more "
-                "than half come back as partial and the reply says partial: true. Filters: shot, use, move, subjects (at least that many "
-                "subject slots, 0-2), format (landscape, portrait).")
+                "subjects, props, screens, authoredFor (model or cutout), floor (none: frame waist-up or against the sky), uses "
+                "(dialogue, talk, reaction, figure, establishing, action, speed, impact, reveal, product, music, drive, transition, title, "
+                "look, plate), kind (scene, stage, camera, look, transition, title), place (a dressing, world or mold id) and travel "
+                "(true: a subject crosses the set). A query is matched word by word in Spanish or English through a shared vocabulary "
+                "(diálogo, plano general, persecución, cocina, triste...). Words no card knows come back as unknown_words and do not "
+                "count. match is full when every known word is in the card; when no card has them all, the best cards with at least "
+                "half of them (one of two) come back as partial and the reply says partial: true. Filters: shot, use, move, kind, place, "
+                "travel, subjects (at least that many subject slots, 0-2), format (landscape, portrait).")
 _FILTERS = {"shot": {"enum": list(SHOT_SIZES)}, "use": {"enum": list(USES)}, "move": {"enum": list(MOVES)},
-            "subjects": {"type": "integer", "minimum": 0, "maximum": 2}, "format": {"enum": list(FORMATS)}}
+            "subjects": {"type": "integer", "minimum": 0, "maximum": 2}, "format": {"enum": list(FORMATS)},
+            "kind": {"enum": list(KINDS)}, "place": {"type": "string", "maxLength": 120}, "travel": {"type": "boolean"}}
+_FILTER_NAMES = tuple(_FILTERS)
+_SUGGEST = {"line": {"type": "string", "maxLength": 400, "description": "The shot as a writer phrases it: what happens, in Spanish or English."},
+            "speakers": {"type": "integer", "minimum": 0, "maximum": 4, "description": "Who talks: 0 asks an establishing shot, 1 a talk shot, 2 or more a dialogue with that many subject slots."},
+            "place": {"type": "string", "maxLength": 120, "description": "Where, in plain words (cocina, rooftop, bosque)."},
+            "mood": {"type": "string", "maxLength": 120, "description": "The feeling, in plain words (triste, tense, laugh)."},
+            "beat": {"enum": list(SUGGEST_BEATS), "description": "The use the shot serves; wins over the one speakers implies."},
+            "format": {"enum": list(FORMATS)}, "kind": {"enum": list(KINDS)},
+            "limit": {"type": "integer", "minimum": 1, "maximum": SUGGEST_MAX_LIMIT}}
 _OPERATIONS = {
     "world3d.templates.list": (False, "Search or list Video 3D shots. With a query, limit defaults to 8 and is at most 24. With no query, cards stay in id order and limit defaults to 50, the maximum. offset pages either; the reply includes total. roles keeps templates that have every listed role (for a cast and a painted set: [\"subject_1\", \"background\"]); setting keeps one place (studio, city, sea, stage, space...); category is a category (cinema, action, product, music, space, drive) or a tag (anime, pixel, psx, dark-fantasy, creative, perspective, animated). workspace is required. " + _CARD_TRAITS, {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
-    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles, setting, category and the trait filters (shot, use, move, subjects, format) work as in list, and every card carries the same traits and match.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
+    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles, setting, category and the trait filters (shot, use, move, kind, place, travel, subjects, format) work as in list, and every card carries the same traits and match; the reply lists unknown_words.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
     "world3d.templates.get": (False, "Return one exact Video 3D template card and its editable document. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
+    "world3d.templates.suggest": (False, "Suggest up to limit (default 3, at most 8) Video 3D cards for a shot described as a writer would: line, speakers, place, mood, beat, format, kind. Each card adds a reason in plain words (subjects, shot, moves, uses, place); the reply carries unknown_words and the filters it derived. Read-only: it never instantiates. Same cards and match rule as list.", _SUGGEST, []),
     "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-.", {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
     "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
     "world3d.scene.inspect": (False, "List object ids, markers, traits and the current revision.", {"scene_id": _ID}, ["scene_id"]),
@@ -72,7 +85,7 @@ _OPERATIONS = {
     "world3d.scene.talk": (True, "Make an image object talk as a Character Kit cutout: its approved pose, the mouth drawing for each cue (audio.mouth_cues output, Rhubarb A-H/X) and its blink. Each line has start (scene seconds), cues and optionally audio (a workspace or upload URL) that joins the scene soundtrack. Calling it again replaces that object's lines. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "object_id": _ID, "role": {"type": "string"}, "kit_id": _ID, "pose": {"type": "string", "maxLength": 120}, "blink": {"type": "boolean"}, "lines": {"type": "array", "maxItems": 24, "items": {"type": "object", "additionalProperties": False, "required": ["start", "cues"], "properties": {"start": {"type": "number", "minimum": 0, "maximum": 600}, "cues": {"type": "array", "maxItems": 10000}, "audio": {"type": ["string", "object"]}, "gain": {"type": "number", "minimum": 0, "maximum": 1}}}}}, ["scene_id", "base_revision", "kit_id", "lines"]),
     "world3d.scene.preview": (False, "Paint cheap frames of the modified revision at concrete times. The frames are this scene, not the template thumbnail.", {"scene_id": _ID, "times": {"type": "array"}, "expected_revision": {"type": "integer"}}, ["scene_id"]),
     "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document.", {"scene_id": _ID}, ["scene_id"]),
-    "world3d.scene.apply_query": (True, "Search and instantiate only when the top card has every query word and strictly outranks the next. A tie or a partial match returns the cards as needs_choice and creates nothing; the trait filters (shot, use, move, subjects, format) narrow the search first.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, ["query"]),
+    "world3d.scene.apply_query": (True, "Search and instantiate only when the top card has every known query word and strictly outranks the next. A tie or a partial match returns the cards as needs_choice and creates nothing; unknown_words lists the query words no card knows; the trait filters (shot, use, move, kind, place, travel, subjects, format) narrow the search first.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, ["query"]),
     "world3d.receipt": (False, "Recover a stored Video 3D mutation after a lost response. Reuse the original intent_id.", {"operation": {"enum": sorted(_MUTATIONS)}, "intent_id": {"type": "string"}}, ["operation", "intent_id"]),
 }
 
@@ -125,6 +138,8 @@ def _effect(name, data, workspace_dir):
         return _search(data, workspace_dir)
     if name == "world3d.templates.get":
         return _get(data, workspace_dir)
+    if name == "world3d.templates.suggest":
+        return _suggest(data, workspace_dir)
     if name == "world3d.scene.inspect":
         return {"status": "completed", "scene": inspect_scene(data["workspace"], data["scene_id"], workspace_dir)}
     if name == "world3d.scene.preview":
@@ -146,18 +161,25 @@ def _effect(name, data, workspace_dir):
 
 
 def _filters(data):
-    return {name: data.get(name) for name in ("shot", "use", "move", "subjects", "format") if data.get(name) is not None}
+    return {name: data.get(name) for name in _FILTER_NAMES if data.get(name) is not None}
 
 
-def _search_cards(data, workspace_dir):
-    return search_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
-                            limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"],
-                            roles=data.get("roles"), setting=data.get("setting"), **_filters(data))
+def _search_report(data, workspace_dir):
+    return search_report(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
+                         limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"],
+                         roles=data.get("roles"), setting=data.get("setting"), **_filters(data))
 
 
 def _search(data, workspace_dir):
-    cards = _search_cards(data, workspace_dir)
-    return {"status": "completed", "templates": cards, "partial": bool(cards) and cards[0]["match"] == "partial"}
+    return {"status": "completed", **_search_report(data, workspace_dir)}
+
+
+def _suggest(data, workspace_dir):
+    found = suggest_templates(line=str(data.get("line") or ""), speakers=data.get("speakers"), place=str(data.get("place") or ""),
+                              mood=str(data.get("mood") or ""), beat=data.get("beat"), format=data.get("format"),
+                              kind=data.get("kind"), limit=data.get("limit"), workspace_dir=workspace_dir,
+                              workspace=data["workspace"])
+    return {"status": "completed", **found}
 
 
 def _list_page(data, workspace_dir):
@@ -183,13 +205,14 @@ def _preview(data, workspace_dir):
 
 
 def _apply_query(data, workspace_dir):
-    hits = _search_cards(data, workspace_dir)
+    report = _search_report(data, workspace_dir)
+    hits, unknown = report["templates"], report["unknown_words"]
     if not hits:
-        return {"status": "not_found", "candidates": [], "chosenId": None, "scene": None}
+        return {"status": "not_found", "candidates": [], "chosenId": None, "scene": None, "unknown_words": unknown}
     if hits[0]["match"] != "full" or (len(hits) > 1 and hits[0]["score"] == hits[1]["score"]):
-        return {"status": "needs_choice", "candidates": hits, "chosenId": None, "scene": None}
+        return {"status": "needs_choice", "candidates": hits, "chosenId": None, "scene": None, "unknown_words": unknown}
     scene = instantiate_template(data["workspace"], hits[0]["id"], workspace_dir)
-    return {"status": "completed", "candidates": hits, "chosenId": hits[0]["id"], "scene": scene}
+    return {"status": "completed", "candidates": hits, "chosenId": hits[0]["id"], "scene": scene, "unknown_words": unknown}
 
 
 def _input(arguments):

@@ -67,10 +67,13 @@ def _world3d_query(brief: Any) -> str:
 
 def _plan_world3d_shot(spec: dict, brief: dict, query: str) -> dict:
     """Place one real template id. A tied search is refused instead of inventing a shot."""
-    from services.world3d_template_catalog import search_templates
-    hits = search_templates(query, limit=8)
+    from services.world3d_template_catalog import search_report
+    report = search_report(query, limit=8)
+    hits = report["templates"]
     if not hits or hits[0].get("match") != "full":
-        raise PlanError("unknown_template", f"No Video 3D template matches {query}")
+        unknown = ", ".join(report["unknown_words"])
+        detail = f" (unknown words: {unknown})" if unknown else ""
+        raise PlanError("unknown_template", f"No Video 3D template matches {query}{detail}")
     if len(hits) > 1 and hits[0]["score"] == hits[1]["score"]:
         names = ", ".join(str(item["id"]) for item in hits[:8])
         raise PlanError("ambiguous_template", f"Several templates match {query}: {names}")
