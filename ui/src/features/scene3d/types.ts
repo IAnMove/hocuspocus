@@ -12,6 +12,9 @@ import { MOTION_LAB_IDS, type MotionLabId } from './motionlab/types'
 import { TRANSITION_TEMPLATE_IDS } from './transitionTemplateIds'
 import { SPEED_TEMPLATE_IDS } from './speedTemplateIds'
 import { TITLE_TEMPLATE_IDS } from './titleTemplateIds'
+import { DIALOGUE_TEMPLATE_IDS } from './dialogueTemplateIds'
+import { REACTION_TEMPLATE_IDS } from './reactionTemplateIds'
+import { GROUP_TEMPLATE_IDS } from './groupTemplateIds'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -138,6 +141,9 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...TRANSITION_TEMPLATE_IDS,
   ...SPEED_TEMPLATE_IDS,
   ...TITLE_TEMPLATE_IDS,
+  ...DIALOGUE_TEMPLATE_IDS,
+  ...REACTION_TEMPLATE_IDS,
+  ...GROUP_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]

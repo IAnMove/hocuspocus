@@ -3547,6 +3547,66 @@
     "title-end-card": {
       "title": "Cartela final",
       "description": "Un título asciende y una llamada a la acción que late aterriza debajo mientras la cámara deriva de lado sobre estrellas tenues."
+    },
+    "dialogue-ots-a": {
+      "title": "Por encima del hombro A",
+      "description": "Dos figuras se miran a 1,7 m; la cámara mira por encima del hombro del que habla a la izquierda hacia la cara del de la derecha, plano medio corto con empuje lento. Usa A para un interlocutor y B para el otro: las miradas casan."
+    },
+    "dialogue-ots-b": {
+      "title": "Por encima del hombro B",
+      "description": "El inverso de A: las mismas dos figuras, la cámara por encima del hombro del de la derecha hacia la cara del de la izquierda, a la misma distancia y con el mismo empuje, para que montar A y B conserve las miradas."
+    },
+    "dialogue-table": {
+      "title": "Sentados a la mesa",
+      "description": "Dos figuras sentadas a una mesa, en tres cuartos hacia la cámara, a la altura de los ojos de alguien sentado (1,15 m) con un deslizamiento suave. El reparto necesita un clip sentado (sit_down mantenido) o recortes sentados; enlaza un GLB de mesa en el hueco table."
+    },
+    "dialogue-triangle": {
+      "title": "Triángulo de tres",
+      "description": "Tres figuras en triángulo: una al fondo de cara a la cámara y dos de perfil delante; plano general con un arco lento. La tercera figura es el hueco prop person_3."
+    },
+    "dialogue-embrace": {
+      "title": "Abrazo",
+      "description": "Dos figuras muy juntas en un plano de dos cerrado a la altura de la cabeza, con empuje lento y un arco corto: un beso, un abrazo, una despedida."
+    },
+    "dialogue-phone-split": {
+      "title": "Llamada a pantalla partida",
+      "description": "Dos figuras lejos una de otra miran a cámara como las dos mitades del cuadro, con un separador oscuro y fino entre ellas; cada mitad un plano medio corto, con un empuje lento y simétrico: una llamada, una videollamada."
+    },
+    "reaction-push-face": {
+      "title": "Empuje a la cara",
+      "description": "Una figura; tras una pausa breve la cámara empuja despacio desde un plano medio corto hasta un primer plano de la cara."
+    },
+    "reaction-orbit-face": {
+      "title": "Arco sobre la cara",
+      "description": "Un arco lento de una décima de vuelta alrededor de la cabeza a corta distancia; la cara sigue encuadrada mientras el lugar gira detrás."
+    },
+    "reaction-turn-to-camera": {
+      "title": "Giro a cámara",
+      "description": "La figura gira sobre sí misma, de perfil a mirar a cámara, mientras la cámara aguanta cerca con un empuje mínimo."
+    },
+    "reaction-look-up": {
+      "title": "Contrapicado a la cara",
+      "description": "Un contrapicado sobre la cara que sube e inclina hacia arriba mientras empuja, cerca."
+    },
+    "reaction-impact": {
+      "title": "Impacto en la cara",
+      "description": "Llega el golpe: dos fotogramas blancos, una sacudida corta y un empuje brusco a la cara sobre colores planos."
+    },
+    "group-arc-five": {
+      "title": "Arco de cinco",
+      "description": "Una figura delante y cuatro detrás en arco, todas de cara a la cámara, con un empuje lento en plano general. Las cuatro de detrás son los huecos prop person_2 a person_5."
+    },
+    "group-line-four": {
+      "title": "Fila de cuatro",
+      "description": "Cuatro figuras en fila de cara a la cámara, con un deslizamiento lateral a la altura del pecho. Las dos de los extremos son los huecos prop person_3 y person_4."
+    },
+    "group-audience": {
+      "title": "Artista y público",
+      "description": "Un artista sobre una tarima baja y un público (crowd) de seis recortes vistos de espaldas en la parte baja del cuadro; la cámara sube en grúa por encima del público hacia el escenario. El público son los huecos prop crowd_1 a crowd_6; una imagen enlazada en crowd los llena todos."
+    },
+    "group-circle": {
+      "title": "Círculo de cinco",
+      "description": "Cinco figuras en círculo mirando al centro; la cámara orbita despacio por encima. Tres de ellas son los huecos prop person_3 a person_5."
     }
   },
   "atmos": {
