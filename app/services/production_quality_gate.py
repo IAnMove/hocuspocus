@@ -85,13 +85,13 @@ def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
 
 
 def _baked(entry: dict, rig: str, root: Any = None) -> list[str] | None:
-    """The clips a spec model's rig bakes, or None when any clip resolves (a humanoid with a fallback stands in).
-    A GLB played as it is (rig none) has the clips it brought, read from the file when the workspace is known."""
+    """The clips a spec model's rig bakes, or None when the gate cannot tell. A GLB played as it is (rig none) has
+    the clips it brought, read from the file when the workspace is known."""
     from services.production_models import HUMANOID_CLIPS, PROFILE_CLIPS
     if rig == "none":
         return _brought(entry, root)
-    if rig == "humanoid" and entry.get("fallback"):
-        return None
+    # A humanoid with a fallback either bakes its animations (the rig takes the body) or stands any of them in
+    # with the profile's clips (it does not): a clip outside its animations is baked in neither case.
     return list(entry.get("animations") or (HUMANOID_CLIPS if rig == "humanoid" else PROFILE_CLIPS.get(rig, [])))
 
 
