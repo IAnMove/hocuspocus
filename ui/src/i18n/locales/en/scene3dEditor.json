@@ -313,8 +313,10 @@
   "search": "Search templates",
   "all": "All",
   "allSettings": "Any set",
+  "allKinds": "Any kind",
   "filterCategory": "Shot type",
   "filterSetting": "Set",
+  "filterKind": "Kind",
   "filterCount": "{{shown}} / {{total}}",
   "noResults": "No templates match your search.",
   "play": "Play",
@@ -391,6 +393,14 @@
     "grid": "Grid",
     "circuit": "Circuit",
     "mainframe": "Mainframe"
+  },
+  "kind": {
+    "scene": "Scenes",
+    "stage": "Stages",
+    "camera": "Camera",
+    "look": "Looks",
+    "transition": "Transitions",
+    "title": "Titles"
   },
   "template": {
     "topdown-dragon-portals": {

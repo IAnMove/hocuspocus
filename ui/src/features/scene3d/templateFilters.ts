@@ -4,7 +4,7 @@ import { animeCard } from './animeTemplates'
 import { atmosSet, isAtmosDressing } from './atmos/registry.ts'
 import techniques from './cinematicTechniques.json' with { type: 'json' }
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
-import { templatePlace, templateTraits, templateTraitWords, type TemplateTraits } from './templateTraits.ts'
+import { TEMPLATE_KINDS, templatePlace, templateTraits, templateTraitWords, type TemplateKind, type TemplateTraits } from './templateTraits.ts'
 import type { Scene3DDressing } from './types.ts'
 
 export const TEMPLATE_SETTINGS = [
@@ -82,17 +82,21 @@ function templateSearchText(item: Scene3DTemplate, input: {
 function templateMatchesFilter(item: Scene3DTemplate, input: {
   category: 'all' | Scene3DTemplateFilter
   setting: 'all' | TemplateSetting
+  kind?: 'all' | TemplateKind
   locale: 'en' | 'es'
   titleOf: (id: Scene3DTemplateId) => string
 }, needle: string) {
   if (input.category !== 'all' && TEMPLATE_CATEGORIES[item.id] !== input.category && !item.tags?.some(tag => tag === input.category)) return false
   if (input.setting !== 'all' && templateSetting(item.id) !== input.setting) return false
+  if (input.kind && input.kind !== 'all' && templateTraitsOf(item.id).kind !== input.kind) return false
   return !needle || templateSearchText(item, input).toLocaleLowerCase().includes(needle)
 }
 
 export function filterScene3DTemplates(input: {
   category: 'all' | Scene3DTemplateFilter
   setting: 'all' | TemplateSetting
+  /** The shelf to browse (a scene, a camera technique, a look...); every shelf when omitted. */
+  kind?: 'all' | TemplateKind
   query: string
   locale: 'en' | 'es'
   titleOf: (id: Scene3DTemplateId) => string
@@ -105,4 +109,10 @@ export function settingsIn(templates: readonly Scene3DTemplate[]): TemplateSetti
   const seen = new Set<TemplateSetting>()
   for (const item of templates) seen.add(templateSetting(item.id))
   return TEMPLATE_SETTINGS.filter(setting => seen.has(setting))
+}
+
+export function kindsIn(templates: readonly Scene3DTemplate[]): TemplateKind[] {
+  const seen = new Set<TemplateKind>()
+  for (const item of templates) seen.add(templateTraitsOf(item.id).kind)
+  return TEMPLATE_KINDS.filter(kind => seen.has(kind))
 }

@@ -313,8 +313,10 @@
   "search": "Buscar plantillas",
   "all": "Todas",
   "allSettings": "Cualquier decorado",
+  "allKinds": "Cualquier clase",
   "filterCategory": "Tipo de plano",
   "filterSetting": "Decorado",
+  "filterKind": "Clase",
   "filterCount": "{{shown}} / {{total}}",
   "noResults": "No hay plantillas para esta búsqueda.",
   "play": "Reproducir",
@@ -391,6 +393,14 @@
     "grid": "Rejilla",
     "circuit": "Circuito",
     "mainframe": "Unidad central"
+  },
+  "kind": {
+    "scene": "Escenas",
+    "stage": "Escenarios",
+    "camera": "Cámara",
+    "look": "Estilos",
+    "transition": "Transiciones",
+    "title": "Rótulos"
   },
   "template": {
     "topdown-dragon-portals": {

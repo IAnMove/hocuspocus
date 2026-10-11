@@ -6,7 +6,8 @@ import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
 import { animeCard } from './animeTemplates'
 import { SCENE3D_TEMPLATES, type Scene3DTemplate, type Scene3DTemplateId } from './templates'
-import { filterScene3DTemplates, settingsIn, type TemplateSetting } from './templateFilters'
+import { filterScene3DTemplates, kindsIn, settingsIn, type TemplateSetting } from './templateFilters'
+import type { TemplateKind } from './templateTraits.ts'
 import { CORE_TEMPLATES, isBuiltinScene3DTemplate, isCoreTemplate, templateCollections } from './templateCatalog'
 import { ExampleDownloads } from './ExampleDownloads'
 import { Scene3DTemplateThumb } from './Scene3DTemplateThumb'
@@ -65,16 +66,23 @@ function ShotLibraryBody(props: ShotLibraryProps) {
   // A scene built from a workspace template (an agent's user-… id) has no built-in shot to preselect.
   const currentId = !props.userTemplateId && isBuiltinScene3DTemplate(props.document.templateId) ? props.document.templateId : undefined
   const [picked, setPicked] = useState<Pick | undefined>(currentId ? current : undefined)
-  const setView = (next: Partial<LibraryView>) => setViewState(before => { const view = { ...before, ...next }; saveLibraryView(view); return view })
+  // The shelf narrows one browse and is not remembered: a new shot type starts on every shelf again.
+  const [kind, setKind] = useState<'all' | TemplateKind>('all')
+  const setView = (next: Partial<LibraryView>) => {
+    if (next.category !== undefined) setKind('all')
+    setViewState(before => { const view = { ...before, ...next }; saveLibraryView(view); return view })
+  }
   const titleOf = (id: Scene3DTemplateId) => `${t(`template.${id}.title`)} ${t(`template.${id}.description`)}`
   const filter = { query: view.query, locale, titleOf } as const
   const candidates = view.category === 'recent' ? SCENE3D_TEMPLATES : mode === 'templates' ? CORE_TEMPLATES : SCENE3D_TEMPLATES.filter(item => !isCoreTemplate(item.id))
   const allowed = new Set(candidates.map(item => item.id))
   const inCatalog = (items: Scene3DTemplate[]) => items.filter(item => allowed.has(item.id))
+  const browsed = view.category === 'recent' || view.category === 'mine' ? undefined : view.category
   const shown = view.category === 'recent'
     ? recentTemplates(recent, filterScene3DTemplates({ ...filter, category: 'all', setting: 'all' }))
-    : view.category === 'mine' ? [] : inCatalog(filterScene3DTemplates({ ...filter, category: view.category, setting: view.setting }))
-  const settings = view.category === 'recent' || view.category === 'mine' ? [] : settingsIn(inCatalog(filterScene3DTemplates({ ...filter, category: view.category, setting: 'all' })))
+    : !browsed ? [] : inCatalog(filterScene3DTemplates({ ...filter, category: browsed, setting: view.setting, kind }))
+  const settings = browsed ? settingsIn(inCatalog(filterScene3DTemplates({ ...filter, category: browsed, setting: 'all' }))) : []
+  const kinds = browsed ? kindsIn(inCatalog(filterScene3DTemplates({ ...filter, category: browsed, setting: view.setting }))) : []
   const downloads = libraryDownloads(mode, picked)
   const use = (choice = picked) => {
     if (!choice || props.applyDisabled) return
@@ -99,7 +107,8 @@ function ShotLibraryBody(props: ShotLibraryProps) {
     <p className="border-b border-border px-4 py-2 text-xs text-text-muted">{t('shotLibrary.optionalExamples')}</p>
     {downloads && <ExampleDownloads disabled={props.editingLocked} {...downloads} />}
     <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[12rem_minmax(0,1fr)] md:overflow-hidden lg:grid-cols-[12rem_minmax(0,1fr)_20rem]">
-      <LibrarySidebar available={LIBRARY_CATEGORIES.filter(category => filterScene3DTemplates({ category, setting: 'all', query: '', locale, titleOf }).some(item => allowed.has(item.id)))} view={view} hasRecent={recent.length > 0} settings={settings} onView={setView} />
+      <LibrarySidebar available={LIBRARY_CATEGORIES.filter(category => filterScene3DTemplates({ category, setting: 'all', query: '', locale, titleOf }).some(item => allowed.has(item.id)))} view={view} hasRecent={recent.length > 0} settings={settings} onView={setView}
+        kinds={kinds} kind={kind} onKind={setKind} />
       <main className="min-h-0 overflow-y-auto p-3">
         {view.category === 'mine'
           ? <Scene3DUserTemplates document={props.document} workspace={props.workspace} preview={props.preview} disabled={props.editingLocked} selectedId={picked?.kind === 'user' ? picked.pack.id : undefined}
@@ -128,8 +137,9 @@ function recentTemplates(ids: Scene3DTemplateId[], matching: Scene3DTemplate[]) 
   return ids.flatMap(id => byId.get(id) ?? [])
 }
 
-function LibrarySidebar({ available, view, hasRecent, settings, onView }: {
+function LibrarySidebar({ available, view, hasRecent, settings, onView, kinds, kind, onKind }: {
   available: readonly LibraryCategory[]; view: LibraryView; hasRecent: boolean; settings: TemplateSetting[]; onView: (view: Partial<LibraryView>) => void
+  kinds: TemplateKind[]; kind: 'all' | TemplateKind; onKind: (kind: 'all' | TemplateKind) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const categories: LibraryCategory[] = [...(hasRecent ? ['recent' as const] : []), 'all', ...available, 'mine']
@@ -143,6 +153,12 @@ function LibrarySidebar({ available, view, hasRecent, settings, onView }: {
       {(['all', ...settings] as const).map(item => <button key={item} type="button" onClick={() => onView({ setting: item })} aria-pressed={view.setting === item}
         className={`min-h-8 rounded-full border px-2.5 text-[11px] font-medium ${view.setting === item ? 'border-amber-300 bg-amber-300/15 text-amber-100' : 'border-border text-text-muted hover:bg-bg-hover'}`}>
         {item === 'all' ? t('allSettings') : t(`setting.${item}`)}
+      </button>)}
+    </div>}
+    {kinds.length > 1 && <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('filterKind')}>
+      {(['all', ...kinds] as const).map(item => <button key={item} type="button" onClick={() => onKind(item)} aria-pressed={kind === item}
+        className={`min-h-8 rounded-full border px-2.5 text-[11px] font-medium ${kind === item ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-border text-text-muted hover:bg-bg-hover'}`}>
+        {item === 'all' ? t('allKinds') : t(`kind.${item}`)}
       </button>)}
     </div>}
   </nav>
