@@ -9,8 +9,8 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | A1 | feat/mcp-remove-background | #970 | 4 tests nuevos OK; borrador | image_remove_background.py |
 | A2 | feat/prop-library | #971 | 4 tests nuevos OK; borrador | prop_library.py |
 | A3 | feat/scene3d-add-items | #972 | 5 tests nuevos OK; borrador | scene3d_items.py |
-| A5 | feat/set-skins | pendiente | Código y tests | set_skins.py |
-| A6 | feat/set-molds-v1 | pendiente | pendiente | set_molds/*.json |
+| A5 | feat/set-skins | #973 | 4 tests nuevos OK; borrador | set_skins.py |
+| A6 | feat/set-molds-v1 | pendiente | Código y tests | set_molds/*.json |
 | A7 | feat/sets-room-integration | pendiente | pendiente | production_rooms.py, series_sets.py |
 | A8 | docs/sets-agent-guide | pendiente | pendiente | guías de agentes |
 | Z1 | ramas anteriores | pendiente | pendiente | comprobaciones completas |

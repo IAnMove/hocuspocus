@@ -1,0 +1,338 @@
+{
+  "id": "coche_interior",
+  "title": {
+    "es": "Interior de coche",
+    "en": "Car interior"
+  },
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      2.56,
+      4.0,
+      1.98
+    ],
+    "medium": [
+      3.2,
+      5,
+      2.2
+    ],
+    "large": [
+      4.0,
+      6.25,
+      2.464
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right"
+  ],
+  "openings": [
+    {
+      "wall": "back",
+      "kind": "window",
+      "x": 0.5,
+      "width": 2.5,
+      "height": 0.8,
+      "sill": 1.1,
+      "surface": "windshield"
+    },
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.35,
+      "width": 1.6,
+      "height": 0.7,
+      "sill": 1.1
+    },
+    {
+      "wall": "right",
+      "kind": "window",
+      "x": 0.35,
+      "width": 1.6,
+      "height": 0.7,
+      "sill": 1.1
+    }
+  ],
+  "blocks": [
+    {
+      "id": "seat_driver",
+      "kind": "seat",
+      "box": [
+        -0.7,
+        0,
+        -0.5,
+        0.6,
+        0.9,
+        0.65
+      ],
+      "surfaces": [
+        "seat_driver_front",
+        "seat_driver_top"
+      ]
+    },
+    {
+      "id": "seat_passenger",
+      "kind": "seat",
+      "box": [
+        0.7,
+        0,
+        -0.5,
+        0.6,
+        0.9,
+        0.65
+      ],
+      "surfaces": [
+        "seat_passenger_front",
+        "seat_passenger_top"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "kind": "dashboard",
+      "box": [
+        0,
+        0,
+        -1.7,
+        2.8,
+        0.85,
+        0.55
+      ],
+      "surfaces": [
+        "dashboard_front",
+        "dashboard_top"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "windshield",
+    "window_view",
+    "seat_driver_front",
+    "seat_driver_top",
+    "seat_passenger_front",
+    "seat_passenger_top",
+    "dashboard_front",
+    "dashboard_top"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "sit",
+      "position": [
+        0.0,
+        0,
+        -0.5
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "sit",
+      "position": [
+        0.64,
+        0,
+        0.5
+      ],
+      "facing": 180
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        1.12,
+        0,
+        1.5
+      ],
+      "facing": 180
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0,
+        1.7,
+        2.3
+      ],
+      "lookAt": [
+        0.0,
+        1.1,
+        -0.5
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -1.1199999999999999,
+        1.6,
+        -1.25
+      ],
+      "lookAt": [
+        0.64,
+        1.1,
+        0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        1.1199999999999999,
+        1.6,
+        1.25
+      ],
+      "lookAt": [
+        0.0,
+        1.1,
+        -0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0,
+        1.9500000000000002,
+        2.35
+      ],
+      "lookAt": [
+        0.0,
+        1.1,
+        -0.5
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -0.48,
+        1.6,
+        1.1
+      ],
+      "lookAt": [
+        0.0,
+        1.1,
+        -0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        0.48,
+        1.6,
+        -1.1
+      ],
+      "lookAt": [
+        0.64,
+        1.1,
+        0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -1.2800000000000002,
+        1.7,
+        1.5
+      ],
+      "lookAt": [
+        1.12,
+        1.1,
+        1.5
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "office_day",
+  "propAnchors": [
+    {
+      "id": "table_left",
+      "on": "dashboard_top",
+      "position": [
+        -0.7,
+        0.85,
+        -1.7
+      ],
+      "maxHeight": 0.6
+    },
+    {
+      "id": "table_right",
+      "on": "dashboard_top",
+      "position": [
+        0.7,
+        0.85,
+        -1.7
+      ],
+      "maxHeight": 0.6
+    },
+    {
+      "id": "floor_corner",
+      "on": "floor",
+      "position": [
+        0.0,
+        0,
+        -1.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_back",
+      "position": [
+        1.1199999999999999,
+        1.2,
+        -2.48
+      ],
+      "maxHeight": 0.8
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#85715b"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "windshield": {
+      "color": "#385872"
+    },
+    "window_view": {
+      "color": "#385872"
+    },
+    "seat_driver_front": {
+      "color": "#7b6754"
+    },
+    "seat_driver_top": {
+      "color": "#7b6754"
+    },
+    "seat_passenger_front": {
+      "color": "#7b6754"
+    },
+    "seat_passenger_top": {
+      "color": "#7b6754"
+    },
+    "dashboard_front": {
+      "color": "#385872"
+    },
+    "dashboard_top": {
+      "color": "#385872"
+    }
+  }
+}

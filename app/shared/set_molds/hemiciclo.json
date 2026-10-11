@@ -1,0 +1,640 @@
+{
+  "id": "hemiciclo",
+  "title": {
+    "es": "Hemiciclo",
+    "en": "Assembly chamber"
+  },
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      9.6,
+      9.6,
+      3.6
+    ],
+    "medium": [
+      12,
+      12,
+      4
+    ],
+    "large": [
+      15.0,
+      15.0,
+      4.48
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right"
+  ],
+  "openings": [
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.45,
+      "width": 1.6,
+      "height": 1.3,
+      "sill": 1.28
+    },
+    {
+      "wall": "right",
+      "kind": "door",
+      "x": 0.75,
+      "width": 0.9,
+      "height": 2.1
+    }
+  ],
+  "blocks": [
+    {
+      "id": "tribune",
+      "kind": "tribune",
+      "box": [
+        0,
+        0,
+        -4,
+        2.6,
+        0.4,
+        1.6
+      ],
+      "surfaces": [
+        "tribune_front",
+        "tribune_top"
+      ]
+    },
+    {
+      "id": "lectern",
+      "kind": "lectern",
+      "box": [
+        0,
+        0.4,
+        -4,
+        1,
+        1.2,
+        0.6
+      ],
+      "surfaces": [
+        "lectern_front",
+        "lectern_top"
+      ]
+    },
+    {
+      "id": "bench_0_0",
+      "kind": "bench",
+      "box": [
+        -2.33,
+        0,
+        1.906,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_0_front",
+        "bench_0_0_top"
+      ]
+    },
+    {
+      "id": "bench_0_1",
+      "kind": "bench",
+      "box": [
+        -1.793,
+        0,
+        2.742,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_1_front",
+        "bench_0_1_top"
+      ]
+    },
+    {
+      "id": "bench_0_2",
+      "kind": "bench",
+      "box": [
+        -0.974,
+        0,
+        3.303,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_2_front",
+        "bench_0_2_top"
+      ]
+    },
+    {
+      "id": "bench_0_3",
+      "kind": "bench",
+      "box": [
+        0.0,
+        0,
+        3.5,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_3_front",
+        "bench_0_3_top"
+      ]
+    },
+    {
+      "id": "bench_0_4",
+      "kind": "bench",
+      "box": [
+        0.974,
+        0,
+        3.303,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_4_front",
+        "bench_0_4_top"
+      ]
+    },
+    {
+      "id": "bench_0_5",
+      "kind": "bench",
+      "box": [
+        1.793,
+        0,
+        2.742,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_5_front",
+        "bench_0_5_top"
+      ]
+    },
+    {
+      "id": "bench_0_6",
+      "kind": "bench",
+      "box": [
+        2.33,
+        0,
+        1.906,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_0_6_front",
+        "bench_0_6_top"
+      ]
+    },
+    {
+      "id": "bench_1_0",
+      "kind": "bench",
+      "box": [
+        -3.728,
+        0,
+        2.449,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_0_front",
+        "bench_1_0_top"
+      ]
+    },
+    {
+      "id": "bench_1_1",
+      "kind": "bench",
+      "box": [
+        -2.869,
+        0,
+        3.787,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_1_front",
+        "bench_1_1_top"
+      ]
+    },
+    {
+      "id": "bench_1_2",
+      "kind": "bench",
+      "box": [
+        -1.558,
+        0,
+        4.684,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_2_front",
+        "bench_1_2_top"
+      ]
+    },
+    {
+      "id": "bench_1_3",
+      "kind": "bench",
+      "box": [
+        0.0,
+        0,
+        5.0,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_3_front",
+        "bench_1_3_top"
+      ]
+    },
+    {
+      "id": "bench_1_4",
+      "kind": "bench",
+      "box": [
+        1.558,
+        0,
+        4.684,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_4_front",
+        "bench_1_4_top"
+      ]
+    },
+    {
+      "id": "bench_1_5",
+      "kind": "bench",
+      "box": [
+        2.869,
+        0,
+        3.787,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_5_front",
+        "bench_1_5_top"
+      ]
+    },
+    {
+      "id": "bench_1_6",
+      "kind": "bench",
+      "box": [
+        3.728,
+        0,
+        2.449,
+        1.1,
+        0.85,
+        0.65
+      ],
+      "surfaces": [
+        "bench_1_6_front",
+        "bench_1_6_top"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "window_view",
+    "door",
+    "tribune_front",
+    "tribune_top",
+    "lectern_front",
+    "lectern_top",
+    "bench_0_0_front",
+    "bench_0_0_top",
+    "bench_0_1_front",
+    "bench_0_1_top",
+    "bench_0_2_front",
+    "bench_0_2_top",
+    "bench_0_3_front",
+    "bench_0_3_top",
+    "bench_0_4_front",
+    "bench_0_4_top",
+    "bench_0_5_front",
+    "bench_0_5_top",
+    "bench_0_6_front",
+    "bench_0_6_top",
+    "bench_1_0_front",
+    "bench_1_0_top",
+    "bench_1_1_front",
+    "bench_1_1_top",
+    "bench_1_2_front",
+    "bench_1_2_top",
+    "bench_1_3_front",
+    "bench_1_3_top",
+    "bench_1_4_front",
+    "bench_1_4_top",
+    "bench_1_5_front",
+    "bench_1_5_top",
+    "bench_1_6_front",
+    "bench_1_6_top"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "stand",
+      "position": [
+        -0.6,
+        0,
+        -0.6
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "stand",
+      "position": [
+        0.6,
+        0,
+        0.6
+      ],
+      "facing": 180
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        4.8,
+        0,
+        4.8
+      ],
+      "facing": 180
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0,
+        1.7,
+        5.8
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -4.199999999999999,
+        1.6,
+        -3.0
+      ],
+      "lookAt": [
+        0.6,
+        1.1,
+        0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        4.199999999999999,
+        1.6,
+        3.0
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0,
+        3.75,
+        5.85
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -1.7999999999999998,
+        1.6,
+        2.64
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        1.7999999999999998,
+        1.6,
+        -2.64
+      ],
+      "lookAt": [
+        0.6,
+        1.1,
+        0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -4.800000000000001,
+        1.7,
+        3.5999999999999996
+      ],
+      "lookAt": [
+        4.8,
+        1.1,
+        4.8
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "studio",
+  "propAnchors": [
+    {
+      "id": "table_left",
+      "on": "lectern_top",
+      "position": [
+        -0.25,
+        1.6,
+        -4
+      ],
+      "maxHeight": 0.6
+    },
+    {
+      "id": "table_right",
+      "on": "lectern_top",
+      "position": [
+        0.25,
+        1.6,
+        -4
+      ],
+      "maxHeight": 0.6
+    },
+    {
+      "id": "floor_corner",
+      "on": "floor",
+      "position": [
+        -4.8,
+        0,
+        -4.8
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_back",
+      "position": [
+        4.199999999999999,
+        1.2,
+        -5.98
+      ],
+      "maxHeight": 0.8
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#85715b"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "window_view": {
+      "color": "#385872"
+    },
+    "door": {
+      "color": "#d8d2c4"
+    },
+    "tribune_front": {
+      "color": "#7b6754"
+    },
+    "tribune_top": {
+      "color": "#7b6754"
+    },
+    "lectern_front": {
+      "color": "#7b6754"
+    },
+    "lectern_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_0_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_0_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_1_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_1_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_2_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_2_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_3_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_3_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_4_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_4_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_5_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_5_top": {
+      "color": "#7b6754"
+    },
+    "bench_0_6_front": {
+      "color": "#7b6754"
+    },
+    "bench_0_6_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_0_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_0_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_1_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_1_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_2_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_2_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_3_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_3_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_4_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_4_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_5_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_5_top": {
+      "color": "#7b6754"
+    },
+    "bench_1_6_front": {
+      "color": "#7b6754"
+    },
+    "bench_1_6_top": {
+      "color": "#7b6754"
+    }
+  }
+}

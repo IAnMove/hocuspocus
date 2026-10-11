@@ -279,7 +279,8 @@
         "tests/test_image_remove_background.py",
         "tests/test_prop_library.py",
         "tests/test_scene3d_items.py",
-        "tests/test_set_skins.py"
+        "tests/test_set_skins.py",
+        "tests/test_set_molds_catalog.py"
       ]
     },
     {
