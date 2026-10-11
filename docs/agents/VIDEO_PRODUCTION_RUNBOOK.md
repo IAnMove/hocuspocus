@@ -508,7 +508,10 @@ and the ground get neither the place nor the production's look.
   its move: `close` (0.6 of the template's distance), `medium` (0.8), `wide`
   (1.35), `far` (1.8), or a number 0.25–4. A `dance-orbit` over the sky islands
   with `"frame": "close"` fills the frame with the dancer; a two-shot with
-  `"frame": "wide"` shows the place.
+  `"frame": "wide"` shows the place. The camera frames the cast member at rest:
+  it follows where the slot places and turns the model, not the pose of the
+  clip, so raised arms or a nod never move the shot. A document may set
+  `camera.framing.track: "pose"` to stay on a moving face.
 - `light` may be a named light instead of a light object: `noon`, `golden`
   (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
   from the side), `stage` (hard white from the front), `campfire` (warm from
