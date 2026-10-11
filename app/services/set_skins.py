@@ -83,18 +83,26 @@ def _identity(mold,size,skin,style,location_image,root,workspace):
     return hashlib.sha256(json.dumps(data,sort_keys=True,allow_nan=False).encode()).hexdigest()
 
 
+def _heal_pass(picture, request, root, workspace, call, tag, index):
+    cfg=defaults()['texture']
+    rolled=roll_half(picture)
+    guide=root/f'{tag}-guide-{index}.png';mask=root/f'{tag}-mask-{index}.png'
+    rolled.save(guide);Image.fromarray(seam_mask(*picture.size,max(2,min(picture.size)//cfg['bandDivisor']))).save(mask)
+    response=generate_batch(call,workspace,[{**request,'guide':_url(guide,root,workspace),'mask':_url(mask,root,workspace)}],f'{tag}-heal-{index}')
+    with Image.open(asset_path(response[0]['files'][0],root,workspace)) as image:
+        return unroll(image.convert('RGB'))
+
+
 def _heal_texture(picture, request, root, workspace, call, tag):
-    cfg=defaults()['texture']; error=seam_error(picture)
-    for index in range(1+cfg['extraPasses']):
-        rolled=roll_half(picture)
-        guide=root/f'{tag}-guide-{index}.png';mask=root/f'{tag}-mask-{index}.png'
-        rolled.save(guide);Image.fromarray(seam_mask(*picture.size,max(2,min(picture.size)//cfg['bandDivisor']))).save(mask)
-        response=generate_batch(call,workspace,[{**request,'guide':_url(guide,root,workspace),'mask':_url(mask,root,workspace)}],f'{tag}-heal-{index}')
-        with Image.open(asset_path(response[0]['files'][0],root,workspace)) as image:
-            picture=unroll(image.convert('RGB'))
-        error=seam_error(picture)
+    """Inpaint the wrap seam: ``1 + extraPasses`` passes, and one more while the last pass still lowered the error
+    (a turbo pass costs seconds). The caller decides what a seam still over ``seamMax`` becomes."""
+    cfg=defaults()['texture']; error=seam_error(picture); configured=1+cfg['extraPasses']; passes=configured
+    for index in range(configured+1):
+        if index == passes: break
+        before=error
+        picture=_heal_pass(picture,request,root,workspace,call,tag,index); error=seam_error(picture)
         if error <= cfg['seamMax']: break
-    if error > cfg['seamMax']: raise ValueError(f'seam_visible: {error:.3f} > {cfg["seamMax"]}')
+        if index+1 == configured and error < before: passes+=1      # still improving: one last pass
     return picture,error
 
 
@@ -120,14 +128,25 @@ def _surface(name,value,mold,requests,sources,root,workspace,call,tag,location_i
         if name in requests: picture,metrics['seam_error']=_heal_texture(picture,requests[name],root,workspace,call,f'{tag}-{name}')
         target=tuple(map(int,defaults()['texture']['resolution'].split('x')))
         picture=picture.resize(target,Image.Resampling.LANCZOS)
-        metrics['seam_error']=seam_error(picture)
-        if metrics['seam_error']>defaults()['texture']['seamMax']: raise ValueError(f'{name}: texture seam exceeds configured maximum')
+        metrics['seam_error']=round(seam_error(picture),3)
+        if metrics['seam_error']>defaults()['texture']['seamMax']:
+            # A texture that will not tile must not cost the production: it is painted once over the surface instead.
+            kind='image';metrics['fallback']='image'
+            picture=ImageOps.fit(picture,wall_resolution(*surface_sizes(mold)[name]),method=Image.Resampling.LANCZOS)
     else:
         from services.diorama_set import trim_border
         if name in requests: picture=trim_border(picture)
         picture=ImageOps.fit(picture,wall_resolution(*surface_sizes(mold)[name]),method=Image.Resampling.LANCZOS)
     destination=root/f'{tag}-{name}.png';picture.save(destination)
     return {kind:{'asset':_url(destination,root,workspace)}, **({'tile_m':value.get('tile_m',defaults()['texture']['tile_m'])} if kind=='texture' else {}), **({'metrics':metrics} if metrics else {})}
+
+
+def skin_warnings(resolved):
+    """``seam_fallback`` for every texture painted once as an image because its seam stayed visible."""
+    limit=defaults()['texture']['seamMax']
+    return [{'code':'seam_fallback','surface':name,'seam_error':value['metrics']['seam_error'],'limit':limit}
+            for name,value in sorted((resolved or {}).items())
+            if isinstance(value,dict) and (value.get('metrics') or {}).get('fallback')=='image']
 
 
 def _hex(rgb):

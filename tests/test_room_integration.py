@@ -177,3 +177,29 @@ def test_room_templates_prepare_cutout_cast_and_fingerprint_compiler_output(tmp_
     assert service._templates(room,'same-skin','test')==first
     document['rendererRevision']=2
     assert service._templates(room,'same-skin','test')!=first
+
+
+def test_a_seam_that_stays_visible_does_not_stop_the_production(tmp_path,monkeypatch):
+    """The pilot: seam 1.846 > 1.5 after the heal passes stopped the run at `models`. Now the floor is painted once
+    and the log and production.status say so."""
+    import numpy as np
+    from PIL import Image
+    from services import production_rooms, set_skins
+    from services.music_production import status_summary
+    ramp=np.tile(np.linspace(0,255,1024)[None,:,None],(1024,1,3)).astype(np.uint8)
+    Image.fromarray(ramp).save(tmp_path/'floor-made.png')
+    def heal(call,ws,requests,tag):
+        Image.fromarray(set_skins.roll_half(ramp)).save(tmp_path/f'{tag}.png')
+        return [{'files':[f'{tag}.png']}]
+    monkeypatch.setattr(set_skins,'generate_batch',heal)
+    entry={'kind':'room','mold':'cocina','size':'medium','skin':{'floor':{'texture':'terracotta tiles','tile_m':1}},'props':[]}
+    record={'entry':entry,'style':'paper','pictures':{'floor':'floor-made.png'}}
+    lines=[]
+    production=SimpleNamespace(root=tmp_path,ws='default',mcp=lambda *a:None,log=lines.append,state={'sets':{'kitchen':record}})
+    production_rooms.build(production,'kitchen',record)
+    assert 'image' in record['room']['skin']['floor'] and 'pictures' not in record
+    assert [w['code'] for w in record['warnings']]==['seam_fallback']
+    assert any(line.startswith('set kitchen: seam_fallback floor') for line in lines)
+    shown=status_summary(production.state,'default')['set_warnings']
+    assert shown==[{**record['warnings'][0],'set':'kitchen'}] and shown[0]['seam_error']>1.5
+    assert 'set_warnings' not in status_summary({'sets':{'office':{'room':{}}}},'default')

@@ -539,6 +539,9 @@ def status_summary(state: dict, workspace: str, root: str | None = None, product
     counted = mismatches(state)
     if counted:
         summary["subject_counts"] = counted
+    from services.production_rooms import set_warnings
+    if set_warnings(state):
+        summary["set_warnings"] = set_warnings(state)
     from services.production_smoothness import for_status
     smooth = for_status(state)
     if smooth:
