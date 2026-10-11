@@ -1,5 +1,5 @@
 /** Interior geometry, authored in metres; surfaces retain wall UVs across opening cuts. */
-import type { Scene3DDocument, Vec3 } from './types'
+import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
 export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number }
 export type RoomOpening = { wall: string; kind: string; x: number; width: number; height: number; sill?: number; surface?: string }
@@ -24,6 +24,12 @@ export function roomLightPreset(room: RoomSet) {
   return LIGHTS[room.mold.lights] ?? LIGHTS.office_day
 }
 
+function roomImage(slot: Scene3DSlot): Scene3DSlot {
+  if (slot.media !== 'image') return slot
+  const surface = slot.surface ?? 'cutout'
+  return { ...slot, surface, ...(surface === 'cutout' ? { imageLook: { grounded: true, ...slot.imageLook } } : {}) }
+}
+
 export function validRoomSet(value: unknown): value is RoomSet {
   if (!value || typeof value !== 'object') return false
   const room = value as RoomSet, mold = room.mold
@@ -43,7 +49,7 @@ export function stageRoomSet(document: Scene3DDocument, room?: RoomSet): Scene3D
   if (!named) throw new Error(`unknown_room_camera:${room.camera}`)
   document.room = structuredClone(room)
   document.dressing = 'none'
-  document.slots = document.slots.filter(slot => slot.slot !== 'background')
+  document.slots = document.slots.filter(slot => slot.slot !== 'background').map(roomImage)
   document.environment = { reflectiveFloor: false, platform: false, bloom: 0, floorStyle: 'none' }
   document.camera = { family: 'fixed', eye: [...named.position], look: [...named.lookAt], fov: named.fov }
   document.light = { kind: 'directional', ...roomLightPreset(room) }

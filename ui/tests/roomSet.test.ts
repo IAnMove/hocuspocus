@@ -43,3 +43,13 @@ test('a closed room has its own fill and a key below its ceiling without a model
   assert(key.distance > Math.max(...mold.dimensions))
   room.dispose()
 })
+
+test('room production images become cutouts while an explicit wall keeps its material', () => {
+  const document = createDefaultScene3DDocument()
+  document.slots[0] = { ...document.slots[0], media: 'image', sourceUrl: '/person.png' }
+  document.slots[1] = { ...document.slots[1], media: 'image', sourceUrl: '/wall.png', surface: 'wall' }
+  const parsed = parseScene3DDocument(stageRoomSet(document, { mold }))!
+  assert.equal(parsed.slots[0].surface, 'cutout')
+  assert.equal(parsed.slots[0].imageLook?.grounded, true)
+  assert.equal(parsed.slots[1].surface, 'wall')
+})
