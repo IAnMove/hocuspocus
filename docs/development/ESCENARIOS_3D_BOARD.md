@@ -13,10 +13,14 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | A6 | feat/set-molds-v1 | #974 | Z1 local OK: 6713 Python; UI; ratchet; docs | set_molds/*.json |
 | A7 | feat/sets-room-integration | #975 | Z1 local OK: 6720 Python + 20 contrato/catálogo; UI; ratchet; docs | production_rooms.py, series_sets.py |
 | A8 | docs/sets-agent-guide | #976 | Z1 local OK: 6721 Python + 27 catálogo/Qwen; UI; ratchet; docs | guías de agentes |
-| Z1 | ramas anteriores | #969–#976 | Local completo; CI de las correcciones finales en curso | comprobaciones completas |
+| Z1 | ramas anteriores | #969–#976 | Local completo; comprobaciones remotas enlazadas en cada PR | comprobaciones completas |
 | Z2 | docs/sets-trial | #977 | Completado: 70 imágenes, croma190, seam_error1.1807, caché sin GPU | defaults medidos e informe |
 | Z3 | ramas anteriores | #969–#977 | Completado; correcciones y evidencias reales | evidencias por bloque |
-| Z4 | docs/sets-acceptance | pendiente | pendiente | aceptación completa |
+| Z4 | docs/sets-acceptance | #978 | Prueba MCP completada; revisión visual del usuario pendiente | aceptación completa |
 
 Los pequeños ganchos, el registro de tests y este tablero son compartidos secuencialmente por la pila.
 Coste fase 1: 0 tokens LLM externos; 0 generaciones; tokens Codex N/A.
+
+Entrega Z4: dos MP4 de ocho planos; cambio exclusivo a piel anime verificado por hashes y cuatro tomas del plató reutilizadas. Total local: 77 imágenes / 44 trabajos, 684 s de inferencia; 75 exports 3D y cuatro montajes. :42042 actualizado a b9435598; :42070 detenido.
+
+Revisión de Claude (2026-10-11), aplicada en la pila y propagada hasta #978: tiras de imagen en orden en las paredes frontal e izquierda con huecos (#969); vistas de ventana y puerta solapan el hueco para que las cámaras oblicuas no vean el fondo negro (#969); los frentes de mueble pintados dejan sus cantos en el color del molde (#969); el suelo conserva el color del molde bajo el tono automático de las paredes (#973, `skin.floorShade` en `set_defaults.json`); puerta visible en los 15 moldes (#969, #974); encabezado «Atrezo» en el inspector (#972). Sin renders nuevos: los MP4 de Z4 son anteriores a estas correcciones.
