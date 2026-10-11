@@ -36,3 +36,26 @@ def test_seven_cameras_see_a_character_and_seated_marks_clear_boxes(id_):
                 bx,by,bz,w,h,d=block['box']
                 overlaps=abs(x-bx)<w/2+.2 and abs(z-bz)<d/2+.2 and y<by+h and y+1.7>by
                 assert not overlaps,(id_,size,mark['id'],block['id'])
+
+
+@pytest.mark.parametrize('id_', sorted(EXPECTED))
+def test_dialogue_camera_rays_end_on_authored_room_surfaces(id_):
+    for size in ('small', 'medium', 'large'):
+        mold = resolve_mold(id_, size)
+        w, d, h = mold['dimensions']
+        bounds = [(-w / 2, w / 2), (0, h), (-d / 2, d / 2)]
+        surfaces = [('wall_left', 'wall_right'), ('floor', 'ceiling'), ('wall_back', 'wall_front')]
+        for camera in mold['cameras']:
+            origin = camera['position']
+            direction = [b - a for a, b in zip(origin, camera['lookAt'])]
+            exits = []
+            for axis, delta in enumerate(direction):
+                if abs(delta) < 1e-9:
+                    continue
+                side = int(delta > 0)
+                distance = (bounds[axis][side] - origin[axis]) / delta
+                exits.append((distance, surfaces[axis][side]))
+            _, surface = min(exits)
+            assert surface in mold['surfaces'], (id_, size, camera['id'], surface)
+            if surface.startswith('wall_'):
+                assert surface.removeprefix('wall_') in mold['walls']

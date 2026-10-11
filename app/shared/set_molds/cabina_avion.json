@@ -25,7 +25,8 @@
   "walls": [
     "back",
     "left",
-    "right"
+    "right",
+    "front"
   ],
   "openings": [
     {
@@ -365,6 +366,7 @@
     "wall_back",
     "wall_left",
     "wall_right",
+    "wall_front",
     "window_left_0",
     "window_left_1",
     "window_left_2",
@@ -716,6 +718,9 @@
     },
     "seat_3_3_top": {
       "color": "#b6c7cc"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
     }
   }
 }
