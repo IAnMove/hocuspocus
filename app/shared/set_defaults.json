@@ -35,7 +35,7 @@
     "auto": true,
     "hazeMax": 0.2,
     "borderShare": 0.9,
-    "colorDistance": 70,
+    "colorDistance": 190,
     "cropMargin": 0.02
   },
   "imageParams": {
