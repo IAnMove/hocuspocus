@@ -2109,11 +2109,11 @@
     },
     "cine-three-shot": {
       "title": "Plano de tres",
-      "description": "Encuadre. Tres figuras en un solo cuadro."
+      "description": "Encuadre. Tres figuras en un solo cuadro: dos huecos de reparto y una tercera figura de pie en el hueco de atrezo."
     },
     "cine-group-shot": {
       "title": "Plano de grupo",
-      "description": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados."
+      "description": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados: dos huecos de reparto y una tercera figura de pie en el hueco de atrezo."
     },
     "cine-insert": {
       "title": "Plano detalle",
@@ -2729,7 +2729,7 @@
     },
     "cine-stop-motion": {
       "title": "Stop motion",
-      "description": "Tiempo. Una pose fija. El modelo no avanza a saltos como una marioneta."
+      "description": "Tiempo. Una pose fija que avanza a saltos como una marioneta: la imagen se sostiene cada tres fotogramas."
     },
     "cine-low-shutter": {
       "title": "Obturación baja",
@@ -2757,11 +2757,11 @@
     },
     "cine-lens-flare": {
       "title": "Destello de lente",
-      "description": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo. No hay una pasada de destello."
+      "description": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo, con rayos de luz que cruzan el cuadro."
     },
     "cine-anamorphic-flare": {
       "title": "Destello anamórfico",
-      "description": "Efecto. Un cuadro amplio, bajo y brillante. No se dibujan las rayas."
+      "description": "Efecto. Un cuadro amplio, bajo y brillante, con rayos de luz dibujados encima."
     },
     "cine-halation": {
       "title": "Halación",
@@ -2769,7 +2769,7 @@
     },
     "cine-film-grain": {
       "title": "Grano de película",
-      "description": "Efecto. Un encuadre cercano y contrastado. No se aplica grano."
+      "description": "Efecto. Un encuadre cercano y contrastado, con grano de película sobre todo el plano."
     },
     "cine-bokeh": {
       "title": "Bokeh",
@@ -2797,15 +2797,15 @@
     },
     "cine-light-leak": {
       "title": "Fuga de luz",
-      "description": "Efecto. Una luz de borde muy alta desde un lado, en lugar de una fuga."
+      "description": "Efecto. Una luz de borde muy alta desde un lado y rayos de luz que se cuelan por el cuadro."
     },
     "cine-vignette": {
       "title": "Viñeta",
-      "description": "Efecto. Un charco de luz en el centro y un grado más oscuro alrededor."
+      "description": "Efecto. Un charco de luz en el centro y una viñeta que oscurece los bordes."
     },
     "cine-chromatic-aberration": {
       "title": "Aberración cromática",
-      "description": "Efecto. Un angular cerca de la figura, donde se verían los flecos de color. Los flecos no se dibujan."
+      "description": "Efecto. Un angular cerca de la figura, con un glitch leve que desdobla los bordes."
     },
     "cine-infrared": {
       "title": "Infrarrojo",
@@ -2857,7 +2857,7 @@
     },
     "cine-datamosh": {
       "title": "Datamosh",
-      "description": "Efecto. Un avance rápido y roto, con giro. Los píxeles no se derriten."
+      "description": "Efecto. Un avance rápido y roto, con giro, bajo un glitch que rasga la imagen."
     },
     "cine-diorama": {
       "title": "Diorama",

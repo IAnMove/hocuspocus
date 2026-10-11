@@ -2109,11 +2109,11 @@
     },
     "cine-three-shot": {
       "title": "Three-Shot",
-      "description": "Framing. Three figures in one frame."
+      "description": "Framing. Three figures in one frame: two cast slots and a third standing figure in the prop slot."
     },
     "cine-group-shot": {
       "title": "Group Shot",
-      "description": "Framing. A wider three-figure group, with air on both sides."
+      "description": "Framing. A wider three-figure group, with air on both sides: two cast slots and a third standing figure in the prop slot."
     },
     "cine-insert": {
       "title": "Insert Shot",
@@ -2729,7 +2729,7 @@
     },
     "cine-stop-motion": {
       "title": "Stop Motion",
-      "description": "Time. A locked pose. The model is not stepped like a puppet."
+      "description": "Time. A locked pose stepped like a puppet: the picture holds every three frames."
     },
     "cine-low-shutter": {
       "title": "Low Shutter",
@@ -2757,11 +2757,11 @@
     },
     "cine-lens-flare": {
       "title": "Lens Flare",
-      "description": "Effect. A low sun-style key aimed into the lens. There is no flare pass."
+      "description": "Effect. A low sun-style key aimed into the lens, with light rays streaming across the frame."
     },
     "cine-anamorphic-flare": {
       "title": "Anamorphic Flare",
-      "description": "Effect. A wide, low, bright frame. Streaks are not drawn."
+      "description": "Effect. A wide, low, bright frame with light rays drawn over it."
     },
     "cine-halation": {
       "title": "Halation",
@@ -2769,7 +2769,7 @@
     },
     "cine-film-grain": {
       "title": "Film Grain",
-      "description": "Effect. A contrasty close frame. Grain is not applied."
+      "description": "Effect. A contrasty close frame under film grain over the whole shot."
     },
     "cine-bokeh": {
       "title": "Bokeh",
@@ -2797,15 +2797,15 @@
     },
     "cine-light-leak": {
       "title": "Light Leak",
-      "description": "Effect. A hot edge light from the side, standing in for a leak."
+      "description": "Effect. A hot edge light from the side and light rays leaking across the frame."
     },
     "cine-vignette": {
       "title": "Vignette",
-      "description": "Effect. A pool of light in the center and a darker grade around it."
+      "description": "Effect. A pool of light in the center and a vignette that darkens the edges."
     },
     "cine-chromatic-aberration": {
       "title": "Chromatic Aberration",
-      "description": "Effect. A wide lens close to the figure, where color fringes would show. Fringes are not drawn."
+      "description": "Effect. A wide lens close to the figure, with a low glitch that fringes the edges."
     },
     "cine-infrared": {
       "title": "Infrared",
@@ -2857,7 +2857,7 @@
     },
     "cine-datamosh": {
       "title": "Datamosh",
-      "description": "Effect. A fast broken push with roll. Pixels are not melted."
+      "description": "Effect. A fast broken push with roll, under a glitch that tears the picture."
     },
     "cine-diorama": {
       "title": "Diorama",
