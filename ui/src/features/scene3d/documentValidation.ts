@@ -1,3 +1,4 @@
+import { validRoomSet } from './roomSet'
 import { validFraming } from './framing'
 import { validCameraShake } from './cameraShake.ts'
 import type { Scene3DCamera, Scene3DDocument, Scene3DLight, Scene3DSlot } from './types.ts'
@@ -41,6 +42,7 @@ function validSlot(slot: Scene3DSlot) {
 
 /** Validate user-imported geometry before it reaches Three or frame allocation. */
 export function validScene3DShape(value: Partial<Scene3DDocument>) {
+  if (value.room !== undefined && !validRoomSet(value.room)) return false
   if (!positive(value.width) || !positive(value.height) || !positive(value.duration) || value.duration > 600) return false
   if (![24, 30, 60].includes(value.fps!)) return false
   if (!value.camera || !value.light || !Array.isArray(value.slots)) return false

@@ -203,9 +203,13 @@ def test_the_guide_routes(tmp_path):
 def test_the_series_profile_names_real_series_tools():
     from services.mcp_profiles import PROFILES
     from services.series_commands import command_catalog
-    names = {item["name"] for item in command_catalog()}
+    from services.series_sets import command_catalog as room_catalog
+    operations = [*command_catalog(), *room_catalog()]
+    names = {item["name"] for item in operations}
     series_tools = {name for name in PROFILES["series"]["tools"] if name.startswith(("series.", "characters."))}
     assert series_tools <= names, series_tools - names
     assert {"series.guide", "series.episode.get"} <= names
-    readonly = {item["name"]: item["mutation"] for item in command_catalog()}
+    readonly = {item["name"]: item["mutation"] for item in operations}
     assert readonly["series.guide"] is False and readonly["series.episode.get"] is False
+    assert readonly["series.location.set3d"] is True
+    assert readonly["series.location.set3d.status"] is False
