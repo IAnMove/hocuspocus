@@ -77,11 +77,16 @@ Besides its id, titles, one line in each language, format, duration, roles, `req
 | `floor` | `tiles`, `none`, `backdrop`, `mirror`, `road` | `none`: there is no ground under the cast; frame waist-up or against the sky, or play the shot in a `world`. `backdrop`: the background picture is projected onto the floor. |
 | `uses` | the sixteen intents above | what the shot is good for. `talk` is close enough for a speaking cutout; `figure` holds the whole body; `establishing` shows a place (far, a plate, or a wide shot with a painted or moving set); `look` is a lighting, colour or lens preset that wants a move or a clip from you. |
 | `kind`, `place` | see Kinds and intents | the shelf and the place id. Filters. |
-| `reference` | URL or null | a film still of the real technique, for inspiration only (424 cards). It is **not** our render. `preview` is null on every card until the library renders its own thumbnails. |
+| `reference` | URL or null | a film still of the real technique, for inspiration only (424 cards). It is **not** our render. |
+| `preview` | URL or null | our own render of the built shot at mid-shot (see [Thumbnails](#thumbnails)). Null on a personal template. |
 | `cameras` | list | stage cards only: the mold's named cameras (`two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2`, `entrance`). |
 | `notesEs`, `notesEn` | text | the authored requirement list of the action, campaign and anime shots («GLB lead car; GLB pursuer car; optional street plate»). |
 
 A personal template (`user-…`) reports `subjects`, `props`, `screens`, `authoredFor`, `floor`, `moving` and `travel` from its stored document; `shot`, `distance`, `moves` and `uses` stay unknown because they need the editor's camera. Its `place` is its dressing.
+
+## Thumbnails
+
+A shipped or stage card's `preview` is `/api/v1/world3d/templates/<id>/thumbnail` (`previewUrl` in `world3d.templates.get`): GET it to see the shot. It is the built template at mid-shot, 640×360 (portrait 360×640) WebP, painted by the export's headless renderer with empty slots drawn as the editor's placeholders, and cached in the default workspace's `.world3d-thumbs` once per template version (the compiled document and `RENDER_RECIPE`); `X-Thumbnail-Cache` says `hit` or `miss`. When no picture can be painted now the route answers 503 `thumbnail_unavailable` with a `reason` and `retryable: true`, never a broken image. `python scripts/render_template_thumbnails.py --url http://127.0.0.1:<port> [--only id,id] [--kind stage]` warms the cache of a running instance and reports times and failures; it refuses the live ports unless `--allow-live`.
 
 ## Choosing a shot that will not look frozen
 
@@ -318,4 +323,4 @@ the editor and `world3d.scene.patch`; see
 - A crash after the scene file is written and before the intent file is stored can still leave a duplicate. A transport retry in the same process does not.
 - Two objects with the same role, such as the two props in `dark-still-salt-sea`, must be named by object id. The role resolves only when exactly one slot has it.
 - A two-character shot keeps `subject_2`. Supplying one subject does not remove the other hole.
-- `reference` is a still of the real technique from a film, never a frame of ours; `preview` is null on every shipped card.
+- `reference` is a still of the real technique from a film, never a frame of ours; `preview` is ours, and shows empty slots as placeholders, not your cast.
