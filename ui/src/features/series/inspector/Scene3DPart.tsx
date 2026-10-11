@@ -113,7 +113,7 @@ function SceneEditor({ draft, change, workspace, inherited }: DraftProps & { wor
       objectId: `${prop.id}-${Date.now()}`, file: prop.file, media: 'image', add: true, grounded: true, imageLook: { grounded: true },
       scale: prop.heightM / 2, position: [0, 0, 0], rotationY: 0, setItem: { prop: prop.id, heightM: prop.heightM },
     }])} />
-    <h4>{itemT('props.move')}</h4>
+    <h4>{itemT('props.title')}</h4>
     {objects.map(object => <button key={object.objectId} onClick={() => changeObjects(objects.filter(row => row.objectId !== object.objectId))}>{itemT('props.remove')} {object.objectId}</button>)}
     {objects.map((object, index) => <ObjectEditor key={object.objectId} object={object}
       change={next => changeObjects(objects.map((item, position) => position === index ? next : item))} />)}
