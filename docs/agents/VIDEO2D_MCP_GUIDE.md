@@ -12,7 +12,7 @@ medios en GPU. Los assets tienen que ser ya URLs durables del workspace
 ## 1. Catálogo — `scenes.catalog`
 
 Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
-`fonts`, `atmospheres`, `motion`, `effects`, `graphics`.
+`fonts`, `atmospheres`, `motion`, `effects`, `graphics`, `lyric_looks`.
 
 - `templates` → `app/shared/scene_templates.json`
 - `text` → `app/shared/text_templates.json`
@@ -22,6 +22,19 @@ Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
 - `motion` → `app/shared/motion_presets.json` (movimientos y cámaras)
 - `effects` → `app/shared/scene_effects.json` (efectos de pantalla)
 - `graphics` → `app/shared/scene_graphics.json` (gráficos con id y parámetros, sin código)
+- `lyric_looks` → `app/shared/lyric_looks.json` (estilos de letra de `production.run`)
+
+Los rótulos, movimientos, acabados y estilos de letra traen `titleEs`, `titleEn`,
+`lineEs` y `lineEn` (`app/shared/video2d_lines.json`): qué hace cada uno. Un
+rótulo con `covers: true` (`title-card`, `trailer-slam`) tapa todo el plano.
+
+`q` busca por palabras, en español o en inglés: «plano general», «persecución
+espacial», «rótulo con el nombre», «cámara en mano». Perdona mayúsculas,
+tildes, plurales y palabras vacías, y usa los sinónimos de Video 3D. Devuelve
+lo mejor primero, con `score`. `unknown_words` son las palabras que ninguna
+ficha conoce. Sin `kind`, `q` devuelve los recuentos y las mejores fichas de
+todos los tipos en `matches`. Un `id` que está en dos tipos (`rain` es
+atmósfera y efecto) devuelve las dos fichas en `matches`.
 
 ```json
 {

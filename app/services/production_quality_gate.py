@@ -21,9 +21,11 @@ from urllib.parse import unquote, urlparse
 
 from services.production_camera import unknown_cameras
 from services.production_quality import profile_of
+from services.video2d_catalogs import CATALOGS
 
 REUSED_STILL = 3
-FULL_FRAME_TITLES = ("title-card", "trailer-slam")     # an opaque plate over the whole frame
+# an opaque plate over the whole frame: the text templates marked covers in text_templates.json
+FULL_FRAME_TITLES = tuple(entry["id"] for entry in CATALOGS["scenes.text.catalog"]["entries"] if entry.get("covers") is True)
 MOVING = ("h3", "clip", "scene3d", "screen")
 REUSED_TEMPLATE = 4
 SHOT_FIELDS = {"key", "kind", "line", "span", "t0", "t1", "after", "cast", "sing", "frame", "action", "still", "clip", "image_model",
