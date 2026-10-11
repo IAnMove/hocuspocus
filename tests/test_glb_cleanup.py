@@ -185,3 +185,19 @@ def test_a_skinned_rip_stored_in_parts_is_assembled_in_its_rest_pose_and_still_p
     whole = write_skinned_glb(tmp_path / "whole.glb", apart=False)
     assert not parts_stored_apart(pygltflib.GLTF2().load(str(whole)))
     assert clean_glb(whole, tmp_path / "whole.clean.glb") == [], "a body stored assembled (a T-pose rip) is left alone"
+
+
+def test_a_glow_painted_on_black_without_alpha_is_marked_additive_and_unlit_and_art_is_left_alone(tmp_path):
+    from services.glb_cleanup import glow_materials
+
+    glow = np.zeros((32, 64, 3)); glow[8:24, 20:44] = [0.6, 0.8, 1.0]                 # a fairy's light on black
+    rng = np.random.default_rng(5)
+    bark = 0.4 + 0.1 * rng.random((32, 64, 3)) * np.array([1.0, 0.7, 0.4])            # painted art, bright border
+    dark = 0.02 + 0.005 * rng.random((32, 64, 3))                                     # a plain black texture: no glow inside
+    model = write_textured_glb(tmp_path / "fairy.glb", [glow, bark, dark])
+    assert glow_materials(pygltflib.GLTF2().load(str(model))) == [0]
+    assert clean_glb(model, tmp_path / "fairy.clean.glb") == ["1 of its materials glow on black (a light with no alpha), now added to the picture"]
+    cleaned = pygltflib.GLTF2().load(str(tmp_path / "fairy.clean.glb"))
+    assert cleaned.materials[0].extras == {"hocusBlend": "additive"} and "KHR_materials_unlit" in cleaned.materials[0].extensions
+    assert "KHR_materials_unlit" in cleaned.extensionsUsed
+    assert not cleaned.materials[1].extras and not cleaned.materials[2].extras

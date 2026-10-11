@@ -12,6 +12,7 @@ import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
 import { framingAnchor, markRestPose } from './framingAnchor'
 import {
+  AdditiveBlending,
   AnimationMixer,
   type AnimationAction,
   BackSide,
@@ -360,6 +361,7 @@ export function placeSlot(
     world.scene.add(contactShadow)
   }
   applyMeshShadows(root, world.renderer.shadowMap.enabled, slot.media === 'model3d')
+  applyGlowBlending(root)
   if (contactShadow && world.renderer.shadowMap.enabled) contactShadow.visible = false
   world.slots.set(slot.id, {
     contactShadow,
@@ -743,6 +745,21 @@ export function pruneSlots(world: GpuWorld, slots: readonly Scene3DSlot[]) {
   for (const id of [...world.slots.keys()]) {
     if (!wanted.has(id)) dropSlot(world, id)
   }
+}
+
+/** A material the clean-up marked as a glow on black (``extras.hocusBlend: additive``) adds its light to the picture
+ * instead of painting its black square: a fairy's light, a flame, a spark. */
+export function applyGlowBlending(root: Object3D) {
+  root.traverse((child: Object3D) => {
+    if (!(child instanceof Mesh)) return
+    for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
+      if (!material || material.userData?.hocusBlend !== 'additive') continue
+      material.blending = AdditiveBlending
+      material.transparent = true
+      material.depthWrite = false
+      material.needsUpdate = true
+    }
+  })
 }
 
 function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
