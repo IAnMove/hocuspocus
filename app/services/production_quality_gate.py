@@ -139,6 +139,7 @@ def _covered(shot: dict) -> bool:
 def plan_warnings(spec: dict, root: Any = None, production_id: str | None = None) -> list[dict]:
     shots = _shots(spec)
     found = _ignored_fields(shots) + _replayed_clips(shots) + _castless_h3(spec, shots) + _scene3d_warnings(spec, shots, root)
+    found += _stage_warnings(spec, shots)
     if root:
         found += _copied_from_siblings(spec, shots, Path(root), production_id)
     return found
@@ -252,6 +253,69 @@ def _scan_scene3d(key: str, config: dict, root: Any, rigged: set, templates: dic
             boxes.setdefault(name, []).append(key)
         if source in rigged and not entry.get("clip") and not entry.get("clips"):
             still.append(f"{key}:{role}")
+
+
+SAMEY_RUN = 4
+
+
+def _scene3d(shot: dict) -> dict | None:
+    return shot.get("scene3d") if shot.get("kind") == "scene3d" and isinstance(shot.get("scene3d"), dict) else None
+
+
+def _stage_skin(config: dict, sets: dict) -> tuple[str | None, dict]:
+    """The name and skin of the stage or room a shot plays in: a ``stage-*`` template with no background keeps the mold's
+    colours, a ``sets`` room brings the skin it asked for, an inline room its own."""
+    from services.production_rooms import has_room, is_room
+    from services.world3d_stage_cards import is_stage
+    background = config.get("background")
+    if isinstance(background, str) and is_room(sets.get(background)):
+        return background, sets[background].get("skin") or {}
+    if has_room(config):
+        room = background["room"]
+        return str((room.get("mold") or {}).get("id") or "room"), room.get("skin") or {}
+    if background is None and is_stage(config.get("template")):
+        return str(config["template"]), {}
+    return None, {}
+
+
+def _colours_only(skin: dict) -> bool:
+    return all(isinstance(value, dict) and set(value) <= {"color"} for value in skin.values())
+
+
+def _stage_runs(shots: list[dict]) -> list[tuple[tuple[str, str], list[str]]]:
+    """Consecutive scene3d shots on the same template and background; any other shot ends a run."""
+    runs: list = []
+    for shot in shots:
+        config = _scene3d(shot)
+        if config is None:
+            runs.append(None)
+            continue
+        template = str(config.get("template") or (config.get("document") or {}).get("templateId"))
+        pair = (template, json.dumps(config.get("background"), sort_keys=True, default=str))
+        if runs and runs[-1] and runs[-1][0] == pair:
+            runs[-1][1].append(str(shot.get("key")))
+        else:
+            runs.append((pair, [str(shot.get("key"))]))
+    return [run for run in runs if run]
+
+
+def _stage_warnings(spec: dict, shots: list[dict]) -> list[dict]:
+    """A stage or room shown in its mold colours only, once per set or template, and the same template and background
+    in more than four shots in a row."""
+    sets = spec.get("sets") if isinstance(spec.get("sets"), dict) else {}
+    unskinned: dict[str, list[str]] = {}
+    for shot in shots:
+        config = _scene3d(shot)
+        name, skin = _stage_skin(config, sets) if config is not None else (None, {})
+        if name is not None and _colours_only(skin):
+            unskinned.setdefault(name, []).append(str(shot.get("key")))
+    found = [{"code": "stage_unskinned", "set": name, "shots": keys,
+              "hint": "the stage shows only its mold colours: add a sets entry of kind room with a skin (an image, a texture "
+                      "or a video) and name it as the shot's background"} for name, keys in unskinned.items()]
+    found += [{"code": "looks_samey", "template": template, "background": json.loads(background), "shots": keys,
+               "hint": "the same template and place in more than four shots in a row: change the camera (roomCamera), "
+                       "the template or the place"} for (template, background), keys in _stage_runs(shots) if len(keys) > SAMEY_RUN]
+    return found
 
 
 def _pattern(shots: list[dict]) -> list[str]:

@@ -5,10 +5,16 @@ import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES } from '..
 import { SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/types.ts'
 import { TEMPLATE_VARIANT_GROUPS } from '../src/features/scene3d/templateCatalog.ts'
 import { settingFromDressing } from '../src/features/scene3d/templateFilters.ts'
-import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
+import { templatePlace, templateTraits } from '../src/features/scene3d/templateTraits.ts'
 import { actionCard } from '../src/features/scene3d/actionTemplates.ts'
 import { campaignCard } from '../src/features/scene3d/campaignTemplates.ts'
 import { animeCard } from '../src/features/scene3d/animeTemplates.ts'
+import { transitionCard } from '../src/features/scene3d/transitionTemplates.ts'
+import { speedCard } from '../src/features/scene3d/speedTemplates.ts'
+import { titleCard } from '../src/features/scene3d/titleTemplates.ts'
+import { dialogueCard } from '../src/features/scene3d/dialogueTemplates.ts'
+import { reactionCard } from '../src/features/scene3d/reactionTemplates.ts'
+import { groupCard } from '../src/features/scene3d/groupTemplates.ts'
 
 const outPath = fileURLToPath(new URL('../../app/shared/world3d_templates.json', import.meta.url))
 const en = JSON.parse(readFileSync(new URL('../src/i18n/locales/en/scene3dEditor.json', import.meta.url), 'utf8'))
@@ -31,9 +37,11 @@ function line(text, fallback) {
   return `${(space > LINE_LIMIT / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:·]+$/, '')}…`
 }
 
-/** The authored requirement list of the action, campaign and anime shots, joined for the card. */
+/** The authored requirement list of every pack with requirement notes, joined for the card. */
 function notes(id, locale) {
   const copy = actionCard(id, locale) ?? campaignCard(id, locale) ?? animeCard(id, locale)
+    ?? transitionCard(id, locale) ?? speedCard(id, locale) ?? titleCard(id, locale)
+    ?? dialogueCard(id, locale) ?? reactionCard(id, locale) ?? groupCard(id, locale)
   return copy?.requirements?.length ? copy.requirements.join('; ') : ''
 }
 
@@ -74,7 +82,8 @@ function card(id) {
     lineEn: line(copyEn.description || technique?.descriptionEn, titleEn),
     notesEs: notes(id, 'es'),
     notesEn: notes(id, 'en'),
-    preview: technique?.thumbUrl || null,
+    // No card has its own render yet; the technique still lives in `reference`.
+    preview: null,
     roles: document.slots.map(slot => slot.slot),
     required,
     dependencies,
@@ -90,6 +99,10 @@ function card(id) {
     authoredFor: traits.authoredFor,
     floor: traits.floor,
     uses: traits.uses,
+    kind: traits.kind,
+    place: templatePlace(document),
+    travel: traits.travel,
+    reference: technique?.thumbUrl || null,
     source: 'builtin',
   }
 }

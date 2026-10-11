@@ -2,16 +2,19 @@ import math
 import pytest
 from services.set_molds import catalog, resolve_mold, CAMERAS, surface_sizes
 
-EXPECTED={'despacho','salon','cocina','dormitorio','bar','aula','hemiciclo','plato_tv','sala_prensa','hospital','cabina_avion','vagon','coche_interior','juzgado','oficina_diafana'}
+RECIPES={'despacho','salon','cocina','dormitorio','bar','aula','hemiciclo','plato_tv','sala_prensa','hospital','cabina_avion','vagon','coche_interior','juzgado','oficina_diafana'}
+SHAPES={'sala','sala_ventana','mostrador','filas','pasillo','umbral','escalera','calle','plaza','orilla','escenario_publico','vehiculo','azotea'}
+EXPECTED=RECIPES|SHAPES
 
 
-def test_fifteen_molds_have_complete_metadata():
+def test_every_mold_has_complete_metadata():
     molds=catalog()
     assert {m['id'] for m in molds}==EXPECTED
     for mold in molds:
         assert len(mold['marks'])>=3 and len(mold['propAnchors'])>=4
         assert {c['id'] for c in mold['cameras']}==set(CAMERAS)
-        assert mold['lights'] and mold['defaultSkin'] and mold['openings'] and mold['blocks']
+        assert mold['lights'] and mold['defaultSkin']
+        if mold['id'] in RECIPES: assert mold['openings'] and mold['blocks']
         for size in ('small','medium','large'): assert set(surface_sizes(resolve_mold(mold['id'],size)))==set(mold['surfaces'])
 
 

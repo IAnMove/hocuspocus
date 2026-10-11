@@ -577,6 +577,10 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   }
   document = withN64Look(document)
   if (world.dir) applyLight(world.dir, document.light)
+  if (world.room) {
+    if (world.dir) world.dir.intensity *= world.room.sunBreath(sceneSeconds)
+    void world.room.seek(sceneSeconds).catch(() => {})
+  }
   syncEnvironmentLighting(world, document)
   const posedSlots = document.slots.map(slot => ({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }))
   applyLoopOffset(world, sceneSeconds)

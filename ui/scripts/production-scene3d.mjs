@@ -8,6 +8,8 @@ import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
 import { stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
+import { applyGrade, applyLens, applyNamedLight, copyCamera } from '../src/features/scene3d/modifiers.ts'
+import { isCameraTechnique } from '../src/features/scene3d/techniqueTemplates.ts'
 
 const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
@@ -15,16 +17,6 @@ const SET_COVER = 2
 const WORLD_KEYS = ['dressing', 'atmos', 'environment', 'light', 'worldSfx', 'screenBackdrop', 'pixelWorld']
 /** The camera's distance to its subject, as a share of the template's. */
 const FRAMES = { close: 0.6, medium: 0.8, wide: 1.35, far: 1.8 }
-/** Named lights: the sun (direction it travels, strength, colour) and the ambient share. */
-const LIGHTS = {
-  noon: { direction: [-0.2, -1, -0.3], intensity: 1.5, color: '#fffaf0', ambient: 0.35 },
-  golden: { direction: [-0.85, -0.3, -0.4], intensity: 1.35, color: '#ffc98a', ambient: 0.28 },
-  overcast: { direction: [-0.15, -1, -0.2], intensity: 0.75, color: '#e6edf5', ambient: 0.6 },
-  night: { direction: [0.35, -0.75, -0.45], intensity: 0.5, color: '#9fb6ff', ambient: 0.12 },
-  neon: { direction: [0.55, -0.5, -0.65], intensity: 1.0, color: '#ff6fd8', ambient: 0.3 },
-  stage: { direction: [0, -0.8, -0.6], intensity: 1.8, color: '#ffffff', ambient: 0.08 },
-  campfire: { direction: [0.25, -0.35, -0.9], intensity: 1.1, color: '#ff9b45', ambient: 0.1 },
-}
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
@@ -36,9 +28,11 @@ for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document,
 if (config.background?.room) stageRoomSet(document, { ...config.background.room, camera: config.roomCamera ?? config.background.room.camera })
 else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
+if (config.camera_template) takeCamera(document, config.camera_template)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 if (config.frame !== undefined) reframe(document, config.frame)
-if (typeof config.light === 'string') lightPreset(document, config.light)
+if (config.lens) applyLens(document, config.lens)
+if (typeof config.light === 'string') applyNamedLight(document, config.light)
 for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
   if (config[key] === undefined || (key === 'light' && typeof config.light === 'string')) continue
   document[key] = structuredClone(config[key])
@@ -50,6 +44,7 @@ const authored = Number(request.duration) * speed
 if (!(authored > 0) || authored > 600) throw new Error(`duration_exceeds_clock:${request.duration}`)
 document.playbackSpeed = speed
 document.duration = authored
+if (config.grade) applyGrade(document, config.grade)
 document.fps = config.fps ?? document.fps
 delete document.soundtrack
 retargetFraming(document)
@@ -137,14 +132,12 @@ function reframe(document, frame) {
   else camera.eye = camera.look.map((at, axis) => at + (camera.eye[axis] - at) * factor)
 }
 
-/** A named light replaces the template's sun and sets the ambient share; the rest of the lighting stays. */
-function lightPreset(document, name) {
-  const preset = LIGHTS[name]
-  if (!preset) throw new Error(`unknown_light:${name}`)
-  const { ambient, ...sun } = preset
-  document.light = { kind: 'directional', ...sun }
-  const environment = { source: 'room', rotation: 0, background: 'set', blur: 0, ...document.lighting?.environment, intensity: ambient }
-  document.lighting = { ...document.lighting, environment }
+/** The camera and framing of a camera card (the symmetric of `world`): this shot keeps its duration, cast and place.
+ * A `frame` or `lens` given with it applies after; the framing is re-targeted to this shot's subject at the end. */
+function takeCamera(document, id) {
+  const technique = documentFromTemplate(id)
+  if (!isCameraTechnique(id)) throw new Error(`invalid_camera_template:${id}`)
+  copyCamera(document, technique)
 }
 
 /** A picture moved to the sky no longer scrolls round a cylinder. */

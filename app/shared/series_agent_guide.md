@@ -18,21 +18,18 @@ use only those ids and file names, never invent one.
      The series render only notes a line outside the character's range (`pitch_out_of_range`) and keeps the take;
    - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
      eyes in a wide head: graphic-novel or tenebrist art, eye bags, spectacles, moustaches) is detected, and its mouth
-     is the thin line about one eye-pair width under the eyes. For that art rig with `style: {"mouthStyle": "warp"}`
-     (the `graphic-novel` style does it for you, see below):
-     each pose talks with its own drawing (the lower lip, chin and beard move down, the gap is inked); check each
-     pose's mouth line with `characters.rig.flat.preview` (warnings `mouth_line_guessed`, `mouth_line_unsure`) and
-     pass a better one as `hints.<pose>.mouth` (a point on the line between the lips) and `mouthWidth`.
-     `"ink"` keeps the painted mouth as the rest shape and draws the open shapes in its own ink. If a pose's mouth or
-     eyes are still found in the wrong place, rig again with `hints: {"<pose id>": {"mouth": [x, y]}}` (or `"eyes"`),
-     in % of that pose's keyed image; later rigs reuse the hints, and `null` clears a pose's hints;
+     is the thin line about one eye-pair width under the eyes: rig that art with warp mouths (`style: {"mouthStyle":
+     "warp"}`, or the `graphic-novel` style; the painted section below has the `mouthLine` checks and `hints`).
+     `"ink"` keeps the painted mouth as the rest shape and draws the open shapes in its own ink. Eyes found in the
+     wrong place: rig again with `hints: {"<pose id>": {"eyes": [x, y]}}`, in % of that pose's keyed image; later
+     rigs reuse the hints, and `null` clears a pose's hints;
    - location: `generation.image` 1920x1088 in the series style → `series.update` (new location) → `series.asset.import`
      (owner_type location, reference_role environment); for depth, also make its planes as separate keyed images (a
-     pillar or a bed frame in front, columns behind the cast) and list them in its `layout2d.layers` (below).
+     pillar in front, columns behind the cast) and list them in its `layout2d.layers` (below).
      Paint the plate empty of anything that must move (boats, waves, crowds, rain): a frozen wave reads as broken.
      Animate that motion afterwards, as an H3 loop (`image_start` and `image_end` the same image) or a Video 3D scene;
-   - 3D background: `world3d.templates.list` → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
-   After changing characters or locations, `series.canon.approve` (episodes freeze the approved canon).
+   - 3D background: `world3d.templates.suggest` (below) → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
+   After changing characters or locations, `series.canon.approve`.
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
    same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect at
    once. It assigns the ids, writes the shots and a language version for every other language.
@@ -62,14 +59,13 @@ An episode is made in one of three modes, chosen by the user in Series Lab (Vali
   preview of a 2D shot is its normal render; a 3D shot's preview is exported at `draft` quality. An approved 2D (or
   draft 3D) preview becomes the final take without rendering again; a 3D shot at `final` quality renders its final.
 
-Work with the user's review like this:
+Working with it:
 
 1. `series.episode.review.get`: the mode, the steps left and, per shot, `plan`/`preview` (`pending | approved |
    changes`), its `step` and every note `{stage, text, by}`. Shots in `changes` are the user's requests.
 2. Fix each requested shot (`series.shot.update` for one shot, `series.episode.update`, or the script again with
-   `episode_id`). Changing a shot's content
-   puts its approvals back to pending (notes stay), so the user looks at it again; a new take of a shot puts its
-   preview back to pending.
+   `episode_id`). Changing a shot's content puts its approvals back to pending (notes stay); a new take of a shot
+   puts its preview back to pending.
 3. Answer on the shot: `series.shot.review.set` with `note: {text: "what I changed", by: "agent"}` (and `plan` or
    `preview: "pending"` if you changed nothing the review can see). Never approve on the user's behalf unless asked.
 4. `series.episode.produce` (or `render_native`): it renders what the review lets through and stops `waiting` before
@@ -87,8 +83,7 @@ dark mouth in the character's ink.
    shadow, and the closed mouth painted as one short dark line. Key in the screen colour `characters.styles` returns:
    magenta when the character or object is green, so green cloth is not keyed away, and green otherwise.
 2. **Save and rig.** Save the kit with `provenance: [{"method": "character-style-create", "style": "graphic-novel"}]`;
-   `characters.rig.flat` then uses the style's rig, `{"mouthStyle": "warp"}`, with no `style` (passing it does the
-   same). Later rigs of the kit (a pose added, a mouth line placed) keep warp mouths: only `style.mouthStyle`
+   `characters.rig.flat` then uses the style's rig, `{"mouthStyle": "warp"}`, with no `style`. Later rigs of the kit (a pose added, a mouth line placed) keep warp mouths: only `style.mouthStyle`
    changes them. The result's `style` is the look used.
 3. **Check every pose.** Look at the review image and each pose's `mouthLine` (`mouth`, `mouthWidth`, `found`,
    `from`: hint, landmarks, painted or guess). Warning `mouth_line_guessed` (no painted line where the mouth was
@@ -169,25 +164,25 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
   `shake` (panic). `enterFrom`: `left`/`right`
   walks in, from 0.2 s to 1.4 s unless `enterAt` (s, when it starts) and `enterDuration` (s, how long it takes; a
-  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick paper-puppet
-  hop) or `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
+  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick hop) or
+  `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
   degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
   takes a whole number of steps, so its feet land on the entrance's start, every step after it and its end, and
   the step is stretched a little to fit. `poseId` must be one of the kit's poses.
 - **look room:** stand a character on the side away from where they look (the bible's `facing` per pose): facing
   `left` right of centre, facing `right` left of it; two people face each other. `from_script` moves a 2D cast member
   who looks out of the frame (`lookRoom` in the reply); `"lookRoom": false` on a cast entry or a shot keeps your `x`.
-- **cut poses (edge snap):** a pose whose figure is cut by its image border (a bust cut at the chest and on one
-  side) never shows that cut in the frame. The render reads the pose's alpha: a cut is a run of opaque pixels along
-  the left or right border at least 8 % of the image height long, or along the bottom at least 15 % of its width (a
-  stray pixel, a strand of hair or feet resting on the border are not cuts; the top is not read). A side cut that
-  would show slides the cutout until that cut is just past the frame edge, at the same size; a bottom cut goes past
-  the frame bottom (slid down in a wide shot, enlarged with the eyes on the framing's eye line otherwise); cut on both
-  sides, it is enlarged proportionally until both cuts are out of the frame (at most 2.5×). A cut already outside the
-  frame, or below it, moves nothing. The cut is read from the pose image itself, so a mirrored copy of a pose is cut
-  on the other side. Give a bust cut on its left an `x` on the left of the frame (it lands on that edge anyway), and
-  keep two cut busts on their cut sides in a two-shot. `"edgeSnap": false` on a cast entry keeps it where `x` puts it,
-  cut and all; an entry with a `transform`, or a perched character, is never moved.
+- **cut poses (edge snap):** a pose cut by its image border (a bust cut at the chest and on one side) never shows
+  that cut in the frame. The render reads the pose's alpha: a cut is a run of opaque pixels along the left or right
+  border at least 8 % of the image height long, or along the bottom at least 15 % of its width (a stray pixel, a
+  strand of hair or feet resting on the border are not cuts; the top is not read). A side cut that would show slides
+  the cutout until the cut is just past the frame edge, at the same size; a bottom cut goes past the frame bottom
+  (slid down in a wide shot, else enlarged with the eyes on the framing's eye line); cut on both sides, it is enlarged
+  proportionally until both cuts are out of the frame (at most 2.5×). A cut already outside or below the frame moves
+  nothing. The cut is read from the pose image, so a mirrored pose is cut on the other side. Give a bust cut on its
+  left an `x` on the left (it lands on that edge anyway) and keep two cut busts on their cut sides in a two-shot.
+  `"edgeSnap": false` on a cast entry keeps it where `x` puts it, cut and all; an entry with a `transform`, or a
+  perched character, is never moved.
 - **perched characters:** a character whose bible entry has `layout2d.perch` (a laptop on a desk) is placed on that
   prop in every framing automatically. Give it no transform.
 - **props:** a workspace image (`file`, keyed with `studio.key`) or a series asset (`assetId`), at `x`/`y` (%) and
@@ -196,28 +191,28 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   the floor: its lowest opaque row goes on the line the cast's feet stand on (94 % of the frame height in a wide
   shot or a vertical two-shot; in the other framings the set's floor through that framing's zoom, below the frame in
   a medium shot or a close-up, like the cast's feet), or on its `anchor` when it has one. `y` is then ignored; use an
-  anchor to stand it further back. Without `ground`, `y` is the prop's centre, as before.
+  anchor to stand it further back. Without `ground`, `y` is the prop's centre.
 - **layers (a set in depth):** a location's `layout2d.layers` (`series.update`) are drawn over its background in
   every 2D shot there, at most 8: `{"assetId" | "file", "depth": 0.3, "front": false, "opacity": 1, "x": 50, "y": 50,
   "scale": 1, "drift": 0}`. `depth` 0 is the background's far plane, 1 the nearest; the cast stands at `castDepth`
   (default 0.6, on the location or the shot). `front: true` draws the layer in front of the cast (a pillar, a candle,
-  a bed frame, fog in the foreground; default depth 0.9); the others go behind it, farthest first (default 0.3). Use
-  PNGs with alpha (`studio.key`) or looping mp4/webm videos. `x`/`y` (%) put the layer's centre on the background, so
+  foreground fog; default depth 0.9); the others go behind it, farthest first (default 0.3). Use PNGs with alpha
+  (`studio.key`) or looping mp4/webm videos. `x`/`y` (%) put the layer's centre on the background, so
   it keeps its spot in every framing; `scale` is a fraction of the frame height (1 fills the frame with a
   frame-sized image). With layers a `push` moves every plane by its depth: the far wall grows less than the cast,
-  the pillar in front more, so the push reads as depth. `drift` (frame px per second, negative to the left) slides a
+  the pillar in front more. `drift` (frame px per second, negative to the left) slides a
   layer on its own, also in a static shot: fog or smoke, with a `scale` of 1.2 or more so its edge stays out of the
   frame. A video layer loops from its first frame in every shot unless it has any of `start` (the clip second shown
   at the shot's first frame, 0–3600), `speed` (0.1–4) and `loop`: `"loop"` (start again, the default), `"hold"`
   (keep the last frame) or `"pingpong"` (play back and forth). A 5 s clip behind many shots: give it `"loop":
   "pingpong"` and `"speed": 0.5` so it never visibly restarts, and a different `start` in each shot (its own
-  `layers`) so the shots do not all show the same seconds. A shot's `layers` replace its location's (in a script, `"layers"` and `"castDepth"` on the shot) and `[]`
-  turns them off. A bad layer is refused. Changing a location's layers renders again only its 2D shots that draw them.
+  `layers`) so they show different seconds. A shot's `layers` replace its location's (in a script, `"layers"` and
+  `"castDepth"` on the shot) and `[]` turns them off. A bad layer is refused. Changing a location's layers renders again only its 2D shots that draw them.
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
   0–1. Files from the bible only. `{"anchor": "enter", "cast": 1}` plays it when that cast member's entrance starts
   (`cast` is an index into the shot's `cast` or a character id; plus `offset`), so footsteps or a door start with
-  the walk instead of after it; a cast member who does not enter plays it at the start of the shot. A cue plays
+  the walk; a cast member who does not enter plays it at the start of the shot. A cue plays
   its whole file unless it has `in` (the second of the file it starts at) and/or `length` (seconds): `{"file":
   "sfx-steps.wav", "in": 2.4, "length": 0.35, "anchor": "enter", "cast": 1, "repeat": "steps"}` plays one footstep
   of an 8 s walk on every footfall. The part is written once as `<file>-cut-<hash>.wav` (with its provenance) and
@@ -241,20 +236,19 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   30 min, the take is made without it and the render item has a `warning`; fix it and render that shot again by id.
   A new prompt or volume makes `series.episode.produce` render that shot again. On a video take the render makes
   only the sound (`foley-<episode>-<shot>-<key>.wav`, from that take's picture) and the cut lays it under the take:
-  make it with `series.shot.update` (`render: true`) or `series.episode.render_native` with its `shot_ids` (a render
-  of every shot makes it too); until then the cut goes without it and its `preparedClips` says so.
+  make it with `series.shot.update` (`render: true`) or `series.episode.render_native` with its `shot_ids`; until
+  then the cut goes without it and its `preparedClips` says so.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
   `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
   points right at 0). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
   in % of that cast member's pose image (`cast`: the index in the shot's `cast`, or a character id), so the beam leaves the
-  muzzle wherever the cutout stands, however big it is drawn and while the camera pushes in; `{"point": [70, 40]}` is a
-  point of the frame. The beam then runs from `from` to `x`/`y` (where it lands) and `rotation` is not used. A `cast` that
+  muzzle wherever and however big the cutout is drawn, even under a push; `{"point": [70, 40]}` is a point of the
+  frame. The beam then runs from `from` to `x`/`y` (where it lands) and `rotation` is not used. A `cast` that
   names no one in the shot fails the render; a 3D shot keeps only a frame point. Keep effects off faces: a small burst to
   one side. Light for dark, painted frames: `shockwave` is a ring of light from `x`/`y` (`size` its reach) with a flash, a
   soft halo, trailing echoes and sparks; `shield` is a dome of light around someone (`size` its height) that reads even at
-  `intensity` 0.4 and stays see-through; `embers` rise and cool from the bottom of their box; all keep `color` (gold stays
-  gold).
+  `intensity` 0.4 and stays see-through; `embers` rise and cool from the bottom of their box; all keep `color`.
   `impact_flash` (a white frame, then ink focus lines) and `impact_invert` (the negative of the frame) cover the
   whole picture: give them 2–4 frames (`duration` 0.08–0.17 s at 24 fps) right on the hit. `code_rain` (falling
   green code; `size` is the glyph height in %, default 3) covers the whole picture too, faces included: for a
@@ -276,10 +270,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   shot has no cast and a `durationSeconds` (4–7 s) and usually `locationId` of a dark or title location.
 - **durationSeconds** (`duration`)**:** only for shots without dialogue. With dialogue, the render sets it from the voices.
 - **3D dialogue (`kind: "3d"` in the script, `productionMethod: animation_3d` + `scene3d` on a shot):** a Video 3D
-  template (`world3d.templates.list`, or a personal one) or a saved scene file, and which object each speaking
+  template (`world3d.templates.suggest`, or a personal one) or a saved scene file, and which object each speaking
   character is (`objectId`). The server render records the lines like a 2D shot, makes each object talk as its
   Character Kit, exports it and imports the take. A speaker with no object in the cast is heard over the shot
-  (a narrator, a voice on the radio). `quality`: `draft` (fast) or `final`. Its `sfx` and `fx` play
+  (a narrator, a radio voice). `quality`: `draft` (fast) or `final`. Its `sfx` and `fx` play
   like in a 2D shot (screen effects drawn over the 3D frame), on a line or at a second (`at`).
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
@@ -289,7 +283,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   easing}. `faceTravel` turns the model's +Z along the path; a generated ship or airship whose nose is its -X needs
   `headingOffset: 1.5708` (+X: -1.5708, -Z: 3.1416):
   `{"objectId": "zep", "file": "zeppelin.glb", "add": true, "clip": "Fly", "position": [-6, 3, -8],
-  "motion": {"to": [6, 3, -8], "faceTravel": true}}`. Mix them: 2D cutouts talk, 3D models move.
+  "motion": {"to": [6, 3, -8], "faceTravel": true}}`.
   `"renderLook": "toon"` draws the 3D models as cel anime with an ink outline (`toon` {steps 2-4, outline 0-8 px,
   ink #rrggbb}) so they sit with the flat cutouts and painted backgrounds; images and cutouts keep their look.
   An object also takes:
@@ -308,14 +302,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
     (0.99 long, 0.32 high) is 4.7 m long at 0.9, so it needs about 0.16.
   - **Checks:** `from_script` checks each object's model file, clip names, sequence, hold and appearance before it
     writes anything. A carrier that is unknown or talks fails the render with a clear message.
-  - **Example:** `{"objectId": "guard", "file": "guard.glb", "add": true, "grounded": true, "clips": [{"clip": "Idle",
-    "start": 0}, {"clip": "Aim", "start": 1.5, "fade": 0.4}]}, {"objectId": "rifle", "file": "rifle.glb", "add": true,
-    "scale": 0.16, "hold": {"carrier": "guard", "hand": "right", "offset": [-0.146, 0.013, -0.038], "rotation": [-1.65,
-    0.11, 2.76]}, "appearance": {"start": 1.5}}`.
 
 ## 3D sets: molds, skins and props
 
-1. Read `scene3d.sets.catalog` to choose an interior mold, size, camera, character marks and prop anchors.
+1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
 2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
    `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
    For example, `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
@@ -335,9 +325,33 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    Remove it with `scene3d.item.remove` and `id`; updates can change `heightM`, `rotationY` (radians), `billboard` and `shadow`.
    To share it across every shot at this location, include `{prop: "<approved-id>", anchor: "desk_left"}` in `set3d.props`.
 6. Every mutation uses a unique `intent_id`; reuse it only for the identical retry, and read the result before proceeding.
-   The back wall's straight-on painting supplies the detail; keep its style consistent with the series canon.
+   The back wall's straight-on painting carries the detail; keep it in the series style.
    Use real heights and the mold's anchors so objects rest on their surfaces; a tall object at a low anchor warns `item_too_tall`.
    Keep at most 12 objects per shot, including inherited set props; inspect previews before approving the result.
+7. Molds carry a `kind` and `title`. Shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`,
+   `escenario_publico`, `vehiculo`) and exteriors (`calle`, `plaza`, `orilla`, `azotea`: no ceiling, the view on `wall_back`, a sun
+   preset) sit beside the named interiors. A `kind: "3d"` shot may name a stage card, `scene3d: {template: "stage-sala",
+   roomCamera: "ots_a"}`: the mold in its own colours, with dust and a breathing key light; a location set still brings the skin.
+
+## How to choose a 3D shot
+
+Cards are chosen on axes: `uses` (dialogue, talk, reaction, figure, establishing, action, speed, impact, reveal,
+product, music, drive, transition, title, look, plate), `kind`, `place`, `shot`, `moves`, `still`, `subjects`,
+`travel`. `world3d.templates.suggest` first (`line`, `speakers`, `place`, `mood`, `beat`…): up to three cards with
+a `reason`, the filters it derived and
+`unknown_words` (words no card knows). Then `world3d.templates.list` with those filters or words in either
+language; `match: partial` means no card had every known word: pick an id from the reply. A stage is
+`stage-<mold>` (28, `stage-sala`, `stage-cocina`…): two speaking marks and the cameras `two_shot`, `ots_a`, `ots_b`,
+`wide`, `close_1`, `close_2`, `entrance` (`roomCamera`); five are `far` from `two_shot`: shoot their lines from a
+closer camera. Packs: `dialogue-*` (`ots-a`/`ots-b` keep the eyelines, `table`, `triangle`, `embrace`,
+`phone-split`), `reaction-*`, `speed-*`, `group-*`, `title-*` and `transition-*` (a shot of its own, 0.6–2.5 s;
+`transitionIn` is the join between two takes and needs no card). Modifiers go on the scene, not on the shot:
+`world3d.scene.instantiate` → `world3d.scene.patch` with `light` (`noon`… `dawn`), `grade` (`natural`… `film`),
+`lens` (`14mm`–`200mm`) or `camera_template` (a `kind: camera` card) → `world3d.scene.publish` → `scene3d:
+{"scene": "<file>"}`. What the production dry run warns ruins a series shot too: `template_still` (a `still` card
+with no clip, motion, camera or world), `stage_unskinned` (a stage in its mold colours: give the location a set
+skin), `looks_samey` (one template and place in more than four shots in a row), `template_reused` (one card in
+more than four shots).
 
 ## Edit one shot ("the fifth shot")
 
@@ -359,7 +373,7 @@ other languages update those versions. `check: true` only checks; `render: true`
 `approve: false` keeps it pending); `produce: true` renders what changed in every language and recuts. Without
 `changes`, `instruction: "put a hat on Kevin"` has the server's LLM write the edit from the shot, the cast's poses
 and the workspace files (the reply's `instruction` says what it wrote). Use it instead of sending the whole script
-again for a one-shot fix. The Wizard does the same with `edit_series_shot` ("edita el quinto plano y ponle X").
+again for a one-shot fix. The Wizard does the same with `edit_series_shot`.
 
 One line's voice, without rendering the shot: `series.shot.voices {…, shot}` lists each line with its recording
 (the `ln-*.wav` the next render reuses: `recorded`, `url`, `room`, and `newerThanTake` when it was recorded after the
@@ -376,9 +390,8 @@ Do these in the app, never with scripts: every file they make has a `.meta.json`
 it can be found, reused and redone.
 
 - **Cutouts:** `studio.key` reads the screen colour from the image border (`adaptive`, default true), keys relative
-  to it and clears the backdrop connected to the border. If the character or object has green, the screen is magenta
-  (`characters.styles` already chooses it); key in that colour. `despill` (default true) takes the screen colour off
-  the edges. Check `result.report`: `semiTransparentShare` is the residual haze (alpha 6-199); `haze: true` (20 % or
+  to it and clears the backdrop connected to the border (which screen colour: `characters.styles`, above). `despill`
+  (default true) takes the screen colour off the edges. Check `result.report`: `semiTransparentShare` is the residual haze (alpha 6-199); `haze: true` (20 % or
   more) means the screen did not key: try another `mode` or generate the image again. Do not re-key with scipy.
 - **A frame of a clip:** `media.frame {workspace, source, at: seconds | "first" | "last", output_name}` saves it as
   a PNG (for an image-to-video start frame, or a reference).
@@ -389,8 +402,8 @@ it can be found, reused and redone.
 - **Part of a sound:** a cue's `in`/`length` (above), or `audio.trim {workspace, source, start, length | end,
   output_name}` for a new audio file (an exact cut, keeps the sample rate and channels).
 - **Files from another workspace:** `assets.import_from_workspace {workspace, source_workspace, file,
-  destination_filename}` copies a GLB, image, audio or video with its metadata and records where it came from
-  (Hunyuan3D models made on the main install, for example). Do not `cp` between workspaces.
+  destination_filename}` copies a GLB, image, audio or video with its metadata and records where it came from.
+  Do not `cp` between workspaces.
 - **A stable name for an export:** `scenes.world3d.export` and `scenes.video2d.export` take `output_name`
   (`"set-crane-loop"` publishes `set-crane-loop.mp4`). Exporting again with the same name replaces that file once the
   new render is encoded, so a layer or prop that names it shows the new render; the replaced file is kept as
@@ -418,13 +431,12 @@ without the script naming it:
   shot: `series.episode.produce` only recuts. Switching the mode renders every shot once. `ambienceDuckDb` (0–24,
   default 0 = off) lowers the beds that many dB while someone speaks, like the score below.
 
-**Score (music under the whole episode).** A shot's `music` plays only in that shot, so a dialogue scene is often
-bare voices. `score` on the episode (`series.episode.update` with `episode: {"score": [...]}`) lays music cues
+**Score.** A shot's `music` plays only in that shot. `score` on the episode (`series.episode.update` with `episode: {"score": [...]}`) lays music cues
 across runs of shots at assembly: `{"fromShotId": "e3s04", "toShotId": "e3s12", "file": "mus-theme.wav",
 "volume": 0.18, "fadeIn": 1.5, "fadeOut": 2.0, "duck": true}`, or `{"sceneId": "e3_bar", "file": ...}` for a
-scene's shots. Use the ids `series.episode.get` shows: `from_script` names episode 3's shots `e3s00`, `e3s01`…
-and its scenes `e3_<scene id>`. Only `file` and the shots are required; the numbers shown are the defaults (volume
-0–2 relative to the dialogue, fades 0–30 s). Cues may not overlap (two cues may meet at a cut).
+scene's shots. Use the ids `series.episode.get` shows (Ids, above). Only `file` and the shots are required; the
+numbers shown are the defaults (volume 0–2 relative to the dialogue, fades 0–30 s). Cues may not overlap (two cues
+may meet at a cut).
 
 - Each cue plays from the cut before its first shot to the cut after its last, looped with a crossfade if the file
   is shorter, faded in and out inside the cue. Every clip kind and language version gets it.
@@ -439,9 +451,9 @@ Every assembly checks that each take's sound plays where its pictures do: `serie
 (`inSync`, `maxLagMs`, `late` with each off clip's `index` and `lagMs`, `unsure` for takes too quiet to place). A cut
 with `inSync: false` has lips visibly off from the first clip in `late`: report it, do not deliver it as finished.
 
-`roomByLocation` (`{"<locationId>": "<preset>"}`) makes the voice sound like the place. Lines are recorded dry, so a
-monk in a stone cathedral and a captain on an open deck would sound the same; with a room the render plays a processed
-copy of each line (the dry recording is kept, and lip-sync and timing stay the dry line's):
+`roomByLocation` (`{"<locationId>": "<preset>"}`) makes the voice sound like the place. Lines are recorded dry; with
+a room the render plays a processed copy of each line (the dry recording is kept, and lip-sync and timing stay the
+dry line's):
 
 | preset | what it does |
 | --- | --- |
@@ -457,10 +469,9 @@ copy of each line (the dry recording is kept, and lip-sync and timing stay the d
 The places are subtle on purpose: the room is felt, mostly as early reflections, and never costs a word. Its
 sound has no low end (cut at 200–350 Hz) and no sibilance (cut at 4–6 kHz), and its tail starts after a predelay.
 Every place keeps the voice's speech transmission index above 0.9 and its clarity (C50, 500 Hz–2 kHz) above 12 dB.
-Every copy is levelled to the dry line, so a room never changes how loud a voice is. A place reaches only the
-speakers in the shot, a `radio` every line, and a line's own `voiceRoom` wins (see `voiceRoom` above). A shot
-overrides its location with `layout2d.voiceRoom`. Changing a room renders again only the shots with lines that hear
-it; a series without `roomByLocation` renders exactly as before. The tail of the last line is cut where the shot
+Every copy is levelled to the dry line, so a room never changes how loud a voice is. Who hears a place: `voiceRoom`
+above. Changing a room renders again only the shots with lines that hear it; a series without `roomByLocation`
+renders exactly as before. The tail of the last line is cut where the shot
 ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let it ring out.
 
 ## Writing for quality

@@ -386,18 +386,29 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
-**Template + cast + painted set.** Prefer this over writing a `document`: pick a
-template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
-and a `setting` such as `sea` or `city`) and assign only what changes. Every card
-says what the built shot does: `shot` (close, medium, wide, far, plate), `moves`
-(the camera), `moving` (what the template itself animates), `still` (nothing
-moves unless the cast brings a clip), `subjects`, `authoredFor`, `floor` and
-`uses` (dialogue, talk, reaction, figure, establishing, action, reveal...). Ask
-for them as filters (`{"use": "dialogue", "subjects": 2}`, `{"shot": "close",
-"move": "push"}`) or in words in either language («plano general», «persecución»,
-«girar alrededor»); a `still` card needs a `clip`, a `motion`, a `camera` or a
-`world`, or the dry run warns `template_still`. See
-[Video 3D templates for agents](../development/WORLD3D_TEMPLATES_AGENTS.md).
+**Template + cast + painted set.** Prefer this over writing a `document`: ask
+`world3d.templates.suggest` for the shot as the brief phrases it (line, speakers,
+place, mood, beat), or pick a template whose roles fit (`world3d.templates.list`
+with `roles: ["subject_1", "background"]`, a `setting` such as `sea` or `city`,
+or the filters `kind`, `place` and `travel`) and assign only what changes. Every
+card says what the built shot does: `shot` (close, medium, wide, far, plate),
+`moves` (the camera), `moving` (what the template itself animates), `still`
+(nothing moves unless the cast brings a clip), `subjects`, `authoredFor`,
+`floor`, `kind`, `place` and `uses` (dialogue, talk, reaction, figure,
+establishing, action, speed, impact, reveal...). Ask for them as filters
+(`{"use": "dialogue", "subjects": 2}`, `{"shot": "close", "move": "push"}`,
+`{"kind": "stage", "place": "bar"}`) or in words in either language («plano
+general», «persecución», «girar alrededor»). Every reply lists `unknown_words`
+(the query words no card knows; they never count against the match) and, when no
+card has every known word, returns the best cards with at least half of them as
+`match: partial`, which are never applied. A `still` card needs a `clip`, a
+`motion`, a `camera` or a `world`, or the dry run warns `template_still`. See
+[Video 3D templates for agents](../development/WORLD3D_TEMPLATES_AGENTS.md):
+the [search](../development/WORLD3D_TEMPLATES_AGENTS.md#search), the
+[stages](../development/WORLD3D_TEMPLATES_AGENTS.md#stages), the
+[packs](../development/WORLD3D_TEMPLATES_AGENTS.md#packs-by-intent), the
+[modifiers](../development/WORLD3D_TEMPLATES_AGENTS.md#modifiers) and the
+[starter deck](../development/WORLD3D_TEMPLATES_AGENTS.md#starter-deck).
 `cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
 picture; `background` puts a picture in the template's background slot. The
 template keeps its camera, props, lights and moves. With a painted background on
@@ -525,7 +536,7 @@ the cast (`cine-two-shot`, `cine-medium-shot`, `tracking`) and turn the runner
 to face the way the place comes from. For a closed corridor use the `run-loop`
 template (an endless treadmill set) instead.
 
-**Composition.** Three controls work on any template, with or without a `world`:
+**Composition.** These controls work on any template, with or without a `world`:
 
 - `frame` moves the template's camera nearer or farther, keeping its angle and
   its move: `close` (0.6 of the template's distance), `medium` (0.8), `wide`
@@ -535,12 +546,35 @@ template (an endless treadmill set) instead.
   it follows where the slot places and turns the model, not the pose of the
   clip, so raised arms or a nod never move the shot. A document may set
   `camera.framing.track: "pose"` to stay on a moving face.
+- `camera_template` is the symmetric of `world`: the camera and framing of a
+  camera card (`cine-dolly-in`, `cine-low-angle`, `cine-orbit-360`, any card of
+  the camera-movement, framing, camera-angles, composition, editing,
+  time-and-motion or effects families) copied onto the shot, which keeps its
+  own duration, cast and place. A `dance-orbit` over the sky islands with
+  `"camera_template": "cine-crane-up"` plays the crane there. A card of another
+  kind (a lighting or colour look) fails with `invalid_camera_template`. A
+  `frame` or `lens` given with it applies after.
+- `lens` is a full-frame lens: `14mm`, `24mm`, `35mm`, `50mm`, `85mm`, `135mm`
+  or `200mm`. It sets the camera's field of view (the same numbers as the
+  `cine-*mm` cards) and scales a framing's zoom (`fovFrom`/`fovTo`) by the same
+  ratio, so a slow zoom on a `135mm` still zooms.
 - `scroll` (−10..10 m/s) slides a parallax set past the cast, for a run (above).
 - `light` may be a named light instead of a light object: `noon`, `golden`
   (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
   from the side), `stage` (hard white from the front), `campfire` (warm from
-  low). It replaces the template's or the world's sun and sets the ambient
-  share; the rest of the lighting stays.
+  low), and the lamps of the lighting and colour cards: `rembrandt`, `butterfly`,
+  `split`, `low_key`, `high_key`, `candle`, `backlight`, `window`, `moonlight`,
+  `under`, `hard`, `soft`, `dusk` (cool, after sunset) and `dawn` (pale, rosy,
+  from the other side). It replaces the template's or the world's sun and sets
+  the ambient share; the rest of the lighting stays.
+- `grade` is a colour grade: `natural`, `teal_orange`, `bleach`, `noir`,
+  `sepia`, `flashback`, `dream`, `giallo`, `cold`, `warm`, `vhs` or `film`. A
+  grade sets the document's tone mapping and exposure, puts a gel over the
+  lamp (`cold` turns the key blue, `sepia` brown-gold) and adds the screen
+  effects that do the rest: `noir` a vignette, `flashback` a vignette and grain
+  over a faded warm lamp, `dream` light rays over a bright soft frame, `vhs`
+  the tape look and scanlines, `film` grain. Those effects carry ids `grade-*`,
+  so the template's own effects stay. The grade is applied after `light`.
 - A cast **group** stands several models in a formation with one entry:
   `{"crowd": {"sources": ["klump", "kasplat", "kremling"], "clip": "dance_side",
   "formation": "arc", "spacing": 1.4}}`. Every member is added as a prop at its
@@ -551,6 +585,11 @@ template (an endless treadmill set) instead.
   and `scatter` (a line with a fixed jitter). Members are named `crowd_1`,
   `crowd_2`... in the resolved cast; a shot holds at most 16 models and
   pictures, groups counted by member.
+
+A shot whose `width` and `height` are portrait (1080×1920) gets the template's
+landscape camera adapted to the tall frame (a wider lens, the eye nearer, the
+lateral moves narrowed), the same adaptation the editor applies when a scene
+is switched to portrait; `camera_template` and `lens` are applied before it.
 
 **Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
 sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
@@ -1102,5 +1141,17 @@ those actual results, then pass the whole spec to `production.run` in its normal
 
 The same set props appear in both shots. Choose positions from the catalog's resolved marks and use real prop heights;
 `scene3d.item.add/update/remove/list` also edits an existing Series shot or working Video 3D scene.
+
+Molds come in two kinds, and the catalog lists each one's `kind` and `title`. The fifteen named interiors (`cocina`,
+`aula`, `bar`…) are recipes with furniture. The shape molds are places without a name: `sala`, `sala_ventana`,
+`mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`, `vehiculo`, and the exteriors `calle`,
+`plaza`, `orilla` and `azotea`. An exterior has no ceiling, may list fewer walls, holds its view on `wall_back` (give it
+an `image` skin: the horizon, the sea, the skyline) and is lit by a sun preset (`daylight`, `dusk`, `night_sky`).
+Every mold is also a Video 3D card `stage-<mold>`: `scene3d: {template: "stage-sala", roomCamera: "ots_a", size: "large"}`
+stages the mold on `two-shot` in its default colours, so a shot needs no `sets` entry to stand in a place; name a
+`sets` room as `background` and the shot takes its painted skin instead. A staged room always moves a little (low
+dust motes and a key light that breathes), so it never trips `template_still`. The dry run warns `stage_unskinned` when a
+stage or room shows only its mold colours and `looks_samey` when the same template and background run for more than four
+shots in a row.
 Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
 approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.

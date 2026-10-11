@@ -3,6 +3,7 @@ import type { defineCapability } from './capabilityRegistry'
 export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.templates.list',
   'world3d.templates.catalog',
+  'world3d.templates.suggest',
   'world3d.templates.get',
   'world3d.templates.user.put',
   'world3d.scene.instantiate',
