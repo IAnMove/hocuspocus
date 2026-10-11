@@ -11,6 +11,7 @@ import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
 import { framingAnchor, markRestPose } from './framingAnchor'
+import { flattenRootMotion } from './rootMotion'
 import {
   AdditiveBlending,
   AnimationMixer,
@@ -308,6 +309,7 @@ export function bindMixer(root: Object3D, animations: GLTF['animations'], slot: 
   if (!slot.clip) return null
   const clip = animations[slot.clip.index]
   if (!clip || clip.name !== slot.clip.name) return null
+  if (slot.inPlace) flattenRootMotion(root, clip)
   const mixer = new AnimationMixer(root)
   const action = mixer.clipAction(clip)
   action.setLoop(LoopOnce, 1)

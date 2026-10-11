@@ -17,6 +17,7 @@ const MID_BEHIND = 9           // metres the mid layer stands behind the furthes
 const NEAR_ALONG = 0.3         // the near layer stands this share of the way from the camera to what it looks at
 const NEAR_CLEARANCE = 0.7     // a camera that comes closer than this to the near layer's plane would cross it
 const SPREAD = 1.5             // layers are this much taller than the view at their distance, for the move
+const NEAR_REACH = 0.4          // the near layer's picture reaches this share of the frame up from its bottom edge
 const SINK = 0.05              // share of a layer's height sunk under the ground, so its pieces stand on it
 const LAYER_ASPECT = 1664 / 928   // the layers are drawn at this size (production_parallax.py)
 const TILE_MARGIN = 1.1        // tiles cover this much more than the camera sweeps
@@ -108,14 +109,19 @@ function midSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], 
   return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll)
 }
 
-/** The near layer stands on the floor a short way in front of the camera, tall enough that its pieces frame the
- * bottom and the sides; none when the camera would cross it during the shot (an orbit, a crash zoom). */
+/** The near layer stands on the floor a short way in front of the camera, its picture reaching only the lower part of
+ * the frame, so its pieces frame the bottom and the sides and never hide the cast; none when the camera would cross
+ * it during the shot (an orbit, a crash zoom). */
 function nearSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], pose: Pose, ahead: Vec3, key: string | undefined, scroll: number): Scene3DSlot | null {
   const toLook = Math.hypot(pose.look[0] - pose.eye[0], pose.look[2] - pose.eye[2])
   const distance = toLook * NEAR_ALONG
   const at: Vec3 = [pose.eye[0] + ahead[0] * distance, 0, pose.eye[2] + ahead[2] * distance]
   if (path.some(step => along(step.eye, at, ahead) > -NEAR_CLEARANCE || along(step.look, at, ahead) < NEAR_CLEARANCE)) return null
-  const height = Math.max(viewHeight(document, distance), pose.eye[1] * SPREAD)
+  const half = distance * Math.tan((document.camera.fov * Math.PI) / 360)
+  const sight = pose.eye[1] + (pose.look[1] - pose.eye[1]) * NEAR_ALONG
+  const reach = sight + (2 * NEAR_REACH - 1) * half             // the height its picture's top reaches in the frame
+  if (!(reach > 0.05)) return null                                // a camera this low sees nothing of a floor layer
+  const height = reach / (1 - (layer.foot ?? 0) - SINK)
   return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll)
 }
 
