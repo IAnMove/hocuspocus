@@ -1,4 +1,4 @@
-import { Box3, Matrix4, Vector3, type Object3D } from 'three'
+import { Box3, Matrix4, Vector3, type Object3D, type SkinnedMesh } from 'three'
 import type { Scene3DFraming, Vec3 } from './types'
 
 /** The three points a camera may frame, in one space. */
@@ -8,13 +8,22 @@ const headBones = new WeakMap<Object3D, Object3D | null>()
 /** Each mounted model's points at rest, in the model's own space. */
 const restPoints = new WeakMap<Object3D, AnchorPoints>()
 
+/** The head bone a skin moves. A rigged rip keeps its former skeleton next to the new one (`previous:head`), loose and
+ * still: framing that one aimed the camera beside the character. A loose head is used only when no skin has one. */
 function headBone(root: Object3D) {
   if (!headBones.has(root)) {
-    let head: Object3D | null = null
+    const skinned = new Set<Object3D>()
     root.traverse(node => {
-      if (!head && 'isBone' in node && /head$/i.test(node.name)) head = node
+      if ((node as SkinnedMesh).isSkinnedMesh) for (const bone of (node as SkinnedMesh).skeleton.bones) skinned.add(bone)
     })
-    headBones.set(root, head)
+    let head: Object3D | null = null
+    let loose: Object3D | null = null
+    root.traverse(node => {
+      if (!('isBone' in node) || !/head$/i.test(node.name)) return
+      if (skinned.has(node)) head ??= node
+      else loose ??= node
+    })
+    headBones.set(root, head ?? loose)
   }
   return headBones.get(root) ?? null
 }
