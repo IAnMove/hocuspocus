@@ -1,3 +1,4 @@
+import { stageRoomSet } from '../src/features/scene3d/roomSet.ts'
 // Native template compilation for the production runner. The window is exported length.
 import { readFileSync } from 'node:fs'
 import { applyScene3DTemplate, SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/templates.ts'
@@ -32,7 +33,8 @@ const drawnAsSet = document.environment?.floorStyle === 'backdrop'
 if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
-if (config.background) bindBackground(document, sourced(config.background))
+if (config.background?.room) stageRoomSet(document, config.background.room)
+else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 if (config.frame !== undefined) reframe(document, config.frame)

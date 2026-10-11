@@ -268,6 +268,7 @@ export type Scene3DToon = {
 }
 
 export type Scene3DDocument = {
+  room?: import('./roomSet').RoomSet
   /** Native procedural sets: shared by editor, MCP, Wizard and both export paths. */
   motionLab?: import('./motionlab/types').MotionLabSettings
   rhythm?: import('./rhythm').Scene3DRhythm

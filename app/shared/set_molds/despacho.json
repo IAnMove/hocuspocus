@@ -1,0 +1,287 @@
+{
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      4,
+      4,
+      2.8
+    ],
+    "medium": [
+      6,
+      5,
+      3
+    ],
+    "large": [
+      9,
+      7,
+      3.4
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right"
+  ],
+  "openings": [
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.5,
+      "width": 1.6,
+      "height": 1.4,
+      "sill": 0.9
+    },
+    {
+      "wall": "right",
+      "kind": "door",
+      "x": 0.7,
+      "width": 0.9,
+      "height": 2.1
+    }
+  ],
+  "blocks": [
+    {
+      "id": "desk",
+      "kind": "desk",
+      "box": [
+        0,
+        0,
+        -0.8,
+        1.8,
+        0.75,
+        0.8
+      ],
+      "surfaces": [
+        "desk_front",
+        "desk_top"
+      ]
+    },
+    {
+      "id": "shelf",
+      "kind": "shelf",
+      "box": [
+        0,
+        0,
+        -2.25,
+        3,
+        2.2,
+        0.4
+      ],
+      "surfaces": [
+        "shelf_front"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "window_view",
+    "door",
+    "desk_front",
+    "desk_top",
+    "shelf_front"
+  ],
+  "marks": [
+    {
+      "id": "behind_desk",
+      "pose": "sit",
+      "position": [
+        0,
+        0,
+        -1.5
+      ],
+      "facing": 0
+    },
+    {
+      "id": "visitor",
+      "pose": "stand",
+      "position": [
+        0.4,
+        0,
+        0.6
+      ],
+      "facing": 180
+    },
+    {
+      "id": "door",
+      "pose": "stand",
+      "position": [
+        2.6,
+        0,
+        0.8
+      ],
+      "facing": -90
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        2.4,
+        1.7,
+        2.2
+      ],
+      "lookAt": [
+        0,
+        1,
+        -0.5
+      ],
+      "fov": 55
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -0.6,
+        1.6,
+        -1.9
+      ],
+      "lookAt": [
+        0.4,
+        1.1,
+        0.6
+      ],
+      "fov": 45
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        0.9,
+        1.6,
+        1.2
+      ],
+      "lookAt": [
+        0,
+        1,
+        -1.5
+      ],
+      "fov": 45
+    },
+    {
+      "id": "wide",
+      "position": [
+        0,
+        2.3,
+        2.3
+      ],
+      "lookAt": [
+        0,
+        1,
+        -0.6
+      ],
+      "fov": 70
+    },
+    {
+      "id": "close_1",
+      "position": [
+        0,
+        1.5,
+        0.2
+      ],
+      "lookAt": [
+        0,
+        1.1,
+        -1.5
+      ],
+      "fov": 40
+    },
+    {
+      "id": "close_2",
+      "position": [
+        0.4,
+        1.5,
+        -1
+      ],
+      "lookAt": [
+        0.4,
+        1.2,
+        0.6
+      ],
+      "fov": 40
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -2,
+        1.7,
+        1.8
+      ],
+      "lookAt": [
+        2.6,
+        1,
+        0.8
+      ],
+      "fov": 60
+    }
+  ],
+  "lights": "office_day",
+  "propAnchors": [
+    {
+      "id": "desk_left",
+      "on": "desk_top",
+      "position": [
+        -0.6,
+        0.75,
+        -0.8
+      ],
+      "maxHeight": 0.5
+    },
+    {
+      "id": "desk_right",
+      "on": "desk_top",
+      "position": [
+        0.6,
+        0.75,
+        -0.8
+      ],
+      "maxHeight": 0.5
+    },
+    {
+      "id": "corner",
+      "on": "floor",
+      "position": [
+        -2.6,
+        0,
+        -2.1
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_back",
+      "position": [
+        1.9,
+        1.3,
+        -2.48
+      ],
+      "maxHeight": 0.9
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#8a6f55"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "desk_front": {
+      "color": "#71513a"
+    },
+    "desk_top": {
+      "color": "#a0815b"
+    },
+    "shelf_front": {
+      "color": "#523f32"
+    }
+  },
+  "id": "despacho",
+  "title": {
+    "es": "Despacho",
+    "en": "Office"
+  }
+}
