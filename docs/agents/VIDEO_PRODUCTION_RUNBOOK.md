@@ -1047,3 +1047,45 @@ another output (`song.wav` beside `song.png`) returns `sidecar_conflict` and
 nothing is written when that sidecar holds the other output's metadata or the
 copy would create it; choose another name. This is a CPU
 operation and downloads no models.
+
+## Room sets
+
+An interior is a mold (metres, furniture blocks, holes, marks, cameras and anchors), a skin and approved library props.
+Read `scene3d.sets.catalog` first. The background wall is painted straight-on; side walls and floors may use tiled
+textures, and screens accept video assets. The skin uses `style.image`, caches the complete recipe and submits its
+initial images together. `production.run` with `dry_run: true` reports `room_skin_images` and `room_sets` before GPU work.
+
+Create a lamp with `props.create {workspace: "movie", name: "lamp", description: "small desk lamp", heightM: 0.4,
+style: "layered paper cutouts"}`; poll `props.status`, inspect the PNG and approve its id with `props.approve`.
+Import your approved character PNGs into the same workspace. Replace the lamp id and character filenames below with
+those actual results, then pass the whole spec to `production.run` in its normal version 1 mutation envelope:
+
+```json
+{
+  "title": "The office meeting",
+  "quality": "draft",
+  "song": {"lyrics": "", "caption": "gentle instrumental piano", "duration": 12, "bpm": 100, "seeds": [11, 22, 33]},
+  "style": {"image": "layered paper cutouts, matte card, simple geometric shapes"},
+  "sets": {
+    "office": {"kind": "room", "mold": "despacho", "size": "medium",
+      "skin": {"wall_back": {"image": "office shelves with folders, no people"},
+        "floor": {"texture": "warm oak parquet", "tile_m": 1}, "wall_left": {"color": "#d8cbb5"}},
+      "props": [{"prop": "<approved-lamp-id>", "anchor": "desk_left"}]}
+  },
+  "shots": [
+    {"key": "meeting", "kind": "scene3d", "t0": 0,
+      "scene3d": {"template": "two-shot", "background": "office", "roomCamera": "two_shot",
+        "cast": {"subject_1": {"source": "person-a.png", "position": [0, 0, -1.4], "scale": 0.85, "grounded": true},
+          "subject_2": {"source": "person-b.png", "position": [0.4, 0, 0.6], "scale": 0.85, "grounded": true}}}},
+    {"key": "reply", "kind": "scene3d", "t0": 6,
+      "scene3d": {"template": "two-shot", "background": "office", "roomCamera": "ots_a",
+        "cast": {"subject_1": {"source": "person-a.png", "position": [0, 0, -1.4], "scale": 0.85, "grounded": true},
+          "subject_2": {"source": "person-b.png", "position": [0.4, 0, 0.6], "scale": 0.85, "grounded": true}}}}
+  ]
+}
+```
+
+The same set props appear in both shots. Choose positions from the catalog's resolved marks and use real prop heights;
+`scene3d.item.add/update/remove/list` also edits an existing Series shot or working Video 3D scene.
+Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
+approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.
