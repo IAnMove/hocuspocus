@@ -8,7 +8,7 @@ the same handlers filtered to a profile, with its own first instructions.
 from __future__ import annotations
 
 SERIES_TOOLS = frozenset({
-    "scene3d.sets.catalog",
+    "scene3d.sets.catalog", "scene3d.item.add", "scene3d.item.update", "scene3d.item.remove", "scene3d.item.list",
     "props.create", "props.import", "props.status", "props.approve", "props.reject", "props.list", "props.get", "props.delete",
     # Start here, then the series itself.
     "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",

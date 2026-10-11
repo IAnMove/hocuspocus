@@ -4067,6 +4067,7 @@
     "height": "Altura (metros)",
     "style": "Estilo",
     "generate": "Generar candidatos",
-    "generating": "Generando candidatos de atrezo…"
+    "generating": "Generando candidatos de atrezo…",
+    "remove": "Quitar"
   }
 }

@@ -653,6 +653,7 @@ function WorkspaceStageColumn({
         <div className="min-w-0 space-y-3">
           <PropLibraryPanel workspace={workspace} disabled={editingLocked} onAdd={prop => applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))} />
           <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
+          {selected?.slot === 'prop' && <button disabled={editingLocked} className="min-h-11 rounded-lg border border-border px-3" onClick={() => applyScene(current => ({ ...current, slots: current.slots.filter(slot => slot.id !== selected.id) }))}>{editorT('props.remove')}</button>}
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
             onReset={() => {
