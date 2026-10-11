@@ -155,9 +155,9 @@ def _check_parallax(entry):
     """A parallax set spelled out: the far picture as source, cutout layers at depths, the key colour, a ground slab."""
     layers, key = entry.get("layers"), entry.get("key", "#ff00ff")
     if not isinstance(layers, list) or not 0 < len(layers) <= 3 or not all(
-            isinstance(layer, dict) and set(layer) == {"source", "depth"} and _source(layer["source"]) and layer["depth"] in LAYER_DEPTHS
-            for layer in layers):
-        raise ValueError("scene3d.background.layers lists 1-3 {source, depth: mid|near} painted cutouts")
+            isinstance(layer, dict) and {"source", "depth"} <= set(layer) <= {"source", "depth", "foot"} and _source(layer["source"])
+            and layer["depth"] in LAYER_DEPTHS and _measure(layer.get("foot", 0), 0, 0.9) for layer in layers):
+        raise ValueError("scene3d.background.layers lists 1-3 {source, depth: mid|near, foot?} painted cutouts")
     if not (isinstance(key, str) and len(key) == 7 and key[0] == "#" and all(ch in "0123456789abcdefABCDEF" for ch in key[1:])):
         raise ValueError("scene3d.background.key is the layers' chroma-key colour, #rrggbb")
     if "houses" in entry:
