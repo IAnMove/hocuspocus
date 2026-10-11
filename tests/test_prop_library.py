@@ -72,3 +72,5 @@ def test_batch_uses_installed_model_defaults_and_satisfies_native_admission():
     result=generate_batch(call,'test',[{'prompt':'lamp','negative':'text, watermark, hands','resolution':'1024x1024'},{'prompt':'mug','resolution':'1024x1024'}],'batch-check')
     assert len(result)==2
     assert all(p['num_inference_steps']==6 and p['guidance_scale']==1 for p in admitted)
+    assert [p['prompt'] for p in admitted]==['lamp','mug']
+    assert all(p['negative_prompt']=='' for p in admitted)
