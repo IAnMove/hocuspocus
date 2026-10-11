@@ -18,6 +18,11 @@ const SET_COVER = 2
 const WORLD_KEYS = ['dressing', 'atmos', 'environment', 'light', 'worldSfx', 'screenBackdrop', 'pixelWorld']
 /** The camera's distance to its subject, as a share of the template's. */
 const FRAMES = { close: 0.6, medium: 0.8, wide: 1.35, far: 1.8 }
+/** A model is drawn this tall at scale 1; framing offsets are in these units. */
+const MODEL_HEIGHT = 1.7
+/** The room a nearer frame keeps above the head, and the most it raises the aim above the centre (about the chin). */
+const HEADROOM = 0.1
+const MAX_LIFT = 0.6
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
 /** Ids of the pictures cast where the template authored a model. */
@@ -35,6 +40,7 @@ if (config.camera_template) takeCamera(document, config.camera_template)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 if (config.frame !== undefined) reframe(document, config.frame)
 if (config.lens) applyLens(document, config.lens)
+if (config.frame !== undefined && (FRAMES[config.frame] ?? Number(config.frame)) < 1) keepHeadInFrame(document)
 if (typeof config.light === 'string') applyNamedLight(document, config.light)
 for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
   if (config[key] === undefined || (key === 'light' && typeof config.light === 'string')) continue
@@ -145,6 +151,23 @@ function reframe(document, frame) {
   else if (camera.eyeOffset) camera.eyeOffset = nearer(camera.eyeOffset)
   else if (['orbit', 'product', 'musical', 'follow'].includes(camera.family)) camera.orbitRadius = (camera.orbitRadius ?? 4.2) * factor
   else camera.eye = camera.look.map((at, axis) => at + (camera.eye[axis] - at) * factor)
+}
+
+/** A framing camera pushed nearer to a figure's middle loses the head off the top of the frame: aim it a little higher
+ * (eye and look together, so the angle holds) until the frame keeps room above the head. Only a camera that looks at
+ * the centre itself; one that aims at a chosen point (`lookFrom`/`lookTo`) keeps it. Offsets are in figure units:
+ * a figure is MODEL_HEIGHT tall and its centre anchor stands half way up. */
+function keepHeadInFrame(document) {
+  const camera = document.camera
+  const framing = camera.framing
+  if (!framing || framing.anchor !== 'center' || framing.lookFrom || framing.lookTo) return
+  const top = MODEL_HEIGHT / 2 + HEADROOM
+  const lift = (eye, fov) => Math.min(MAX_LIFT, Math.max(0, top - Math.hypot(...eye) * Math.tan((fov * Math.PI) / 360)))
+  const fovFrom = framing.fovFrom ?? camera.fov
+  const start = lift(framing.from, fovFrom), end = lift(framing.to, framing.fovTo ?? fovFrom)
+  if (!start && !end) return
+  const up = ([x, y, z], by) => [x, y + by, z]
+  camera.framing = { ...framing, from: up(framing.from, start), to: up(framing.to, end), lookFrom: [0, start, 0], lookTo: [0, end, 0] }
 }
 
 /** The camera and framing of a camera card (the symmetric of `world`): this shot keeps its duration, cast and place.
