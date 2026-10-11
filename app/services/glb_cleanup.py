@@ -12,6 +12,10 @@ A ripped character may come with a held thing hung under its feet instead of in 
 it reads as a column between the legs and stands the body on the gun's end. For a body that stands on two feet,
 a part hanging well below the feet is dropped.
 
+A glow (a fairy's light, a flame, a spark) is often a bright shape painted on black with no alpha channel, meant
+to be added to the picture: drawn as it comes, it is a black square with a light inside. Such a material is marked
+additive and unlit, and the viewer adds its light instead of painting the square.
+
 A skinned rip may store each part in its own bone's space (every limb piled at the origin) and leave the skeleton
 to assemble the body: a viewer shows it whole, but anything reading the vertices (the humanoid rig, the clean-ups
 above) sees a heap. Such a model is baked into its rest pose, the parts where the skeleton puts them, and rebound
@@ -32,7 +36,9 @@ SAMPLE = 256            # texels on a side of the corner of a texture that is me
 FEET = 10               # the lowest tenth of a standing body's vertices are its feet
 UNDER_FEET = 0.2        # a part reaching this share of the height below the feet hangs under the floor
 APART = 0.75            # skinned vertices spanning less than this share of the rest pose's height are stored in parts
-CLEANUP = 4             # version of this cleanup, part of a model's fingerprint
+BLACK = 0.03            # a texture whose border is darker than this (mean RGB) is painted on black
+GLOW = 0.1              # ... and whose inside is this much brighter than its border glows
+CLEANUP = 5             # version of this cleanup, part of a model's fingerprint
 
 _TYPES = {5126: np.float32, 5121: np.uint8, 5123: np.uint16}
 _WIDTH = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
@@ -118,6 +124,53 @@ def _drop_noisy_textures(gltf) -> int:
             paint.baseColorTexture = None
             changed += 1
     return changed
+
+
+def glow_materials(gltf) -> list[int]:
+    """Indices of the materials painted as a glow on black: an opaque texture without alpha whose border is black
+    and whose inside is brighter, on a material that does not blend yet."""
+    found = []
+    for index, material in enumerate(gltf.materials or []):
+        paint = material.pbrMetallicRoughness
+        texture = paint.baseColorTexture if paint else None
+        if texture is None or (material.alphaMode or "OPAQUE") != "OPAQUE":
+            continue
+        source = gltf.textures[texture.index].source
+        if source is None or _has_alpha(gltf, gltf.images[source]):
+            continue
+        texels = _texels(gltf, gltf.images[source])
+        if texels is None or min(texels.shape[:2]) < 4:
+            continue
+        border = np.concatenate([texels[0], texels[-1], texels[:, 0], texels[:, -1]])
+        if float(border.mean()) < BLACK and float(texels.mean()) > float(border.mean()) + GLOW:
+            found.append(index)
+    return found
+
+
+def _has_alpha(gltf, image) -> bool:
+    from PIL import Image
+
+    if image.bufferView is None:
+        return False
+    view = gltf.bufferViews[image.bufferView]
+    start = view.byteOffset or 0
+    try:
+        with Image.open(io.BytesIO(gltf.binary_blob()[start:start + view.byteLength])) as picture:
+            return picture.mode in ("RGBA", "LA", "PA") or "transparency" in picture.info
+    except (OSError, ValueError):
+        return False
+
+
+def _mark_glows(gltf) -> int:
+    """Glow materials become additive (``extras.hocusBlend``) and unlit; the count marked."""
+    glows = glow_materials(gltf)
+    for index in glows:
+        material = gltf.materials[index]
+        material.extras = {**(material.extras or {}), "hocusBlend": "additive"}
+        material.extensions = {**(material.extensions or {}), "KHR_materials_unlit": {}}
+    if glows and "KHR_materials_unlit" not in (gltf.extensionsUsed or []):
+        gltf.extensionsUsed = [*(gltf.extensionsUsed or []), "KHR_materials_unlit"]
+    return len(glows)
 
 
 def parts_under_feet(gltf) -> list[tuple[int, int]]:
@@ -270,6 +323,8 @@ def clean_glb(source: str | Path, target: str | Path, *, standing: bool = False)
             fixes.append("its vertex colours were normals (rainbow tints)")
         if painted := _drop_noisy_textures(gltf):
             fixes.append(f"{painted} of its materials were painted with decoding noise, now dropped")
+        if glows := _mark_glows(gltf):
+            fixes.append(f"{glows} of its materials glow on black (a light with no alpha), now added to the picture")
         if standing and (hung := _drop_parts_under_feet(gltf)):
             fixes.append(f"{hung} of its parts hung under its feet (a held thing the rip misplaced), now dropped")
     except (OSError, ValueError, KeyError, IndexError, TypeError, struct.error):
