@@ -23,7 +23,7 @@ EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
-               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera"}
+               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera", "scroll"}
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add",
                "sources", "formation", "spacing", "imageLook", "setItem", "billboard"}
 GROUP_FIELDS = {"sources", "formation", "spacing", "position", "rotationY"}
@@ -33,7 +33,7 @@ FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
 # Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
 # of a production is then exported again on its next run instead of reusing the stale file.
-RENDER_RECIPE = 1
+RENDER_RECIPE = 2
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
@@ -120,6 +120,9 @@ def _check_composition(config):
     light = config.get("light")
     if isinstance(light, str) and light not in LIGHTS:
         raise ValueError(f"scene3d.light is a light object or one of {', '.join(LIGHTS)}")
+    scroll = config.get("scroll")
+    if scroll is not None and (isinstance(scroll, bool) or not isinstance(scroll, (int, float)) or not -10 <= scroll <= 10):
+        raise ValueError("scene3d.scroll is the speed, in metres per second, at which a parallax set slides past a running cast (-10..10)")
 
 
 def _check_background(config):

@@ -55,7 +55,7 @@ delete document.soundtrack
 retargetFraming(document)
 if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
 if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
-if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background)]
+if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll })]
 const parsed = parseScene3DDocument(document)
 if (!parsed) throw new Error('Invalid Video 3D document')
 process.stdout.write(JSON.stringify(parsed))

@@ -717,6 +717,10 @@ PARALLAX = {"source": "/api/v1/uploads/far.png", "key": "#00ff00",
 
 def test_a_parallax_background_is_checked():
     validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX))
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX, scroll=-3))
+    for bad_scroll in (11, "fast", True):
+        with pytest.raises(ValueError, match="scene3d.scroll"):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX, scroll=bad_scroll))
     for bad in ({**PARALLAX, "layers": []}, {**PARALLAX, "layers": [{"source": "m.png", "depth": "far"}]}, {**PARALLAX, "key": "green"},
                 {**PARALLAX, "layers": [{"source": "m.png", "depth": "mid", "foot": 2}]},
                 {**PARALLAX, "houses": [{"source": "h.glb", "width": 5, "height": 6}]}):
@@ -735,13 +739,20 @@ def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips
     assert all(slot["imageLook"]["colorKey"]["color"] == "#00ff00" and slot["imageLook"]["unlit"] for slot in layers.values())
     camera_z = doc["camera"]["eye"][2]
     assert layers["set-layer-mid"]["position"][2] <= -9, "the mid layer stands well behind the cast, away from the camera"
-    assert layers["set-layer-mid"]["position"][1] == pytest.approx(-0.25 * 2 * layers["set-layer-mid"]["scale"]), "lowered by the empty key under its pieces"
+    assert layers["set-layer-mid"]["position"][1] == pytest.approx(-(0.25 + 0.05) * 2 * layers["set-layer-mid"]["scale"]), "lowered by the empty key under its pieces and sunk 5 %"
+    assert layers["set-layer-near"]["position"][1] < 0, "the near layer stands on the floor, sunk like the others"
+    assert "drift" not in layers["set-layer-mid"] and "tiles" not in layers["set-layer-mid"]["imageLook"], "a still two-shot needs no tiles and nothing scrolls"
     assert 0 < layers["set-layer-near"]["position"][2] < camera_z, "the near layer stands between the camera and the cast"
     assert layers["set-layer-mid"]["scale"] > layers["set-layer-near"]["scale"] > 0, "each layer covers the view at its distance"
     assert next(slot for slot in doc["slots"] if slot["id"] == "set-ground")["position"][1] == 0
     orbit = compile_document(cast_shot(template="dance-orbit", background=PARALLAX, cast=hero), 4)
     ids = {slot["id"] for slot in orbit["slots"]}
     assert "set-layer-mid" in ids and "set-layer-near" not in ids, "an orbit would cross the near layer"
+    turning = next(slot for slot in orbit["slots"] if slot["id"] == "set-layer-mid")
+    assert turning["imageLook"]["tiles"] >= 3, "an orbit sweeps past a single picture: mirrored tiles cover the turn"
+    run = compile_document(cast_shot(template="cine-two-shot", background=PARALLAX, cast={**hero, "subject_2": "/api/v1/file/b.glb?workspace=t"}, scroll=2.5), 4)
+    moving = {slot["id"]: slot for slot in run["slots"] if slot["id"].startswith("set-")}
+    assert all(slot["drift"] > 0 for slot in moving.values()) and moving["set-ground"]["drift"] < moving["set-layer-mid"]["drift"], "scroll slides the layers and the ground"
 
 
 def test_a_renderer_recipe_change_exports_every_clip_again(tmp_path, monkeypatch):

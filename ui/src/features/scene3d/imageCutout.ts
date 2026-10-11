@@ -1,4 +1,4 @@
-import { DoubleSide, Mesh, MeshBasicMaterial, MeshStandardMaterial, type Object3D, type Texture } from 'three'
+import { DoubleSide, Mesh, MeshBasicMaterial, MeshStandardMaterial, MirroredRepeatWrapping, type Object3D, type Texture } from 'three'
 import { applyPsxImageMaterial } from './imageLook'
 import { applyImageColorKey } from './imageColorKey'
 import { imageWindowGeometry } from './imageWindows'
@@ -22,10 +22,24 @@ function cutoutMaterial(slot: Scene3DSlot, texture: Texture | null) {
 /** A bottom-anchored image plane with real alpha occlusion and scene lighting. */
 export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
   const aspect = cutoutAspect(texture)
-  const mesh = new Mesh(imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
+  const tiles = slot.imageLook?.tiles ?? 1
+  const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
   groundImageCutout(mesh, slot, texture, aspect)
   poseImageCutout(mesh, slot)
   return mesh
+}
+
+/** The picture repeated side by side, every other copy mirrored so the seams join: a layer wide enough for a camera
+ * that turns, with the original copy in the middle. The texture wraps mirrored, so a scrolled offset loops too. */
+function tiledGeometry(aspect: number, tiles: number, texture: Texture | null) {
+  const geometry = imageWindowGeometry(aspect * tiles)
+  const uv = geometry.getAttribute('uv')
+  for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * tiles - (tiles - 1) / 2)
+  if (texture) {
+    texture.wrapS = MirroredRepeatWrapping
+    texture.needsUpdate = true
+  }
+  return geometry
 }
 
 function groundImageCutout(mesh: Mesh, slot: Scene3DSlot, texture: Texture | null, aspect: number) {
