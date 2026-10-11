@@ -31,6 +31,9 @@ FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camer
 LIGHTS = ("noon", "golden", "overcast", "night", "neon", "stage", "campfire")
 FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
+# Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
+# of a production is then exported again on its next run instead of reusing the stale file.
+RENDER_RECIPE = 1
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
@@ -406,7 +409,8 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
         shot = {**shot, "scene3d": resolve_media(shot["scene3d"], stills=spec.get("stills"), root=production.root,
                                                  workspace=production.ws, models=production.state.get("models"),
                                                  sets=production.state.get("sets"))}
-        source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0)}, sort_keys=True)
+        source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0),
+                             "recipe": RENDER_RECIPE}, sort_keys=True)
         fingerprint = hashlib.sha256(source.encode()).hexdigest()[:16]
         if clips.get(key, {}).get("fingerprint") == fingerprint and (production.root / clips[key]["file"]).is_file():
             continue
