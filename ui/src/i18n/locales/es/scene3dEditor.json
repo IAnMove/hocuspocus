@@ -558,7 +558,7 @@
       "description": "Encuadre oblicuo cercano para observar la superficie del objeto."
     },
     "product-pair": {
-      "title": "Comparación de productos",
+      "title": "Pareja de productos",
       "description": "Dos productos comparten una composición frontal simétrica y pausada."
     },
     "product-pedestal": {
@@ -1962,7 +1962,7 @@
       "description": "Movimiento. Una vista baja y angular desde la altura del regazo, hacia el pecho."
     },
     "cine-car-chasing": {
-      "title": "Persecución en coche",
+      "title": "Persecución en coche desde atrás",
       "description": "Movimiento. Una vista de persecución desde atrás y un poco arriba, en la calle."
     },
     "cine-car-grip": {
@@ -2094,7 +2094,7 @@
       "description": "Encuadre. Una vista amplia y fija que puede cubrir a dos personas."
     },
     "cine-two-shot": {
-      "title": "Plano de dos",
+      "title": "Plano de dos (encuadre)",
       "description": "Encuadre. Dos personas comparten un plano medio-amplio."
     },
     "cine-three-shot": {
