@@ -1090,5 +1090,17 @@ those actual results, then pass the whole spec to `production.run` in its normal
 
 The same set props appear in both shots. Choose positions from the catalog's resolved marks and use real prop heights;
 `scene3d.item.add/update/remove/list` also edits an existing Series shot or working Video 3D scene.
+
+Molds come in two kinds, and the catalog lists each one's `kind` and `title`. The fifteen named interiors (`cocina`,
+`aula`, `bar`…) are recipes with furniture. The shape molds are places without a name: `sala`, `sala_ventana`,
+`mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`, `vehiculo`, and the exteriors `calle`,
+`plaza`, `orilla` and `azotea`. An exterior has no ceiling, may list fewer walls, holds its view on `wall_back` (give it
+an `image` skin: the horizon, the sea, the skyline) and is lit by a sun preset (`daylight`, `dusk`, `night_sky`).
+Every mold is also a Video 3D card `stage-<mold>`: `scene3d: {template: "stage-sala", roomCamera: "ots_a", size: "large"}`
+stages the mold on `two-shot` in its default colours, so a shot needs no `sets` entry to stand in a place; name a
+`sets` room as `background` and the shot takes its painted skin instead. A staged room always moves a little (low
+dust motes and a key light that breathes), so it never trips `template_still`. The dry run warns `stage_unskinned` when a
+stage or room shows only its mold colours and `looks_samey` when the same template and background run for more than four
+shots in a row.
 Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
 approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.
