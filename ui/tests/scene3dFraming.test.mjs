@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { AnimationClip, VectorKeyframeTrack, Bone, Group, Mesh, BoxGeometry, MeshBasicMaterial, PerspectiveCamera, Scene } from 'three'
+import { AnimationClip, VectorKeyframeTrack, Bone, Group, Mesh, BoxGeometry, MeshBasicMaterial, PerspectiveCamera, Scene, Skeleton, SkinnedMesh, Uint16BufferAttribute, Float32BufferAttribute } from 'three'
 import { SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/types.ts'
 import { CINEMATIC_TEMPLATE_IDS } from '../src/features/scene3d/cinematicTemplateIds.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES } from '../src/features/scene3d/templates.ts'
@@ -112,4 +112,18 @@ test('camera holds on the rest pose through a nod, tracks it on demand, and seek
   paintWorld(world, doc, 3); assert.equal(world.camera.position.y, 1.75)
   paintWorld(world, doc, 1); assert.ok(first.angleTo(world.camera.quaternion) < 1e-6)
   assert.equal(world.camera.position.y, 1.25)
+})
+
+test('a rigged rip frames the head its skin moves, not the loose head of its former skeleton', () => {
+  const root = new Group()
+  const old = new Bone(); old.name = 'previous:head'; old.position.set(3, 0.2, 0); root.add(old)
+  const hips = new Bone(); hips.name = 'Hips'; const head = new Bone(); head.name = 'Head'; head.position.y = 1.6; hips.add(head); root.add(hips)
+  const geometry = new BoxGeometry(); const count = geometry.getAttribute('position').count
+  geometry.setAttribute('skinIndex', new Uint16BufferAttribute(new Uint16Array(count * 4), 4))
+  geometry.setAttribute('skinWeight', new Float32BufferAttribute(new Float32Array(count * 4).map((_, i) => (i % 4 === 0 ? 1 : 0)), 4))
+  const body = new SkinnedMesh(geometry, new MeshBasicMaterial()); body.bind(new Skeleton([hips, head])); root.add(body)
+  near(framingAnchor(root, 'head', 'pose'), [0, 1.6, 0])
+  const bare = new Group(); const lone = new Bone(); lone.name = 'head'; lone.position.y = 1.2; bare.add(lone)
+  near(framingAnchor(bare, 'head', 'pose'), [0, 1.2, 0])
+  body.geometry.dispose(); body.material.dispose()
 })

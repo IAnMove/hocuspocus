@@ -1,4 +1,4 @@
-import { Box3, Matrix4, Vector3, type Object3D } from 'three'
+import { Box3, Matrix4, Vector3, type Object3D, type SkinnedMesh } from 'three'
 import type { Scene3DFraming, Vec3 } from './types'
 
 /** The three points a camera may frame, in one space. */
@@ -13,19 +13,29 @@ const restPoints = new WeakMap<Object3D, AnchorPoints>()
  * chest of a doll in a dress, or a big-headed figure, would otherwise frame the chest and cut the face at the top. */
 export const HEAD_BELOW_CROWN = .15
 
-function firstNode(cache: WeakMap<Object3D, Object3D | null>, root: Object3D, wanted: (node: Object3D) => boolean) {
+/** The first bone whose name matches, preferring one a skin moves. A rigged rip keeps its former skeleton next to the
+ * new one (`previous:head`), loose and still: framing that one aimed the camera beside the character. A loose bone is
+ * used only when no skin has one. */
+function skinnedFirst(cache: WeakMap<Object3D, Object3D | null>, root: Object3D, wanted: (node: Object3D) => boolean) {
   if (!cache.has(root)) {
-    let found: Object3D | null = null
+    const skinned = new Set<Object3D>()
     root.traverse(node => {
-      if (!found && wanted(node)) found = node
+      if ((node as SkinnedMesh).isSkinnedMesh) for (const bone of (node as SkinnedMesh).skeleton.bones) skinned.add(bone)
     })
-    cache.set(root, found)
+    let moved: Object3D | null = null
+    let loose: Object3D | null = null
+    root.traverse(node => {
+      if (!wanted(node)) return
+      if (skinned.has(node)) moved ??= node
+      else loose ??= node
+    })
+    cache.set(root, moved ?? loose)
   }
   return cache.get(root) ?? null
 }
 
-const headBone = (root: Object3D) => firstNode(headBones, root, node => 'isBone' in node && /head$/i.test(node.name))
-const crownMark = (root: Object3D) => firstNode(crownMarks, root, node => /headtop(_end)?$/i.test(node.name))
+const headBone = (root: Object3D) => skinnedFirst(headBones, root, node => 'isBone' in node && /head$/i.test(node.name))
+const crownMark = (root: Object3D) => skinnedFirst(crownMarks, root, node => /headtop(_end)?$/i.test(node.name))
 
 /** The points of the model as it stands now, in world space: the head bone when there is one (raised toward a crown
  * mark far above it), else its bounding box. */

@@ -36,10 +36,10 @@ FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
 # Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
 # of a production is then exported again on its next run instead of reusing the stale file. 4: runners in place and
-# the near layer kept off the cast. 5: honest technique effects and three-shot cards, a picture in a model's place
-# compiled as a grounded cutout, a head framed under the rig's crown mark, and the close pack cards re-aimed so the
-# eyes end near the upper third.
-RENDER_RECIPE = 5
+# the near layer kept off the cast. 5: the head a skin moves, not a former skeleton's loose head. 6: honest technique
+# effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
+# rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third.
+RENDER_RECIPE = 6
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
