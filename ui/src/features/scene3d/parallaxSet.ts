@@ -2,8 +2,9 @@
 // so a camera that moves sees the place shift in depth. The far picture is the sky; the ground is a slab.
 // A layer is tiled with mirrored copies of itself until it covers everything the camera sweeps over during the
 // shot, so a turn never shows its edge; every layer sinks a little into the ground, so its pieces stand on it
-// rather than float; the near layer stands on the floor too, so nothing is seen under it. With ``scroll`` the
-// layers and the ground slide past the cast at that speed: a character running on the spot runs through the place.
+// rather than float; the near layer stands on the floor too, so nothing is seen under it, and stays under the cast's
+// feet. With ``scroll`` the mid layer and the ground slide past the cast at that speed (no near layer: it would
+// flicker past): a character running on the spot runs through the place.
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 import { cameraPath, castPoints, type DioramaGround } from './dioramaSet.ts'
 
@@ -18,6 +19,7 @@ const NEAR_ALONG = 0.3         // the near layer stands this share of the way fr
 const NEAR_CLEARANCE = 0.7     // a camera that comes closer than this to the near layer's plane would cross it
 const SPREAD = 1.5             // layers are this much taller than the view at their distance, for the move
 const NEAR_REACH = 0.4          // the near layer's picture reaches this share of the frame up from its bottom edge
+const UNDER_FEET = 0.7          // ...and at most this share of the way from the frame's bottom up to the cast's feet
 const SINK = 0.05              // share of a layer's height sunk under the ground, so its pieces stand on it
 const LAYER_ASPECT = 1664 / 928   // the layers are drawn at this size (production_parallax.py)
 const TILE_MARGIN = 1.1        // tiles cover this much more than the camera sweeps
@@ -110,19 +112,37 @@ function midSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], 
 }
 
 /** The near layer stands on the floor a short way in front of the camera, its picture reaching only the lower part of
- * the frame, so its pieces frame the bottom and the sides and never hide the cast; none when the camera would cross
- * it during the shot (an orbit, a crash zoom). */
+ * the frame and staying under the cast's feet, so its pieces frame the bottom and the sides and never hide the cast.
+ * None when the camera would cross it during the shot (an orbit, a crash zoom), when the cast's feet are out of the
+ * frame (a close shot: any near piece would cover the body), or on a scrolled shot: a picture this close slides past
+ * several times a second and its mirrored copies flicker. */
 function nearSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], pose: Pose, ahead: Vec3, key: string | undefined, scroll: number): Scene3DSlot | null {
+  if (scroll) return null
   const toLook = Math.hypot(pose.look[0] - pose.eye[0], pose.look[2] - pose.eye[2])
   const distance = toLook * NEAR_ALONG
   const at: Vec3 = [pose.eye[0] + ahead[0] * distance, 0, pose.eye[2] + ahead[2] * distance]
   if (path.some(step => along(step.eye, at, ahead) > -NEAR_CLEARANCE || along(step.look, at, ahead) < NEAR_CLEARANCE)) return null
   const half = distance * Math.tan((document.camera.fov * Math.PI) / 360)
   const sight = pose.eye[1] + (pose.look[1] - pose.eye[1]) * NEAR_ALONG
-  const reach = sight + (2 * NEAR_REACH - 1) * half             // the height its picture's top reaches in the frame
+  const base = Math.max(0, sight - half)                          // the lowest the frame shows at the layer's plane
+  const feet = feetLine(document, pose, ahead, distance)
+  if (feet <= base) return null
+  const reach = Math.min(sight + (2 * NEAR_REACH - 1) * half, base + (feet - base) * UNDER_FEET)   // its picture's top
   if (!(reach > 0.05)) return null                                // a camera this low sees nothing of a floor layer
   const height = reach / (1 - (layer.foot ?? 0) - SINK)
   return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll)
+}
+
+/** The height at which the cast's lowest point (its feet) is seen through a plane ``distance`` ahead of the camera;
+ * a cast member nearer than the plane is in front of the layer and cannot be hidden by it. */
+function feetLine(document: Scene3DDocument, pose: Pose, ahead: Vec3, distance: number): number {
+  let lowest = Infinity
+  for (const point of castPoints(document)) {
+    const away = along(point, pose.eye, ahead)
+    if (away <= distance) continue
+    lowest = Math.min(lowest, pose.eye[1] + (point[1] - pose.eye[1]) * (distance / away))
+  }
+  return lowest
 }
 
 /** The ground slab, turned to the camera's heading so a scroll runs along the view. */
