@@ -274,7 +274,8 @@
         "tests/test_game_qa.py",
         "tests/test_golden_shots.py",
         "tests/test_production_models.py",
-        "tests/test_production_turn.py"
+        "tests/test_production_turn.py",
+        "tests/test_set_molds.py"
       ]
     },
     {
@@ -1614,6 +1615,20 @@
       ]
     },
     {
+      "prefix": "app/services/production_quality_gate.py",
+      "paths": [
+        "tests/test_world3d_template_traits.py",
+        "tests/test_production_quality_gate.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_template_vocabulary.py",
+      "paths": [
+        "tests/test_world3d_template_traits.py",
+        "tests/test_world3d_templates.py"
+      ]
+    },
+    {
       "prefix": "app/services/production_usage.py",
       "paths": [
         "tests/test_production_usage.py",
@@ -2427,20 +2442,6 @@
         "tests/test_game_profile.py",
         "tests/test_series_agent_fixes.py",
         "tests/test_series_kit_pins.py"
-      ]
-    },
-    {
-      "prefix": "app/services/production_quality_gate.py",
-      "paths": [
-        "tests/test_world3d_template_traits.py",
-        "tests/test_production_quality_gate.py"
-      ]
-    },
-    {
-      "prefix": "app/services/world3d_template_vocabulary.py",
-      "paths": [
-        "tests/test_world3d_template_traits.py",
-        "tests/test_world3d_templates.py"
       ]
     }
   ]

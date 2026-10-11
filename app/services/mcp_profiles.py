@@ -8,6 +8,7 @@ the same handlers filtered to a profile, with its own first instructions.
 from __future__ import annotations
 
 SERIES_TOOLS = frozenset({
+    "scene3d.sets.catalog",
     # Start here, then the series itself.
     "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",

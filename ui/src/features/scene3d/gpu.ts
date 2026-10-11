@@ -1,3 +1,4 @@
+import { RoomSetRuntime } from './roomSetRuntime'
 import { applyN64Look, withN64Look } from './n64Look'
 import { ToonLook, resolveToon, type ToonTarget } from './toonLook'
 import { imageCutoutMesh, poseImageCutout } from './imageCutout'
@@ -97,6 +98,8 @@ export type SlotGpu = {
 }
 
 export type GpuWorld = {
+  room?: RoomSetRuntime
+  roomKey?: string
   cinema?: CinematicRuntime
   renderer: WebGLRenderer
   scene: Scene
@@ -395,7 +398,7 @@ function screenAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean
 }
 
 export function worldAssetsReady(world: GpuWorld, slots: readonly Scene3DSlot[]): boolean {
-  if (!world.dressingReady) return false
+  if (!world.dressingReady || (world.room && !world.room.ready)) return false
   return slots.every(slot => {
     const gpu = world.slots.get(slot.id)
     if (!speechAssetsReady(gpu, slot) || !screenAssetsReady(gpu, slot)) return false
@@ -563,6 +566,12 @@ function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: read
 }
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
+  const roomKey = JSON.stringify(document.room)
+  if (world.roomKey !== roomKey) {
+    world.room?.dispose(); world.room = document.room ? new RoomSetRuntime(document.room) : undefined
+    world.roomKey = roomKey
+    if (world.room) world.scene.add(world.room.root)
+  }
   document = withN64Look(document)
   if (world.dir) applyLight(world.dir, document.light)
   syncEnvironmentLighting(world, document)
@@ -802,6 +811,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
 }
 
 export function disposeWorld(world: GpuWorld) {
+  world.room?.dispose()
   world.cinema?.dispose()
   world.lighting?.dispose()
   world.toon?.dispose()

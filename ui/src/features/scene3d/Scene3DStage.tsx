@@ -215,6 +215,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       // its current surface before awaiting media, including the first frame.
       paintWorld(world, frozen, seconds)
       await prepareWorldSfxMedia(world.worldSfx, frozen.worldSfx, seconds)
+      await world.room?.seek(seconds)
       await Promise.all(frozen.slots.map(slot => slot.screen ? world.slots.get(slot.id)?.screen?.seek(seconds, slot.screen) : undefined))
     },
     paint(seconds, frozen) {
