@@ -5,6 +5,10 @@ import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES } from '..
 import { SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/types.ts'
 import { TEMPLATE_VARIANT_GROUPS } from '../src/features/scene3d/templateCatalog.ts'
 import { settingFromDressing } from '../src/features/scene3d/templateFilters.ts'
+import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
+import { actionCard } from '../src/features/scene3d/actionTemplates.ts'
+import { campaignCard } from '../src/features/scene3d/campaignTemplates.ts'
+import { animeCard } from '../src/features/scene3d/animeTemplates.ts'
 
 const outPath = fileURLToPath(new URL('../../app/shared/world3d_templates.json', import.meta.url))
 const en = JSON.parse(readFileSync(new URL('../src/i18n/locales/en/scene3dEditor.json', import.meta.url), 'utf8'))
@@ -16,10 +20,21 @@ const variantOf = new Map()
 for (const group of TEMPLATE_VARIANT_GROUPS) {
   for (const id of group.slice(1)) variantOf.set(id, group[0])
 }
+const LINE_LIMIT = 240
 
+/** One line of at most LINE_LIMIT characters, cut at a word so a search never sees half a word. */
 function line(text, fallback) {
   const value = (text || fallback || '').replace(/\s+/g, ' ').trim()
-  return value.length > 180 ? `${value.slice(0, 177)}...` : value
+  if (value.length <= LINE_LIMIT) return value
+  const cut = value.slice(0, LINE_LIMIT - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > LINE_LIMIT / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:·]+$/, '')}…`
+}
+
+/** The authored requirement list of the action, campaign and anime shots, joined for the card. */
+function notes(id, locale) {
+  const copy = actionCard(id, locale) ?? campaignCard(id, locale) ?? animeCard(id, locale)
+  return copy?.requirements?.length ? copy.requirements.join('; ') : ''
 }
 
 function card(id) {
@@ -38,12 +53,15 @@ function card(id) {
   for (const cue of document.worldSfx || []) dependencies.push(`worldSfx:${cue.kind}`)
   if (document.renderLook) dependencies.push(`renderLook:${document.renderLook}`)
   if (document.environment?.reflectiveFloor) dependencies.push('reflectiveFloor')
+  const category = TEMPLATE_CATEGORIES[id]
+  const family = technique?.category || template.camera
+  const traits = templateTraits(document, { category, family })
   return {
     id,
     titleEs,
     titleEn,
-    category: TEMPLATE_CATEGORIES[id],
-    family: technique?.category || template.camera,
+    category,
+    family,
     variantOf: variantOf.get(id) || null,
     format: document.height > document.width ? 'portrait' : 'landscape',
     width: document.width,
@@ -54,11 +72,24 @@ function card(id) {
     setting: settingFromDressing(document.dressing),
     lineEs: line(copyEs.description || technique?.descriptionEs, titleEs),
     lineEn: line(copyEn.description || technique?.descriptionEn, titleEn),
+    notesEs: notes(id, 'es'),
+    notesEn: notes(id, 'en'),
     preview: technique?.thumbUrl || null,
     roles: document.slots.map(slot => slot.slot),
     required,
     dependencies,
     tags: template.tags || [],
+    shot: traits.shot,
+    distance: traits.distance,
+    moves: traits.moves,
+    moving: traits.moving,
+    still: traits.still,
+    subjects: traits.subjects,
+    props: traits.props,
+    screens: traits.screens,
+    authoredFor: traits.authoredFor,
+    floor: traits.floor,
+    uses: traits.uses,
     source: 'builtin',
   }
 }

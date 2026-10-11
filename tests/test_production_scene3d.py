@@ -742,3 +742,16 @@ def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips
     orbit = compile_document(cast_shot(template="dance-orbit", background=PARALLAX, cast=hero), 4)
     ids = {slot["id"] for slot in orbit["slots"]}
     assert "set-layer-mid" in ids and "set-layer-near" not in ids, "an orbit would cross the near layer"
+
+
+def test_a_renderer_recipe_change_exports_every_clip_again(tmp_path, monkeypatch):
+    from services import production_scene3d
+
+    production = Production(tmp_path)
+    render(production)
+    before = production.state["clips"]["hero"]
+    monkeypatch.setattr(production_scene3d, "RENDER_RECIPE", production_scene3d.RENDER_RECIPE + 1)
+    render(production)
+    after = production.state["clips"]["hero"]
+    assert after["fingerprint"] != before["fingerprint"] and after["file"] != before["file"]
+    assert len(production.calls) == 4

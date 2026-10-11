@@ -10,7 +10,7 @@ import { SpeechFaceRuntime } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
-import { framingAnchor } from './framingAnchor'
+import { framingAnchor, markRestPose } from './framingAnchor'
 import {
   AnimationMixer,
   type AnimationAction,
@@ -350,6 +350,8 @@ export function placeSlot(
 ) {
   dropSlot(world, slot.id)
   world.scene.add(root)
+  // Before any clip moves it: the camera frames these points wherever the slot later places the model.
+  if (slot.media === 'model3d') markRestPose(root)
   const contactShadow = slot.media === 'model3d' ? new Mesh(new CircleGeometry(.4, 24), new MeshBasicMaterial({ color: 0x03070d, transparent: true, opacity: .25, depthWrite: false })) : undefined
   if (contactShadow) {
     contactShadow.rotation.x = -Math.PI / 2
@@ -539,9 +541,9 @@ function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number, sh
   const local = performanceClipTime(slot.performance === 'idle' ? 0 : sceneSeconds, clip?.duration ?? null, slot.clipPlayback)
   if (local != null && clip && gpu.mixer) seekBoundMixer(gpu.mixer, clip, local)
   if (slot.performance === 'idle' && clip && gpu.mixer) {
-    gpu.root.updateMatrixWorld(true)
-    const center = new Box3().setFromObject(gpu.root, true).getCenter(new Vector3())
-    gpu.root.position.x += slot.position[0] - center.x; gpu.root.position.z += slot.position[2] - center.z
+    // Centre the model at rest, not its pose of the moment: an arm swinging forward must not slide the body back.
+    const [centerX, , centerZ] = framingAnchor(gpu.root, 'center')
+    gpu.root.position.x += slot.position[0] - centerX; gpu.root.position.z += slot.position[2] - centerZ
     gpu.root.rotation.y += Math.sin(sceneSeconds * .8) * .025
   }
   groundLoadedSlot(gpu, slot)
@@ -589,7 +591,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
-  const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
+  const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor, framing.track), target, sceneSeconds, document.duration) : null
   const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const posed = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))

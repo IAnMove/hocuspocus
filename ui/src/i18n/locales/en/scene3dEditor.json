@@ -558,7 +558,7 @@
       "description": "Close oblique framing to inspect the object surface."
     },
     "product-pair": {
-      "title": "Product comparison",
+      "title": "Product pair",
       "description": "Two products share a calm, symmetrical frontal composition."
     },
     "product-pedestal": {
@@ -2094,7 +2094,7 @@
       "description": "Framing. A wide locked view that can cover two people."
     },
     "cine-two-shot": {
-      "title": "Two-Shot",
+      "title": "Two-Shot (framing)",
       "description": "Framing. Two people share a medium-wide frame."
     },
     "cine-three-shot": {
