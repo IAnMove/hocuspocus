@@ -532,13 +532,12 @@ def _points(folded: str, tokens: list[str], card: dict, words: dict[str, set[str
         synonyms = expand(token) - literal
         short = len(token) <= _SHORT_TOKEN
         for field, exact, loose in _FIELD_POINTS:
-            if _hit(literal, words[field]) and not (short and field in _NAME_FIELDS):
+            found = _hit(literal, words[field])
+            # A short literal word («off», «bar») in the id or title is worth what a synonym is, not the literal points.
+            if found and not (short and field in _NAME_FIELDS):
                 score += exact
-            elif _hit(synonyms, words[field]):
+            elif found or _hit(synonyms, words[field]):
                 score += loose
-        # A short literal word («off», «pov») in the id or title is worth no more than a word in the line.
-        if short and not _hit(literal, words["line"]) and _hit(literal, words["id"] | words["title"]):
-            score += 2
     return score
 
 
@@ -584,7 +583,9 @@ def _trait_text(card: dict) -> str:
     parts.extend(card.get(key) for key in ("family", "dressing", "shot", "authoredFor", "floor", "kind", "place"))
     parts.append(f"format{card.get('format') or ''}")
     parts.extend(" ".join(str(item) for item in card.get(key) or [])
-                 for key in ("roles", "tags", "dependencies", "moves", "moving", "uses", "cameras", "traitWords"))
+                 for key in ("roles", "tags", "dependencies", "moves", "moving", "uses", "traitWords"))
+    # A stage's camera names (close_1, wide, entrance) are one token each, so they are not shot-size or emotion words.
+    parts.extend("cam" + _fold(str(name)).replace(" ", "") for name in card.get("cameras") or [])
     parts.append(_STILL_WORDS.get(card.get("still"), ""))
     parts.append(_SUBJECT_WORDS.get(int(card.get("subjects") or 0), "group"))
     parts.append("travel walk" if card.get("travel") else "")

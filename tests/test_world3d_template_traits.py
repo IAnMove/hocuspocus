@@ -95,6 +95,10 @@ def test_vocabulary_words_belong_to_one_group_and_reach_the_traits():
     assert "travel" in expand("camina") and "seated" in expand("sentado") and "crowd" in expand("publico")
     assert "entrance" in expand("entra") and "push" not in expand("entra")
     assert "pov" in expand("subjetivo") and "cowboy" in expand("americano") and "phone" in expand("llamada")
+    assert "shoulder" in expand("contraplano") and "dialogue" not in expand("contraplano")
+    assert "three" not in expand("grupo") and "lower" in expand("inferior") and "third" in expand("tercio")
+    assert "hacia" not in QUERY_STOP and "toward" in expand("hacia") and "rise" in expand("arriba")
+    assert expand("puerta").isdisjoint(expand("escalera")) and expand("pasillo").isdisjoint(expand("ventana"))
     assert "flashback" in expand("sueno") and "impact" in expand("golpe") and "action" not in expand("golpe")
     assert "speed" in expand("rapido") and "drive" in expand("coche")
 
@@ -169,12 +173,14 @@ def test_unknown_words_never_count_and_half_of_the_known_ones_is_enough(tmp_path
     assert catalog["result"]["unknown_words"] == []
 
 
-def test_a_short_literal_word_scores_as_a_line_word():
+def test_a_short_literal_word_scores_as_a_synonym_would():
     narrator = search_templates("narrador en off", limit=8)
     assert "talk" in narrator[0]["uses"] and "anime-face-off" not in ids(narrator)
     assert search_templates("anime face off", limit=1)[0]["id"] == "anime-face-off"
-    assert ids(search_templates("pov", limit=2)) == ["cine-pov", "cine-object-pov"]
-    assert search_templates("pov", limit=1)[0]["score"] == 2
+    pov = {card["id"]: card["score"] for card in search_templates("pov", limit=3)}
+    assert pov == {"cine-object-pov": 7, "cine-pov": 4}                       # id 4 (+ title 3), never the literal 8 and 6
+    bar = search_templates("una pareja discute en un bar", limit=3)
+    assert bar[0]["score"] == bar[1]["score"] and {bar[0]["id"], bar[1]["id"]} == {"cafe-duet", "stage-bar"}
     assert ids(search_templates("two shot", limit=1)) == ["two-shot"]       # the whole title still wins
 
 

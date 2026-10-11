@@ -46,11 +46,13 @@ def ids(found):
 def test_speakers_place_and_mood_become_filters_and_query_words():
     found = suggest_templates(speakers=2, place="cocina", mood="triste")
     assert found["filters"] == {"use": "dialogue", "subjects": 2}
-    assert found["unknown_words"] == [] and found["partial"] is False
+    assert found["unknown_words"] == [] and found["partial"] is True       # no kitchen is sad: the place leads, partially
     assert found["templates"] and all(card["subjects"] == 2 and "dialogue" in card["uses"] for card in found["templates"])
-    assert ids(found)[0] == "stage-cocina"                                # the kitchen recipe is the place
+    assert ids(found)[0] == "stage-cocina" and found["templates"][1]["shot"] == "close"
     assert found["templates"][0]["reason"] == ("two subjects, wide, moves on its own, uses: dialogue, talk, figure; place: cocina; "
-                                               "cameras: two_shot, ots_a, ots_b, wide, close_1, close_2, entrance")
+                                               "cameras: two_shot, ots_a, ots_b, wide, close_1, close_2, entrance; partial match")
+    kitchen = suggest_templates(speakers=2, place="cocina")
+    assert kitchen["partial"] is False and ids(kitchen) == ["stage-cocina"]
     one = suggest_templates(speakers=1, line="el presentador habla a cámara")
     assert one["filters"] == {"use": "talk", "subjects": 1} and ids(one)[0] == "speech-presenter"
     assert one["templates"][0]["reason"] == "one subject, close, moves: push, uses: talk, reaction"
