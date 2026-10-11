@@ -13,10 +13,10 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | A6 | feat/set-molds-v1 | #974 | Z1 local OK: 6713 Python; UI; ratchet; docs | set_molds/*.json |
 | A7 | feat/sets-room-integration | #975 | Z1 local OK: 6720 Python + 20 contrato/catálogo; UI; ratchet; docs | production_rooms.py, series_sets.py |
 | A8 | docs/sets-agent-guide | #976 | Z1 local OK: 6721 Python + 27 catálogo/Qwen; UI; ratchet; docs | guías de agentes |
-| Z1 | ramas anteriores | #969–#976 | Local completo; CI de las correcciones finales en curso | comprobaciones completas |
+| Z1 | ramas anteriores | #969–#976 | Local completo; comprobaciones remotas enlazadas en cada PR | comprobaciones completas |
 | Z2 | docs/sets-trial | #977 | Completado: 70 imágenes, croma190, seam_error1.1807, caché sin GPU | defaults medidos e informe |
 | Z3 | ramas anteriores | #969–#977 | Completado; correcciones y evidencias reales | evidencias por bloque |
-| Z4 | docs/sets-acceptance | pendiente de número | Prueba MCP completada; revisión visual del usuario pendiente | aceptación completa |
+| Z4 | docs/sets-acceptance | #978 | Prueba MCP completada; revisión visual del usuario pendiente | aceptación completa |
 
 Los pequeños ganchos, el registro de tests y este tablero son compartidos secuencialmente por la pila.
 Coste fase 1: 0 tokens LLM externos; 0 generaciones; tokens Codex N/A.
