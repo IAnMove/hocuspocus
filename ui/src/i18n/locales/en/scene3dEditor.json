@@ -4067,6 +4067,8 @@
     "height": "Height (metres)",
     "style": "Style",
     "generate": "Generate candidates",
-    "generating": "Generating prop candidates…"
+    "generating": "Generating prop candidates…",
+    "remove": "Remove",
+    "move": "Move"
   }
 }

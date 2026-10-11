@@ -163,6 +163,9 @@ def _object_entry(entry: Any) -> dict[str, Any] | None:
     result.update({key: checked for key, check in checks.items() if (checked := check(entry.get(key))) is not None})
     if isinstance(entry.get("grounded"), bool):
         result["grounded"] = entry["grounded"]
+    for key in ("setItem", "imageLook", "billboard"):
+        if key in entry:
+            result[key] = entry[key]
     return result if len(result) > 2 else None
 
 
@@ -307,7 +310,7 @@ def _object_binding(workspace: str, root: str | None, entry: dict[str, Any], err
         binding["clip"] = resolve(entry["clip"])
     if "clips" in entry:
         binding["clips"] = [{**cue, "clip": resolve(cue["clip"])} for cue in entry["clips"]]
-    for key in ("clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "hold", "appearance"):
+    for key in ("setItem", "imageLook", "billboard", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "hold", "appearance"):
         if key in entry:
             binding[key] = entry[key]
     return binding

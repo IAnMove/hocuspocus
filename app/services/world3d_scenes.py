@@ -26,7 +26,7 @@ from services.world3d_template_catalog import require_card, user_template_docume
 _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
 _COMPILED: dict[str, dict] = {}
-_SLOT_FIELDS = {"sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media"}
+_SLOT_FIELDS = {"setItem", "imageLook", "billboard", "sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media"}
 _MAX_SLOTS = 24
 _ADDED_MEDIA = ("model3d", "image")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
@@ -424,6 +424,11 @@ def _bind(document: dict, binding: dict) -> list[str]:
     if binding.get("add") is True:
         _add_slot(document, binding)
     slot = _target(document["slots"], binding)
+    if binding.get("remove") is True:
+        if any((s.get("hold") or {}).get("carrier") == slot["id"] for s in document["slots"]):
+            raise World3DSceneError("item_in_use", "Remove held objects before their carrier")
+        document["slots"].remove(slot)
+        return []
     warnings = _clip_warning(slot, binding)
     for key in _SLOT_FIELDS:
         snake = _snake(key)

@@ -29,7 +29,7 @@ from services.series_shot_plan import sound_tracks
 from services.series_stop_motion import read_fields
 
 # What the render binds over the scene for each listed object (``series_shot3d._object_binding``).
-OBJECT_FIELDS = ("position", "rotationY", "scale", "motion", "grounded", "clips", "hold", "appearance", "clipPlayback")
+OBJECT_FIELDS = ("setItem", "imageLook", "billboard", "position", "rotationY", "scale", "motion", "grounded", "clips", "hold", "appearance", "clipPlayback")
 SHOT_FX_PREFIX, SCENE_TRACK_PREFIX = "shot-", "scene-"
 _FILE_URL = re.compile(r"^/api/v1/file/(?P<name>[^?#]+)")
 

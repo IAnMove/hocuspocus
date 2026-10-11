@@ -178,6 +178,8 @@ export type Scene3DSourceRef = {
 }
 
 export type Scene3DSlot = {
+  billboard?: boolean
+  setItem?: { heightM: number; prop?: string; at?: { mark?: string; anchor?: string; position?: Vec3 } }
   rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
     libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice

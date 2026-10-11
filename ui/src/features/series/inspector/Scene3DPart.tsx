@@ -1,3 +1,4 @@
+import { PropLibraryPanel } from '../../scene3d/PropLibraryPanel'
 import type { TFunction } from 'i18next'
 import { useState } from 'react'
 import { Box, ExternalLink, Loader2 } from 'lucide-react'
@@ -95,8 +96,9 @@ function ObjectList({ objects }: { objects: Object3D[] }) {
   </li>)}</ul>
 }
 
-function SceneEditor({ draft, change }: DraftProps) {
+function SceneEditor({ draft, change, workspace }: DraftProps & { workspace: string }) {
   const { t } = useUiTranslation('seriesLab')
+  const { t: itemT } = useUiTranslation('scene3dEditor')
   const objects = (draft.objects || []) as Object3D[]
   return <div className="space-y-2">
     <div className={grid}>
@@ -105,6 +107,12 @@ function SceneEditor({ draft, change }: DraftProps) {
       <SelectInput title={t('inspector.scene3d.lookTitle')} value={draft.renderLook} empty={t('inspector.scene3d.looks.none')}
         onChange={value => change(withField(draft, 'renderLook', value))} options={(['toon', 'n64'] as const).map(value => ({ value, label: t(`inspector.scene3d.looks.${value}`) }))} />
     </div>
+    <PropLibraryPanel workspace={workspace} disabled={objects.length >= 12} onAdd={prop => change({ ...draft, objects: [...objects, {
+      objectId: `${prop.id}-${Date.now()}`, file: prop.file, media: 'image', add: true, grounded: true, imageLook: { grounded: true },
+      scale: prop.heightM / 2, position: [0, 0, 0], rotationY: 0, setItem: { prop: prop.id, heightM: prop.heightM },
+    }] })} />
+    <h4>{itemT('props.move')}</h4>
+    {objects.map(object => <button key={object.objectId} onClick={() => change({ ...draft, objects: objects.filter(row => row.objectId !== object.objectId) })}>{itemT('props.remove')} {object.objectId}</button>)}
     {objects.map((object, index) => <ObjectEditor key={object.objectId} object={object}
       change={next => change({ ...draft, objects: objects.map((item, position) => position === index ? next : item) })} />)}
   </div>
@@ -130,5 +138,5 @@ export function Scene3DPart({ context, onOpenEditor }: { context: PartContext; o
       <p className="mt-2 text-[10px] text-text-muted">{t('inspector.scene3d.hint')}</p>
       {error && <p role="alert" className="mt-1 text-[11px] text-red-300">{error}</p>}
     </>}
-    editor={props => <SceneEditor {...props} />} />
+    editor={props => <SceneEditor {...props} workspace={context.workspace} />} />
 }

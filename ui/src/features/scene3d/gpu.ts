@@ -598,6 +598,9 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   world.camera.position.set(...shaken.eye)
   world.camera.lookAt(...shaken.look)
   world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
+  for (const slot of posedSlots) {
+    if (slot.billboard && slot.media === 'image') paintActor(world, { ...slot, rotationY: Math.atan2(shaken.eye[0]-slot.position[0], shaken.eye[2]-slot.position[2]) }, sceneSeconds, document.duration)
+  }
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
