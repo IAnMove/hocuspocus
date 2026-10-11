@@ -69,7 +69,7 @@ def _plan_world3d_shot(spec: dict, brief: dict, query: str) -> dict:
     """Place one real template id. A tied search is refused instead of inventing a shot."""
     from services.world3d_template_catalog import search_templates
     hits = search_templates(query, limit=8)
-    if not hits:
+    if not hits or hits[0].get("match") != "full":
         raise PlanError("unknown_template", f"No Video 3D template matches {query}")
     if len(hits) > 1 and hits[0]["score"] == hits[1]["score"]:
         names = ", ".join(str(item["id"]) for item in hits[:8])
