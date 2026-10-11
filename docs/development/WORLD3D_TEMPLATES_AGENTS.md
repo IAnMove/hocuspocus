@@ -8,7 +8,38 @@ Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loa
 
 `POST /api/v1/world3d/templates/commands` with `{"operation","version":1,"input":{"workspace",...}}`. Mutations also send `intent_id`. The same operations are MCP tools. With a query, `world3d.templates.list` and `world3d.templates.catalog` are the same bounded search (default 8, maximum 24). Without a query, `world3d.templates.list` pages the library in id order (default and maximum 50, `offset`, `total`). Both languages are searched. A limit above those maximums or a language other than `es` or `en` is rejected. An unknown id returns `unknown_template` and does not open another shot.
 
-`world3d.scene.apply_query` instantiates a scene only when the top score is strictly higher than the second. A tie returns `needs_choice` and creates nothing. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.
+A query is a handful of words in Spanish or English, matched one by one through a shared vocabulary (`app/services/world3d_template_vocabulary.py`): «diálogo», «conversación» and «two people» reach the cards whose `uses` say `dialogue`; «plano general» reaches `wide`; «girar alrededor» reaches `orbit`; «persecución» reaches the chases; «nieve» reaches `cine-snow` first and then every card with snow in it. Words that name the thing searched (plano, toma, shot, scene, template, video...) are ignored. A literal word always outranks a synonym, an exact title wins outright, and plurals match singulars. Every card carries `match`: `full` when every word is in it. When no card has them all, the best cards with more than half come back as `partial` and the reply says `partial: true`; a card is never half full and half partial in the same reply. A query with no match at all returns nothing.
+
+Filters narrow the library before the words are scored: `roles` (every listed role present), `setting` (one place), `category` (a category or a tag: `anime`, `pixel`, `psx`, `dark-fantasy`, `creative`, `perspective`, `animated`), and the trait filters `shot`, `use`, `move`, `subjects` (at least that many subject slots, 0–2) and `format` (`landscape`, `portrait`). `{"use": "dialogue", "subjects": 2, "shot": "medium"}` lists the two-person talking shots; `{"shot": "close", "move": "push"}` the pushes into a face; `{"shot": "plate"}` the shots with no subject slot. A value outside the enum fails with `invalid_shot`, `invalid_use`, `invalid_move`, `invalid_subjects` or `invalid_format`.
+
+`world3d.scene.apply_query` instantiates a scene only when the top card is a full match and its score is strictly higher than the second. A tie or a partial match returns `needs_choice` with the cards and creates nothing. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.
+
+## What a card says
+
+Besides its id, titles, one line in each language, format, duration, roles, `required` holes, `dependencies` and `tags`, every shipped card carries traits that the exporter reads from the built document (`ui/src/features/scene3d/templateTraits.ts`). They are estimates of the authored scene, never hand-written claims, and the same numbers the editor's gallery search uses.
+
+| field | values | read it as |
+| --- | --- | --- |
+| `shot` | `close`, `medium`, `wide`, `far`, `plate` | how much of a person the frame holds at mid-shot: head and shoulders or tighter, to the waist, the whole figure, the figure under a third of the frame, or no subject slot at all. `distance` is the metres from the camera to the subject (null on a plate). |
+| `moves` | `push`, `pull`, `slide`, `rise`, `descend`, `arc`, `orbit`, `zoom`, `roll`, `ride`, `track`, `shake` | what the camera does over the shot. Empty: the camera holds still. `ride` is the sway of a chase or hood camera; `track` means the camera follows a subject the template already moves. |
+| `moving` | `camera`, `subjects`, `props`, `screens`, `effects`, `backdrop`, `texts` | what the template itself animates: a camera move, authored clips or paths on the cast or the props, a video screen, world or screen effects, a set that moves (endless road, treadmill, procedural weather, pixel sky, native motion set, a scrolling plate), kinetic text. |
+| `still` | boolean | true when `moving` is empty: only the cast's own clip, a talking cutout or an override you add can move the picture. 162 shipped cards are still; most are the lighting, colour and lens looks. |
+| `subjects`, `props`, `screens` | counts | the subject slots (`subject_1`, `subject_2`), the prop slots that are not screens, and the screens. |
+| `authoredFor` | `model`, `cutout`, `mixed`, `none` | the media the subject slots were authored with. A production may bind the other kind: a GLB in a cutout's place becomes a model, a picture in a model's place a cutout. |
+| `floor` | `tiles`, `none`, `backdrop`, `mirror`, `road` | `none`: there is no ground under the cast; frame waist-up or against the sky, or play the shot in a `world`. `backdrop`: the background picture is projected onto the floor. |
+| `uses` | `dialogue`, `talk`, `reaction`, `figure`, `establishing`, `action`, `reveal`, `product`, `music`, `drive`, `transition`, `title`, `look`, `plate` | what the shot is good for. `talk` is close enough for a speaking cutout; `figure` holds the whole body; `establishing` shows a place (far, a plate, or a wide shot with a painted or moving set); `look` is a lighting, colour or lens preset that wants a move or a clip from you. |
+| `notesEs`, `notesEn` | text | the authored requirement list of the action, campaign and anime shots («GLB lead car; GLB pursuer car; optional street plate»). |
+
+A personal template (`user-…`) reports `subjects`, `props`, `screens`, `authoredFor`, `floor` and `moving` from its stored document; `shot`, `distance`, `moves` and `uses` stay unknown because they need the editor's camera.
+
+## Choosing a shot that will not look frozen
+
+- **Read `moving` before `uses`.** A `still` card plus a picture, or plus a GLB with no clip, exports a photograph held for the whole shot. Give it a clip (`cast[].clip`, `clips`), a `motion`, a `camera`, a `frame`, or play it in a `world` whose set moves; or take a card whose `moves` are not empty. Production dry runs warn `template_still` for exactly that case.
+- **Match the shot to the line.** `talk` and `dialogue` for speech (`speech-dialogue`, `face-to-face`, `cine-over-the-shoulder-frame`, the `face-*` shots); `reaction` for a beat on one face; `figure` and `establishing` to show a body or a place; `action` when something must travel or explode; `transition` for a two-second cut (`anime-eyecatch`, `anime-impact-frame`).
+- **Count the people.** `subjects` is how many the template seats; a third person is `add: true` as a prop. Two subjects on a `far` card are tiny.
+- **Mind the floor.** `floor: none` under a full-body cast shows feet on nothing: frame from the waist up, shoot against the sky, or give the shot a `world` or a painted `background`.
+- **Vary.** One template in more than four shots is `template_reused`; the looks (`uses: look`) change the light, not the composition, so pair them with a move.
+- **Keep the frame.** `frame: close|medium|wide|far` moves any template's camera nearer or farther without changing its move; `duration` with `retime: true` stretches effects and cues with the shot.
 
 ## Present a robot
 
