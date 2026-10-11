@@ -5,21 +5,30 @@ import type { Scene3DFraming, Vec3 } from './types'
 type AnchorPoints = Record<Scene3DFraming['anchor'], Vector3>
 
 const headBones = new WeakMap<Object3D, Object3D | null>()
+const crownMarks = new WeakMap<Object3D, Object3D | null>()
 /** Each mounted model's points at rest, in the model's own space. */
 const restPoints = new WeakMap<Object3D, AnchorPoints>()
+/** Where a rig marks its crown (HeadTop_End), the head point is at most this share of the figure's height below it.
+ * A realistic rig's head bone already sits there (1.53 m under a 1.70 m crown); an auto-rig that put the bone at the
+ * chest of a doll in a dress, or a big-headed figure, would otherwise frame the chest and cut the face at the top. */
+export const HEAD_BELOW_CROWN = .15
 
-function headBone(root: Object3D) {
-  if (!headBones.has(root)) {
-    let head: Object3D | null = null
+function firstNode(cache: WeakMap<Object3D, Object3D | null>, root: Object3D, wanted: (node: Object3D) => boolean) {
+  if (!cache.has(root)) {
+    let found: Object3D | null = null
     root.traverse(node => {
-      if (!head && 'isBone' in node && /head$/i.test(node.name)) head = node
+      if (!found && wanted(node)) found = node
     })
-    headBones.set(root, head)
+    cache.set(root, found)
   }
-  return headBones.get(root) ?? null
+  return cache.get(root) ?? null
 }
 
-/** The points of the model as it stands now, in world space: the head bone when there is one, else its bounding box. */
+const headBone = (root: Object3D) => firstNode(headBones, root, node => 'isBone' in node && /head$/i.test(node.name))
+const crownMark = (root: Object3D) => firstNode(crownMarks, root, node => /headtop(_end)?$/i.test(node.name))
+
+/** The points of the model as it stands now, in world space: the head bone when there is one (raised toward a crown
+ * mark far above it), else its bounding box. */
 function posedPoints(root: Object3D): AnchorPoints {
   const box = new Box3().setFromObject(root, true)
   const origin = root.getWorldPosition(new Vector3())
@@ -28,6 +37,8 @@ function posedPoints(root: Object3D): AnchorPoints {
   const bone = headBone(root)
   const head = bone ? bone.getWorldPosition(new Vector3())
     : box.isEmpty() ? origin.clone() : new Vector3(center.x, box.min.y + (box.max.y - box.min.y) * .86, center.z)
+  const crown = bone && !box.isEmpty() ? crownMark(root) : null
+  if (crown) head.y = Math.max(head.y, crown.getWorldPosition(new Vector3()).y - HEAD_BELOW_CROWN * (box.max.y - box.min.y))
   return { center, feet, head }
 }
 

@@ -58,7 +58,7 @@ const SPECS: Record<ReactionTemplateId, CastPackSpec> = {
   'reaction-look-up': {
     category: 'cinema', duration: 5, dressing: 'citadel', light: KEY,
     camera: cam('establishment', [0, 0.8, 1.5], [0, 1.35, 0], 38, {
-      framing: headFraming('subject_1', [0, -0.75, 1.5], [0, -0.42, 1.25], { lookFrom: [0, -0.45, 0], lookTo: [0, -0.02, 0] }),
+      framing: headFraming('subject_1', [0, -0.79, 1.5], [0, -0.46, 1.25], { lookFrom: [0, -0.49, 0], lookTo: [0, -0.06, 0] }),
     }),
     slots: subject({ rotationY: 0.1 }),
     aliases: ALIASES,

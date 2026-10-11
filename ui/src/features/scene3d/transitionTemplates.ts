@@ -99,7 +99,7 @@ const SPECS: Record<TransitionTemplateId, TransitionSpec> = {
     camera: cam('establishment', [0, 1.5, 3.2], [0, 1.4, 0], 38, {
       framing: {
         targetSlot: 'subject', anchor: 'head', relativeToFacing: false,
-        from: [0, -0.12, 3.2], to: [0, -0.06, 1.2], lookFrom: [0, -0.3, 0], lookTo: [0, -0.12, 0],
+        from: [0, -0.03, 3.2], to: [0, 0.03, 1.2], lookFrom: [0, -0.21, 0], lookTo: [0, -0.03, 0],
         moveStart: 0.05, moveEnd: 0.7, ease: 'snap',
       },
     }),
@@ -118,7 +118,7 @@ const SPECS: Record<TransitionTemplateId, TransitionSpec> = {
     camera: cam('establishment', [0, 1.5, 1.7], [0, 1.45, 0], 36, {
       framing: {
         targetSlot: 'subject', anchor: 'head', relativeToFacing: false,
-        from: [0, -0.08, 1.7], to: [0, -0.04, 1.15], lookFrom: [0, -0.12, 0], lookTo: [0, -0.08, 0],
+        from: [0, -0.02, 1.7], to: [0, 0.02, 1.15], lookFrom: [0, -0.06, 0], lookTo: [0, -0.02, 0],
       },
     }),
     slots: [cutout('subject', 'subject_1', [0, 0, 0])],
@@ -195,7 +195,7 @@ const SPECS: Record<TransitionTemplateId, TransitionSpec> = {
     camera: cam('establishment', [0, 1.5, 4.4], [0, 1.4, 0], 38, {
       framing: {
         targetSlot: 'subject', anchor: 'head', relativeToFacing: false,
-        from: [0, -0.1, 4.4], to: [0, -0.04, 1], lookFrom: [0, -0.5, 0], lookTo: [0, -0.06, 0],
+        from: [0, -0.05, 4.4], to: [0, 0.01, 1], lookFrom: [0, -0.45, 0], lookTo: [0, -0.01, 0],
         moveStart: 0.3, moveEnd: 0.5, ease: 'snap',
       },
       shake: [{ start: 0.3, end: 0.6, amplitude: 0.06, frequency: 20, seed: 3, decay: 6 }],

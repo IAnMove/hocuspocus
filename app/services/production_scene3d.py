@@ -35,8 +35,10 @@ LIGHTS = LIGHT_NAMES     # app/shared/world3d_modifiers.json, the table the comp
 FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
 # Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
-# of a production is then exported again on its next run instead of reusing the stale file.
-RENDER_RECIPE = 2
+# of a production is then exported again on its next run instead of reusing the stale file. 3: honest technique
+# effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
+# rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third.
+RENDER_RECIPE = 3
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}

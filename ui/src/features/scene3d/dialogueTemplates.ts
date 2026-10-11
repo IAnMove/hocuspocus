@@ -19,9 +19,9 @@ const otsPair = (): Scene3DSlot[] => [
   plate(),
 ]
 /** Camera A sits behind subject_1's shoulder; its push is 6 % so neither speaker is still. B mirrors it in x. */
-const OTS_FROM: Vec3 = [-2.4, -0.05, 0.6]
-const OTS_TO: Vec3 = [-2.26, -0.05, 0.56]
-const OTS_LOOK: Vec3 = [0, -0.02, 0]
+const OTS_FROM: Vec3 = [-2.4, -0.17, 0.6]
+const OTS_TO: Vec3 = [-2.26, -0.17, 0.56]
+const OTS_LOOK: Vec3 = [0, -0.14, 0]
 
 /** A thin dark plane between the two halves of a split screen: a frameless screen slot that needs no media. */
 const divider = (): Scene3DSlot => ({
@@ -90,7 +90,7 @@ const SPECS: Record<DialogueTemplateId, CastPackSpec> = {
   'dialogue-embrace': {
     category: 'cinema', duration: 6, dressing: 'citadel', light: KEY,
     camera: cam('establishment', [0, 1.5, 1.9], [0, 1.45, 0], 36, {
-      framing: headFraming('subject_1', [0.27, 0, 1.95], [0.27, 0, 1.7], { lookFrom: [0.27, -0.05, -0.04], lookTo: [0.27, -0.05, -0.04], orbitTurns: 0.03 }),
+      framing: headFraming('subject_1', [0.27, -0.03, 1.95], [0.27, -0.03, 1.7], { lookFrom: [0.27, -0.08, -0.04], lookTo: [0.27, -0.08, -0.04], orbitTurns: 0.03 }),
     }),
     slots: [
       model('subject_1', 'subject_1', [-0.27, 0, 0.04], { rotationY: 1.15 }),

@@ -136,7 +136,7 @@ const SPECS: Record<SpeedTemplateId, SpeedSpec> = {
     camera: cam('establishment', [0, 1.5, 2.5], [0, 1.4, 0], 38, {
       framing: {
         targetSlot: 'subject', anchor: 'head', relativeToFacing: false,
-        from: [0, -0.16, 2.5], to: [0, -0.1, 0.95], lookFrom: [0, -0.2, 0], lookTo: [0, -0.12, 0],
+        from: [0, -0.05, 2.5], to: [0, 0.01, 0.95], lookFrom: [0, -0.09, 0], lookTo: [0, -0.01, 0],
         moveStart: 0.25, moveEnd: 0.55, ease: 'snap',
       },
       shake: [{ start: 2.75, end: 3.5, amplitude: 0.05, frequency: 18, seed: 9, decay: 4 }],
