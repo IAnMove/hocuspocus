@@ -8,7 +8,7 @@ export function filterProps(props: LibraryProp[], text: string, style: string) {
 }
 export function propSlot(prop: LibraryProp, workspace: string, id = prop.id): Scene3DSlot {
   return { id, slot: 'prop', media: 'image', sourceUrl: `${BASE}/api/v1/file/${encodeURIComponent(prop.file)}?workspace=${encodeURIComponent(workspace)}`,
-    surface: 'cutout', grounded: true, position: [0, 0, 0], rotationY: 0, scale: prop.heightM / 2, clip: null }
+    surface: 'cutout', grounded: true, imageLook: { grounded: true }, setItem: { heightM: prop.heightM, prop: prop.id }, position: [0, 0, 0], rotationY: 0, scale: prop.heightM / 2, clip: null }
 }
 export async function propsCommand(operation: string, input: Record<string, unknown>, intent?: string) {
   const response = await fetch(`${BASE}/api/v1/props/commands`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
