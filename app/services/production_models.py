@@ -30,6 +30,7 @@ import re
 import time
 from typing import Any, Callable
 
+from services import production_rooms as rooms
 from services.glb_cleanup import CLEANUP as GLB_CLEANUP
 from services.production_control import sleep_until
 from services.production_diorama import (
@@ -85,9 +86,9 @@ def check_sets(spec: dict) -> None:
     if not isinstance(sets, dict) or len(sets) > 12:
         raise ModelError("spec.sets maps up to 12 names to {prompt, seed}")
     for name, entry in sets.items():
-        built = is_diorama(entry) or is_parallax(entry)
+        built = is_diorama(entry) or is_parallax(entry) or rooms.is_room(entry)
         if built and isinstance(name, str) and _NAME.match(name):
-            why = (check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
+            why = (rooms.check_room if rooms.is_room(entry) else check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
             if why:
                 raise ModelError(why)
         elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
@@ -219,6 +220,7 @@ def _await(production: Any, operation: str, jobs: dict[str, tuple[str | None, st
 
 # The set kinds built from several pictures, each with its recipe, its picture jobs and what a built record holds.
 SET_KINDS = (
+    {"name": "room", "is": rooms.is_room, "recipe": rooms.recipe, "jobs": rooms.picture_jobs, "built": rooms.is_built},
     {"name": "diorama", "is": is_diorama, "recipe": diorama_recipe, "jobs": diorama_jobs, "built": diorama_built},
     {"name": "parallax", "is": is_parallax, "recipe": parallax_recipe, "jobs": parallax_jobs, "built": parallax_built},
 )
@@ -309,7 +311,7 @@ def _collect_pictures(production: Any, jobs: dict, made: dict, sets: dict, pictu
             pictures[name] = production.upload(file)[1]
     for set_name, record in sets.items():
         if record.get("pictures") and not record.get("error"):
-            (build_parallax if record.get("kind") == "parallax" else build_diorama)(production, set_name, record)
+            (rooms.build if record.get("kind") == "room" else build_parallax if record.get("kind") == "parallax" else build_diorama)(production, set_name, record)
     production.save()
 
 

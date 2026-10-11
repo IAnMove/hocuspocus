@@ -1,3 +1,4 @@
+import { PropLibraryPanel } from '../../scene3d/PropLibraryPanel'
 import type { TFunction } from 'i18next'
 import { useState } from 'react'
 import { Box, ExternalLink, Loader2 } from 'lucide-react'
@@ -10,9 +11,10 @@ import { CheckInput, NumberInput, SelectInput } from './fields'
 import type { SectionDraft } from './inspectorStore'
 import { InspectorSection, type DraftProps } from './InspectorSection'
 import { grid, stableJson, withField } from './model'
+import { roomItemOverrides, visibleRoomItems } from './roomItems'
 
 type Object3D = Record<string, unknown> & { objectId: string }
-const EDITED = ['objects', 'quality', 'renderLook'] as const
+const EDITED = ['objects', 'removedSetObjects', 'quality', 'renderLook'] as const
 const ADVANCED = ['clips', 'hold', 'motion', 'appearance'] as const
 
 function clipNames(value: unknown): string[] {
@@ -95,9 +97,11 @@ function ObjectList({ objects }: { objects: Object3D[] }) {
   </li>)}</ul>
 }
 
-function SceneEditor({ draft, change }: DraftProps) {
+function SceneEditor({ draft, change, workspace, inherited }: DraftProps & { workspace: string; inherited: Object3D[] }) {
   const { t } = useUiTranslation('seriesLab')
-  const objects = (draft.objects || []) as Object3D[]
+  const { t: itemT } = useUiTranslation('scene3dEditor')
+  const objects = visibleRoomItems(inherited, (draft.objects || []) as Object3D[], (draft.removedSetObjects || []) as string[])
+  const changeObjects = (rows: Object3D[]) => change({ ...draft, ...roomItemOverrides(inherited, rows) })
   return <div className="space-y-2">
     <div className={grid}>
       <SelectInput title={t('inspector.scene3d.quality')} value={draft.quality || 'draft'} onChange={value => change({ ...draft, quality: value })}
@@ -105,8 +109,14 @@ function SceneEditor({ draft, change }: DraftProps) {
       <SelectInput title={t('inspector.scene3d.lookTitle')} value={draft.renderLook} empty={t('inspector.scene3d.looks.none')}
         onChange={value => change(withField(draft, 'renderLook', value))} options={(['toon', 'n64'] as const).map(value => ({ value, label: t(`inspector.scene3d.looks.${value}`) }))} />
     </div>
+    <PropLibraryPanel workspace={workspace} disabled={objects.length >= 12} onAdd={prop => changeObjects([...objects, {
+      objectId: `${prop.id}-${Date.now()}`, file: prop.file, media: 'image', add: true, grounded: true, imageLook: { grounded: true },
+      scale: prop.heightM / 2, position: [0, 0, 0], rotationY: 0, setItem: { prop: prop.id, heightM: prop.heightM },
+    }])} />
+    <h4>{itemT('props.title')}</h4>
+    {objects.map(object => <button key={object.objectId} onClick={() => changeObjects(objects.filter(row => row.objectId !== object.objectId))}>{itemT('props.remove')} {object.objectId}</button>)}
     {objects.map((object, index) => <ObjectEditor key={object.objectId} object={object}
-      change={next => change({ ...draft, objects: objects.map((item, position) => position === index ? next : item) })} />)}
+      change={next => changeObjects(objects.map((item, position) => position === index ? next : item))} />)}
   </div>
 }
 
@@ -116,6 +126,8 @@ export function Scene3DPart({ context, onOpenEditor }: { context: PartContext; o
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const scene = context.script?.scene3d
+  const inherited = (scene?.scene ? [] : context.series.locations.find(location => location.id === context.shot.locationId)?.set3dBuilt?.objects || []) as Object3D[]
+  const objects = visibleRoomItems(inherited, (scene?.objects || []) as Object3D[], (scene?.removedSetObjects || []) as string[])
   const open = async () => {
     setBusy(true); setError('')
     try { await onOpenEditor() } catch (reason) { setError((reason as Error).message) } finally { setBusy(false) }
@@ -126,9 +138,9 @@ export function Scene3DPart({ context, onOpenEditor }: { context: PartContext; o
     actions={scene && <button type="button" className={`${secondaryButton} min-h-10 sm:min-h-0 sm:py-1.5`} disabled={busy} onClick={() => void open()}>
       {busy ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}{t('inspector.scene3d.openEditor')}</button>}
     view={<>
-      <ObjectList objects={(scene?.objects || []) as Object3D[]} />
+      <ObjectList objects={objects} />
       <p className="mt-2 text-[10px] text-text-muted">{t('inspector.scene3d.hint')}</p>
       {error && <p role="alert" className="mt-1 text-[11px] text-red-300">{error}</p>}
     </>}
-    editor={props => <SceneEditor {...props} />} />
+    editor={props => <SceneEditor {...props} workspace={context.workspace} inherited={inherited} />} />
 }

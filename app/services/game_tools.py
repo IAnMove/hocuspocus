@@ -10,7 +10,10 @@ import time
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
-from services.game_generators.base import GenContext
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.game_generators.base import GenContext
 from services.lyrics_language import detect_language
 
 

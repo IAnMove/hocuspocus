@@ -178,6 +178,8 @@ export type Scene3DSourceRef = {
 }
 
 export type Scene3DSlot = {
+  billboard?: boolean
+  setItem?: { heightM: number; prop?: string; at?: { mark?: string; anchor?: string; position?: Vec3 } }
   rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
     libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice
@@ -271,6 +273,7 @@ export type Scene3DToon = {
 }
 
 export type Scene3DDocument = {
+  room?: import('./roomSet').RoomSet
   /** Native procedural sets: shared by editor, MCP, Wizard and both export paths. */
   motionLab?: import('./motionlab/types').MotionLabSettings
   rhythm?: import('./rhythm').Scene3DRhythm

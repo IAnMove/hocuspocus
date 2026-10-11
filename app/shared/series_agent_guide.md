@@ -313,6 +313,32 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
     "scale": 0.16, "hold": {"carrier": "guard", "hand": "right", "offset": [-0.146, 0.013, -0.038], "rotation": [-1.65,
     0.11, 2.76]}, "appearance": {"start": 1.5}}`.
 
+## 3D sets: molds, skins and props
+
+1. Read `scene3d.sets.catalog` to choose an interior mold, size, camera, character marks and prop anchors.
+2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
+   `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
+   For example, `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
+   To reuse the approved location picture, use `wall_back: {image: "location"}` instead.
+   Asset skins use `{image: {asset: "wall.png"}}`, `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`.
+   Poll `series.location.set3d.status` until completed; failed status includes its error.
+3. The location's 3D shots inherit its set; `scene3d.roomCamera` selects `two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2` or `entrance`.
+   In `series.episode.from_script`, use `kind: "3d", cast: [["pedro", "base", "behind_desk"]]`; unknown marks warn and use a valid fallback.
+4. Create a prop with `props.create`: `input: {workspace, name: "lamp", description: "small brass desk lamp", heightM: 0.4, style: "layered paper cutouts"}`.
+   Poll `props.status` with `job_id`, inspect the candidate PNGs, then call `props.approve` with the chosen `id`.
+   `props.list` filters by `style` and `query`; `props.import` accepts an existing PNG and `heightM`.
+   For an image outside the library, `image.remove_background` takes `source, method: "auto" | "screen" | "u2net", crop: true` and returns `file`, `bbox`, `method` and halo report.
+5. Add the approved prop to one shot with `scene3d.item.add`:
+   `input: {workspace, target: {series_id, episode_id, shot: 1}, item: {prop: "<approved-id>"}, at: {anchor: "desk_left"}}`.
+   A working Video 3D scene uses `target: {scene_id}`; direct media uses `item: {image: "lamp.png"}` or an existing `{glb: "lamp.glb"}` with `heightM`.
+   `scene3d.item.list` returns object ids; move one with `scene3d.item.update` and `id, at: {position: [x, y, z]}` (metres).
+   Remove it with `scene3d.item.remove` and `id`; updates can change `heightM`, `rotationY` (radians), `billboard` and `shadow`.
+   To share it across every shot at this location, include `{prop: "<approved-id>", anchor: "desk_left"}` in `set3d.props`.
+6. Every mutation uses a unique `intent_id`; reuse it only for the identical retry, and read the result before proceeding.
+   The back wall's straight-on painting supplies the detail; keep its style consistent with the series canon.
+   Use real heights and the mold's anchors so objects rest on their surfaces; a tall object at a low anchor warns `item_too_tall`.
+   Keep at most 12 objects per shot, including inherited set props; inspect previews before approving the result.
+
 ## Edit one shot ("the fifth shot")
 
 `series.shot.get {workspace, series_id, episode_id, shot}` reads one shot, and `series.shot.update` edits it, by id

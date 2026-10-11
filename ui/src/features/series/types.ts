@@ -104,6 +104,9 @@ export interface SeriesSetLayer {
 }
 
 export interface SeriesLocation {
+  set3d?: { mold: string; size?: string; skin?: Record<string, unknown>; props?: Array<Record<string, unknown>> }
+  set3dBuilt?: { objects?: Array<Record<string, unknown>> }
+  set3dStatus?: { status: string; fingerprint?: string; error?: string }
   id: string
   name: string
   purpose: string

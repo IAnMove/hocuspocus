@@ -59,6 +59,9 @@ def _location(location: dict[str, Any]) -> dict[str, Any]:
     for key in ("homes", "anchors", "layers", "castDepth"):
         if layout.get(key):
             entry[key] = layout[key]
+    if location.get("set3d"):
+        entry["set3d"] = location["set3d"]
+        entry["set3dStatus"] = location.get("set3dStatus", {})
     if layout.get("plateAssetId"):
         entry["plate3d"] = True
     return entry

@@ -130,3 +130,58 @@ def test_a_held_thing_hung_under_a_standing_bodys_feet_is_dropped_and_its_legs_s
     # The largest part is the body, however low it reaches.
     low = write_parts_glb(tmp_path / "low.glb", [(300, -1.0, 1.0), (30, 0.5, 1.5)])
     assert parts_under_feet(pygltflib.GLTF2().load(str(low))) == []
+
+
+def write_skinned_glb(path, apart):
+    """Two box parts, each skinned to one joint; the second joint stands 2 m above the first. With ``apart`` the
+    second part is stored at the origin (its bone's space) and only the skeleton lifts it into place."""
+    box = np.array([[x, y, z] for x in (-0.5, 0.5) for y in (0.0, 1.0) for z in (-0.5, 0.5)], dtype=np.float32)
+    lifted = box + np.array([0.0, 2.0, 0.0], dtype=np.float32)
+    parts = [box, box if apart else lifted]
+    bind = np.eye(4, dtype=np.float32) if apart else np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, -2, 0, 1]], dtype=np.float32)
+    blob, views, accessors, primitives = b"", [], [], []
+
+    def add(data, kind, component, normalized=False, minmax=False):
+        nonlocal blob
+        views.append(pygltflib.BufferView(buffer=0, byteOffset=len(blob), byteLength=len(data.tobytes())))
+        blob += data.tobytes()
+        accessor = pygltflib.Accessor(bufferView=len(views) - 1, componentType=component, count=len(data), type=kind, normalized=normalized)
+        if minmax:
+            accessor.min, accessor.max = data.min(0).tolist(), data.max(0).tolist()
+        accessors.append(accessor)
+        return len(accessors) - 1
+
+    for index, points in enumerate(parts):
+        position = add(points, "VEC3", pygltflib.FLOAT, minmax=True)
+        normal = add(np.tile(np.array([[0, 1, 0]], dtype=np.float32), (8, 1)), "VEC3", pygltflib.FLOAT)
+        joints = add(np.full((8, 4), index, dtype=np.uint8), "VEC4", pygltflib.UNSIGNED_BYTE)
+        weights = add(np.tile(np.array([[1, 0, 0, 0]], dtype=np.float32), (8, 1)), "VEC4", pygltflib.FLOAT)
+        primitives.append(pygltflib.Primitive(attributes=pygltflib.Attributes(POSITION=position, NORMAL=normal, JOINTS_0=joints, WEIGHTS_0=weights)))
+    matrices = add(np.stack([np.eye(4, dtype=np.float32), bind]).reshape(2, 16), "MAT4", pygltflib.FLOAT)
+    gltf = pygltflib.GLTF2(
+        scenes=[pygltflib.Scene(nodes=[0, 2])], scene=0,
+        nodes=[pygltflib.Node(name="root", children=[1]), pygltflib.Node(name="upper", translation=[0.0, 2.0, 0.0]), pygltflib.Node(mesh=0, skin=0)],
+        skins=[pygltflib.Skin(joints=[0, 1], inverseBindMatrices=matrices)],
+        bufferViews=views, accessors=accessors, meshes=[pygltflib.Mesh(primitives=primitives)], buffers=[pygltflib.Buffer(byteLength=len(blob))])
+    gltf.set_binary_blob(blob)
+    gltf.save_binary(str(path))
+    return path
+
+
+def test_a_skinned_rip_stored_in_parts_is_assembled_in_its_rest_pose_and_still_plays(tmp_path):
+    from services.glb_cleanup import _node_worlds, _read, _rest_pose, _skin_matrices, parts_stored_apart
+
+    apart = write_skinned_glb(tmp_path / "apart.glb", apart=True)
+    assert parts_stored_apart(pygltflib.GLTF2().load(str(apart)))
+    assert clean_glb(apart, tmp_path / "apart.clean.glb") == ["its 2 skinned parts were stored apart (each in its bone's space), now assembled in its rest pose"]
+    baked = pygltflib.GLTF2().load(str(tmp_path / "apart.clean.glb"))
+    stored = np.vstack([_read(baked, primitive.attributes.POSITION) for primitive in baked.meshes[0].primitives])
+    assert stored[:, 1].min() == 0 and stored[:, 1].max() == 3, "the upper part now stands where its bone holds it"
+    matrices = _skin_matrices(baked, baked.skins[0], _node_worlds(baked))
+    for primitive in baked.meshes[0].primitives:
+        before, rest, normals = _rest_pose(baked, primitive, matrices)
+        assert np.allclose(before, rest), "rebound: at rest the skeleton leaves every vertex where it is stored"
+        assert np.allclose(normals, [0, 1, 0])
+    whole = write_skinned_glb(tmp_path / "whole.glb", apart=False)
+    assert not parts_stored_apart(pygltflib.GLTF2().load(str(whole)))
+    assert clean_glb(whole, tmp_path / "whole.clean.glb") == [], "a body stored assembled (a T-pose rip) is left alone"

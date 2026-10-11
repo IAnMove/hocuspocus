@@ -8,8 +8,10 @@ the same handlers filtered to a profile, with its own first instructions.
 from __future__ import annotations
 
 SERIES_TOOLS = frozenset({
+    "scene3d.sets.catalog", "scene3d.item.add", "scene3d.item.update", "scene3d.item.remove", "scene3d.item.list",
+    "props.create", "props.import", "props.status", "props.approve", "props.reject", "props.list", "props.get", "props.delete",
     # Start here, then the series itself.
-    "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
+    "series.location.set3d", "series.location.set3d.status", "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",
     "series.episode.from_script", "series.episode.script.get", "series.episode.produce", "series.episode.produce.status", "series.episode.produce.cancel",
     "series.episode.produce.resume",
@@ -26,7 +28,7 @@ SERIES_TOOLS = frozenset({
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "jobs.cancel",
-    "studio.key", "qa.speech", "qa.accent", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
+    "image.remove_background", "studio.key", "qa.speech", "qa.accent", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
     # One shot by its number or id, and the media steps that used to need scripts outside the app.
     "series.shot.get", "series.shot.update", "series.shot.voices", "series.shot.voice", "series.shot.voice.status", "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
     # Editing a take's scene and Video 3D.
@@ -43,7 +45,7 @@ GAME_TOOLS = frozenset({
     "game.asset.approve", "game.asset.reject", "game.asset.lock",
     "game.produce", "game.produce.status", "game.produce.cancel", "game.produce.resume", "game.export",
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
-    "studio.key", "qa.accent",
+    "image.remove_background", "studio.key", "qa.accent",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
     "characters.list", "characters.get", "characters.save", "characters.rig.check",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
