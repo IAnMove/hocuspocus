@@ -277,6 +277,18 @@
     },
     "shelf_front": {
       "color": "#523f32"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "window_view": {
+      "color": "#385872"
+    },
+    "door": {
+      "color": "#b89f80"
     }
   },
   "id": "despacho",

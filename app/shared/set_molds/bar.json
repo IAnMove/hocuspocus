@@ -277,6 +277,9 @@
     },
     "shelf_front": {
       "color": "#523f32"
+    },
+    "door": {
+      "color": "#b89f80"
     }
   },
   "id": "bar",
