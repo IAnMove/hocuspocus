@@ -28,7 +28,8 @@
     "resolution": "1024x1024",
     "tile_m": 1.0,
     "seamMax": 1.5,
-    "extraPasses": 1
+    "extraPasses": 1,
+    "bandDivisor": 8
   },
   "removeBackground": {
     "auto": true,
@@ -55,5 +56,8 @@
     "qwen_image_21_turbo": true,
     "qwen_image_21_viggle_turbo": false,
     "qwen_image_21": true
+  },
+  "skin": {
+    "floorShade": 0.7
   }
 }

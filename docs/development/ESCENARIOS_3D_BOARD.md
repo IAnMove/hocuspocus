@@ -9,7 +9,7 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | A1 | feat/mcp-remove-background | #970 | Z1 local OK: 6682 Python + 55 cancelación; UI; ratchet; docs | image_remove_background.py |
 | A2 | feat/prop-library | #971 | Z1 local OK: 6685 Python + 55 cancelación; UI; ratchet; docs | prop_library.py |
 | A3 | feat/scene3d-add-items | #972 | Z1 local OK: 6691 Python + 12 escala/GLB/editor; UI; ratchet; docs | scene3d_items.py |
-| A5 | feat/set-skins | pendiente | pendiente | set_skins.py |
+| A5 | feat/set-skins | #973 | Z1 local OK: 6697 Python; UI; ratchet; docs | set_skins.py |
 | A6 | feat/set-molds-v1 | pendiente | pendiente | set_molds/*.json |
 | A7 | feat/sets-room-integration | pendiente | pendiente | production_rooms.py, series_sets.py |
 | A8 | docs/sets-agent-guide | pendiente | pendiente | guías de agentes |
