@@ -1,5 +1,5 @@
 import { cameraEyeAtTime, cameraLookAtTime } from './camera'
-import type { Scene3DDocument, Scene3DFraming, Scene3DSlot, Vec3 } from './types.ts'
+import type { Scene3DCameraFamily, Scene3DDocument, Scene3DFraming, Scene3DSlot, Vec3 } from './types.ts'
 
 /** What a shot card tells an agent before the document is opened: how close the
  * camera is, what it does, what the template itself animates, who fits in it and
@@ -14,12 +14,17 @@ export type TemplateCameraMove = typeof TEMPLATE_CAMERA_MOVES[number]
 export const TEMPLATE_MOVING_PARTS = ['camera', 'subjects', 'props', 'screens', 'effects', 'backdrop', 'texts'] as const
 export type TemplateMovingPart = typeof TEMPLATE_MOVING_PARTS[number]
 
-export const TEMPLATE_USES = ['dialogue', 'talk', 'reaction', 'figure', 'establishing', 'action', 'reveal', 'product', 'music', 'drive', 'transition', 'title', 'look', 'plate'] as const
+export const TEMPLATE_USES = ['dialogue', 'talk', 'reaction', 'figure', 'establishing', 'action', 'speed', 'impact', 'reveal', 'product', 'music', 'drive', 'transition', 'title', 'look', 'plate'] as const
 export type TemplateUse = typeof TEMPLATE_USES[number]
+
+/** The shelf a card sits on: a finished scene, a room mold, a camera technique, a look, a cut piece or a title. */
+export const TEMPLATE_KINDS = ['scene', 'stage', 'camera', 'look', 'transition', 'title'] as const
+export type TemplateKind = typeof TEMPLATE_KINDS[number]
 
 export type TemplateAuthoredFor = 'model' | 'cutout' | 'mixed' | 'none'
 
 export type TemplateTraits = {
+  kind: TemplateKind
   /** How much of a person the frame holds at mid-shot: `close` (head and shoulders or tighter), `medium` (to the waist), `wide` (whole figure), `far` (the figure under a third of the frame), `plate` (no subject slot). */
   shot: TemplateShotSize
   /** Metres from the camera to the subject at mid-shot, rounded; null for a plate. */
@@ -30,6 +35,8 @@ export type TemplateTraits = {
   moving: TemplateMovingPart[]
   /** True when `moving` is empty: only the cast's own clip or speech can move the picture. */
   still: boolean
+  /** A subject slot walks a motion path: the figure crosses the set. */
+  travel: boolean
   subjects: number
   props: number
   screens: number
@@ -52,6 +59,12 @@ const BODY_BELOW_HEAD = 1.6
 /** The frame holds this many figure heights at the top of each size. */
 const SHOT_FRACTIONS: ReadonlyArray<[TemplateShotSize, number]> = [['close', 0.5], ['medium', 1.1], ['wide', 3.5]]
 const LOOK_FAMILIES = new Set(['lighting', 'color', 'lenses', 'genre-looks', 'viral-looks', 'atmosphere'])
+const CAMERA_FAMILIES = new Set(['camera-movement', 'framing', 'camera-angles', 'composition', 'editing', 'time-and-motion', 'effects'])
+/** Camera families that ride a vehicle or run after one: never a conversation, always speed. */
+const FAST_CAMERAS = new Set<Scene3DCameraFamily>(['chase', 'pursuit', 'hood', 'wing'])
+const TRACKING_MOVES = new Set<TemplateCameraMove>(['track', 'ride', 'slide'])
+/** A figure covering this many metres a second is running, riding or driving, not talking (the talks stay under 0.6). */
+const RUN_PACE = 1
 const EXPLOSIVE_FX = new Set(['explosion', 'shockwave', 'lightning', 'laser', 'energy_beam', 'fire', 'ice_burst'])
 const SUBJECT_ROLES = new Set(['subject_1', 'subject_2'])
 /** Dressings whose set moves on its own (endless roads and treadmills, procedural weather and water, pixel skies, native motion sets). */
@@ -135,6 +148,8 @@ function familyMoves(doc: Scene3DDocument, subject: Scene3DSlot | undefined): Te
 
 function cameraMoves(doc: Scene3DDocument, framing: Scene3DFraming | undefined, subject: Scene3DSlot | undefined): TemplateCameraMove[] {
   const moves = framing ? framingMoves(framing, doc.camera.fov) : familyMoves(doc, subject)
+  // A framing hangs off its target's anchor, so the camera travels with a figure that walks.
+  if (framing && doc.slots.some(slot => slot.id === framing.targetSlot && slot.motion)) moves.push('track')
   if (doc.camera.shake?.length) moves.push('shake')
   return moves
 }
@@ -189,7 +204,7 @@ function floorOf(doc: Scene3DDocument): string {
 }
 
 type Measured = Pick<TemplateTraits, 'shot' | 'moves' | 'moving' | 'subjects'> & { framing?: Scene3DFraming }
-type UseContext = Measured & { doc: Scene3DDocument; hints: TemplateTraitHints; near: boolean; beat: boolean }
+type UseContext = Measured & { doc: Scene3DDocument; hints: TemplateTraitHints; near: boolean; beat: boolean; look: boolean; rush: boolean }
 
 /** A place is shown when the template paints one: a bound plate, a set that moves, or a procedural world. */
 function showsPlace(doc: Scene3DDocument, moving: TemplateMovingPart[]) {
@@ -199,22 +214,39 @@ function showsPlace(doc: Scene3DDocument, moving: TemplateMovingPart[]) {
 const craneRise = (framing?: Scene3DFraming) => Boolean(framing && framing.to[1] - framing.from[1] >= 0.4)
 const explosive = (doc: Scene3DDocument) => (doc.worldSfx ?? []).some(cue => EXPLOSIVE_FX.has(String(cue.kind)))
 const subjectsTravel = (doc: Scene3DDocument) => doc.slots.some(slot => isSubject(slot) && slot.motion)
+const fastCamera = (doc: Scene3DDocument) => FAST_CAMERAS.has(doc.camera.family)
+const fastSet = (doc: Scene3DDocument) => doc.dressing === 'treadmill' || Boolean(doc.dressing?.startsWith('drive-'))
+const tracksRush = (ctx: UseContext) => ctx.rush && ctx.moves.some(move => TRACKING_MOVES.has(move))
+
+/** Metres a slot's motion path covers, through its waypoints. */
+function pathLength(slot: Scene3DSlot): number {
+  if (!slot.motion) return 0
+  const stops: Vec3[] = [slot.position, ...(slot.motion.via ? [slot.motion.via] : []), ...(slot.motion.points ?? []), slot.motion.to]
+  return stops.slice(1).reduce((total, stop, index) => total + length(sub(stop, stops[index])), 0)
+}
+
+/** The fastest subject's metres per second over the shot. */
+function pace(doc: Scene3DDocument): number {
+  return Math.max(0, ...doc.slots.filter(isSubject).map(pathLength)) / Math.max(doc.duration, 1e-6)
+}
 
 const USE_RULES: ReadonlyArray<[TemplateUse, (ctx: UseContext) => boolean]> = [
   ['plate', ctx => ctx.shot === 'plate'],
-  ['dialogue', ctx => ctx.subjects >= 2 && ctx.shot !== 'far' && ctx.hints.category !== 'product'],
+  ['dialogue', ctx => ctx.subjects >= 2 && ctx.shot !== 'far' && ctx.hints.category !== 'product' && !fastCamera(ctx.doc) && !ctx.beat && !ctx.rush],
   ['talk', ctx => ctx.subjects >= 1 && ctx.near && !ctx.beat],
-  ['reaction', ctx => ctx.subjects === 1 && ctx.shot === 'close' && (ctx.moves.includes('arc') || ctx.moves.includes('push'))],
+  ['reaction', ctx => ctx.subjects === 1 && ctx.shot === 'close' && (ctx.moves.includes('arc') || ctx.moves.includes('push') || (!ctx.moves.length && !ctx.look))],
   ['figure', ctx => ctx.subjects >= 1 && ctx.shot === 'wide'],
   ['establishing', ctx => ctx.shot === 'far' || ctx.shot === 'plate' || (ctx.shot === 'wide' && showsPlace(ctx.doc, ctx.moving))],
   ['action', ctx => ctx.hints.category === 'action' || ctx.hints.family === 'chase' || ctx.hints.family === 'pursuit' || ctx.beat || subjectsTravel(ctx.doc)],
+  ['speed', ctx => ctx.hints.category === 'drive' || fastCamera(ctx.doc) || fastSet(ctx.doc) || tracksRush(ctx) || ctx.doc.templateId.startsWith('speed-')],
+  ['impact', ctx => ctx.beat],
   ['reveal', ctx => ctx.doc.camera.family === 'reveal' || craneRise(ctx.framing) || (ctx.moves.includes('pull') && ctx.moves.includes('zoom'))],
   ['product', ctx => ctx.hints.category === 'product'],
   ['music', ctx => ctx.hints.category === 'music' || Boolean(ctx.doc.rhythm)],
   ['drive', ctx => ctx.hints.category === 'drive'],
   ['transition', ctx => ctx.doc.duration <= 3 && ctx.moving.includes('effects')],
   ['title', ctx => ctx.moving.includes('texts')],
-  ['look', ctx => Boolean(ctx.hints.family && LOOK_FAMILIES.has(ctx.hints.family))],
+  ['look', ctx => ctx.look],
 ]
 
 function usesOf(doc: Scene3DDocument, measured: Measured, hints: TemplateTraitHints): TemplateUse[] {
@@ -222,8 +254,27 @@ function usesOf(doc: Scene3DDocument, measured: Measured, hints: TemplateTraitHi
     ...measured, doc, hints,
     near: measured.shot === 'close' || measured.shot === 'medium',
     beat: measured.moves.includes('shake') || explosive(doc),
+    look: Boolean(hints.family && LOOK_FAMILIES.has(hints.family)),
+    rush: pace(doc) >= RUN_PACE,
   }
   return USE_RULES.filter(([, applies]) => applies(ctx)).map(([use]) => use)
+}
+
+/** The family decides for a technique card; a pack id or the document decides for the rest. */
+function kindOf(doc: Scene3DDocument, measured: Measured, uses: TemplateUse[], hints: TemplateTraitHints): TemplateKind {
+  const family = hints.family ?? ''
+  if (LOOK_FAMILIES.has(family)) return 'look'
+  if (CAMERA_FAMILIES.has(family)) return 'camera'
+  if (uses.includes('transition') || doc.templateId.startsWith('transition-')) return 'transition'
+  if (doc.templateId.startsWith('title-') || (measured.subjects === 0 && measured.moving.includes('texts'))) return 'title'
+  if (doc.room) return 'stage'
+  return 'scene'
+}
+
+/** The dressing or mold the document was built in: the card's `place`, a filter an agent matches exactly. */
+export function templatePlace(doc: Scene3DDocument): string | null {
+  const place = doc.room?.mold.id ?? doc.dressing
+  return place && place !== 'none' ? place : null
 }
 
 export function templateTraits(doc: Scene3DDocument, hints: TemplateTraitHints = {}): TemplateTraits {
@@ -236,22 +287,25 @@ export function templateTraits(doc: Scene3DDocument, hints: TemplateTraitHints =
   const subjects = doc.slots.filter(slot => SUBJECT_ROLES.has(slot.slot)).length
   const props = doc.slots.filter(slot => slot.slot === 'prop' && slot.media !== 'screen').length
   const screens = doc.slots.filter(slot => slot.media === 'screen').length
+  const uses = usesOf(doc, { shot, moves, moving, subjects, framing }, hints)
   return {
+    kind: kindOf(doc, { shot, moves, moving, subjects }, uses, hints),
     shot,
     distance: measured ? Math.round(measured.distance * 10) / 10 : null,
     moves,
     moving,
     still: moving.length === 0,
+    travel: subjectsTravel(doc),
     subjects,
     props,
     screens,
     authoredFor: authoredFor(doc),
     floor: floorOf(doc),
-    uses: usesOf(doc, { shot, moves, moving, subjects, framing }, hints),
+    uses,
   }
 }
 
 /** The words a text search should see for these traits, in both languages' shared vocabulary. */
 export function templateTraitWords(traits: TemplateTraits): string[] {
-  return [traits.shot, ...traits.moves, ...traits.moving, ...traits.uses, traits.authoredFor, traits.still ? 'still' : 'animated']
+  return [traits.shot, ...traits.moves, ...traits.moving, ...traits.uses, traits.kind, traits.authoredFor, traits.still ? 'still' : 'animated', ...(traits.travel ? ['travel'] : [])]
 }

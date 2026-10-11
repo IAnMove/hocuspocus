@@ -5,7 +5,7 @@ import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES } from '..
 import { SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/types.ts'
 import { TEMPLATE_VARIANT_GROUPS } from '../src/features/scene3d/templateCatalog.ts'
 import { settingFromDressing } from '../src/features/scene3d/templateFilters.ts'
-import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
+import { templatePlace, templateTraits } from '../src/features/scene3d/templateTraits.ts'
 import { actionCard } from '../src/features/scene3d/actionTemplates.ts'
 import { campaignCard } from '../src/features/scene3d/campaignTemplates.ts'
 import { animeCard } from '../src/features/scene3d/animeTemplates.ts'
@@ -74,7 +74,8 @@ function card(id) {
     lineEn: line(copyEn.description || technique?.descriptionEn, titleEn),
     notesEs: notes(id, 'es'),
     notesEn: notes(id, 'en'),
-    preview: technique?.thumbUrl || null,
+    // No card has its own render yet; the technique still lives in `reference`.
+    preview: null,
     roles: document.slots.map(slot => slot.slot),
     required,
     dependencies,
@@ -90,6 +91,10 @@ function card(id) {
     authoredFor: traits.authoredFor,
     floor: traits.floor,
     uses: traits.uses,
+    kind: traits.kind,
+    place: templatePlace(document),
+    travel: traits.travel,
+    reference: technique?.thumbUrl || null,
     source: 'builtin',
   }
 }

@@ -2,8 +2,9 @@ import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
 import { animeCard } from './animeTemplates'
 import { atmosSet, isAtmosDressing } from './atmos/registry.ts'
+import techniques from './cinematicTechniques.json' with { type: 'json' }
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
-import { templateTraits, templateTraitWords, type TemplateTraits } from './templateTraits.ts'
+import { templatePlace, templateTraits, templateTraitWords, type TemplateTraits } from './templateTraits.ts'
 import type { Scene3DDressing } from './types.ts'
 
 export const TEMPLATE_SETTINGS = [
@@ -47,11 +48,26 @@ export function templateSetting(id: Scene3DTemplateId): TemplateSetting {
   return settingFromDressing(applyScene3DTemplate(id).dressing)
 }
 
+/** The technique family of a cinema card, else its camera family: the same hint the catalog exporter passes. */
+const families = new Map<string, string>(techniques.map(entry => [entry.id, entry.category]))
+for (const item of SCENE3D_TEMPLATES) if (!families.has(item.id)) families.set(item.id, item.camera)
+
 const traits = new Map<Scene3DTemplateId, TemplateTraits>()
-/** The shot's derived traits (shot size, camera moves, what moves, uses), read once from the built document. */
+const places = new Map<Scene3DTemplateId, string | null>()
+function derive(id: Scene3DTemplateId) {
+  const doc = applyScene3DTemplate(id)
+  traits.set(id, templateTraits(doc, { category: TEMPLATE_CATEGORIES[id], family: families.get(id) }))
+  places.set(id, templatePlace(doc))
+}
+/** The shot's derived traits (kind, shot size, camera moves, what moves, uses), read once from the built document. */
 export function templateTraitsOf(id: Scene3DTemplateId): TemplateTraits {
-  if (!traits.has(id)) traits.set(id, templateTraits(applyScene3DTemplate(id), { category: TEMPLATE_CATEGORIES[id] }))
+  if (!traits.has(id)) derive(id)
   return traits.get(id)!
+}
+/** The dressing or mold the shot was built in, read once from the built document. */
+export function templatePlaceOf(id: Scene3DTemplateId): string | null {
+  if (!places.has(id)) derive(id)
+  return places.get(id)!
 }
 
 function templateSearchText(item: Scene3DTemplate, input: {
@@ -59,7 +75,8 @@ function templateSearchText(item: Scene3DTemplate, input: {
   titleOf: (id: Scene3DTemplateId) => string
 }) {
   const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale) ?? animeCard(item.id, input.locale)
-  return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)} ${templateTraitWords(templateTraitsOf(item.id)).join(' ')}`
+  const place = templatePlaceOf(item.id)?.replaceAll('-', ' ') ?? ''
+  return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)} ${place} ${templateTraitWords(templateTraitsOf(item.id)).join(' ')}`
 }
 
 function templateMatchesFilter(item: Scene3DTemplate, input: {
