@@ -6,7 +6,7 @@ import { slotPoseAtTime } from './performance'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
 export interface DioramaHouse { source: string; width: number; height: number }
-export interface DioramaGround { source: string; height: number; size: number }
+export interface DioramaGround { source: string; height: number; size: number; tile?: number }   // tile: metres the picture covers before it repeats (3 when absent)
 export interface DioramaSet { houses: DioramaHouse[]; ground?: DioramaGround; layout?: 'plaza' | 'open' }
 
 const MIN_RADIUS = 7          // the plaza is at least this wide around what the camera looks at

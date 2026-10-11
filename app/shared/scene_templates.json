@@ -341,7 +341,7 @@
       "id": "cinema-hero",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Da al sujeto una entrada frontal con presencia y dirección cinematográfica.",
+      "visualIntent": "La figura está quieta desde el primer fotograma; la cámara sube y se abre para darle presencia. Nadie entra en el plano.",
       "title": "Entrada de héroe",
       "version": 1,
       "slots": [
@@ -536,7 +536,7 @@
       "id": "music-pulse",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Convierte un pulso visual en cambios rítmicos de escala, contraste y desplazamiento.",
+      "visualIntent": "La figura rebota al ritmo con cambios de escala y desplazamiento, la cámara empuja y flotan luciérnagas.",
       "title": "Pulso musical",
       "version": 1,
       "slots": [
@@ -601,7 +601,7 @@
       "id": "music-duet",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Alterna dos presencias en una composición de videoclip con respuesta visual compartida.",
+      "visualIntent": "Dos figuras laten a la vez al ritmo mientras la cámara se balancea un poco. No se alternan.",
       "title": "Dúo musical",
       "version": 1,
       "slots": [
@@ -675,7 +675,7 @@
       "id": "music-chorus",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Amplía un gesto principal con una cadencia de capas y un encuadre de estribillo.",
+      "visualIntent": "La figura se queda quieta mientras la cámara late al ritmo y cae confeti, para un estribillo.",
       "title": "Coro musical",
       "version": 1,
       "slots": [
@@ -879,7 +879,7 @@
       "id": "music-stage",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Coloca el motivo en un escenario gráfico preparado para una entrada de videoclip.",
+      "visualIntent": "La figura rebota al ritmo mientras la cámara la barre de lado. No hay escenario: el fondo es la placa.",
       "title": "Escenario musical",
       "version": 1,
       "slots": [
@@ -1646,7 +1646,7 @@
       "id": "documentary-history",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Foto con movimiento lento, rótulo de fecha y acabado de archivo. Candidata, no aprobada.",
+      "visualIntent": "Foto quieta con polvo, acabado de archivo, un rótulo de fecha y un contador de años con textos de ejemplo fijos. La foto no se mueve. Candidata, no aprobada.",
       "title": "Documental histórico",
       "version": 1,
       "slots": [
@@ -1711,7 +1711,7 @@
       "id": "trailer-teaser",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Golpes de título sobre negro, tarjeta final y bandas anchas. Candidata, no aprobada.",
+      "visualIntent": "Secuencia de rótulos sobre negro opaco (golpes de palabra, tarjeta de título y tarjeta final) con textos de ejemplo fijos y bandas anchas. Tapa todo el plano: las imágenes de sus slots no se ven. Candidata, no aprobada.",
       "title": "Teaser de tráiler",
       "version": 1,
       "slots": [
@@ -1776,7 +1776,7 @@
       "id": "lyric-vertical",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Pieza 9:16 con letra en karaoke y pulso. Candidata, no aprobada.",
+      "visualIntent": "Placa quieta en 9:16 con bokeh y una línea de karaoke de ejemplo fija; la compilación no acepta tu letra. Candidata, no aprobada.",
       "title": "Lyric video vertical",
       "version": 1,
       "slots": [
@@ -1841,7 +1841,7 @@
       "id": "city-postcard",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Tira de ciudad, banner de papel y gaviotas. Candidata, no aprobada.",
+      "visualIntent": "Placa de ciudad quieta con hojas que cruzan en tira y una pancarta de papel con texto de ejemplo fijo. No hay gaviotas. Candidata, no aprobada.",
       "title": "Postal de ciudad",
       "version": 1,
       "slots": [

@@ -9,6 +9,7 @@ import json
 import subprocess
 from typing import Any
 
+from services.production_camera import background_ops
 from services.production_control import sleep_until
 from services.production_package import (
     attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, write_manifest,
@@ -42,28 +43,18 @@ def scene_layer_ops(production: Any, shot: dict, start: float, end: float, dur: 
         raise host.ProductionError("scene3d_export_failed", f"scene3d clip missing: {shot['key']}")
     if clip:
         host.note_held(production.state, shot["key"], False)
-        ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
         skip = round(max(0.0, start - shot.get("t0", start)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
-        # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
-        # shorter duration would freeze the clip mid-scene, so it always covers the scene (+ the skipped head)
-        anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.0, "rotation": 0},
-                                "duration": round(dur + skip, 3)}
-        if skip > 0:
-            anim["trimStart"] = skip
-        ops.append({"op": "update_layer", "id": "bg", "patch": {"fill": True, "animation": anim}})
+        ops += background_ops(clip["url"], "video", dur, camera=shot.get("camera"), skip=skip)
     elif shot["kind"] == "screen":
         desktop = {"theme": style.get("theme") or "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1",
                    "switch": "none", **{k: str(v) for k, v in (shot.get("desktop") or {}).items()}}
         ops.append({"op": "add_title", "id": "desk", "template": "desktop", "fields": desktop, "start": 0, "duration": dur})
     else:
-        zoom = shot.get("zoom") or [1.0, 1.1]
         source = stills.get(shot.get("still"), shot.get("still"))
         if not source and shot["kind"] == "h3" and shot["key"] in production.state.get("frames", {}):
             source = production.upload(production.state["frames"][shot["key"]])[1]      # clip failed: hold its start frame
             host.note_held(production.state, shot["key"])
-        ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
-                {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
-                    "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
+        ops += background_ops(source, "image", dur, camera=shot.get("camera"), zoom=shot.get("zoom"), focus=shot.get("focus"))
     title_ops, used = production._title_ops(shot, dur, style)
     ops.extend(title_ops)
     ops.extend(production._lyric_ops(shot, start, end, dur, score, style, used))

@@ -185,7 +185,7 @@ def test_failed_update_does_not_keep_overrides_or_clear_the_scene(tmp_path: Path
     production.save()
     _fail_scene_export(production)
     with pytest.raises(ShotEditError) as caught:
-        update_shot(production, spec, "s0", camera="camera-orbit", lyric_style={"color": "#ABCDEF"})
+        update_shot(production, spec, "s0", camera="camera-dolly", lyric_style={"color": "#ABCDEF"})
     assert caught.value.code == "scene_export_failed"
     assert "overrides" not in spec["shots"][0]
     assert production.state["scenes"]["s0"]["file"] == "old-s0.mp4"
@@ -227,15 +227,15 @@ def test_update_stores_overrides_and_reexports_only_that_scene(tmp_path: Path):
     result = update_shot(
         production, spec, "s0",
         lyric_style={"color": "#ABCDEF"},
-        camera="camera-orbit",
+        camera="camera-dolly",
         title={"template": "lower-third-date", "fields": {"date": "MAY", "caption": "NIGHT"}},
     )
-    assert result["overrides"]["camera"] == "camera-orbit"
+    assert result["overrides"]["camera"] == "camera-dolly"
     assert spec["shots"][0]["overrides"]["lyric_style"] == {"color": "#ABCDEF"}
     blob = json.dumps(edits)
     assert "#ABCDEF" in blob
     assert "#111111" not in blob
-    assert "camera-orbit" in blob
+    assert "camera-dolly" in blob
     assert calls.count("scenes.video2d.export") == 1
     assert len(saved) == 1
     clips = {clip["id"]: clip for clip in saved[0]["montage"]["clips"]}
@@ -243,6 +243,11 @@ def test_update_stores_overrides_and_reexports_only_that_scene(tmp_path: Path):
     with pytest.raises(ShotEditError) as empty:
         update_shot(production, spec, "s0")
     assert empty.value.code == "empty_update"
+    with pytest.raises(ShotEditError) as unknown:      # refused before the export, the override kept as it was
+        update_shot(production, spec, "s0", camera="camera-orbit")
+    assert unknown.value.code == "unknown_camera"
+    assert spec["shots"][0]["overrides"]["camera"] == "camera-dolly"
+    assert calls.count("scenes.video2d.export") == 1
 
 
 def test_scenes_keep_a_locked_shot_in_the_cut(tmp_path: Path):

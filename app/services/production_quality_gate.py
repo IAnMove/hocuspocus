@@ -3,8 +3,9 @@
 ``blocking_problems`` is what ``production.run`` refuses in a new or changed spec: one still image filling
 three or more shots that are not marked deliberate (``allow: ["still"]``), more runtime on still images
 than the quality allows, and a full-frame title (title-card, trailer-slam) over a moving shot, which hides the
-clip it paid for (``allow: ["title_card"]`` keeps a deliberate one), and a 3D shot asking a spec model for a clip its
-rig will not bake (the export would fail after every GPU stage). A resume of an unchanged spec is never refused.
+clip it paid for (``allow: ["title_card"]`` keeps a deliberate one), a 3D shot asking a spec model for a clip its
+rig will not bake (the export would fail after every GPU stage), and a ``camera`` that is not a camera preset
+(``unknown_camera``; the scene edit would fail after the GPU work). A resume of an unchanged spec is never refused.
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
@@ -18,10 +19,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from services.production_camera import unknown_cameras
 from services.production_quality import profile_of
+from services.video2d_catalogs import CATALOGS
 
 REUSED_STILL = 3
-FULL_FRAME_TITLES = ("title-card", "trailer-slam")     # an opaque plate over the whole frame
+# an opaque plate over the whole frame: the text templates marked covers in text_templates.json
+FULL_FRAME_TITLES = tuple(entry["id"] for entry in CATALOGS["scenes.text.catalog"]["entries"] if entry.get("covers") is True)
 MOVING = ("h3", "clip", "scene3d", "screen")
 REUSED_TEMPLATE = 4
 SHOT_FIELDS = {"key", "kind", "line", "span", "t0", "t1", "after", "cast", "sing", "frame", "action", "still", "clip", "image_model",
@@ -52,7 +56,8 @@ def refuse_thin_plan(spec: dict, stored: Any, root: Any = None) -> None:
     problems = blocking_problems(spec, root)
     if problems:
         from fastapi import HTTPException
-        summary = "; ".join(f"{item['code']} ({item.get('still') or item.get('ratio')})" for item in problems)
+        summary = "; ".join(f"{item['code']} ({item.get('still') or item.get('ratio') or ', '.join(item.get('cameras') or [])})"
+                            for item in problems)
         raise HTTPException(422, {"code": "quality_gate", "message": f"The plan would look thin: {summary}. See problems.",
                                   "problems": problems, "retryable": False})
 
@@ -75,6 +80,7 @@ def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
         problems.append({"code": "too_static", "ratio": round(ratio, 2), "limit": limit,
                          "hint": "replace still shots with H3 or scene3d shots"})
     problems += _unbaked_clips(spec, shots, root)
+    problems += unknown_cameras(spec)
     hidden = [str(shot.get("key")) for shot in shots if _covered(shot)]
     if hidden:
         problems.append({"code": "title_card_hides_shot", "shots": hidden,

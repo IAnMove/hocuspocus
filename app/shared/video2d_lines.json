@@ -1,0 +1,347 @@
+{
+  "version": 1,
+  "note": "One name and one line in Spanish and English for the Video 2D text templates, motion and camera presets, finishes and lyric looks, keyed by scenes.catalog kind and id. scenes.catalog shows them in its summaries and searches them. Each line says what the compiled cue or preset does. A kind: camera line describes it on a camera layer (add_layer type camera), where it moves the view.",
+  "text": {
+    "lower-third-date": {
+      "titleEs": "Rótulo inferior con fecha", "titleEn": "Date lower third",
+      "lineEs": "Una fecha grande sobre una barra roja entra desde la derecha y un pie aparece debajo con un fundido, abajo a la izquierda. El plano sigue visible.",
+      "lineEn": "A big date on a red bar slides in from the right and a caption fades in under it, bottom left. The shot stays visible."
+    },
+    "chorus-banner": {
+      "titleEs": "Pancarta de estribillo", "titleEn": "Chorus banner",
+      "lineEs": "Una frase en rotulador sobre una tira de papel en el centro; entra palabra a palabra y late.",
+      "lineEn": "One line in marker on a paper strip in the middle; it enters word by word and pulses."
+    },
+    "title-card": {
+      "titleEs": "Tarjeta de título", "titleEn": "Title card",
+      "lineEs": "Tapa todo el plano: un título grande que se enfoca sobre una placa negra opaca, con subtítulo opcional. La imagen de debajo no se ve.",
+      "lineEn": "Covers the whole frame: a big title comes into focus on an opaque black plate, with an optional subtitle. The picture under it is not seen."
+    },
+    "end-card": {
+      "titleEs": "Tarjeta final", "titleEn": "End card",
+      "lineEs": "Un título grande y una llamada a la acción debajo, centrados y sin fondo propio.",
+      "lineEn": "A big title with a call to action under it, centred, with no background of its own."
+    },
+    "year-counter": {
+      "titleEs": "Contador de años", "titleEn": "Year counter",
+      "lineEs": "Un número grande cuenta de un año a otro en el centro, con una etiqueta debajo.",
+      "lineEn": "A big number counts from one year to another in the centre, with a label under it."
+    },
+    "quote": {
+      "titleEs": "Cita", "titleEn": "Quote",
+      "lineEs": "Una cita en cursiva y entre comillas se teclea en el centro, con el autor debajo.",
+      "lineEn": "An italic quote in quotation marks types itself out in the centre, with the author under it."
+    },
+    "trailer-slam": {
+      "titleEs": "Golpes de tráiler", "titleEn": "Trailer slam",
+      "lineEs": "Tapa todo el plano: una palabra tras otra golpea sobre negro opaco y cada una ocupa su parte del tiempo. La imagen de debajo no se ve.",
+      "lineEn": "Covers the whole frame: one word after another slams in on opaque black, each for its share of the time. The picture under it is not seen."
+    },
+    "chapter": {
+      "titleEs": "Título de capítulo", "titleEn": "Chapter title",
+      "lineEs": "Un antetítulo pequeño en mayúsculas sobre un título grande, en el centro y sin fondo propio.",
+      "lineEn": "A small capital kicker over a big title, in the centre, with no background of its own."
+    },
+    "social-caption": {
+      "titleEs": "Subtítulo social", "titleEn": "Social caption",
+      "lineEs": "Una línea en una píldora oscura abajo en el centro, como el subtítulo de un vídeo de redes. Los estilos de letra parten de él.",
+      "lineEn": "One line in a dark pill at the bottom centre, like a social video caption. The lyric looks are built on it."
+    },
+    "ransom": {
+      "titleEs": "Nota de rescate", "titleEn": "Ransom note",
+      "lineEs": "Cada palabra en un recorte de papel con otra tipografía y otra inclinación; entran una tras otra.",
+      "lineEn": "Each word on its own paper scrap with a different typeface and tilt; they come in one after another."
+    },
+    "dymo": {
+      "titleEs": "Etiqueta Dymo", "titleEn": "Dymo label",
+      "lineEs": "Una línea en mayúsculas sobre cinta de rotuladora, un poco torcida; entra palabra a palabra. Cinta negra o amarilla.",
+      "lineEn": "One capital line on label-maker tape, slightly tilted; it enters word by word. Black or yellow tape."
+    },
+    "card": {
+      "titleEs": "Tarjeta", "titleEn": "Card",
+      "lineEs": "Un título sobre una tarjeta crema en el centro, un poco girada; sube al entrar.",
+      "lineEn": "A title on a cream card in the centre, slightly turned; it rises in."
+    },
+    "desktop": {
+      "titleEs": "Escritorio", "titleEn": "Desktop",
+      "lineEs": "No es un rótulo: dibuja un escritorio de ventanas en mosaico que llena todo el cuadro (tema, disposición, apps y cambio de espacio).",
+      "lineEn": "Not lettering: it draws a tiling-window desktop that fills the whole frame (theme, layout, apps and workspace switch)."
+    }
+  },
+  "motion": {
+    "turntable": {
+      "titleEs": "Plato giratorio", "titleEn": "Turntable",
+      "lineEs": "El objeto se queda en el centro; un modelo 3D gira sobre sí mismo.",
+      "lineEn": "The object stays in the centre; a 3D model turns on itself."
+    },
+    "meteor": {
+      "titleEs": "Meteoro", "titleEn": "Meteor",
+      "lineEs": "Cruza el cuadro en diagonal de abajo a la izquierda a arriba a la derecha, acelerando y creciendo, y sale.",
+      "lineEn": "Crosses the frame on a diagonal from bottom left to top right, speeding up and growing, and leaves it."
+    },
+    "space-cruise": {
+      "titleEs": "Crucero espacial", "titleEn": "Space cruise",
+      "lineEs": "Cruza de izquierda a derecha, sube un poco y crece despacio.",
+      "lineEn": "Crosses from left to right, rising a little and growing slowly."
+    },
+    "hover": {
+      "titleEs": "Flotar", "titleEn": "Hover",
+      "lineEs": "Sube un poco en el centro y crece levemente.",
+      "lineEn": "Rises a little in the centre and grows slightly."
+    },
+    "landing": {
+      "titleEs": "Aterrizaje", "titleEn": "Landing",
+      "lineEs": "Cae desde encima del cuadro hasta debajo del centro, creciendo, y rebota al llegar.",
+      "lineEn": "Drops from above the frame to below the centre, growing, and bounces as it lands."
+    },
+    "liftoff": {
+      "titleEs": "Despegue", "titleEn": "Liftoff",
+      "lineEs": "Sale hacia arriba desde debajo del centro, acelera, se encoge y deja el cuadro.",
+      "lineEn": "Takes off upwards from below the centre, speeds up, shrinks and leaves the frame."
+    },
+    "zoom-in": {
+      "titleEs": "Objeto que se acerca", "titleEn": "Zoom in",
+      "lineEs": "Crece en el centro de muy pequeño a más grande que el cuadro, acelerando.",
+      "lineEn": "Grows in the centre from tiny to larger than the frame, speeding up."
+    },
+    "zoom-out": {
+      "titleEs": "Objeto que se aleja", "titleEn": "Zoom out",
+      "lineEs": "Encoge en el centro de más grande que el cuadro a muy pequeño.",
+      "lineEn": "Shrinks in the centre from larger than the frame to tiny."
+    },
+    "pass-camera": {
+      "titleEs": "Pasa junto a cámara", "titleEn": "Pass the camera",
+      "lineEs": "Cruza de izquierda a derecha y crece hasta pasar junto a la cámara, acelerando.",
+      "lineEn": "Crosses from left to right and grows until it passes by the camera, speeding up."
+    },
+    "hero-flyover": {
+      "titleEs": "Sobrevuelo del héroe", "titleEn": "Hero flyover",
+      "lineEs": "Entra arriba a la izquierda y sale abajo a la derecha, creciendo mucho por el camino.",
+      "lineEn": "Enters top left and leaves bottom right, growing a lot on the way."
+    },
+    "fade-reveal": {
+      "titleEs": "Aparición con fundido", "titleEn": "Fade reveal",
+      "lineEs": "Aparece en el centro con un fundido y crece un poco.",
+      "lineEn": "Fades in in the centre and grows a little."
+    },
+    "portal-arrival": {
+      "titleEs": "Llegada por portal", "titleEn": "Portal arrival",
+      "lineEs": "Surge de un punto en el centro hasta el tamaño del cuadro mientras aparece con un fundido, acelerando.",
+      "lineEn": "Grows out of a point in the centre to the size of the frame while it fades in, speeding up."
+    },
+    "exit-frame": {
+      "titleEs": "Salida del cuadro", "titleEn": "Exit frame",
+      "lineEs": "Sale del centro hacia arriba a la derecha, acelerando y encogiéndose.",
+      "lineEn": "Leaves the centre towards the top right, speeding up and shrinking."
+    },
+    "drift-right": {
+      "titleEs": "Deriva a la derecha", "titleEn": "Drift right",
+      "lineEs": "Se desliza a velocidad constante de izquierda a derecha, sin cambiar de tamaño.",
+      "lineEn": "Slides at a steady speed from left to right without changing size."
+    },
+    "drift-left": {
+      "titleEs": "Deriva a la izquierda", "titleEn": "Drift left",
+      "lineEs": "Se desliza a velocidad constante de derecha a izquierda, sin cambiar de tamaño.",
+      "lineEn": "Slides at a steady speed from right to left without changing size."
+    },
+    "diagonal-rise": {
+      "titleEs": "Subida en diagonal", "titleEn": "Diagonal rise",
+      "lineEs": "Sube de abajo a la izquierda a arriba a la derecha y crece.",
+      "lineEn": "Rises from bottom left to top right and grows."
+    },
+    "diagonal-drop": {
+      "titleEs": "Caída en diagonal", "titleEn": "Diagonal drop",
+      "lineEs": "Cae de arriba a la derecha a abajo a la izquierda, acelerando y encogiéndose.",
+      "lineEn": "Falls from top right to bottom left, speeding up and shrinking."
+    },
+    "pop": {
+      "titleEs": "Aparición con rebote", "titleEn": "Pop",
+      "lineEs": "Sale de un punto en el centro y crece con un rebote en un segundo.",
+      "lineEn": "Pops out of a point in the centre and grows with a bounce in one second."
+    },
+    "glide": {
+      "titleEs": "Planeo", "titleEn": "Glide",
+      "lineEs": "Cruza el tercio inferior de izquierda a derecha, de borde a borde, y crece un poco.",
+      "lineEn": "Crosses the lower third from left to right, edge to edge, growing a little."
+    },
+    "vibrate": {
+      "titleEs": "Vibración", "titleEn": "Vibrate",
+      "lineEs": "Se mueve muy poco en el centro con un rebote; casi quieto.",
+      "lineEn": "Moves very little in the centre with a bounce; almost still."
+    },
+    "orbit-sweep": {
+      "titleEs": "Barrido orbital", "titleEn": "Orbit sweep",
+      "lineEs": "Sube de abajo a la izquierda a arriba a la derecha y crece mucho. Es una diagonal, no una órbita.",
+      "lineEn": "Rises from bottom left to top right and grows a lot. It is a diagonal, not an orbit."
+    },
+    "center-reveal": {
+      "titleEs": "Revelado central", "titleEn": "Centre reveal",
+      "lineEs": "Sube desde debajo del cuadro hasta el centro y crece.",
+      "lineEn": "Rises from below the frame to the centre and grows."
+    },
+    "floating-logo": {
+      "titleEs": "Logo flotante", "titleEn": "Floating logo",
+      "lineEs": "Baja despacio un poco en el centro, sin cambiar de tamaño.",
+      "lineEn": "Moves slowly down a little in the centre without changing size."
+    },
+    "cinematic-push": {
+      "titleEs": "Empuje cinematográfico", "titleEn": "Cinematic push",
+      "lineEs": "El objeto pasa de pequeño a más grande que el cuadro mientras va al centro: parece que la cámara se acerca a él.",
+      "lineEn": "The object grows from small to larger than the frame while it moves to the centre: it looks like the camera moves in on it."
+    },
+    "crane-reveal": {
+      "titleEs": "Revelado en grúa", "titleEn": "Crane reveal",
+      "lineEs": "Sube desde debajo del cuadro, grande y transparente, hasta el centro, más pequeño y opaco.",
+      "lineEn": "Rises from below the frame, large and see-through, to the centre, smaller and solid."
+    },
+    "foreground-parallax": {
+      "titleEs": "Primer término en paralaje", "titleEn": "Foreground parallax",
+      "lineEs": "Una capa grande cruza el cuadro de izquierda a derecha a velocidad constante, como un primer término que pasa ante la cámara.",
+      "lineEn": "A large layer crosses the frame from left to right at a steady speed, like a foreground passing the camera."
+    },
+    "camera-locked": {
+      "titleEs": "Cámara fija", "titleEn": "Locked camera",
+      "lineEs": "La cámara no se mueve.",
+      "lineEn": "The camera does not move."
+    },
+    "camera-pan-right": {
+      "titleEs": "Paneo a la derecha", "titleEn": "Pan right",
+      "lineEs": "La vista se desliza hacia la derecha.",
+      "lineEn": "The view slides to the right."
+    },
+    "camera-pan-left": {
+      "titleEs": "Paneo a la izquierda", "titleEn": "Pan left",
+      "lineEs": "La vista se desliza hacia la izquierda.",
+      "lineEn": "The view slides to the left."
+    },
+    "camera-push-in": {
+      "titleEs": "Acercamiento", "titleEn": "Push in",
+      "lineEs": "La cámara se acerca al centro hasta 1,55 veces.",
+      "lineEn": "The camera moves in on the centre, up to 1.55 times."
+    },
+    "camera-pull-out": {
+      "titleEs": "Alejamiento", "titleEn": "Pull out",
+      "lineEs": "La cámara se aleja desde 1,6 veces hasta el plano entero.",
+      "lineEn": "The camera pulls back from 1.6 times to the whole shot."
+    },
+    "camera-crane-up": {
+      "titleEs": "Grúa arriba", "titleEn": "Crane up",
+      "lineEs": "La vista sube y se abre un poco.",
+      "lineEn": "The view rises and widens a little."
+    },
+    "camera-dutch-drift": {
+      "titleEs": "Deriva holandesa", "titleEn": "Dutch drift",
+      "lineEs": "La vista se inclina de un lado al otro (de −6° a 7°), se desplaza en diagonal y se acerca.",
+      "lineEn": "The view tilts from one side to the other (−6° to 7°), drifts on a diagonal and moves in."
+    },
+    "camera-handheld": {
+      "titleEs": "Cámara en mano", "titleEn": "Handheld",
+      "lineEs": "Temblor de cámara al hombro con un acercamiento leve.",
+      "lineEn": "Shoulder-camera shake with a slight push in."
+    },
+    "camera-whip-pan": {
+      "titleEs": "Barrido rápido", "titleEn": "Whip pan",
+      "lineEs": "La vista barre hacia la derecha cada vez más deprisa, con un giro leve y temblor.",
+      "lineEn": "The view sweeps to the right faster and faster, with a slight roll and shake."
+    },
+    "camera-dolly": {
+      "titleEs": "Dolly de revelado", "titleEn": "Dolly reveal",
+      "lineEs": "La cámara se aleja mucho en diagonal con un giro leve y abre el plano. No es un plano tranquilo.",
+      "lineEn": "The camera pulls far back on a diagonal with a slight roll and opens the shot. Not a quiet shot."
+    }
+  },
+  "finish": {
+    "warmCinema": {
+      "titleEs": "Cine cálido", "titleEn": "Warm cinema",
+      "lineEs": "Color más cálido y algo más contrastado, viñeta suave y bandas negras de 2,39:1.",
+      "lineEn": "Warmer, slightly punchier colour, a soft vignette and 2.39:1 black bars."
+    },
+    "oldDoc": {
+      "titleEs": "Documental antiguo", "titleEn": "Old documentary",
+      "lineEs": "Color apagado y cálido, más contraste, grano y arañazos de película.",
+      "lineEn": "Faded warm colour, more contrast, grain and film scratches."
+    },
+    "nightNeon": {
+      "titleEs": "Neón nocturno", "titleEn": "Night neon",
+      "lineEs": "Color más frío y saturado, con resplandor en las luces.",
+      "lineEn": "Colder, more saturated colour with a glow on the highlights."
+    },
+    "paperComic": {
+      "titleEs": "Papel / cómic", "titleEn": "Paper / comic",
+      "lineEs": "Color algo más cálido y menos saturado sobre una textura de papel.",
+      "lineEn": "Slightly warmer, less saturated colour on a paper texture."
+    },
+    "risoPress": {
+      "titleEs": "Prensa riso", "titleEn": "Riso press",
+      "lineEs": "Reimprime el plano en cuatro tintas de risografía (naranja, rosa, azul y negro) sobre papel, con trama, desajuste de registro y golpes en los cortes y los tiempos.",
+      "lineEn": "Reprints the shot in four risograph inks (orange, pink, blue and black) on paper, with halftone, misregistration and kicks on cuts and beats."
+    }
+  },
+  "lyric_looks": {
+    "cinema": {
+      "titleEs": "Subtítulo de cine", "titleEn": "Cinema subtitle",
+      "lineEs": "Subtítulo serif claro abajo, con contorno y sombra; entra y sale con un fundido. Va con Cine cálido.",
+      "lineEn": "A light serif subtitle at the bottom with an outline and a shadow; it fades in and out. Pairs with Warm cinema."
+    },
+    "storybook": {
+      "titleEs": "Cuento rotulado a mano", "titleEn": "Hand-lettered storybook",
+      "lineEs": "Letra manuscrita oscura con borde claro, un poco inclinada; entra palabra a palabra con la línea y flota.",
+      "lineEn": "Dark handwritten letters with a light outline, slightly tilted; they enter word by word with the line and float."
+    },
+    "marker-pop": {
+      "titleEs": "Rotulador pop", "titleEn": "Marker pop",
+      "lineEs": "Mayúsculas de rotulador amarillo claro con contorno oscuro, abajo; entran de golpe y laten.",
+      "lineEn": "Pale-yellow marker capitals with a dark outline at the bottom; they slam in and pulse."
+    },
+    "neon": {
+      "titleEs": "Letrero de neón", "titleEn": "Neon sign",
+      "lineEs": "Mayúsculas rosa claro con resplandor magenta; se enfocan al entrar y parpadean. Va con Neón nocturno.",
+      "lineEn": "Light-pink capitals with a magenta glow; they come into focus and flicker. Pairs with Night neon."
+    },
+    "big-word": {
+      "titleEs": "Estribillo grande", "titleEn": "Big centred chorus",
+      "lineEs": "Mayúsculas blancas grandes en la parte alta, palabra a palabra con la línea, que laten.",
+      "lineEn": "Big white capitals high in the frame, word by word with the line, pulsing."
+    },
+    "typewriter": {
+      "titleEs": "Documento tecleado", "titleEn": "Typed document",
+      "lineEs": "Letra de máquina de escribir abajo a la izquierda que se teclea con la línea. Va con Documental antiguo.",
+      "lineEn": "Typewriter letters bottom left that type out with the line. Pairs with Old documentary."
+    },
+    "paper-strip": {
+      "titleEs": "Tira de papel", "titleEn": "Torn paper strip",
+      "lineEs": "Texto oscuro sobre una tira de papel un poco inclinada; entra desde la izquierda y sale hacia la derecha.",
+      "lineEn": "Dark text on a slightly tilted paper strip; it slides in from the left and out to the right."
+    },
+    "comic-caption": {
+      "titleEs": "Cartucho de cómic", "titleEn": "Comic narration box",
+      "lineEs": "Mayúsculas negras en una caja amarilla arriba a la izquierda, como la narración de un cómic. Va con Papel / cómic.",
+      "lineEn": "Black capitals in a yellow box top left, like comic narration. Pairs with Paper / comic."
+    },
+    "riso-offset": {
+      "titleEs": "Riso desajustado", "titleEn": "Riso misregistration",
+      "lineEs": "Mayúsculas rojas con una sombra azul desplazada, como una tinta fuera de registro; entran y salen con un barrido. Va con Prensa riso.",
+      "lineEn": "Red capitals with an offset blue shadow, like ink out of register; they wipe in and out. Pairs with Riso press."
+    },
+    "quiet-left": {
+      "titleEs": "Discreto abajo a la izquierda", "titleEn": "Quiet lower left",
+      "lineEs": "Texto blanco pequeño abajo a la izquierda que sube al entrar.",
+      "lineEn": "Small white text bottom left that rises in."
+    },
+    "engraved": {
+      "titleEs": "Mayúsculas grabadas", "titleEn": "Engraved capitals",
+      "lineEs": "Mayúsculas serif claras abajo que aparecen letra a letra con la línea.",
+      "lineEn": "Light serif capitals at the bottom that appear letter by letter with the line."
+    },
+    "arcade": {
+      "titleEs": "Mayúsculas arcade", "titleEn": "Arcade capitals",
+      "lineEs": "Mayúsculas monoespaciadas blancas con sombra dura, letra a letra con la línea; desaparecen de golpe.",
+      "lineEn": "White monospace capitals with a hard shadow, letter by letter with the line; they cut out at once."
+    },
+    "wave-chant": {
+      "titleEs": "Cántico en ola", "titleEn": "Wavy chant",
+      "lineEs": "Letra display clara que entra palabra a palabra con la línea, ondula y cae al salir.",
+      "lineEn": "Light display letters that enter word by word with the line, wave, and fall away at the end."
+    }
+  }
+}

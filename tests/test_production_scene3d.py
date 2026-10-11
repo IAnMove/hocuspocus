@@ -752,7 +752,9 @@ def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips
     assert turning["imageLook"]["tiles"] >= 3, "an orbit sweeps past a single picture: mirrored tiles cover the turn"
     run = compile_document(cast_shot(template="cine-two-shot", background=PARALLAX, cast={**hero, "subject_2": "/api/v1/file/b.glb?workspace=t"}, scroll=2.5), 4)
     moving = {slot["id"]: slot for slot in run["slots"] if slot["id"].startswith("set-")}
-    assert all(slot["drift"] > 0 for slot in moving.values()) and moving["set-ground"]["drift"] < moving["set-layer-mid"]["drift"], "scroll slides the layers and the ground"
+    assert all(slot["drift"] > 0 for slot in moving.values()), "scroll slides the layers and the ground"
+    stretch = moving["set-ground"]["scale"] * 1.7 / 0.2
+    assert moving["set-ground"]["drift"] * 3 * stretch == pytest.approx(2.5, rel=1e-3), "the ground moves at the scroll speed: its picture repeats every 3 m"
 
 
 def test_a_renderer_recipe_change_exports_every_clip_again(tmp_path, monkeypatch):

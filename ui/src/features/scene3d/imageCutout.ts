@@ -24,6 +24,10 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
   const aspect = cutoutAspect(texture)
   const tiles = slot.imageLook?.tiles ?? 1
   const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
+  if (texture && slot.drift) {         // a scrolled picture repeats mirrored instead of smearing its last column
+    texture.wrapS = MirroredRepeatWrapping
+    texture.needsUpdate = true
+  }
   groundImageCutout(mesh, slot, texture, aspect)
   poseImageCutout(mesh, slot)
   return mesh

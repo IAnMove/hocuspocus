@@ -12,7 +12,7 @@ medios en GPU. Los assets tienen que ser ya URLs durables del workspace
 ## 1. Catálogo — `scenes.catalog`
 
 Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
-`fonts`, `atmospheres`, `motion`, `effects`, `graphics`.
+`fonts`, `atmospheres`, `motion`, `effects`, `graphics`, `lyric_looks`.
 
 - `templates` → `app/shared/scene_templates.json`
 - `text` → `app/shared/text_templates.json`
@@ -22,6 +22,19 @@ Descubre ids. No guarda. `kind` es uno de: `templates`, `text`, `finish`,
 - `motion` → `app/shared/motion_presets.json` (movimientos y cámaras)
 - `effects` → `app/shared/scene_effects.json` (efectos de pantalla)
 - `graphics` → `app/shared/scene_graphics.json` (gráficos con id y parámetros, sin código)
+- `lyric_looks` → `app/shared/lyric_looks.json` (estilos de letra de `production.run`)
+
+Los rótulos, movimientos, acabados y estilos de letra traen `titleEs`, `titleEn`,
+`lineEs` y `lineEn` (`app/shared/video2d_lines.json`): qué hace cada uno. Un
+rótulo con `covers: true` (`title-card`, `trailer-slam`) tapa todo el plano.
+
+`q` busca por palabras, en español o en inglés: «plano general», «persecución
+espacial», «rótulo con el nombre», «cámara en mano». Perdona mayúsculas,
+tildes, plurales y palabras vacías, y usa los sinónimos de Video 3D. Devuelve
+lo mejor primero, con `score`. `unknown_words` son las palabras que ninguna
+ficha conoce. Sin `kind`, `q` devuelve los recuentos y las mejores fichas de
+todos los tipos en `matches`. Un `id` que está en dos tipos (`rain` es
+atmósfera y efecto) devuelve las dos fichas en `matches`.
 
 ```json
 {
@@ -140,7 +153,13 @@ No guarda ni renderiza. `operations` es una lista (máximo 32). `set_finish`
 copia un id de `finish_presets.json`. `add_title` construye los cues de un id
 de `text_templates.json`. `reorder` asigna z 0, 10, 20… en el orden nuevo y
 debe ser una permutación de los ids de capa. Las cámaras de `add_layer` salen
-de los ids `kind: camera` de `motion_presets.json`.
+de los ids `kind: camera` de `motion_presets.json`. Ponlas en una capa de
+cámara: `add_layer` con `type: "camera"` y sin `source`. Esa capa mueve la
+vista de todas las capas de imagen y vídeo (los textos y las atmósferas no se
+mueven): `camera-pan-right` va a la derecha y el temblor de `camera-handheld`
+llega a la imagen. El mismo preset en una capa de imagen mueve esa imagen al
+revés y su temblor no se dibuja. Si la cámara se desplaza, amplía la imagen de
+fondo (`scale` en su `animation`) para que no se vea su borde.
 
 `update_layer` puede llevar `patch.focus` con `{x, y}` de 0 a 100: es el punto
 del marco de la capa que permanece en el ancla mientras cambia `scale`. Sin
