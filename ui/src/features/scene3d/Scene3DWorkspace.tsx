@@ -1,3 +1,5 @@
+import { PropLibraryPanel } from './PropLibraryPanel'
+import { propSlot, PROP_DRAG_TYPE, type LibraryProp } from './propLibrary'
 import { ExampleDownloads } from './ExampleDownloads'
 import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
@@ -601,7 +603,12 @@ function WorkspaceStageColumn({
 }) {
   const pickKey = selected ? `${generation}/${selected.id}/${selected.sourceUrl}` : ''
   return (
-    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
+    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes(PROP_DRAG_TYPE)) event.preventDefault() }} onDrop={event => {
+            const raw = event.dataTransfer.getData(PROP_DRAG_TYPE)
+            if (!raw || editingLocked) return
+            event.preventDefault()
+            try { const prop = JSON.parse(raw) as LibraryProp; if (prop.approved && prop.heightM > 0) applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] })) } catch { /* Ignore foreign drag data. */ }
+          }}>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Scene3DPreview width={sceneDoc.width} height={sceneDoc.height}>
           <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
@@ -644,6 +651,7 @@ function WorkspaceStageColumn({
           </Scene3DInteraction>
         </Scene3DPreview>
         <div className="min-w-0 space-y-3">
+          <PropLibraryPanel workspace={workspace} disabled={editingLocked} onAdd={prop => applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))} />
           <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}

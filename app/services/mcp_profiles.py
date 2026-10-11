@@ -9,6 +9,7 @@ from __future__ import annotations
 
 SERIES_TOOLS = frozenset({
     "scene3d.sets.catalog",
+    "props.create", "props.import", "props.status", "props.approve", "props.reject", "props.list", "props.get", "props.delete",
     # Start here, then the series itself.
     "series.guide", "series.list", "series.get", "series.episode.get", "series.create", "series.update", "series.canon.approve",
     "series.templates", "series.create_from_template",

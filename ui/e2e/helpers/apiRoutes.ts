@@ -551,6 +551,11 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
     const method = request.method().toUpperCase()
     const pathname = url.pathname
 
+    if (method === 'POST' && pathname === '/api/v1/props/commands' && request.postDataJSON()?.operation === 'props.list') {
+      await route.fulfill(json({ version: 1, operation: 'props.list', status: 'completed', result: { version: 1, revision: 0, props: [] } }))
+      return
+    }
+
     // A save must acknowledge the captured messages, otherwise the real UI
     // endlessly rebases and resubmits against an artificial empty receipt.
     if (pathname === '/api/v1/wizard/conversations' && (method === 'GET' || method === 'PUT')) {
