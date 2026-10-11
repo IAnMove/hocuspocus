@@ -176,3 +176,41 @@ def test_router_reports_provider_usage_without_estimating_from_text():
         response = TestClient(app).post("/api/v1/writing-guide/propose", json=body())
     assert response.status_code == 200
     assert response.json()["usage"] == {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20, "calls": 1}
+
+
+def test_router_reports_an_unusable_writing_provider_with_its_own_hint():
+    from fastapi import HTTPException
+    def override(_body):
+        raise HTTPException(status_code=400, detail="Set the Ollama URL in Settings → Services first")
+    app = FastAPI()
+    app.include_router(create_writing_guide_router(
+        ensure_llm_loaded=lambda: pytest.fail("Must not load the global LLM"), writing_override=override))
+    response = TestClient(app).post("/api/v1/writing-guide/propose", json=body(writingProvider="ollama"))
+    assert response.status_code == 400
+    assert response.json()["detail"] == {"code": "providerConfig", "message": "Set the Ollama URL in Settings → Services first"}
+
+
+def test_malformed_snapshots_scripts_and_questions_do_not_break_planning():
+    series = create_series_project("default")
+    series["writingGuide"] = guide({"series:root": {"engine": "Rescatar"}})
+    episode = {"id": "ep", "seasonId": "s", "canonSnapshot": {"writingDecisions": ["not a dict"]}, "script": None}
+    assert episode_guidance(series, episode) == {}
+    episode["canonSnapshot"] = {"writingDecisions": {"series:root": "not a dict", "season:s": {"stakes": "frozen"}}}
+    assert episode_guidance(series, episode) == {}
+    with pytest.raises(ValueError):
+        prepare_request(body(questionId=["desire"]))
+
+
+def test_season_decisions_stay_live_and_do_not_reopen_the_canon():
+    series = create_series_project("default")
+    season_id = series["seasons"][0]["id"]
+    episode = create_series_episode(series, season_id)
+    updated = copy.deepcopy(series)
+    updated["writingGuide"] = guide({f"season:{season_id}": {"stakes": "La flota se hunde"}, "season:other": {"stakes": "NO FILTRAR"}})
+    assert not series_canon_inputs_changed(series, updated), "a season note is not a canon input, like the season premise"
+    decisions = episode_guidance(updated, episode)
+    assert decisions[f"season:{season_id}"]["stakes"] == "La flota se hunde" and "season:other" not in decisions
+    updated["writingGuide"]["sections"]["series:root"] = {"notes": {"engine": "Motor"}}
+    assert series_canon_inputs_changed(series, updated)
+    second = create_series_episode(updated, season_id)
+    assert second["canonSnapshot"]["writingDecisions"] == {"series:root": {"engine": "Motor"}}, "seasons are never frozen"

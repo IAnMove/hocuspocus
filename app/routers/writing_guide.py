@@ -18,9 +18,18 @@ def create_writing_guide_router(*, ensure_llm_loaded: Callable, writing_override
     async def propose(request: Request, body: dict):
         try:
             prepared = prepare_request(body)
-            override = writing_override(body)
         except ValueError as error:
             raise HTTPException(400, {"code": "invalidRequest", "message": str(error)}) from error
+        try:
+            override = writing_override(body)
+        except ValueError as error:
+            raise HTTPException(400, {"code": "providerConfig", "message": str(error)}) from error
+        except HTTPException as error:
+            # Both runtimes report an unusable writing provider as a plain 400 string;
+            # the panel needs a stable code plus that message to tell the author what to set.
+            if error.status_code == 400 and not isinstance(error.detail, dict):
+                raise HTTPException(400, {"code": "providerConfig", "message": str(error.detail)}) from error
+            raise
         from services import llm_service
         from services.task_manager import CancellationToken
         token = CancellationToken()

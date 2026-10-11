@@ -145,8 +145,8 @@ def _canon_input(series: dict, key: str) -> Any:
 
 def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
     """Compare durable production inputs without coupling canon to chat language."""
-    from services.writing_guide import accepted_guidance
-    if accepted_guidance(current) != accepted_guidance(updated):
+    from services.writing_guide import canon_guidance
+    if canon_guidance(current) != canon_guidance(updated):
         return True
     current_canon = copy.deepcopy(current.get("canon") or {})
     updated_canon = copy.deepcopy(updated.get("canon") or {})

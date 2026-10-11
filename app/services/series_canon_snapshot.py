@@ -18,7 +18,7 @@ def _approved_references(entities, raw_assets, objects, unique_ids):
 
 
 def create_snapshot(series: dict, *, normalize_canon, objects, text, unique_ids) -> dict:
-    from services.writing_guide import accepted_guidance
+    from services.writing_guide import canon_guidance
     canon = normalize_canon(series.get("canon"))
     provider = copy.deepcopy(series.get("provider")) if isinstance(series.get("provider"), dict) else {}
     capability = copy.deepcopy(provider.get("videoCapabilities")) \
@@ -45,7 +45,7 @@ def create_snapshot(series: dict, *, normalize_canon, objects, text, unique_ids)
     approved_assets = _approved_references([*frozen_characters, *frozen_locations, *frozen_props], raw_assets, objects, unique_ids)
     return {
         "revision": canon["revision"],
-        "writingDecisions": accepted_guidance(series),
+        "writingDecisions": canon_guidance(series),
         "worldSummary": canon["worldSummary"],
         "immutableRules": copy.deepcopy(canon["immutableRules"]),
         "currentFacts": copy.deepcopy(canon["currentFacts"]),

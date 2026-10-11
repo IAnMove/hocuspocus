@@ -27,6 +27,8 @@ export type WritingGuideState = { version: 1; sections: Record<string, GuideSect
 export type GuideData = { values: Record<string, string>; section: GuideSection }
 export type GuideUpdate = (current: GuideData) => GuideData
 export const MAX_ANSWER = 6000
+/** Below the server's 24000-character bound, so a proposal request is never refused for its context. */
+export const MAX_CONTEXT = 20000
 export const catalog = rawCatalog as {
   scopes: Record<GuideScope, GuideField[]>
   questions: Record<string, { question: Record<string, string>; hint: Record<string, string>; example: Record<string, string> }>
@@ -133,19 +135,27 @@ export function guideContext(project: Entity, target: Entity, decisions: Writing
     'desire', 'need', 'flaw', 'conflict', 'arc', 'longArc', 'voice', 'voiceAndDialogue', 'appearance', 'identityLock',
     'label', 'dynamic', 'evolution', 'fromCharacterId', 'toCharacterId', 'purpose', 'entryState', 'exitState',
     'goal', 'turn', 'beats', 'participatingCharacterIds', 'locationId', 'text', 'characterId', 'dialogue']
-  let limit = 500
+  let limit = 500, rows = 12
   const compact = (value: unknown, depth = 0): unknown => {
     if (typeof value === 'string') return value.slice(0, limit)
     if (depth > 5) return undefined
-    if (Array.isArray(value)) return value.slice(0, 12).map(v => compact(v, depth + 1))
+    if (Array.isArray(value)) return value.slice(0, rows).map(v => compact(v, depth + 1))
     return Object.fromEntries(Object.entries(object(value)).filter(([key]) => keys.includes(key)).map(([key, v]) => [key, compact(v, depth + 1)]))
   }
   const build = () => ({ project: compact(project), world: compact(project.world || project.canon),
     characters: compact(project.characters), relationships: compact(project.relationships),
     episode: compact(project.writingEpisode), target: compact(target),
     decisions: compactDecisions(extraDecisions(decisions), limit) })
-  let context = build()
-  while (JSON.stringify(context).length > 20000 && limit > 30) { limit = Math.floor(limit / 2); context = build() }
+  const tooLong = (value: unknown) => JSON.stringify(value).length > MAX_CONTEXT
+  let context: Entity = build()
+  // Shorten texts first, then fewer rows (a long episode has 12 scenes × 12 lines), then texts again.
+  while (tooLong(context) && (limit > 30 || rows > 3)) {
+    if (limit > 200 || rows <= 3) limit = Math.max(30, Math.floor(limit / 2))
+    else rows = Math.max(3, Math.floor(rows / 2))
+    context = build()
+  }
+  // The server rejects anything above its limit, so the question must still reach it with its own target.
+  if (tooLong(context)) context = { project: compact(project), target: compact(target), decisions: {} }
   return context
 }
 

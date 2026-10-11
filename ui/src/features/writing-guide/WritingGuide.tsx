@@ -18,7 +18,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
   const [advanced, setAdvanced] = useState(false)
   const [position, setPosition] = useState(0)
   const [busy, setBusy] = useState<GuideAction | null>(null)
-  const [error, setError] = useState<GuideErrorCode | ''>('')
+  const [error, setError] = useState<{ code: GuideErrorCode; detail: string } | null>(null)
   const controller = useRef<AbortController | null>(null)
   useEffect(() => () => { controller.current?.abort() }, [])
   const fields = catalog.scopes[scope]
@@ -36,7 +36,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
     if (controller.current) return
     const abort = new AbortController()
     controller.current = abort
-    setBusy(action); setError('')
+    setBusy(action); setError(null)
     const base = { ...data.values }
     try {
       const result = await proposeWriting({ scope, action, questionId: field.id, language, values: base, context, provider }, abort.signal)
@@ -46,7 +46,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
         selected: result.suggestions.filter(row => !base[row.field]?.trim()).map(row => row.field),
       } } }))
     } catch (reason) {
-      if (!abort.signal.aborted) setError(reason instanceof WritingGuideError ? reason.code : 'failed')
+      if (!abort.signal.aborted) setError(reason instanceof WritingGuideError ? { code: reason.code, detail: reason.detail } : { code: 'failed', detail: '' })
     } finally {
       if (controller.current === abort) { controller.current = null; setBusy(null) }
     }
@@ -94,7 +94,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
           controller.current?.abort(); controller.current = null; setBusy(null)
         }}>{t('cancel')}</button>
       </div>}
-      {error && <p role="alert" className="text-sm text-red-500">{t(`errors.${error}`)}</p>}
+      {error && <p role="alert" className="text-sm text-red-500">{t(`errors.${error.code}`, { message: error.detail })}</p>}
       <WritingProposal data={data} onChange={onChange} onApply={apply} />
     </div>
   </details>

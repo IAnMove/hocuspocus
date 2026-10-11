@@ -28,6 +28,8 @@ def prepare_request(body: dict) -> dict:
     if any(not isinstance(value, str) or len(value) > MAX_VALUE for value in values.values()):
         raise ValueError(f"Each answer must be text of at most {MAX_VALUE} characters")
     question = body.get("questionId", "")
+    if not isinstance(question, str):
+        raise ValueError("Invalid writing question")
     if action == "examples" and question not in ids:
         raise ValueError("Choose a question before requesting examples")
     context = body.get("context", {})
@@ -141,14 +143,23 @@ def accepted_guidance(project: dict, *, episodic: bool = False) -> dict[str, Any
     return result
 
 
+def canon_guidance(series: dict) -> dict[str, Any]:
+    """Decisions the bible freezes per episode. Seasons stay live, like their own premise and arc."""
+    return {key: value for key, value in accepted_guidance(series).items() if not key.startswith("season:")}
+
+
 def episode_guidance(series: dict, episode: dict) -> dict:
-    snapshot = episode.get("canonSnapshot") or {}
-    frozen = snapshot.get("writingDecisions", {})  # Legacy snapshots predate the guide; do not inject live canon.
-    local = accepted_guidance(series, episodic=True)
-    ids = {f"episode:{episode.get('id')}", *(f"scene:{episode.get('id')}/{s.get('id')}" for s in episode.get("script", []) if isinstance(s, dict))}
-    frozen = {key: value for key, value in frozen.items()
-              if not key.startswith("season:") or key == f"season:{episode.get('seasonId')}"}
-    return {**frozen, **{key: value for key, value in local.items() if key in ids}}
+    snapshot = episode.get("canonSnapshot")
+    # Legacy snapshots predate the guide; do not inject live canon. A hand-edited library may hold anything.
+    frozen = snapshot.get("writingDecisions") if isinstance(snapshot, dict) else None
+    frozen = {key: value for key, value in (frozen if isinstance(frozen, dict) else {}).items()
+              if isinstance(value, dict) and not key.startswith("season:")}
+    script = episode.get("script")
+    scenes = script if isinstance(script, list) else []
+    ids = {f"season:{episode.get('seasonId')}", f"episode:{episode.get('id')}",
+           *(f"scene:{episode.get('id')}/{s.get('id')}" for s in scenes if isinstance(s, dict))}
+    live = {**accepted_guidance(series), **accepted_guidance(series, episodic=True)}
+    return {**frozen, **{key: value for key, value in live.items() if key in ids}}
 
 
 def import_guidance(story: dict) -> dict:

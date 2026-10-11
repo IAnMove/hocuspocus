@@ -18,6 +18,7 @@
   "cancel": "Cancel",
   "errors": {
     "invalidRequest": "Check the answers and their length before requesting another proposal.",
+    "providerConfig": "Set up the writing provider before requesting a proposal: {{message}}",
     "invalidProposal": "The model returned a proposal in an invalid format. You can try again.",
     "providerFailed": "The writing provider failed. Check its configuration and try again.",
     "network": "Could not connect to HocusPocus. Check the connection and try again.",

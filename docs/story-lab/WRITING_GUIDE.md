@@ -44,7 +44,9 @@ el perfil global cuando se hereda. La escritura manual no llama al LLM.
 
 Las decisiones extra aceptadas alimentan la generación habitual de Story Lab
 y la preparación de Series. Los episodios nuevos congelan las decisiones
-generales en su canon. Las notas de un episodio se usan solo en ese episodio.
+generales en su canon; las notas de temporada se leen en vivo, como su premisa
+y su arco, y no reabren la aprobación del canon. Las notas de un episodio se
+usan solo en ese episodio.
 Los episodios anteriores a esta función no heredan decisiones nuevas a escondidas.
 La importación Story → Series conserva las decisiones compatibles y descarta
 los borradores pendientes.

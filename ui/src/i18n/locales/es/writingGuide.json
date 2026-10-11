@@ -18,6 +18,7 @@
   "cancel": "Cancelar",
   "errors": {
     "invalidRequest": "Revisa las respuestas y su longitud antes de pedir otra propuesta.",
+    "providerConfig": "Configura el proveedor de texto antes de pedir una propuesta: {{message}}",
     "invalidProposal": "El modelo devolvió una propuesta con un formato no válido. Puedes intentarlo de nuevo.",
     "providerFailed": "El proveedor de texto falló. Revisa su configuración e inténtalo de nuevo.",
     "network": "No se pudo conectar con HocusPocus. Comprueba la conexión e inténtalo de nuevo.",

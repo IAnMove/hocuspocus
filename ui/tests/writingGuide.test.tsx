@@ -240,3 +240,40 @@ test('unstructured server and network failures use translatable codes, never raw
   globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
   await assert.rejects(proposeWriting(request, signal), error => error instanceof WritingGuideError && error.code === 'network')
 })
+
+test('an unusable writing provider shows the server hint about which setting to fix', async t => {
+  const { fireEvent, waitFor } = await import('@testing-library/react')
+  const original = globalThis.fetch
+  globalThis.fetch = (async () => new Response(JSON.stringify({ detail: { code: 'providerConfig', message: 'Set the Ollama URL in Settings → Services first' } }), { status: 400 })) as typeof fetch
+  t.after(() => { globalThis.fetch = original })
+  const { view } = await mount(t)
+  fireEvent.click(view.getByRole('button', { name: 'Develop from my answers' }))
+  await waitFor(() => assert.match(view.getByRole('alert').textContent || '', /Set the Ollama URL in Settings → Services first/))
+  assert.match(view.getByRole('alert').textContent || '', /^Set up the writing provider/)
+})
+
+test('a long episode keeps the scene context under the server limit without dropping the target', () => {
+  const scene = (i: number) => ({ id: `scene-${i}`, purpose: 'p'.repeat(500), entryState: 'e'.repeat(500), exitState: 'x'.repeat(500),
+    beats: Array.from({ length: 12 }, (_, j) => ({ id: `b${j}`, kind: 'action', summary: 's'.repeat(500) })),
+    dialogue: Array.from({ length: 12 }, (_, j) => ({ id: `l${j}`, characterId: 'c', text: 't'.repeat(500), emotion: 'calm', delivery: 'slow' })) })
+  const writingEpisode = { id: 'ep', title: 'Long', premise: 'q'.repeat(500), script: Array.from({ length: 12 }, (_, i) => scene(i)) }
+  const characters = Array.from({ length: 12 }, (_, i) => ({ id: `c${i}`, name: `Name ${i}`, desire: 'd'.repeat(500), personality: 'p'.repeat(500) }))
+  const context = guideContext({ title: 'Series', writingEpisode, characters }, writingEpisode.script[0], undefined)
+  const text = JSON.stringify(context)
+  assert.ok(text.length <= 20000, `context is ${text.length} characters`)
+  assert.ok(text.includes('scene-0') && text.includes('Name 0'))
+})
+
+test('episode advice reads season decisions live while the bible stays frozen', () => {
+  const project = series(episode([]))
+  project.episodesById.ep1.seasonId = 'season-1'
+  project.episodesById.ep1.canonSnapshot = { revision: 1, worldSummary: 'Frozen world',
+    writingDecisions: { 'series:root': { engine: 'Frozen engine' }, 'season:season-1': { stakes: 'Frozen season stakes' } } }
+  project.writingGuide = { version: 1, sections: {
+    'season:season-1': { notes: { stakes: 'Live season stakes' } },
+    'season:season-2': { notes: { stakes: 'OTHER SEASON' } },
+  } }
+  const text = JSON.stringify(seriesGuideContext(project, { scope: 'episode', id: 'ep1' }, project.episodesById.ep1))
+  assert.ok(text.includes('Frozen engine') && text.includes('Live season stakes'))
+  assert.ok(!text.includes('Frozen season stakes') && !text.includes('OTHER SEASON'))
+})

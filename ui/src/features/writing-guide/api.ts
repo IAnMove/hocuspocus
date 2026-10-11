@@ -7,11 +7,13 @@ export type GuideRequest = {
   values: Record<string, string>; context: Record<string, unknown>; provider: GuideProvider
 }
 
-const errorCodes = ['invalidRequest', 'invalidProposal', 'providerFailed', 'network', 'failed'] as const
+const errorCodes = ['invalidRequest', 'providerConfig', 'invalidProposal', 'providerFailed', 'network', 'failed'] as const
 export type GuideErrorCode = typeof errorCodes[number]
+/** `detail` is the server's own hint (which setting to fix); every other code stays fully localized. */
 export class WritingGuideError extends Error {
   readonly code: GuideErrorCode
-  constructor(code: GuideErrorCode) { super(code); this.code = code }
+  readonly detail: string
+  constructor(code: GuideErrorCode, detail = '') { super(detail || code); this.code = code; this.detail = detail }
 }
 
 export async function proposeWriting(request: GuideRequest, signal: AbortSignal): Promise<GuideResult> {
@@ -23,7 +25,8 @@ export async function proposeWriting(request: GuideRequest, signal: AbortSignal)
   const result = await response.json().catch(() => { throw new WritingGuideError('failed') })
   if (!response.ok) {
     const code = result?.detail?.code
-    throw new WritingGuideError(errorCodes.includes(code) ? code : 'failed')
+    const detail = code === 'providerConfig' && typeof result.detail.message === 'string' ? result.detail.message : ''
+    throw new WritingGuideError(errorCodes.includes(code) ? code : 'failed', detail)
   }
   return result
 }
