@@ -67,6 +67,7 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
     surface: parseSurface(slot.surface),
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat), drift: drift(slot.drift),
+    inPlace: slot.inPlace === true ? true : undefined,
     performance: parsePerformance(slot.performance),
     rhythm: parseSlotRhythm(slot.rhythm),
   }

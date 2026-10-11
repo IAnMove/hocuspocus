@@ -3,6 +3,7 @@ import test from 'node:test'
 import { MirroredRepeatWrapping, Texture } from 'three'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
 import { stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
+import { cameraPath } from '../src/features/scene3d/dioramaSet.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { imageCutoutMesh } from '../src/features/scene3d/imageCutout.ts'
 
@@ -27,6 +28,18 @@ test('layers sink a little into the ground under their painted feet, and the nea
   assert.ok(near, 'a static medium shot keeps its near layer')
   assert.ok(near.position[1] <= -(0.2 + 0.05) * height(near) + 1e-9 && near.position[1] > -height(near), 'the near layer stands on the floor, not under the line of sight')
   assert.equal(mid.drift, undefined)
+})
+
+test('the near layer stands on the floor and its picture reaches only the lower part of the frame', () => {
+  const doc = applyScene3DTemplate('cine-two-shot')
+  const near = layer(stageParallaxSet(doc, SET), 'near')
+  const mid = layer(stageParallaxSet(doc, SET), 'mid')
+  const top = near.position[1] + near.scale * 2
+  assert.ok(top > 0 && near.scale < mid.scale, 'a short layer near the camera')
+  assert.ok(near.position[1] < 0, 'standing on the floor, sunk under its painted feet')
+  const pose = cameraPath(doc)[Math.floor(cameraPath(doc).length / 2)]
+  const sight = pose.eye[1] + (pose.look[1] - pose.eye[1]) * 0.3
+  assert.ok(top * (1 - 0.1 - 0.05) < sight, 'its painted pieces stay under the line of sight: the cast is never hidden')
 })
 
 test('scroll slides every layer and the ground past the cast, turning the ground to the view, and parsing keeps it', () => {

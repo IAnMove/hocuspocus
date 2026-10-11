@@ -57,6 +57,8 @@ if (config.background && !drawnAsSet && document.environment?.floorStyle === 'ba
 turnPicturesToCamera(document, standIns)
 if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
 if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll })]
+// A runner on a scrolling set runs on the spot: the place moves, the cast stays under the camera.
+if (config.scroll) for (const slot of document.slots) if (slot.media === 'model3d' && !slot.id.startsWith('set-')) slot.inPlace = true
 const parsed = parseScene3DDocument(document)
 if (!parsed) throw new Error('Invalid Video 3D document')
 process.stdout.write(JSON.stringify(parsed))
@@ -108,7 +110,7 @@ function bindCast(document, key, entry) {
   if (picture && entry.rotationY === undefined) standIns.add(next.id)
   // A generated model is centred on its origin; standing it on its feet keeps its animated legs above the floor.
   if (next.media === 'model3d' && entry.grounded === undefined) next.grounded = true
-  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard']) {
+  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard', 'inPlace']) {
     if (entry[field] !== undefined && !(picture && (field === 'scale' || field === 'imageLook'))) next[field] = structuredClone(entry[field])
   }
   document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]

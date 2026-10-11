@@ -531,10 +531,14 @@ place nor the production's look.
 reads as running when the place moves: `"scroll": 2.5` on a shot with a
 parallax `background` slides its layers and its ground past the cast at that
 many metres per second (to the camera's left; negative to the right), with the
-nearer layers crossing the frame faster. Pair it with a camera that stays with
-the cast (`cine-two-shot`, `cine-medium-shot`, `tracking`) and turn the runner
-to face the way the place comes from. For a closed corridor use the `run-loop`
-template (an endless treadmill set) instead.
+nearer layers crossing the frame faster, and the cast plays its clips on the
+spot (`inPlace`: a dash or a walk brought with a model loses its travel across
+the floor and keeps its bob). Use the `tracking` template: a side camera that
+follows a runner facing right; a framing camera (`cine-two-shot`) turns with the
+runner and sees it from the front. For a closed corridor use the `run-loop`
+template (an endless treadmill set) instead. The near layer of any parallax set
+reaches only the lower part of the frame (its pieces stay under the line of
+sight), so it frames the cast without hiding it.
 
 **Composition.** These controls work on any template, with or without a `world`:
 

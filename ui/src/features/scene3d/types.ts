@@ -212,6 +212,8 @@ export type Scene3DSlot = {
   textureRepeat?: number
   /** Its texture slides this many uv units per second: a set's layers and ground passing a running cast. */
   drift?: number
+  /** Its clip plays on the spot: the root's travel across the floor is dropped (a runner on a scrolling set). */
+  inPlace?: boolean
   performance?: 'typing' | 'idle'
   grounded?: boolean
   clip: Scene3DClipRef | null

@@ -28,17 +28,18 @@ CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "po
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
                "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera", "grade", "lens", "camera_template", "scroll"}
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add",
-               "sources", "formation", "spacing", "imageLook", "setItem", "billboard"}
+               "sources", "formation", "spacing", "imageLook", "setItem", "billboard", "inPlace"}
 GROUP_FIELDS = {"sources", "formation", "spacing", "position", "rotationY"}
 FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camera's distance to the subject, as a share of the template's
 LIGHTS = LIGHT_NAMES     # app/shared/world3d_modifiers.json, the table the compiler and world3d.scene.patch read
 FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
 # Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
-# of a production is then exported again on its next run instead of reusing the stale file. 3: honest technique
-# effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
-# rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third.
-RENDER_RECIPE = 3
+# of a production is then exported again on its next run instead of reusing the stale file. 4: runners in place and
+# the near layer kept off the cast. 5: honest technique effects and three-shot cards, a picture in a model's place
+# compiled as a grounded cutout, a head framed under the rig's crown mark, and the close pack cards re-aimed so the
+# eyes end near the upper third.
+RENDER_RECIPE = 5
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}

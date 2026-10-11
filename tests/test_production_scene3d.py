@@ -753,6 +753,9 @@ def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips
     run = compile_document(cast_shot(template="cine-two-shot", background=PARALLAX, cast={**hero, "subject_2": "/api/v1/file/b.glb?workspace=t"}, scroll=2.5), 4)
     moving = {slot["id"]: slot for slot in run["slots"] if slot["id"].startswith("set-")}
     assert all(slot["drift"] > 0 for slot in moving.values()), "scroll slides the layers and the ground"
+    cast = [slot for slot in run["slots"] if slot["media"] == "model3d" and not slot["id"].startswith("set-")]
+    assert cast and all(slot.get("inPlace") for slot in cast), "on a scrolled set the cast runs on the spot"
+    assert not any(slot.get("inPlace") for slot in doc["slots"]), "without scroll a clip keeps its travel"
     stretch = moving["set-ground"]["scale"] * 1.7 / 0.2
     assert moving["set-ground"]["drift"] * 3 * stretch == pytest.approx(2.5, rel=1e-3), "the ground moves at the scroll speed: its picture repeats every 3 m"
 
