@@ -25,7 +25,8 @@
   "walls": [
     "back",
     "left",
-    "right"
+    "right",
+    "front"
   ],
   "openings": [
     {
@@ -308,6 +309,7 @@
     "wall_back",
     "wall_left",
     "wall_right",
+    "wall_front",
     "window_view",
     "door",
     "tribune_front",
@@ -635,6 +637,9 @@
     },
     "bench_1_6_top": {
       "color": "#7b6754"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
     }
   }
 }

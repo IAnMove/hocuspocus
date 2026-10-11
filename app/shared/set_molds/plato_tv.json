@@ -25,7 +25,8 @@
   "walls": [
     "back",
     "left",
-    "right"
+    "right",
+    "front"
   ],
   "openings": [
     {
@@ -132,6 +133,7 @@
     "wall_back",
     "wall_left",
     "wall_right",
+    "wall_front",
     "window_view",
     "door",
     "desk_0_front",
@@ -371,6 +373,9 @@
     },
     "video_screen_top": {
       "color": "#385872"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
     }
   }
 }

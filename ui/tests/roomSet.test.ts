@@ -9,7 +9,7 @@ const mold = JSON.parse(readFileSync(new URL('../../app/shared/set_molds/despach
 mold.dimensions = mold.sizes.medium; mold.size = 'medium'
 test('room panels leave holes in walls and put views behind them', () => {
   const panels = roomPanels({ mold })
-  assert.equal(panels.length, 30)
+  assert.equal(panels.length, 31)
   const hole = mold.openings[0], view = panels.find(p => p.surface === 'window_view')!
   assert.equal(view.size[0], hole.width)
   assert(view.position[0] < -3)
