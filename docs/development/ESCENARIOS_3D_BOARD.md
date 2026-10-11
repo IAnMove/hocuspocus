@@ -16,7 +16,9 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 | Z1 | ramas anteriores | #969–#976 | Local completo; CI de las correcciones finales en curso | comprobaciones completas |
 | Z2 | docs/sets-trial | #977 | Completado: 70 imágenes, croma190, seam_error1.1807, caché sin GPU | defaults medidos e informe |
 | Z3 | ramas anteriores | #969–#977 | Completado; correcciones y evidencias reales | evidencias por bloque |
-| Z4 | docs/sets-acceptance | pendiente | pendiente | aceptación completa |
+| Z4 | docs/sets-acceptance | pendiente de número | Prueba MCP completada; revisión visual del usuario pendiente | aceptación completa |
 
 Los pequeños ganchos, el registro de tests y este tablero son compartidos secuencialmente por la pila.
 Coste fase 1: 0 tokens LLM externos; 0 generaciones; tokens Codex N/A.
+
+Entrega Z4: dos MP4 de ocho planos; cambio exclusivo a piel anime verificado por hashes y cuatro tomas del plató reutilizadas. Total local: 77 imágenes / 44 trabajos, 684 s de inferencia; 75 exports 3D y cuatro montajes. :42042 actualizado a b9435598; :42070 detenido.
