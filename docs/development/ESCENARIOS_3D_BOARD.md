@@ -5,7 +5,7 @@ Fase 1: tests nuevos simulados por bloque. CI completa y GPU: fase 2.
 
 | Bloque | Rama | PR | Estado | Archivos (exclusivos) |
 |---|---|---|---|---|
-| A4 | feat/set-molds-format | #969 | Z1 local OK: 6677 Python; UI completa; ratchet; docs | set_molds.py, set_commands.py, roomSet.ts, roomSetRuntime.ts, set_defaults.json |
+| A4 | feat/set-molds-format | #969 | Z1 local OK: 6677 Python + 55 cancelación; UI; ratchet; docs | set_molds.py, set_commands.py, roomSet.ts, roomSetRuntime.ts, set_defaults.json |
 | A1 | feat/mcp-remove-background | pendiente | pendiente | image_remove_background.py |
 | A2 | feat/prop-library | pendiente | pendiente | prop_library.py |
 | A3 | feat/scene3d-add-items | pendiente | pendiente | scene3d_items.py |
