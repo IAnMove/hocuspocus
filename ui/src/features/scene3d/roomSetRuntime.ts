@@ -1,6 +1,6 @@
 /** Shared preview/export room surfaces. Video uses the existing deterministic screen decoder. */
-import { DoubleSide, Group, Mesh, MeshStandardMaterial, PlaneGeometry, RepeatWrapping, SRGBColorSpace, TextureLoader } from 'three'
-import { roomPanels, type RoomPanel, type RoomSet } from './roomSet'
+import { AmbientLight, DoubleSide, Group, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TextureLoader } from 'three'
+import { roomLightPreset, roomPanels, type RoomPanel, type RoomSet } from './roomSet'
 import { defaultMediaScreen, type MediaScreen } from './mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from './screenMediaRuntime'
 
@@ -13,6 +13,12 @@ export class RoomSetRuntime {
   private repaint: () => void
   constructor(room: RoomSet, repaint: () => void = () => {}) {
     this.repaint = repaint
+    // A closed ceiling blocks the outdoor sun; light the interior independently.
+    const preset = roomLightPreset(room), [width, depth, height] = room.mold.dimensions
+    const fill = new AmbientLight('#ffffff', 1.2 * preset.intensity)
+    const key = new PointLight(preset.color, 35 * preset.intensity, 2 * Math.max(width, depth, height))
+    key.position.set(0, height - 0.15, depth * 0.12)
+    this.root.add(fill, key)
     void Promise.all(roomPanels(room).map(panel => this.panel(panel))).then(() => { this.ready = !this.abort.signal.aborted; this.repaint() }).catch(error => { this.error = error })
   }
   private async panel(panel: RoomPanel) {

@@ -3,6 +3,8 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { roomPanels, stageRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
+import { AmbientLight, PointLight } from 'three'
+import { RoomSetRuntime } from '../src/features/scene3d/roomSetRuntime.ts'
 const mold = JSON.parse(readFileSync(new URL('../../app/shared/set_molds/despacho.json', import.meta.url), 'utf8')) as RoomMold & { sizes: { medium: RoomMold['dimensions'] } }
 mold.dimensions = mold.sizes.medium; mold.size = 'medium'
 test('room panels leave holes in walls and put views behind them', () => {
@@ -27,4 +29,17 @@ test('named camera and materials survive editor roundtrip', () => {
   assert.equal(doc.camera.family, 'fixed')
   assert.deepEqual(doc.camera.eye, mold.cameras[1].position)
   assert.deepEqual(parseScene3DDocument(doc)?.room, room)
+})
+
+test('a closed room has its own fill and a key below its ceiling without a model or HDRI', async () => {
+  const room = new RoomSetRuntime({ mold })
+  await Promise.resolve()
+  const fill = room.root.children.find(child => child instanceof AmbientLight) as AmbientLight
+  const key = room.root.children.find(child => child instanceof PointLight) as PointLight
+  assert(fill.intensity > 0)
+  assert(key.intensity > 0)
+  assert(key.position.y > 0 && key.position.y < mold.dimensions[2])
+  assert(Math.abs(key.position.z) < mold.dimensions[1] / 2)
+  assert(key.distance > Math.max(...mold.dimensions))
+  room.dispose()
 })
