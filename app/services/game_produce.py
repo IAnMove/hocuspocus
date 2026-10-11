@@ -67,30 +67,64 @@ def public_job(job: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in job.items() if key != "workspace"}
 
 
-def _owns(name: str, asset_id: str, others: list[str]) -> bool:
-    """True when the file belongs to this asset and not to a longer sibling id."""
-    if not name.startswith(f"{asset_id}-"):
-        return False
-    return not any(len(other) > len(asset_id) and name.startswith(f"{other}-") for other in others)
+def _root_file(root: Path, value: str) -> Path | None:
+    """A leftover that still sits at the workspace root, or None if it already lives in a folder."""
+    text = str(value).split("?")[0].replace("\\", "/").rstrip("/")
+    for prefix in ("/api/v1/file/", "/api/v1/uploads/"):
+        if prefix in text:
+            text = text.split(prefix, 1)[1]
+            break
+    if not text:
+        return None
+    candidate = Path(text)
+    try:
+        base = root.resolve()
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+            return resolved if resolved.parent == base and resolved.is_file() else None
+        parts = [part for part in text.split("/") if part]
+        if len(parts) != 1 or parts[0] in {".", ".."}:
+            return None
+        path = (root / parts[0]).resolve()
+        return path if path.parent == base and path.is_file() else None
+    except OSError:
+        return None
 
 
-def archive_raw_outputs(workspace: str, game: dict[str, Any], asset_id: str, attempt_id: str) -> list[str]:
-    """Move ``<asset-id>-*`` files from the workspace root into the attempt's ``raw/``.
+def leftover_root_files(provenance: dict | None) -> list[str]:
+    """Root leftovers this attempt's tools recorded on their provenance steps."""
+    names: list[str] = []
+    for step in (provenance or {}).get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        for item in step.get("leftovers") or []:
+            if isinstance(item, str) and item and item not in names:
+                names.append(item)
+    return names
 
-    A longer id wins: ``heroe-idle-still.png`` stays when the asset is ``heroe``
-    and ``heroe-idle`` is also in the game. Files stay put until the asset succeeds.
+
+def archive_raw_outputs(workspace: str, game: dict[str, Any], asset_id: str, attempt_id: str,
+                        leftovers: list[str] | None = None) -> list[str]:
+    """Move this attempt's leftover root files into ``raw/``.
+
+    Only names the tools wrote (``leftovers`` / provenance) are moved, so a produce of
+    ``heroe`` leaves ``heroe-portrait.png`` from another job alone. Files already in a
+    folder stay put.
     """
     root = Path(workspace)
-    if not root.is_dir():
+    if not root.is_dir() or not leftovers:
         return []
-    others = [str(item.get("id")) for item in game.get("assets") or [] if item.get("id") and item.get("id") != asset_id]
     dest = root / "game" / str(game.get("id") or "game") / asset_id / attempt_id / "raw"
     moved = []
-    for path in list(root.iterdir()):
-        if path.is_file() and _owns(path.name, asset_id, others):
-            dest.mkdir(parents=True, exist_ok=True)
-            path.replace(dest / path.name)
-            moved.append(path.name)
+    seen: set[str] = set()
+    for value in leftovers:
+        path = _root_file(root, value)
+        if path is None or path.name in seen:
+            continue
+        dest.mkdir(parents=True, exist_ok=True)
+        path.replace(dest / path.name)
+        seen.add(path.name)
+        moved.append(path.name)
     return moved
 
 
@@ -357,7 +391,10 @@ class GameProduce:
             self._stamp_style(job, game, asset, attempt)
         _record_elapsed(self.deps.workspace_dir(job["workspace"]), game, asset, job.get("candidates"), elapsed)
         try:
-            archive_raw_outputs(self.deps.workspace_dir(job["workspace"]), game, asset["id"], step["attemptId"])
+            archive_raw_outputs(
+                self.deps.workspace_dir(job["workspace"]), game, asset["id"], step["attemptId"],
+                leftover_root_files(provenance),
+            )
         except OSError as error:
             step["archiveWarning"] = str(error)[:300]
             self._save(job)

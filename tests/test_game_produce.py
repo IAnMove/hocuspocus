@@ -11,7 +11,7 @@ from services.game_generators.base import AttemptResult
 from services.game_jobs import GameJobStore
 from services.game_library import create_game, read_library, write_library
 from services.game_list import EXAMPLE_LIST, commit_list, parse_lines
-from services.game_produce import GameProduce, ProduceDeps, ProduceError, archive_raw_outputs, build_produce
+from services.game_produce import GameProduce, ProduceDeps, ProduceError, archive_raw_outputs, leftover_root_files, build_produce
 from services.game_tools import GameToolError
 from routers.game_produce import create_game_produce_router
 
@@ -271,14 +271,39 @@ def test_resume_requeues_steps_lost_when_the_server_shut_down(tmp_path, monkeypa
     assert finished["steps"][1]["attemptId"] == "bbb"
 
 
-def test_raw_outputs_move_after_success_without_taking_a_longer_id(tmp_path):
+def test_raw_outputs_move_only_this_attempt_leftovers(tmp_path):
     (tmp_path / "hero-still.png").write_bytes(b"a")
+    (tmp_path / "hero-portrait.png").write_bytes(b"keep")
     (tmp_path / "hero-idle-still.png").write_bytes(b"b")
     game = {"id": "bosque", "assets": [_asset("hero", "item"), _asset("hero-idle", "item", "approved")]}
-    moved = archive_raw_outputs(str(tmp_path), game, "hero", "attempt")
+    moved = archive_raw_outputs(str(tmp_path), game, "hero", "attempt", ["hero-still.png"])
     assert moved == ["hero-still.png"]
     assert (tmp_path / "game" / "bosque" / "hero" / "attempt" / "raw" / "hero-still.png").is_file()
+    assert (tmp_path / "hero-portrait.png").read_bytes() == b"keep"
     assert (tmp_path / "hero-idle-still.png").is_file()
+    assert archive_raw_outputs(str(tmp_path), game, "hero", "attempt") == []
+    assert archive_raw_outputs(str(tmp_path), game, "hero", "other", ["game/bosque/hero/nested.png"]) == []
+    assert leftover_root_files({"steps": [{"leftovers": ["hero-still.png", "hero-still.png"]}]}) == ["hero-still.png"]
+
+
+def test_produce_archives_only_this_attempt_leftovers(tmp_path, monkeypatch):
+    (tmp_path / "hero-still.png").write_bytes(b"raw")
+    (tmp_path / "hero-portrait.png").write_bytes(b"keep")
+
+    def action(ctx, _calls):
+        return AttemptResult(
+            files={"main": "game/bosque/hero/a1/main.png"},
+            metrics={"attemptIds": [ctx.attempt_id]},
+            warnings=[],
+            provenance={"steps": [{"tool": "generation.image", "leftovers": ["hero-still.png"]}]},
+        )
+
+    store = Store([_asset("hero", "item")])
+    service = _service(tmp_path, store, Scripted(action), monkeypatch)
+    job = service.start("lab", "bosque", asset_ids=["hero"])
+    assert job["status"] == "completed"
+    assert (tmp_path / "game" / "bosque" / "hero" / job["steps"][0]["attemptId"] / "raw" / "hero-still.png").is_file()
+    assert (tmp_path / "hero-portrait.png").read_bytes() == b"keep"
 
 
 def test_job_store_round_trip(tmp_path):
