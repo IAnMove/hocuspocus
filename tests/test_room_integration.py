@@ -126,6 +126,7 @@ def test_room_listener_uses_approved_kit_review_state():
         {'roomSet':{'mold':'despacho'},'cast':[{'characterId':'a','objectId':'subject_1'}]},[],
         {'kit':{'base':{'source':'a.png','reviewState':'approved'}}},{'a':'kit'})
     assert result['revision']==2 and calls[0]['bindings'][0]['source_url'].endswith('a.png?workspace=test')
+    assert calls[0]['bindings'][0]['imageLook']=={'grounded':True}
 
 
 def test_room_rest_binds_running_event_loop():
@@ -159,3 +160,20 @@ def test_actual_room_compiler_persists_all_seven_templates(tmp_path):
     assert loc['set3dStatus']['status']=='completed',loc['set3dStatus']
     assert len(loc['set3dBuilt']['templates'])==7
     assert 'approvedAttemptId' not in stored and content_digest(stored)!=before
+
+
+def test_room_templates_prepare_cutout_cast_and_fingerprint_compiler_output(tmp_path):
+    import copy
+    captured=[]
+    def call(name,args):
+        captured.append(args['input'])
+        return {'result':{}}
+    document={'slots':[{'id':'subject_1','slot':'subject_1'},{'id':'subject_2','slot':'subject_2'}]}
+    service=SeriesSets(lambda _:str(tmp_path),lambda *a:{},lambda *a:None,call,
+                       compiler=lambda *a:copy.deepcopy(document))
+    room={'mold':resolve_mold('despacho'),'skin':{}}
+    first=service._templates(room,'same-skin','test')
+    assert all(slot['surface']=='cutout' for template in captured for slot in template['document']['slots'])
+    assert service._templates(room,'same-skin','test')==first
+    document['rendererRevision']=2
+    assert service._templates(room,'same-skin','test')!=first

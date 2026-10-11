@@ -96,7 +96,7 @@ def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
         if not source.startswith(('/api/','http://','https://')):
             from urllib.parse import quote
             source=f"/api/v1/file/{quote(source.removeprefix('outputs/'))}?workspace={quote(workspace)}"
-        bindings.append({'object_id':entry['objectId'],'media':'image','source_url':source})
+        bindings.append({'object_id':entry['objectId'],'media':'image','source_url':source,'imageLook':{'grounded':True}})
     if not bindings: return scene
     return require_result(call('world3d.scene.patch',{'version':1,'intent_id':f'{stem}-listeners','input':{
         'workspace':workspace,'scene_id':scene['sceneId'],'base_revision':scene['revision'],'bindings':bindings}}))['scene']
@@ -159,11 +159,13 @@ class SeriesSets:
         from services.set_generation import require_result
         compile_=self.compiler or compile_document;templates={}
         for camera in room['mold']['cameras']:
-            id_=f'user-room-{digest[:20]}-{camera["id"]}'
             document=compile_({'key':'room','scene3d':{'template':'two-shot','background':{'room':{**room,'camera':camera['id']}}}},5)
             # Until a character is bound, place its marker at the room's first two marks.
             for index,slot in enumerate(s for s in document['slots'] if s['slot'] in {'subject_1','subject_2'}):
-                mark=room['mold']['marks'][index];slot.update(position=mark['position'],rotationY=mark['facing']*3.141592653589793/180,scale=.85)
+                mark=room['mold']['marks'][index];slot.update(position=mark['position'],rotationY=mark['facing']*3.141592653589793/180,scale=.85,surface='cutout')
+            # Compiler changes must not replay an older immutable template with the same skin request.
+            identity=hashlib.sha256(json.dumps([digest,document],sort_keys=True).encode()).hexdigest()
+            id_=f'user-room-{identity[:20]}-{camera["id"]}'
             require_result(self.call('world3d.templates.user.put',{'version':1,'intent_id':f'template-{id_}','input':{'workspace':workspace,'id':id_,'title':id_,'document':document}}))
             templates[camera['id']]=id_
         return templates
