@@ -14,7 +14,9 @@ failure. Not part of CI; it renders on that server's GPU.
 The live instances (42003, 42042) are refused unless ``--allow-live``: a render
 there takes the GPU from the work running on them. A 503 ``thumbnail_unavailable``
 (the GPU is busy, another picture is rendering) is retried ``--retries`` times.
-Exit status: 0 when every picture was served, 1 when any failed, 2 on a usage error.
+A 409 ``examples_not_installed`` (the card shows example media this installation
+has not downloaded) is reported as skipped with its collections, not as a failure.
+Exit status: 0 when every picture was served or skipped, 1 when any failed, 2 on a usage error.
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -101,6 +104,10 @@ def fetch(base: str, path: str, *, retries: int, pause: float, timeout: float) -
             if error.code == 503 and detail.get("retryable") and attempts <= retries:
                 time.sleep(pause)
                 continue
+            if error.code == 409 and detail.get("code") == "examples_not_installed":
+                return {"status": "skipped", "http": 409, "code": "examples_not_installed",
+                        "collections": list(detail.get("collections") or []), "message": str(detail.get("message") or "")[:300],
+                        "seconds": round(time.monotonic() - started, 2), "attempts": attempts}
             return {"status": "failed", "http": error.code, "code": detail.get("code"), "reason": detail.get("reason"),
                     "message": str(detail.get("message") or error.reason)[:300],
                     "seconds": round(time.monotonic() - started, 2), "attempts": attempts}
@@ -115,6 +122,8 @@ def _line(index: int, total: int, card_id: str, result: dict) -> str:
     if result["status"] == "ok":
         kind = {"hit": "cached", "miss": "rendered"}.get(result["cache"], result["cache"])
         return f"{head} ok    {kind:<8} {card_id}  {result['seconds']:.2f} s  {result['bytes'] // 1024} KB"
+    if result["status"] == "skipped":
+        return f"{head} skip  {card_id}  needs examples: {', '.join(result['collections']) or 'unlisted files'}"
     why = "/".join(str(part) for part in (result.get("http"), result.get("code"), result.get("reason")) if part)
     return f"{head} FAIL  {card_id}  {why}: {result['message']}"
 
@@ -122,11 +131,17 @@ def _line(index: int, total: int, card_id: str, result: dict) -> str:
 def summary(results: dict[str, dict], seconds: float) -> list[str]:
     ok = {key: value for key, value in results.items() if value["status"] == "ok"}
     rendered = sum(1 for value in ok.values() if value["cache"] == "miss")
-    failed = sorted(key for key, value in results.items() if value["status"] != "ok")
-    lines = [f"{len(results)} cards: {rendered} rendered, {len(ok) - rendered} cached, {len(failed)} failed in {seconds:.1f} s"]
+    skipped = {key: value for key, value in results.items() if value["status"] == "skipped"}
+    failed = sorted(key for key, value in results.items() if value["status"] == "failed")
+    lines = [f"{len(results)} cards: {rendered} rendered, {len(ok) - rendered} cached, {len(skipped)} skipped, "
+             f"{len(failed)} failed in {seconds:.1f} s"]
     slowest = sorted(ok.items(), key=lambda item: -item[1]["seconds"])[:5]
     if slowest:
         lines.append("slowest: " + ", ".join(f"{key} {value['seconds']:.1f} s" for key, value in slowest))
+    if skipped:
+        needed = Counter(name for value in skipped.values() for name in value["collections"])
+        lines.append("skipped, example collections not installed: "
+                     + ", ".join(f"{name} ({count})" for name, count in sorted(needed.items())))
     if failed:
         lines.append("failed: " + ", ".join(failed))
     return lines
@@ -163,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         print(line)
     if args.report:
         Path(args.report).write_text(json.dumps({"url": base, "results": results}, indent=2), encoding="utf-8")
-    return 1 if any(value["status"] != "ok" for value in results.values()) else 0
+    return 1 if any(value["status"] == "failed" for value in results.values()) else 0
 
 
 if __name__ == "__main__":

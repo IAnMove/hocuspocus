@@ -6,6 +6,7 @@ real owned-browser script in Node against a fake Playwright module (skipped with
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import shutil
@@ -21,6 +22,7 @@ from PIL import Image
 from routers.world3d_templates import create_world3d_templates_router
 from services import resource_scheduler, world3d_template_commands
 from services import world3d_thumbnails as thumbs
+from services.example_assets import ExampleAssets
 from services.world3d_export import (
     World3DExportCancelled,
     World3DExportPending,
@@ -38,6 +40,7 @@ from services.world3d_template_catalog import (
 )
 from services.world3d_template_commands import command_catalog, execute_command
 from services.world3d_thumbnails import (
+    ThumbnailNeedsExamples,
     ThumbnailUnavailable,
     World3DThumbnails,
     paint_still,
@@ -187,6 +190,47 @@ def test_an_id_the_template_tool_does_not_know_is_404(tmp_path):
 
     service = World3DThumbnails(outputs_dir=lambda: tmp_path / "default", renderer=FakeRenderer(), compile_document=compile_document)
     assert _client(tmp_path, service).get(URL.format("two-shot")).status_code == 404
+
+
+def _examples(tmp_path, data=b"diner"):
+    """A manifest with one collection holding one picture; the cache starts empty (nothing downloaded)."""
+    name = "creative/neon-diner.jpg"
+    manifest = {"revision": 1, "files": {name: {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}},
+                "collections": {"creative": {"files": [name], "dependencies": [], "archive": {"sha256": "x"}}}}
+    return ExampleAssets(tmp_path / "examples-cache", manifest)
+
+
+def _creative_document(*urls):
+    document = _document("creative-neon-diner", width=720, height=1280)
+    document["slots"] = [{**document["slots"][0], "id": f"slot-{index}", "sourceUrl": url} for index, url in enumerate(urls)]
+    return document
+
+
+def test_a_card_whose_example_media_is_not_installed_is_refused_at_once(tmp_path):
+    renderer = FakeRenderer()
+    documents = {"creative-neon-diner": _creative_document("/examples/creative/neon-diner.jpg?v=2", "/examples/gone.png")}
+    service = _service(tmp_path, renderer, documents, examples=_examples(tmp_path))
+    response = _client(tmp_path, service).get(URL.format("creative-neon-diner"))
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "examples_not_installed" and detail["retryable"] is False
+    assert detail["collections"] == ["creative"] and detail["files"] == ["creative/neon-diner.jpg", "gone.png"]
+    assert "creative" in detail["message"] and renderer.calls == [] and _cache(tmp_path) == []
+
+
+def test_the_card_renders_once_its_collection_is_downloaded(tmp_path):
+    renderer = FakeRenderer()
+    assets = _examples(tmp_path)
+    documents = {"creative-neon-diner": _creative_document("/examples/creative/neon-diner.jpg")}
+    service = _service(tmp_path, renderer, documents, examples=assets)
+    with pytest.raises(ThumbnailNeedsExamples):
+        service.thumbnail("creative-neon-diner")
+    entry = assets.entry("creative/neon-diner.jpg")
+    assets.cache.mkdir(parents=True)
+    (assets.cache / (entry["sha256"] + ".jpg")).write_bytes(b"diner")
+    picture = service.thumbnail("creative-neon-diner")
+    assert not picture.cached and len(renderer.calls) == 1
+    assert thumbs.example_files(_creative_document("/examples/a.png?x=1", "/api/v1/uploads/b.png")) == {"a.png"}
 
 
 def _unavailable(response, reason):

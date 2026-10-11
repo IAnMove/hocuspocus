@@ -28,8 +28,8 @@ def _card(card_id, kind="scene", personal=False):
             "preview": None if personal else f"/api/v1/world3d/templates/{card_id}/thumbnail"}
 
 
-CARDS = [_card("a-scene"), _card("b-cached"), _card("c-flaky"), _card("d-broken"), _card("stage-bar", "stage"),
-         _card("user-mine", personal=True)]
+CARDS = [_card("a-scene"), _card("b-cached"), _card("c-flaky"), _card("d-broken"), _card("e-examples"),
+         _card("stage-bar", "stage"), _card("user-mine", personal=True)]
 
 
 class FakeServer:
@@ -54,6 +54,10 @@ class FakeServer:
                 if card_id == "d-broken" or (card_id == "c-flaky" and owner.gets.count("c-flaky") == 1):
                     self._json(503, {"detail": {"code": "thumbnail_unavailable", "reason": "render_failed" if card_id == "d-broken" else "busy",
                                                 "message": "page crashed" if card_id == "d-broken" else "rendering", "retryable": True}})
+                    return
+                if card_id == "e-examples":
+                    self._json(409, {"detail": {"code": "examples_not_installed", "collections": ["creative"],
+                                                "message": "download creative first", "retryable": False}})
                     return
                 self.send_response(200)
                 self.send_header("Content-Type", "image/webp")
@@ -99,15 +103,24 @@ def test_every_card_is_asked_in_turn_with_times_failures_and_a_report(server, tm
     code = prewarm.main(["--url", server.url, "--pause", "0", "--report", str(report)])
     out = capsys.readouterr().out
     assert code == 1, "a card that never rendered fails the run"
-    assert [body["input"]["offset"] for body in server.lists] == [0, 2, 4], "the list is paged to its total"
-    assert server.gets == ["a-scene", "b-cached", "c-flaky", "c-flaky", "d-broken", "d-broken", "d-broken", "stage-bar"]
+    assert [body["input"]["offset"] for body in server.lists] == [0, 2, 4, 6], "the list is paged to its total"
+    assert server.gets == ["a-scene", "b-cached", "c-flaky", "c-flaky", "d-broken", "d-broken", "d-broken", "e-examples",
+                           "stage-bar"], "a card that needs examples is asked once, never retried"
     assert "ok    rendered a-scene" in out and "ok    cached   b-cached" in out and "ok    rendered c-flaky" in out
     assert "FAIL  d-broken  503/thumbnail_unavailable/render_failed: page crashed" in out
     assert "user-mine" not in out, "a personal template has no picture to warm"
-    assert "5 cards: 3 rendered, 1 cached, 1 failed" in out and "failed: d-broken" in out and "slowest: " in out
+    assert "skip  e-examples  needs examples: creative" in out
+    assert "6 cards: 3 rendered, 1 cached, 1 skipped, 1 failed" in out and "failed: d-broken" in out and "slowest: " in out
+    assert "skipped, example collections not installed: creative (1)" in out
     results = json.loads(report.read_text())["results"]
     assert results["c-flaky"]["attempts"] == 2 and results["d-broken"]["attempts"] == 3
     assert results["a-scene"]["bytes"] == len(PICTURE) and results["a-scene"]["type"] == "image/webp"
+    assert results["e-examples"]["status"] == "skipped" and results["e-examples"]["collections"] == ["creative"]
+
+
+def test_a_run_whose_only_misses_need_examples_succeeds(server, capsys):
+    assert prewarm.main(["--url", server.url, "--only", "a-scene,e-examples"]) == 0
+    assert "2 cards: 1 rendered, 0 cached, 1 skipped, 0 failed" in capsys.readouterr().out
 
 
 def test_kind_and_only_narrow_the_run(server, capsys):
@@ -117,7 +130,7 @@ def test_kind_and_only_narrow_the_run(server, capsys):
     assert prewarm.main(["--url", server.url, "--only", "a-scene,nope,a-scene"]) == 1
     out = capsys.readouterr().out
     assert server.gets == ["a-scene"]
-    assert "FAIL  nope  not_listed: not in the card list" in out and "2 cards: 1 rendered, 0 cached, 1 failed" in out
+    assert "FAIL  nope  not_listed: not in the card list" in out and "2 cards: 1 rendered, 0 cached, 0 skipped, 1 failed" in out
 
 
 def test_live_instances_are_refused_unless_asked(capsys):

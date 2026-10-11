@@ -63,7 +63,7 @@ _CARD_TRAITS = ("Each card also says what the built shot does: shot (close, medi
                 "half of them (one of two) come back as partial and the reply says partial: true. Filters: shot, use, move, kind, place, "
                 "travel, subjects (at least that many subject slots, 0-2), format (landscape, portrait). preview is the URL of our own "
                 "render of the built shot at mid-shot (GET it to see the shot; empty slots show as the editor's placeholders; a 503 "
-                "thumbnail_unavailable is retryable) and is null on personal templates; reference is a film still of the real "
+                "thumbnail_unavailable is retryable; a 409 examples_not_installed names the example collections to download first) and is null on personal templates; reference is a film still of the real "
                 "technique, for inspiration only, never our render.")
 _FILTERS = {"shot": {"enum": list(SHOT_SIZES)}, "use": {"enum": list(USES)}, "move": {"enum": list(MOVES)},
             "subjects": {"type": "integer", "minimum": 0, "maximum": 2}, "format": {"enum": list(FORMATS)},

@@ -97,6 +97,12 @@ painted now the route answers 503 `thumbnail_unavailable` with `retryable: true`
 never a broken image. `world3d.templates.get` returns `previewUrl`; `reference`
 stays a film still for inspiration. `scripts/render_template_thumbnails.py`
 pre-warms the cache of a running instance and reports times and failures.
+A card that shows optional example media this installation has not downloaded
+(122 of 829 cards use the creative, dark-fantasy and other collections) answers
+409 `examples_not_installed` with the `collections` to download, at once and
+without a render; the pre-warm reports it as skipped. Before, each one held the
+render lane for minutes. The shipped scene `stage-crane` compiles again: only an
+existing mold makes a `stage-<mold>` id.
 
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
