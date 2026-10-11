@@ -275,7 +275,8 @@
         "tests/test_golden_shots.py",
         "tests/test_production_models.py",
         "tests/test_production_turn.py",
-        "tests/test_set_molds.py"
+        "tests/test_set_molds.py",
+        "tests/test_image_remove_background.py"
       ]
     },
     {
