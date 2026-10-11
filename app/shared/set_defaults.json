@@ -1,8 +1,41 @@
 {
   "imageModel": "fastest_installed_qwen21_turbo",
-  "imageModelOrder": ["qwen_image_21_turbo", "qwen_image_21_viggle_turbo", "qwen_image_21"],
-  "prop": {"resolution": "1024x1024", "background": {"flat_styles": "screen", "painted_or_realistic": "grey_u2net"}, "flatStyles": ["cartulina", "paper", "cartoon", "anime", "pixel"], "candidates": 2},
-  "wall": {"longSide": 1536, "multiple": 32},
-  "texture": {"resolution": "1024x1024", "tile_m": 1.0, "seamMax": 1.5, "extraPasses": 1},
-  "removeBackground": {"auto": true, "hazeMax": 0.2, "borderShare": 0.9, "colorDistance": 70, "cropMargin": 0.02}
+  "imageModelOrder": [
+    "qwen_image_21_turbo",
+    "qwen_image_21_viggle_turbo",
+    "qwen_image_21"
+  ],
+  "prop": {
+    "resolution": "1024x1024",
+    "background": {
+      "flat_styles": "screen",
+      "painted_or_realistic": "grey_u2net"
+    },
+    "flatStyles": [
+      "cartulina",
+      "paper",
+      "cartoon",
+      "anime",
+      "pixel"
+    ],
+    "candidates": 2
+  },
+  "wall": {
+    "longSide": 1536,
+    "multiple": 32
+  },
+  "texture": {
+    "resolution": "1024x1024",
+    "tile_m": 1.0,
+    "seamMax": 1.5,
+    "extraPasses": 1,
+    "bandDivisor": 8
+  },
+  "removeBackground": {
+    "auto": true,
+    "hazeMax": 0.2,
+    "borderShare": 0.9,
+    "colorDistance": 70,
+    "cropMargin": 0.02
+  }
 }
