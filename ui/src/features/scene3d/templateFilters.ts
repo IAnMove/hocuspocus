@@ -1,6 +1,9 @@
 import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
 import { animeCard } from './animeTemplates'
+import { transitionCard } from './transitionTemplates'
+import { speedCard } from './speedTemplates'
+import { titleCard } from './titleTemplates'
 import { atmosSet, isAtmosDressing } from './atmos/registry.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES, type Scene3DTemplate, type Scene3DTemplateFilter, type Scene3DTemplateId } from './templates'
 import { templateTraits, templateTraitWords, type TemplateTraits } from './templateTraits.ts'
@@ -59,6 +62,7 @@ function templateSearchText(item: Scene3DTemplate, input: {
   titleOf: (id: Scene3DTemplateId) => string
 }) {
   const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale) ?? animeCard(item.id, input.locale)
+    ?? transitionCard(item.id, input.locale) ?? speedCard(item.id, input.locale) ?? titleCard(item.id, input.locale)
   return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)} ${templateTraitWords(templateTraitsOf(item.id)).join(' ')}`
 }
 

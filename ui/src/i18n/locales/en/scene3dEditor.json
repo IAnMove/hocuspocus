@@ -365,7 +365,8 @@
     "perspective": "Perspectives",
     "animated": "Living backgrounds",
     "pixel": "Pixel worlds",
-    "anime": "Anime"
+    "anime": "Anime",
+    "transition": "Transitions"
   },
   "setting": {
     "sea": "Sea",
@@ -3468,6 +3469,74 @@
     "motion-particle-morph": {
       "title": "Particle shape typography",
       "description": "A genuine 3D point cloud morphs between a sphere, torus, heart and editable block lettering."
+    },
+    "transition-whip-pan": {
+      "title": "Whip pan",
+      "description": "A very fast slide with a roll over radial speed lines; the camera lands centred on the figure with a short settle."
+    },
+    "transition-iris-in": {
+      "title": "Iris in",
+      "description": "A fast push to the centre while a vignette closes in four steps over a dark backdrop."
+    },
+    "transition-flash-white": {
+      "title": "Flash to white",
+      "description": "Three white frames, then two more, over a tight push on the face; plain colours, no ink lines."
+    },
+    "transition-wipe-prop": {
+      "title": "Prop wipe",
+      "description": "A prop crosses the frame left to right close to the lens and covers it at mid-shot: a door, a bus, a cloud. It keeps facing the camera; turn it if its wide side is elsewhere."
+    },
+    "transition-match-shape": {
+      "title": "Match on shape",
+      "description": "A centred close frame holds for a second, then snaps out to the whole figure: the shape a match cut lands on."
+    },
+    "transition-eyecatch": {
+      "title": "Eyecatch (plain)",
+      "description": "A scene-change card in two plain tones: the figure spins in from the distance over focus lines, and an optional title lands under it."
+    },
+    "transition-smash-in": {
+      "title": "Smash in",
+      "description": "An abrupt snap from the whole figure to the face in a fifth of a second, with a burst of lines and a shake that dies away."
+    },
+    "transition-rise-off": {
+      "title": "Rise off",
+      "description": "The camera lifts off the figure into a blank backdrop with soft light from above; the next shot can start on anything."
+    },
+    "speed-run-toward": {
+      "title": "Run toward camera",
+      "description": "A low lens creeps in on a figure running on the spot over faint radial speed lines. The template brings no clip: bind a GLB with a run clip (clip: run)."
+    },
+    "speed-foot-chase": {
+      "title": "Foot chase",
+      "description": "Two figures sprint down the street on parallel lanes; the camera tracks the runner from ahead and shakes lightly as the chaser closes in."
+    },
+    "speed-flyby": {
+      "title": "Fly-by",
+      "description": "A craft crosses the sky from left to right, 32 m in six seconds, trailing smoke; the camera pans with it over the head of a figure on the ground."
+    },
+    "speed-rush-lines": {
+      "title": "Rush lines",
+      "description": "A hard push from a medium shot to the face over radial speed lines; the camera shakes where the push lands."
+    },
+    "speed-side-dash": {
+      "title": "Side dash",
+      "description": "Seen from the side, the figure dashes ten metres across the set while the frame slides fast from one side of it to the other."
+    },
+    "title-lower-third": {
+      "title": "Lower third",
+      "description": "A name on a bar and a role line slide in from the left, hold under the figure and slide out, over a slow push."
+    },
+    "title-kinetic-stage": {
+      "title": "Kinetic stage",
+      "description": "One big word per beat punches in over a dark mirror stage under a shaft of light, with a slow push on the figure. The line splits into words, up to eight."
+    },
+    "title-chapter": {
+      "title": "Chapter card",
+      "description": "A centred chapter card: the kicker types in, a rule draws itself and the title wipes on, over a vignette and a slow push."
+    },
+    "title-end-card": {
+      "title": "End card",
+      "description": "A title rises and a pulsing call to action lands under it while the camera drifts sideways over faint stars."
     }
   },
   "atmos": {
