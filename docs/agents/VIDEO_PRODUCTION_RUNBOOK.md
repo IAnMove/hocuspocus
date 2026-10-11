@@ -388,7 +388,16 @@ no H3 lip-sync is implied.
 
 **Template + cast + painted set.** Prefer this over writing a `document`: pick a
 template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
-and a `setting` such as `sea` or `city`) and assign only what changes.
+and a `setting` such as `sea` or `city`) and assign only what changes. Every card
+says what the built shot does: `shot` (close, medium, wide, far, plate), `moves`
+(the camera), `moving` (what the template itself animates), `still` (nothing
+moves unless the cast brings a clip), `subjects`, `authoredFor`, `floor` and
+`uses` (dialogue, talk, reaction, figure, establishing, action, reveal...). Ask
+for them as filters (`{"use": "dialogue", "subjects": 2}`, `{"shot": "close",
+"move": "push"}`) or in words in either language («plano general», «persecución»,
+«girar alrededor»); a `still` card needs a `clip`, a `motion`, a `camera` or a
+`world`, or the dry run warns `template_still`. See
+[Video 3D templates for agents](../development/WORLD3D_TEMPLATES_AGENTS.md).
 `cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
 picture; `background` puts a picture in the template's background slot. The
 template keeps its camera, props, lights and moves. With a painted background on
@@ -508,7 +517,10 @@ and the ground get neither the place nor the production's look.
   its move: `close` (0.6 of the template's distance), `medium` (0.8), `wide`
   (1.35), `far` (1.8), or a number 0.25–4. A `dance-orbit` over the sky islands
   with `"frame": "close"` fills the frame with the dancer; a two-shot with
-  `"frame": "wide"` shows the place.
+  `"frame": "wide"` shows the place. The camera frames the cast member at rest:
+  it follows where the slot places and turns the model, not the pose of the
+  clip, so raised arms or a nod never move the shot. A document may set
+  `camera.framing.track: "pose"` to stay on a moving face.
 - `light` may be a named light instead of a light object: `noon`, `golden`
   (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
   from the side), `stage` (hard white from the front), `campfire` (warm from

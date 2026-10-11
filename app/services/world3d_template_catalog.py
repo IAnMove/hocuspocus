@@ -2,6 +2,12 @@
 
 The JSON is a projection of the UI library. It stores cards, not documents.
 ``world3d.templates.catalog`` is the bounded search, not a dump of every description.
+
+A card carries, besides its copy, the traits the exporter read from the built document: how close the camera is
+(``shot``), what it does (``moves``), what the template itself animates (``moving``, ``still``), who fits
+(``subjects``, ``props``, ``authoredFor``), the ``floor`` and the ``uses`` it is good for. A query is matched word by
+word in both languages through ``world3d_template_vocabulary``; a literal word outranks a synonym. When no card has
+every word, the best cards with more than half of them come back marked ``match: partial`` and nothing is applied.
 """
 from __future__ import annotations
 
@@ -12,6 +18,9 @@ from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 
+from services.template_search import stem
+from services.world3d_template_vocabulary import FORMATS, MOVES, QUERY_STOP, SHOT_SIZES, USES, expand
+
 CATALOG_FILE = "world3d_templates.json"
 CATALOG_OPERATION = "world3d.templates.catalog"
 USER_FILE = "world3d-user-templates.json"
@@ -20,13 +29,16 @@ MAX_LIMIT = 24
 # A plain listing (no query) pages by id; a query stays the bounded search above.
 LIST_DEFAULT_LIMIT = 50
 LIST_MAX_LIMIT = 50
-_GROUPS = (
-    frozenset({"orbit", "orbita", "girar", "alrededor", "around", "360"}),
-    frozenset({"lluvia", "rain", "llueve"}),
-    frozenset({"ralenti", "slow", "lento", "lenta", "slowmotion"}),
-    frozenset({"zoom", "dolly"}),
-)
+CARD_KEYS = (
+    "id", "titleEs", "titleEn", "category", "family", "variantOf", "format", "width", "height", "duration",
+    "playbackSpeed", "dressing", "setting", "lineEs", "lineEn", "notesEs", "notesEn", "preview", "roles", "required",
+    "dependencies", "tags", "shot", "distance", "moves", "moving", "still", "subjects", "props", "screens",
+    "authoredFor", "floor", "uses", "source")
+TRAIT_DEFAULTS = {"notesEs": "", "notesEn": "", "shot": None, "distance": None, "moves": [], "moving": [], "still": None,
+                  "subjects": 0, "props": 0, "screens": 0, "authoredFor": "none", "floor": None, "uses": []}
 _ROOT = Path(__file__).resolve().parents[1] / "shared" / CATALOG_FILE
+_SUBJECT_ROLES = ("subject_1", "subject_2")
+_ANIMATED_SLOT_KEYS = ("motion", "clip", "clips", "performance", "rhythm", "appearance", "speech")
 
 
 class World3DTemplateError(ValueError):
@@ -45,43 +57,91 @@ def builtin_cards() -> tuple[dict, ...]:
     return tuple(cards)
 
 
+def builtin_card(template_id: str) -> dict | None:
+    """The shipped card of one template, or None for a personal or unknown id."""
+    return next((card for card in builtin_cards() if card.get("id") == template_id), None)
+
+
 def search_templates(query: str = "", *, category: str | None = None, language: str | None = None,
                      limit: int | None = None, workspace_dir=None, workspace: str | None = None,
-                     roles: list[str] | None = None, setting: str | None = None) -> list[dict]:
-    """Return at most ``limit`` short cards. Both languages are always searched."""
+                     roles: list[str] | None = None, setting: str | None = None, **filters) -> list[dict]:
+    """Return at most ``limit`` short cards. Both languages are always searched.
+
+    Every card carries ``match``: ``full`` when every query word is in it, ``partial`` when no card has them all
+    and this one has more than half. Partial cards are never mixed with full ones."""
     _require_language(language)
     bounded = _limit(limit)
-    ranked = _ranked(query, _fitting(_cards(workspace_dir, workspace), roles, setting), category)
-    return [_public_card(card, score) for score, _index, card in ranked[:bounded]]
+    ranked = _ranked(query, _fitting(_cards(workspace_dir, workspace), roles, setting, filters), category)
+    return [_public_card(card, score, match) for score, match, _index, card in ranked[:bounded]]
 
 
 def page_templates(query: str = "", *, category: str | None = None, language: str | None = None,
                    limit: int | None = None, offset: int | None = None, workspace_dir=None,
-                   workspace: str | None = None, roles: list[str] | None = None, setting: str | None = None) -> dict:
+                   workspace: str | None = None, roles: list[str] | None = None, setting: str | None = None,
+                   **filters) -> dict:
     """One page of ``world3d.templates.list``. No query keeps id order."""
     _require_language(language)
     queried = bool(str(query or "").strip())
     bounded = _limit(limit) if queried else _list_limit(limit)
     start = _offset(offset)
-    cards = _fitting(_cards(workspace_dir, workspace), roles, setting)
+    cards = _fitting(_cards(workspace_dir, workspace), roles, setting, filters)
     if queried:
-        chosen = [(score, card) for score, _index, card in _ranked(query, cards, category)]
+        chosen = [(score, match, card) for score, match, _index, card in _ranked(query, cards, category)]
     else:
-        filtered = [card for card in cards if not category or card.get("category") == category]
+        filtered = [card for card in cards if _in_category(card, category)]
         filtered.sort(key=lambda card: str(card.get("id") or ""))
-        chosen = [(0, card) for card in filtered]
+        chosen = [(0, "full", card) for card in filtered]
     page = chosen[start:start + bounded]
-    return {"templates": [_public_card(card, score) for score, card in page], "total": len(chosen)}
+    partial = bool(chosen) and chosen[0][1] == "partial"
+    return {"templates": [_public_card(card, score, match) for score, match, card in page], "total": len(chosen),
+            "partial": partial}
 
 
-def _fitting(cards: list[dict], roles: list[str] | None, setting: str | None) -> list[dict]:
-    """Templates that have every asked role (subject_1, subject_2, background, prop) and the asked setting."""
+def _fitting(cards: list[dict], roles: list[str] | None, setting: str | None, filters: dict) -> list[dict]:
+    """Templates that have every asked role (subject_1, subject_2, background, prop), the asked setting and traits."""
     if roles is not None and (not isinstance(roles, list) or not all(isinstance(role, str) for role in roles)):
         raise World3DTemplateError("invalid_roles", "roles must be a list of role names")
-    wanted = set(roles or ())
+    checks = [lambda card, wanted=set(roles or ()): wanted <= set(card.get("roles") or ())]
     place = _fold(setting or "")
-    return [card for card in cards if wanted <= set(card.get("roles") or ())
-            and (not place or _fold(str(card.get("setting") or "")) == place)]
+    if place:
+        checks.append(lambda card: _fold(str(card.get("setting") or "")) == place)
+    checks.extend(_trait_checks(filters))
+    return [card for card in cards if all(check(card) for check in checks)]
+
+
+def _trait_checks(filters: dict) -> list:
+    """One predicate per trait filter given: shot, use, move, format (exact) and subjects (at least)."""
+    checks = []
+    for name, allowed, key, exact in (("shot", SHOT_SIZES, "shot", True), ("use", USES, "uses", False),
+                                      ("move", MOVES, "moves", False), ("format", FORMATS, "format", True)):
+        wanted = _choice(filters.get(name), allowed, name)
+        if wanted is None:
+            continue
+        if exact:
+            checks.append(lambda card, key=key, wanted=wanted: card.get(key) == wanted)
+        else:
+            checks.append(lambda card, key=key, wanted=wanted: wanted in (card.get(key) or ()))
+    subjects = _count(filters.get("subjects"))
+    if subjects is not None:
+        checks.append(lambda card: int(card.get("subjects") or 0) >= subjects)
+    return checks
+
+
+def _choice(value, allowed: tuple[str, ...], name: str) -> str | None:
+    if value in (None, ""):
+        return None
+    folded = _fold(str(value)) if isinstance(value, str) else None
+    if folded not in allowed:
+        raise World3DTemplateError(f"invalid_{name}", f"{name} must be one of {', '.join(allowed)}")
+    return folded
+
+
+def _count(value) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or not 0 <= value <= 2:
+        raise World3DTemplateError("invalid_subjects", "subjects must be an integer from 0 to 2: the subject slots a shot needs")
+    return value
 
 
 def _cards(workspace_dir, workspace: str | None) -> list[dict]:
@@ -91,17 +151,31 @@ def _cards(workspace_dir, workspace: str | None) -> list[dict]:
     return cards
 
 
+def _in_category(card: dict, category: str | None) -> bool:
+    """``category`` names a category or a tag, as the editor's filter does."""
+    return not category or card.get("category") == category or category in (card.get("tags") or ())
+
+
 def _ranked(query: str, cards: list[dict], category: str | None) -> list[tuple]:
-    ranked = []
+    """``(score, match, index, card)`` best first: full matches, else the partial ones."""
+    folded = _fold(query)
+    tokens = _query_tokens(folded)
+    full, partial = [], []
     for index, card in enumerate(cards):
-        if category and card.get("category") != category:
+        if not _in_category(card, category):
             continue
-        score = _score(query, card)
-        if score is None:
+        found = _match(folded, tokens, card)
+        if found is None:
             continue
-        ranked.append((score, index, card))
-    ranked.sort(key=lambda item: (-item[0], item[1]))
-    return ranked
+        hits, score = found
+        if hits == len(tokens):
+            full.append((score, hits, index, card))
+        elif hits * 2 > len(tokens):
+            partial.append((score, hits, index, card))
+    chosen = full or partial
+    chosen.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    match = "full" if full else "partial"
+    return [(score, match, index, card) for score, _hits, index, card in chosen]
 
 
 def _require_language(language: str | None) -> None:
@@ -192,6 +266,46 @@ def user_template_row(template_id: str, workspace_dir, workspace: str) -> dict:
     raise World3DTemplateError("unknown_template", f"unknown_template:{template_id}", 404)
 
 
+def document_traits(document: dict) -> dict:
+    """The traits a stored document shows without building it: who fits, what the slots animate, the floor.
+
+    The camera estimate (``shot``, ``distance``, ``moves``) needs the UI's camera code, so a personal template keeps
+    those unknown; ``moving`` lists what its slots and effects animate on their own."""
+    slots = [slot for slot in document.get("slots") or [] if isinstance(slot, dict)]
+    subjects = [slot for slot in slots if slot.get("slot") in _SUBJECT_ROLES]
+    props = [slot for slot in slots if slot.get("slot") == "prop" and slot.get("media") != "screen"]
+    media = {str(slot.get("media") or "model3d") for slot in subjects}
+    environment = document.get("environment") if isinstance(document.get("environment"), dict) else {}
+    return {
+        "subjects": len(subjects), "props": len(props),
+        "screens": sum(1 for slot in slots if slot.get("media") == "screen"),
+        "authoredFor": "none" if not media else "mixed" if len(media) > 1 else "cutout" if "image" in media else "model",
+        "floor": environment.get("floorStyle") or ("mirror" if environment.get("reflectiveFloor") else None),
+        "moving": _document_moving(document, slots, subjects, props), "still": None,
+    }
+
+
+def _slot_animated(slot: dict) -> bool:
+    return any(slot.get(key) for key in _ANIMATED_SLOT_KEYS)
+
+
+def _slot_plays_video(slot: dict) -> bool:
+    screen = slot.get("screen") if isinstance(slot.get("screen"), dict) else {}
+    return screen.get("media") == "video" and bool(screen.get("sourceUrl"))
+
+
+def _document_moving(document: dict, slots: list[dict], subjects: list[dict], props: list[dict]) -> list[str]:
+    backdrop = document.get("screenBackdrop") if isinstance(document.get("screenBackdrop"), dict) else {}
+    found = (
+        ("subjects", any(_slot_animated(slot) for slot in subjects)),
+        ("props", any(_slot_animated(slot) for slot in props)),
+        ("screens", any(_slot_plays_video(slot) for slot in slots)),
+        ("effects", bool(document.get("worldSfx") or document.get("sfx") or backdrop.get("sfx"))),
+        ("texts", bool(document.get("texts") or document.get("lyrics"))),
+    )
+    return [name for name, moving in found if moving]
+
+
 def _user_card(row: dict) -> dict:
     document = row.get("document") if isinstance(row.get("document"), dict) else {}
     slots = document.get("slots") if isinstance(document.get("slots"), list) else []
@@ -207,67 +321,85 @@ def _user_card(row: dict) -> dict:
         "preview": None, "roles": [slot.get("slot") for slot in slots if isinstance(slot, dict)],
         "required": [{"id": slot.get("id"), "role": slot.get("slot"), "media": slot.get("media")}
                      for slot in slots if isinstance(slot, dict) and not slot.get("sourceUrl")],
-        "dependencies": [], "tags": [], "source": "workspace",
+        "dependencies": [], "tags": [], **TRAIT_DEFAULTS, **document_traits(document), "source": "workspace",
     }
 
 
-def _public_card(card: dict, score: int) -> dict:
-    shown = {key: card.get(key) for key in (
-        "id", "titleEs", "titleEn", "category", "family", "variantOf", "format", "width", "height",
-        "duration", "playbackSpeed", "dressing", "setting", "lineEs", "lineEn", "preview", "roles",
-        "required", "dependencies", "tags", "source")}
+def _public_card(card: dict, score: int, match: str = "full") -> dict:
+    shown = {key: card.get(key, TRAIT_DEFAULTS.get(key)) for key in CARD_KEYS}
     shown["score"] = score
+    shown["match"] = match
     return shown
 
 
-def _score(query: str, card: dict) -> int | None:
-    folded = _fold(query)
-    if not folded:
-        return 0
-    blob = _blob(card)
+def _query_tokens(folded: str) -> list[str]:
     tokens = folded.split()
-    if not all(_token_hits(token, blob) for token in tokens):
+    kept = [token for token in tokens if token not in QUERY_STOP]
+    return kept or tokens
+
+
+def _match(folded: str, tokens: list[str], card: dict) -> tuple[int, int] | None:
+    """``(hits, points)`` for a card, or None when no query word is in it. An empty query matches everything."""
+    if not tokens:
+        return 0, 0
+    words = _words(card)
+    hits = sum(1 for token in tokens if _hit(expand(token), words["all"]))
+    if hits == 0:
         return None
-    return _points(folded, tokens, card)
+    return hits, _points(folded, tokens, card, words)
 
 
-def _points(folded: str, tokens: list[str], card: dict) -> int:
+def _points(folded: str, tokens: list[str], card: dict, words: dict[str, set[str]]) -> int:
     titles = {_fold(str(card.get("titleEs") or "")), _fold(str(card.get("titleEn") or ""))}
     ident = _fold(str(card.get("id") or "").replace("-", " "))
-    title_blob = _fold(f"{card.get('titleEs') or ''} {card.get('titleEn') or ''}")
-    line_blob = _fold(f"{card.get('lineEs') or ''} {card.get('lineEn') or ''}")
     score = 80 if folded in titles else 24 if any(folded and folded in title for title in titles) else 0
     if ident == folded:
         score += 40
     for token in tokens:
-        words = _expand(token)
-        if any(word in ident.split() for word in words):
-            score += 8
-        if any(word in title_blob.split() for word in words):
-            score += 6
-        if any(word in line_blob.split() for word in words):
-            score += 2
+        literal = {token}
+        synonyms = expand(token) - literal
+        for field, exact, loose in (("id", 8, 4), ("title", 6, 3), ("traits", 3, 2), ("line", 2, 1)):
+            score += exact if _hit(literal, words[field]) else loose if _hit(synonyms, words[field]) else 0
     return score
 
 
-def _token_hits(token: str, blob: str) -> bool:
-    words = blob.split()
-    return any(word in words for word in _expand(token))
+def _hit(candidates: frozenset[str] | set[str], words: set[str]) -> bool:
+    return any(word in words or stem(word) in words for word in candidates)
 
 
-def _expand(token: str) -> set[str]:
-    for group in _GROUPS:
-        if token in group:
-            return set(group)
-    return {token}
+def _words(card: dict) -> dict[str, set[str]]:
+    """The words of each searchable field, with their stems, so «escenas» finds «escena»."""
+    fields = {
+        "id": str(card.get("id") or "").replace("-", " "),
+        "title": f"{card.get('titleEs') or ''} {card.get('titleEn') or ''}",
+        "line": f"{card.get('lineEs') or ''} {card.get('lineEn') or ''} {card.get('notesEs') or ''} {card.get('notesEn') or ''}",
+        "traits": _trait_text(card),
+    }
+    found = {name: set(_fold(text).split()) for name, text in fields.items()}
+    for name in found:
+        found[name] |= {stem(word) for word in list(found[name])}
+    found["all"] = set().union(*found.values())
+    return found
 
 
-def _blob(card: dict) -> str:
-    parts = [str(card.get("id") or "").replace("-", " "), card.get("titleEs"), card.get("titleEn"), card.get("lineEs"),
-             card.get("lineEn"), card.get("category"), card.get("family"), card.get("setting"), card.get("dressing"),
-             " ".join(str(role) for role in card.get("roles") or []), " ".join(str(tag) for tag in card.get("tags") or []),
-             " ".join(str(item) for item in card.get("dependencies") or [])]
-    return _fold(" ".join(str(part or "") for part in parts))
+_STILL_WORDS = {True: "still static", False: "animated", None: ""}
+_SUBJECT_WORDS = {0: "nobody", 1: "solo"}
+
+
+def _speed_words(card: dict) -> str:
+    speed = float(card.get("playbackSpeed") or 1)
+    return "slowmotion" if speed < 1 else "timelapse fast" if speed > 1 else ""
+
+
+def _trait_text(card: dict) -> str:
+    """Trait words, tags, roles, setting and format in the shared search vocabulary."""
+    parts = [card.get(key) for key in ("category", "family", "setting", "dressing", "shot", "authoredFor", "floor")]
+    parts.append(f"format{card.get('format') or ''}")
+    parts.extend(" ".join(str(item) for item in card.get(key) or []) for key in ("roles", "tags", "dependencies", "moves", "moving", "uses"))
+    parts.append(_STILL_WORDS.get(card.get("still"), ""))
+    parts.append(_SUBJECT_WORDS.get(int(card.get("subjects") or 0), "duo pair"))
+    parts.append(_speed_words(card))
+    return " ".join(str(part or "") for part in parts)
 
 
 def _fold(text: str) -> str:
