@@ -694,7 +694,9 @@ def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
     hero = {"subject_1": "/api/v1/file/a.glb?workspace=t"}
     plain = compile_document(cast_shot(template="cine-dolly-in", cast=hero), 4)["camera"]["framing"]
     close = compile_document(cast_shot(template="cine-dolly-in", cast=hero, frame="close"), 4)["camera"]["framing"]
-    assert close["from"] == [plain["from"][0] * 0.6, plain["from"][1], plain["from"][2] * 0.6] and close["to"][2] == plain["to"][2] * 0.6
+    lift = close["lookFrom"][1]
+    assert close["from"] == [plain["from"][0] * 0.6, plain["from"][1] + lift, plain["from"][2] * 0.6] and close["to"][2] == plain["to"][2] * 0.6
+    assert 0 < lift <= 0.6 and close["lookFrom"] == [0, lift, 0], "nearer to the figure's middle, eye and aim rise together so the head stays in"
     orbit = compile_document(cast_shot(template="dance-orbit", cast=hero, frame="wide"), 4)["camera"]
     assert abs(orbit["orbitRadius"] - 5.4 * 1.35) < 1e-9
     crane = compile_document(cast_shot(template="crane-reveal", cast=hero, frame=0.5), 4)["camera"]

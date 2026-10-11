@@ -98,3 +98,23 @@ test('named camera shots keep speed, portrait format, framing and the other char
   assert.deepEqual(pair.slots.map(slot => slot.slot), ['subject_1', 'subject_2', 'background'])
   assert.equal(pair.slots[1].sourceUrl, '')
 })
+
+test('a frame pushed nearer to a figure\'s middle aims higher until the head keeps room above it', () => {
+  const subject = '/api/v1/file/hero.glb?workspace=movie'
+  const top = (eye, look, fov) => look[1] + Math.hypot(eye[0] - look[0], eye[1] - look[1], eye[2] - look[2]) * Math.tan((fov * Math.PI) / 360)
+  const plain = compile({ template: 'cine-arc-left', subject })
+  const medium = compile({ template: 'cine-arc-left', subject, frame: 'medium' })
+  const framing = medium.camera.framing
+  assert.equal(framing.anchor, 'center')
+  for (const [eye, look] of [[framing.from, framing.lookFrom], [framing.to, framing.lookTo]]) {
+    assert.ok(look[1] > 0 && look[1] <= 0.6, `aim raised by ${look[1]}`)
+    assert.ok(top(eye, look, medium.camera.fov) >= 0.85 + 0.1 - 1e-9, 'the frame top clears the head (0.85 above the centre)')
+  }
+  const lifted = framing.from[1] - plain.camera.framing.from[1] * 1
+  assert.ok(Math.abs(lifted - framing.lookFrom[1]) < 1e-9, 'eye and look rise together: the angle holds')
+  const wide = compile({ template: 'cine-arc-left', subject, frame: 'wide' })
+  assert.equal(wide.camera.framing.lookFrom, undefined, 'a farther frame already holds the figure')
+  const aimed = compile({ template: 'cine-arc-left', subject, frame: 'close',
+    camera: { framing: { ...plain.camera.framing, lookFrom: [0, -0.4, 0], lookTo: [0, -0.4, 0] } } })
+  assert.deepEqual(aimed.camera.framing.lookFrom, [0, -0.4, 0], 'a camera aimed at a chosen point keeps it')
+})

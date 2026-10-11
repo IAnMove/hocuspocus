@@ -39,7 +39,7 @@ CAST_MEMBERS = 16
 # the near layer kept off the cast. 5: the head a skin moves, not a former skeleton's loose head. 6: honest technique
 # effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
 # rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third.
-RENDER_RECIPE = 6
+RENDER_RECIPE = 7
 SURFACES = ("cutout", "environment", "wall", "floor")
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}

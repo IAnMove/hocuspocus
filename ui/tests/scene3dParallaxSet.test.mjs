@@ -42,14 +42,15 @@ test('the near layer stands on the floor and its picture reaches only the lower 
   assert.ok(top * (1 - 0.1 - 0.05) < sight, 'its painted pieces stay under the line of sight: the cast is never hidden')
 })
 
-test('scroll slides every layer and the ground past the cast, turning the ground to the view, and parsing keeps it', () => {
+test('scroll slides the mid layer and the ground past the cast, turning the ground to the view, and parsing keeps it', () => {
   const doc = applyScene3DTemplate('cine-two-shot')
   const slots = stageParallaxSet(doc, SET, { scroll: 2 })
   for (const slot of slots) assert.ok(typeof slot.drift === 'number' && slot.drift > 0, slot.id)
-  const ground = slots.find(slot => slot.id === 'set-ground'), mid = layer(slots, 'mid'), near = layer(slots, 'near')
+  const ground = slots.find(slot => slot.id === 'set-ground'), mid = layer(slots, 'mid')
+  assert.equal(layer(slots, 'near'), undefined, 'no near layer on a scrolled shot: a picture that close would flicker past')
   const metres = (slot, width) => slot.drift * width
   assert.ok(Math.abs(metres(ground, 3 * Math.max(1, 80 / 80) * (ground.scale * 1.7 / 0.2)) - 2) < 1e-3, 'the ground moves 2 m/s: its picture repeats every 3 m, stretched with the slab')
-  assert.ok(Math.abs(metres(mid, mid.scale * 2 * 1664 / 928) - 2) < 1e-3 && Math.abs(metres(near, near.scale * 2 * 1664 / 928) - 2) < 1e-3, 'every layer moves at the same speed in metres')
+  assert.ok(Math.abs(metres(mid, mid.scale * 2 * 1664 / 928) - 2) < 1e-3, 'the layer moves at the ground\'s speed in metres')
   assert.ok(Math.abs(ground.rotationY - mid.rotationY) < 1e-9, 'the slab faces the camera so its texture runs along the view')
   assert.ok(stageParallaxSet(doc, SET, { scroll: -2 }).find(slot => slot.id === 'set-ground').drift < 0)
   doc.slots = [...doc.slots, ...slots]
@@ -82,4 +83,24 @@ test('a tiled cutout is as wide as its tiles, keeps the original copy in the mid
   const plain = imageCutoutMesh({ ...slot, imageLook: { unlit: true } }, new Texture())
   plain.geometry.computeBoundingBox()
   assert.ok(Math.abs(plain.geometry.boundingBox.max.x - plain.geometry.boundingBox.min.x - 2) < 1e-6)
+})
+
+test('the near layer never rises above the cast\'s feet as the camera sees them, and is left out when the feet are out of frame', () => {
+  for (const id of ['tracking', 'cine-two-shot', 'crane-reveal', 'cine-medium-close-up']) {
+    const doc = applyScene3DTemplate(id)
+    const near = layer(stageParallaxSet(doc, SET), 'near')
+    if (!near) continue
+    const pose = cameraPath(doc)[Math.floor(cameraPath(doc).length / 2)]
+    const ahead = [pose.look[0] - pose.eye[0], 0, pose.look[2] - pose.eye[2]]
+    const length = Math.hypot(ahead[0], ahead[2]); ahead[0] /= length; ahead[2] /= length
+    const along = point => (point[0] - pose.eye[0]) * ahead[0] + (point[2] - pose.eye[2]) * ahead[2]
+    const distance = along(near.position)
+    const top = near.position[1] + near.scale * 2                      // its painted pieces reach the picture's top edge
+    for (const slot of doc.slots.filter(slot => slot.slot !== 'background' && slot.media === 'model3d')) {
+      const away = along(slot.position)
+      if (away <= distance) continue
+      const feet = pose.eye[1] + (slot.position[1] - pose.eye[1]) * (distance / away)
+      assert.ok(top <= feet + 1e-6, `${id}: near pieces reach ${top.toFixed(3)} over feet seen at ${feet.toFixed(3)}`)
+    }
+  }
 })
