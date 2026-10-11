@@ -49,3 +49,26 @@ def test_import_alpha_does_not_key_again(tmp_path):
     result=service.execute('props.import',{'version':1,'intent_id':'import','input':{'workspace':'demo','name':'Cup','heightM':.2,'source':str(tmp_path/'alpha.png')}})['result']
     assert Image.open(tmp_path/result['prop']['file']).size==(12,14)
     assert result['revision']==1
+
+
+def test_batch_uses_installed_model_defaults_and_satisfies_native_admission():
+    from services.set_generation import generate_batch
+    from services.studio_image_spec import freeze_studio_image_spec
+    admitted=[]
+    def call(name,args):
+        if name=='media.options': return {'local':{'image':[{'id':'qwen_image_21_viggle_turbo'}]}}
+        if name=='generation.image':
+            from services.generation_output_name import prepare_command_output_name
+            command,output_name=prepare_command_output_name({'operation':name,**args})
+            assert output_name==args['intent_id']
+            frozen=freeze_studio_image_spec(command)
+            params=frozen['effective']['input']['params']
+            from services.studio_image_preparation import _validate_conditioning
+            _validate_conditioning(params, {'no_negative_prompt':True})
+            admitted.append(params)
+            return {'job_id':f'job-{len(admitted)}'}
+        assert name=='jobs.wait' and len(admitted)==2
+        return {'status':'completed','output_files':['object.png']}
+    result=generate_batch(call,'test',[{'prompt':'lamp','negative':'text, watermark, hands','resolution':'1024x1024'},{'prompt':'mug','resolution':'1024x1024'}],'batch-check')
+    assert len(result)==2
+    assert all(p['num_inference_steps']==6 and p['guidance_scale']==1 for p in admitted)

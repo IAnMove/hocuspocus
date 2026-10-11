@@ -41,6 +41,13 @@ def _entries(mold, key) -> list:
     return entries
 
 
+def _opening_fit(span, wall_height, x, width, height, sill):
+    if not all(_number(v) for v in (x, width, height, sill)) or not (0 < width <= span and 0 < height and 0 <= sill and sill + height <= wall_height):
+        raise ValueError("opening outside wall")
+    if not width / 2 <= x * span <= span - width / 2:
+        raise ValueError("opening outside wall")
+
+
 def _openings(mold, dims):
     for opening in mold.get("openings", []):
         wall = opening.get("wall")
@@ -48,10 +55,7 @@ def _openings(mold, dims):
         x, width, height, sill = (opening.get(k, 0) for k in ("x", "width", "height", "sill"))
         if wall not in mold["walls"] or opening.get("kind") not in {"door", "window"}:
             raise ValueError("opening: unknown wall or kind")
-        if not all(_number(v) for v in (x, width, height, sill)) or not (0 < width <= span and 0 < height and 0 <= sill and sill + height <= dims[2]):
-            raise ValueError("opening outside wall")
-        if not width / 2 <= x * span <= span - width / 2:
-            raise ValueError("opening outside wall")
+        _opening_fit(span, dims[2], x, width, height, sill)
         if opening.get("surface", "window_view" if opening["kind"] == "window" else "door") not in mold["surfaces"]:
             raise ValueError("opening: unknown surface")
 
@@ -68,6 +72,28 @@ def _blocks(mold, dims):
             raise ValueError("block: unknown surface")
 
 
+def _places(mold, dims, surfaces):
+    for key in ("marks", "propAnchors", "cameras"):
+        for entry in _entries(mold, key):
+            if not _inside(entry.get("position"), dims):
+                raise ValueError(f"{key}: {entry['id']} outside room")
+            if key == "propAnchors" and (entry.get("on") not in surfaces or not _number(entry.get("maxHeight")) or entry["maxHeight"] <= 0):
+                raise ValueError("anchor: unknown surface or invalid height")
+            if key == "cameras" and (not _inside(entry.get("lookAt"), dims) or not _number(entry.get("fov")) or not 1 <= entry["fov"] <= 120):
+                raise ValueError("camera: invalid target or fov")
+
+
+def _surfaces(mold):
+    surfaces = mold.get("surfaces", [])
+    if not surfaces or len(set(surfaces)) != len(surfaces) or not all(isinstance(s, str) for s in surfaces):
+        raise ValueError("unique surfaces required")
+    if not set(mold.get("walls", [])) <= WALLS or not {f"wall_{w}" for w in mold["walls"]} <= set(surfaces):
+        raise ValueError("unknown wall surface")
+    if not set(mold.get("defaultSkin", {})) <= set(surfaces):
+        raise ValueError("defaultSkin: unknown surface")
+    return surfaces
+
+
 def validate_mold(mold: dict) -> dict:
     """Reject impossible geometry before compilation or generation."""
     if not isinstance(mold, dict) or not re.fullmatch(r"[a-z][a-z0-9_]{0,79}", str(mold.get("id", ""))):
@@ -77,22 +103,9 @@ def validate_mold(mold: dict) -> dict:
     for dims in mold["sizes"].values():
         if not _vector(dims) or not all(0.5 <= n <= 30 for n in dims):
             raise ValueError("room dimensions must be between 0.5 and 30 metres")
-    surfaces = mold.get("surfaces", [])
-    if not surfaces or len(set(surfaces)) != len(surfaces) or not all(isinstance(s, str) for s in surfaces):
-        raise ValueError("unique surfaces required")
-    if not set(mold.get("walls", [])) <= WALLS or not {f"wall_{w}" for w in mold["walls"]} <= set(surfaces):
-        raise ValueError("unknown wall surface")
-    if not set(mold.get("defaultSkin", {})) <= set(surfaces):
-        raise ValueError("defaultSkin: unknown surface")
+    surfaces = _surfaces(mold)
     dims = mold["sizes"]["medium"]
-    for key in ("marks", "propAnchors", "cameras"):
-        for entry in _entries(mold, key):
-            if not _inside(entry.get("position"), dims):
-                raise ValueError(f"{key}: {entry['id']} outside room")
-            if key == "propAnchors" and (entry.get("on") not in surfaces or not _number(entry.get("maxHeight")) or entry["maxHeight"] <= 0):
-                raise ValueError("anchor: unknown surface or invalid height")
-            if key == "cameras" and (not _inside(entry.get("lookAt"), dims) or not _number(entry.get("fov")) or not 1 <= entry["fov"] <= 120):
-                raise ValueError("camera: invalid target or fov")
+    _places(mold, dims, surfaces)
     _openings(mold, dims)
     _blocks(mold, dims)
     return mold

@@ -167,6 +167,8 @@ def _object_entry(entry: Any) -> dict[str, Any] | None:
     for key in ("setItem", "imageLook", "billboard"):
         if key in entry:
             result[key] = entry[key]
+    if isinstance(result.get("setItem"), dict) and "scale" in result:
+        result["setItem"] = {**result["setItem"], "heightM": result["scale"] * (2 if media == "image" else 1.7)}
     return result if len(result) > 2 else None
 
 
