@@ -140,15 +140,15 @@ def test_a_literal_word_outranks_its_synonyms_and_stop_words_are_ignored():
 def test_unknown_words_never_count_and_half_of_the_known_ones_is_enough(tmp_path):
     tavern = search_report(TAVERN, limit=5)
     assert tavern["unknown_words"] == ["tenso"] and tavern["partial"] is False
-    assert ids(tavern["templates"]) == ["cafe-duet"]                      # dialogue at the café: both known words
+    assert ids(tavern["templates"])[0] == "cafe-duet" and "stage-bar" in ids(tavern["templates"])   # bar dialogues: both known words
     church = search_report(CHURCH, limit=5)
     assert church["unknown_words"] == ["tenso"] and church["partial"] is True
     assert church["templates"] and all(card["match"] == "partial" for card in church["templates"])
     assert "duo-diagonal" in ids(church["templates"]) and "speech-dialogue" in ids(church["templates"])
     assert search_report("primer plano llorando")["partial"] is False     # one of two is enough: crying is a reaction word
-    concert = search_report("crowd cheering concert", limit=8)
-    assert concert["partial"] is True and concert["unknown_words"] == []
-    assert "cine-group-shot" in ids(concert["templates"]) and "dance-orbit" not in ids(concert["templates"])  # 1 of 3 is not half
+    cheering = search_report("crowd cheering church", limit=8)
+    assert cheering["partial"] is True and cheering["unknown_words"] == []
+    assert "group-audience" in ids(cheering["templates"]) and "atmos-temple-low" not in ids(cheering["templates"])  # 1 of 3 is not half
     assert search_report("xyzzy xyzzy plugh") == {"templates": [], "unknown_words": ["xyzzy", "plugh"], "partial": False}
     page = page_templates(CHURCH)
     assert page["partial"] is True and page["unknown_words"] == ["tenso"] and page["total"] >= len(church["templates"])

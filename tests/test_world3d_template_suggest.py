@@ -46,10 +46,11 @@ def ids(found):
 def test_speakers_place_and_mood_become_filters_and_query_words():
     found = suggest_templates(speakers=2, place="cocina", mood="triste")
     assert found["filters"] == {"use": "dialogue", "subjects": 2}
-    assert found["unknown_words"] == ["cocina"] and found["partial"] is False
+    assert found["unknown_words"] == [] and found["partial"] is False
     assert found["templates"] and all(card["subjects"] == 2 and "dialogue" in card["uses"] for card in found["templates"])
-    assert found["templates"][0]["shot"] == "close"                       # sad is an emotion word: the reaction cards are close
-    assert found["templates"][0]["reason"].startswith("two subjects, close")
+    assert ids(found)[0] == "stage-cocina"                                # the kitchen recipe is the place
+    assert found["templates"][0]["reason"] == ("two subjects, wide, moves on its own, uses: dialogue, talk, figure; place: cocina; "
+                                               "cameras: two_shot, ots_a, ots_b, wide, close_1, close_2, entrance")
     one = suggest_templates(speakers=1, line="el presentador habla a cámara")
     assert one["filters"] == {"use": "talk", "subjects": 1} and ids(one)[0] == "speech-presenter"
     assert one["templates"][0]["reason"] == "one subject, close, moves: push, uses: talk, reaction"
@@ -72,10 +73,11 @@ def test_nobody_speaking_asks_an_establishing_shot_and_the_beat_wins():
 
 def test_reasons_say_motion_place_and_travel_in_plain_words():
     rooftop = suggest_templates(line="two friends talking on a rooftop", speakers=2)
-    assert ids(rooftop)[0] == "voxel-talk" and rooftop["unknown_words"] == ["friends"]
-    reason = rooftop["templates"][0]["reason"]
-    assert reason.startswith("two subjects, wide, moves: slide, uses: ") and "place: rooftop" in reason
-    assert reason.endswith("the subject crosses the set")
+    assert ids(rooftop) == ["stage-azotea", "voxel-talk"] and rooftop["unknown_words"] == ["friends"]
+    stage, scene = (card["reason"] for card in rooftop["templates"])
+    assert stage.startswith("two subjects, wide, moves on its own, uses: dialogue, talk, figure; place: azotea; cameras: two_shot")
+    assert scene.startswith("two subjects, wide, moves: slide, uses: ") and "place: rooftop" in scene
+    assert scene.endswith("the subject crosses the set")
     still = suggest_templates(line="dos personajes hablando")
     assert ids(still)[0] == "speech-dialogue" and ", still, " in still["templates"][0]["reason"]
     partial = suggest_templates(line="tense dialogue in a church")
@@ -123,7 +125,7 @@ def test_suggest_is_a_read_only_tool_with_the_same_answer_over_http_and_mcp(tmp_
     http = call(client, data)
     mcp = call(client, data, mcp=True)
     assert http["operation"] == OPERATION and http["status"] == "completed"
-    assert ids(http["result"]) == ids(mcp["result"]) == ["voxel-talk"]
+    assert ids(http["result"]) == ids(mcp["result"]) == ["stage-azotea", "voxel-talk"]
     assert http["result"]["unknown_words"] == ["amigos", "tenso"] and http["result"]["filters"] == {"use": "dialogue", "subjects": 2}
     assert http["result"]["templates"][0]["reason"] == mcp["result"]["templates"][0]["reason"]
     assert http["result"]["templates"][0]["match"] == "full" and http["result"]["partial"] is False
