@@ -3468,6 +3468,66 @@
     "motion-particle-morph": {
       "title": "Particle shape typography",
       "description": "A genuine 3D point cloud morphs between a sphere, torus, heart and editable block lettering."
+    },
+    "dialogue-ots-a": {
+      "title": "Over the shoulder A",
+      "description": "Two figures face each other 1.7 m apart; the camera looks over the left speaker’s shoulder onto the right one’s face, medium-close with a slow push. Use A for one speaker and B for the other: the eyelines match."
+    },
+    "dialogue-ots-b": {
+      "title": "Over the shoulder B",
+      "description": "The reverse of A: the same two figures, the camera over the right speaker’s shoulder onto the left one’s face, at the same distance and with the same push, so cutting A and B keeps the eyelines."
+    },
+    "dialogue-table": {
+      "title": "Seated at a table",
+      "description": "Two figures sit across a table, three-quarter to the camera, at seated eye height (1.15 m) with a gentle slide. The cast needs a seated clip (sit_down held) or seated cutouts; bind a table GLB to the table slot."
+    },
+    "dialogue-triangle": {
+      "title": "Triangle of three",
+      "description": "Three figures in a triangle: one at the back facing the camera and two in profile in front; a master shot with a slow arc. The third figure is the prop slot person_3."
+    },
+    "dialogue-embrace": {
+      "title": "Embrace",
+      "description": "Two figures close together in a tight two-shot at head height, with a slow push and a shallow arc: a kiss, a hug, a farewell."
+    },
+    "dialogue-phone-split": {
+      "title": "Phone split",
+      "description": "Two figures far apart face the camera as the two halves of the frame, with a thin dark divider between them; each half a medium-close, with a slow symmetric push: a phone call, a video call."
+    },
+    "reaction-push-face": {
+      "title": "Push on the face",
+      "description": "One figure; after a short hold the camera pushes slowly from a medium-close to a close-up on the face."
+    },
+    "reaction-orbit-face": {
+      "title": "Orbit on the face",
+      "description": "A slow arc of a tenth of a turn around the head at close distance; the face stays framed while the place turns behind it."
+    },
+    "reaction-turn-to-camera": {
+      "title": "Turn to camera",
+      "description": "The figure turns in place from profile to face the camera while the camera holds close with a tiny push."
+    },
+    "reaction-look-up": {
+      "title": "Look up",
+      "description": "A low angle on the face that rises and tilts up as it pushes in, close."
+    },
+    "reaction-impact": {
+      "title": "Impact on the face",
+      "description": "A hit lands: two white frames, a short shake and a snap push to the face over plain colours."
+    },
+    "group-arc-five": {
+      "title": "Arc of five",
+      "description": "One figure in front and four behind in an arc, all facing the camera, with a slow wide push. The four behind are the prop slots person_2 to person_5."
+    },
+    "group-line-four": {
+      "title": "Line of four",
+      "description": "Four figures in a line facing the camera, with a lateral slide at chest height. The outer two are the prop slots person_3 and person_4."
+    },
+    "group-audience": {
+      "title": "Performer and crowd",
+      "description": "A performer on a low platform and a crowd of six cutouts seen from behind at the bottom of the frame; the camera cranes up over the crowd toward the stage. The crowd is the prop slots crowd_1 to crowd_6; one picture bound to crowd fills them all."
+    },
+    "group-circle": {
+      "title": "Circle of five",
+      "description": "Five figures in a circle facing the centre; the camera orbits slowly above them. Three of them are the prop slots person_3 to person_5."
     }
   },
   "atmos": {

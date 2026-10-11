@@ -9,6 +9,9 @@ import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
 import { actionCard } from '../src/features/scene3d/actionTemplates.ts'
 import { campaignCard } from '../src/features/scene3d/campaignTemplates.ts'
 import { animeCard } from '../src/features/scene3d/animeTemplates.ts'
+import { dialogueCard } from '../src/features/scene3d/dialogueTemplates.ts'
+import { reactionCard } from '../src/features/scene3d/reactionTemplates.ts'
+import { groupCard } from '../src/features/scene3d/groupTemplates.ts'
 
 const outPath = fileURLToPath(new URL('../../app/shared/world3d_templates.json', import.meta.url))
 const en = JSON.parse(readFileSync(new URL('../src/i18n/locales/en/scene3dEditor.json', import.meta.url), 'utf8'))
@@ -31,9 +34,10 @@ function line(text, fallback) {
   return `${(space > LINE_LIMIT / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:·]+$/, '')}…`
 }
 
-/** The authored requirement list of the action, campaign and anime shots, joined for the card. */
+/** The authored requirement list of the action, campaign, anime, dialogue, reaction and group shots, joined for the card. */
 function notes(id, locale) {
   const copy = actionCard(id, locale) ?? campaignCard(id, locale) ?? animeCard(id, locale)
+    ?? dialogueCard(id, locale) ?? reactionCard(id, locale) ?? groupCard(id, locale)
   return copy?.requirements?.length ? copy.requirements.join('; ') : ''
 }
 
