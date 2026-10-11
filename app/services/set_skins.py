@@ -130,16 +130,21 @@ def _surface(name,value,mold,requests,sources,root,workspace,call,tag,location_i
     return {kind:{'asset':_url(destination,root,workspace)}, **({'tile_m':value.get('tile_m',defaults()['texture']['tile_m'])} if kind=='texture' else {}), **({'metrics':metrics} if metrics else {})}
 
 
-def _auto_color(resolved,requested,root,workspace):
+def _hex(rgb):
+    return '#'+''.join(f'{int(round(v)):02x}' for v in rgb)
+
+
+def _auto_color(resolved,requested,mold_defaults,root,workspace):
+    """Walls the request leaves alone follow the back wall's mean tone; the floor keeps the mold's colour, else a darker tone."""
     back=resolved.get('wall_back',{})
     source=back.get('image',{}).get('asset') or back.get('texture',{}).get('asset')
     if source:
-        with Image.open(asset_path(source,root,workspace)) as image:
-            color='#'+''.join(f'{int(round(v)):02x}' for v in np.asarray(image.convert('RGB')).mean(axis=(0,1)))
-    else: color=back.get('color')
-    if color:
-        for name in resolved:
-            if name in {'floor','wall_left','wall_right','wall_front'} and name not in requested: resolved[name]={'color':color}
+        with Image.open(asset_path(source,root,workspace)) as image: tone=np.asarray(image.convert('RGB')).mean(axis=(0,1))
+    elif re.fullmatch(r'#[a-fA-F0-9]{6}',str(back.get('color',''))): tone=np.array([int(back['color'][i:i+2],16) for i in (1,3,5)],dtype=float)
+    else: return
+    for name in ('wall_left','wall_right','wall_front'):
+        if name in resolved and name not in requested: resolved[name]={'color':_hex(tone)}
+    if 'floor' in resolved and 'floor' not in requested and 'floor' not in mold_defaults: resolved['floor']={'color':_hex(tone*defaults()['skin']['floorShade'])}
 
 
 def build_skin(mold, size, skin, style, *, location_image=None, root=None, workspace='default', call=None, provided=None):
@@ -161,5 +166,5 @@ def build_skin(mold, size, skin, style, *, location_image=None, root=None, works
         requests,sources=_pictures(room,skin,style,root,workspace,call,tag,provided or {})
         values={**{name:{'color':'#d8d2c4'} for name in room['surfaces']},**room['defaultSkin'],**skin}
         resolved={name:_surface(name,value,room,requests,sources,root,workspace,call,tag,location_image) for name,value in values.items()}
-        _auto_color(resolved,skin,root,workspace);atomic_json(cache,resolved)
+        _auto_color(resolved,skin,room['defaultSkin'],root,workspace);atomic_json(cache,resolved)
         return resolved
