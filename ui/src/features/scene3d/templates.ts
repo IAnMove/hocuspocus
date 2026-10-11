@@ -12,6 +12,12 @@ import { atmosTemplateDocument, ATMOS_TEMPLATES, ATMOS_CATEGORIES } from './atmo
 import { techniqueDocument, TECHNIQUE_TEMPLATES, TECHNIQUE_CATEGORIES } from './techniqueTemplates'
 import { animeTemplateDocument, ANIME_TEMPLATES, ANIME_CATEGORIES } from './animeTemplates'
 import { motionLabTemplateDocument, MOTION_LAB_TEMPLATES, MOTION_LAB_CATEGORIES } from './motionlab/templates'
+import { transitionTemplateDocument, TRANSITION_TEMPLATES, TRANSITION_CATEGORIES } from './transitionTemplates'
+import { speedTemplateDocument, SPEED_TEMPLATES, SPEED_CATEGORIES } from './speedTemplates'
+import { titleTemplateDocument, TITLE_TEMPLATES, TITLE_CATEGORIES } from './titleTemplates'
+import { dialogueTemplateDocument, DIALOGUE_TEMPLATES, DIALOGUE_CATEGORIES } from './dialogueTemplates'
+import { reactionTemplateDocument, REACTION_TEMPLATES, REACTION_CATEGORIES } from './reactionTemplates'
+import { groupTemplateDocument, GROUP_TEMPLATES, GROUP_CATEGORIES } from './groupTemplates'
 import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
 import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
 import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
@@ -28,7 +34,7 @@ export type Scene3DTemplate = {
   frameFormat?: 'landscape' | 'portrait'
 }
 
-export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated' | 'pixel' | 'anime'
+export type Scene3DTemplateTag = 'dark-fantasy' | 'psx' | 'creative' | 'perspective' | 'animated' | 'pixel' | 'anime' | 'transition'
 export type Scene3DTemplateCategory = 'cinema' | 'action' | 'product' | 'music' | 'space' | 'drive'
 export type Scene3DTemplateFilter = Scene3DTemplateCategory | Scene3DTemplateTag
 export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCategory> = {
@@ -90,6 +96,12 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   'drive-coast-reveal': 'drive',
   'drive-city-wide': 'drive',
   'drive-tunnel-wing': 'drive',
+  ...TRANSITION_CATEGORIES,
+  ...SPEED_CATEGORIES,
+  ...TITLE_CATEGORIES,
+  ...DIALOGUE_CATEGORIES,
+  ...REACTION_CATEGORIES,
+  ...GROUP_CATEGORIES,
 }
 
 const CAMERA_PROFILES: Partial<Record<Scene3DTemplateId, Partial<Scene3DCamera>>> = {
@@ -193,6 +205,12 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...TECHNIQUE_TEMPLATES,
   ...ANIME_TEMPLATES,
   ...MOTION_LAB_TEMPLATES,
+  ...TRANSITION_TEMPLATES,
+  ...SPEED_TEMPLATES,
+  ...TITLE_TEMPLATES,
+  ...DIALOGUE_TEMPLATES,
+  ...REACTION_TEMPLATES,
+  ...GROUP_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -390,6 +408,8 @@ const FAMILY_BUILDERS: ReadonlyArray<(id: string) => Scene3DDocument | null | un
   campaignTemplateDocument, effectsTemplateDocument, speechTemplateDocument, mediaTemplateDocument, cinematicDocument,
   atmosTemplateDocument, techniqueDocument,
   motionLabTemplateDocument,
+  transitionTemplateDocument, speedTemplateDocument, titleTemplateDocument,
+  dialogueTemplateDocument, reactionTemplateDocument, groupTemplateDocument,
 ]
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {

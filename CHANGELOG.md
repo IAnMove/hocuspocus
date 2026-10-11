@@ -32,6 +32,61 @@ gallery search finds shots by the same traits, and a production dry run warns
 clip, a motion, a camera or a world. See
 [Video 3D templates for agents](docs/development/WORLD3D_TEMPLATES_AGENTS.md).
 
+The Video 3D library is chosen on axes instead of a flat list. Every card now
+carries `kind` (scene, stage, camera, look, transition, title), `place` (a
+dressing, world or mold id), `travel` (a subject crosses the set), a `reference`
+film still of the real technique and, on stages, `cameras`; `uses` gains `speed`
+and `impact`, and `dialogue` and `reaction` follow stricter rules. The search
+reads both languages through one vocabulary whose place words are split the way
+a director tells places apart (kitchen, bedroom, office, classroom, bar, church,
+hospital, court, TV studio, street, rooftop, forest, sea, space...), plus
+emotions, walking, sitting, entering and crowds; every reply lists
+`unknown_words`, which never count against the match, and returns the best cards
+with at least half of the known words as `partial` when none has them all. New
+filters `kind`, `place` and `travel` on `world3d.templates.list`, `catalog` and
+`apply_query`, and a read-only `world3d.templates.suggest` that takes a shot as a
+writer phrases it (`line`, `speakers`, `place`, `mood`, `beat`, `format`, `kind`)
+and returns up to three cards with a `reason` in plain words, reachable from
+MCP, the Series profile and the Wizard.
+
+Room molds become shots. Thirteen shape molds (`sala`, `sala_ventana`,
+`mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`,
+`vehiculo` and the exteriors `calle`, `plaza`, `orilla`, `azotea`, with no
+ceiling and a sun preset) join the fifteen named interiors, and every mold is a
+`stage-<mold>` card (`kind: stage`) with its cameras, speaking marks and a
+measured shot, accepted by `world3d.templates.get`, `world3d.scene.instantiate`,
+`apply_query`, a production `scene3d.template` and a Series `kind: "3d"` shot
+(`roomCamera` picks the camera; the location's set brings the skin). Every
+staged room carries dust motes and a key light that breathes, so no stage is
+still.
+
+Six packs of short cards by intent, 32 in all: `transition-*` (whip pan, iris
+in, flash white, wipe by a prop, match on shape, eyecatch, smash in, rise off;
+0.6–2.5 s), `speed-*` (run toward camera, foot chase, fly-by, rush lines, side
+dash), `dialogue-*` (over-the-shoulder A and B with matched eyelines, table,
+triangle, embrace, phone split), `reaction-*` (push, orbit, turn to camera, look
+up, impact), `group-*` (arc of five, line of four, performer with audience,
+circle) and `title-*` (lower third, kinetic title, chapter card, end card). Their
+traits are read from the built documents like every other card's; the catalog
+holds 801 cards plus the 28 stages.
+
+Named modifiers on any Video 3D shot, shared by the production compiler and
+`world3d.scene.patch` through `app/shared/world3d_modifiers.json`: `light` (21
+names from `noon` to `dawn`, or a directional light object), `grade` (`natural`,
+`teal_orange`, `bleach`, `noir`, `sepia`, `flashback`, `dream`, `giallo`, `cold`,
+`warm`, `vhs`, `film`: exposure and tone mapping, a gel over the lamp and
+existing screen effects), `lens` (`14mm` to `200mm`: the camera fov, with a
+framing's fov move scaled) and `camera_template` (a `kind: camera` card whose
+camera and framing any shot takes while keeping its duration, cast and place).
+The honest effect cards (`cine-film-grain`, `cine-vignette`, `cine-lens-flare`)
+now carry the screen effect that does the thing.
+
+Production dry runs warn `stage_unskinned` when a stage or room shows only its
+mold colours and `looks_samey` when the same template and background run for
+more than four shots in a row, next to `template_still` and `template_reused`.
+The contract behind all of it is
+[TEMPLATE_LIBRARY_MODEL.md](docs/development/TEMPLATE_LIBRARY_MODEL.md).
+
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
 journey, volumetric poster lettering and particle morph typography. Editor, MCP

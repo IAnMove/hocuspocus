@@ -1,6 +1,6 @@
 /** Shared preview/export room surfaces. Video uses the existing deterministic screen decoder. */
 import { AmbientLight, DoubleSide, Group, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TextureLoader } from 'three'
-import { roomLightPreset, roomPanels, type RoomPanel, type RoomSet } from './roomSet'
+import { hasAmbientLife, isExterior, keyLightBreath, roomLightPreset, roomPanels, type RoomPanel, type RoomSet } from './roomSet'
 import { defaultMediaScreen, type MediaScreen } from './mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from './screenMediaRuntime'
 
@@ -8,17 +8,28 @@ export class RoomSetRuntime {
   readonly root = new Group()
   ready = false
   error: unknown
+  /** The lamp below a ceiling. An exterior has none: its sun (`document.light`) is the key light. */
+  readonly key?: PointLight
+  private keyIntensity = 0
+  private readonly breathing: boolean
   private abort = new AbortController()
   private screens: { runtime: ScreenMediaRuntime; screen: MediaScreen }[] = []
   private repaint: () => void
   constructor(room: RoomSet, repaint: () => void = () => {}) {
     this.repaint = repaint
-    // A closed ceiling blocks the outdoor sun; light the interior independently.
+    this.breathing = hasAmbientLife(room.mold)
     const preset = roomLightPreset(room), [width, depth, height] = room.mold.dimensions
-    const fill = new AmbientLight('#ffffff', 1.2 * preset.intensity)
-    const key = new PointLight(preset.color, 35 * preset.intensity, 2 * Math.max(width, depth, height))
-    key.position.set(0, height - 0.15, depth * 0.12)
-    this.root.add(fill, key)
+    if (isExterior(room.mold)) {
+      // Open to the sky: the document's sun reaches in, the sky adds a soft fill.
+      this.root.add(new AmbientLight('#ffffff', 0.8 * preset.intensity))
+    } else {
+      // A closed ceiling blocks the outdoor sun; light the interior independently.
+      const fill = new AmbientLight('#ffffff', 1.2 * preset.intensity)
+      this.key = new PointLight(preset.color, 35 * preset.intensity, 2 * Math.max(width, depth, height))
+      this.keyIntensity = this.key.intensity
+      this.key.position.set(0, height - 0.15, depth * 0.12)
+      this.root.add(fill, this.key)
+    }
     void Promise.all(roomPanels(room).map(panel => this.panel(panel))).then(() => { this.ready = !this.abort.signal.aborted; this.repaint() }).catch(error => { this.error = error })
   }
   private async panel(panel: RoomPanel) {
@@ -49,7 +60,15 @@ export class RoomSetRuntime {
     for (let i=0; i<uv.count; i++) uv.setXY(i, left+uv.getX(i)*(right-left), bottom+uv.getY(i)*(top-bottom))
     uv.needsUpdate = true; material.map = texture; material.needsUpdate = true
   }
-  async seek(seconds: number) { await Promise.all(this.screens.map(({ runtime, screen }) => runtime.seek(seconds, screen))) }
+  /** What the key light is multiplied by at this scene second. */
+  breath(seconds: number) { return this.breathing ? keyLightBreath(seconds) : 1 }
+  /** The sun's share of the breathing: outdoors the sun is the key light, indoors the lamp breathes instead. */
+  sunBreath(seconds: number) { return this.key ? 1 : this.breath(seconds) }
+  /** Every painted frame, preview or export: the lamp at this second, then the video skins at theirs. */
+  async seek(seconds: number) {
+    if (this.key) this.key.intensity = this.keyIntensity * this.breath(seconds)
+    await Promise.all(this.screens.map(({ runtime, screen }) => runtime.seek(seconds, screen)))
+  }
   dispose() {
     this.abort.abort(); this.screens.forEach(({ runtime }) => runtime.dispose()); this.root.removeFromParent()
     this.root.traverse(object => { if (object instanceof Mesh) { object.geometry.dispose(); const mat = object.material as MeshStandardMaterial; mat.map?.dispose(); mat.dispose() } })
