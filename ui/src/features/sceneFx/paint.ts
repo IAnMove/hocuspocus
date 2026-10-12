@@ -137,7 +137,7 @@ function labelColor(color: string) {
 
 /** One cue around its x/y, scaled by size and turned by rotation. */
 function paintPlacedCue(ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, width: number, height: number) {
-  const progress = time / (cue.end - cue.start)
+  const progress = Math.min(1, time / (cue.end - cue.start))
   const scale = Math.min(width, height) * cue.size / 100
   ctx.save(); ctx.translate(width * cue.x / 100, height * cue.y / 100); ctx.scale(scale, scale)
   ctx.rotate((cue.rotation ?? 0) * Math.PI / 180)
@@ -192,7 +192,7 @@ export function paintSceneFx(
 ) {
   const live = cues.filter(cue => seconds >= cue.start && seconds < cue.end)
   if (source && typeof ctx.drawImage === 'function' && live.some(cue => needsFrameSource(cue.kind))) ctx.drawImage(source, 0, 0, width, height)
-  for (const cue of live) if (isRetroLook(cue.kind)) applyRetroLook(ctx, width, height, cue, seconds)
+  for (const cue of live) if (isRetroLook(cue.kind)) applyRetroLook(ctx, width, height, cue, cue.start + (seconds - cue.start) * (cue.speed ?? 1))
   for (const cue of live) if (isEtching(cue.kind)) applyEtchingLook(ctx, width, height)
   for (const cue of live) {
     if (isRetroLook(cue.kind) || isEtching(cue.kind)) continue

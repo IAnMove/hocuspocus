@@ -90,6 +90,7 @@ export const SCENE_FX_SCHEMA = {
       y: { type: 'number', minimum: 0, maximum: 100 }, size: { type: 'number', minimum: 1, maximum: 200 },
       intensity: { type: 'number', minimum: .1, maximum: 2 }, color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
       rotation: { type: 'number', minimum: -180, maximum: 180 },
+      speed: { type: 'number', minimum: FX_SPEED_RANGE[0], maximum: FX_SPEED_RANGE[1] },
       from: { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: {
         x: { type: 'number', minimum: ORIGIN_RANGE[0], maximum: ORIGIN_RANGE[1] }, y: { type: 'number', minimum: ORIGIN_RANGE[0], maximum: ORIGIN_RANGE[1] },
         layerId: { type: 'string', maxLength: 160 } } },

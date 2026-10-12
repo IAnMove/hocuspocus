@@ -204,3 +204,24 @@ test('an effect speed runs its own time slower or faster, identically in 2D and 
   assert.deepEqual(draw(1, slow), draw(0.5, normal))
   assert.notDeepEqual(draw(1, slow), draw(1, normal))
 })
+
+test('a fast one-shot effect ends early instead of painting NaN, and the schema keeps speed', async () => {
+  const { paintSceneFx } = await import('../src/features/sceneFx/paint')
+  const { SCENE_FX_SCHEMA } = await import('../src/features/sceneFx/types')
+  const values: number[] = []
+  // A canvas that keeps what is set on it (globalAlpha, lineWidth...) and records every number it is given.
+  const state: Record<string, unknown> = { globalAlpha: 1, lineWidth: 1 }
+  const ctx = new Proxy(state, {
+    get: (target, key) => key in target ? target[key as string] : (...args: unknown[]) => {
+      for (const arg of args) if (typeof arg === 'number') values.push(arg)
+      return String(key).endsWith('Gradient') ? { addColorStop: (offset: number) => { values.push(offset) } } : undefined
+    },
+    set: (target, key, value) => { if (typeof value === 'number') values.push(value); target[key as string] = value; return true },
+  }) as unknown as CanvasRenderingContext2D
+  for (const kind of ['confetti', 'sparks', 'explosion', 'fireworks']) {
+    const [cue] = parseSceneFx([{ id: kind, kind, start: 0, end: 2, speed: 4 }])
+    for (const seconds of [0.3, 1.0, 1.9]) paintSceneFx(ctx, 640, 360, seconds, [cue])
+  }
+  assert.ok(values.length > 0 && values.every(Number.isFinite), 'every painted number is finite')
+  assert.deepEqual(SCENE_FX_SCHEMA.items.properties.speed, { type: 'number', minimum: 0.02, maximum: 4 })
+})
