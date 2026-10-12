@@ -340,3 +340,29 @@ def test_a_malformed_scene2d_is_a_dry_run_warning_not_a_crash():
     assert report["windows"][0]["scene2d"] == {"template": "music-pinball"}
     assert [warning["code"] for warning in report["warnings"] if warning["code"].startswith("scene2d")] == ["scene2d_invalid"]
     assert scene2d.card_of(item) is None
+
+
+@pytest.mark.parametrize("item, mode", [(shot(), "scene"), ({**shot(), "scene2d": {"template": "music-pinball"}, "frame": "a plaza"}, "frame")])
+def test_the_shared_view_regenerates_a_scene2d_shot_from_its_drawn_background_or_its_scene(tmp_path, item, mode):
+    from services.production_shot_actions import perform
+    (tmp_path / "clip1.production.json").write_text(json.dumps({"status": "completed", "spec": {"title": "Clip", "shots": [item]}}))
+    (tmp_path / "clip1.shots.json").write_text(json.dumps({"revision": 3, "shots": [{"key": "s1", "clip": "s1.mp4"}]}))
+    result = perform(str(tmp_path), "film", "clip1", "s1", {"action": "regenerate", "expected_revision": 3})
+    assert result["regeneration"]["body"]["from"] == mode
+
+
+def test_the_run_cuts_the_played_cast_out_after_the_clips_and_before_the_scenes(tmp_path, monkeypatch):
+    plan = validate_spec(spec(shot(scene2d={"cast": {"subject_1": "lia"}}), cast=[{"id": "lia", "sheet_prompt": "a singer"}]))
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=lambda *_: {})
+    stages = []
+    for name in ("song", "analyze", "cast", "frames", "clips", "scenes", "package"):
+        setattr(production, name, lambda *_, stage=name: stages.append(stage))
+    production.score = lambda: {"duration": 30, "lines": []}
+    production.montage = lambda *_: production.state.update(final="p.mp4")
+    monkeypatch.setattr(scene2d, "make_cutouts", lambda *_: stages.append("cutouts"))
+    production.run(plan)
+    assert production.state["status"] == "completed"
+    assert stages.index("clips") < stages.index("cutouts") < stages.index("scenes")
+    stages.clear()
+    production.run(validate_spec(spec(shot())))
+    assert "cutouts" not in stages, "no cast id played, nothing to cut out"
