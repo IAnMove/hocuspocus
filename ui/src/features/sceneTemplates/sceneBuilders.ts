@@ -1,5 +1,6 @@
 import type { SceneLayer, SceneKeyframe, SceneAtmosphereKind, SceneCatalogAssetReference } from '../../types'
 import type { ControlValue, TemplateAssetKind, TemplateSlotName } from './catalog'
+import { ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS } from '../../lib/scene2d/layerStyle'
 
 export interface TemplateAsset { source: string; type: TemplateAssetKind; name?: string; catalogAtAssignment?: SceneCatalogAssetReference }
 export type TemplateBindings = Partial<Record<TemplateSlotName, TemplateAsset>>
@@ -108,8 +109,12 @@ export function backdrop(ctx: BuildContext): SceneLayer {
 export function foreground(ctx: BuildContext): SceneLayer[] {
   return ctx.bindings.foreground ? [{ ...asset(ctx, 'foreground', { scale: 1.12 }, 80), fill: true, parallax: 1.6 }] : []
 }
-export function atmosphere(ctx: BuildContext, kind: SceneAtmosphereKind, color = '#b9d5ff'): SceneLayer {
-  return { ...layer(`atmosphere-${kind}`, 'effect', '', ctx.duration, { opacity: .35 }, 60), atmosphere: { kind, density: 25, speed: .5, size: .6, wind: 1, color } }
+/** The editor's own preset for the kind (density, size, speed, wind, opacity), so the particles read over a real
+ * plate: a fixed 25 particles of size .6 at 35 % read on the plain demo art and vanished over real pictures. */
+export function atmosphere(ctx: BuildContext, kind: SceneAtmosphereKind, color?: string): SceneLayer {
+  const { density, speed, size, wind, color: presetColor } = ATMOSPHERE_PRESETS[kind]
+  return { ...layer(`atmosphere-${kind}`, 'effect', '', ctx.duration, { opacity: ATMOSPHERE_OPACITY[kind] }, 60),
+    atmosphere: { kind, density, speed, size, wind, color: color ?? presetColor } }
 }
 /** Pulses a layer on the visual BPM: on every beat, or only on the even or odd beats (two figures taking turns). */
 export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'scale' = 'scale', on: 'all' | 'even' | 'odd' = 'all'): SceneLayer {

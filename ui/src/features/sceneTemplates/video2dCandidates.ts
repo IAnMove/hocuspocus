@@ -3,7 +3,7 @@
 import { buildTextTemplate, type KineticText } from '../../lib/kineticText'
 import type { Scene, SceneLayer } from '../../types'
 import { FINISH_PRESETS } from '../../lib/scene2d/finish'
-import { asset, keyframes, layer, type Beat, type BuildContext, type Pose } from './sceneBuilders'
+import { asset, atmosphere, keyframes, type Beat, type BuildContext, type Pose } from './sceneBuilders'
 
 export type Video2dFrame = { width?: number; height?: number }
 type Video2dBody = Pick<Scene, 'width' | 'height' | 'fps' | 'layers' | 'texts' | 'finish'>
@@ -19,8 +19,9 @@ function moving(c: BuildContext, slot: 'subject_1' | 'background' | 'foreground'
   return { ...keyframes(asset(c, slot, from, z), glide(c, from, to)), fill, parallax }
 }
 
+/** The kind's own preset, as every card draws its particles, kept under the titles (z 20). */
 function particles(c: BuildContext, kind: 'dust' | 'leaves'): SceneLayer {
-  return { ...layer(`atmosphere-${kind}`, 'effect', '', c.duration, {}, 20), atmosphere: { kind, density: 24, speed: .4, size: 1.2, wind: 4, color: '#dbe7f5' } }
+  return { ...atmosphere(c, kind), z: 20 }
 }
 
 const text = (c: BuildContext, key: string) => String(c.options[key] ?? '').trim()
