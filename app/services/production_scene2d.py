@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services.video2d_catalogs import CATALOGS
+from services.video2d_compile import warning_text
 
 FIELDS = frozenset({"template", "cast", "background", "controls"})
 FAMILY = "music-"
@@ -32,7 +33,8 @@ RECIPE = 1                                    # bump when the compile request ch
 TRAITS = Path(__file__).resolve().parents[1] / "shared" / "video2d_template_traits.json"
 COMPILE = "scenes.template.compile"
 CUTOUT = "image.remove_background"
-_URLS = ("/api/", "http://", "https://")
+# Sources the compiler reads as they are: app files, example media, inline pictures and remote URLs.
+_URLS = ("/api/", "/examples/", "data:", "http://", "https://")
 
 
 class Scene2dError(ValueError):
@@ -41,11 +43,12 @@ class Scene2dError(ValueError):
         self.code = code
 
 
-def _prepare(data: dict) -> dict:
+def _prepare(data: dict, workspace_dir: Any = None) -> dict:
     """The 2D template compiler's own check of a card call (aliases, slots, controls, frame), without Node. An alias
-    compiles as its card with the alias's preset already in the controls, so ``templateId`` is the card itself."""
+    compiles as its card with the alias's preset already in the controls, so ``templateId`` is the card itself.
+    ``workspace_dir`` lets the alpha check read the run's own files."""
     from services import video2d_compile
-    prepared = video2d_compile.prepare_template(data)
+    prepared = video2d_compile.prepare_template(data, workspace_dir=workspace_dir)
     return {**prepared["request"], "templateId": prepared["card"], "warnings": prepared["warnings"]}
 
 
@@ -128,7 +131,7 @@ def _explain(key: Any, template: str, error: Exception) -> Scene2dError:
     return Scene2dError("invalid_spec", message)
 
 
-def prepare_card(shot: dict, sources: dict[str, str] | None = None) -> dict:
+def prepare_card(shot: dict, sources: dict[str, str] | None = None, workspace_dir: Any = None) -> dict:
     """The compiler's prepared request for the shot's card (``templateId`` is the card an alias stands for).
 
     Without ``sources`` every given slot and the background stand in as a placeholder picture."""
@@ -139,7 +142,7 @@ def prepare_card(shot: dict, sources: dict[str, str] | None = None) -> dict:
         sources = {**{role: PLACEHOLDER for role in config.get("cast") or {}}, "background": PLACEHOLDER}
     from services.video2d_compile import CompileError
     try:
-        prepared = _prepare({"templateId": template, "assets": sources, "controls": dict(config.get("controls") or {})})
+        prepared = _prepare({"templateId": template, "assets": sources, "controls": dict(config.get("controls") or {})}, workspace_dir)
     except CompileError as error:
         raise _explain(shot.get("key"), template, error) from error
     _family(shot.get("key"), str(prepared.get("templateId") or template))
@@ -316,7 +319,8 @@ def scene2d_document(production: Any, shot: dict, seconds: float, score: dict, s
         result = reply.get("result") if isinstance(reply.get("result"), dict) else {}
         if not isinstance(result.get("document"), dict):
             raise ProductionError("scene2d_compile_failed", f"{shot['key']}: {json.dumps(reply)[:300]}")
-        warnings = [str(item) for item in [*(prepared.get("warnings") or []), *(result.get("warnings") or [])]]
+        # The compile reply already carries the preparation's warnings (it prepares the same input again).
+        warnings = [warning_text(item) for item in result.get("warnings") or []]
         record = {"fingerprint": fingerprint, "card": prepared.get("templateId"), "document": result["document"], "warnings": warnings}
         kept[shot["key"]] = record
         if warnings:
@@ -339,6 +343,13 @@ def _planned(value: str, spec: dict, root: Any, workspace: str) -> tuple[str, st
     return url, url
 
 
+def _workspace_dirs(root: Any, workspace: str) -> Any:
+    """Where /api/v1/file sources live during a dry run: ``root`` is the run's workspace folder."""
+    if root is None:
+        return None
+    return lambda name: str(root) if name == workspace else str(Path(root).parent / str(name))
+
+
 def _planned_sources(shot: dict, spec: dict, root: Any, workspace: str) -> tuple[dict[str, str], dict[str, str]]:
     config, shown, checked = shot["scene2d"], {}, {}
     for role, value in (config.get("cast") or {}).items():
@@ -355,7 +366,7 @@ def _card_warnings(key: Any, card: str, warnings: list) -> list[dict]:
     """The compiler's warnings (``cutout_without_alpha:subject_1``) as dry-run rows."""
     rows = []
     for item in warnings:
-        code, _, detail = str(item).partition(":")
+        code, _, detail = warning_text(item).partition(":")
         rows.append({"code": code, "key": key, "template": card, **({"detail": detail} if detail else {})})
     return rows
 
@@ -366,13 +377,13 @@ def dry_run_report(shot: dict, spec: dict, root: Any, workspace: str, seconds: f
     try:
         _config(shot)
         shown, checked = _planned_sources(shot, spec, root, workspace)
-        prepared = prepare_card(shot, checked)
+        prepared = prepare_card(shot, checked, _workspace_dirs(root, workspace))
     except Scene2dError as error:
         code = "scene2d_invalid" if error.code == "invalid_spec" else error.code
         return {"template": shot["scene2d"].get("template")}, [{"code": code, "key": key, "message": str(error)[:240]}]
     card = str(prepared.get("templateId"))
     row = {"template": shot["scene2d"]["template"], "card": card, "sources": shown,
-           "warnings": [str(item) for item in prepared.get("warnings") or []]}
+           "warnings": [warning_text(item) for item in prepared.get("warnings") or []]}
     found = _card_warnings(key, card, row["warnings"])
     longest = _span(card, "duration")
     if longest and seconds > longest[1] + 0.05:

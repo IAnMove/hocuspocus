@@ -59,7 +59,7 @@ def test_an_alias_of_a_music_card_is_accepted(template, cast):
 
 def test_an_alias_of_another_family_is_refused_after_the_compiler_resolves_it(monkeypatch):
     real = scene2d._prepare
-    monkeypatch.setattr(scene2d, "_prepare", lambda data: {**real({**data, "templateId": "music-pinball"}), "templateId": "cinema-tracking"})
+    monkeypatch.setattr(scene2d, "_prepare", lambda data, workspace_dir=None: {**real({**data, "templateId": "music-pinball"}), "templateId": "cinema-tracking"})
     error = refused(shot("music-parallax"))
     assert error.code == "scene2d_family_not_allowed" and "cinema-tracking" in str(error)
 
@@ -258,7 +258,9 @@ def test_a_real_compile_of_one_scene2d_shot_is_a_2d_scene_document(tmp_path):
 
 def test_the_dry_run_shows_the_card_its_sources_and_the_compilers_warnings(tmp_path, monkeypatch):
     real = scene2d._prepare
-    monkeypatch.setattr(scene2d, "_prepare", lambda data: {**real(data), "warnings": ["cutout_without_alpha:subject_1"]})
+    # The compiler's real warning shape: a structured row, not text (a dry run once showed its code as "{'code'").
+    alpha = {"code": "cutout_without_alpha", "slot": "subject_1", "message": "subject_1 has no transparent pixel"}
+    monkeypatch.setattr(scene2d, "_prepare", lambda data, workspace_dir=None: {**real(data, workspace_dir), "warnings": [alpha]})
     (tmp_path / "plaza.png").write_bytes(b"png")
     cast = {**shot(), "scene2d": {"template": "music-pinball", "cast": {"subject_1": "lia"}, "background": "plaza.png"}}
     broken = {**shot(key="s2"), "t0": 6, "scene2d": {"template": "music-pinball", "cast": {"subject_1": SUBJECT}, "background": "missing.png"}}
@@ -272,6 +274,7 @@ def test_the_dry_run_shows_the_card_its_sources_and_the_compilers_warnings(tmp_p
     assert third["sources"]["subject_1"] == PLATE and third["sources"]["background"].startswith("frame")
     codes = [(item["code"], item.get("key")) for item in report["warnings"]]
     assert ("cutout_without_alpha", "s1") in codes and ("scene2d_invalid", "s2") in codes
+    assert next(item for item in report["warnings"] if item["code"] == "cutout_without_alpha")["detail"] == "subject_1"
     assert ("scene2d_holds", "s3") in codes, "the last cut runs 20 s, past the card's longest move"
     assert not any(item["code"] == "few_clips" for item in report["warnings"]), "a scene2d shot is a moving shot"
 
@@ -395,3 +398,20 @@ def test_a_shot_edit_rebuilds_the_card_scene_and_records_what_a_resume_compares(
     replies["scenes.video2d.export"] = lambda arguments: calls.append(arguments) or {"receipt": {"commandId": "again"}}
     export_scenes(production, plan, shot_windows(plan, production.score()))
     assert calls == [], "the scene the edit exported is the one a resume would make"
+
+
+def test_the_dry_run_reads_the_runs_own_pictures_for_the_alpha_check(tmp_path):
+    from PIL import Image
+    Image.new("RGB", (8, 8), (200, 40, 40)).save(tmp_path / "boxed.png")      # a picture with no transparent pixel
+    Image.new("RGBA", (8, 8), (0, 0, 0, 0)).save(tmp_path / "cut.png")
+    boxed = {**shot(), "scene2d": {"template": "music-pinball", "cast": {"subject_1": "boxed.png"}, "background": PLATE}}
+    clean = {**shot(key="s2"), "t0": 6, "scene2d": {"template": "music-pinball", "cast": {"subject_1": "cut.png"}, "background": PLATE}}
+    report = dry_run(spec(boxed, clean), root=tmp_path, workspace="ws")
+    alpha = [(item["key"], item.get("detail")) for item in report["warnings"] if item["code"] == "cutout_without_alpha"]
+    assert alpha == [("s1", "subject_1")], "the workspace picture is read from the run's folder, not ./outputs"
+
+
+@pytest.mark.parametrize("value", ["/examples/creative/singer.png", "data:image/png;base64,iVBORw0KGgo="])
+def test_example_media_and_inline_pictures_are_sources_as_they_are(value):
+    media = {"workspace": "ws", "root": None, "models": {}, "sets": {}, "cast": {}, "stills": {}}
+    assert scene2d.source_url(value, media) == value

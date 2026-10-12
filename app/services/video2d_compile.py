@@ -532,12 +532,22 @@ def _bridge_result(bridged: dict) -> dict:
     raise CompileError(code, detail[:500])
 
 
+def warning_text(item: Any) -> str:
+    """One compile warning as text: ``code:slot`` for a structured one (``cutout_without_alpha:subject_2``)."""
+    if isinstance(item, dict):
+        code, slot = str(item.get("code") or "warning"), item.get("slot")
+        return f"{code}:{slot}" if slot else code
+    return str(item)
+
+
 def _shape(name: str, result: dict, early: list[dict] | None = None) -> dict:
     if name == "scenes.template.compile":
         document, warnings = result.get("document"), result.get("warnings")
         if not isinstance(document, dict) or not isinstance(warnings, list):
             raise CompileError("compile_bridge_failed", "document")
-        return {"document": document, "warnings": [*(early or []), *(str(item) for item in warnings)][:20]}
+        # One shape for every warning: the bridge's plain ones become {"code": ...} next to the structured alpha ones.
+        bridged = [item if isinstance(item, dict) else {"code": str(item)} for item in warnings]
+        return {"document": document, "warnings": [*(early or []), *bridged][:20]}
     if name == "scenes.text.template":
         texts = result.get("texts")
         if not isinstance(texts, list):
