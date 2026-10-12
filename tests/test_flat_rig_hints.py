@@ -68,3 +68,14 @@ def test_an_eyes_hint_keeps_light_hair_out_of_the_eyes():
     x0, y0, x1, y1 = box
     assert 135 <= x0 and x1 <= 265 and 155 <= y0 and y1 <= 182, box
     assert mask[168, 145] and mask[168, 178] and not mask[60, 200], "both halves of each eye, none of the hair"
+
+
+def test_a_blink_closes_both_halves_of_an_eye_its_pupil_cut():
+    """The bug: the openings kept the two largest pieces of white, one half of each eye, so one lid closed over half
+    an eye and the iris stayed open: the character winked instead of blinking."""
+    from services.flat_rig_eyes import eye_openings, find_eyes
+    pixels = np.array(_silver_bob())
+    _box, mask = find_eyes(pixels[..., :3], pixels[..., 3], near=(200, 168))
+    openings = eye_openings(pixels[..., :3], pixels[..., 3], mask, (232, 190, 160))
+    for label, (outer, inner) in ((1, (145, 178)), (2, (255, 222))):
+        assert openings[168, outer] == label and openings[168, inner] == label, f"eye {label} opens whole"

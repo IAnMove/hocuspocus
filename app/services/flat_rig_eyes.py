@@ -332,20 +332,35 @@ def _whole_white(rgb: np.ndarray, alpha: np.ndarray, white: np.ndarray, pair_wid
     return whole
 
 
+def _two_eyes(parts):
+    """The whites' pieces as two eyes, left then right. An eye a pupil cut in two comes as two pieces (an eyes hint
+    joins them, ``_with_fragments``), so the eyes part at the widest gap between neighbouring pieces; specks under a
+    tenth of the largest piece are left out."""
+    largest = max(part["size"] for part in parts)
+    parts = sorted((part for part in parts if part["size"] >= largest * 0.1), key=lambda part: part["x0"] + part["x1"])
+    if len(parts) <= 2:
+        return [[part] for part in parts]
+    gaps = [parts[i + 1]["x0"] - parts[i]["x1"] for i in range(len(parts) - 1)]
+    cut = gaps.index(max(gaps)) + 1
+    return [parts[:cut], parts[cut:]]
+
+
 def eye_openings(rgb: np.ndarray, alpha: np.ndarray, eyes: np.ndarray, skin, screen: bool = False) -> np.ndarray:
     """Each eye's whole opening, labelled 1 (left) and 2 (right), grown from the whites ``find_eyes`` returns."""
     labels, parts = _components(eyes)
     if len(parts) == 1:
         # Two eyes drawn touching were found as two halves of one blob (find_eyes): cut it the same way again.
         parts = _split_touching(labels, parts)
-    parts = sorted(sorted(parts, key=lambda part: -part["size"])[:2], key=lambda part: part["x0"])
+    eyes_found = _two_eyes(parts)
+    parts = [{"x0": min(p["x0"] for p in eye), "x1": max(p["x1"] for p in eye), "labels": [p["label"] for p in eye]}
+             for eye in eyes_found]
     skin = np.asarray(skin, dtype=float)
     found = np.zeros(eyes.shape, np.uint8)
     for index, part in enumerate(parts):
         # Each eye may reach up to the other one's white, not a fixed middle: eyes looking aside have both irises on
         # the same side of their whites, one of them well past the middle between the whites.
         limits = (parts[0]["x1"] if index else 0, parts[1]["x0"] if index == 0 and len(parts) == 2 else eyes.shape[1])
-        white = labels == part["label"]
+        white = np.isin(labels, part["labels"])
         if not screen:
             white = _whole_white(rgb, alpha, white, max(p["x1"] for p in parts) - min(p["x0"] for p in parts))
             white[:, :limits[0]] = white[:, limits[1]:] = False
