@@ -16,10 +16,15 @@ def create_video2d_catalog_router() -> APIRouter:
         q: str | None = None,
         detail: bool = False,
         id: str | None = None,
+        use: str | None = None,
+        move: str | None = None,
+        subjects: int | None = None,
+        format: str | None = None,
     ):
         payload = {
             key: value
-            for key, value in (("kind", kind), ("family", family), ("q", q), ("id", id))
+            for key, value in (("kind", kind), ("family", family), ("q", q), ("id", id), ("use", use), ("move", move),
+                               ("subjects", subjects), ("format", format))
             if value is not None
         }
         if detail:
