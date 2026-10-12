@@ -879,6 +879,7 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'krea2_turbo_edit',
   'qwen_image_21',
   'qwen_image_21_viggle_turbo',
+  'qwen_image_21_turbo',
   'qwen_image_21_bf16',
   'qwen_image_21_gguf_q8_0',
   'qwen_image_21_gguf_q5_0',
@@ -937,8 +938,9 @@ const DEFAULT_ENABLED_MODELS = new Set([
  * a user who then disables them stays disabled forever. (This is
  * deliberately narrower than auto-enabling every unknown model — only
  * the curated list's own additions are pushed.) */
-const DEFAULTS_VERSION = 15
+const DEFAULTS_VERSION = 16
 const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  16: ['qwen_image_21_turbo'],
   15: ['qwen_image_21_viggle_turbo'],
   14: ['qwen_image_21_uncensored_gguf_q4_k_m', 'qwen_image_21_uncensored_gguf_q5_k_m', 'qwen_image_21_uncensored_gguf_q6_k'],
   13: ['qwen_image_21', 'qwen_image_21_bf16', 'qwen_image_21_gguf_q8_0', 'qwen_image_21_gguf_q5_0', 'qwen_image_21_gguf_q4_k'],

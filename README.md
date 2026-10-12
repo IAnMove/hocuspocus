@@ -192,6 +192,38 @@ The gallery loads bounded 320/640 px previews; opening the details dialog loads 
 
 **Qwen Image 2.1 Viggle Turbo v0.2.1** is available in the image model selector for text-to-image and instruction editing with up to three input images (including the source). It reuses the Qwen 2.1 INT8 base files and downloads the pinned rank-256 adapter automatically on first use. Its six-step schedule and CFG 1 are fixed; start at 1024×1024. The LoRA runs without merging into the quantized base. This is a preview: complex edits can be less faithful, and 2K/RGBA/masked editing are not validated by its authors. [Model card and Qwen Research License](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo).
 
+**Qwen Image 2.1 Official Turbo INT8 · 8 Steps** (`qwen_image_21_turbo`) is the separate official October 9 checkpoint. Choose it in the image model selector for creation or editing. Its first generation downloads a pinned ~7.3 GB Comfy-Org INT8 ConvRot transformer; it shares the base Qwen3-VL encoder and RGBA VAE. Eight steps and CFG 1 are fixed, using the official sampling sigmas without additional resolution shifting. Native 2K and up to ten input images are supported. Start at 1K on a 24 GB GPU. Quality varies with the prompt; the 40-step base remains available. [Official model card and license](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo).
+
+API callers should load the model defaults before submitting a job, then poll `GET /api/v1/status/{job_id}` until completion:
+
+```javascript
+const model = 'qwen_image_21_turbo';
+const defaults = await fetch(`${baseUrl}/api/v1/defaults/${model}`).then(r => r.json());
+const job = await fetch(`${baseUrl}/api/v1/generate`, {
+  method: 'POST', headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({...defaults, model_type: model, image_mode: 1, prompt: 'A ceramic robot watering a fern', seed: 42, workspace: 'default'})
+}).then(r => r.json());
+```
+
+```python
+model = 'qwen_image_21_turbo'
+defaults = requests.get(f'{base_url}/api/v1/defaults/{model}').json()
+job = requests.post(f'{base_url}/api/v1/generate', json={
+    **defaults, 'model_type': model, 'image_mode': 1, 'prompt': 'A ceramic robot watering a fern',
+    'seed': 42, 'workspace': 'default',
+}).json()
+```
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/generate" \
+  -H 'Content-Type: application/json' \
+  -d '{"model_type":"qwen_image_21_turbo","image_mode":1,"prompt":"A ceramic robot watering a fern","resolution":"1024x1024","num_inference_steps":8,"guidance_scale":1,"batch_size":1,"seed":42,"workspace":"default"}'
+```
+
+To reproduce the base/Turbo comparison against a freshly started backend, run `python scripts/benchmark_qwen21_turbo.py --base-url http://127.0.0.1:PORT --output-dir ../logs/qwen21-turbo-benchmark` from the activated `app` environment. It saves requests, phase timings and PNGs in the specified directory, generates into a separate benchmark workspace, and compares identical seeds/prompts for portrait, typography, objects, editing from the same source and native 2K transparency. Warmups are excluded from scored results. It preserves saved model preferences.
+
+For native 2K on a 24 GB GPU, use **Auto** VAE tiling and keep the GPU free of other generation servers. A temporary test backend can use `python launch.py --vae-config 0` without saving that override. Reference edits run after both models' text-to-image comparisons because reference encoding can trigger the INT8 engine's slower session-wide kernel fallback. See the [local comparison notes](docs/development/QWEN21_TURBO.md).
+
 **Example — MiniMax H3.** Prompt a wide night sea and add `Audio: surf, wind, a low cello`. Use **FL2VA** when you have an exact first/last frame from Story. Use **Ref2VA** when you pass up to 9 images, 3 videos and 3 audio clips as identity/mood references (`<Picture 1>`, `<Video 1>`, `<Audio 1>`).
 
 ### Steal a look from a real H3 style library

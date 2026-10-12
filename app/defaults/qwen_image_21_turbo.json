@@ -1,0 +1,69 @@
+{
+    "model": {
+        "name": "Qwen Image 2.1 Official Turbo INT8 \u00b7 8 Steps",
+        "architecture": "qwen_image_21",
+        "description": "Official Qwen 2.1 Turbo checkpoint, released October 9, 2026. Unified text-to-image and editing, native 2K, RGBA and up to 10 references. Comfy-Org INT8 ConvRot weights with the official fixed eight-step schedule and CFG 1. Quality depends on the prompt; compare with the 40-step base.",
+        "selector_help": "Official Qwen Turbo, separate from Viggle six-step LoRA. Reuses the Qwen3-VL encoder and Qwen 2.1 VAE; downloads a separate ~7.3 GB INT8 transformer on first use. Uses the saved eight-step sigmas without resolution shifting. Do not stack acceleration LoRAs. Optional fast alternative; the 40-step base remains the default. Use Auto VAE tiling for native 2K on a 24 GB GPU.",
+        "URLs": [
+            "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors"
+        ],
+        "license_name": "Qwen Research License",
+        "license_url": "https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/blob/main/LICENSE",
+        "resource_requirements": {
+            "vram_gb": 16,
+            "ram_gb": 32,
+            "storage_gb": 18,
+            "platform": "NVIDIA CUDA",
+            "backend": "INT8 ConvRot",
+            "tier": "experimental",
+            "note": "Shares the base encoder and VAE. 24 GB GPU recommended for native 2K; use 1K on smaller GPUs. Separate INT8 checkpoint, no adapter."
+        },
+        "xresolutions": [
+            [
+                "2048x2048 (1:1)",
+                "2048x2048"
+            ],
+            [
+                "2400x1792 (4:3)",
+                "2400x1792"
+            ],
+            [
+                "1792x2400 (3:4)",
+                "1792x2400"
+            ],
+            [
+                "2528x1696 (3:2)",
+                "2528x1696"
+            ],
+            [
+                "1696x2528 (2:3)",
+                "1696x2528"
+            ],
+            [
+                "2752x1536 (16:9)",
+                "2752x1536"
+            ],
+            [
+                "1536x2752 (9:16)",
+                "1536x2752"
+            ]
+        ],
+        "attention": {
+            "<89": "sdpa"
+        },
+        "image_outputs": true,
+        "preload_URLs": "qwen_image_21",
+        "qwen21_official_turbo": true,
+        "lock_inference_steps": true,
+        "inference_steps_min": 8,
+        "inference_steps_max": 8,
+        "lock_guidance_scale": true,
+        "no_negative_prompt": true
+    },
+    "prompt": "A neon shop sign that reads QWEN IMAGE 2.1, rainy night, reflections on wet pavement",
+    "resolution": "1024x1024",
+    "num_inference_steps": 8,
+    "guidance_scale": 1,
+    "batch_size": 1,
+    "negative_prompt": ""
+}
