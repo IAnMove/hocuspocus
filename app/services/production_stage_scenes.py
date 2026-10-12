@@ -179,7 +179,9 @@ def repackage(production: Any, spec: dict) -> None:
         if file:
             current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": file}}).get("result") or {})
             montage = current.get("montage") or current
-            if attach_origins(montage, production.state.get("scene_docs") or {}, production.id) and montage.get("clips"):
+            if _owned_by_other(montage, production.id):
+                production.log(f"package: left {file} (another production owns it)")
+            elif attach_origins(montage, production.state.get("scene_docs") or {}, production.id) and montage.get("clips"):
                 revision = current.get("revision") or montage.get("revision")
                 saved = production.mcp("montages.save", {"version": 1, "intent_id": f"{production.id}-origins-{int(host.time.time())}",
                                                    "input": {"workspace": production.ws, "montage": montage, "file": file, "expected_revision": revision}})
@@ -191,18 +193,29 @@ def repackage(production: Any, spec: dict) -> None:
     production._finish_package(previous, previous_error, None)
 
 
+def _origin_productions(document: dict) -> set[str]:
+    owners = {(clip.get("origin") or {}).get("productionId") for clip in document.get("clips") or [] if isinstance(clip, dict)}
+    return {owner for owner in owners if owner}
+
+
 def _made_by(document: dict, production_id: str) -> bool:
     """Every clip origin that names a production names this one (``attach_origins`` writes them)."""
-    owners = {(clip.get("origin") or {}).get("productionId") for clip in document.get("clips") or [] if isinstance(clip, dict)}
-    return owners - {None} == {production_id}
+    return _origin_productions(document) == {production_id}
+
+
+def _owned_by_other(document: dict, production_id: str) -> bool:
+    """A clip origin names a production and none of them is this one."""
+    owners = _origin_productions(document)
+    return bool(owners) and production_id not in owners
 
 
 def owned_montage(production: Any) -> tuple[str, int | None]:
     """The montage file this production saves, and the revision to update (None: a new file).
 
     The state's file first, then ``<production_id>.montage.json``: a title is not unique in a workspace, an id is.
-    An existing file is updated when the state names it or its clips come from this production; one that belongs to
-    another production moves the name on to ``-2``, ``-3``… The store keeps montages in the workspace folder."""
+    An existing file is updated when its clips come from this production, or when the state names it and no other
+    production owns it. A file that belongs to another production moves the name on to ``-2``, ``-3``… even if a
+    stale state still points at it. The store keeps montages in the workspace folder."""
     from services.montage_documents import SUFFIX, slug_file
     named = production.state.get("montage_file")
     stem = slug_file(production.id)[: -len(SUFFIX)]
@@ -214,7 +227,9 @@ def owned_montage(production: Any) -> tuple[str, int | None]:
             current = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if file == named or _made_by(current, production.id):
+        if _made_by(current, production.id):
+            return file, int(current.get("revision", 1))
+        if file == named and not _owned_by_other(current, production.id):
             return file, int(current.get("revision", 1))
     raise _host().ProductionError("montage_failed", f"no free montage name for {production.id}")
 

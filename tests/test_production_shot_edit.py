@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from services.music_production import Production, segments
-from services.production_shot_edit import ShotEditError, update_shot, use_take
+from services.production_shot_edit import ShotEditError, replace_montage_clip, update_shot, use_take
 from services.production_shot_review import record_decision
 
 
@@ -106,6 +106,25 @@ def test_use_take_replaces_one_montage_clip_and_keeps_the_rest(tmp_path: Path):
     manifest = json.loads((root / "show.shots.json").read_text(encoding="utf-8"))
     by_key = {row["key"]: row for row in manifest["shots"]}
     assert by_key["s0"]["clip"] == "take-b.mp4"
+
+
+def test_replace_montage_clip_refuses_another_production_file(tmp_path: Path):
+    production, _spec, _root, saved, _edits = _build(tmp_path)
+    inner = production.mcp
+
+    def foreign(tool: str, arguments: dict) -> dict:
+        if tool == "montages.get":
+            return {"result": {"revision": 4, "montage": {"revision": 4, "clips": [
+                {"id": "s0", "source": "/api/v1/file/old-s0.mp4?workspace=film",
+                 "origin": {"kind": "scene2d", "productionId": "someone-else", "scene": "old.scene.json"}},
+            ]}}}
+        return inner(tool, arguments)
+
+    production.mcp = foreign
+    with pytest.raises(ShotEditError) as caught:
+        replace_montage_clip(production, "s0", "show-s0.mp4")
+    assert caught.value.code == "montage_foreign"
+    assert saved == []
 
 
 def test_use_take_exports_the_chosen_scene_once(tmp_path: Path):

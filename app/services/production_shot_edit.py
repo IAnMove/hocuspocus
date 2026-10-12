@@ -16,6 +16,7 @@ from services.production_package import (
     clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, workspace_url, write_manifest,
 )
 from services.production_scene_retry import finish_scene_exports
+from services.production_stage_scenes import _owned_by_other
 
 
 class ShotEditError(ValueError):
@@ -136,6 +137,8 @@ def replace_montage_clip(production: Any, key: str, video_file: str, expected_re
         raise ShotEditError("montage_missing", "this production has no montage yet")
     current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": montage_file}}).get("result") or {})
     montage = current.get("montage") or current
+    if _owned_by_other(montage, production.id):
+        raise ShotEditError("montage_foreign", "this production's montage file belongs to another production")
     found = False
     for clip in montage.get("clips") or []:
         if clip.get("id") == key:
