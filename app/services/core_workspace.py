@@ -230,6 +230,7 @@ def services_config() -> dict[str, Any]:
         "nsfw_mode": False,
         "nsfw_accepted_at": None,
         "director_prompt_polish": "off",
+        "raw_prompts": False,
         "workflow_parallelism_enabled": False,
         "debug_trace_enabled": False,
         "civitai_api_key_set": False,

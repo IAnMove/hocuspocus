@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.production_image_defaults import default_image_model, image_choice
+from services.production_seeds import default_seed, ensure_seed_base, window_seed
 
 
 def _host():
@@ -45,7 +46,7 @@ def cast_sheets(production: Any, spec: dict) -> None:
     cast = production.state.setdefault("cast", {})
     settings = spec.get("style") or {}
     style = settings.get("image", "")
-    jobs = {c["id"]: production.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", 5),
+    jobs = {c["id"]: production.image("cast-" + c["id"], c["sheet_prompt"] if style in c["sheet_prompt"] else f"{c['sheet_prompt']} {style}".strip(), None, "1536x1024", c.get("seed", default_seed(production, 5)),
                                  *image_choice(c, settings), production._attempt("cast_attempts", c["id"]))
             for c in spec.get("cast") or [] if c["id"] not in cast and not c.get("group")}
     for cid, name in production.wait(jobs).items():
@@ -118,7 +119,7 @@ def shoot_frames(production: Any, spec: dict, windows: list[dict]) -> None:
             attempt = production._attempt("frame_attempts", w["key"])
             res = frame_resolution(spec, attempt, failures.get(w["key"], ""))
             refs = frame_references(w, production.state.get("cast") or {}, production.state.get("cast_single") or {})
-            jobs[w["key"]] = production.image("frame-" + w["key"], production.frame_prompt(spec, w), refs or None, res, w.get("seed", 3) + (attempt or 0),
+            jobs[w["key"]] = production.image("frame-" + w["key"], production.frame_prompt(spec, w), refs or None, res, w.get("seed", window_seed(production, 3, int(w.get("i") or 0))) + (attempt or 0),
                                         *image_choice(w, settings), attempt)
         for key, name in production.wait(jobs).items():
             if name:
@@ -143,12 +144,13 @@ def run_preview(production: Any, request: dict) -> None:
     from services.production_stage_run import adopt_prepared_identity
     production._cancel = arm(production.ws, production.id)
     adopt_prepared_identity(production)
+    ensure_seed_base(production.state)
     production.state.update(status="running", preview_frames={})
     production.save()
     try:
         model = request.get("image_model") or default_image_model()     # the look test uses the model the run will use
         jobs = {str(index): production.image(f"preview-{index}", prompt, None, request.get("resolution", "1280x704"),
-                                       (request.get("seeds") or [101, 102, 103])[index], model,
+                                       (request.get("seeds") or [default_seed(production, offset) for offset in (101, 102, 103)])[index], model,
                                        request.get("image_steps"))
                 for index, prompt in enumerate(request["prompts"])}
         production.state["preview_frames"] = {key: production.upload(name)[1] for key, name in production.wait(jobs).items() if name}

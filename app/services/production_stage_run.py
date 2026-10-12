@@ -48,6 +48,8 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
     from services.production_preview import keep_completed_cut, remember_completed_cut
     remember_completed_cut(production.state, prior_status, through)
     adopt_prepared_identity(production)
+    from services.production_seeds import ensure_seed_base
+    ensure_seed_base(production.state)       # before "started": a run from before the base keeps its old seeds
     production.state.update(spec=spec, status="running", started=production.state.get("started") or host.time.time(), through=through)
     from services.production_close import note_resume
     note_resume(production)

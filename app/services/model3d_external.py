@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Any
@@ -95,7 +96,8 @@ def _settings(body: dict, model: dict) -> dict:
     low_vram = body.get("low_vram", model["supports_low_vram"])
     if not isinstance(low_vram, bool) or (low_vram and not model["supports_low_vram"]):
         raise ValueError("Unsupported low_vram setting")
-    return {"seed": _integer(body, "seed", 1234, 0, 2**32 - 1),
+    seed = body.get("seed", -1)
+    return {"seed": secrets.randbelow(2**32) if seed == -1 and not isinstance(seed, bool) else _integer(body, "seed", 0, 0, 2**32 - 1),
             "resolution": resolution, "low_vram": low_vram,
             "camera_fov": _camera_fov(body.get("camera_fov", 0), model),
             "output_format": "glb", "texture_mode": "native-pbr", "prompt": ""}

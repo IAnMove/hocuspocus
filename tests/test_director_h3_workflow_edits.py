@@ -437,3 +437,31 @@ def test_h3_rejoin_rejects_stale_clip_even_when_segments_are_playable(tmp_path: 
             director_pipeline.rejoin_clips(str(tmp_path), "h3-stale-rejoin")
     assert joined == []
     assert checkpoint.read_bytes() == before
+
+
+def test_regenerating_an_h3_segment_draws_and_records_a_new_seed(tmp_path: Path):
+    state = _saved_state(tmp_path)
+    _write_pipeline(tmp_path, state)
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"retry_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch.object(director_pipeline.secrets, "randbelow", side_effect=[4242, 4343]):
+        for _ in range(2):
+            director_pipeline.rerun_h3_segment(str(tmp_path), "editable", 0, 0, cascade=False)
+
+    assert [item["seed"] for item in submitted] == [4242, 4343]
+    saved = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
+    assert saved["clips"][0]["h3_segments"][0]["seed"] == 4343
+
+
+def test_comic_movies_keep_the_seed_their_pre_pinned():
+    state = {"_params_snapshot": {"pipeline_type": "comic_movie"}}
+    assert director_pipeline._regenerate_seed(state, 777) == 777
+    with patch.object(director_pipeline.secrets, "randbelow", return_value=55):
+        assert director_pipeline._regenerate_seed({}, 777) == 55

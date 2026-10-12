@@ -596,12 +596,7 @@ def apply_character_visual_style_lock(
         f"CHARACTER STYLE LOCK: {style}. Every visible person or character must keep this "
         "exact rendering medium, material, proportions and surface treatment throughout."
     )
-    combined = f"{lock} {text}".strip()
-    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
-        remaining = max(0, 1449 - len(lock))
-        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
-        combined = f"{lock} {shortened}".strip()
-    return combined
+    return f"{lock} {text}".strip()
 
 
 def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
@@ -615,12 +610,7 @@ def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
         "subtitles, title cards, labels, signs, UI, logos or watermarks. Lyrics and dialogue "
         "remain audio/performance only; any screens or code are abstract and unreadable."
     )
-    combined = f"{lock} {text}".strip()
-    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
-        remaining = max(0, 1449 - len(lock))
-        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
-        combined = f"{lock} {shortened}".strip()
-    return combined
+    return f"{lock} {text}".strip()
 
 
 def apply_visual_style_lock(
@@ -656,15 +646,10 @@ def apply_visual_style_lock(
         )
     if mode in {"video", "i2v", "a2v", "t2v", "extend", "retake"}:
         medium += " Animate the artwork without changing its visual medium."
-    combined = f"{medium} {text}".strip()
-    # MiniMax Image currently rejects prompts at 1500 characters.  Story
-    # prompts can be verbose, so reserve a small transport margin while
-    # keeping the style lock at the front (the most important instruction).
-    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
-        remaining = max(0, 1449 - len(medium))
-        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
-        combined = f"{medium} {shortened}".strip()
-    return combined
+    # No length cut here: the lock is for every image model, and only MiniMax
+    # Image-01 has a 1,500-character limit, which its own prepare_prompt keeps
+    # (the start, where the locks sit, and the end).
+    return f"{medium} {text}".strip()
 
 
 def enforce_visual_style_on_clip_plans(

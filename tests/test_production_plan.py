@@ -123,3 +123,14 @@ def test_the_brief_can_ask_for_a_quality_profile():
     assert plan_brief(_brief())["quality"] == "standard"
     assert plan_brief(_brief(calidad="max"))["quality"] == "max"
     assert plan_brief(_brief(quality="nonsense"))["quality"] == "standard"
+
+
+def test_a_style_with_no_named_look_keeps_the_briefs_words_instead_of_anime():
+    spec = _passes(_brief(estilo="acuarela suave, tonos pastel, luz de mañana"))
+    assert spec["style"]["image"].startswith("acuarela suave") and "anime" not in spec["style"]["image"].lower()
+
+
+def test_sung_shots_do_not_share_one_start_frame():
+    sung = [shot["frame"] for shot in _passes(_brief())["shots"] if shot.get("sing")]
+    assert len(sung) >= 4 and len(set(sung)) == 4
+    assert all("lips parted" in frame and "in the scene: " in frame for frame in sung)

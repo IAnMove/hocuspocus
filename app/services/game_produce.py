@@ -20,7 +20,7 @@ from typing import Any
 from services.game_estimate import record_run
 from services.game_qa import note_style
 from services.game_generators import REGISTRY
-from services.game_generators.base import GenContext
+from services.game_generators.base import GenContext, attempt_seed
 from services.game_inputs import asset_inputs
 from services.game_jobs import GameJobStore
 from services.game_library import add_attempt, read_library, stamp_attempt, write_library
@@ -320,6 +320,7 @@ class GameProduce:
         if generator is None:
             raise GameToolError("missing_generator", asset["kind"])
         running = copy.deepcopy(asset)
+        running.setdefault("spec", {})["seed"] = attempt_seed(asset, attempt_id)
         if isinstance(job.get("candidates"), int) and job["candidates"] > 0:
             running["candidates"] = job["candidates"]
         ctx = GenContext(
@@ -343,7 +344,7 @@ class GameProduce:
     def _succeed(self, job: dict, step: dict, game: dict, asset: dict, result: Any, elapsed: float) -> None:
         provenance = result.provenance if isinstance(getattr(result, "provenance", None), dict) else {"steps": []}
         common = list(getattr(result, "warnings", None) or [])
-        shared = {"provenance": provenance, "inputs": asset_inputs(game, asset)}
+        shared = {"provenance": {**provenance, "seed": attempt_seed(asset, step["attemptId"])}, "inputs": asset_inputs(game, asset)}
         saved = []
         for attempt_id, files, metrics, own in _candidates(result, step["attemptId"]):
             warnings = [*_for_candidate(common, attempt_id), *own]

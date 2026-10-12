@@ -229,6 +229,7 @@
     "octree": "Octree resolution",
     "chunks": "Processing chunks",
     "seed": "Seed",
+    "seedRandom": "-1 draws a new seed every time",
     "surface": "Surface algorithm",
     "dmc": "DMC",
     "marchingCubes": "Marching Cubes",

@@ -1795,11 +1795,19 @@ def _default_production_profile() -> dict:
     return production_profile_defaults.default_profile(_DEFAULT_PRODUCTION_PROFILE, _check_model_downloaded)
 
 
+_warned_invalid_profiles: set[str] = set()
+
+
 def _active_production_profile() -> dict:
     raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
     try:
         return _normalize_production_profile(raw)
-    except ValueError:
+    except ValueError as error:
+        # The defaults stand in, but never silently: say so once per reason,
+        # and /production-profile reports it so the UI can show it.
+        if raw is not None and str(error) not in _warned_invalid_profiles:
+            _warned_invalid_profiles.add(str(error))
+            print(f"[Production profile] The saved profile is invalid ({error}); using the defaults until it is saved again.")
         return _default_production_profile()
 
 
@@ -1847,13 +1855,15 @@ def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "
 
 def _production_profile_response() -> dict:
     raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
+    invalid_reason = ""
     try:
         profile = _normalize_production_profile(raw)
         configured = True
-    except ValueError:
+    except ValueError as error:
         profile = _default_production_profile()
         configured = False
-    return {"configured": configured, "profile": profile}
+        invalid_reason = str(error) if raw is not None else ""
+    return {"configured": configured, "profile": profile, "invalid_reason": invalid_reason}
 
 
 def _profile_image_model_type(profile: dict | None = None) -> str:
@@ -7475,10 +7485,12 @@ def get_services_config():
         "use_director_v2": services.get("use_director_v2", True),
         "nsfw_mode": nsfw,
         "nsfw_accepted_at": services.get("nsfw_accepted_at", None),
-        # v1.6 defaults to model-aware third-pass polish. Native H3 video
-        # prompts bypass creative rewriting while applicable image/other-model
-        # prompts retain their dialect-specific enhancement.
-        "director_prompt_polish": services.get("director_prompt_polish", "third_pass"),
+        # Off by default: Director prompts reach the models as the planner
+        # wrote them. The model-aware third pass is opt-in; native H3 video
+        # prompts bypass its creative rewriting.
+        "director_prompt_polish": services.get("director_prompt_polish", "off"),
+        # Raw prompts: the Director adds no style prefix, locks or polish.
+        "raw_prompts": services.get("raw_prompts") is True,
         # Safe workflow overlap: every local GPU and remote server keeps
         # capacity one; only genuinely different resources run together.
         "workflow_parallelism_enabled": services.get("workflow_parallelism_enabled", True),
@@ -7553,7 +7565,7 @@ async def update_services_config(request: Request):
         "minimax_llm_api_key", "minimax_image_api_key", "minimax_music_api_key",
         "grok_api_key", "meshy_api_key", "hi3d_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
-        "debug_trace_enabled", "workflow_parallelism_enabled",
+        "raw_prompts", "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance", "storage_allow_linked_removal",
         "director_multishot_lora_mode",
@@ -10535,9 +10547,10 @@ async def _director_v2_plan_body(body: dict):
             planner_kwargs["batch_checkpoint"] = _checkpoint_music_plan_batch
 
         # Prompt polish mode: off | full_guide | light_guide | third_pass.
-        # The default third pass is model-aware; native H3 prompts retain
-        # their deterministic compiler while applicable prompts are polished.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        # Off by default: the planner's prompts reach the models as written.
+        # The third pass is model-aware; native H3 prompts retain their
+        # deterministic compiler while applicable prompts are polished.
+        polish_mode = "off" if services.get("raw_prompts") is True else services.get("director_prompt_polish", "off")
         video_model = body.get("video_model", "")
         image_model = body.get("image_model", "")
 
@@ -24592,6 +24605,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 dpid = job["params"].get("_director_pipeline_id")
                 if dpid:
                     sidecar["director_pipeline_id"] = dpid
+                if isinstance(gen.get("model_prompts"), dict):
+                    # The prompt a model handler rewrote (an H3 window's
+                    # timing contract): what the model really received.
+                    sidecar["model_prompts"] = dict(gen["model_prompts"])
                 clip_index_by_filename = {
                     filename: index
                     for index, filename in clip_output_files.items()

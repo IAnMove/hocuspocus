@@ -729,6 +729,30 @@ export function ServicesSettingsPanel() {
           </p>
         </div>
 
+        {/* Raw prompts: no layer between the plan and the model */}
+        <label className="flex items-center justify-between cursor-pointer group">
+          <div className="flex-1 mr-3 min-w-0">
+            <div className="text-sm text-text-primary group-hover:text-accent-blue transition-colors">
+              {t('services.rawPrompts')}
+            </div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              {t('services.rawPromptsHint')}
+            </div>
+          </div>
+          <div
+            role="switch"
+            aria-checked={servicesConfig.raw_prompts === true}
+            onClick={() => updateConfig({ raw_prompts: servicesConfig.raw_prompts !== true })}
+            className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+              servicesConfig.raw_prompts ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
+              servicesConfig.raw_prompts ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </label>
+
         {/* Resource-aware workflow overlap */}
         <label className="flex items-center justify-between cursor-pointer group">
           <div className="flex-1 mr-3 min-w-0">

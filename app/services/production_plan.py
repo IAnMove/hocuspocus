@@ -35,7 +35,7 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
     spec = {
         "title": _title(fields["tema"]),
         "song": {"lyrics": lyrics, "caption": _clip(fields["musica"], 32), "duration": duration, "bpm": bpm, **_language(fields, lyrics)},
-        "style": {"preset": _preset(fields["estilo"]), **({"footer": fields["footer"]} if fields.get("footer") else {})},
+        "style": {**_style(fields["estilo"]), **({"footer": fields["footer"]} if fields.get("footer") else {})},
         "cast": [{"id": "hero", "sheet_prompt": fields["protagonista"][:400]}],
         "shots": "auto",
         "cta": _clip(fields["cta"], 32),
@@ -211,10 +211,19 @@ _LOOKS = (
 )
 
 
-def _preset(style: str) -> str:
+def _preset(style: str) -> str | None:
     """An explicit look word wins over a subject word: "zine riso sobre Omarchy" is a zine, not a desktop."""
     text = style.lower()
     for preset, words in _LOOKS:
         if any(re.search(rf"\b{re.escape(word)}", text) for word in words):
             return preset
-    return "anime"
+    return None
+
+
+def _style(style: str) -> dict:
+    """A named look when the brief names one; otherwise the brief's own words, never a default look."""
+    preset = _preset(style)
+    if preset:
+        return {"preset": preset}
+    look = " ".join(style.split())[:400]
+    return {"image": look, "video": look}
