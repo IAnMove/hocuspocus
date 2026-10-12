@@ -1,7 +1,7 @@
 # VoxCPM2 speech
 
-VoxCPM2 (OpenBMB, 2B parameters, Apache-2.0) is a local speech engine next to
-Qwen3 TTS. It speaks 30 languages, including Spanish, and outputs 48 kHz audio.
+VoxCPM2 (OpenBMB, 2B parameters, Apache-2.0) is the default local speech engine,
+next to Qwen3 TTS. It speaks 30 languages, including Spanish, and outputs 48 kHz audio.
 One checkpoint serves two model types that follow the Qwen3 conventions:
 
 | Model type | Like | Voice from | `alt_prompt` |
@@ -14,6 +14,16 @@ clone type also takes `custom_settings.style` (speaking style, up to 300
 characters) and `custom_settings.auto_split_every_s`. `Speaker 1:` /
 `Speaker 2:` lines with two references make a dialogue. Steps (default 10,
 4–30) and guidance (default 2, 1–5) are the regular Studio controls.
+
+## Default
+
+`ui/src/lib/preferredModels.ts` makes `voxcpm2_voicedesign` the speech default once
+installed (`defaultSpeechModel`; KugelAudio otherwise): Studio speech, the Wizard's
+`prepare_audio`, the scene animator, face-rig and lip previews. Scene recipes,
+game voices without a kit (`DEFAULT_VOICE_DESIGN_MODEL`), the Character Creator
+voice designer (`DEFAULT_VOICE_ENGINE`) and new reference voices
+(`DEFAULT_REFERENCE_VOICE_MODEL`) use VoxCPM2 directly. Saved voices keep their
+model; a remembered Studio choice is kept too.
 
 ## Code
 

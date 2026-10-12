@@ -9,8 +9,10 @@ export type PresetCharacterVoice = {
 }
 export const CHARACTER_VOICE_LANGUAGES = ['auto', 'chinese', 'english', 'japanese', 'korean', 'german', 'french', 'russian', 'portuguese', 'spanish', 'italian'] as const
 /** Speech models that clone a character voice from a reference recording and its transcript. */
-export const REFERENCE_VOICE_MODELS = ['qwen3_tts_base', 'voxcpm2_base'] as const
+export const REFERENCE_VOICE_MODELS = ['voxcpm2_base', 'qwen3_tts_base'] as const
 export type ReferenceVoiceModel = typeof REFERENCE_VOICE_MODELS[number]
+/** New reference voices start on VoxCPM2. */
+export const DEFAULT_REFERENCE_VOICE_MODEL: ReferenceVoiceModel = 'voxcpm2_base'
 /** Reference voices that also take a style direction (VoxCPM2 controllable cloning). */
 export const STYLED_REFERENCE_VOICE_MODELS: readonly ReferenceVoiceModel[] = ['voxcpm2_base']
 export const VOICE_STYLE_MAX_CHARS = 300

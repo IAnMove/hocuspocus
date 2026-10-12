@@ -85,7 +85,7 @@ test('a keyed candidate records a rig check that says the eyes are small, and a 
   assert.ok(failed.every(item => item.status === 'ready' && item.rig === undefined))
 })
 
-test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
+test('Qwen3 voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
   assert.deepEqual(expectedPitch('Male voice. Calm.'), [75, 175])
   assert.deepEqual(expectedPitch('Voz de mujer joven'), [150, 320])
   assert.deepEqual(expectedPitch('A small boy'), [220, 400])
@@ -99,7 +99,7 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   let seed = 1
   const voices = await designVoiceCandidates({
     workspace: 'cast', description: 'Male voice. Low and slow.', text: 'Hola. Esta es mi voz.', language: 'spanish',
-    signal: new AbortController().signal, onUpdate: () => {},
+    engine: 'qwen3', signal: new AbortController().signal, onUpdate: () => {},
   }, {
     seed: () => seed++,
     submitGeneration: async params => { submitted.push(params); return { job_id: `job-${params.seed}` } as never },
@@ -109,20 +109,20 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   })
   assert.equal(submitted.length, 3)
   assert.deepEqual(submitted.map(params => params.seed), [1, 2, 3])
-  assert.ok(submitted.every(params => params.model_type === VOICE_DESIGN_MODEL && params.alt_prompt === 'Male voice. Low and slow.'
+  assert.ok(submitted.every(params => params.model_type === VOICE_ENGINES.qwen3.design && params.alt_prompt === 'Male voice. Low and slow.'
     && params.model_mode === 'spanish' && params.prompt === 'Hola. Esta es mi voz.'))
   assert.deepEqual((checked[0] as { pitchRange: number[] }).pitchRange, [75, 175])
   assert.ok(voices.every(voice => voice.status === 'ready'))
-  assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }), {
+  assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }, 'qwen3'), {
     provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: 'Kevin (spanish)',
     referenceAudio: '/api/v1/file/job-1.wav?workspace=cast', transcript: 'Hola. Esta es mi voz.', language: 'spanish' })
 })
 
-test('VoxCPM2 designs from the description alone and the chosen take becomes a VoxCPM2 reference', async () => {
+test('the default engine, VoxCPM2, designs from the description alone and the chosen take becomes a VoxCPM2 reference', async () => {
   const submitted: Record<string, unknown>[] = []
   const voices = await designVoiceCandidates({
     workspace: 'cast', description: 'Female voice. Young reporter.', text: 'Hola. Esta es mi voz.', language: 'spanish',
-    engine: 'voxcpm2', signal: new AbortController().signal, onUpdate: () => {},
+    signal: new AbortController().signal, onUpdate: () => {},
   }, {
     seed: () => 7,
     submitGeneration: async params => { submitted.push(params); return { job_id: `job-${submitted.length}` } as never },
@@ -130,9 +130,10 @@ test('VoxCPM2 designs from the description alone and the chosen take becomes a V
     checkSpeech: async () => ({ transcript: 'Hola. Esta es mi voz.', wer: 0, medianPitchHz: 210, wordsPerSecond: 2.4, duration: 3, warnings: [] }),
     fileUrl: (name, workspace) => `/api/v1/file/${name}?workspace=${workspace}`,
   })
+  assert.equal(VOICE_DESIGN_MODEL, 'voxcpm2_voicedesign')
   assert.ok(submitted.every(params => params.model_type === VOICE_ENGINES.voxcpm2.design && !('model_mode' in params)
     && params.alt_prompt === 'Female voice. Young reporter.'))
-  assert.equal(referenceVoice(voices[0], { name: 'Zilia (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }, 'voxcpm2').model,
+  assert.equal(referenceVoice(voices[0], { name: 'Zilia (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }).model,
     'voxcpm2_base')
 })
 

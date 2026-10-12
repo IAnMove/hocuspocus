@@ -42,6 +42,7 @@ import { FacePatchOptions, FacePatchTextureNotice } from './FacePatchOptions'
 import { useFaceRigOperationGuard } from './useFaceRigOperationGuard'
 import { isFacePatchCompatible } from '../../lib/characterFacePatch'
 import { useStore } from '../../stores/useStore'
+import { defaultSpeechModel } from '../../lib/preferredModels'
 import i18n, { useUiTranslation } from '../../i18n'
 import { mouthWipeBox, resizeMouthWipeBox } from './mouthWipeBox'
 import { MouthPackChoices } from './MouthPackChoices'
@@ -111,7 +112,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const { t } = useUiTranslation('characters')
   const stateLabel = (state: CharacterKitFaceRigState) => t(`faceRig.states.${state}`)
   const imageModel = useStore(state => state.selectedModelPerMode.image || '')
-  const speechModel = useStore(state => state.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
+  const speechModel = useStore(state => state.selectedModelPerAudioSubMode.speech ?? defaultSpeechModel(state.models))
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const workspace = workspaceOverride ?? activeWorkspace
   const [selectedState, setSelectedState] = useState<CharacterKitFaceRigState>('wide')

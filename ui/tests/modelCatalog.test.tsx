@@ -172,3 +172,11 @@ test('H3 catalog presentation is unchanged when rendered through ModelCatalogInf
     assert.doesNotMatch(text, /Minimum requirements|Requisitos mínimos/)
   } finally { cleanup() }
 })
+
+test('speech defaults to VoxCPM2 once installed and keeps KugelAudio on installs without it', async () => {
+  const { defaultSpeechModel, installedPreferredModel } = await import('../src/lib/preferredModels')
+  const installed = [{ model_type: 'voxcpm2_voicedesign', is_downloaded: true }, { model_type: 'kugelaudio_0_open', is_downloaded: true }]
+  assert.equal(defaultSpeechModel(installed), 'voxcpm2_voicedesign')
+  assert.equal(installedPreferredModel('audio', installed), 'voxcpm2_voicedesign')
+  assert.equal(defaultSpeechModel([{ model_type: 'voxcpm2_voicedesign', is_downloaded: false }]), 'kugelaudio_0_open')
+})
