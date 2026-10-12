@@ -127,7 +127,8 @@ export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'sca
   return keyframes(item, beats.filter((beat, i) => !i || beat.at > beats[i - 1].at))
 }
 
-export type GraphicKind = 'beam' | 'bolt' | 'shield' | 'burst' | 'debris'
+export const GRAPHIC_KINDS = ['beam', 'bolt', 'shield', 'burst', 'debris'] as const
+export type GraphicKind = typeof GRAPHIC_KINDS[number]
 /** The bolt is long (8:1) so a shot reads at a glance: a cyan glow, a bright body that fades to the tail and a
  * white-hot core. The thin square `beam` stays as it was for scenes that already use it. */
 const GRAPHIC_SIZE: Record<GraphicKind, [number, number]> = { beam: [512, 512], bolt: [1024, 128], shield: [512, 512], burst: [512, 512], debris: [512, 512] }
@@ -142,6 +143,9 @@ function graphic(kind: GraphicKind): string {
   const [width, height] = GRAPHIC_SIZE[kind]
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${shapes[kind]}</svg>`)}`
 }
+/** Every graphic source the builders emit, byte for byte: the review showcase accepts these and no other SVG. */
+export const builtInGraphicSources = (): string[] => GRAPHIC_KINDS.map(graphic)
+
 export function effect(ctx: BuildContext, kind: GraphicKind, id: string, beats: Beat[]): SceneLayer {
   return keyframes(layer(id, 'image', graphic(kind), ctx.duration, { opacity: 0 }, 35), beats)
 }

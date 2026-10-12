@@ -255,6 +255,7 @@
       "travel": "cross",
       "format": "landscape",
       "uses": [
+        "establishing",
         "space"
       ],
       "background": "drift",
@@ -322,6 +323,7 @@
       "travel": "cross",
       "format": "landscape",
       "uses": [
+        "establishing",
         "space"
       ],
       "background": "drift",
@@ -333,6 +335,8 @@
       ],
       "moving": [
         "camera",
+        "subject",
+        "props",
         "particles"
       ],
       "still": false,
@@ -741,11 +745,12 @@
       "holdShare": 0,
       "subjects": 1,
       "props": 0,
-      "travel": "in",
+      "travel": "cross",
       "format": "landscape",
       "uses": [
         "music",
-        "dance"
+        "dance",
+        "establishing"
       ],
       "background": "drift",
       "duration": 4
