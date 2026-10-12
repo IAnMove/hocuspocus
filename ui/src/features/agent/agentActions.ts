@@ -27,6 +27,7 @@ import type { AgentProductionWorksAction } from './productionWorkCapabilities'
 import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentRerenderSeriesShotAction } from './seriesShotEditCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
+import type { AgentVideo2DTemplatesAction } from './video2dTemplateCapabilities'
 import type {
   AgentLipsCreatorAction,
   AgentGenerateLipsAction,
@@ -633,6 +634,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction
+  | AgentVideo2DTemplatesAction
   | AgentProductionWorksAction
   | AgentEditSeriesShotAction
   | AgentRerenderSeriesShotAction

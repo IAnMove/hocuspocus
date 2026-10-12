@@ -52,7 +52,7 @@ test('migrates valid legacy keep/discard/pending choices and keeps new IDs pendi
   assert.equal(loaded.state.choices[newTemplate.id].decision, 'pending')
   assert.equal(loaded.state.choices[newTemplate.id].notes, '')
   assert.equal(loaded.state.choices.unknown, undefined)
-  assert.match(loaded.warning, /24.*previas/)
+  assert.match(loaded.warning, /17.*previas/)
   assert.match(loaded.warning, /24.*nuevas.*pendientes/)
 })
 

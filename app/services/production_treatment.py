@@ -195,7 +195,8 @@ def _plain(text: Any) -> str:
 def _signature(shot: dict) -> str:
     """What makes two shots the same shot to a viewer: kind, picture, action, framing. A variation phrase is a difference."""
     keyed = {"kind": shot.get("kind"), "frame": _plain(shot.get("frame")), "action": _plain(shot.get("action")), "still": shot.get("still"),
-             "clip": shot.get("clip"), "desktop": shot.get("desktop"), "scene3d": shot.get("scene3d"), "zoom": shot.get("zoom"),
+             "clip": shot.get("clip"), "desktop": shot.get("desktop"), "scene3d": shot.get("scene3d"), "scene2d": shot.get("scene2d"),
+             "zoom": shot.get("zoom"),
              "camera": shot.get("camera")}
     return json.dumps(keyed, sort_keys=True, default=str)
 

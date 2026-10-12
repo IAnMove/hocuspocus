@@ -43,6 +43,18 @@ def check_lyric_looks(style: dict) -> None:
         raise LyricLookError(f"unknown lyric looks {', '.join(map(str, unknown))}; known: {', '.join(looks())}")
 
 
+def check_finish(style: dict) -> None:
+    """A named finish (``style.finish.preset``) must exist: a typo would otherwise fail only at export, after the GPU."""
+    finish = style.get("finish")
+    preset = finish.get("preset") if isinstance(finish, dict) else None
+    if preset is None:
+        return
+    from services.video2d_preset_catalog import finish_presets
+    names = sorted(finish_presets())
+    if preset not in names:
+        raise LyricLookError(f"style.finish.preset must be one of {', '.join(names)}")
+
+
 def section_of(tag: str) -> str:
     """'[Chorus 2]' -> chorus, '[Pre-Chorus]' -> pre-chorus, '[Verse]' -> verse; anything else is default."""
     words = re.sub(r"[^a-z\- ]", " ", tag.lower()).split()

@@ -36,6 +36,35 @@ ficha conoce. Sin `kind`, `q` devuelve los recuentos y las mejores fichas de
 todos los tipos en `matches`. Un `id` que está en dos tipos (`rain` es
 atmósfera y efecto) devuelve las dos fichas en `matches`.
 
+Las plantillas de escena son 41 fichas. Cada fila trae su texto ES/EN,
+`reviewStatus` y los rasgos medidos sobre la ficha compilada
+(`app/shared/video2d_template_traits.json`): `moves` (qué hace la cámara y qué
+hace el reparto: `push`, `drift`, `bounce`, `orbit`, `spin`…), `moving`,
+`holdShare` y `still`, `subjects`, `props`, `travel`, `format`, `uses`
+(`music`, `dance`, `transition`, `dialogue`…), `background` y `duration`. Una
+ficha con `still: true` trae `warnings: ["template_still"]`: más de medio plano
+quieto. Filtra con `use`, `move`, `format` y `subjects` (al menos ese número de
+sujetos), como en la biblioteca 3D. `aliases` lista los ids fusionados en la
+ficha y su preset de controles; un `id` fusionado (`music-stage`) devuelve su
+ficha y `alias`. Un `id` retirado (`trailer-teaser`, `lyric-vertical`) devuelve
+`retired: true` y `use_instead`. Las fichas `cinema-*` traen `twins`: la
+plantilla narrativa que cubre ese plano.
+
+Para elegir una ficha musical para un plano, `scenes.templates.suggest` recibe
+la frase del guionista (`line`), cuántas personas salen (`speakers`), `mood`,
+`beat` (un uso) y `format`, y devuelve hasta `limit` fichas `music-*` con
+`reason`, `slots` y `controls`. No compila ni guarda.
+
+```json
+{
+  "version": 1,
+  "input": {
+    "line": "la cantante rebota al ritmo en el escenario",
+    "speakers": 1
+  }
+}
+```
+
 ```json
 {
   "version": 1,
@@ -71,7 +100,9 @@ y pasar esa URL a compilar.
 
 No guarda. Devuelve `{document, warnings}`. `templateId` es un id real de
 `scene_templates.json`. `assets` asigna cada slot de esa plantilla a un medio
-durable. `controls` usa solo controles que el catálogo declara para ese id.
+durable. Los slots son `subject_1`, `subject_2`, `background`, `prop_1`,
+`prop_2` y `foreground`; los nombres viejos (`hero`, `plate`, `prop`) se
+aceptan. `controls` usa solo controles que el catálogo declara para ese id.
 `documentary-history` admite como máximo 12 s; si el documento se estira
 después, validar avisa `empty_timespan`.
 
@@ -79,14 +110,14 @@ después, validar avisa `empty_timespan`.
 {
   "version": 1,
   "input": {
-    "templateId": "trailer-teaser",
+    "templateId": "cinema-establishing",
     "controls": {
       "duration": 4,
       "intensity": 0.6
     },
     "assets": {
-      "hero": "/examples/hero.png",
-      "plate": "/examples/plate.png"
+      "subject_1": "/examples/hero.png",
+      "background": "/examples/plate.png"
     },
     "width": 1280,
     "height": 720,

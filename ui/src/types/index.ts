@@ -551,6 +551,9 @@ export interface SceneLayer {
     speed: number
     /** Initial offset along the selected axis, in scene percent. */
     phase?: number
+    /** Every other copy is drawn mirrored along the scroll axis, so a picture that is not seamless meets itself at
+     * each join. The copies must touch (spacing equal to the drawn size along that axis); an odd count gets one more. */
+    mirror?: boolean
     /** Foreground silhouette locked to each tile join so a looping plate never shows its seam. */
     seamOccluder?: {
       enabled: boolean

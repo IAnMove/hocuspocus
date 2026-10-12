@@ -13,6 +13,7 @@ export const AGENT_ACTION_TYPES = [
   'lips_creator',
   'generate_lips',
   'world3d_templates',
+  'video2d_templates',
   'production_works',
   'edit_series_shot',
   'rerender_series_shot',

@@ -74,8 +74,9 @@ import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKi
 import { canonicalSceneFps } from '../../lib/sceneFps.ts'
 import { createSceneEvaluator, type SceneEvaluator } from '../../lib/scene2d/evaluate'
 import { layerPicturePoint, paintScene2D } from '../../lib/scene2d/paint'
+import { videosSettled } from '../../lib/scene2d/videoSettle'
 import { assignZ, breakDependencyCycles, dependencyWouldCycleIn, normalizeScene2DLayers, normalizeZ } from '../../lib/scene2d/normalize'
-import { ATMOSPHERE_KINDS, ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS, DEFAULT_EFFECTS, drawAtmosphere, effectFilter, finiteNumber, hasCanvasFilterEffects, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip } from '../../lib/scene2d/layerStyle'
+import { ATMOSPHERE_KINDS, ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS, DEFAULT_EFFECTS, drawAtmosphere, effectFilter, finiteNumber, hasCanvasFilterEffects, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip, stripFlipCss } from '../../lib/scene2d/layerStyle'
 import type { AnimatorLayer, AnimatorLayerType, AnimatorScene, Atmosphere, LayerEffects, LayerStrip, Point, VisualAnimatorLayer, VisualLayerType } from '../../lib/scene2d/types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
@@ -483,6 +484,10 @@ export function SceneAnimatorPanel() {
   const selectedModelSource = selected?.type === 'model3d' ? selected.source : null
   const selectedModelClip = selected?.type === 'model3d' ? selected.animation.clip : undefined
 
+  /** The video elements the stage holds for the scene's video layers (what an export frame must wait for). */
+  const sceneVideoElements = () => sceneRef.current.layers.filter(layer => layer.type === 'video')
+    .flatMap(layer => findLayerElements(canvasRef.current, layer.id))
+    .filter((element): element is HTMLVideoElement => element instanceof HTMLVideoElement)
   const syncSceneMedia = useCallback((sceneSeconds: number) => {
     sceneRef.current.layers.filter(layer => layer.type === 'model3d').forEach(layer => {
       findLayerElements(canvasRef.current, layer.id).forEach(element => {
@@ -1712,6 +1717,7 @@ export function SceneAnimatorPanel() {
         const seconds = Math.min(current.duration, index / fps)
         const progress = sceneProgressFromSeconds(seconds, current.duration)
         syncSceneMedia(seconds)
+        await videosSettled(sceneVideoElements())
         await exportStage.renderFrame(progress)
         if (!paintScene(canvas, progress, exportStage.canvases)) throw new Error('Could not paint export frame.')
         const frame = new VideoFrame(canvas, { timestamp: index * frameDurationUs, duration: frameDurationUs })
@@ -2612,7 +2618,7 @@ export function SceneAnimatorPanel() {
     if (!layer.visible) return null
     const edgeMove = (event: ReactPointerEvent<HTMLElement>) => { if (layer.type !== 'model3d') return startGesture(event, layer, 'move'); const box = event.currentTarget.getBoundingClientRect(); const edge = (event.clientX - box.left) / box.width < .18 || (event.clientX - box.left) / box.width > .82 || (event.clientY - box.top) / box.height < .18 || (event.clientY - box.top) / box.height > .82; startGesture(event, layer, edge ? 'move' : 'orbit') }
     return states.map((state, index) => {
-      const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, mixBlendMode: effects.blendMode }
+      const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)${stripFlipCss(state)}`, mixBlendMode: effects.blendMode }
       const layerShortSide = Math.min(previewWidth * (layer.type === 'model3d' ? .52 : 1) * state.scale, previewHeight * (layer.type === 'model3d' ? .75 : 1) * state.scale)
       const maskStyle: CSSProperties = { overflow: 'hidden', borderRadius: effects.mask === 'ellipse' ? '50%' : effects.mask === 'rounded' ? `${layerShortSide * effects.maskRadius / 100}px` : undefined }
       const isPrimary = index === 0

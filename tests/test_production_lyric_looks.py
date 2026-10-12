@@ -89,3 +89,11 @@ def test_a_look_patch_is_accepted_by_the_video2d_editor():
                 for cue in TITLE_BUILDERS[entry["template"]]({"caption": "una luz"}, {"start": 0, "duration": 3, "width": 1920, "height": 1080})]
         texts = edit({"version": 1, "input": {"document": document, "operations": ops, "full": True}})["result"]["document"]["texts"]
         assert texts[0]["font"] == entry["look"]["font"], entry["id"]
+
+
+def test_a_named_finish_must_exist_and_a_raw_finish_or_none_passes():
+    from services.production_lyric_looks import check_finish
+    for style in ({}, {"finish": {"preset": "noir"}}, {"finish": {"preset": "warmCinema"}}, {"finish": {"grade": {"contrast": 1.1}}}):
+        check_finish(style)
+    with pytest.raises(LyricLookError, match="style.finish.preset must be one of"):
+        check_finish({"finish": {"preset": "noire"}})

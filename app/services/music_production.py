@@ -55,6 +55,7 @@ DYMO_READABLE = {"color": "#141210", "box": {"kind": "tape", "color": "#F4EEE2",
 MAX_LOST_JOBS = 3                                        # per shot: then a vanished job counts as a failed take
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
+SHOT_KINDS = ("h3", "still", "clip", "screen", "scene3d", "scene2d")
 _threads: dict[str, threading.Thread] = {}
 _edits: dict[str, threading.Thread] = {}
 _lock = threading.Lock()
@@ -103,11 +104,12 @@ SPEC_SCHEMA: dict[str, Any] = {
         "sets": {"type": "object", "description": "name -> {prompt, seed}: painted sets for scene3d background, drawn eye-level with an open floor and nobody in it, in the same image batch as the models"},
         "models": {"type": "object", "description": "name -> {from (cast id, stills name or picture URL) or prompt, rig (humanoid, prop, vehicle, quadruped, flying, serpentine, none; humanoid for a cast id), animations [clip names], seed}: textured Hunyuan3D GLBs, rigged with clips on the song's tempo, made in one batch after cast. A scene3d cast entry uses the name."},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
-            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
+            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d", "scene2d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
             "scene3d": {"type": "object", "description": "Native Video 3D: template or document; cast {role or object id: GLB/picture or {source, clip, motion...}}, background (painted set projected on the floor), floor, GLB subject/slots, camera, atmosphere and movement"},
+            "scene2d": {"type": "object", "description": "Video 2D music card (music-*, see scenes.catalog): template, cast {slot: picture or cast id (its cutout)}, background (picture or seamless video; default the shot's still or a frame drawn from its frame prompt), controls. The card moves its own camera; shot camera does not apply"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"},
             "allow": {"type": "array", "maxItems": 3, "items": {"enum": ["still", "dark", "secondary"]},
@@ -156,8 +158,8 @@ def _require_image_models(spec: dict) -> None:
 
 
 def _require_shot(shot: Any, keys: set) -> None:
-    if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen", "scene3d"):
-        raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen|scene3d")
+    if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in SHOT_KINDS:
+        raise ProductionError("invalid_spec", "each shot needs key and kind " + "|".join(SHOT_KINDS))
     if shot["key"] in keys:
         raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
     keys.add(shot["key"])
@@ -174,12 +176,23 @@ def _require_scene3d(shot: Any) -> None:
         raise ProductionError("invalid_spec", str(error)) from error
 
 
+def _require_scene2d(shot: Any) -> None:
+    if not isinstance(shot, dict) or shot.get("kind") != "scene2d":
+        return
+    from services.production_scene2d import Scene2dError, validate_scene2d_shot
+    try:
+        validate_scene2d_shot(shot)
+    except Scene2dError as error:
+        raise ProductionError(error.code, str(error)) from error
+
+
 def _require_shots(spec: dict) -> None:
     keys: set = set()
     for shot in spec["shots"]:
         _require_shot(shot, keys)
     for shot in [*spec["shots"], *(spec.get("fill") or [])]:
         _require_scene3d(shot)
+        _require_scene2d(shot)
 
 
 def validate_spec(spec: Any) -> dict:
@@ -190,11 +203,12 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
-    from services.production_lyric_looks import LyricLookError, check_lyric_looks
+    from services.production_lyric_looks import LyricLookError, check_finish, check_lyric_looks
     from services.production_models import ModelError, check_models
     try:
         check_models(spec)
         check_lyric_looks(spec["style"])
+        check_finish(spec["style"])
     except (ModelError, LyricLookError) as error:
         raise ProductionError("invalid_spec", str(error)) from error
     from services.production_resolution import check_resolution
@@ -649,7 +663,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if data.get("dry_run") is True:
             from services.production_dry_run import dry_run
             return {"version": 1, "status": "completed", "operation": RUN,
-                    "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]), production_id=data["production_id"])}
+                    "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]), production_id=data["production_id"],
+                                      workspace=data["workspace"])}
         if mcp is None and (not token() or not app_url()):
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"

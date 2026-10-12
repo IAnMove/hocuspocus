@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  CATALOG_VERSION,
-  CANDIDATE_SCENE_TEMPLATES,
+  ALL_SCENE_TEMPLATES,
+  SCENE_TEMPLATE_ALIASES,
+  getCandidateSceneTemplate,
+  templateCatalogVersion,
 } from '../src/features/sceneTemplates/catalog.ts'
 import {
   candidateDemoBindings,
@@ -13,7 +15,8 @@ import { keyframes, layer, pulse } from '../src/features/sceneTemplates/sceneBui
 import { parseSceneFile, serializeSceneFile } from '../src/lib/sceneFile.ts'
 import { sceneFromLibraryPayload } from '../src/lib/sceneLibrary.ts'
 
-const IDS = CANDIDATE_SCENE_TEMPLATES.map(template => template.id)
+const IDS = ALL_SCENE_TEMPLATES.map(template => template.id)
+const versionOf = id => templateCatalogVersion(getCandidateSceneTemplate(id))
 const VARIANTS = ['coral', 'teal']
 
 const cases = () => IDS.flatMap(id => VARIANTS.map(variant => ({ id, variant })))
@@ -120,9 +123,9 @@ const assertRelationships = scene => {
   }
 }
 
-test('all 24 candidate builders compile both deterministic demo variants', () => {
-  assert.equal(IDS.length, 24)
-  assert.equal(new Set(IDS).size, 24, 'candidate builder IDs are unique')
+test('all 41 cards compile both deterministic demo variants', () => {
+  assert.equal(IDS.length, 41)
+  assert.equal(new Set(IDS).size, 41, 'card IDs are unique')
   const failures = []
   for (const current of cases()) {
     try {
@@ -159,9 +162,9 @@ test('all candidate scenes preserve exact slot sources in candidate provenance',
       bindingRecord(candidateDemoBindings(current.id, current.variant)),
       `${current.id}/${current.variant} slot provenance`,
     )
-    assert.equal(scene.narrative?.controls.catalogVersion, CATALOG_VERSION)
+    assert.equal(scene.narrative?.controls.catalogVersion, versionOf(current.id))
     assert.equal(scene.narrative?.controls.templateVersion, 1)
-    assert.equal(scene.narrative?.controls.reviewStatus, 'candidate')
+    assert.equal(scene.narrative?.controls.reviewStatus, 'approved')
   }
 })
 
@@ -196,28 +199,28 @@ test('keyframed templates expose the actual endpoint poses to legacy editor cont
 
 test('compiler rejects repeated GLB sources and mismatched inline MIME types', () => {
   const pair = candidateDemoBindings('space-chase', 'coral')
-  assert.throws(() => compileCandidateScene('space-chase', { ...pair, prop: pair.hero }), /GLB.*repetid/i)
+  assert.throws(() => compileCandidateScene('space-chase', { ...pair, prop_1: pair.subject_1 }), /GLB.*repetid/i)
   assert.throws(() => compileCandidateScene('space-chase', {
-    ...pair, hero: { ...pair.hero, source: 'data:image/png;base64,AA==' },
+    ...pair, subject_1: { ...pair.subject_1, source: 'data:image/png;base64,AA==' },
   }), /MIME/i)
   const cinema = candidateDemoBindings('cinema-establishing', 'coral')
   assert.throws(() => compileCandidateScene('cinema-establishing', {
-    ...cinema, plate: { ...cinema.plate, source: pair.hero.source },
+    ...cinema, background: { ...cinema.background, source: pair.subject_1.source },
   }), /MIME/i)
   assert.doesNotThrow(() => compileCandidateScene('cinema-establishing', {
-    ...cinema, plate: { type: 'image', source: '/api/v1/files/asset-id' },
+    ...cinema, background: { type: 'image', source: '/api/v1/files/asset-id' },
   }))
 })
 
-test('chorus camera pulses around its declared pose without discarding animation', () => {
-  const camera = candidateDemoScene('music-chorus').layers.find(item => item.type === 'camera')
+test('the chorus alias pulses the camera around its declared pose without discarding animation', () => {
+  const camera = compileCandidateScene('music-chorus', candidateDemoBindings('music-pulse'), { drift: 0 }).layers.find(item => item.type === 'camera')
   assert.equal(camera.animation.keyframes[0].scale, 1.04)
   assert.equal(camera.animation.keyframes.at(-1).scale, 1.04)
   assert.equal(Math.max(...camera.animation.keyframes.map(frame => frame.scale)), 1.04 * (1 + .09 * .6))
   assert.throws(() => pulse({ duration: 4, bpm: 120, intensity: .6, bindings: {} }, camera), /keyframes existentes/i)
 })
 
-test('all 24 builders have distinct motion fingerprints beyond asset sources and names', () => {
+test('all 41 cards have distinct motion fingerprints beyond asset sources and names', () => {
   const fingerprints = new Map()
   for (const id of IDS) {
     const fingerprint = motionFingerprint(build({ id, variant: 'coral' }))
@@ -225,7 +228,7 @@ test('all 24 builders have distinct motion fingerprints beyond asset sources and
     assert.equal(previous, undefined, `${id} shares its motion fingerprint with ${previous ?? 'another candidate'}`)
     fingerprints.set(fingerprint, id)
   }
-  assert.equal(fingerprints.size, 24)
+  assert.equal(fingerprints.size, 41)
 })
 
 test('candidate scenes round-trip through scene JSON and MP4 sidecar payload shape', () => {
@@ -234,9 +237,9 @@ test('candidate scenes round-trip through scene JSON and MP4 sidecar payload sha
     const parsed = parseSceneFile(serializeSceneFile(original))
     const recovered = sceneFromLibraryPayload({ params: { scene: parsed } })
     assert.equal(recovered.narrative?.templateId, current.id)
-    assert.equal(recovered.narrative?.controls.catalogVersion, CATALOG_VERSION)
+    assert.equal(recovered.narrative?.controls.catalogVersion, versionOf(current.id))
     assert.equal(recovered.narrative?.controls.templateVersion, 1)
-    assert.equal(recovered.narrative?.controls.reviewStatus, 'candidate')
+    assert.equal(recovered.narrative?.controls.reviewStatus, 'approved')
     assert.deepEqual(provenanceRecord(recovered), provenanceRecord(original), `${current.id}/${current.variant} recovered provenance`)
   }
 })
@@ -250,15 +253,15 @@ test('candidate compiler rejects unknown, incomplete, invalid, unsafe, and out-o
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', {}),
-    /slot obligatorio hero/i,
+    /slot obligatorio subject_1/i,
   )
   assert.throws(
-    () => compileCandidateScene('cinema-establishing', { ...valid, unknown: valid.hero }),
+    () => compileCandidateScene('cinema-establishing', { ...valid, unknown: valid.subject_1 }),
     /slot desconocido/i,
   )
   assert.throws(
-    () => compileCandidateScene('cinema-establishing', { ...valid, hero: { ...valid.hero, type: 'video' } }),
-    /slot hero no admite video/i,
+    () => compileCandidateScene('cinema-establishing', { ...valid, subject_1: { ...valid.subject_1, type: 'video' } }),
+    /slot subject_1 no admite video/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', valid, { duration: Number.NaN }),
@@ -269,11 +272,90 @@ test('candidate compiler rejects unknown, incomplete, invalid, unsafe, and out-o
     /Duración/i,
   )
   assert.throws(
-    () => compileCandidateScene('cinema-establishing', { ...valid, hero: { ...valid.hero, source: 'blob:unsafe-preview' } }),
+    () => compileCandidateScene('cinema-establishing', { ...valid, subject_1: { ...valid.subject_1, source: 'blob:unsafe-preview' } }),
     /asset|referencia|durable/i,
   )
   assert.throws(
-    () => compileCandidateScene('cinema-establishing', { ...valid, hero: { ...valid.hero, source: 'javascript:alert(1)' } }),
+    () => compileCandidateScene('cinema-establishing', { ...valid, subject_1: { ...valid.subject_1, source: 'javascript:alert(1)' } }),
     /asset|referencia|durable/i,
   )
+})
+
+const choiceValues = template => Object.entries(template.controls)
+  .filter(([, spec]) => spec.kind === 'choice')
+  .flatMap(([key, spec]) => spec.options.map(value => ({ [key]: value })))
+
+const bindingsFor = (id, controls = {}) => {
+  const bindings = candidateDemoBindings(id)
+  // Optional slots a choice needs (pinball's bouncing prop) get the demo prop.
+  if (controls.bouncer === 'prop') bindings.prop_1 = demoProp()
+  return bindings
+}
+const demoProp = () => candidateDemoBindings('music-crowd-surf').prop_1
+
+test('every card compiles at its defaults, at 3 and 12 seconds, and at every choice it offers', () => {
+  const failures = []
+  for (const template of ALL_SCENE_TEMPLATES) {
+    for (const controls of [{}, { duration: 3 }, { duration: 12 }, ...choiceValues(template)]) {
+      try {
+        const scene = compileCandidateScene(template.id, bindingsFor(template.id, controls), controls)
+        assertSceneFrames(scene)
+        assertRelationships(scene)
+        for (const [key, value] of Object.entries(controls)) assert.equal(scene.narrative.controls[key], value)
+      } catch (error) {
+        failures.push(`${template.id} ${JSON.stringify(controls)}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+  assert.deepEqual(failures, [])
+})
+
+test('every alias compiles as its card with its preset, records the alias, and lets a caller override', () => {
+  for (const [alias, { card, preset }] of Object.entries(SCENE_TEMPLATE_ALIASES)) {
+    const scene = compileCandidateScene(alias, bindingsFor(card, preset))
+    assert.equal(scene.narrative.templateId, card)
+    assert.equal(scene.narrative.controls.alias, alias)
+    for (const [key, value] of Object.entries(preset)) assert.equal(scene.narrative.controls[key], value)
+    const direct = compileCandidateScene(card, bindingsFor(card, preset), preset)
+    assert.deepEqual(scene.layers, direct.layers, `${alias} is ${card} with ${JSON.stringify(preset)}`)
+  }
+  const overridden = compileCandidateScene('music-stage', candidateDemoBindings('music-pulse'), { camera: 'push' })
+  assert.equal(overridden.narrative.controls.camera, 'push')
+})
+
+test('merged cards keep the look of the card they absorbed', () => {
+  const layerIds = scene => scene.layers.map(item => item.id)
+  const explosion = compileCandidateScene('space-explosion', candidateDemoBindings('space-broadside'))
+  assert.deepEqual(layerIds(explosion), ['background', 'subject_1', 'prop_1', 'beam-0', 'explosion-flash', 'explosion-debris', 'camera'])
+  assert.equal(explosion.layers.find(item => item.id === 'camera').animation.shake.amount, .18)
+  assert.ok(layerIds(compileCandidateScene('space-shield', candidateDemoBindings('space-broadside'))).includes('impact-shield'))
+  assert.ok(layerIds(compileCandidateScene('cinema-isolation', candidateDemoBindings('cinema-establishing'))).includes('atmosphere-rain'))
+  assert.ok(layerIds(compileCandidateScene('music-parallax', candidateDemoBindings('cinema-tracking'))).includes('atmosphere-speedlines'))
+  const swarm = compileCandidateScene('music-satellite-swarm', candidateDemoBindings('music-orbit'))
+  assert.equal(swarm.layers.find(item => item.id === 'subject_1').animation.keyframes, undefined, 'the figure holds')
+  assert.equal(swarm.layers.find(item => item.id === 'prop_1').animation.orbit.count, 5)
+  const ricochet = compileCandidateScene('music-ricochet-pass', { ...candidateDemoBindings('music-pinball'), prop_1: demoProp() })
+  assert.equal(ricochet.layers.find(item => item.id === 'prop_1').transform.scale, .18)
+  assert.throws(() => compileCandidateScene('music-ricochet-pass', candidateDemoBindings('music-pinball')), /slot obligatorio prop_1/)
+})
+
+test('choice and text controls are checked with stable codes', () => {
+  const bindings = candidateDemoBindings('music-pulse')
+  const codeOf = fn => { try { fn() } catch (error) { return error.code } return 'compiled' }
+  assert.equal(codeOf(() => compileCandidateScene('music-pulse', bindings, { camera: 'dolly' })), 'template_bad_control')
+  assert.equal(codeOf(() => compileCandidateScene('music-pulse', bindings, { camera: 3 })), 'template_bad_control')
+  assert.equal(codeOf(() => compileCandidateScene('music-pulse', bindings, { mood: 'calm' })), 'template_bad_control')
+  assert.equal(codeOf(() => compileCandidateScene('music-pulse', bindings, { drift: 1.5 })), 'template_bad_control')
+  const history = candidateDemoBindings('documentary-history')
+  assert.equal(codeOf(() => compileCandidateScene('documentary-history', history, { caption: 'x'.repeat(81) })), 'template_bad_control')
+  assert.equal(codeOf(() => compileCandidateScene('documentary-history', history, { caption: '🎞'.repeat(80) })), 'compiled', 'code points, not UTF-16 units')
+  assert.equal(codeOf(() => compileCandidateScene('trailer-teaser', history)), 'template_retired')
+  assert.equal(codeOf(() => compileCandidateScene('cinema-two-shot', { ...candidateDemoBindings('cinema-two-shot'), prop: candidateDemoBindings('cinema-two-shot').subject_2 })), 'slot_alias_conflict')
+})
+
+test('old slot names compile to the new layer ids', () => {
+  const art = candidateDemoBindings('cinema-two-shot')
+  const scene = compileCandidateScene('cinema-two-shot', { hero: art.subject_1, plate: art.background, prop: art.subject_2 })
+  assert.deepEqual(scene.layers.map(item => item.id), ['background', 'subject_1', 'subject_2', 'camera'])
+  assert.deepEqual(scene.narrative.assets.map(item => item.slot), ['subject_1', 'background', 'subject_2'])
 })

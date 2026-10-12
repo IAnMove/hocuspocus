@@ -42,9 +42,10 @@ export async function commitTemplateSlotChoice(
   return { action: 'apply', item: asset }
 }
 
-export function acceptForSlotKinds(kinds: readonly ('image' | 'model3d')[]): string {
+export function acceptForSlotKinds(kinds: readonly ('image' | 'model3d' | 'video')[]): string {
   const parts: string[] = []
   if (kinds.includes('image')) parts.push('image/*')
+  if (kinds.includes('video')) parts.push('video/*')
   if (kinds.includes('model3d')) parts.push('.glb,model/gltf-binary')
   return parts.join(',')
 }

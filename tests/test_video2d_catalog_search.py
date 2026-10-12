@@ -24,13 +24,12 @@ PHRASES = [
     ("close-up of the singer", "cinema-closeup"),
     ("entrada del héroe", "cinema-hero"),
     ("persecución espacial", "space-chase"),
-    ("explosión de una nave", "space-explosion"),
+    ("explosión de una nave", "space-broadside"),
     ("producto girando", "music-product"),
     ("rebota como una bola de pinball", "music-pinball"),
     ("choca esos cinco", "music-high-five"),
     ("documental histórico con fecha", "documentary-history"),
-    ("trailer teaser", "trailer-teaser"),
-    ("lyric video vertical para tiktok", "lyric-vertical"),
+    ("trailer teaser", "trailer-slam"),
     ("rótulo con el nombre", "lower-third-date"),
     ("título de capítulo", "chapter"),
     ("cita", "quote"),
@@ -55,10 +54,20 @@ def test_a_writer_phrase_finds_the_entry_first(phrase, wanted):
     assert within["entries"][0]["id"] == wanted and within["entries"][0]["score"] == found["matches"][0]["score"]
 
 
+def test_merged_and_retired_cards_lead_to_what_replaced_them():
+    """space-explosion is space-broadside with outcome explode; the retired cards point at texts and lyric looks."""
+    assert _search("explosión de una nave")["matches"][0]["id"] == "space-broadside"
+    lyric = _search("lyric video vertical para tiktok")
+    assert lyric["matches"][0]["kind"] == "lyric_looks" and lyric["partial"] is True
+    assert not any(item["id"] in {"trailer-teaser", "lyric-vertical", "space-explosion"} for item in _search("trailer explosión lyric")["matches"])
+
+
 def test_words_no_entry_knows_come_back_and_do_not_count():
     docking = _search("la nave atraca en la estación")
-    assert docking["unknown_words"] == ["atraca"]
-    assert "space-docking" in [item["id"] for item in docking["matches"][:2]]
+    assert docking["unknown_words"] == [] and docking["matches"][0]["id"] == "space-docking"
+    sailing = _search("la nave zarpa de la estación")
+    assert sailing["unknown_words"] == ["zarpa"]
+    assert "space-docking" in [item["id"] for item in sailing["matches"][:2]]
     assert _search("rótulo con el nombre")["unknown_words"] == ["nombre"]
     nothing = _search("zzyzx quux")
     assert nothing["matches"] == [] and nothing["unknown_words"] == ["zzyzx", "quux"]
@@ -132,16 +141,14 @@ def test_title_card_and_trailer_slam_say_they_cover_the_frame():
 
 
 def test_the_review_lines_say_what_the_compiled_scene_does():
+    """The cards the review found dishonest now do what their line says, and the merged and retired ones are gone."""
     intents = {entry["id"]: entry["visualIntent"] for entry in CATALOGS["scenes.templates.catalog"]["entries"]}
-    assert "Nadie entra" in intents["cinema-hero"]
-    assert "No hay escenario" in intents["music-stage"]
-    assert "a la vez" in intents["music-duet"] and "No se alternan" in intents["music-duet"]
-    assert "contraste" not in intents["music-pulse"]
-    assert "quieta" in intents["music-chorus"]
-    assert "no se mueve" in intents["documentary-history"]
-    assert "no se ven" in intents["trailer-teaser"]
-    assert "no acepta tu letra" in intents["lyric-vertical"]
+    assert "entra en el plano" in intents["cinema-hero"]
+    assert "se alternan al ritmo" in intents["music-duet"]
+    assert "contraste" not in intents["music-pulse"] and "sweep" in intents["music-pulse"]
+    assert "movimiento lento" in intents["documentary-history"]
     assert "No hay gaviotas" in intents["city-postcard"]
+    assert not {"music-stage", "music-chorus", "trailer-teaser", "lyric-vertical"} & set(intents)
 
 
 def test_a_literal_word_outranks_its_synonym_and_score_is_unchanged():

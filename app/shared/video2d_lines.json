@@ -275,18 +275,78 @@
       "titleEs": "Prensa riso", "titleEn": "Riso press",
       "lineEs": "Reimprime el plano en cuatro tintas de risografía (naranja, rosa, azul y negro) sobre papel, con trama, desajuste de registro y golpes en los cortes y los tiempos.",
       "lineEn": "Reprints the shot in four risograph inks (orange, pink, blue and black) on paper, with halftone, misregistration and kicks on cuts and beats."
+    },
+    "natural": {
+      "titleEs": "Natural", "titleEn": "Natural",
+      "lineEs": "Curva de película suave y el color tal cual. El grado neutro, como «natural» en 3D.",
+      "lineEn": "A gentle film curve and the colour as shot. The neutral grade, as «natural» in 3D."
+    },
+    "teal_orange": {
+      "titleEs": "Verde azulado y naranja", "titleEn": "Teal and orange",
+      "lineEs": "Luces cálidas anaranjadas y sombras verde azuladas, con más contraste. El look de cine de acción.",
+      "lineEn": "Warm orange highlights and teal shadows, with more contrast. The action-film look."
+    },
+    "bleach": {
+      "titleEs": "Blanqueo", "titleEn": "Bleach bypass",
+      "lineEs": "Color muy apagado y plateado, con mucho contraste y la luz algo más baja.",
+      "lineEn": "Strongly drained, silvery colour with hard contrast and slightly lower light."
+    },
+    "noir": {
+      "titleEs": "Cine negro", "titleEn": "Noir",
+      "lineEs": "Casi en blanco y negro, oscuro y frío, con mucho contraste y una viñeta fuerte.",
+      "lineEn": "Nearly black and white, dark and cold, with hard contrast and a heavy vignette."
+    },
+    "sepia": {
+      "titleEs": "Sepia", "titleEn": "Sepia",
+      "lineEs": "Color casi apagado bajo un tono marrón dorado, con una viñeta suave.",
+      "lineEn": "Mostly drained colour under a gold-brown tone, with a soft vignette."
+    },
+    "flashback": {
+      "titleEs": "Recuerdo", "titleEn": "Flashback",
+      "lineEs": "Recuerdo cálido y desvaído: negros levantados, menos color, grano y viñeta.",
+      "lineEn": "A faded warm memory: lifted blacks, less colour, grain and a vignette."
+    },
+    "dream": {
+      "titleEs": "Sueño", "titleEn": "Dream",
+      "lineEs": "Imagen luminosa y suave con tono rosado, resplandor y rayos de luz.",
+      "lineEn": "A bright, soft picture with a pink tone, glow and light rays."
+    },
+    "giallo": {
+      "titleEs": "Giallo", "titleEn": "Giallo",
+      "lineEs": "Tono rojo intenso, color saturado, más contraste y una viñeta: terror italiano de los setenta.",
+      "lineEn": "A strong red tone, saturated colour, more contrast and a vignette: seventies Italian horror."
+    },
+    "cold": {
+      "titleEs": "Frío", "titleEn": "Cold",
+      "lineEs": "Color frío y azulado sobre todo el plano.",
+      "lineEn": "Cold, bluish colour over the whole shot."
+    },
+    "warm": {
+      "titleEs": "Cálido", "titleEn": "Warm",
+      "lineEs": "Color cálido y dorado sobre todo el plano.",
+      "lineEn": "Warm, golden colour over the whole shot."
+    },
+    "vhs": {
+      "titleEs": "VHS", "titleEn": "VHS",
+      "lineEs": "Cinta de vídeo: color corrido, filas que tiemblan, ruido, la barra de arrastre y líneas de barrido.",
+      "lineEn": "Video tape: colour bleed, wobbling rows, noise, the tracking bar and scanlines."
+    },
+    "film": {
+      "titleEs": "Película", "titleEn": "Film",
+      "lineEs": "Curva de película con grano fino.",
+      "lineEn": "A film curve with fine grain."
     }
   },
   "lyric_looks": {
     "cinema": {
       "titleEs": "Subtítulo de cine", "titleEn": "Cinema subtitle",
-      "lineEs": "Subtítulo serif claro abajo, con contorno y sombra; entra y sale con un fundido. Va con Cine cálido.",
-      "lineEn": "A light serif subtitle at the bottom with an outline and a shadow; it fades in and out. Pairs with Warm cinema."
+      "lineEs": "Subtítulo serif claro abajo, con contorno y sombra; entra y sale con un fundido. Va con Cine cálido, Verde azulado y naranja, Cálido y Película.",
+      "lineEn": "A light serif subtitle at the bottom with an outline and a shadow; it fades in and out. Pairs with Warm cinema, Teal and orange, Warm and Film."
     },
     "storybook": {
       "titleEs": "Cuento rotulado a mano", "titleEn": "Hand-lettered storybook",
-      "lineEs": "Letra manuscrita oscura con borde claro, un poco inclinada; entra palabra a palabra con la línea y flota.",
-      "lineEn": "Dark handwritten letters with a light outline, slightly tilted; they enter word by word with the line and float."
+      "lineEs": "Letra manuscrita oscura con borde claro, un poco inclinada; entra palabra a palabra con la línea y flota. Va con Sueño.",
+      "lineEn": "Dark handwritten letters with a light outline, slightly tilted; they enter word by word with the line and float. Pairs with Dream."
     },
     "marker-pop": {
       "titleEs": "Rotulador pop", "titleEn": "Marker pop",
@@ -295,8 +355,8 @@
     },
     "neon": {
       "titleEs": "Letrero de neón", "titleEn": "Neon sign",
-      "lineEs": "Mayúsculas rosa claro con resplandor magenta; se enfocan al entrar y parpadean. Va con Neón nocturno.",
-      "lineEn": "Light-pink capitals with a magenta glow; they come into focus and flicker. Pairs with Night neon."
+      "lineEs": "Mayúsculas rosa claro con resplandor magenta; se enfocan al entrar y parpadean. Va con Neón nocturno y Giallo.",
+      "lineEn": "Light-pink capitals with a magenta glow; they come into focus and flicker. Pairs with Night neon and Giallo."
     },
     "big-word": {
       "titleEs": "Estribillo grande", "titleEn": "Big centred chorus",
@@ -305,8 +365,8 @@
     },
     "typewriter": {
       "titleEs": "Documento tecleado", "titleEn": "Typed document",
-      "lineEs": "Letra de máquina de escribir abajo a la izquierda que se teclea con la línea. Va con Documental antiguo.",
-      "lineEn": "Typewriter letters bottom left that type out with the line. Pairs with Old documentary."
+      "lineEs": "Letra de máquina de escribir abajo a la izquierda que se teclea con la línea. Va con Documental antiguo, Sepia y Recuerdo.",
+      "lineEn": "Typewriter letters bottom left that type out with the line. Pairs with Old documentary, Sepia and Flashback."
     },
     "paper-strip": {
       "titleEs": "Tira de papel", "titleEn": "Torn paper strip",
@@ -325,23 +385,230 @@
     },
     "quiet-left": {
       "titleEs": "Discreto abajo a la izquierda", "titleEn": "Quiet lower left",
-      "lineEs": "Texto blanco pequeño abajo a la izquierda que sube al entrar.",
-      "lineEn": "Small white text bottom left that rises in."
+      "lineEs": "Texto blanco pequeño abajo a la izquierda que sube al entrar. Va con Natural, Blanqueo y Frío.",
+      "lineEn": "Small white text bottom left that rises in. Pairs with Natural, Bleach bypass and Cold."
     },
     "engraved": {
       "titleEs": "Mayúsculas grabadas", "titleEn": "Engraved capitals",
-      "lineEs": "Mayúsculas serif claras abajo que aparecen letra a letra con la línea.",
-      "lineEn": "Light serif capitals at the bottom that appear letter by letter with the line."
+      "lineEs": "Mayúsculas serif claras abajo que aparecen letra a letra con la línea. Va con Cine negro.",
+      "lineEn": "Light serif capitals at the bottom that appear letter by letter with the line. Pairs with Noir."
     },
     "arcade": {
       "titleEs": "Mayúsculas arcade", "titleEn": "Arcade capitals",
-      "lineEs": "Mayúsculas monoespaciadas blancas con sombra dura, letra a letra con la línea; desaparecen de golpe.",
-      "lineEn": "White monospace capitals with a hard shadow, letter by letter with the line; they cut out at once."
+      "lineEs": "Mayúsculas monoespaciadas blancas con sombra dura, letra a letra con la línea; desaparecen de golpe. Va con VHS.",
+      "lineEn": "White monospace capitals with a hard shadow, letter by letter with the line; they cut out at once. Pairs with VHS."
     },
     "wave-chant": {
       "titleEs": "Cántico en ola", "titleEn": "Wavy chant",
       "lineEs": "Letra display clara que entra palabra a palabra con la línea, ondula y cae al salir.",
       "lineEn": "Light display letters that enter word by word with the line, wave, and fall away at the end."
+    }
+  },
+  "templates": {
+    "cinema-establishing": {
+      "titleEs": "Plano general de situación", "titleEn": "Establishing shot",
+      "lineEs": "Plano general: una figura pequeña en el lugar mientras la cámara se abre y se desliza, con polvo en el aire. Con mood lonely el picado sube como una grúa, la figura queda sola y llueve.",
+      "lineEn": "Wide establishing shot: a small figure in the place while the camera opens and slides, with dust in the air. With mood lonely the high angle cranes up, the figure is left alone and it rains."
+    },
+    "cinema-reveal": {
+      "titleEs": "Revelación", "titleEn": "Reveal",
+      "lineEs": "Revelación: la figura aparece con un fundido y entra un poco en el plano mientras la cámara se abre y se desliza de lado.",
+      "lineEn": "Reveal: the figure fades in and steps into the shot while the camera opens and slides sideways."
+    },
+    "cinema-closeup": {
+      "titleEs": "Primer plano", "titleEn": "Close-up",
+      "lineEs": "Primer plano: la figura llena el cuadro y la cámara empuja despacio hacia ella, con bokeh delante. Para una cara, un cantante o un momento íntimo.",
+      "lineEn": "Close-up: the figure fills the frame and the camera slowly pushes in, with bokeh in front. For a face, a singer or an intimate moment."
+    },
+    "cinema-two-shot": {
+      "titleEs": "Plano a dos", "titleEn": "Two-shot",
+      "lineEs": "Dos personajes cara a cara, hablando o en tensión: la cámara hace un arco lento o empuja con paralaje y las dos figuras se mecen un poco.",
+      "lineEn": "Two characters face to face, talking or in tension: the camera makes a slow arc or push with parallax and both figures sway a little."
+    },
+    "cinema-detail": {
+      "titleEs": "Plano detalle", "titleEn": "Detail insert",
+      "lineEs": "Plano detalle: un objeto o una pista grande en el cuadro; la cámara se abre poco a poco y se desliza para mostrarlo.",
+      "lineEn": "Detail insert: an object or a clue large in the frame; the camera slowly opens and slides to show it."
+    },
+    "cinema-hero": {
+      "titleEs": "Entrada del héroe", "titleEn": "Hero entrance",
+      "lineEs": "Entrada del héroe: la figura entra por un lado o sube al cuadro mientras la cámara sube y se abre en contrapicado, con brasas en el aire.",
+      "lineEn": "Hero entrance: the figure enters from one side or rises into the frame while the camera rises and opens from a low angle, with embers in the air."
+    },
+    "cinema-tracking": {
+      "titleEs": "Travelling de seguimiento", "titleEn": "Tracking shot",
+      "lineEs": "Travelling: la figura cruza el plano de un lado a otro y la cámara la acompaña con paralaje, entre hojas; con atmosphere streaks pasan rayas de velocidad.",
+      "lineEn": "Tracking shot: the figure crosses the shot from side to side and the camera follows with parallax, through leaves; with atmosphere streaks speed lines rush past."
+    },
+    "music-pulse": {
+      "titleEs": "Pulso musical", "titleEn": "Music pulse",
+      "lineEs": "Un cantante o bailarín rebota al ritmo en el escenario mientras la cámara empuja, con luciérnagas. El control camera la cambia: barrido lateral (sweep), apertura de final (open) o latido de estribillo al compás (beat); atmosphere confetti echa confeti.",
+      "lineEn": "A singer or dancer bounces to the beat on stage while the camera pushes in, with fireflies. The camera control changes it: a side sweep (sweep), a finale opening (open) or a chorus pulse on the beat (beat); atmosphere confetti adds confetti."
+    },
+    "music-duet": {
+      "titleEs": "Dúo musical", "titleEn": "Music duet",
+      "lineEs": "Dúo: dos cantantes o bailarines se turnan al ritmo, late uno y luego el otro, mientras la cámara se balancea un poco.",
+      "lineEn": "Duet: two singers or dancers take turns on the beat, one pulses and then the other, while the camera rocks a little."
+    },
+    "music-orbit": {
+      "titleEs": "Órbita musical", "titleEn": "Music orbit",
+      "lineEs": "La figura rebota al ritmo y varias copias de un objeto giran en órbita a su alrededor mientras la cámara empuja. Con bounce off la figura se queda quieta y solo orbitan las copias.",
+      "lineEn": "The figure bounces to the beat while copies of an object orbit around it and the camera pushes in. With bounce off the figure holds still and only the copies orbit."
+    },
+    "music-product": {
+      "titleEs": "Producto musical", "titleEn": "Music product",
+      "lineEs": "Anuncio de producto: el objeto se balancea (gira sobre sí mismo si es un GLB) mientras la cámara empuja con ritmo de videoclip, entre destellos.",
+      "lineEn": "Product spot: the object rocks (it spins on itself if it is a GLB) while the camera pushes in with music video energy, among sparkles."
+    },
+    "space-cruise": {
+      "titleEs": "Crucero espacial", "titleEn": "Space cruise",
+      "lineEs": "Una nave (imagen o GLB) cruza el campo de estrellas y crece al acercarse; la cámara la sigue.",
+      "lineEn": "A ship (a picture or a GLB) crosses the star field and grows as it comes closer; the camera follows it."
+    },
+    "space-orbit": {
+      "titleEs": "Órbita espacial", "titleEn": "Space orbit",
+      "lineEs": "Una nave (imagen o GLB) da vueltas en órbita alrededor de un planeta o una estación mientras la cámara se abre y se desliza.",
+      "lineEn": "A ship (a picture or a GLB) circles in orbit around a planet or a station while the camera opens and slides."
+    },
+    "space-docking": {
+      "titleEs": "Acoplamiento espacial", "titleEn": "Space docking",
+      "lineEs": "Acoplamiento: la nave (imagen o GLB) se acerca a la estación, se hace pequeña al alejarse y atraca; la cámara empuja.",
+      "lineEn": "Docking: the ship (a picture or a GLB) heads for the station, gets smaller as it moves away and docks; the camera pushes in."
+    },
+    "space-chase": {
+      "titleEs": "Persecución espacial", "titleEn": "Space chase",
+      "lineEs": "Persecución: dos naves cruzan el plano una tras otra entre rayas de velocidad; la cámara las sigue, se ladea y tiembla.",
+      "lineEn": "Chase: two ships cross the shot one after the other through speed lines; the camera follows, tilts and shakes."
+    },
+    "space-broadside": {
+      "titleEs": "Andanada espacial", "titleEn": "Space broadside",
+      "lineEs": "Dos naves de perfil se disparan rayos mientras la cámara empuja. El control outcome elige el final: fallan (miss), un escudo para el impacto (shield) o la nave rival explota con restos y temblor (explode).",
+      "lineEn": "Two ships side by side fire beams at each other while the camera pushes in. The outcome control picks the ending: they miss (miss), a shield stops the hit (shield) or the rival ship explodes with debris and a shake (explode)."
+    },
+    "space-warp": {
+      "titleEs": "Salto al hiperespacio", "titleEn": "Hyperspace jump",
+      "lineEs": "Salto al hiperespacio: la nave acelera hacia un punto, se encoge y desaparece entre rayas de velocidad; la cámara empuja.",
+      "lineEn": "Hyperspace jump: the ship speeds toward a point, shrinks and vanishes into speed lines; the camera pushes in."
+    },
+    "documentary-history": {
+      "titleEs": "Documental histórico", "titleEn": "History documentary",
+      "lineEs": "Documental de archivo: la foto avanza despacio con paralaje entre la figura y el primer término, con polvo y acabado de archivo; un rótulo con fecha y un contador de años llevan tus textos. 6 s.",
+      "lineEn": "Archive documentary: the photo pushes in slowly with parallax between the figure and the foreground, with dust and an archive finish; a dated caption and a year counter carry your texts. 6 s."
+    },
+    "city-postcard": {
+      "titleEs": "Postal de ciudad", "titleEn": "City postcard",
+      "lineEs": "Postal de ciudad: la placa se desliza de lado, cruzan hojas y una pancarta de papel lleva tu texto. No hay pájaros. 6 s.",
+      "lineEn": "City postcard: the plate drifts sideways, leaves blow across and a paper banner carries your text. No birds. 6 s."
+    },
+    "music-spiral-exit": {
+      "titleEs": "Salida en espiral", "titleEn": "Spiral exit",
+      "lineEs": "Salida: la figura gira dos vueltas en espiral, se encoge y desaparece en el centro. Cierra un plano o sirve de transición.",
+      "lineEn": "Exit: the figure spins twice in a spiral, shrinks and vanishes in the centre. Closes a shot or works as a transition."
+    },
+    "music-speed-flight": {
+      "titleEs": "Vuelo a toda velocidad", "titleEn": "Speed flight",
+      "lineEs": "La figura cruza el plano volando a toda velocidad, de un lado a otro, mientras el fondo pasa en tira; pide un fondo sin costuras.",
+      "lineEn": "The figure flies across the shot at full speed, from one side to the other, while the background scrolls past; it needs a seamless background."
+    },
+    "music-infinite-fall": {
+      "titleEs": "Caída infinita", "titleEn": "Endless fall",
+      "lineEs": "La figura cae al vacío desde arriba, se hace pequeña y sale por abajo mientras el fondo sube en tira; pide un fondo sin costuras.",
+      "lineEn": "The figure falls into the void from the top, gets smaller and leaves at the bottom while the background scrolls up; it needs a seamless background."
+    },
+    "music-pinball": {
+      "titleEs": "Pinball", "titleEn": "Pinball",
+      "lineEs": "La figura rebota en zigzag como una bola de pinball, con golpes de escala. Con bouncer prop rebota un objeto y la figura se queda de referencia.",
+      "lineEn": "The figure bounces in a zigzag like a pinball, with punches of scale. With bouncer prop an object bounces instead and the figure stays as the reference."
+    },
+    "music-boomerang": {
+      "titleEs": "Bumerán", "titleEn": "Boomerang",
+      "lineEs": "Bumerán: la figura sale en una curva amplia y vuelve girando al punto de partida.",
+      "lineEn": "Boomerang: the figure flies out on a wide curve and comes back spinning to where it started."
+    },
+    "music-cannon-launch": {
+      "titleEs": "Disparo de cañón", "titleEn": "Cannon launch",
+      "lineEs": "La figura sale disparada como de un cañón y abandona el plano en arco por arriba a la derecha.",
+      "lineEn": "The figure is shot out as if from a cannon and leaves the frame in an arc, top right."
+    },
+    "music-orbit-duel": {
+      "titleEs": "Duelo en órbita", "titleEn": "Orbit duel",
+      "lineEs": "Dos figuras giran en órbitas opuestas alrededor del centro y se cruzan, con tensión de videoclip.",
+      "lineEn": "Two figures circle in opposite orbits around the centre and cross each other, with music video tension."
+    },
+    "music-high-five": {
+      "titleEs": "Choca esos cinco", "titleEn": "High five",
+      "lineEs": "Dos personajes se acercan, chocan esos cinco en el centro y se separan con un pequeño rebote.",
+      "lineEn": "Two characters come together, high-five in the middle and part with a small bounce."
+    },
+    "music-magnet-pull": {
+      "titleEs": "Tirón magnético", "titleEn": "Magnet pull",
+      "lineEs": "Imán: la primera figura se queda casi quieta y atrae a la segunda, que llega de lado, rebota y se queda junto a ella.",
+      "lineEn": "Magnet: the first figure holds almost still and pulls the second one in from the side; it bounces and settles next to it."
+    },
+    "music-portal-swap": {
+      "titleEs": "Cambio por portal", "titleEn": "Portal swap",
+      "lineEs": "Dos figuras desaparecen por un portal y reaparecen intercambiando el sitio, entre destellos.",
+      "lineEn": "Two figures vanish through a portal and reappear in each other's place, among sparkles."
+    },
+    "music-trampoline": {
+      "titleEs": "Cama elástica", "titleEn": "Trampoline",
+      "lineEs": "La figura salta en una cama elástica: baja, rebota y sube con un pulso vertical exagerado.",
+      "lineEn": "The figure jumps on a trampoline: it dips, bounces and flies up with a big vertical pulse."
+    },
+    "music-pendulum": {
+      "titleEs": "Péndulo", "titleEn": "Pendulum",
+      "lineEs": "La figura se balancea de lado a lado como un péndulo, con un vaivén hipnótico.",
+      "lineEn": "The figure swings from side to side like a pendulum, with a hypnotic sway."
+    },
+    "music-rubber-band": {
+      "titleEs": "Goma elástica", "titleEn": "Rubber band",
+      "lineEs": "La figura se estira hacia un lado como una goma elástica y vuelve de golpe al centro, una y otra vez.",
+      "lineEn": "The figure stretches to one side like a rubber band and snaps back to the centre, again and again."
+    },
+    "music-card-toss": {
+      "titleEs": "Carta lanzada", "titleEn": "Card toss",
+      "lineEs": "La figura entra girando como una carta lanzada, se deja ver un momento y sale disparada girando. Sirve de entrada o de salida.",
+      "lineEn": "The figure spins in like a thrown card, holds for a moment and flies out spinning. Works as an entrance or an exit."
+    },
+    "music-staircase-pop": {
+      "titleEs": "Escalera", "titleEn": "Staircase pop",
+      "lineEs": "La figura sube una escalera de escalón en escalón, con un rebote en cada uno, y la cámara la sigue.",
+      "lineEn": "The figure climbs a staircase step by step, with a bounce on each step, and the camera follows it."
+    },
+    "music-accordion-clones": {
+      "titleEs": "Clones en acordeón", "titleEn": "Accordion clones",
+      "lineEs": "Clones de la figura se abren en abanico y se cierran como un acordeón al ritmo.",
+      "lineEn": "Clones of the figure fan out and fold back like an accordion on the beat."
+    },
+    "music-domino-wave": {
+      "titleEs": "Ola de dominó", "titleEn": "Domino wave",
+      "lineEs": "Una fila de copias de la figura se inclina por turnos y se endereza, como una ola de fichas de dominó.",
+      "lineEn": "A row of copies of the figure tips over one after another and stands back up, like a wave of dominoes."
+    },
+    "music-conveyor": {
+      "titleEs": "Cinta transportadora", "titleEn": "Conveyor belt",
+      "lineEs": "Copias de la figura pasan en fila sobre una cinta transportadora mientras el fondo corre en tira; pide un fondo sin costuras.",
+      "lineEn": "Copies of the figure pass in a row on a conveyor belt while the background scrolls; it needs a seamless background."
+    },
+    "music-spotlight-relay": {
+      "titleEs": "Relevo de focos", "titleEn": "Spotlight relay",
+      "lineEs": "Dos cantantes se pasan el foco una y otra vez: uno crece y se ilumina mientras el otro se apaga, y la cámara los acompaña.",
+      "lineEn": "Two singers pass the spotlight back and forth: one grows and lights up while the other dims, and the camera moves with them."
+    },
+    "music-corkscrew-rise": {
+      "titleEs": "Ascenso en sacacorchos", "titleEn": "Corkscrew rise",
+      "lineEs": "La figura sube en espiral como un sacacorchos, de abajo hasta salir por arriba, girando de lado a lado.",
+      "lineEn": "The figure rises in a spiral like a corkscrew, from the bottom until it leaves at the top, weaving from side to side."
+    },
+    "music-shockwave": {
+      "titleEs": "Onda expansiva", "titleEn": "Shockwave",
+      "lineEs": "Golpe: la figura crece de un salto con el bajo y la cámara late con el impacto, como una onda expansiva, entre confeti.",
+      "lineEn": "Hit: the figure jumps in scale on the bass and the camera kicks with the impact, like a shockwave, among confetti."
+    },
+    "music-crowd-surf": {
+      "titleEs": "Surf sobre el público", "titleEn": "Crowd surf",
+      "lineEs": "La figura, tumbada, cruza por encima del público, que la lleva en volandas y se mece debajo.",
+      "lineEn": "The figure, lying down, crosses over the crowd; the audience carries it along and sways underneath."
     }
   }
 }

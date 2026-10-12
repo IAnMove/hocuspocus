@@ -58,6 +58,8 @@ def _catalog_groups() -> list:
     from services.world3d_export import command_catalog as world_export
     from services.song_analysis import command_catalog as audio
     from services.video2d_edit import command_catalog as scene_edit
+    from services.video2d_catalogs import query_operations as scene_catalog
+    from services.video2d_compile import command_catalog as scene_compile
     from services.job_leftovers import command_catalog as leftovers
 
     groups = [
@@ -66,6 +68,8 @@ def _catalog_groups() -> list:
         audio(),
         montages(),
         scene_edit(),
+        scene_catalog(),
+        scene_compile(),
         scene_export(),
         scene_commands(),
         world_export(),
@@ -136,3 +140,12 @@ def test_review_contract_names_the_code_checks():
         assert token in section
     assert "not a language model looking at the contact sheet" in section
     assert "must not invent yes or no" in section
+
+
+def test_the_scene2d_section_names_the_card_tools_and_a_valid_shot():
+    from services.production_scene2d import validate_scene2d_shot
+    section = _section(_text(), "Video 2D music cards (`scene2d`)")
+    assert "scenes.templates.suggest" in section and "scenes.catalog" in section
+    assert "scene2d_family_not_allowed" in section and "cutout_without_alpha" in section
+    [shot] = [json.loads(block) for block in _json_blocks(section)]
+    assert validate_scene2d_shot(shot)["templateId"] == "music-pinball"
