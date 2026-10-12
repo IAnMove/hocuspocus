@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
+speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
+Design*, and the Character Creator voice designer and new reference voices start on
+VoxCPM2. Installs without it keep KugelAudio in Studio; Qwen3 stays available
+everywhere, and saved character voices keep their engine.
+
 **VoxCPM2** joins the local speech engines next to Qwen3 TTS: OpenBMB's 2B model
 speaks 30 languages at 48 kHz. *VoxCPM2 Voice Design* makes a voice from a written
 description and *VoxCPM2 Voice Clone* clones a recording (with its transcript for

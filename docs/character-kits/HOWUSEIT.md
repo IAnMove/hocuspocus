@@ -215,9 +215,9 @@ acting notes. Tijeral ships these presets; they are not cloned actors.
 **Add your own voice** (`qwen3_tts_base` or `voxcpm2_base`):
 
 1. Choose **Add your own voice: import or record**.
-2. Name the voice (max 120 chars) and pick the **Voice engine**: Qwen3, or
-   VoxCPM2 (48 kHz, 30 languages, optional **Speaking style** such as
-   «susurrando»; with a style VoxCPM2 clones from the sample alone).
+2. Name the voice (max 120 chars) and pick the **Voice engine**: VoxCPM2,
+   the default (48 kHz, 30 languages, optional **Speaking style** such as
+   «susurrando»; with a style VoxCPM2 clones from the sample alone), or Qwen3.
 3. Import WAV/MP3/M4A/FLAC/OGG (or record on HTTPS / localhost).
 4. Enter the **exact transcript** of that sample (max 4000 chars). This is
    not the dialogue to generate later.

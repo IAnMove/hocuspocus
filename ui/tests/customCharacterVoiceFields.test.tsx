@@ -53,7 +53,7 @@ test('imported recording becomes a reusable voice only with name and transcript;
   assert.equal(view.queryByRole('button', { name: 'Generate voice sample' }), null)
   fireEvent.change(view.getByLabelText('Exact sample transcript'), { target: { value: 'These are the words I recorded.' } })
   assert.ok(view.getByRole('button', { name: 'Generate voice sample' }))
-  assert.equal(current?.model, 'qwen3_tts_base')
+  assert.equal(current?.model, 'voxcpm2_base', 'new reference voices start on VoxCPM2')
   assert.equal((current as CustomCharacterVoice).referenceAudio, '/api/v1/uploads/recording.wav')
   assert.ok(!JSON.stringify(current).includes('/server/private'))
   fireEvent.change(view.getByTestId('character-voice'), { target: { value: 'saved:other' } })

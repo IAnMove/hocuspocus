@@ -1,6 +1,8 @@
 """VoxCPM2's own sampling recipe at the speech request boundary."""
 
 VOXCPM2_MODELS = frozenset({"voxcpm2_voicedesign", "voxcpm2_base"})
+# The default voice-design model of generators that make a voice from traits (games).
+DEFAULT_VOICE_DESIGN_MODEL = "voxcpm2_voicedesign"
 DEFAULT_STEPS = 10
 DEFAULT_GUIDANCE = 2.0
 

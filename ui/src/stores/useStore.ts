@@ -25,7 +25,7 @@ import i18n from '../i18n'
 import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
-import { installedPreferredModel } from '../lib/preferredModels'
+import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
 import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
 import { createActivityPublicationGate } from '../lib/activityPublication'
 import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
@@ -2854,7 +2854,7 @@ export const useStore = create<AppState>((set, get) => {
     const savedModels = { ...get().selectedModelPerAudioSubMode, [prevSub]: params.model_type }
     // Determine model for target sub-mode
     const audioSubModeDefaults: Record<import('../types').AudioSubMode, string> = {
-      speech: 'kugelaudio_0_open',
+      speech: defaultSpeechModel(models),
       // XL SFT LM_4B: the premium CFG variant + strongest LM — the
       // quality default. Turbo variants remain enabled for speed.
       music: 'ace_step_v1_5_xl_sft_lm_4b',

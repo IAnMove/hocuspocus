@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
-import { CHARACTER_VOICES, isCharacterVoiceReady, isReferenceVoice, type CharacterVoice, type CustomCharacterVoice } from '../../lib/characterVoice'
+import { CHARACTER_VOICES, DEFAULT_REFERENCE_VOICE_MODEL, isCharacterVoiceReady, isReferenceVoice, type CharacterVoice, type CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
 import type { CharacterKit } from '../../lib/characterKit'
 import { CHARACTER_VOICE_PROFILES } from '../../lib/characterVoiceCatalog'
@@ -37,7 +37,7 @@ export function CharacterVoiceFields({ workspace, value, onChange, disabled, sav
       return
     }
     if (id === 'new-reference') {
-      onChange({ provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language: language ?? 'auto' }); return
+      onChange({ provider: 'local', model: DEFAULT_REFERENCE_VOICE_MODEL, voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language: language ?? 'auto' }); return
     }
     onChange(id ? { provider: 'local', model: 'qwen3_tts_customvoice', voiceId: id,
       instructions: value?.model === 'qwen3_tts_customvoice' ? value.instructions : undefined } : undefined)
