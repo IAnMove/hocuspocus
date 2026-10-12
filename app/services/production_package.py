@@ -63,6 +63,26 @@ def clip_origin(production_id: str, key: str, scene: str | None, note: str = "")
     return origin
 
 
+def clip_production_ids(document: dict) -> set[str]:
+    """Production ids named on clip origins (empty when none have been attached)."""
+    return {
+        (clip.get("origin") or {}).get("productionId")
+        for clip in document.get("clips") or []
+        if isinstance(clip, dict)
+    } - {None}
+
+
+def montage_made_by(document: dict, production_id: str) -> bool:
+    """Every clip origin that names a production names this one (``attach_origins`` writes them)."""
+    return clip_production_ids(document) == {production_id}
+
+
+def montage_owned_by_other(document: dict, production_id: str) -> bool:
+    """True when the montage names at least one production and this one is not among them."""
+    owners = clip_production_ids(document)
+    return bool(owners) and production_id not in owners
+
+
 def attach_origins(montage: dict, docs: dict[str, dict], production_id: str) -> int:
     """Name each montage clip after its shot and give it its origin and lyric. Returns how many clips changed."""
     changed = 0

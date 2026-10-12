@@ -108,6 +108,26 @@ def test_use_take_replaces_one_montage_clip_and_keeps_the_rest(tmp_path: Path):
     assert by_key["s0"]["clip"] == "take-b.mp4"
 
 
+def test_use_take_refuses_another_productions_montage(tmp_path: Path):
+    production, spec, root, saved, _edits = _build(tmp_path)
+    inner = production.mcp
+
+    def foreign(tool: str, arguments: dict) -> dict:
+        if tool == "montages.get":
+            return {"result": {"revision": 4, "montage": {"revision": 4, "clips": [
+                {"id": "s0", "source": "/api/v1/file/old-s0.mp4?workspace=film",
+                 "origin": {"kind": "scene2d", "productionId": "someone-else", "scene": "old.scene.json"}},
+            ]}}}
+        return inner(tool, arguments)
+
+    production.mcp = foreign
+    with pytest.raises(ShotEditError) as caught:
+        use_take(production, spec, "s0", "take-b.mp4")
+    assert caught.value.code == "montage_foreign"
+    assert saved == []
+    assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+
+
 def test_use_take_exports_the_chosen_scene_once(tmp_path: Path):
     production, spec, _root, _saved, _edits = _build(tmp_path)
     calls: list[str] = []

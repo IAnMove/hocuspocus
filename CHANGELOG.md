@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+A production whose leftover ``montage_file`` still names another production's
+timeline (the old title collision) no longer overwrites that file on a rerun,
+a package, or a shot retake. It writes its own ``<id>.montage.json`` instead.
+
 **VoxCPM2** joins the local speech engines next to Qwen3 TTS: OpenBMB's 2B model
 speaks 30 languages at 48 kHz. *VoxCPM2 Voice Design* makes a voice from a written
 description and *VoxCPM2 Voice Clone* clones a recording (with its transcript for
