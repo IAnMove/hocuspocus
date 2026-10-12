@@ -1,6 +1,7 @@
 """Room sets in production batches and Series, without GPU or server."""
 import copy
 import pytest
+from fastapi import HTTPException
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -203,3 +204,22 @@ def test_a_seam_that_stays_visible_does_not_stop_the_production(tmp_path,monkeyp
     shown=status_summary(production.state,'default')['set_warnings']
     assert shown==[{**record['warnings'][0],'set':'kitchen'}] and shown[0]['seam_error']>1.5
     assert 'set_warnings' not in status_summary({'sets':{'office':{'room':{}}}},'default')
+
+
+def test_a_set_chooses_a_light_of_its_mold_kind_and_the_room_carries_it(tmp_path, monkeypatch):
+    from services import series_sets
+    series = {'locations': [{'id': 'street'}], 'episodesById': {}}
+    monkeypatch.setattr(series_sets, 'build_skin', lambda *a, **k: {'wall_back': {'color': '#223344'}})
+    monkeypatch.setattr(series_sets, 'prop_objects', lambda *a: [])
+    rooms = []
+    service = SeriesSets(lambda ws: tmp_path, lambda *a: series, lambda ws, sid, fn: fn(series), lambda name, args: {'result': {}},
+                         inline=True, compiler=lambda config, *_: rooms.append(config['scene3d']['background']['room']) or
+                         {'slots': [{'slot': 'subject_1'}, {'slot': 'subject_2'}]})
+    base = {'workspace': 'test', 'series_id': 's', 'location_id': 'street', 'mold': 'calle'}
+    service.execute('series.location.set3d', {'version': 1, 'intent_id': 'night', 'input': {**base, 'light': 'night_sky'}})
+    location = series['locations'][0]
+    assert location['set3dStatus']['status'] == 'completed' and location['set3d']['light'] == 'night_sky'
+    assert {room['mold']['lights'] for room in rooms} == {'night_sky'}
+    assert location['set3dBuilt']['room']['mold']['lights'] == 'night_sky'
+    with pytest.raises(HTTPException, match='unknown light for a exterior set: bar_warm'):
+        service.execute('series.location.set3d', {'version': 1, 'intent_id': 'bar', 'input': {**base, 'light': 'bar_warm'}})
