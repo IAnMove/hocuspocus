@@ -39,6 +39,7 @@ from typing import Any
 
 from services.audio_levels import gain_to, level_file
 from services.audio_mix import track_source
+from services.character_speech_definition import is_reference_voice
 from services.production_control import Cancelled
 from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
@@ -225,9 +226,12 @@ def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) ->
     # The speech schema requires a resolution even for audio; it does not change the output.
     params: dict[str, Any] = {"prompt": text, "model_type": voice["model"], "seed": seed, "duration_seconds": seconds, "priority": 10,
                               "resolution": "1280x720"}
-    if voice.get("model") == "qwen3_tts_base":
-        params.update({"model_mode": voice.get("language") or language, "audio_prompt_type": "A",
-                       "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
+    if is_reference_voice(voice):
+        params.update({"audio_prompt_type": "A", "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
+        if voice["model"] == "qwen3_tts_base":
+            params["model_mode"] = voice.get("language") or language
+        if voice.get("instructions"):
+            params["custom_settings"] = {"style": voice["instructions"]}
     elif voice.get("voiceId"):
         params.update({"model_mode": voice["voiceId"], "alt_prompt": voice.get("instructions") or ""})
     return params

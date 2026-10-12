@@ -6,6 +6,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**VoxCPM2** joins the local speech engines next to Qwen3 TTS: OpenBMB's 2B model
+speaks 30 languages at 48 kHz. *VoxCPM2 Voice Design* makes a voice from a written
+description and *VoxCPM2 Voice Clone* clones a recording (with its transcript for
+the closest match), with two-voice dialogue and an optional speaking style. The
+Character Creator voice designer and reference voices can pick it as their engine,
+and series lines, auditions, Studio, Wizard and MCP `generation.speech` use it like
+Qwen3. Weights (~5 GB) download on first use. See [VoxCPM2](docs/development/VOXCPM2.md).
+
 Story Lab and Series Lab add optional **Help me write** panels with essential
 questions, examples, missing-answer suggestions, section development and editorial
 review. Answers share existing story fields; editable proposals persist until

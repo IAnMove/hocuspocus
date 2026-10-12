@@ -4,7 +4,7 @@ import { usableCharacterAsset, type CharacterKitReviewPolicy } from './character
 import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, type FacePatchMetadata } from './characterFacePatch'
 import { CHARACTER_MOUTH_STATES, mouthStateForSound, type CharacterMouthState } from './characterMouthStates'
 import { characterRestPoseSource } from './characterRestPose'
-import { characterVoiceFor } from './characterVoice'
+import { characterVoiceFor, isReferenceVoice, speechEngineName } from './characterVoice'
 export type { CharacterMouthState } from './characterMouthStates'
 
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
@@ -125,15 +125,16 @@ export function resolvedCharacterTts(
   kit?: CharacterKit,
   fallback?: { provider?: string; voiceId?: string },
   language?: string,
-): { source: 'kit' | 'profile' | 'none'; voiceId?: string; voiceName?: string; provider?: string; instructions?: string } {
+): { source: 'kit' | 'profile' | 'none'; voiceId?: string; voiceName?: string; provider?: string; instructions?: string; engine?: string } {
   const voice = characterVoiceFor(kit, language)
   if (voice) {
     return {
       source: 'kit',
+      engine: speechEngineName(voice.model),
       voiceId: voice.voiceId,
-      ...(voice.model === 'qwen3_tts_base' ? { voiceName: voice.name } : {}),
+      ...(isReferenceVoice(voice) ? { voiceName: voice.name } : {}),
       provider: voice.provider,
-      instructions: voice.model === 'qwen3_tts_customvoice' ? voice.instructions : undefined,
+      instructions: voice.instructions,
     }
   }
   if (fallback?.voiceId) {

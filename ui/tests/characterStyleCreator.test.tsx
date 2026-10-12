@@ -5,7 +5,7 @@ import { JSDOM } from 'jsdom'
 import { characterStyle, characterStyleLabel, characterStylePrompt, screenFor } from '../src/lib/characterStyles'
 import { flaggedRigPoses } from '../src/lib/flatRigMouth'
 import { generateKeyedCandidates, type KeyedCandidate } from '../src/features/characters/characterCandidates'
-import { designVoiceCandidates, expectedPitch, referenceVoice, VOICE_DESIGN_MODEL } from '../src/features/characters/voiceDesign'
+import { designVoiceCandidates, expectedPitch, referenceVoice, VOICE_DESIGN_MODEL, VOICE_ENGINES } from '../src/features/characters/voiceDesign'
 
 const dom = new JSDOM('<!doctype html><html><body /></html>', { url: 'http://localhost/' })
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
@@ -116,6 +116,24 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }), {
     provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: 'Kevin (spanish)',
     referenceAudio: '/api/v1/file/job-1.wav?workspace=cast', transcript: 'Hola. Esta es mi voz.', language: 'spanish' })
+})
+
+test('VoxCPM2 designs from the description alone and the chosen take becomes a VoxCPM2 reference', async () => {
+  const submitted: Record<string, unknown>[] = []
+  const voices = await designVoiceCandidates({
+    workspace: 'cast', description: 'Female voice. Young reporter.', text: 'Hola. Esta es mi voz.', language: 'spanish',
+    engine: 'voxcpm2', signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 7,
+    submitGeneration: async params => { submitted.push(params); return { job_id: `job-${submitted.length}` } as never },
+    fetchJobStatus: async jobId => ({ status: 'completed', output_files: [`${jobId}.wav`] }) as never,
+    checkSpeech: async () => ({ transcript: 'Hola. Esta es mi voz.', wer: 0, medianPitchHz: 210, wordsPerSecond: 2.4, duration: 3, warnings: [] }),
+    fileUrl: (name, workspace) => `/api/v1/file/${name}?workspace=${workspace}`,
+  })
+  assert.ok(submitted.every(params => params.model_type === VOICE_ENGINES.voxcpm2.design && !('model_mode' in params)
+    && params.alt_prompt === 'Female voice. Young reporter.'))
+  assert.equal(referenceVoice(voices[0], { name: 'Zilia (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }, 'voxcpm2').model,
+    'voxcpm2_base')
 })
 
 type CreatorRequest = { method: string; url: string; body?: Record<string, unknown> }

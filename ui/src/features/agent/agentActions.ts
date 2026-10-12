@@ -2978,7 +2978,7 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
         installed: model.is_downloaded === true,
         enabled: state.enabledModels.has(model.model_type),
         music: /ace_step|minimax_music3|music[-_]/i.test(model.model_type),
-        speech: /qwen|chatterbox|kugelaudio|heartmula|yue|index_tts/i.test(model.model_type),
+        speech: /qwen|voxcpm|chatterbox|kugelaudio|heartmula|yue|index_tts/i.test(model.model_type),
         sfx: /^mmaudio/i.test(model.model_type),
       })),
     recent_image_outputs: state.outputs

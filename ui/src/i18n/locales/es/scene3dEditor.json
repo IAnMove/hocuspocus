@@ -256,6 +256,14 @@
       "transcript": "Texto exacto de la muestra",
       "transcriptPlaceholder": "Escribe aquí las mismas palabras que se escuchan en el audio. No es el diálogo que se generará.",
       "language": "Idioma para los nuevos diálogos",
+      "engine": "Motor de voz",
+      "engines": {
+        "qwen3_tts_base": "Qwen3 — clona la muestra en 10 idiomas",
+        "voxcpm2_base": "VoxCPM2 — clon a 48 kHz en 30 idiomas, admite estilo de habla"
+      },
+      "style": "Estilo de habla (opcional)",
+      "stylePlaceholder": "susurrando, emocionado, más despacio…",
+      "styleHint": "Cómo habla esta voz por defecto. Con un estilo, VoxCPM2 clona solo a partir de la muestra, sin su transcripción.",
       "saveHint": "Guarda todo el personaje para conservar esta voz. Podrás elegirla en otros personajes; los planos nuevos o regenerados usarán esa configuración.",
       "incomplete": "Para probar o guardar esta voz, añade su nombre, una muestra de audio y su transcripción exacta.",
       "voiceFileSize": "Elige un audio de hasta 20 MB que no esté vacío.",

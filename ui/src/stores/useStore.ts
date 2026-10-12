@@ -916,6 +916,8 @@ const DEFAULT_ENABLED_MODELS = new Set([
   'qwen3_tts_base',
   'qwen3_tts_customvoice',
   'qwen3_tts_voicedesign',
+  'voxcpm2_base',
+  'voxcpm2_voicedesign',
   // Audio — Music
   'ace_step_v1_5_turbo_lm_4b',
   'ace_step_v1_5_xl',
@@ -938,8 +940,9 @@ const DEFAULT_ENABLED_MODELS = new Set([
  * a user who then disables them stays disabled forever. (This is
  * deliberately narrower than auto-enabling every unknown model — only
  * the curated list's own additions are pushed.) */
-const DEFAULTS_VERSION = 16
+const DEFAULTS_VERSION = 17
 const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  17: ['voxcpm2_base', 'voxcpm2_voicedesign'],
   16: ['qwen_image_21_turbo'],
   15: ['qwen_image_21_viggle_turbo'],
   14: ['qwen_image_21_uncensored_gguf_q4_k_m', 'qwen_image_21_uncensored_gguf_q5_k_m', 'qwen_image_21_uncensored_gguf_q6_k'],

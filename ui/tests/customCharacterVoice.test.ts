@@ -94,3 +94,30 @@ test('cancelling while resolving a reference never submits an unwanted generatio
     fetchJobStatus: async () => { assert.fail('Must not poll') },
   }), /abort/i)
 })
+
+const vox: CustomCharacterVoice = { ...custom, model: 'voxcpm2_base', name: 'Zilia ES' }
+
+test('VoxCPM2 reference voices keep an optional style; Qwen3 references refuse one', () => {
+  assert.deepEqual(parseCharacterVoice(vox), vox)
+  assert.deepEqual(parseCharacterVoice({ ...vox, instructions: '  susurrando  ' }), { ...vox, instructions: 'susurrando' })
+  assert.deepEqual(parseCharacterVoice({ ...vox, instructions: '   ' }), vox)
+  assert.throws(() => parseCharacterVoice({ ...vox, instructions: 'x'.repeat(301) }), /too long/)
+  assert.throws(() => parseCharacterVoice({ ...custom, instructions: 'susurrando' }), /no style/)
+  assert.equal(resolvedCharacterTts({ ...createCharacterKit('Zilia'), voice: vox }).engine, 'VoxCPM2')
+  assert.equal(resolvedCharacterTts({ ...createCharacterKit('Zilia'), voice: vox }).voiceName, 'Zilia ES')
+})
+
+test('a VoxCPM2 line sends the reference and transcript, no language mode, and its style as a custom setting', async () => {
+  const requests: Record<string, unknown>[] = []
+  const voice = { ...vox, instructions: 'susurrando' }
+  await generateSceneSpeechClip({ model: voice.model, voice, prompt: 'Nueva frase.', durationSeconds: 5, workspace: 'episode' }, {
+    adoptAudio: async () => ({ filename: 'zilia.wav', path: '/server/zilia.wav', url: voice.referenceAudio }),
+    submitGeneration: async params => { requests.push(params); return { job_id: 'owned-vox', status: 'queued' } },
+    fetchJobStatus: async () => ({ status: 'completed', output_files: ['line.wav'] } as never),
+  })
+  assert.equal(requests[0].model_type, 'voxcpm2_base')
+  assert.equal('model_mode' in requests[0], false)
+  assert.equal(requests[0].audio_guide, '/server/zilia.wav')
+  assert.equal(requests[0].alt_prompt, custom.transcript)
+  assert.deepEqual(requests[0].custom_settings, { style: 'susurrando' })
+})

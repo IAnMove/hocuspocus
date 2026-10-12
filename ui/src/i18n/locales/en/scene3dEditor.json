@@ -256,6 +256,14 @@
       "transcript": "Exact sample transcript",
       "transcriptPlaceholder": "Enter the same words heard in the audio. This is not the dialogue to generate.",
       "language": "Language for new dialogue",
+      "engine": "Voice engine",
+      "engines": {
+        "qwen3_tts_base": "Qwen3 — clones the sample in 10 languages",
+        "voxcpm2_base": "VoxCPM2 — 48 kHz clone in 30 languages, takes a speaking style"
+      },
+      "style": "Speaking style (optional)",
+      "stylePlaceholder": "whispering, excited, slower…",
+      "styleHint": "How this voice should speak by default. With a style VoxCPM2 clones from the sample alone, without its transcript.",
       "saveHint": "Save the whole character to keep this voice. You can select it for other characters; new or regenerated shots will use that configuration.",
       "incomplete": "To preview or save this voice, add its name, an audio sample, and its exact transcript.",
       "voiceFileSize": "Choose a nonempty audio file up to 20 MB.",

@@ -1,0 +1,14 @@
+{
+    "model": {
+        "name": "TTS VoxCPM2 Voice Design 2B",
+        "architecture": "voxcpm2_voicedesign",
+        "description": "OpenBMB VoxCPM2: speech in 30 languages (Spanish, English, Chinese, Japanese...) at 48 kHz from a written voice description, no reference audio. Downloads ~5 GB once, shared with VoxCPM2 Voice Clone.",
+        "URLs": []
+    },
+    "prompt": "Hola, soy la nueva voz de HocusPocus. ¿Me oyes bien?",
+    "alt_prompt": "young woman from Madrid, warm and lively voice, clear diction",
+    "num_inference_steps": 10,
+    "guidance_scale": 2.0,
+    "multi_prompts_gen_type": 2,
+    "duration_seconds": 60
+}

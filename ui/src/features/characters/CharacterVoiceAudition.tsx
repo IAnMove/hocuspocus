@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getFileUrl } from '../../api/client'
 import { useUiTranslation } from '../../i18n'
-import type { CharacterVoice } from '../../lib/characterVoice'
+import { isReferenceVoice, type CharacterVoice } from '../../lib/characterVoice'
 import { generateSceneSpeechClip } from '../../lib/sceneSpeech'
 
 /** An explicit voice-only audition: no saved character or mouth rig required. */
@@ -22,7 +22,7 @@ export function CharacterVoiceAudition({ workspace, voice, language: spoken }: {
     const owner = new AbortController(); controller.current = owner
     setBusy(true); setError(''); setFilename('')
     try {
-      const sampleVoice = voice.model === 'qwen3_tts_base' ? { ...voice, language: language === 'es' ? 'spanish' as const : 'english' as const } : voice
+      const sampleVoice = isReferenceVoice(voice) ? { ...voice, language: language === 'es' ? 'spanish' as const : 'english' as const } : voice
       const result = await generateSceneSpeechClip({ workspace, model: voice.model, durationSeconds: 20,
         prompt: t(`speech.voiceAudition.sample.${language}`), signal: owner.signal, voice: sampleVoice })
       if (!owner.signal.aborted) setFilename(result.filename)

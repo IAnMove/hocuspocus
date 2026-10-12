@@ -4,8 +4,15 @@ import { awaitSpeechOutput } from '../../lib/sceneSpeech'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
 
-export const VOICE_DESIGN_MODEL = 'qwen3_tts_voicedesign'
-export const REFERENCE_VOICE_MODEL = 'qwen3_tts_base'
+/** Engines that design a voice from a description, then clone every line from the chosen take.
+ * Qwen3 is told the language; VoxCPM2 reads it from the text (30 languages, 48 kHz). */
+export const VOICE_ENGINES = {
+  qwen3: { design: 'qwen3_tts_voicedesign', reference: 'qwen3_tts_base', tellsLanguage: true },
+  voxcpm2: { design: 'voxcpm2_voicedesign', reference: 'voxcpm2_base', tellsLanguage: false },
+} as const
+export type VoiceEngine = keyof typeof VOICE_ENGINES
+export const VOICE_DESIGN_MODEL = VOICE_ENGINES.qwen3.design
+export const REFERENCE_VOICE_MODEL = VOICE_ENGINES.qwen3.reference
 export const VOICE_CANDIDATES = 3
 
 /** Calm, plain sentences make a steadier cloning reference than an excited line. */
@@ -60,9 +67,12 @@ const defaults: VoiceDesignDependencies = {
 export async function designVoiceCandidates(request: {
   workspace: string; description: string; text: string; language: SpokenLanguage; signal: AbortSignal
   accent?: 'castilian'
+  engine?: VoiceEngine
   onUpdate: (voices: DesignedVoice[]) => void
 }, dependencies: Partial<VoiceDesignDependencies> = {}): Promise<DesignedVoice[]> {
   const deps = { ...defaults, ...dependencies }
+  const engine = VOICE_ENGINES[request.engine ?? 'qwen3']
+  const model = engine.design
   const pitchRange = expectedPitch(request.description)
   const seconds = Math.min(30, Math.max(6, Math.ceil(request.text.split(/\s+/).length / 2.2) + 3))
   let voices: DesignedVoice[] = Array.from({ length: VOICE_CANDIDATES },
@@ -75,14 +85,15 @@ export async function designVoiceCandidates(request: {
   await Promise.all(voices.map(async voice => {
     try {
       const submitted = await deps.submitGeneration({
-        model_type: VOICE_DESIGN_MODEL, generation_mode: 'audio', _audio_sub_mode: 'speech', prompt: request.text,
-        alt_prompt: request.description, model_mode: request.language, duration_seconds: seconds, seed: voice.seed,
+        model_type: model, generation_mode: 'audio', _audio_sub_mode: 'speech', prompt: request.text,
+        alt_prompt: request.description, ...(engine.tellsLanguage ? { model_mode: request.language } : {}),
+        duration_seconds: seconds, seed: voice.seed,
         video_length: 0, image_mode: 0, multi_prompts_gen_type: 2, workspace: request.workspace,
       })
       const clip = await awaitSpeechOutput(
-        { prompt: request.text, model: VOICE_DESIGN_MODEL, durationSeconds: seconds, workspace: request.workspace, signal: request.signal },
+        { prompt: request.text, model, durationSeconds: seconds, workspace: request.workspace, signal: request.signal },
         { submitGeneration: deps.submitGeneration, fetchJobStatus: deps.fetchJobStatus, cancelJob: deps.cancelJob },
-        { prompt: request.text, model: VOICE_DESIGN_MODEL, jobId: submitted.job_id })
+        { prompt: request.text, model, jobId: submitted.job_id })
       update(voice.id, { status: 'checking', filename: clip.filename, url: deps.fileUrl(clip.filename, request.workspace) })
       const check = await deps.checkSpeech({ workspace: request.workspace, file: clip.filename, text: request.text,
         language: request.language, ...(pitchRange ? { pitchRange } : {}) })
@@ -105,8 +116,9 @@ export async function designVoiceCandidates(request: {
 }
 
 /** The chosen take becomes the language's reference voice: every later line is cloned from it. */
-export function referenceVoice(voice: DesignedVoice, details: { name: string; text: string; language: SpokenLanguage }): CustomCharacterVoice {
+export function referenceVoice(voice: DesignedVoice, details: { name: string; text: string; language: SpokenLanguage },
+  engine: VoiceEngine = 'qwen3'): CustomCharacterVoice {
   if (!voice.url) throw new Error('This voice has no recording yet.')
-  return { provider: 'local', model: REFERENCE_VOICE_MODEL, voiceId: 'reference', name: details.name.slice(0, 120),
+  return { provider: 'local', model: VOICE_ENGINES[engine].reference, voiceId: 'reference', name: details.name.slice(0, 120),
     referenceAudio: voice.url, transcript: details.text, language: details.language }
 }

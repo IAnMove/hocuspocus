@@ -146,3 +146,22 @@ test('a microphone take that overruns its timer retains the first 30 seconds ins
   await assert.rejects(uploadVoiceReference(blob, signal, 'import'), /voiceFileDuration/)
   assert.equal(uploads, 1, 'imported recordings are never silently cropped')
 })
+
+test('choosing VoxCPM2 for a reference voice offers a speaking style; going back to Qwen3 drops it', async () => {
+  const { render, fireEvent, cleanup } = await import('@testing-library/react')
+  const { CustomCharacterVoiceFields } = await import('../src/features/characters/CustomCharacterVoiceFields')
+  function Harness() {
+    const [voice, setVoice] = useState<CustomCharacterVoice>(saved)
+    return <><CustomCharacterVoiceFields value={voice} onChange={setVoice} /><output data-testid="voice">{JSON.stringify(voice)}</output></>
+  }
+  const view = render(<Harness />)
+  const current = () => JSON.parse(view.getByTestId('voice').textContent || '{}') as CustomCharacterVoice
+  assert.equal(view.queryByTestId('custom-voice-style'), null)
+  fireEvent.change(view.getByTestId('custom-voice-engine'), { target: { value: 'voxcpm2_base' } })
+  fireEvent.change(view.getByTestId('custom-voice-style'), { target: { value: 'susurrando' } })
+  assert.deepEqual(current(), { ...saved, model: 'voxcpm2_base', instructions: 'susurrando' })
+  fireEvent.change(view.getByTestId('custom-voice-engine'), { target: { value: 'qwen3_tts_base' } })
+  assert.deepEqual(current(), saved)
+  assert.equal(view.queryByTestId('custom-voice-style'), null)
+  cleanup()
+})
