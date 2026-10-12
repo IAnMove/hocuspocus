@@ -15,6 +15,14 @@ const keyRgb = (hex: string): [number, number, number] => [1, 3, 5].map(start =>
 
 export type SettleLook = { floor: number; color?: string }   // floor: share of the picture under the floor line; color: the floor's
 
+/** A settle look from a document, or undefined when malformed. */
+export function parseSettleLook(raw: unknown): SettleLook | undefined {
+  const value = raw as { floor?: unknown; color?: unknown } | undefined
+  if (!value || typeof value !== 'object' || typeof value.floor !== 'number' || !Number.isFinite(value.floor)) return undefined
+  const color = typeof value.color === 'string' && /^#[\da-f]{6}$/i.test(value.color) ? value.color : undefined
+  return { floor: Math.max(0, Math.min(0.9, value.floor)), ...(color ? { color } : {}) }
+}
+
 const hexRgb = (hex: string | undefined): [number, number, number] | undefined =>
   hex && /^#[\da-f]{6}$/i.test(hex) ? keyRgb(hex) : undefined
 const smooth = (t: number) => t * t * (3 - 2 * t)

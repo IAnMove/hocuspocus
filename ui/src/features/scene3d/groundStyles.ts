@@ -91,74 +91,127 @@ function periodicNoise(next: () => number, cells: number) {
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 const shade = ([r, g, b]: Rgb, f: number): Rgb => [r * f, g * f, b * f]
 
-/** The style's tile: RGBA, ``size`` pixels square, seamless. */
-export function groundPixels(style: GroundStyle, seed = 1, size = TEXTURE): Uint8Array {
-  const recipe = GROUND_RECIPES[style]
-  const next = random(styleSeed(style, seed))
-  const patches = periodicNoise(next, 4), mottle = periodicNoise(next, 16), grain = periodicNoise(next, 96)
-  const [dark, body, light] = recipe.base
-  const colors: Rgb[] = new Array(size * size)
+/** A tile being painted: its colours, its random draws, its palette and its large patches. */
+type Tile = { size: number; colors: Rgb[]; next: () => number; dark: Rgb; body: Rgb; light: Rgb; patches: (u: number, v: number) => number }
+
+/** Blend ``color`` into the pixel at (x, y), wrapping round the tile. */
+function put(tile: Tile, x: number, y: number, color: Rgb, alpha = 1) {
+  const { size, colors } = tile
+  const index = (((y % size) + size) % size) * size + (((x % size) + size) % size)
+  colors[index] = mix(colors[index], color, alpha)
+}
+
+const randomPixel = (tile: Tile) => [Math.floor(tile.next() * tile.size), Math.floor(tile.next() * tile.size)] as const
+
+/** Sand ripples and snow's blue shadows, over the base patches. */
+const BASE_TINTS: Partial<Record<GroundStyle, (color: Rgb, tile: Tile, u: number, v: number) => Rgb>> = {
+  sand: (color, tile, u, v) => shade(color, 0.92 + 0.08 * Math.sin((v * 9 + tile.patches(u, v) * 1.6) * Math.PI * 2)),
+  snow: (color, tile, u, v) => mix(color, [196, 214, 240], Math.max(0, 0.45 - tile.patches(u, v)) * 0.8),
+}
+
+function paintBase(tile: Tile, style: GroundStyle, mottle: (u: number, v: number) => number, grain: (u: number, v: number) => number) {
+  const { size, dark, body, light } = tile, tint = BASE_TINTS[style]
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const u = x / size, v = y / size
-    const tone = 0.55 * patches(u, v) + 0.3 * mottle(u, v) + 0.15 * grain(u, v)
-    let color = tone < 0.5 ? mix(dark, body, tone * 2) : mix(body, light, (tone - 0.5) * 2)
-    if (style === 'sand') color = shade(color, 0.92 + 0.08 * Math.sin((v * 9 + patches(u, v) * 1.6) * Math.PI * 2))
-    if (style === 'snow') color = mix(color, [196, 214, 240], Math.max(0, 0.45 - patches(u, v)) * 0.8)
-    colors[y * size + x] = color
+    const tone = 0.55 * tile.patches(u, v) + 0.3 * mottle(u, v) + 0.15 * grain(u, v)
+    const color = tone < 0.5 ? mix(dark, body, tone * 2) : mix(body, light, (tone - 0.5) * 2)
+    tile.colors[y * size + x] = tint ? tint(color, tile, u, v) : color
   }
-  const put = (x: number, y: number, color: Rgb, alpha = 1) => {
-    const index = (((y % size) + size) % size) * size + (((x % size) + size) % size)
-    colors[index] = mix(colors[index], color, alpha)
+}
+
+/** Grass blades: short strokes leaning one way, darker at the root. */
+function paintBlades(tile: Tile, count: number) {
+  for (let i = 0; i < count; i++) {
+    const [x, y] = randomPixel(tile), length = 2 + Math.floor(tile.next() * 4)
+    const lean = tile.next() < 0.5 ? -1 : 1, base = tile.next() < 0.5 ? tile.light : tile.body
+    for (let step = 0; step < length; step++) put(tile, x + Math.round(lean * step * 0.4), y - step, shade(base, 0.75 + 0.35 * step / length), 0.75)
   }
-  const strokes = { grass: 9000, meadow: 7000, dirt: 900, sand: 0, asphalt: 0, snow: 0, cobble: 0 }[style]
-  for (let i = 0; i < strokes; i++) {          // grass blades: short strokes leaning one way, darker at the root
-    const x = Math.floor(next() * size), y = Math.floor(next() * size), length = 2 + Math.floor(next() * 4)
-    const lean = next() < 0.5 ? -1 : 1, tint = next()
-    for (let step = 0; step < length; step++)
-      put(x + Math.round(lean * step * 0.4), y - step, shade(tint < 0.5 ? light : body, 0.75 + 0.35 * step / length), 0.75)
+}
+
+const PETALS: Rgb[] = [[250, 246, 236], [250, 220, 80], [238, 140, 178]]
+
+function paintPetals(tile: Tile, count: number) {
+  for (let i = 0; i < count; i++) {
+    const [x, y] = randomPixel(tile), petal = PETALS[Math.floor(tile.next() * PETALS.length)]
+    put(tile, x, y, petal); put(tile, x + 1, y, petal, 0.6); put(tile, x, y + 1, petal, 0.6)
   }
-  if (style === 'meadow') for (let i = 0; i < 900; i++) {
-    const x = Math.floor(next() * size), y = Math.floor(next() * size)
-    const petal: Rgb = ([[250, 246, 236], [250, 220, 80], [238, 140, 178]] as Rgb[])[Math.floor(next() * 3)]
-    put(x, y, petal); put(x + 1, y, petal, 0.6); put(x, y + 1, petal, 0.6)
+}
+
+/** Light and dark grit, one pixel each. */
+function paintGrit(tile: Tile, count: number) {
+  for (let i = 0; i < count; i++) {
+    const [x, y] = randomPixel(tile)
+    put(tile, x, y, tile.next() < 0.5 ? shade(tile.light, 1.15) : shade(tile.dark, 0.8), 0.7)
   }
-  if (style === 'asphalt' || style === 'sand' || style === 'dirt') for (let i = 0; i < (style === 'asphalt' ? 26000 : 9000); i++) {
-    const x = Math.floor(next() * size), y = Math.floor(next() * size)
-    put(x, y, next() < 0.5 ? shade(light, 1.15) : shade(dark, 0.8), 0.7)
-  }
-  if (style === 'asphalt') for (let crack = 0; crack < 7; crack++) {   // hairline cracks and a few dark patches
-    let x = next() * size, y = next() * size, angle = next() * Math.PI * 2
-    for (let step = 0; step < 60 + next() * 80; step++) {
-      put(Math.round(x), Math.round(y), shade(dark, 0.55), 0.85)
-      angle += (next() - 0.5) * 0.7; x += Math.cos(angle); y += Math.sin(angle)
+}
+
+/** Hairline cracks wandering across the tile. */
+function paintCracks(tile: Tile, count: number) {
+  for (let crack = 0; crack < count; crack++) {
+    let x = tile.next() * tile.size, y = tile.next() * tile.size, angle = tile.next() * Math.PI * 2
+    for (let step = 0; step < 60 + tile.next() * 80; step++) {
+      put(tile, Math.round(x), Math.round(y), shade(tile.dark, 0.55), 0.85)
+      angle += (tile.next() - 0.5) * 0.7; x += Math.cos(angle); y += Math.sin(angle)
     }
   }
-  if (style === 'dirt' || style === 'sand') for (let i = 0; i < (style === 'dirt' ? 700 : 260); i++) {   // pebbles
-    const x = Math.floor(next() * size), y = Math.floor(next() * size), r = 1 + Math.floor(next() * 2)
+}
+
+/** Small round pebbles, lit from above. */
+function paintPebbles(tile: Tile, count: number) {
+  for (let i = 0; i < count; i++) {
+    const [x, y] = randomPixel(tile), r = 1 + Math.floor(tile.next() * 2)
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++)
-      if (dx * dx + dy * dy <= r * r) put(x + dx, y + dy, dy > 0 ? shade(dark, 0.9) : shade(light, 1.05), 0.9)
+      if (dx * dx + dy * dy <= r * r) put(tile, x + dx, y + dy, dy > 0 ? shade(tile.dark, 0.9) : shade(tile.light, 1.05), 0.9)
   }
-  if (style === 'cobble') {                    // stones: periodic Voronoi cells with mortar between them
-    const cells = 14, seeds: [number, number, number][] = []
-    for (let cy = 0; cy < cells; cy++) for (let cx = 0; cx < cells; cx++) seeds.push([(cx + 0.2 + next() * 0.6) / cells, (cy + 0.2 + next() * 0.6) / cells, next()])
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-      const u = x / size, v = y / size
-      let first = Infinity, second = Infinity, tone = 0
-      for (const [sx, sy, t] of seeds) {
-        const dx = Math.min(Math.abs(u - sx), 1 - Math.abs(u - sx)), dy = Math.min(Math.abs(v - sy), 1 - Math.abs(v - sy))
-        const d = Math.hypot(dx, dy)
-        if (d < first) { second = first; first = d; tone = t } else if (d < second) second = d
-      }
-      const edge = (second - first) * cells
-      const stone = mix(mix(dark, body, 0.5 + tone * 0.5), light, Math.max(0, 0.25 - first * cells * 0.4))
-      colors[y * size + x] = edge < 0.08 ? mix(shade(dark, 0.55), colors[y * size + x], 0.25) : mix(stone, colors[y * size + x], 0.25)
-    }
+}
+
+/** The nearest and second nearest of the periodic cell seeds to (u, v), and the nearest one's tone. */
+function nearestSeeds(seeds: [number, number, number][], u: number, v: number) {
+  let first = Infinity, second = Infinity, tone = 0
+  for (const [sx, sy, t] of seeds) {
+    const dx = Math.min(Math.abs(u - sx), 1 - Math.abs(u - sx)), dy = Math.min(Math.abs(v - sy), 1 - Math.abs(v - sy))
+    const d = Math.hypot(dx, dy)
+    if (d < first) { second = first; first = d; tone = t } else if (d < second) second = d
   }
+  return { first, second, tone }
+}
+
+/** Stones: periodic Voronoi cells with dark mortar between them. */
+function paintCobbles(tile: Tile, cells: number) {
+  const { size, dark, body, light } = tile, seeds: [number, number, number][] = []
+  for (let cy = 0; cy < cells; cy++) for (let cx = 0; cx < cells; cx++)
+    seeds.push([(cx + 0.2 + tile.next() * 0.6) / cells, (cy + 0.2 + tile.next() * 0.6) / cells, tile.next()])
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const { first, second, tone } = nearestSeeds(seeds, x / size, y / size)
+    const stone = mix(mix(dark, body, 0.5 + tone * 0.5), light, Math.max(0, 0.25 - first * cells * 0.4))
+    const under = tile.colors[y * size + x]
+    tile.colors[y * size + x] = (second - first) * cells < 0.08 ? mix(shade(dark, 0.55), under, 0.25) : mix(stone, under, 0.25)
+  }
+}
+
+type Painter = (tile: Tile, amount: number) => void
+/** What each style paints over its base, in order, and how much. */
+const DETAILS: Record<GroundStyle, [Painter, number][]> = {
+  grass: [[paintBlades, 9000]],
+  meadow: [[paintBlades, 7000], [paintPetals, 900]],
+  sand: [[paintGrit, 9000], [paintPebbles, 260]],
+  asphalt: [[paintGrit, 26000], [paintCracks, 7]],
+  dirt: [[paintBlades, 900], [paintGrit, 9000], [paintPebbles, 700]],
+  snow: [],
+  cobble: [[paintCobbles, 14]],
+}
+
+/** The style's tile: RGBA, ``size`` pixels square, seamless. */
+export function groundPixels(style: GroundStyle, seed = 1, size = TEXTURE): Uint8Array {
+  const [dark, body, light] = GROUND_RECIPES[style].base
+  const next = random(styleSeed(style, seed))
+  const patches = periodicNoise(next, 4), mottle = periodicNoise(next, 16), grain = periodicNoise(next, 96)
+  const tile: Tile = { size, colors: new Array(size * size), next, dark, body, light, patches }
+  paintBase(tile, style, mottle, grain)
+  for (const [paint, amount] of DETAILS[style]) paint(tile, amount)
   const pixels = new Uint8Array(size * size * 4)
-  colors.forEach((color, index) => {
-    pixels[index * 4] = Math.max(0, Math.min(255, Math.round(color[0])))
-    pixels[index * 4 + 1] = Math.max(0, Math.min(255, Math.round(color[1])))
-    pixels[index * 4 + 2] = Math.max(0, Math.min(255, Math.round(color[2])))
+  tile.colors.forEach((color, index) => {
+    for (let channel = 0; channel < 3; channel++) pixels[index * 4 + channel] = Math.max(0, Math.min(255, Math.round(color[channel])))
     pixels[index * 4 + 3] = 255
   })
   return pixels

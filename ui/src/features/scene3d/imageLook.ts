@@ -1,6 +1,7 @@
 import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMaterial, type Texture } from 'three'
 import { parseImageWindows, type ImageWindow } from './imageWindows'
 import { parseImageColorKey, type ImageColorKey } from './imageColorKey'
+import { parseSettleLook } from './imageSettle'
 
 export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey;
   /** Mirrored copies of the picture side by side (1–9): a set layer wide enough for a camera that turns. */
@@ -28,10 +29,8 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (isPositiveFinite(value.shadow)) look.shadow = Math.min(1, value.shadow)
   if (isPositiveFinite(value.psx)) look.psx = Math.max(.5, Math.min(2, value.psx))
   if (isPositiveFinite(value.tiles) && value.tiles >= 2) look.tiles = Math.min(9, Math.round(value.tiles))
-  const settle = value.settle as { floor?: unknown; color?: unknown } | undefined
-  if (settle && typeof settle === 'object' && typeof settle.floor === 'number' && Number.isFinite(settle.floor))
-    look.settle = { floor: Math.max(0, Math.min(0.9, settle.floor)),
-      ...(typeof settle.color === 'string' && /^#[\da-f]{6}$/i.test(settle.color) ? { color: settle.color } : {}) }
+  const settle = parseSettleLook(value.settle)
+  if (settle) look.settle = settle
   return Object.keys(look).length ? look : undefined
 }
 
