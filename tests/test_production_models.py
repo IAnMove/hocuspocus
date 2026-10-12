@@ -341,6 +341,25 @@ def test_a_glb_in_the_workspace_is_only_rigged_and_a_refused_humanoid_falls_back
             check_models({"models": {"x": bad}}) if "none" not in bad.get("glb", "") else make_models(Production(tmp_path), {"style": {}, "models": {"x": bad}}, sleep=lambda _: None)
 
 
+def test_a_glb_that_climbs_out_of_the_workspace_is_refused(tmp_path):
+    import services.production_models as production_models
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.glb"
+    outside.write_bytes(b"glb outside")
+    (tmp_path / "secret.glb").write_bytes(b"glb secret")
+    try:
+        for glb in (f"../{outside.name}", "/tmp/outside.glb", "pack/../secret.glb", r"..\secret.glb"):
+            with pytest.raises(ModelError, match="climbs out"):
+                check_models({"models": {"x": {"glb": glb}}})
+        with pytest.raises(ModelError, match="climbs out"):
+            make_models(Production(tmp_path), {"style": {}, "models": {"x": {"glb": f"../{outside.name}"}}},
+                        sleep=lambda _: None)
+        with pytest.raises(ModelError, match="climbs out"):
+            production_models._cleaned(Production(tmp_path), "x", f"../{outside.name}", standing=False)
+        assert list(tmp_path.parent.glob(f"{tmp_path.name}-outside.clean-*.glb")) == []
+    finally:
+        outside.unlink(missing_ok=True)
+
+
 def test_up_to_twelve_models_are_made_and_up_to_forty_counting_glbs(tmp_path):
     glbs = {f"g{n}": {"glb": f"pack/g{n}.glb", "rig": "prop"} for n in range(28)}
     made = {f"m{n}": {"prompt": "a lamp"} for n in range(12)}

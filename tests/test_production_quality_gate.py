@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from services.music_production import command_handlers
 from services.production_dry_run import dry_run
-from services.production_quality_gate import blocking_problems, plan_warnings
+from services.production_quality_gate import _brought, blocking_problems, plan_warnings
 
 SONG = {"lyrics": "[Verse]\nla luz se queda", "caption": "lullaby", "duration": 40, "bpm": 96}
 
@@ -157,6 +157,8 @@ def test_a_glb_played_as_it_is_passes_the_gate_with_the_clips_it_brought(tmp_pat
     problems = blocking_problems({"song": SONG, "models": models, "shots": shots}, tmp_path)
     assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 dance_side", "c:subject_1 hover"])]
     assert blocking_problems({"song": SONG, "models": models, "shots": shots[:1]}) == [], "with no workspace at hand the file is trusted"
+    assert _brought({"glb": "../zelda.glb", "rig": "none"}, tmp_path) is None
+    assert _brought({"glb": "pack/../zelda.glb", "rig": "none"}, tmp_path) is None
 
 
 def test_two_shots_starting_together_do_not_break_the_gate():

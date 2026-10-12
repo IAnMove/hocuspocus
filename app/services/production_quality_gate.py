@@ -107,9 +107,13 @@ def _brought(entry: dict, root: Any) -> list[str] | None:
         return []
     if root is None:
         return None
+    from services.production_models import workspace_rel
     from services.series_shot3d import glb_clip_names
+    relative = workspace_rel(entry["glb"])
+    if relative is None:
+        return None
     try:
-        return glb_clip_names(Path(root) / entry["glb"])
+        return glb_clip_names(Path(root) / relative)
     except (OSError, ValueError):
         return None
 
