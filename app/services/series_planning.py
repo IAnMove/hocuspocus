@@ -280,6 +280,7 @@ def canon_preparation_schema() -> dict:
 
 
 def canon_preparation_prompt(series: dict, instruction: str = "") -> tuple[str, str]:
+    from services.writing_guide import accepted_guidance
     context = {
         key: series.get(key) for key in (
             "title", "premise", "logline", "format", "language", "genre", "tone",
@@ -288,6 +289,7 @@ def canon_preparation_prompt(series: dict, instruction: str = "") -> tuple[str, 
             "relationships", "locations", "props",
         )
     }
+    context["writingDecisions"] = accepted_guidance(series)
     system = (
         "You are the Series Lab canon architect. Return exactly one JSON object matching the schema. "
         "Create a compact production-ready MVP bible with at most two principal characters and two locations. "
@@ -792,6 +794,7 @@ def _bounded(value: Any, depth: int = 0) -> Any:
 
 
 def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = "") -> tuple[str, str]:
+    from services.writing_guide import episode_guidance
     from services.series_production import normalize_production_methods
     shot_profile = series_shot_count_profile(episode)
     script_scene_ids = [
@@ -808,6 +811,7 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
             )
         },
         "canonSnapshot": canon_snapshot,
+        "writingDecisions": episode_guidance(series, episode),
         "characters": series.get("characters", []),
         "relationships": series.get("relationships", []),
         "locations": series.get("locations", []),

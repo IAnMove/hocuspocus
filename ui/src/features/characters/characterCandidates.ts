@@ -1,4 +1,4 @@
-import { keyStudioImage } from '../../api/characters'
+import { checkRigPose, keyStudioImage, type RigCheck } from '../../api/characters'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { characterStylePrompt, type CharacterStyle, type CharacterStyleKind } from '../../lib/characterStyles'
 
@@ -13,16 +13,22 @@ export type KeyedCandidate = {
   raw?: string
   keyed?: string
   error?: string
+  /** Share of the keyed image still semi-transparent when studio.key reports a haze (the screen did not key cleanly). */
+  haze?: number
+  /** characters.rig.check on the keyed pose. Absent when the check did not answer. */
+  rig?: { ready: boolean; reasons: string[] }
 }
 
 export type CandidateDependencies = {
   generate: typeof generateImageAsset
   key: typeof keyStudioImage
   seed: () => number
+  check: typeof checkRigPose
 }
 
 const defaults: CandidateDependencies = {
   generate: generateImageAsset, key: keyStudioImage, seed: () => Math.floor(Math.random() * 2_000_000_000),
+  check: checkRigPose,
 }
 
 /** Three takes of one description on a plain screen; each is keyed as soon as it arrives. */
@@ -53,7 +59,9 @@ export async function generateKeyedCandidates(request: {
       const keyed = await deps.key({ workspace: request.workspace, source: image.source, mode: screen,
         intentId: `character-key-${candidate.seed}` })
       request.signal.throwIfAborted()
-      update(candidate.id, { status: 'ready', keyed: keyed.url })
+      const rig = await readRigCheck(deps.check, request.workspace, keyed.url, request.signal)
+      update(candidate.id, { status: 'ready', keyed: keyed.url, ...(keyed.report?.haze ? { haze: keyed.report.semiTransparentShare } : {}),
+        ...(rig ? { rig } : {}) })
     } catch (error) {
       if (request.signal.aborted) return
       update(candidate.id, { status: 'failed', error: (error as Error).message })
@@ -61,4 +69,17 @@ export async function generateKeyedCandidates(request: {
   }))
   request.signal.throwIfAborted()
   return candidates
+}
+
+/** The check is optional in the sense that a failure, or a body with no boolean `ready`, leaves the candidate usable. */
+async function readRigCheck(check: typeof checkRigPose, workspace: string, source: string, signal: AbortSignal): Promise<KeyedCandidate['rig']> {
+  try {
+    const checked: RigCheck = await check({ workspace, source, signal })
+    if (typeof checked?.ready !== 'boolean') return undefined
+    const reasons = Array.isArray(checked.reasons) ? checked.reasons.filter(reason => typeof reason === 'string') : []
+    return { ready: checked.ready, reasons }
+  } catch (error) {
+    if (signal.aborted) throw error
+    return undefined
+  }
 }

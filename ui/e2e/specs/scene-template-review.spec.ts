@@ -164,7 +164,7 @@ async function installReviewRoutes(page: Page, state: ReviewRouteState): Promise
 async function openGallery(page: Page): Promise<void> {
   await page.goto('/scene-template-review')
   await expect(page.locator('section[aria-label="Galería de plantillas candidatas de Video3D"]')).toBeVisible()
-  await expect(page.locator('[data-template-id]')).toHaveCount(48)
+  await expect(page.locator('[data-template-id]')).toHaveCount(41)
 }
 
 async function readAutosave(page: Page): Promise<SceneLike | null> {
@@ -230,7 +230,7 @@ test('opens cinema-establishing in the real editor, saves exact scene JSON, and 
       controls: expect.objectContaining({
         catalogVersion: CATALOG_VERSION,
         templateVersion: 1,
-        reviewStatus: 'candidate',
+        reviewStatus: 'approved',
       }),
     })
     expect(SAVED_OUTPUT).toMatchObject({ name: 'review.scene.json', type: 'scene', url: expect.stringContaining('/api/v1/file/review.scene.json') })
@@ -254,7 +254,7 @@ test('opens cinema-establishing in the real editor, saves exact scene JSON, and 
     const recoveredScene = await readAutosave(page)
     expect(recoveredScene?.narrative).toMatchObject({
       templateId: 'cinema-establishing',
-      controls: expect.objectContaining({ catalogVersion: CATALOG_VERSION, templateVersion: 1, reviewStatus: 'candidate' }),
+      controls: expect.objectContaining({ catalogVersion: CATALOG_VERSION, templateVersion: 1, reviewStatus: 'approved' }),
     })
     expect(recoveredScene).toEqual(postedScene)
   } finally {
@@ -286,7 +286,8 @@ test('Library template bindings survive the real editor save and reopen without 
     await page.goto('/scene-template-review?editor=1')
     await page.getByRole('button', { name: 'Templates · create with my Library assets' }).click()
     const composer = page.getByRole('dialog', { name: 'Create scene from Library' })
-    await expect(composer.getByLabel('Visual BPM')).toBeDisabled()
+    // The shelf opens on music-pulse, a rhythmic card: its exposed BPM is editable.
+    await expect(composer.getByLabel('Visual BPM')).toBeEnabled()
     await chooseComposerLibraryFile(page, composer, 'hero(1).svg')
     await composer.getByRole('button', { name: 'Background (required)', exact: true }).click()
     await chooseComposerLibraryFile(page, composer, 'plate(1).svg')
@@ -302,8 +303,8 @@ test('Library template bindings survive the real editor save and reopen without 
     const saved = state.postedPayloads[0].scene as SceneLike
     expect(saved.generationPolicy).toBe('provided_only')
     expect(saved.narrative).toMatchObject({ assets: [
-      { slot: 'hero', catalogAtAssignment: { assetId: 'canonical-hero', workspaceId: 'default', runId: 'run-hero' } },
-      { slot: 'plate', catalogAtAssignment: { assetId: 'canonical-plate', workspaceId: 'default', runId: 'run-plate' } },
+      { slot: 'subject_1', catalogAtAssignment: { assetId: 'canonical-hero', workspaceId: 'default', runId: 'run-hero' } },
+      { slot: 'background', catalogAtAssignment: { assetId: 'canonical-plate', workspaceId: 'default', runId: 'run-plate' } },
     ] })
     await name.fill('Not saved')
     await page.getByRole('button', { name: 'Open scene', exact: true }).first().click()
@@ -386,7 +387,7 @@ test('keeps review decisions across reload and exports catalog/template versions
       templates: Array<{ id: string; templateVersion: number; decision: string }>
     }
     expect(exported.catalogVersion).toBe(EXPANDED_CATALOG_VERSION)
-    expect(exported.templates).toHaveLength(48)
+    expect(exported.templates).toHaveLength(41)
     expect(exported.templates.find(template => template.id === 'cinema-establishing')).toMatchObject({
       templateVersion: 1,
       decision: 'keep',

@@ -51,7 +51,7 @@ const rawCatalogVersion = (raw: string): unknown => {
 }
 
 const migrationWarning = (legacyWarning?: string) => [
-  'Se preservaron las decisiones válidas de las 24 plantillas previas; las 24 plantillas nuevas quedan pendientes y no se autoaprueban.',
+  `Se preservaron las decisiones válidas de las ${LEGACY_REFS.length} plantillas previas; las ${EXPANDED_REFS.length - LEGACY_REFS.length} plantillas nuevas quedan pendientes y no se autoaprueban.`,
   legacyWarning,
 ].filter(Boolean).join(' ')
 

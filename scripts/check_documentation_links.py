@@ -8,7 +8,15 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCUMENTS = (ROOT / "README.md", ROOT / "ui" / "README.md")
+DOCUMENTS = (
+    ROOT / "README.md",
+    ROOT / "ui" / "README.md",
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "docs" / "HOWUSEIT.md",
+    ROOT / "docs" / "APP_USER_GUIDE.md",
+    ROOT / "docs" / "README.md",
+    ROOT / "docs" / "development" / "README.md",
+)
 MARKDOWN_LINK = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
 

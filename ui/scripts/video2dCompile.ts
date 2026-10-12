@@ -1,8 +1,8 @@
 // Headless bridge: the MCP server validates catalog ids, then this module calls
 // the existing UI builders. It does not save, export, or fetch the network.
-import { getCandidateSceneTemplate } from '../src/features/sceneTemplates/catalog.ts'
-import { compileCandidateScene, type TemplateBindings, type TemplateControls } from '../src/features/sceneTemplates/compile.ts'
-import { compileVideo2dCandidate, VIDEO2D_CANDIDATE_IDS, type Video2dCandidateSize } from '../src/features/sceneTemplates/video2dCandidates.ts'
+import { canonicalBindings, resolveSceneTemplate, type TemplateAssetKind } from '../src/features/sceneTemplates/catalog.ts'
+import { compileCandidateScene, type TemplateBindings, type TemplateControlInput } from '../src/features/sceneTemplates/compile.ts'
+import { TemplateError } from '../src/features/sceneTemplates/templateErrors.ts'
 import { buildTextTemplate, TEXT_TEMPLATES } from '../src/lib/kineticText/templates.ts'
 import { importLrc, importPlainLyrics, importSrt, importTimingBundle, parseSceneLyrics, type SceneLyrics } from '../src/lib/kineticText/lyrics.ts'
 import type { KineticText } from '../src/lib/kineticText/types.ts'
@@ -12,19 +12,22 @@ const Y_MIN = 12
 const Y_MAX = 80
 const WIDTH_MAX = 90
 
-export type BridgeFailure = { ok: false; code: string; message: string }
+export type BridgeFailure = { ok: false; code: string; message: string; use_instead?: string[] }
 export type BridgeResult = { ok: true; result: { document: Scene; warnings: string[] } | { texts: KineticText[] } | { lyrics: SceneLyrics } } | BridgeFailure
 
 class CodedError extends Error {
   code: string
-  constructor(code: string, message: string) {
+  details: Readonly<Record<string, unknown>>
+  constructor(code: string, message: string, details: Readonly<Record<string, unknown>> = {}) {
     super(message)
     this.code = code
+    this.details = details
   }
 }
 
 function asCoded(error: unknown): CodedError {
   if (error instanceof CodedError) return error
+  if (error instanceof TemplateError) return new CodedError(error.code, error.message, error.details)
   const message = error instanceof Error ? error.message : 'Compile failed'
   return new CodedError(codeFor(message), message)
 }
@@ -48,18 +51,22 @@ function stringMap(value: unknown, code: string): Record<string, string> {
   return entries
 }
 
-function slotType(source: string, kinds: readonly ('image' | 'model3d')[]): 'image' | 'model3d' {
+const VIDEO_SOURCE = /^data:video\/|\.(?:mp4|webm|mov|m4v)(?:$|[?#])/i
+
+/** The asset type a source declares by its MIME or extension; the Python compile reads it the same way. */
+export function slotType(source: string, kinds: readonly TemplateAssetKind[]): TemplateAssetKind {
   if (/^data:model\/gltf-binary;/i.test(source) || /\.glb(?:$|[?#])/i.test(source)) return 'model3d'
-  if (kinds.length === 1 && kinds[0] === 'model3d') return 'model3d'
+  if (VIDEO_SOURCE.test(source)) return 'video'
+  if (kinds.length === 1 && kinds[0] !== 'image') return kinds[0]
   return 'image'
 }
 
 function sceneBindings(id: string, assets: unknown): TemplateBindings {
-  const template = getCandidateSceneTemplate(id)
-  const map = stringMap(assets, 'template_bad_asset')
+  const { template } = resolveSceneTemplate(id)
+  const sources = canonicalBindings(template, stringMap(assets, 'template_bad_asset'))
   const bindings: TemplateBindings = {}
   for (const slot of template.slots) {
-    const source = map[slot.id]
+    const source = sources[slot.id]
     if (!source) continue
     const type = slotType(source, slot.kinds)
     if (!slot.kinds.includes(type)) throw new CodedError('template_bad_asset', slot.id)
@@ -68,32 +75,17 @@ function sceneBindings(id: string, assets: unknown): TemplateBindings {
   return bindings
 }
 
-function sceneControls(value: unknown): Partial<TemplateControls> {
+/** Numbers, choices and texts pass through; compileCandidateScene checks them against the card. */
+function sceneControls(value: unknown): TemplateControlInput {
   if (value == null) return {}
   if (typeof value !== 'object' || Array.isArray(value)) throw new CodedError('template_bad_control', 'controls')
-  const controls: Partial<TemplateControls> = {}
-  for (const key of ['duration', 'bpm', 'intensity'] as const) {
-    const item = (value as Record<string, unknown>)[key]
+  const controls: Record<string, number | string> = {}
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
     if (item == null) continue
-    if (typeof item !== 'number' || !Number.isFinite(item)) throw new CodedError('template_bad_control', key)
-    controls[key] = item
+    if (typeof item === 'string' || (typeof item === 'number' && Number.isFinite(item))) controls[key] = item
+    else throw new CodedError('template_bad_control', key)
   }
   return controls
-}
-
-function numericSize(input: Record<string, unknown>): Video2dCandidateSize {
-  const controls = input.controls && typeof input.controls === 'object' && !Array.isArray(input.controls)
-    ? input.controls as Record<string, unknown>
-    : {}
-  const duration = typeof input.duration === 'number' ? input.duration
-    : typeof controls.duration === 'number' ? controls.duration
-    : undefined
-  const size: Video2dCandidateSize = {}
-  if (typeof input.width === 'number') size.width = input.width
-  if (typeof input.height === 'number') size.height = input.height
-  if (typeof duration === 'number') size.duration = duration
-  if (typeof input.fps === 'number') size.fps = input.fps
-  return size
 }
 
 function frameRate(value: unknown): 24 | 30 | 60 | undefined {
@@ -138,12 +130,10 @@ function fitPortrait(scene: Scene, warnings: string[]): Scene {
 function compileScene(input: Record<string, unknown>): Scene {
   const id = input.templateId
   if (typeof id !== 'string' || !id) throw new CodedError('template_unknown', 'templateId')
-  if ((VIDEO2D_CANDIDATE_IDS as readonly string[]).includes(id)) {
-    const scene = compileVideo2dCandidate(id, numericSize(input), stringMap(input.assets, 'template_bad_asset'))
-    if (!scene) throw new CodedError('template_unknown', id)
-    return scene
-  }
-  return compileCandidateScene(id, sceneBindings(id, input.assets), sceneControls(input.controls))
+  const controls = sceneControls(input.controls)
+  const duration = typeof input.duration === 'number' && controls.duration === undefined ? { duration: input.duration } : {}
+  const frame = { ...(typeof input.width === 'number' ? { width: input.width } : {}), ...(typeof input.height === 'number' ? { height: input.height } : {}) }
+  return compileCandidateScene(id, sceneBindings(id, input.assets), { ...controls, ...duration }, frame)
 }
 
 function compileTemplate(input: Record<string, unknown>) {
@@ -219,6 +209,7 @@ export function compilePayload(payload: unknown): BridgeResult {
     return { ok: true, result: dispatch(payload) }
   } catch (error) {
     const coded = asCoded(error)
-    return { ok: false, code: coded.code, message: coded.message }
+    const useInstead = coded.details.use_instead
+    return { ok: false, code: coded.code, message: coded.message, ...(Array.isArray(useInstead) ? { use_instead: useInstead.map(String) } : {}) }
   }
 }

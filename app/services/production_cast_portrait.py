@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from services.production_image_defaults import image_choice
+
 PHRASE = "single full-body view, plain neutral background, exactly one subject"
 PORTRAIT_SIZE = "1024x1536"
 
@@ -68,8 +70,6 @@ def _portrait_jobs(production: Any, spec: dict) -> dict:
     cast = production.state.get("cast") or {}
     settings = spec.get("style") or {}
     style = settings.get("image", "")
-    model = settings.get("image_model", "flux2_klein_9b")
-    steps = settings.get("image_steps")
     jobs = {}
     for entry in spec.get("cast") or []:
         if not isinstance(entry, dict) or entry.get("group"):
@@ -79,7 +79,7 @@ def _portrait_jobs(production: Any, spec: dict) -> dict:
             continue
         jobs[cid] = production.image(
             "cast-single-" + cid, single_prompt(entry, style), None, PORTRAIT_SIZE,
-            entry.get("seed", 5), entry.get("image_model", model), entry.get("image_steps", steps),
+            entry.get("seed", 5), *image_choice(entry, settings),
             production._attempt("cast_single_attempts", cid),
         )
     return jobs

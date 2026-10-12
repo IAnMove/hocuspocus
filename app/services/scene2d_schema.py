@@ -186,7 +186,7 @@ def _layer() -> dict:
         "source": _string(), "thumbnail": _string(), "visible": {"type": "boolean"}, "z": _number(),
         "locked": {"type": "boolean"}, "missingAsset": {"type": "boolean"}, "fill": {"type": "boolean"},
         "cover": {"type": "boolean"},
-        "atmosphere": _atmosphere(), "parallax": _number(),
+        "atmosphere": _atmosphere(), "parallax": _number(), "parallaxZoom": {"type": "boolean"},
         "beatPulse": _object({"amount": _number(), "on": _enum(["beats", "downbeats"])}, ["amount", "on"]),
         "sequence": _sequence(), "seamlessHorizontal": {"type": "boolean"},
         "faceBinding": _object({
@@ -199,6 +199,8 @@ def _layer() -> dict:
         }, ["type", "targetLayerId"]),
         "effects": _effects(), "strip": _strip(),
         "focus": _object({"x": _number(0, 100), "y": _number(0, 100)}, ["x", "y"]),
+        # Video layers: the clip's own clock (sceneTimeline.sceneVideoTime), apart from the motion timing.
+        "playback": _object({"start": _number(0, 3600), "loop": _enum(["loop", "hold", "pingpong"]), "speed": _number(0.1, 4)}),
         "transform": _object({
             "x": _number(), "y": _number(), "scale": _number(), "opacity": _number(),
             "rotation": _number(), "rotationX": _number(), "rotationY": _number(),
@@ -263,8 +265,9 @@ def _finish() -> dict:
     return _object({
         "grade": _object({
             "exposure": unit, "contrast": unit, "saturation": unit, "temperature": unit, "tint": unit,
-            "fade": _number(0, 1), "beatFlash": _number(0, 1),
+            "fade": _number(0, 1), "beatFlash": _number(0, 1), "curve": _enum(["aces", "agx", "neutral"]),
         }, ["exposure", "contrast", "saturation", "temperature", "tint", "fade"]),
+        "gel": _object({"color": HEX, "amount": _number(0, 1), "shadows": HEX}, ["color", "amount"]),
         "bloom": _object({
             "amount": _number(0, 1), "threshold": _number(0, 1), "radius": _number(0, 1), "beat": _number(0, 1),
         }, ["amount", "threshold", "radius"]),
@@ -276,6 +279,8 @@ def _finish() -> dict:
         "grain": _object({"amount": _number(0, 1), "size": _number(0.5, 4)}, ["amount", "size"]),
         "texture": _object({"kind": _enum(["none", "paper", "film-dust", "scratches"]), "amount": _number(0, 1)}, ["kind", "amount"]),
         "letterbox": _object({"ratio": _enum([1.85, 2, 2.39]), "color": HEX}, ["ratio", "color"]),
+        "vhs": _object({"amount": _number(0, 1)}, ["amount"]),
+        "scanlines": _object({"amount": _number(0, 1)}, ["amount"]),
         "applyToTexts": {"type": "boolean"},
         "riso": _object({
             "paper": HEX, "sepPaper": HEX,
@@ -306,6 +311,8 @@ def _sfx() -> dict:
         "size": _number(1, 200), "intensity": _number(0.1, 2), "color": HEX,
         "rotation": _number(-180, 180), "seed": {"type": "integer", "minimum": 1, "maximum": 1000000},
         "sound": {"type": "boolean"}, "volume": _number(0, 1),
+        # A laser or lightning from this point to x/y: % of the frame, or of the picture of the layer it names.
+        "from": _object({"x": _number(-50, 150), "y": _number(-50, 150), "layerId": _string(160)}, ["x", "y"]),
     }, ["id", "kind", "start", "end"]), max_items=64)
 
 
@@ -360,6 +367,8 @@ def _document_properties() -> dict:
         "height": _number(0, exclusive_low=True),
         "fps": _enum([24, 30, 60]),
         "duration": {"type": "number", "exclusiveMinimum": 0, "maximum": 600},
+        "motionStep": _enum([2, 3, 4]),
+        "stopMotionJitter": _number(0, 2),
         "layers": _array(_layer(), max_items=500),
         "audioTracks": _array(_object({
             "id": _string(), "filename": _string(), "name": _string(),

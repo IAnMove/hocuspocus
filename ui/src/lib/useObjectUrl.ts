@@ -18,3 +18,10 @@ export function useObjectUrl(source: Blob | null, fallback: string | null = null
 
   return objectUrl || fallback
 }
+
+/** One object URL per file in `files`, revoked together when the list changes. */
+export function useObjectUrls(files: readonly Blob[]): string[] {
+  const urls = useMemo(() => files.map(file => URL.createObjectURL(file)), [files])
+  useEffect(() => () => { urls.forEach(url => URL.revokeObjectURL(url)) }, [urls])
+  return urls
+}

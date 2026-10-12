@@ -8,16 +8,30 @@ export type PresetCharacterVoice = {
   instructions?: string
 }
 export const CHARACTER_VOICE_LANGUAGES = ['auto', 'chinese', 'english', 'japanese', 'korean', 'german', 'french', 'russian', 'portuguese', 'spanish', 'italian'] as const
+/** Speech models that clone a character voice from a reference recording and its transcript. */
+export const REFERENCE_VOICE_MODELS = ['voxcpm2_base', 'qwen3_tts_base'] as const
+export type ReferenceVoiceModel = typeof REFERENCE_VOICE_MODELS[number]
+/** New reference voices start on VoxCPM2. */
+export const DEFAULT_REFERENCE_VOICE_MODEL: ReferenceVoiceModel = 'voxcpm2_base'
+/** Reference voices that also take a style direction (VoxCPM2 controllable cloning). */
+export const STYLED_REFERENCE_VOICE_MODELS: readonly ReferenceVoiceModel[] = ['voxcpm2_base']
+export const VOICE_STYLE_MAX_CHARS = 300
 export type CustomCharacterVoice = {
   provider: 'local'
-  model: 'qwen3_tts_base'
+  model: ReferenceVoiceModel
   voiceId: 'reference'
   name: string
   referenceAudio: string
   transcript: string
   language: typeof CHARACTER_VOICE_LANGUAGES[number]
+  /** VoxCPM2 only: how the cloned voice speaks (whispering, excited…). */
+  instructions?: string
 }
 export type CharacterVoice = PresetCharacterVoice | CustomCharacterVoice
+export const isReferenceVoiceModel = (model: unknown): model is ReferenceVoiceModel =>
+  REFERENCE_VOICE_MODELS.includes(model as ReferenceVoiceModel)
+export const isReferenceVoice = (voice: CharacterVoice | undefined): voice is CustomCharacterVoice =>
+  Boolean(voice && isReferenceVoiceModel(voice.model))
 /** One dedicated voice per spoken language; the kit's `voice` speaks every other language. */
 export type CharacterVoicesByLanguage = Partial<Record<SpokenLanguage, CharacterVoice>>
 export type CharacterKitRef = { id: string; workspace: string }
@@ -48,22 +62,29 @@ export function parseCharacterVoiceReference(raw: unknown): string {
 }
 
 const boundedText = (raw: unknown, max: number): raw is string => typeof raw === 'string' && Boolean(raw.trim()) && raw.length <= max
+function voiceStyle(data: Record<string, unknown>, model: ReferenceVoiceModel): { instructions?: string } {
+  if (data.instructions === undefined) return {}
+  if (!STYLED_REFERENCE_VOICE_MODELS.includes(model)) throw new Error('This reference voice takes no style direction.')
+  if (typeof data.instructions !== 'string' || data.instructions.length > VOICE_STYLE_MAX_CHARS) throw new Error('Voice instructions are too long.')
+  return data.instructions.trim() ? { instructions: data.instructions.trim() } : {}
+}
 function parseCustomCharacterVoice(data: Record<string, unknown>): CustomCharacterVoice {
-  if (Object.keys(data).some(key => !['provider', 'model', 'voiceId', 'name', 'referenceAudio', 'transcript', 'language'].includes(key))
+  const keys = ['provider', 'model', 'voiceId', 'name', 'referenceAudio', 'transcript', 'language', 'instructions']
+  if (Object.keys(data).some(key => !keys.includes(key)) || !isReferenceVoiceModel(data.model)
     || data.provider !== 'local' || data.voiceId !== 'reference' || !boundedText(data.name, 120) || !boundedText(data.transcript, 4000)
     || !CHARACTER_VOICE_LANGUAGES.includes(data.language as typeof CHARACTER_VOICE_LANGUAGES[number])) {
     throw new Error('Add a named local reference recording, its transcript and a supported language.')
   }
-  return { provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: data.name.trim(),
+  return { provider: 'local', model: data.model, voiceId: 'reference', name: data.name.trim(),
     referenceAudio: parseCharacterVoiceReference(data.referenceAudio), transcript: data.transcript.trim(),
-    language: data.language as CustomCharacterVoice['language'] }
+    language: data.language as CustomCharacterVoice['language'], ...voiceStyle(data, data.model) }
 }
 
 export function parseCharacterVoice(raw: unknown): CharacterVoice | undefined {
   if (raw === undefined) return undefined
   if (!raw || typeof raw !== 'object') throw new Error('Invalid character voice.')
   const data = raw as Record<string, unknown>
-  if (data.model === 'qwen3_tts_base') return parseCustomCharacterVoice(data)
+  if (isReferenceVoiceModel(data.model)) return parseCustomCharacterVoice(data)
   if (Object.keys(data).some(key => !['provider', 'model', 'voiceId', 'instructions'].includes(key))
     || data.provider !== 'local' || data.model !== 'qwen3_tts_customvoice'
     || !CHARACTER_VOICES.includes(data.voiceId as typeof CHARACTER_VOICES[number])
@@ -81,7 +102,7 @@ export function parseCharacterVoicesByLanguage(raw: unknown): CharacterVoicesByL
     if (!SPOKEN_LANGUAGES.includes(language as SpokenLanguage)) throw new Error(`Unsupported voice language: ${language}.`)
     const voice = parseCharacterVoice(value)
     if (!voice) continue
-    if (voice.model === 'qwen3_tts_base' && voice.language !== language && voice.language !== 'auto') {
+    if (isReferenceVoice(voice) && voice.language !== language && voice.language !== 'auto') {
       throw new Error('A reference voice must speak the language it is assigned to.')
     }
     voices[language as SpokenLanguage] = voice
@@ -98,7 +119,18 @@ export function characterVoiceFor(
   return (key && kit?.voicesByLanguage?.[key]) || kit?.voice
 }
 
-export const characterVoiceLabel = (voice: CharacterVoice) => voice.model === 'qwen3_tts_base' ? voice.name : voice.voiceId
+export const characterVoiceLabel = (voice: CharacterVoice) => isReferenceVoice(voice) ? voice.name : voice.voiceId
+/** Generation params of a cloned voice: its recording and transcript; Qwen3 also takes the
+ * language, VoxCPM2 an optional style direction. */
+export function referenceVoiceParams(voice: CustomCharacterVoice, referencePath: string | undefined): Record<string, unknown> {
+  return {
+    audio_prompt_type: 'A', audio_guide: referencePath, alt_prompt: voice.transcript,
+    ...(voice.model === 'qwen3_tts_base' ? { model_mode: voice.language } : {}),
+    ...(voice.instructions ? { custom_settings: { style: voice.instructions } } : {}),
+  }
+}
+/** The speech engine a voice belongs to, as people know it. */
+export const speechEngineName = (model: string) => model.startsWith('voxcpm2') ? 'VoxCPM2' : 'Qwen3'
 
 export function isCharacterVoiceReady(raw: unknown): boolean {
   try { parseCharacterVoice(raw); return true } catch { return false }

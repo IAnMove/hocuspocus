@@ -27,7 +27,7 @@ export function StoryStructureTab({
         })}><Plus size={13} /> {t('structure.add')}</button>
       </div>
       <div className="space-y-3">
-        {project.beats.map((beat, index) => <BeatEditor key={beat.id} beat={beat} index={index} total={project.beats.length} update={update} />)}
+        {project.beats.map((beat, index) => <BeatEditor projectId={project.id} key={beat.id} beat={beat} index={index} total={project.beats.length} update={update} />)}
       </div>
     </>
   )

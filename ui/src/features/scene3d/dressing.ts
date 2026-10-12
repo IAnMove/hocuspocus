@@ -19,10 +19,14 @@ import { clearDrive } from './driveMotion.ts'
 import type { GpuWorld } from './gpu.ts'
 import type { Scene3DDressing } from './types.ts'
 import { disposePixelWorld, isPixelDressing, pixelWorldGroup } from './pixel/pixelWorldSet'
+import { applyMotionLabAtmosphere, buildMotionLab } from './motionlab/runtime'
+import { isMotionLab, type MotionLabHandle, type MotionLabSettings } from './motionlab/types'
 
 export function dropDressing(world: GpuWorld) {
   if (!world.dressing) return
   world.scene.remove(world.dressing)
+  const motionLab = world.dressing.userData.motionLab as MotionLabHandle | undefined
+  if (motionLab) { motionLab.dispose(); world.dressing = null; return }
   if (world.dressing.userData.pixelWorld) {
     disposePixelWorld(world.dressing)
     world.dressing = null
@@ -98,13 +102,16 @@ export function syncDressing(
   kind: Scene3DDressing | undefined,
   maps?: { cafe?: CafeMaps; drive?: DriveMaps },
   settings?: AtmosSettings,
+  motionLab?: MotionLabSettings,
 ) {
   dropDressing(world)
   clearDrive(world)
   applyActionAtmosphere(world.scene, kind)
   applyAtmosAtmosphere(world.scene, kind, settings)
+  applyMotionLabAtmosphere(world.scene, kind)
   world.floor.visible = kind !== 'space' && kind !== 'treadmill' && kind !== 'cafe' && !isDriveDressing(kind) && !isActionDressing(kind) && !isPixelDressing(kind) && !isAtmosDressing(kind)
   world.floor.position.y = world.floor.visible ? 0 : -80
+  if (isMotionLab(kind)) { world.floor.visible = false; world.floor.position.y = -80; world.dressing = buildMotionLab(kind, motionLab)?.root ?? null }
   if (kind === 'street') world.dressing = streetGroup()
   if (kind === 'retro-lab' || kind === 'observatory' || kind === 'broadcast-plaza') world.dressing = mediaSet(kind)
   if (kind === 'workshop') world.dressing = workshopGroup()

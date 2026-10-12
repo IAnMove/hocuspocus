@@ -17,6 +17,7 @@ import { latestNativeTake } from './nativeTake'
 import { nativeGenerationPlan, type NativeGenerationMode } from './nativeGenerationPlan'
 import { seriesAssetUrl } from './referenceImages'
 import { releaseStoredSceneCopy } from '../../lib/sceneRecovery'
+import { safeSessionStorage, safeStorageSet } from '../../lib/safeStorage'
 import i18n from '../../i18n'
 import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 import { registerEpisodeProduction, noteEpisodeProductionStatus } from './productionRegistration'
@@ -78,7 +79,7 @@ async function persistNativeShot(
       nativeRegeneration: mode !== 'missing', lipSyncUpdate: mode !== 'missing' && shot.dialogueBeats.length > 0, characterReviewPolicy: policy,
       lipSyncFingerprint: seriesLipSyncFingerprint(workspace, series, prepared.shot, kits) } })
   useSeriesStore.getState().acceptAssetImport(workspace, result)
-  if (sceneFilename) releaseStoredSceneCopy(sessionStorage, recoveryKey, recoveryCopy)
+  if (sceneFilename) releaseStoredSceneCopy(safeSessionStorage, recoveryKey, recoveryCopy)
 }
 
 async function renderNativeShot(workspace: string, seriesId: string, episodeId: string, shotId: string, mode: NativeGenerationMode) {
@@ -103,7 +104,7 @@ async function renderNativeShot(workspace: string, seriesId: string, episodeId: 
   await useSeriesStore.getState().saveNow()
   const recoveryKey = `hocuspocus:series-scene:${workspace}:${seriesId}:${episodeId}:${shotId}`
   const recoveryCopy = JSON.stringify(prepared.scene)
-  sessionStorage.setItem(recoveryKey, recoveryCopy)
+  safeStorageSet('session', recoveryKey, recoveryCopy)
   useSeriesNativeBatch.setState({ phase: 'rendering' })
   useStore.getState().setMediaFilter('scene3d')
   await presentSceneDocument('2d', prepared.scene, () => useStore.getState().activeWorkspace === workspace)

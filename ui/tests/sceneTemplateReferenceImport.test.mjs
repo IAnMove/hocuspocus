@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { APPROVED_REFERENCE_JSON } from '../src/features/sceneTemplates/approvedReferences.ts'
-import { CANDIDATE_SCENE_TEMPLATES } from '../src/features/sceneTemplates/catalog.ts'
+import { CANDIDATE_SCENE_TEMPLATES, SCENE_TEMPLATE_ALIASES, resolveSceneTemplate } from '../src/features/sceneTemplates/catalog.ts'
 import { importApprovedReference, verifyReferenceBytes } from '../src/features/sceneTemplates/referenceImport.ts'
 
-test('reference index pins exactly 24 JSON hashes/byte counts, not generated media', () => {
-  assert.deepEqual(Object.keys(APPROVED_REFERENCE_JSON), CANDIDATE_SCENE_TEMPLATES.map(item => item.id))
+// The 24 «coral v1» originals the owner approved by eye. Seven were merged into other cards on 2026-10-12; their
+// published hashes stay as a historical record and each id still compiles, as an alias of its card.
+const CORAL_V1 = [
+  'cinema-establishing', 'cinema-reveal', 'cinema-closeup', 'cinema-two-shot', 'cinema-detail', 'cinema-hero', 'cinema-isolation', 'cinema-tracking',
+  'music-pulse', 'music-duet', 'music-chorus', 'music-orbit', 'music-parallax', 'music-stage', 'music-product', 'music-finale',
+  'space-cruise', 'space-orbit', 'space-docking', 'space-chase', 'space-broadside', 'space-shield', 'space-explosion', 'space-warp',
+]
+
+test('reference index keeps the 24 coral v1 hashes/byte counts as history, not generated media', () => {
+  assert.deepEqual(Object.keys(APPROVED_REFERENCE_JSON), CORAL_V1)
+  const merged = CORAL_V1.filter(id => id in SCENE_TEMPLATE_ALIASES)
+  assert.deepEqual(merged, ['cinema-isolation', 'music-chorus', 'music-parallax', 'music-stage', 'music-finale', 'space-shield', 'space-explosion'])
+  assert.deepEqual(CORAL_V1.filter(id => !merged.includes(id)), CANDIDATE_SCENE_TEMPLATES.map(item => item.id))
+  for (const id of CORAL_V1) assert.ok(resolveSceneTemplate(id).template, `${id} still compiles`)
   for (const reference of Object.values(APPROVED_REFERENCE_JSON)) {
     assert.deepEqual(Object.keys(reference).sort(), ['bytes', 'sha256'])
     assert.match(reference.sha256, /^[a-f0-9]{64}$/)

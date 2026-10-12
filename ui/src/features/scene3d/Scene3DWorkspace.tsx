@@ -1,6 +1,10 @@
+import { PropLibraryPanel } from './PropLibraryPanel'
+import { propSlot, PROP_DRAG_TYPE, type LibraryProp } from './propLibrary'
 import { ExampleDownloads } from './ExampleDownloads'
-import { exampleCollections } from './templateCatalog'
-import { CinematicControls, AppearanceControls } from './CinematicControls'
+import { useDocumentRoundtrip } from './documentRoundtrip'
+import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
+import { exampleCollections, isBuiltinScene3DTemplate } from './templateCatalog'
+import { CinematicControls, AppearanceControls, RenderLookControls } from './CinematicControls'
 import { PixelWorldControls } from './PixelWorldControls'
 import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
 import { useSceneDocumentHandoff } from '../sceneFx/handoff'
@@ -23,9 +27,13 @@ import { useSpeechProfiles } from './speech/useSpeechProfiles'
 import { SPEECH_HANDOFF_EVENT, takeSpeechProduction, preserveSpeechDraft } from './speech/production'
 import { Scene3DSoundtrackControls } from './speech/Scene3DSoundtrackControls'
 import { SceneSpeechAudio } from './speech/preview'
+import { MotionLabAudio } from './motionlab/previewAudio'
+import { MotionLabControls } from './motionlab/controls'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
+import { Scene3DRoomCameraPicker } from './Scene3DRoomCameraPicker'
+import { withRoomCamera } from './roomCamera'
 import { AtmosClearingControls } from './AtmosClearingControls.tsx'
 import { KineticTextControls } from '../../components/common/KineticTextControls'
 import { KineticTextOverlay } from '../../components/common/KineticTextOverlay'
@@ -176,7 +184,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       applyScene(adopted.document)
       return
     }
-    sessionStorage.setItem('hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
+    safeStorageSet('session', 'hocuspocus:scene-before-command:' + Date.now(), JSON.stringify(sceneDocRef.current))
     bumpGeneration(); applyScene(adopted.document); setFrame(0)
     selectSlot(adopted.document.slots[0]?.id ?? 'subject_1'); setSpeechOpen(adopted.document.slots.some(slot => Boolean(slot.speech)))
   })
@@ -318,7 +326,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     const receive = () => {
       if (exportingRef.current) return
       try {
-        const next = takeSpeechProduction(workspace, sessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
+        const next = takeSpeechProduction(workspace, safeSessionStorage, () => preserveSpeechDraft(workspace, sceneDocRef.current))
         if (!next) return
         bumpGeneration()
         setPlaying(false); setFrame(0)
@@ -353,7 +361,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     adoptMountedScene(remountUserTemplate(pack, sceneDoc, keepAssets), pack.id)
   }
 
-  const roundtrip = Boolean(parseScene3DDocument(JSON.parse(JSON.stringify(sceneDoc))))
+  const roundtrip = useDocumentRoundtrip(sceneDoc)
 
   const exportScene = async () => {
     const target = session.captureForSave()
@@ -377,12 +385,13 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     <div className="flex w-full flex-col gap-2" data-testid="scene3d-workspace">
       <ExampleDownloads required={exampleCollections(sceneDoc)} disabled={editingLocked} onInstalled={() => { if (!exportingRef.current) bumpGeneration() }} />
       <SceneSpeechAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} />
+      <MotionLabAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} speed={speed} />
       {sceneDoc.production && <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm" data-testid="speech-production-origin">
         {editorT(`speech.kind.${sceneDoc.production.kind}`)} · {sceneDoc.production.title}
         <span className="mt-1 block text-xs text-text-muted">{editorT('speech.productionReady')}</span>
         <button className="mt-2 underline" disabled={editingLocked} onClick={() => {
           try {
-            const raw = sessionStorage.getItem('hocuspocus:world3d-before-speech:' + workspace)
+            const raw = safeStorageGet('session', 'hocuspocus:world3d-before-speech:' + workspace)
             const previous = raw && parseScene3DDocument(JSON.parse(raw))
             if (!previous) return
             preserveSpeechDraft(workspace, sceneDoc)
@@ -417,6 +426,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       <Scene3DSpeechSelector slots={sceneDoc.slots} selected={selected} open={speechOpen}
         onToggle={() => { setPickTarget(undefined); setSpeechOpen(open => !open) }} onSelect={selectSlot} />
       <CinematicControls environment={sceneDoc.environment} disabled={editingLocked} onChange={environment => applyScene(current => ({ ...current, environment }))} />
+      <RenderLookControls document={sceneDoc} disabled={editingLocked} onChange={look => applyScene(current => ({ ...current, ...look }))} />
+      <MotionLabControls document={sceneDoc} disabled={editingLocked} onChange={motionLab => applyScene(current => ({ ...current, motionLab }))} />
       <PixelWorldControls pixelWorld={sceneDoc.pixelWorld} dressing={sceneDoc.dressing} tvs={sceneDoc.slots.filter(slot => slot.screen?.style === 'crt').length} slots={sceneDoc.slots.length} disabled={editingLocked}
         onChange={patch => applyScene(current => ({ ...current, ...patch }))} onAddTv={() => applyScene(current => addTv(current))} />
       <SceneFxControls cues={sceneDoc.sfx} duration={sceneDoc.duration} disabled={editingLocked} onChange={sfx => applyScene(current => ({ ...current, sfx }))} onShowcase={collection => applyScene(current => withFxShowcase(current, collection))} />
@@ -484,6 +495,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             {FAMILIES.map(family => <option key={family} value={family}>{t(`stage.family.${family}`)}</option>)}
           </select>
         </label>
+        <Scene3DRoomCameraPicker document={sceneDoc} disabled={exporting} onChange={id => applyScene(current => withRoomCamera(current, id))} />
         <button
           type="button"
           data-testid="world3d-export"
@@ -594,7 +606,12 @@ function WorkspaceStageColumn({
 }) {
   const pickKey = selected ? `${generation}/${selected.id}/${selected.sourceUrl}` : ''
   return (
-    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
+    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes(PROP_DRAG_TYPE)) event.preventDefault() }} onDrop={event => {
+            const raw = event.dataTransfer.getData(PROP_DRAG_TYPE)
+            if (!raw || editingLocked) return
+            event.preventDefault()
+            try { const prop = JSON.parse(raw) as LibraryProp; if (prop.approved && prop.heightM > 0) applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] })) } catch { /* Ignore foreign drag data. */ }
+          }}>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Scene3DPreview width={sceneDoc.width} height={sceneDoc.height}>
           <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
@@ -637,11 +654,14 @@ function WorkspaceStageColumn({
           </Scene3DInteraction>
         </Scene3DPreview>
         <div className="min-w-0 space-y-3">
+          <PropLibraryPanel workspace={workspace} disabled={editingLocked} onAdd={prop => applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))} />
           <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
+          {selected?.slot === 'prop' && <button disabled={editingLocked} className="min-h-11 rounded-lg border border-border px-3" onClick={() => applyScene(current => ({ ...current, slots: current.slots.filter(slot => slot.id !== selected.id) }))}>{editorT('props.remove')}</button>}
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
             onReset={() => {
-              const pose = applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id)
+              const pose = isBuiltinScene3DTemplate(sceneDoc.templateId)
+                ? applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id) : undefined
               if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
             }} />}
         </div>

@@ -1,44 +1,49 @@
 import { finishTemplateLayers, TEMPLATE_FINISH_VERSION } from './templateFinish'
-import type { Scene } from '../../types'
-import { EXPANDED_CATALOG_VERSION, templateCatalogVersion, getCandidateSceneTemplate, type SceneTemplateDefinition } from './catalog'
-import { backdrop, foreground, type TemplateBindings, type TemplateControls, type TemplateAsset } from './sceneBuilders'
+import type { Scene, SceneLayer } from '../../types'
+import { canonicalBindings, requiredSlots, resolveSceneTemplate, templateCatalogVersion, type SceneTemplateDefinition, type TemplateSlotName } from './catalog'
+import { backdrop, foreground, type BuildContext, type TemplateAsset, type TemplateBindings } from './sceneBuilders'
+import { resolveControls, type TemplateControlInput, type TemplateControlValues } from './templateControls'
+import { TemplateError } from './templateErrors'
+import { withCameraDrift } from './cameraDrift'
 import { cinemaScenes } from './cinemaScenes'
 import { musicScenes } from './musicScenes'
 import { spaceScenes } from './spaceScenes'
 import { musicMotionSolo } from './musicMotionSolo'
 import { musicMotionEnsemble } from './musicMotionEnsemble'
 import { musicMotionBackground } from './musicMotionBuilders'
+import { video2dScenes, type Video2dFrame } from './video2dCandidates'
 export type { TemplateBindings, TemplateControls, TemplateAsset } from './sceneBuilders'
+export type { TemplateControlInput } from './templateControls'
+
+/** Bindings as callers send them: the slot names of the card, or the old names (hero, plate, prop). */
+export type TemplateBindingsInput = Readonly<Record<string, TemplateAsset | undefined>>
 
 const builders = { ...cinemaScenes, ...musicScenes, ...spaceScenes, ...musicMotionSolo, ...musicMotionEnsemble }
 const DISTINCT_MUSIC_SLOTS = ['subject_1', 'subject_2', 'prop_1'] as const
 
-function finiteRange(value: number, min: number, max: number, label: string) {
-  if (!Number.isFinite(value) || value < min || value > max) throw new Error(`${label}: debe estar entre ${min} y ${max}.`)
-  return value
-}
 function validateAsset(value: TemplateAsset) {
-  if (typeof value.source !== 'string' || !value.source.trim() || value.source.length > 2_000_000) throw new Error('Cada slot necesita un recurso existente y durable (máximo 2 MB de referencia).')
-  if (!/^(?:data:(?:image\/|model\/gltf-binary;)|\/api\/v1\/|\/examples\/|https?:\/\/)/i.test(value.source)) throw new Error('Usa un asset de Library o una referencia de imagen/GLB durable; no blob:, scripts ni rutas del disco.')
+  if (typeof value.source !== 'string' || !value.source.trim() || value.source.length > 2_000_000) throw new TemplateError('template_bad_asset', 'Cada slot necesita un recurso existente y durable (máximo 2 MB de referencia).')
+  if (!/^(?:data:(?:image\/|model\/gltf-binary;)|\/api\/v1\/|\/examples\/|https?:\/\/)/i.test(value.source)) throw new TemplateError('template_bad_asset', 'Usa un asset de Library o una referencia de imagen/vídeo/GLB durable; no blob:, scripts ni rutas del disco.')
   // HTTP/API references are checked by the media loader; only inline MIME is known here.
   if (/^data:/i.test(value.source)) {
     const matchesKind = value.type === 'image' ? /^data:image\//i : /^data:model\/gltf-binary;/i
-    if (!matchesKind.test(value.source)) throw new Error('El MIME del asset inline no coincide con su tipo declarado.')
+    if (!matchesKind.test(value.source)) throw new TemplateError('template_bad_asset', 'El MIME del asset inline no coincide con su tipo declarado.')
   }
 }
-function validateBindings(template: SceneTemplateDefinition, bindings: TemplateBindings) {
-  const allowed = new Set(template.slots.map(slot => slot.id))
-  if (Object.keys(bindings).some(slot => !allowed.has(slot as keyof TemplateBindings))) throw new Error('El binding contiene un slot desconocido.')
+function validateBindings(template: SceneTemplateDefinition, bindings: TemplateBindings, controls: TemplateControlValues) {
+  const needed = new Set(requiredSlots(template, controls).map(slot => slot.id))
   for (const slot of template.slots) {
     const value = bindings[slot.id]
-    if (!value && slot.required) throw new Error(`Falta el slot obligatorio ${slot.id}.`)
+    if (!value && needed.has(slot.id)) throw new TemplateError('template_missing_slot', `Falta el slot obligatorio ${slot.id}.`)
     if (!value) continue
-    if (!slot.kinds.includes(value.type)) throw new Error(`El slot ${slot.id} no admite ${value.type}.`)
+    if (!slot.kinds.includes(value.type)) throw new TemplateError('template_bad_asset', `El slot ${slot.id} no admite ${value.type}.`)
     validateAsset(value)
   }
-  validateDistinctMusicSlots(bindings)
+  // The choreographies repeat and swap figures, so their identity slots must be distinct assets; the original
+  // grammars keep allowing the same picture twice.
+  if (template.group === 'music-motion') validateDistinctMusicSlots(bindings)
   const models = Object.values(bindings).filter(value => value?.type === 'model3d').map(value => value!.source)
-  if (new Set(models).size !== models.length) throw new Error('Los slots GLB no admiten fuentes repetidas en este compositor.')
+  if (new Set(models).size !== models.length) throw new TemplateError('template_bad_asset', 'Los slots GLB no admiten fuentes repetidas en este compositor.')
 }
 
 function validateDistinctMusicSlots(bindings: TemplateBindings) {
@@ -50,7 +55,7 @@ function validateDistinctMusicSlots(bindings: TemplateBindings) {
 
     const previousSourceSlot = sources.get(binding.source)
     if (previousSourceSlot) {
-      throw new Error(`Los slots musicales ${previousSourceSlot} y ${slot} no pueden reutilizar el mismo recurso: source coincide.`)
+      throw new TemplateError('template_bad_asset', `Los slots musicales ${previousSourceSlot} y ${slot} no pueden reutilizar el mismo recurso: source coincide.`)
     }
     sources.set(binding.source, slot)
 
@@ -58,33 +63,52 @@ function validateDistinctMusicSlots(bindings: TemplateBindings) {
     if (typeof assetId !== 'string' || !assetId.trim()) continue
     const previousAssetSlot = assetIds.get(assetId)
     if (previousAssetSlot) {
-      throw new Error(`Los slots musicales ${previousAssetSlot} y ${slot} no pueden reutilizar el mismo recurso: assetId canónico coincide (${assetId}).`)
+      throw new TemplateError('template_bad_asset', `Los slots musicales ${previousAssetSlot} y ${slot} no pueden reutilizar el mismo recurso: assetId canónico coincide (${assetId}).`)
     }
     assetIds.set(assetId, slot)
   }
 }
 
-export function compileCandidateScene(id: string, bindings: TemplateBindings, options: Partial<TemplateControls> = {}): Scene {
-  const template = getCandidateSceneTemplate(id)
-  const build = builders[id]
-  if (!build) throw new Error(`La plantilla ${id} todavía no tiene compilador.`)
-  validateBindings(template, bindings)
-  const controls: TemplateControls = {
-    duration: finiteRange(options.duration ?? template.defaultDuration, 3, 12, 'Duración'),
-    bpm: finiteRange(options.bpm ?? 120, 40, 220, 'BPM'),
-    intensity: finiteRange(options.intensity ?? .6, 0, 1, 'Intensidad'),
+type SceneBody = Pick<Scene, 'width' | 'height' | 'fps' | 'layers'> & Partial<Pick<Scene, 'texts' | 'finish'>>
+
+function layerScene(template: SceneTemplateDefinition, ctx: BuildContext): SceneBody {
+  const build = builders[template.id]
+  if (!build) throw new TemplateError('template_unknown', `La plantilla ${template.id} todavía no tiene compilador.`)
+  const background = template.group === 'music-motion' ? musicMotionBackground(template.id, ctx) : [backdrop(ctx)]
+  const built = withCameraDrift([...background, ...build(ctx), ...foreground(ctx)], ctx)
+  return { width: 1280, height: 720, fps: 30, layers: finishTemplateLayers(built, template.family, ctx.intensity) }
+}
+
+function sceneBody(template: SceneTemplateDefinition, ctx: BuildContext, frame: Video2dFrame): SceneBody {
+  const video2d = video2dScenes[template.id]
+  return template.group === 'video2d' && video2d ? video2d(ctx, frame) : layerScene(template, ctx)
+}
+
+function checkBudget(layers: SceneLayer[]) {
+  if (layers.length > 24 || layers.filter(item => item.type === 'model3d').length > 2) throw new TemplateError('template_compile_failed', 'La escena excede el presupuesto de 24 capas / 2 GLB.')
+}
+
+/**
+ * Compile one card (or an alias of one) with provided assets. Old slot names and alias ids are translated here, so
+ * the composer, the MCP bridge and saved recipes share one entry; errors carry the codes the Python compile uses.
+ */
+export function compileCandidateScene(id: string, input: TemplateBindingsInput, options: TemplateControlInput = {}, frame: Video2dFrame = {}): Scene {
+  const { template, alias, preset } = resolveSceneTemplate(id)
+  const controls = resolveControls(template, preset, options)
+  const bindings = canonicalBindings<TemplateAsset>(template, input) as TemplateBindings
+  validateBindings(template, bindings, controls)
+  const ctx: BuildContext = {
+    duration: Number(controls.duration), bpm: Number(controls.bpm), intensity: Number(controls.intensity),
+    bindings, options: controls, base: template.defaultDuration,
   }
-  const ctx = { ...controls, bindings }
-  const expanded = templateCatalogVersion(template) === EXPANDED_CATALOG_VERSION
-  const background = expanded ? musicMotionBackground(id, ctx) : [backdrop(ctx)]
-  const layers = finishTemplateLayers([...background, ...build(ctx), ...foreground(ctx)], template.family, controls.intensity)
-  if (layers.length > 24 || layers.filter(item => item.type === 'model3d').length > 2) throw new Error('La escena excede el presupuesto de 24 capas / 2 GLB.')
+  const body = sceneBody(template, ctx, frame)
+  checkBudget(body.layers)
   return {
-    version: 1, name: `${template.title} · candidata`, generationPolicy: 'provided_only',
-    width: 1280, height: 720, fps: 30, duration: controls.duration, layers,
-    narrative: { templateId: id, category: template.family, visualIntent: template.description,
-      controls: { ...controls, finishVersion: TEMPLATE_FINISH_VERSION, catalogVersion: templateCatalogVersion(template), templateVersion: template.version, reviewStatus: template.status, renderer: 'layer-compositor-v1' },
-      assets: Object.entries(bindings).filter(([, value]) => value).map(([slot, value]) => ({ slot, source: value!.source, name: value!.name, type: value!.type,
+    version: 1, name: `${template.title}${template.status === 'candidate' ? ' · candidata' : ''}`, generationPolicy: 'provided_only',
+    ...body, duration: ctx.duration,
+    narrative: { templateId: template.id, category: template.family, visualIntent: template.description,
+      controls: { ...controls, ...(alias ? { alias } : {}), finishVersion: TEMPLATE_FINISH_VERSION, catalogVersion: templateCatalogVersion(template), templateVersion: template.version, reviewStatus: template.status, renderer: 'layer-compositor-v1' },
+      assets: (Object.entries(bindings) as Array<[TemplateSlotName, TemplateAsset | undefined]>).filter(([, value]) => value).map(([slot, value]) => ({ slot, source: value!.source, name: value!.name, type: value!.type,
         ...(value!.catalogAtAssignment ? { catalogAtAssignment: { ...value!.catalogAtAssignment } } : {}),
       })),
       prompt: template.promptExample, evaluationCues: [...template.limits],

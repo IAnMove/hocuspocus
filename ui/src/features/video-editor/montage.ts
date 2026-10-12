@@ -151,6 +151,14 @@ export function loadMontageState(workspace: string): { layers: MontageLayers; re
   }
 }
 
+/** Another part of the app (the Wizard's export) saved the open draft as a montage: the editor takes its new ref. */
+export const MONTAGE_REF_EVENT = 'hocuspocus:video-editor-montage-ref'
+
+export function announceMontageRef(workspace: string, layers: MontageLayers, ref: MontageRef): void {
+  persistMontageState(workspace, layers, ref)
+  if (typeof window !== 'undefined') window.dispatchEvent(new window.CustomEvent(MONTAGE_REF_EVENT, { detail: { workspace, ref } }))
+}
+
 export function persistMontageState(workspace: string, layers: MontageLayers, ref: MontageRef | null): void {
   try {
     window.localStorage.setItem(`${LAYERS_KEY}:${encodeURIComponent(workspace)}`, JSON.stringify({ layers, ref }))

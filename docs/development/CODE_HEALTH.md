@@ -138,11 +138,29 @@ The verifier requires full Git history, exact source/base SHAs, contiguous
 first-parent ancestry and a checked-out candidate tree equal to the source
 tree. The main base must have the same tree as the integration merge-base
 (publication-only merge history is allowed). It rejects dirty product files,
-missing blobs, omitted measurements, and changes to the analyzer, policy,
-ESLint configuration or UI dependency manifests anywhere in the chain.
-Changes to `scripts.test` are allowed because measurement invokes ESLint
-directly; all other manifest fields, install hooks and the lockfile must remain
-identical. Historical blob metrics must reproduce the gate's base and candidate
+missing blobs, omitted measurements, and changes to the analyzer, policy or
+ESLint configuration anywhere in the chain. UI dependencies are compared by
+their measurement fingerprint: ESLint's executable, the configuration's static
+package imports, and their dependencies, optional dependencies and peers.
+The fingerprint preserves complete lock records (including version, resolved
+URL, integrity and executable mappings), dependency ranges and resolved paths;
+an absent optional dependency is recorded explicitly. All packages declaring
+install scripts or native builds and their dependencies are also protected,
+even outside ESLint's graph. Because npm can execute implicit native build hooks
+without a lockfile flag, the remaining package records and root dependency
+ranges may only be removed: additions or mutations require separate review.
+Removing an unrelated package such as `@types/dompurify` therefore does not
+invalidate an otherwise identical measurement toolchain; adding or updating an
+unrelated package still fails closed.
+
+Root manifest metadata, overrides and install hooks remain protected. Ordinary
+npm scripts may change because measurement invokes ESLint directly; when a root
+install hook exists, all scripts and installed packages remain protected because
+that hook could use them. Missing required packages or identities, linked
+packages, lockfiles other than npm v3, and local or dynamic configuration imports
+fail closed. Analyzer and ESLint configuration files still require identical
+blobs; there is no exception for changes to the measurement tools themselves.
+Historical blob metrics must reproduce the gate's base and candidate
 measurements exactly. Unsupported history or measurement changes fail closed and require
 separate review; branch labels alone are insufficient to pass.
 

@@ -6,6 +6,7 @@ import { useStore } from '../../stores/useStore'
 import { applyMusicProductionTake, getMusicProduction, listMusicProductions, lockMusicProductionShot, requestMusicProductionShot, retakeMusicProductionShot, reviewMusicProductionShot, undoMusicProductionShot } from './api'
 import { MusicProductionGrid } from './MusicProductionGrid'
 import { ReviewMode } from './ReviewMode'
+import { PublishedPageLink } from './PublishedPageLink'
 import type { MusicProductionCard, MusicProductionShot, ShotReviewAction } from './types'
 import { requestOpenMontage } from './useOpenProductionMontage'
 
@@ -25,6 +26,7 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
   const { t } = useUiTranslation('navigation')
   const [cards, setCards] = useState<MusicProductionCard[] | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const selectedCard = cards?.find(card => card.production_id === selected) ?? null
   const [shots, setShots] = useState<MusicProductionShot[]>([])
   const [montage, setMontage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +90,7 @@ function MusicProductionsBody({ workspace, onClose }: { workspace: string; onClo
           <button type="button" className="self-start rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover" onClick={() => setReviewing(true)}>
             {t('musicProductions.review')}
           </button>
+          {selectedCard?.publication ? <PublishedPageLink publication={selectedCard.publication} /> : null}
         </div>
         <MusicProductionGrid
           workspace={workspace}
@@ -138,17 +141,16 @@ function ProductionList({ cards, onOpen }: { cards: MusicProductionCard[] | null
   if (!cards) return <p className="text-xs text-text-secondary">{t('musicProductions.loading')}</p>
   if (cards.length === 0) return <p className="text-xs text-text-secondary">{t('musicProductions.empty')}</p>
   return <div className="grid gap-3 sm:grid-cols-2">
-    {cards.map(card => <button
-      key={card.production_id}
-      type="button"
-      className="flex flex-col gap-2 rounded border border-border bg-bg-secondary p-3 text-left hover:bg-bg-hover"
-      onClick={() => onOpen(card)}
-    >
-      {card.contact_sheet ? <img src={card.contact_sheet} alt={card.title} className="aspect-video w-full rounded object-cover" /> : null}
-      <span className="text-sm font-medium text-text-primary">{card.title}</span>
-      <span className="text-[11px] text-text-secondary">{t('musicProductions.status')}: {card.status}</span>
-      <span className="text-[11px] text-text-secondary">{t('musicProductions.duration')}: {typeof card.duration === 'number' ? `${card.duration}s` : '—'}</span>
-      <span className="text-[11px] text-text-primary">{t('musicProductions.open')}</span>
-    </button>)}
+    {cards.map(card => <div key={card.production_id} data-testid={`music-production-${card.production_id}`}
+      className="flex flex-col gap-2 rounded border border-border bg-bg-secondary p-3">
+      <button type="button" className="flex flex-col gap-2 rounded text-left hover:bg-bg-hover" onClick={() => onOpen(card)}>
+        {card.contact_sheet ? <img src={card.contact_sheet} alt={card.title} className="aspect-video w-full rounded object-cover" /> : null}
+        <span className="text-sm font-medium text-text-primary">{card.title}</span>
+        <span className="text-[11px] text-text-secondary">{t('musicProductions.status')}: {card.status}</span>
+        <span className="text-[11px] text-text-secondary">{t('musicProductions.duration')}: {typeof card.duration === 'number' ? `${card.duration}s` : '—'}</span>
+        <span className="text-[11px] text-text-primary">{t('musicProductions.open')}</span>
+      </button>
+      {card.publication ? <PublishedPageLink publication={card.publication} /> : null}
+    </div>)}
   </div>
 }

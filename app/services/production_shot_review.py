@@ -1,8 +1,12 @@
-"""Per-shot human review, stored beside the production file, never inside it.
+"""Per-shot review, stored beside the production file, never inside it.
 
 ``production.status`` keeps rereading ``<id>.production.json``. The review lives in
 ``<id>.review.json``. Without that file the artistic verdict stays pending.
-A human approval is ``approved``. It is never the string ok.
+An approval is ``approved``. It is never the string ok.
+
+Each decision records who made it (``decidedBy``: ``user``, ``agent`` for an MCP
+client or ``wizard``) and when (``decidedAt``), so the verdict says ``human`` only
+when people made every decision (``agent`` when only agents did, else ``mixed``).
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 STATUSES = ("pending", "approved", "changes_requested")
+DECIDERS = ("user", "agent", "wizard")
 
 
 class ReviewError(ValueError):
@@ -62,13 +67,15 @@ def shot_row(body: dict, key: str) -> dict:
     return row
 
 
-def record_decision(root: Any, production_id: str, key: str, *, status: str | None = None, locked: bool | None = None, notes: str | None = None, snapshot: dict | None = None) -> dict:
+def record_decision(root: Any, production_id: str, key: str, *, status: str | None = None, locked: bool | None = None, notes: str | None = None, snapshot: dict | None = None, by: str | None = None) -> dict:
     if status is not None and status not in STATUSES:
         raise ReviewError("invalid_review", "status must be pending, approved, or changes_requested")
     body = ensure_review(root, production_id)
     row = shot_row(body, key)
     if status is not None:
         row["status"] = status
+        row["decidedBy"] = _decider(by)
+        row["decidedAt"] = time.time()
     if locked is not None:
         row["locked"] = bool(locked)
     if notes is not None:
@@ -78,7 +85,16 @@ def record_decision(root: Any, production_id: str, key: str, *, status: str | No
         history.append({"id": uuid.uuid4().hex[:12], "at": time.time(), "snapshot": snapshot})
         row["history"] = history[-8:]
     save_review(root, production_id, body)
-    return {"key": key, "status": row.get("status"), "locked": bool(row.get("locked")), "notes": row.get("notes") or ""}
+    result = {"key": key, "status": row.get("status"), "locked": bool(row.get("locked")), "notes": row.get("notes") or ""}
+    return {**result, "decidedBy": row["decidedBy"]} if row.get("decidedBy") else result
+
+
+def _decider(by: str | None) -> str:
+    """Who decides now: the caller's word, else the request scope (an MCP client is ``agent``, the Wizard ``wizard``)."""
+    if by in DECIDERS:
+        return by
+    from services.agent_activity import actor_label
+    return actor_label()
 
 
 def annotate_rows(rows: list[dict], root: Any, production_id: str) -> list[dict]:
@@ -95,17 +111,30 @@ def annotate_rows(rows: list[dict], root: Any, production_id: str) -> list[dict]
 
 
 def apply_artistic(summary: dict, root: Any, production_id: str | None) -> dict:
-    """Overlay a human verdict. No review file leaves the code-check pending verdict alone."""
+    """Overlay the review's verdict. No review file leaves the code-check pending verdict alone."""
     review = summary.get("review") if isinstance(summary.get("review"), dict) else None
     artistic = review.get("artistic") if isinstance(review, dict) else None
     if not isinstance(artistic, dict) or not production_id:
         return summary
-    verdict = human_verdict(load_review(root, production_id))
+    body = load_review(root, production_id)
+    verdict = human_verdict(body)
     if verdict is None:
         return summary
     artistic["verdict"] = verdict
-    artistic["source"] = "human"
+    artistic["source"] = verdict_source(body)
     return summary
+
+
+def verdict_source(body: dict | None) -> str:
+    """``human`` when people made every decision (older reviews did not say, and were people), ``agent`` when agents
+    or the Wizard made them all, ``mixed`` otherwise."""
+    shots = body.get("shots") if isinstance(body, dict) and isinstance(body.get("shots"), dict) else {}
+    deciders = {row.get("decidedBy") or "user" for row in shots.values()
+                if isinstance(row, dict) and row.get("status") in ("approved", "changes_requested")}
+    machines = deciders & {"agent", "wizard"}
+    if not machines:
+        return "human"
+    return "agent" if machines == deciders else "mixed"
 
 
 def human_verdict(body: dict | None) -> str | None:

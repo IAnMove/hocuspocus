@@ -43,7 +43,9 @@ export function openActivityArtifact(name: string): boolean {
   const file = (app.outputs || []).find(item => item.name === name || item.name.endsWith(`/${name}`))
   app.setDashboardOpen(false)
   if (!file) {
+    // Older results are not in the loaded gallery pages: search for the file instead of doing nothing.
     app.setMediaFilter(filterForOutput('', name))
+    app.setOutputSearchQuery(name.replace(/^.*\//, '').replace(/\.[^.]+$/, ''))
     return false
   }
   app.setMediaFilter(filterForOutput(file.type, file.name))

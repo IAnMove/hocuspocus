@@ -5,6 +5,7 @@ from services import series_shot3d
 from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender
 from services.series_shot_extras import cue_time, fx_cues, perch, sfx_tracks
 from services.series_shot_plan import build_shot_spec, normalize_layout2d, plan_timing
+from services.series_take_inputs import render_inputs
 
 
 def series():
@@ -111,15 +112,41 @@ def test_a_3d_shot_instantiates_sets_the_length_makes_each_speaker_talk_and_publ
     assert talk["lines"] == [{"start": 0.8, "cues": lines[0]["cues"], "audio": "/api/v1/file/ln%201.wav?workspace=cast"}]
 
 
-def test_a_speaker_without_an_object_or_a_failing_tool_stops_the_shot():
+class HeldWorld3D(World3D):
+    """A template whose document already has a stop-motion step (a scene saved from the editor)."""
+
+    def __call__(self, tool, arguments):
+        if tool == "world3d.scene.instantiate":
+            self.calls.append((tool, arguments))
+            return {"result": {"scene": {"sceneId": "w3d-1", "revision": 1, "document": {"motionStep": 2, "slots": []}}}}
+        return super().__call__(tool, arguments)
+
+
+def test_a_3d_shot_saves_its_stop_motion_in_the_scene_and_a_plain_shot_asks_as_before():
+    def length(tools):
+        return next(args["input"] for tool, args in tools.calls if tool == "world3d.scene.patch" and "duration" in args["input"])
+
+    held = {"id": "s20", "layout2d": {"motionStep": 3, "stopMotionJitter": 1.5}, "scene3d": {"template": "user-mars", "cast": []}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", held, [], 4.0, {}, {}, NativeRenderError)
+    assert (length(tools)["motionStep"], length(tools)["stopMotionJitter"]) == (3, 1.5)
+    plain = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", plain, [], 4.0, {}, {}, NativeRenderError)
+    assert not {"motionStep", "stopMotionJitter"} & set(length(tools)), "the patch earlier renders asked for"
+    tools = HeldWorld3D()
+    series_shot3d.build_scene(tools, "cast", "job", plain, [], 4.0, {}, {}, NativeRenderError)
+    assert length(tools)["motionStep"] == 0 and "stopMotionJitter" not in length(tools), "the shot took it off"
+
+
+def test_a_speaker_without_an_object_is_heard_over_the_shot_and_a_failing_tool_stops_it():
     shot = {"id": "s20", "scene3d": {"template": "user-mars", "cast": []}}
-    lines = [{"characterId": "elon", "start": 0.3, "filename": "a.wav"}]
-    try:
-        series_shot3d.build_scene(World3D(), "cast", "job", shot, lines, 3, {}, {"elon": "kit-elon"}, NativeRenderError)
-    except NativeRenderError as error:
-        assert error.code == "unbound_speaker" and "elon" in str(error)
-    else:
-        raise AssertionError("expected unbound_speaker")
+    lines = [{"characterId": "elon", "start": 0.3, "filename": "a b.wav"}]
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", shot, lines, 3, {}, {"elon": "kit-elon"}, NativeRenderError)
+    length = tools.calls[1][1]["input"]
+    assert length["voiceOver"] == [{"start": 0.3, "audio": "/api/v1/file/a%20b.wav?workspace=cast"}]
+    assert not any(tool == "world3d.scene.talk" for tool, _ in tools.calls), "nobody talks on screen"
     try:
         series_shot3d.build_scene(World3D(fail="world3d.scene.instantiate"), "cast", "job", shot, [], 3, {}, {}, NativeRenderError)
     except NativeRenderError as error:
@@ -180,7 +207,7 @@ def test_the_server_render_makes_a_3d_dialogue_shot_a_take(tmp_path):
         time.sleep(0.02)
     assert job["status"] == "completed", job
     export = next(args for tool, args in tools.calls if tool == "scenes.world3d.export")
-    assert export["input"] == {"workspace": "cast", "document": {"v": 1}, "quality": "final"}
+    assert export["input"] == {"workspace": "cast", "document": {"v": 1, "width": 1920, "height": 1080, "fps": 24}, "quality": "final"}
     talk = next(args for tool, args in tools.calls if tool == "world3d.scene.talk")["input"]
     assert talk["lines"][0]["start"] == 0.8
     imported = next(args for tool, args in tools.calls if tool == "series.asset.import")["input"]
@@ -203,3 +230,307 @@ def test_a_3d_take_subtitles_come_from_its_own_lines():
     assert scene_beats("/nonexistent", plan[1]["dialogueBeats"]) == beats
     cues = episode_cues([{"offset": 5.0, "duration": 2.5, "beats": scene_beats("/nonexistent", beats)}])
     assert [(cue["start"], cue["end"], cue["text"]) for cue in cues] == [(5.35, 7.0, "Desde Marte: aprobado.")]
+
+
+def test_sound_effects_keep_a_zero_volume_and_a_subfolder_but_never_leave_the_workspace():
+    layout = normalize_layout2d({"sfx": [{"file": "sfx/pen.wav", "line": 0, "volume": 0}, {"file": "../pen.wav", "line": 0},
+                                         {"file": "sfx/../../pen.wav", "line": 0}, {"file": "/etc/pen.wav", "line": 0}]})
+    assert layout["sfx"] == [{"file": "sfx/pen.wav", "line": 0, "anchor": "start", "volume": 0}]
+
+
+def test_scene_sound_joins_a_3d_shot_soundtrack_balanced_and_ducked_by_the_page():
+    tools = World3D()
+    shot = {"id": "s20", "scene3d": {"scene": "mars.world3d.scene.json", "cast": [{"characterId": "elon", "objectId": "elon", "poseId": "phone"}]}}
+    lines = [{"characterId": "elon", "start": 0.8, "filename": "ln 1.wav", "cues": []}]
+    tracks = [{"id": "ambience", "filename": "amb/mars wind.wav", "kind": "sfx", "startTime": 0, "volume": 0.3},
+              {"id": "music", "filename": "theme.wav", "kind": "music", "startTime": 1.5, "volume": 1.8}]
+    series_shot3d.build_scene(tools, "cast", "job", shot, lines, 4.5, {}, {"elon": "kit-elon"}, NativeRenderError, tracks=tracks)
+    length = tools.calls[3][1]["input"]
+    assert length["duration"] == 4.5
+    assert length["soundtrack"] == [
+        {"id": "scene-ambience", "audio": "/api/v1/file/amb/mars%20wind.wav?workspace=cast", "start": 0.0, "gain": 0.3},
+        {"id": "scene-music", "audio": "/api/v1/file/theme.wav?workspace=cast", "start": 1.5, "gain": 1.0}]
+    plain = World3D()
+    series_shot3d.build_scene(plain, "cast", "job", shot, lines, 4.5, {}, {"elon": "kit-elon"}, NativeRenderError)
+    assert "soundtrack" not in plain.calls[3][1]["input"], "no tracks, no soundtrack patch"
+
+
+def test_a_directional_effect_keeps_its_rotation_so_a_laser_leaves_the_gun():
+    layout = normalize_layout2d({"fx": [{"kind": "laser", "line": 0, "x": 30, "y": 36, "rotation": 180},
+                                        {"kind": "laser", "line": 0, "rotation": 400}]})
+    assert layout["fx"][0]["rotation"] == 180.0 and "rotation" not in layout["fx"][1]
+    cues = fx_cues(layout, [(0.4, 1.4)], 3.0)
+    assert cues[0]["rotation"] == 180.0 and cues[0]["x"] == 30.0
+
+
+def test_a_beam_can_start_on_a_cast_member_or_at_a_point_of_the_frame():
+    layout = normalize_layout2d({"fx": [
+        {"kind": "laser", "at": 0.6, "duration": 0.3, "x": 90, "y": 20, "color": "#ffd56a", "from": {"cast": 0, "point": [95, 46]}},
+        {"kind": "lightning", "at": 1, "from": {"cast": " blas ", "point": [10, -20]}},
+        {"kind": "laser", "at": 1, "from": {"point": [70, 40]}},
+        {"kind": "confetti", "at": 1, "from": {"point": [70, 40]}},
+        {"kind": "laser", "at": 1, "from": {"cast": True, "point": [70, 40]}},
+        {"kind": "laser", "at": 1, "from": {"cast": 0, "point": [70]}},
+        {"kind": "laser", "at": 1, "from": {"cast": 9, "point": [70, 40]}},
+        {"kind": "laser", "at": 1, "from": {"point": [70, 400]}},
+    ]})
+    assert [cue.get("from") for cue in layout["fx"]] == [
+        {"cast": 0, "point": [95.0, 46.0]}, {"cast": "blas", "point": [10.0, -20.0]}, {"point": [70.0, 40.0]}, None, None, None, None, None]
+    cues = fx_cues(layout, [(0.4, 1.4)], 3.0)
+    assert cues[0] == {"id": "fx-0", "kind": "laser", "start": 0.6, "end": 0.9, "x": 90.0, "y": 20.0, "color": "#ffd56a",
+                       "from": {"cast": 0, "point": [95.0, 46.0]}}
+    assert "from" not in cues[3]
+
+
+def test_a_3d_shot_keeps_a_beam_from_the_frame_and_drops_one_from_a_cutout():
+    effects = series_shot3d._shot_effects([{"id": "fx-0", "kind": "laser", "start": 1, "end": 1.3, "from": {"point": [70.0, 40.0]}},
+                                           {"id": "fx-1", "kind": "laser", "start": 1, "end": 1.3, "from": {"cast": 0, "point": [95.0, 46.0]}},
+                                           {"id": "fx-2", "kind": "vignette", "start": 0, "end": 3}])
+    assert effects == [{"id": "shot-fx-0", "kind": "laser", "start": 1, "end": 1.3, "from": {"x": 70.0, "y": 40.0}},
+                       {"id": "shot-fx-1", "kind": "laser", "start": 1, "end": 1.3},
+                       {"id": "shot-fx-2", "kind": "vignette", "start": 0, "end": 3}]
+
+
+def _glb(path, names):
+    import json as _json
+    import struct as _struct
+    body = _json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": name} for name in names]}).encode()
+    body += b" " * (-len(body) % 4)
+    path.write_bytes(b"glTF" + _struct.pack("<II", 2, 20 + len(body)) + _struct.pack("<I4s", len(body), b"JSON") + body)
+
+
+def test_a_3d_shot_places_its_objects_with_the_clip_found_in_the_model(tmp_path):
+    _glb(tmp_path / "zeppelin.glb", ["Idle", "Fly"])
+    value = series_shot3d.normalize_scene3d({"template": "anime-face-off", "objects": [
+        {"objectId": "zep", "file": "zeppelin.glb", "add": True, "clip": "Fly", "clipPlayback": {"speed": 2, "loop": "yes"}, "grounded": "no",
+         "position": [0, 2, -6], "rotationY": 1.57, "motion": {"to": [5, 2, -6], "faceTravel": True, "points": [[1, 2, 3], "x"]}},
+        {"objectId": "bad", "file": "../secret.glb", "add": True},
+        {"objectId": "abs", "file": "/etc/passwd"},
+        {"objectId": "nothing"},
+        {"objectId": "hero", "file": "rayo.glb", "clip": {"index": 1, "name": "Run"}, "grounded": True},
+        {"objectId": "flat", "media": "screen", "file": "a.png"}]})
+    assert value["objects"] == [{"objectId": "zep", "media": "model3d", "file": "zeppelin.glb", "add": True, "clip": "Fly",
+                                 "clipPlayback": {"speed": 2.0}, "position": [0.0, 2.0, -6.0], "motion": {"to": [5.0, 2.0, -6.0], "faceTravel": True},
+                                 "rotationY": 1.57},
+                                {"objectId": "hero", "media": "model3d", "file": "rayo.glb", "clip": {"index": 1, "name": "Run"}, "grounded": True}]
+    value["objects"] = value["objects"][:1]
+    tools = World3D()
+    shot = {"id": "s30", "scene3d": value}
+    series_shot3d.build_scene(tools, "cast", "job", shot, [], 5, {}, {}, NativeRenderError, root=str(tmp_path))
+    patch = tools.calls[1][1]["input"]
+    assert patch["retime"] is True and patch["duration"] == 5
+    assert patch["bindings"] == [{"object_id": "zep", "media": "model3d", "add": True, "source_url": "/api/v1/file/zeppelin.glb?workspace=cast",
+                                  "clip": {"index": 1, "name": "Fly"}, "clipPlayback": {"speed": 2.0}, "position": [0.0, 2.0, -6.0],
+                                  "rotationY": 1.57, "motion": {"to": [5.0, 2.0, -6.0], "faceTravel": True}}]
+    shot["scene3d"] = {**value, "retime": False, "objects": [{**value["objects"][0], "clip": "Explode"}]}
+    try:
+        series_shot3d.build_scene(World3D(), "cast", "job", shot, [], 5, {}, {}, NativeRenderError, root=str(tmp_path))
+    except NativeRenderError as error:
+        assert error.code == "unknown_clip" and "Idle, Fly" in str(error)
+    else:
+        raise AssertionError("expected unknown_clip")
+    kept = series_shot3d.normalize_scene3d({"template": "anime-face-off", "retime": False})
+    assert kept["retime"] is False and "objects" not in kept
+
+
+def test_a_3d_shot_plays_its_sound_effects_and_screen_effects_like_a_2d_shot(tmp_path):
+    project = series()
+    project["episodesById"] = {"ep1": {"id": "ep1", "shots": [{
+        "id": "s21", "order": 1, "sceneId": "a", "productionMethod": "animation_3d", "durationSeconds": 4,
+        "layout2d": {"sfx": [{"file": "boom.wav", "at": 1.25, "volume": 0.9}],
+                     "fx": [{"kind": "manga_impact", "at": 1.2, "duration": 0.4, "x": 40, "y": 30, "size": 25}]},
+        "scene3d": {"template": "user-sky", "quality": "draft"}}]}}
+    tools = RenderTools(tmp_path)
+    render = SeriesNativeRender(NativeRenderDeps(
+        call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: {"seriesById": {"uv": project}},
+        read_kits=lambda _ws: {}, trim=lambda source, target: 1.0, sleep=lambda _s: None, poll_seconds=0, check_speech=False,
+        set_shot_duration=lambda *args: None))
+    job = render.start("cast", "uv", "ep1", approve=True)
+    for _ in range(200):
+        job = render.status("cast", job["jobId"])
+        if job["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.02)
+    assert job["status"] == "completed", job
+    length = next(args["input"] for tool, args in tools.calls if tool == "world3d.scene.patch" and "duration" in args["input"])
+    assert {"id": "scene-sfx-0", "audio": "/api/v1/file/boom.wav?workspace=cast", "start": 1.25, "gain": 0.9} in length["soundtrack"]
+    assert length["screenFx"] == [{"id": "shot-fx-0", "kind": "manga_impact", "start": 1.2, "end": 1.6, "x": 40.0, "y": 30.0, "size": 25.0}]
+
+
+def test_a_3d_shot_asks_for_the_toon_look_and_drops_bad_settings():
+    value = series_shot3d.normalize_scene3d({"template": "anime-face-off", "renderLook": "toon", "toon": {"steps": 2, "ink": "#AA0000"}})
+    assert (value["renderLook"], value["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})
+    bad = series_shot3d.normalize_scene3d({"template": "anime-face-off", "renderLook": "cel", "toon": {"steps": 9}})
+    assert "renderLook" not in bad and "toon" not in bad
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", {"id": "s31", "scene3d": value}, [], 4, {}, {}, NativeRenderError)
+    patch = tools.calls[1][1]["input"]
+    assert (patch["renderLook"], patch["toon"]) == ("toon", {"steps": 2, "ink": "#aa0000"})
+
+
+def test_a_3d_object_keeps_a_heading_offset_for_a_model_whose_nose_is_not_plus_z():
+    value = series_shot3d.normalize_scene3d({"template": "user-sky", "objects": [
+        {"objectId": "ship", "file": "ship.glb", "add": True, "motion": {"to": [0, 2, -30], "faceTravel": True, "headingOffset": 1.5708}},
+        {"objectId": "bad", "file": "ship.glb", "add": True, "motion": {"to": [0, 2, -30], "headingOffset": 40}}]})
+    assert value["objects"][0]["motion"] == {"to": [0.0, 2.0, -30.0], "faceTravel": True, "headingOffset": 1.5708}
+    assert "headingOffset" not in value["objects"][1]["motion"]
+
+
+def _durations(value):
+    return [cue["duration"] for cue in normalize_layout2d({"fx": [{"kind": "vignette", "at": 0, "duration": value}]})["fx"]]
+
+
+def test_a_screen_effect_longer_than_the_maximum_is_clamped_not_reset_to_one_second():
+    # An author who writes 99 for "the whole shot" used to get 1 s: the grade vanished after one second.
+    assert _durations(99) == [30.0] and _durations(30.0001) == [30.0] and _durations(1e9) == [30.0]
+    assert _durations(0.05) == [0.1] and _durations(0) == [0.1] and _durations(-5) == [0.1]
+    assert _durations(0.1) == [0.1] and _durations(30) == [30.0] and _durations(2) == [2.0]
+
+
+def test_a_missing_or_non_numeric_effect_duration_takes_the_default_and_shot_is_kept():
+    for value in (None, "soon", "", True, [3], {"s": 3}, float("nan")):
+        assert _durations(value) == [1.0], value
+    layout = normalize_layout2d({"fx": [{"kind": "impact_flash", "line": 0}, {"kind": "vignette", "at": 0, "duration": "shot"},
+                                        {"kind": "film_grain", "at": 0, "duration": " Shot "}]})
+    assert [cue["duration"] for cue in layout["fx"]] == [1.0, "shot", "shot"]
+
+
+def test_a_shot_duration_lasts_to_the_end_of_the_shot_and_a_clamped_one_keeps_its_seconds():
+    timing, duration = plan_timing([1.0, 0.5], intro=1.0, gap=0.2, tail=1.0)
+    layout = normalize_layout2d({"fx": [{"kind": "vignette", "at": 0, "duration": "shot"},
+                                        {"kind": "candlelight", "line": 1, "duration": "shot"},
+                                        {"kind": "film_grain", "at": 0.5, "duration": 99},
+                                        {"kind": "confetti", "at": 1, "duration": 2},
+                                        {"kind": "glitch", "at": 1}]})
+    ends = {cue["kind"]: (cue["start"], cue["end"]) for cue in fx_cues(layout, timing, duration)}
+    last = round(duration - 0.01, 3)
+    assert ends["vignette"] == (0.0, last) and last == 3.698, "until the end of the shot"
+    assert ends["candlelight"] == (2.2, last)
+    assert ends["film_grain"] == (0.5, last), "99 is clamped to 30 s and the shot ends first"
+    assert ends["confetti"] == (1.0, 3.0) and ends["glitch"] == (1.0, 2.0), "seconds and the default are unchanged"
+    long_shot = fx_cues(layout, [(0.0, 1.0)], 45.0)
+    assert {cue["kind"]: cue["end"] for cue in long_shot} == {
+        "vignette": 44.99, "candlelight": 44.99, "film_grain": 30.5, "confetti": 3.0, "glitch": 2.0}, "30 s is the clamp, shot is not"
+
+
+def test_a_shot_with_valid_screen_effect_durations_keeps_its_take_digest():
+    raw = {"framing": "wide", "fx": [{"kind": "confetti", "line": 0, "duration": 1.5, "x": 70}, {"kind": "vignette", "at": 0.5, "duration": 30},
+                                     {"kind": "film_grain", "at": 1, "duration": 0.1}, {"kind": "impact_flash", "line": 0},
+                                     {"kind": "confetti", "line": 0, "duration": "x"}],
+           "sfx": [{"file": "pen.wav", "line": 0}]}
+    layout = normalize_layout2d(raw)
+    assert [cue["duration"] for cue in layout["fx"]] == [1.5, 30.0, 0.1, 1.0, 1.0], "valid, missing and bad ones read as before"
+    series = {"id": "show", "spokenLanguage": "English", "locations": [{"id": "sky", "name": "Sky"}],
+              "characters": [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana", "workspace": "ws"}}}]}
+    kits = {"kit-ana": {"id": "kit-ana", "voice": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}
+    shot = {"id": "s1", "order": 1, "locationId": "sky", "productionMethod": "animation_3d", "visibleCharacterIds": ["ana"],
+            "dialogueBeats": [{"id": "s1_b0", "characterId": "ana", "text": "Hold on!"}], "layout2d": layout,
+            "scene3d": {"template": "user-airship", "cast": [{"characterId": "ana", "objectId": "ana"}], "quality": "draft"}}
+    # Computed with the code before this fix: takes rendered then stay up to date.
+    assert render_inputs(series, shot, kits) == "efa49e2c1b00e41b"
+    clamped = {**shot, "layout2d": normalize_layout2d({**raw, "fx": [{**raw["fx"][1], "duration": 99}]})}
+    assert render_inputs(series, clamped, kits) != render_inputs(
+        series, {**shot, "layout2d": normalize_layout2d({**raw, "fx": [{**raw["fx"][1], "duration": 1}]})}, kits), "30 s is not 1 s"
+
+
+class World3DWithSlots(World3D):
+    """A template whose instantiated document lists its objects (the cast member elon is a model of the template)."""
+
+    def __call__(self, tool, arguments):
+        reply = super().__call__(tool, arguments)
+        if tool == "world3d.scene.instantiate":
+            reply["result"]["scene"]["document"] = {"slots": [{"id": "elon", "media": "model3d"}, {"id": "sky", "media": "image"}]}
+        return reply
+
+
+def test_a_3d_object_plays_a_clip_sequence_rides_in_a_hand_and_materializes(tmp_path):
+    _glb(tmp_path / "guard.glb", ["Idle", "Run", "Aim"])
+    _glb(tmp_path / "rifle.glb", [])
+    value = series_shot3d.normalize_scene3d({"template": "user-plaza", "objects": [
+        {"objectId": "guard", "file": "guard.glb", "add": True, "grounded": True,
+         "clips": [{"clip": "Aim", "start": 1.5, "fade": 0.4, "loop": False}, {"clip": {"index": 0, "name": "Idle"}, "start": 0}]},
+        {"objectId": "rifle", "file": "rifle.glb", "add": True, "scale": 0.19,
+         "hold": {"carrier": "guard", "hand": "right", "offset": [0, 0.02, 0.05], "rotation": [-1.65, 0.11, 2.76]},
+         "appearance": {"start": 0.5, "duration": 0.6, "color": "#ffcc00"}},
+        {"objectId": "poster", "media": "image", "file": "p.png", "add": True, "clips": [{"clip": "Idle", "start": 0}],
+         "hold": {"carrier": "poster", "hand": "left"}, "appearance": {"start": 900}}]})
+    guard, rifle, poster = value["objects"]
+    assert guard["clips"] == [{"clip": {"index": 0, "name": "Idle"}, "start": 0.0}, {"clip": "Aim", "start": 1.5, "fade": 0.4, "loop": False}]
+    assert rifle["hold"] == {"carrier": "guard", "hand": "right", "offset": [0.0, 0.02, 0.05], "rotation": [-1.65, 0.11, 2.76]}
+    assert rifle["appearance"] == {"start": 0.5, "duration": 0.6, "color": "#ffcc00"}
+    assert set(poster) == {"objectId", "media", "file", "add"}, "an image plays no clips, holds nothing of itself, bad times are dropped"
+    shot = {"id": "s40", "scene3d": {**value, "objects": [guard, rifle]}}
+    tools = World3D()
+    series_shot3d.build_scene(tools, "cast", "job", shot, [], 4, {}, {}, NativeRenderError, root=str(tmp_path))
+    bindings = tools.calls[1][1]["input"]["bindings"]
+    assert bindings[0]["clips"] == [{"clip": {"index": 0, "name": "Idle"}, "start": 0.0},
+                                    {"clip": {"index": 2, "name": "Aim"}, "start": 1.5, "fade": 0.4, "loop": False}]
+    assert bindings[1]["hold"] == rifle["hold"] and bindings[1]["appearance"] == rifle["appearance"] and bindings[1]["scale"] == 0.19
+
+    def refused(code, config, lines=(), tools_class=World3D):
+        try:
+            series_shot3d.build_scene(tools_class(), "cast", "job", {"id": "s41", "scene3d": config}, list(lines), 4, {}, {"elon": "kit-elon"},
+                                      NativeRenderError, root=str(tmp_path))
+        except NativeRenderError as error:
+            assert error.code == code, (error.code, str(error))
+            return str(error)
+        raise AssertionError(f"expected {code}")
+    typo = {**value, "objects": [{**guard, "clips": [{"clip": "Aimm", "start": 0}]}]}
+    assert "Idle, Run, Aim" in refused("unknown_clip", typo)
+    cast = [{"characterId": "elon", "objectId": "elon"}]
+    by_elon = {**value, "cast": cast, "objects": [{**rifle, "hold": {"carrier": "elon", "hand": "right"}}]}
+    line = [{"characterId": "elon", "start": 0.2, "filename": "e.wav"}]
+    assert "cutout" in refused("carrier_is_cutout", by_elon, line)
+    quiet = World3DWithSlots()
+    series_shot3d.build_scene(quiet, "cast", "job", {"id": "s42", "scene3d": by_elon}, [], 4, {}, {"elon": "kit-elon"}, NativeRenderError,
+                              root=str(tmp_path))
+    assert quiet.calls[1][1]["input"]["bindings"][0]["hold"]["carrier"] == "elon", "a cast member with no line in the shot is a model"
+    by_sky = {**value, "objects": [{**rifle, "hold": {"carrier": "sky", "hand": "left"}}]}
+    assert "(models: elon)" in refused("unknown_carrier", by_sky, tools_class=World3DWithSlots)
+    by_nobody = {**value, "objects": [{**rifle, "hold": {"carrier": "nobody", "hand": "left"}}]}
+    refused("unknown_carrier", by_nobody, tools_class=World3DWithSlots)
+
+
+def test_scene3d_problems_name_bad_holds_sequences_and_appearances_without_a_workspace():
+    problems = series_shot3d.scene3d_problems({"template": "user-plaza", "objects": [
+        {"objectId": "gun", "hold": {"carrier": "hero", "hand": "right", "rotation": [0, 9, 0]}},
+        {"objectId": "hero", "clips": [{"clip": "Idle", "start": 0, "fadeIn": 1}], "appearance": {"start": 1, "duration": 99}},
+        {"objectId": "ok", "file": "missing.glb", "clips": [{"clip": "Idle", "start": 0}]}]})
+    assert problems == ["scene3d object gun: hold.rotation must be [x, y, z], each -6.2832 to 6.2832 radians",
+                        "scene3d object hero: clips[0] must be {clip, start, duration?, fade?, speed?, offset?, loop?}",
+                        "scene3d object hero: appearance.duration must be 0.1-30 seconds"], "files and clip names wait for a workspace"
+
+
+class _PlatedWorld(World3D):
+    def __call__(self, tool, arguments):
+        result = super().__call__(tool, arguments)
+        if tool == "world3d.scene.instantiate":
+            result["result"]["scene"]["document"] = {"slots": [
+                {"id": "background", "slot": "background", "surface": "environment", "sourceUrl": "/old/madrid.png"},
+                {"id": "hero", "slot": "subject", "surface": "character"},
+            ]}
+        return result
+
+
+def test_a_location_backdrop_replaces_only_the_environment_slot():
+    plate = "/api/v1/file/plaza.png?workspace=cast"
+    shot = {"id": "s20", "scene3d": {"template": "user-mars", "cast": [{"characterId": "elon", "objectId": "elon"}], "backdrop": "location"}}
+    tools = _PlatedWorld()
+    series_shot3d.build_scene(tools, "cast", "job", shot, [], 4, {}, {}, NativeRenderError, plate=plate)
+    length = next(args["input"] for name, args in tools.calls if name == "world3d.scene.patch" and "duration" in args["input"])
+    assert length["bindings"] == [{"object_id": "background", "source_url": plate}]
+    plain = {"id": "s20", "scene3d": {"template": "user-mars", "cast": [{"characterId": "elon", "objectId": "elon"}]}}
+    first = series_shot3d.build_scene(World3D(), "cast", "job", plain, [], 4, {}, {}, NativeRenderError)
+    second = series_shot3d.build_scene(World3D(), "cast", "job", plain, [], 4, {}, {}, NativeRenderError)
+    moved = series_shot3d.build_scene(World3D(), "cast", "job", plain, [], 4, {}, {}, NativeRenderError, plate=plate)
+    assert first["renderDigest"] == second["renderDigest"] != moved["renderDigest"]
+    untouched = _PlatedWorld()
+    series_shot3d.build_scene(untouched, "cast", "job", plain, [], 4, {}, {}, NativeRenderError)
+    bare = next(args["input"] for name, args in untouched.calls if name == "world3d.scene.patch" and "duration" in args["input"])
+    assert "bindings" not in bare
+    assert "backdrop" not in series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": "template"})
+    assert series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": "location"})["backdrop"] == "location"
+    assert series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": {"asset": "asset_1"}})["backdrop"] == {"asset": "asset_1"}
+    assert "backdrop" not in series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": {"asset": "../x"}})
+    assert series_shot3d.scene3d_problems({"template": "user-mars", "backdrop": 3}) == [
+        "scene3d.backdrop must be template, location, or {asset}"]

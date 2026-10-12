@@ -1,15 +1,22 @@
 // Optional full-frame finish. Missing `finish` leaves the frame untouched.
 import finishCatalog from '../../../../app/shared/finish_presets.json' with { type: 'json' }
+import { paintGel, paintScanlines, paintTone, paintVhs, takeAmount, takeGel, takeToneCurve, type SceneAmount, type SceneGel, type ToneCurve } from './finishPieces'
 import { paintRisoPress, takeRiso, type RisoCutLayer, type SceneRiso } from './risoPress'
 
 export type SceneFinish = {
-  grade?: { exposure: number; contrast: number; saturation: number; temperature: number; tint: number; fade: number; beatFlash?: number }
+  /** `curve` is the tone curve of the 3D grade of the same name (aces, agx or neutral). */
+  grade?: { exposure: number; contrast: number; saturation: number; temperature: number; tint: number; fade: number; beatFlash?: number; curve?: ToneCurve }
+  /** A colour over the light, like the 3D lamp gel. */
+  gel?: SceneGel
   bloom?: { amount: number; threshold: number; radius: number; beat?: number }
   rays?: { amount: number; x: number; y: number; length: number; threshold: number }
   vignette?: { amount: number; softness: number }
   grain?: { amount: number; size: number }
   texture?: { kind: 'none' | 'paper' | 'film-dust' | 'scratches'; amount: number }
   letterbox?: { ratio: 1.85 | 2 | 2.39; color: string }
+  /** Tape: colour bleed, row wobble, noise and the tracking bar of the 3D `vhs` effect. */
+  vhs?: SceneAmount
+  scanlines?: SceneAmount
   applyToTexts?: boolean
   /** Opt-in risograph reprint. Absent on every preset that is not `risoPress`. */
   riso?: SceneRiso
@@ -26,6 +33,7 @@ function takeGrade(grade: SceneFinish['grade']): SceneFinish['grade'] {
     saturation: num(grade.saturation, 0, -1, 1), temperature: num(grade.temperature, 0, -1, 1),
     tint: num(grade.tint, 0, -1, 1), fade: num(grade.fade, 0, 0, 1),
     ...(grade.beatFlash != null ? { beatFlash: num(grade.beatFlash, 0, 0, 1) } : {}),
+    ...(takeToneCurve(grade.curve) ? { curve: takeToneCurve(grade.curve) } : {}),
   }
 }
 
@@ -55,14 +63,20 @@ export function parseFinish(raw: unknown): SceneFinish | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as SceneFinish
   const riso = takeRiso(value.riso)
+  const gel = takeGel(value.gel)
+  const vhs = takeAmount(value.vhs)
+  const scanlines = takeAmount(value.scanlines)
   const finish: SceneFinish = {
     ...(takeGrade(value.grade) ? { grade: takeGrade(value.grade) } : {}),
+    ...(gel ? { gel } : {}),
     ...(takeBloom(value.bloom) ? { bloom: takeBloom(value.bloom) } : {}),
     ...(takeRays(value.rays) ? { rays: takeRays(value.rays) } : {}),
     ...(value.vignette ? { vignette: { amount: num(value.vignette.amount, 0, 0, 1), softness: num(value.vignette.softness, 0.5, 0, 1) } } : {}),
     ...(value.grain ? { grain: { amount: num(value.grain.amount, 0, 0, 1), size: num(value.grain.size, 1, 0.5, 4) } } : {}),
     ...(takeTexture(value.texture) ? { texture: takeTexture(value.texture) } : {}),
     ...(takeLetterbox(value.letterbox) ? { letterbox: takeLetterbox(value.letterbox) } : {}),
+    ...(vhs ? { vhs } : {}),
+    ...(scanlines ? { scanlines } : {}),
     ...(value.applyToTexts === true ? { applyToTexts: true } : {}),
     ...(riso ? { riso } : {}),
   }
@@ -105,13 +119,17 @@ export function grainSeed(seconds: number) {
 
 export function paintSceneFinish(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, finish?: SceneFinish, envelope = 0, layers?: readonly RisoCutLayer[], duration = 0) {
   if (!finish) return
+  paintGel(ctx, width, height, finish.gel)
   paintGrade(ctx, width, height, finish.grade, envelope)
+  paintTone(ctx, width, height, finish.grade?.curve)
   const bloom = finish.bloom
   if (bloom && bloom.amount > 0) {
     paintBloom(ctx, width, height, { ...bloom, amount: bloom.amount * (1 + (bloom.beat ?? 0) * envelope) })
   }
   paintRays(ctx, width, height, finish.rays)
   paintVignette(ctx, width, height, finish.vignette)
+  paintVhs(ctx, width, height, seconds, finish.vhs, (tapeWidth, tapeHeight) => canvas('vhs', tapeWidth, tapeHeight))
+  paintScanlines(ctx, width, height, seconds, finish.scanlines)
   paintNoise(ctx, width, height, seconds, finish)
   if (finish.riso) paintRisoPress(ctx, width, height, seconds, finish.riso, envelope, layers, duration)
   paintLetterbox(ctx, width, height, finish.letterbox)
@@ -182,24 +200,46 @@ function paintLetterbox(ctx: CanvasRenderingContext2D, width: number, height: nu
   }
 }
 
+/** One grain value per noise pixel. An integer hash (lowbias32) so neighbouring pixels and frames never line up into
+ * the regular plaid a linear hash draws. */
+export function grainNoise(frame: number, count: number) {
+  const values = new Uint8ClampedArray(count)
+  const seed = Math.imul(frame, 0x9e3779b1)
+  for (let index = 0; index < count; index += 1) {
+    let value = (seed + index) | 0
+    value ^= value >>> 16
+    value = Math.imul(value, 0x7feb352d)
+    value ^= value >>> 15
+    value = Math.imul(value, 0x846ca68b)
+    value ^= value >>> 16
+    values[index] = value & 255
+  }
+  return values
+}
+
+/** Grain cells of `grain.size` frame pixels (texture alone uses size 1), at most 960 noise pixels across. */
+function noiseSize(width: number, height: number, finish: SceneFinish) {
+  const cell = Math.max(finish.grain?.size ?? 1, width / 960)
+  return { width: Math.max(1, Math.round(width / cell)), height: Math.max(1, Math.round(height / cell)) }
+}
+
 function paintNoise(ctx: CanvasRenderingContext2D, width: number, height: number, seconds: number, finish: SceneFinish) {
   const amount = Math.max(finish.grain?.amount ?? 0, finish.texture?.amount ?? 0)
   if (amount <= 0) return
-  const noise = canvas('noise', 160, 90)
+  const size = noiseSize(width, height, finish)
+  const noise = canvas('noise', size.width, size.height)
   const noiseCtx = noise?.getContext('2d')
   if (!noise || !noiseCtx) return
   const frame = grainSeed(seconds)
-  const image = noiseCtx.getImageData(0, 0, noise.width, noise.height)
-  for (let index = 0; index < image.data.length; index += 4) {
-    const value = ((Math.imul(frame + index, 0x45d9f3b) >>> 0) % 255)
-    image.data[index] = value
-    image.data[index + 1] = value
-    image.data[index + 2] = value
-    image.data[index + 3] = 255
+  const image = noiseCtx.createImageData(noise.width, noise.height)
+  const values = grainNoise(frame, noise.width * noise.height)
+  for (let pixel = 0; pixel < values.length; pixel += 1) {
+    image.data.fill(values[pixel], pixel * 4, pixel * 4 + 3)
+    image.data[pixel * 4 + 3] = 255
   }
   noiseCtx.putImageData(image, 0, 0)
   ctx.save()
   ctx.globalAlpha = amount * 0.35
-  ctx.drawImage(noise, -(frame % 7), -(frame % 5), width + 14, height + 10)
+  ctx.drawImage(noise, 0, 0, width, height)
   ctx.restore()
 }

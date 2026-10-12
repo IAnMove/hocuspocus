@@ -1,14 +1,18 @@
-# Contributing to Maestro
+# Contributing to HocusPocus
 
 ## Development status
 
-Start with [CURRENT_WORK](docs/development/CURRENT_WORK.md) for integrated work,
-active areas and verified pending tasks. Read domain contracts on demand; archived
-phase packets and session handoffs are not the current queue.
+Start with [docs/README.md](docs/README.md), the index of guides, live contracts
+and historical documents. [CHANGELOG.md](CHANGELOG.md) says what each version
+integrated and what is unreleased; the
+[production board](docs/development/PRODUCTION_WORK_BOARD.md) tracks the video
+production blocks. Read domain contracts on demand; archived phase packets and
+session handoffs are not the current queue.
 
-Thanks for your interest in improving Maestro! This is a local-first AI
+Thanks for your interest in improving HocusPocus! This is a local-first AI
 video/image/music studio built on the [Wan2GP](https://github.com/deepbeepmeep/Wan2GP)
-pipeline and distributed through [Pinokio](https://pinokio.computer).
+pipeline (lineage Wan2GP → Maestro → HocusPocus) and distributed through
+[Pinokio](https://pinokio.computer).
 
 ## Getting set up
 
@@ -21,22 +25,23 @@ sessions' edits, and do not merge or change remote protections without authoriza
 See [branch and release workflow](docs/development/BRANCHING.md). This policy
 supersedes historical main-as-integration examples, not their acceptance criteria.
 
-Maestro is a Pinokio app, so the easiest dev loop is:
+HocusPocus is a Pinokio app, so the easiest dev loop is:
 
-1. Install Maestro through Pinokio (see the [README](README.md)). This creates
+1. Install HocusPocus through Pinokio (see the [README](README.md)). This creates
    the Python environment in `app/env/` and installs the app.
 2. Edit the source in place. The layout:
    - **Launcher scripts** (`install.js`, `start.js`, `update.js`, `reset.js`,
      `pinokio.js`) live at the repo root.
-   - **Backend** — `app/`: FastAPI endpoints in `app/launch.py`, the generation
-     pipeline in `app/wgp.py`, and services (LLM, Director, recipes, etc.) in
-     `app/services/`.
+   - **Backend** — `app/`: the FastAPI server is `app/_launch_runtime.py`
+     (`app/launch.py` is the thin entry point that defers importing it), with
+     routers in `app/routers/`, services (LLM, Director, series, jobs, etc.) in
+     `app/services/` and the WanGP generation pipeline in `app/wgp.py`.
    - **Frontend** — `ui/`: a React + TypeScript + Tailwind app; global state in
      `ui/src/stores/useStore.ts`.
 3. After changing the UI, rebuild it:
    ```
    cd ui
-   npm install
+   npm ci
    npm run build
    ```
    Pinokio's **Update** flow does this automatically; during active dev you can
@@ -59,7 +64,14 @@ SuperGrok Heavy / complimentary Ultra; this workflow does not.
 
 ## Before you open a PR
 
-CI runs three checks on every PR — please run them locally first:
+The quickest route is the wrapper: `bash scripts/validate_local.sh` runs the
+fast pre-push checks (contracts, code-health ratchet against the PR base, UI
+tests, lint, build, simulated E2E) and `bash scripts/validate_local.sh --full`
+is CI-equivalent (plus the clean-repo, documentation, brand and dependency
+guards, compileall and the whole Python suite). Neither installs packages or
+calls a provider; see [LOCAL_VALIDATION](docs/development/LOCAL_VALIDATION.md).
+
+CI runs these checks on every PR — the wrapper covers them, or run them by hand:
 
 ```bash
 # 1. Clean-repo guard (see below) — must pass
@@ -73,9 +85,13 @@ cd ui && npm run build
 ```
 
 The canonical backend test command is run from the repository root, so the
-`pytest.ini` `pythonpath` setting resolves imports from `app/` consistently:
+`pytest.ini` `pythonpath` setting resolves imports from `app/` consistently.
+`pytest` is a development dependency (pinned in
+`scripts/ci-python-requirements.txt`), not part of the installed app, so add
+it to the managed environment once:
 
 ```bash
+app/env/bin/python -m pip install pytest==8.3.5
 app/env/bin/python -m pytest -q
 ```
 
@@ -124,6 +140,6 @@ always what's needed to reproduce a local-generation issue.
 
 ## License
 
-Maestro is released under the WanGP Non-Commercial Evaluation License (inherited
-from upstream Wan2GP). By contributing you agree your contributions are licensed
+HocusPocus is released under the WanGP Non-Commercial Evaluation License
+(inherited from upstream Wan2GP through Maestro). By contributing you agree your contributions are licensed
 under the same terms. See [LICENSE](LICENSE).

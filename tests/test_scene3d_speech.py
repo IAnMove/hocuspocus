@@ -45,17 +45,21 @@ def test_missing_rhubarb_is_actionable(monkeypatch):
 
 def test_local_process_has_bounds_and_no_shell(monkeypatch, tmp_path):
     monkeypatch.setattr(speech, "rhubarb_executable", lambda: "/configured/rhubarb")
-    monkeypatch.setattr(speech.tempfile, "mkdtemp", lambda **kwargs: str(tmp_path))
+    monkeypatch.setattr(speech.tempfile, "tempdir", str(tmp_path))
+    seen = {}
 
     def run(args, **kwargs):
         assert kwargs["shell"] is False and kwargs["timeout"] == 90
         assert args[args.index("-r") + 1] == "phonetic"
+        source = Path(args[-1])
+        seen["folder"] = source.parent
+        assert source.name == "voice.wav" and source.exists() and source.parent.name.startswith("hocuspocus-speech-")
         Path(args[args.index("-o") + 1]).write_text(json.dumps({"mouthCues": [{"start": 0, "end": 1, "value": "D"}]}))
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(speech.subprocess, "run", run)
     assert speech.analyze_voice(wav())["mouthCues"][0]["value"] == "D"
-    assert (tmp_path / "voice.wav").exists()
+    assert not seen["folder"].exists(), "the copy of the audio goes away with the analysis"
 
 
 def test_router_mounted_under_existing_character_boundary(monkeypatch, tmp_path):

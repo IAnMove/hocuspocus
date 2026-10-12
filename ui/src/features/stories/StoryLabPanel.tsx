@@ -1154,11 +1154,11 @@ export function StoryLabPanel() {
     )
     let activeJobId = ''
     const sourceProjectId = project.id
-    persistStoryLabSessionRecord(activeWorkspace, project.id, {
-      scope,
-      generateImagesAfterApply: options.generateImages === true,
-    })
     try {
+      persistStoryLabSessionRecord(activeWorkspace, project.id, {
+        scope,
+        generateImagesAfterApply: options.generateImages === true,
+      })
       const resolvedWriting = resolveStoryWritingProvider(productionProfile, project)
       const effectiveProvider: StoryProject['provider'] = project.provider.useGlobalProfile
         ? {

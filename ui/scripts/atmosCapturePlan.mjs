@@ -67,10 +67,17 @@ export function parseCaptureArgs(argv, env = process.env) {
   let exportClip = false
   let out = env.ATMOS_CAPTURE_DIR || ''
   let port = Number(env.HOCUSPOCUS_E2E_PORT || 4199)
+  let samples
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
     if (argument === '--help' || argument === '-h') return captureOptions(true, ids, exportClip, out, port, look)
     if (argument === '--export') { exportClip = true; continue }
+    if (argument === '--samples') {
+      const value = readOption(argv, index, argument)
+      samples = value.split(',').map(Number)
+      if (samples.length > 6 || samples.some(time => !Number.isFinite(time) || time < 0 || time > 600) || value.split(',').some(part => !part.trim())) throw new Error('Samples must contain 1–6 times between 0 and 600 seconds.')
+      index += 1; continue
+    }
     if (argument === '--out' || argument === '--port') {
       const value = readOption(argv, index, argument)
       index += 1
@@ -84,7 +91,7 @@ export function parseCaptureArgs(argv, env = process.env) {
   }
   if (!ids.length) throw new Error('Pass at least one template id.')
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Port must be an integer from 1 to 65535.')
-  return captureOptions(false, ids, exportClip, out, port, look)
+  return { ...captureOptions(false, ids, exportClip, out, port, look), ...(samples ? { samples } : {}) }
 }
 
 function readOption(argv, index, name) {

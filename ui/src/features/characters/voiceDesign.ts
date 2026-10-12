@@ -1,11 +1,20 @@
 import { cancelJob, fetchJobStatus, getFileUrl, submitGeneration } from '../../api/client'
-import { checkSpeech, type SpeechCheck } from '../../api/characters'
+import { checkAccent, checkSpeech, type AccentCheck, type SpeechCheck } from '../../api/characters'
 import { awaitSpeechOutput } from '../../lib/sceneSpeech'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
 
-export const VOICE_DESIGN_MODEL = 'qwen3_tts_voicedesign'
-export const REFERENCE_VOICE_MODEL = 'qwen3_tts_base'
+/** Engines that design a voice from a description, then clone every line from the chosen take.
+ * Qwen3 is told the language; VoxCPM2 reads it from the text (30 languages, 48 kHz). */
+export const VOICE_ENGINES = {
+  voxcpm2: { design: 'voxcpm2_voicedesign', reference: 'voxcpm2_base', tellsLanguage: false },
+  qwen3: { design: 'qwen3_tts_voicedesign', reference: 'qwen3_tts_base', tellsLanguage: true },
+} as const
+export type VoiceEngine = keyof typeof VOICE_ENGINES
+/** VoxCPM2 is the default engine; Qwen3 stays available. */
+export const DEFAULT_VOICE_ENGINE: VoiceEngine = 'voxcpm2'
+export const VOICE_DESIGN_MODEL = VOICE_ENGINES[DEFAULT_VOICE_ENGINE].design
+export const REFERENCE_VOICE_MODEL = VOICE_ENGINES[DEFAULT_VOICE_ENGINE].reference
 export const VOICE_CANDIDATES = 3
 
 /** Calm, plain sentences make a steadier cloning reference than an excited line. */
@@ -25,15 +34,20 @@ export type DesignedVoice = {
   filename?: string
   url?: string
   check?: SpeechCheck
+  accent?: AccentCheck
   error?: string
 }
 
-/** A description that says male or female sets the pitch range qa.speech warns about. */
+/** A description sets the pitch range qa.speech warns about.
+
+The first word that names a man, a woman or a child decides, as the hint asks the
+description to start with the voice: a later «casado con una mujer» or «de niño»
+names someone else. boy, girl, niño and niña are 220–400 Hz; chico and chica stay
+adult. No matching word means the take is not checked. */
 export function expectedPitch(description: string): [number, number] | undefined {
-  const text = description.toLowerCase()
-  if (/\b(female|woman|girl|mujer|femenina|chica|niña)\b/u.test(text)) return [150, 320]
-  if (/\b(male|man|boy|hombre|masculina|masculino|chico|niño)\b/u.test(text)) return [75, 175]
-  return undefined
+  const found = /\b(?:(child|children|boy|girl|niño|niña|nino|nina)|(female|woman|mujer|femenina|chica)|(male|man|hombre|masculina|masculino|chico))\b/iu.exec(description)
+  if (!found) return undefined
+  return found[1] ? [220, 400] : found[2] ? [150, 320] : [75, 175]
 }
 
 export type VoiceDesignDependencies = {
@@ -41,21 +55,26 @@ export type VoiceDesignDependencies = {
   fetchJobStatus: typeof fetchJobStatus
   cancelJob: typeof cancelJob
   checkSpeech: typeof checkSpeech
+  checkAccent: typeof checkAccent
   fileUrl: typeof getFileUrl
   seed: () => number
 }
 
 const defaults: VoiceDesignDependencies = {
-  submitGeneration, fetchJobStatus, cancelJob, checkSpeech, fileUrl: getFileUrl,
+  submitGeneration, fetchJobStatus, cancelJob, checkSpeech, checkAccent, fileUrl: getFileUrl,
   seed: () => Math.floor(Math.random() * 2_000_000_000),
 }
 
 /** Three voices from one description, each transcribed and measured as soon as it is ready. */
 export async function designVoiceCandidates(request: {
   workspace: string; description: string; text: string; language: SpokenLanguage; signal: AbortSignal
+  accent?: 'castilian'
+  engine?: VoiceEngine
   onUpdate: (voices: DesignedVoice[]) => void
 }, dependencies: Partial<VoiceDesignDependencies> = {}): Promise<DesignedVoice[]> {
   const deps = { ...defaults, ...dependencies }
+  const engine = VOICE_ENGINES[request.engine ?? DEFAULT_VOICE_ENGINE]
+  const model = engine.design
   const pitchRange = expectedPitch(request.description)
   const seconds = Math.min(30, Math.max(6, Math.ceil(request.text.split(/\s+/).length / 2.2) + 3))
   let voices: DesignedVoice[] = Array.from({ length: VOICE_CANDIDATES },
@@ -68,18 +87,27 @@ export async function designVoiceCandidates(request: {
   await Promise.all(voices.map(async voice => {
     try {
       const submitted = await deps.submitGeneration({
-        model_type: VOICE_DESIGN_MODEL, generation_mode: 'audio', _audio_sub_mode: 'speech', prompt: request.text,
-        alt_prompt: request.description, model_mode: request.language, duration_seconds: seconds, seed: voice.seed,
+        model_type: model, generation_mode: 'audio', _audio_sub_mode: 'speech', prompt: request.text,
+        alt_prompt: request.description, ...(engine.tellsLanguage ? { model_mode: request.language } : {}),
+        duration_seconds: seconds, seed: voice.seed,
         video_length: 0, image_mode: 0, multi_prompts_gen_type: 2, workspace: request.workspace,
       })
       const clip = await awaitSpeechOutput(
-        { prompt: request.text, model: VOICE_DESIGN_MODEL, durationSeconds: seconds, workspace: request.workspace, signal: request.signal },
+        { prompt: request.text, model, durationSeconds: seconds, workspace: request.workspace, signal: request.signal },
         { submitGeneration: deps.submitGeneration, fetchJobStatus: deps.fetchJobStatus, cancelJob: deps.cancelJob },
-        { prompt: request.text, model: VOICE_DESIGN_MODEL, jobId: submitted.job_id })
+        { prompt: request.text, model, jobId: submitted.job_id })
       update(voice.id, { status: 'checking', filename: clip.filename, url: deps.fileUrl(clip.filename, request.workspace) })
       const check = await deps.checkSpeech({ workspace: request.workspace, file: clip.filename, text: request.text,
         language: request.language, ...(pitchRange ? { pitchRange } : {}) })
-      update(voice.id, { status: 'ready', check })
+      let accent: AccentCheck | undefined
+      if (request.accent === 'castilian') {
+        try {
+          accent = await deps.checkAccent({ workspace: request.workspace, file: clip.filename, text: request.text })
+        } catch (error) {
+          check.warnings = [...(check.warnings ?? []), (error as Error).message]
+        }
+      }
+      update(voice.id, { status: 'ready', check, accent })
     } catch (error) {
       if (request.signal.aborted) return
       update(voice.id, { status: 'failed', error: (error as Error).message })
@@ -90,8 +118,9 @@ export async function designVoiceCandidates(request: {
 }
 
 /** The chosen take becomes the language's reference voice: every later line is cloned from it. */
-export function referenceVoice(voice: DesignedVoice, details: { name: string; text: string; language: SpokenLanguage }): CustomCharacterVoice {
+export function referenceVoice(voice: DesignedVoice, details: { name: string; text: string; language: SpokenLanguage },
+  engine: VoiceEngine = DEFAULT_VOICE_ENGINE): CustomCharacterVoice {
   if (!voice.url) throw new Error('This voice has no recording yet.')
-  return { provider: 'local', model: REFERENCE_VOICE_MODEL, voiceId: 'reference', name: details.name.slice(0, 120),
+  return { provider: 'local', model: VOICE_ENGINES[engine].reference, voiceId: 'reference', name: details.name.slice(0, 120),
     referenceAudio: voice.url, transcript: details.text, language: details.language }
 }

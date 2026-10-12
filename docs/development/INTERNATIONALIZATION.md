@@ -1,6 +1,6 @@
 # Internationalization
 
-Status: foundation (2026-09-02). English (`en`) is the source language and fallback. Spanish (`es`) is the second catalog. This document is the boy-scout rule for later PRs. Remaining slices: `docs/development/SLICE_QUEUE.md`.
+Status: foundation (2026-09-02). English (`en`) is the source language and fallback. Spanish (`es`) is the second catalog. This document is the boy-scout rule for later PRs.
 
 The first PR only wired the infrastructure and a small pilot (global navigation, canonical entity names, Settings). Do not translate the rest of the app in one change.
 

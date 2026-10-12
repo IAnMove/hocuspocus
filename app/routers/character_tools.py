@@ -24,7 +24,7 @@ def _envelope(body: Any) -> dict[str, Any]:
     return envelope
 
 
-def create_character_tools_router(*, studio_key: Handler, speech_qa: Handler) -> APIRouter:
+def create_character_tools_router(*, studio_key: Handler, speech_qa: Handler, accent: Handler | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/v1/studio/key")
@@ -36,5 +36,12 @@ def create_character_tools_router(*, studio_key: Handler, speech_qa: Handler) ->
     async def check_speech(request: Request):
         """Transcript, error rate, pitch and pace of a workspace take (the qa.speech command)."""
         return await speech_qa(_envelope(await request.json()))
+
+    @router.post("/api/v1/qa/accent")
+    async def check_accent(request: Request):
+        """Castilian θ rate of a workspace take (the qa.accent command)."""
+        if accent is None:
+            raise HTTPException(status_code=404, detail={"code": "not_available", "message": "Accent check is not wired", "retryable": False})
+        return await accent(_envelope(await request.json()))
 
     return router

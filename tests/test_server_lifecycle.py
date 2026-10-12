@@ -55,7 +55,12 @@ SERVER = textwrap.dedent(
 
     atexit.register(hook)
     threading.Thread(target=lambda: time.sleep(10**6), daemon=False).start()
-    from services.server_lifecycle import run_until_stopped
+    from services.server_lifecycle import bind_listener, run_until_stopped
+    if os.environ.get("PREBIND"):
+        # As launch.py does: own the port before announcing it, then hand the socket to Uvicorn.
+        listener, port = bind_listener("127.0.0.1", int(os.environ["PORT"]))
+        print(f"serving on {port}", flush=True)
+        run_until_stopped(app, host="127.0.0.1", port=port, sockets=[listener])
     run_until_stopped(app, host="127.0.0.1", port=int(os.environ["PORT"]))
     """
 )
@@ -196,3 +201,60 @@ def test_killing_the_launching_shell_stops_the_server(tmp_path):
         connection.close()
         for pid in _server_pids(shell.pid):
             os.kill(pid, signal.SIGKILL)
+
+
+def test_bind_listener_owns_the_preferred_port_or_falls_forward_to_the_next_free_one():
+    from services.server_lifecycle import bind_listener
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    busy = blocker.getsockname()[1]
+    try:
+        listener, port = bind_listener("127.0.0.1", busy, span=3)
+        try:
+            assert port != busy and busy < port <= busy + 3
+            assert listener.getsockname()[1] == port, "the socket is already bound and listening"
+            with socket.create_connection(("127.0.0.1", port), 1):
+                pass
+        finally:
+            listener.close()
+        with pytest.raises(OSError):
+            bind_listener("127.0.0.1", busy, span=0)
+    finally:
+        blocker.close()
+
+
+def test_the_server_serves_on_a_socket_bound_before_the_announcement(tmp_path):
+    process, connection, port = _start(tmp_path, PREBIND="1")
+    try:
+        probe = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        probe.request("GET", "/stream")
+        assert probe.getresponse().read1(16).startswith(b"data:")
+        probe.close()
+    finally:
+        connection.close()
+        process.send_signal(signal.SIGTERM)
+        assert _wait_gone(process.pid, 10)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="TIME_WAIT reuse is the POSIX behaviour")
+def test_a_port_left_in_time_wait_by_the_previous_server_is_bound_again():
+    """A restart used to land on the next port (42004): the old server's closed connections held 42003 in TIME_WAIT."""
+    from services.server_lifecycle import bind_listener
+    # The previous server bound its port the same way (the kernel reuses TIME_WAIT only when both sides allow it,
+    # which Uvicorn's own bind did before the socket was pre-bound here).
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    free = probe.getsockname()[1]
+    probe.close()
+    old, port = bind_listener("127.0.0.1", free, span=0)
+    client = socket.create_connection(("127.0.0.1", port), 1)
+    served, _ = old.accept()
+    served.close()  # the server closes first: its end of the connection waits in TIME_WAIT on this port
+    old.close()
+    client.close()
+    listener, bound = bind_listener("127.0.0.1", port, span=3)
+    try:
+        assert bound == port, "the same port again, not the next one"
+    finally:
+        listener.close()

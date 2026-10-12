@@ -13,10 +13,32 @@ from services.mcp_oauth import McpOAuth, OAuthError
 AUTH_FIELDS = ("response_type", "client_id", "redirect_uri", "code_challenge", "code_challenge_method", "state", "scope", "resource")
 
 
+MAX_BODY = 64 * 1024  # OAuth bodies are a few hundred bytes; these endpoints are reachable from the internet
+
+
+async def _body(request: Request) -> bytes:
+    """The request body, refused past MAX_BODY without reading it all."""
+    try:
+        if int(request.headers.get("content-length") or 0) > MAX_BODY:
+            raise OAuthError("invalid_request", "Request body too large", 413)
+    except ValueError:
+        pass
+    chunks, size = [], 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_BODY:
+            raise OAuthError("invalid_request", "Request body too large", 413)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _form(request: Request) -> dict[str, str]:
-    raw = (await request.body()).decode("utf-8", "replace")
+    raw = (await _body(request)).decode("utf-8", "replace")
     if "json" in (request.headers.get("content-type") or ""):
-        value = json.loads(raw or "{}")
+        try:
+            value = json.loads(raw or "{}")
+        except ValueError as error:
+            raise OAuthError("invalid_request", "Malformed JSON body") from error
         return {str(k): str(v) for k, v in value.items()} if isinstance(value, dict) else {}
     return dict(parse_qsl(raw, keep_blank_values=True))
 
@@ -52,9 +74,9 @@ def create_mcp_oauth_router(oauth: McpOAuth) -> APIRouter:
     @router.post("/oauth/register")
     async def register(request: Request):
         try:
-            body = json.loads((await request.body()) or b"{}")
-            return JSONResponse(oauth.register(body if isinstance(body, dict) else {}), status_code=201,
-                                headers={"Cache-Control": "no-store"})
+            body = json.loads((await _body(request)) or b"{}")
+            return JSONResponse(oauth.register(body if isinstance(body, dict) else {}, peer=request.client.host if request.client else ""),
+                                status_code=201, headers={"Cache-Control": "no-store"})
         except (OAuthError, ValueError) as error:
             return _error(error if isinstance(error, OAuthError) else OAuthError("invalid_client_metadata", str(error)))
 

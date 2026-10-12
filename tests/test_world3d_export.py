@@ -193,6 +193,27 @@ def test_short_voiced_scene_is_admitted_with_its_audio_frozen_as_a_ref():
                      "filename": "voice.wav", "workspace": WORKSPACE}]
 
 
+def test_a_model_in_a_folder_of_the_workspace_is_found_where_it_is(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    slots = [{"id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0, "scale": 1, "media": "model3d", "clip": None,
+              "sourceUrl": f"/api/v1/file/pack/horse.glb?workspace={WORKSPACE}"}]
+    refs = freeze_export_command(_command(document=_document(slots=slots)))["effective"]["input"]["snapshot"]["refs"]
+    assert refs == [{"slotId": "subject_1", "url": slots[0]["sourceUrl"], "kind": "model3d", "filename": "horse.glb", "path": "pack/horse.glb",
+                     "workspace": WORKSPACE}]
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="horse-missing", document=_document(slots=slots)))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+    pack = Path(service.workspace_dir(WORKSPACE)) / "pack"
+    pack.mkdir()
+    (pack / "horse.glb").write_bytes(b"glTF")
+    assert service.submit(_command(intent_id="horse-present", document=_document(slots=slots)))["replayed"] is False
+    forget_task_registry(service._registry(WORKSPACE).workspace_dir)
+    climbing = [{**slots[0], "sourceUrl": f"/api/v1/file/pack/../secret.glb?workspace={WORKSPACE}"}]
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="horse-climbing", document=_document(slots=climbing)))
+    assert error.value.detail["code"] == "missing_ref"
+
+
 def test_voiced_admission_requires_the_audio_file(tmp_path):
     service = _service(tmp_path, renderer=_paint)
     with pytest.raises(Exception) as error:
@@ -853,3 +874,19 @@ def test_a_malformed_geometry_report_is_ignored(tmp_path):
     (tmp_path / "geometry.json").write_text(json.dumps({"verdict": "maybe"}))
     assert read_geometry_report(tmp_path) is None
     assert read_geometry_report(tmp_path / "missing") is None
+
+
+def test_a_published_export_releases_its_frames_and_keeps_its_snapshot(tmp_path, monkeypatch):
+    monkeypatch.delenv("HOCUS_KEEP_EXPORT_STAGING", raising=False)
+    service = _service(tmp_path, renderer=_paint)
+    service.submit(_command(intent_id="release-me"))
+    registry = service._registry(WORKSPACE)
+    task_id = registry.command_admission("release-me")["task_id"]
+    _wait(registry, task_id, {"completed"})
+    staging = staging_dir(registry.workspace_dir, "release-me")
+    assert not (staging / "frames").exists() and not (staging / "encoded.mp4").exists(), "intermediates go with the publish"
+    assert (staging / "snapshot.json").is_file(), "what was rendered stays readable"
+    # Staging goes before the task says completed; the published MP4 was moved out of it, so the result is whole.
+    name = registry.get(task_id)["result_refs"][0]
+    assert (Path(registry.workspace_dir) / name).stat().st_size > 0
+    forget_task_registry(registry.workspace_dir)

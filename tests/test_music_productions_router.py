@@ -11,13 +11,14 @@ from fastapi.testclient import TestClient
 from routers.music_productions import create_music_productions_router
 
 
-def _client(root: Path, token: str = "") -> TestClient:
+def _client(root: Path, token: str = "", mcp=None) -> TestClient:
     app = FastAPI()
     app.include_router(create_music_productions_router(
         workspace_dir=lambda name: str(root) if name == "film" else str(root / "missing"),
         uploads_dir=lambda: str(root / "uploads"),
         app_url=lambda: "http://127.0.0.1:9",
         token=lambda: token,
+        mcp=mcp,
     ))
     return TestClient(app)
 
@@ -70,6 +71,42 @@ def test_use_take_of_a_missing_file_is_422_and_retake_without_mcp_is_503(tmp_pat
     retake = denied.post("/api/v1/music-productions/show/shots/s0/retake", params={"workspace": "film"})
     assert retake.status_code == 503
     assert retake.json()["detail"]["code"] == "mcp_unavailable"
+
+
+@pytest.mark.parametrize("token", ["", "external-token"])
+def test_retake_uses_injected_local_tools_even_when_external_mcp_is_disabled(tmp_path, monkeypatch, token):
+    from services import music_production
+    from services.agent_activity import current_actor, is_external_agent
+    from services.local_mcp import LocalMcp
+
+    root = tmp_path / "film"
+    _write(root)
+    path = root / "show.production.json"
+    state = json.loads(path.read_text())
+    state["spec"] = {"title": "Night bus", "song": {"lyrics": "a", "caption": "pop", "duration": 30, "bpm": 120},
+                     "style": {}, "shots": [{"key": "s0", "kind": "h3", "line": 0, "frame": "f", "action": "sings"}]}
+    path.write_text(json.dumps(state))
+    seen = []
+
+    async def tool(arguments):
+        seen.append((arguments["retake"], current_actor(), is_external_agent()))
+        return {"ok": True}
+
+    local = LocalMcp(lambda: {"demo": tool})
+    monkeypatch.setattr(music_production, "loopback_mcp", lambda *_: pytest.fail("retake must use the injected local tools"))
+    monkeypatch.setattr(music_production.Production, "run", lambda self, spec, retake, through: self.mcp("demo", {"retake": retake}))
+    try:
+        reply = _client(root, token=token, mcp=local.call).post(
+            "/api/v1/music-productions/show/shots/s0/retake", params={"workspace": "film"})
+        assert reply.status_code == 200, reply.text
+        assert reply.json()["result"]["running"] is True
+        music_production._threads["film/show"].join(timeout=3)
+        assert seen == [(("s0",), "server", False)]
+    finally:
+        with music_production._lock:
+            worker = music_production._threads.pop("film/show", None)
+        if worker:
+            worker.join(timeout=3)
 
 
 def test_shot_edits_refuse_while_the_production_thread_is_alive(tmp_path: Path):

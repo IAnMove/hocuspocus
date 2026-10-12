@@ -7,6 +7,15 @@ from urllib.parse import urlsplit, parse_qsl, unquote
 CHARACTER_VOICE_LANGUAGES = {"auto", "chinese", "english", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian"}
 # A character can carry one dedicated voice per spoken language; "auto" is not a language.
 CHARACTER_VOICE_DUB_LANGUAGES = CHARACTER_VOICE_LANGUAGES - {"auto"}
+# Speech models that clone a character voice from a reference recording and its transcript.
+REFERENCE_VOICE_MODELS = ("qwen3_tts_base", "voxcpm2_base")
+# Reference voices that may also carry a style direction (VoxCPM2 controllable cloning).
+STYLED_REFERENCE_VOICE_MODELS = ("voxcpm2_base",)
+VOICE_STYLE_MAX_CHARS = 300
+
+
+def is_reference_voice(voice):
+    return isinstance(voice, dict) and voice.get("model") in REFERENCE_VOICE_MODELS
 
 
 def _voice_reference_query(kind, raw):
@@ -133,18 +142,31 @@ def _voice_text(value, limit):
     return isinstance(value, str) and bool(value.strip()) and len(value) <= limit
 
 
+def _voice_style(value):
+    style = value.get("instructions")
+    if style is None:
+        return {}
+    if value.get("model") not in STYLED_REFERENCE_VOICE_MODELS:
+        raise ValueError("This reference voice takes no style direction.")
+    if not isinstance(style, str) or len(style) > VOICE_STYLE_MAX_CHARS:
+        raise ValueError("Voice instructions are too long.")
+    return {"instructions": style.strip()} if style.strip() else {}
+
+
 def _normalize_reference_voice(value):
-    if (set(value) != {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
+    required = {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
+    if (not required <= set(value) <= required | {"instructions"}
             or value.get("provider") != "local" or value.get("voiceId") != "reference"
             or not _voice_text(value.get("name"), 120) or not _voice_text(value.get("transcript"), 4000)
             or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
         raise ValueError("Add a named local reference recording, its transcript and a supported language.")
-    return {**value, "name": value["name"].strip(), "transcript": value["transcript"].strip(),
-            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"])}
+    base = {key: value[key] for key in required}
+    return {**base, "name": value["name"].strip(), "transcript": value["transcript"].strip(),
+            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"]), **_voice_style(value)}
 
 
 def normalize_character_voice(value):
-    if isinstance(value, dict) and value.get("model") == "qwen3_tts_base":
+    if is_reference_voice(value):
         return _normalize_reference_voice(value)
     if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"}:
         raise ValueError("Store voice preferences only, never credentials.")
@@ -166,7 +188,7 @@ def normalize_character_voices_by_language(value):
         if language not in CHARACTER_VOICE_DUB_LANGUAGES:
             raise ValueError("Unsupported voice language.")
         normalized = normalize_character_voice(voice)
-        if normalized.get("model") == "qwen3_tts_base" and normalized["language"] not in {language, "auto"}:
+        if is_reference_voice(normalized) and normalized["language"] not in {language, "auto"}:
             raise ValueError("A reference voice must speak the language it is assigned to.")
         result[language] = normalized
     return result

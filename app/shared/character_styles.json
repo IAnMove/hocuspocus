@@ -15,6 +15,21 @@
       "background": "Plain flat solid {screen} background filling the whole image behind the character, nothing else in the picture. The character keeps its own colours and has no {screen} anywhere on it.",
       "negative": "photo, realistic, 3D render, gradient shading, soft shadows, text, watermark, multiple characters, cropped body, background scenery, open mouth",
       "rig": { "smile": 0.15, "smirk": 0.0, "width": 0.62, "mouth_scale": 0.78 }
+    },
+    {
+      "id": "graphic-novel",
+      "label": { "en": "Graphic novel (painted)", "es": "Novela gráfica (pintada)" },
+      "summary": {
+        "en": "Painted graphic-novel characters: bold ink, flat black shadows, clear white eyes. They talk with their own drawing (warp mouths). Add a bust pose for close dialogue: a small face in a full figure reads less.",
+        "es": "Personajes pintados de novela gráfica: tinta gruesa, sombras negras planas, ojos blancos claros. Hablan con su propio dibujo (bocas warp). Añade una pose de busto para los diálogos cercanos: una cara pequeña en una figura entera se lee menos."
+      },
+      "kitStyle": "cutout",
+      "character": "Graphic novel character art: very few bold clean ink lines, large flat masses of pure black shadow with hard edges and no soft gradients, a strong graphic silhouette, a flat limited palette of a few muted colours with deep black and bone white, a single hard key light from the LEFT. Full figure, front view, standing, arms relaxed, centred with margin. Both eyes clearly visible with clean bright WHITE sclera and a small black pupil (the black shadow falls on the right cheek, jaw, neck and body, never over the eyes), a small nose, a simple closed mouth painted as one short dark line. {description}",
+      "pose": "The same character as the reference image: same face, proportions, colours and outfit, the same graphic novel art with bold clean ink lines and flat hard-edged black shadows, the key light from the LEFT. Both eyes clearly visible with clean bright WHITE sclera and a small black pupil, never in shadow, a simple closed mouth painted as one short dark line. {description}",
+      "prop": "Graphic novel prop: bold clean ink lines, flat masses of pure black shadow with hard edges, a flat limited palette, the key light from the LEFT, front view, centred. {description}",
+      "background": "Isolated on a plain flat solid {screen} background filling the whole image, no floor, no cast shadow, no text, no frame. The character keeps its own colours and has no {screen} anywhere on it.",
+      "negative": "photo, photorealistic, 3D render, soft gradient shading, airbrush, blurry, text, watermark, speech bubble, panel border, frame, multiple characters, cropped head, background scenery, floor, cast shadow, open mouth, teeth, eyes in shadow, closed eyes, sunglasses",
+      "rig": { "mouthStyle": "warp" }
     }
   ],
   "screens": {

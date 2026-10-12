@@ -20,13 +20,14 @@ from services.character_kit_library import (
     patch_character_kit,
     read_character_kit_library,
 )
+from routers.series_episode import create_checked_episode
 from services.series_library import (
-    create_series_episode,
     create_series_project,
     duplicate_series_project,
     import_story_project,
     normalize_series_project,
     read_series_library,
+    series_put_payload,
     series_canon_inputs_changed,
     validate_workspace_id,
     write_series_library,
@@ -234,7 +235,7 @@ def create_core_labs_router() -> APIRouter:
                         status_code=409,
                         detail=f"Series revision changed to {current.get('revision')}; reload before saving",
                     )
-                updated = normalize_series_project({**raw, "id": series_id}, series_id, workspace)
+                updated = normalize_series_project({**series_put_payload(current, raw), "id": series_id}, series_id, workspace)
                 if series_canon_inputs_changed(current, updated):
                     updated["canon"]["approval"] = "draft"
                     updated["canon"]["approvedAt"] = ""
@@ -280,10 +281,7 @@ def create_core_labs_router() -> APIRouter:
             series = copy.deepcopy(_series_or_404(library, series_id))
             if series.get("canon", {}).get("approval") != "approved":
                 raise HTTPException(status_code=400, detail="Approve the reviewed Series canon before creating an episode")
-            episode = create_series_episode(
-                series, str(body.get("seasonId") or "") or None,
-                **(body.get("episode") if isinstance(body.get("episode"), dict) else {}),
-            )
+            episode = create_checked_episode(series, body)
             series["episodesById"][episode["id"]] = episode
             season = next(item for item in series["seasons"] if item["id"] == episode["seasonId"])
             season["episodeOrder"].append(episode["id"])
@@ -397,6 +395,7 @@ def create_core_labs_router() -> APIRouter:
     @router.post("/api/v1/series/{series_id}/assets/import")
     def import_asset(series_id: str, body: dict):
         import shutil
+        from services.series_plate_checks import with_plate_warning
         from services.series_production import attach_series_import, existing_generated_reference
 
         workspace = _series_workspace(body.get("workspace"))
@@ -439,6 +438,8 @@ def create_core_labs_router() -> APIRouter:
             series["updatedAt"] = _iso_now()
             library["seriesById"][series_id] = series
             stored = _write_series(workspace, library)
-        return {"asset": stored["seriesById"][series_id]["assets"][asset_id], "series": stored["seriesById"][series_id]}
+        stored_series = stored["seriesById"][series_id]
+        return with_plate_warning(
+            {"asset": stored_series["assets"][asset_id], "series": stored_series}, source, body, stored_series)
 
     return router

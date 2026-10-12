@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
+from services.document_origin import write_document_origin
 from services.scene_commands import DocumentInput
 
 
@@ -23,7 +24,7 @@ def preview_png(preview):
     return png
 
 
-def save_world3d(body, workspace_dir):
+def save_world3d(body, workspace_dir, *, capability='scenes.world3d.save'):
     workspace = body.get('workspace')
     if not isinstance(workspace, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,119}', workspace):
         raise ValueError('Choose an explicit workspace')
@@ -53,6 +54,10 @@ def save_world3d(body, workspace_dir):
         for path in written:
             path.unlink(missing_ok=True)
         raise
+    # An export of this document will name this file and may give it a real preview (scene_links).
+    from services.scene_links import remember_saved
+    remember_saved(folder, document, source.name)
+    write_document_origin(source, capability)
     suffix = '?workspace=' + quote(workspace, safe='')
     return {'name': source.name, 'type': 'scene', 'workspace_id': workspace,
             'url': '/api/v1/file/' + quote(source.name) + suffix,

@@ -123,6 +123,7 @@ test('character and location image jobs attach to their source workspace and can
         assert.equal(body.workspace, 'source-workspace')
         if (kind === 'location') {
           assert.ok(body.prompt.startsWith('Empty, unoccupied environment.'))
+          assert.ok(body.prompt.includes('Zero people or characters'))
           assert.ok(!body.prompt.includes(series.visualStyle))
           assert.equal(body.subject_reference, undefined)
           assert.equal(body.aspect_ratio, '16:9')

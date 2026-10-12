@@ -65,6 +65,7 @@ test('primary navigation exposes four stable categories and highlights the selec
     assert.equal(outputFolder.closest('[class*="overflow-x-auto"]'), null)
 
     fireEvent.click(studios)
+    assert.ok(screen.getByRole('tab', { name: 'Game assets' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Story Lab' }))
     assert.equal(useStore.getState().mediaFilter, 'stories')
     assert.equal(useStore.getState().settingsOpen, false)

@@ -658,7 +658,7 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
       }
     }
     if (!selections.length) throw new Error('No hay nuevos intentos elegibles que aprobar; las tomas resueltas ya están aprobadas o no tienen vídeo válido.')
-    const result = await api.approveSeriesAttemptsBulk(workspace, series.id, episode.id, selections)
+    const result = await api.approveSeriesAttemptsBulk(workspace, series.id, episode.id, selections, 'wizard')
     if (result.seriesId !== series.id || result.episodeId !== episode.id) {
       throw new Error('Series Lab aprobó intentos para otro destino; recarga antes de continuar.')
     }
@@ -688,7 +688,7 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
   if (shot.approvedAttemptId === attempt.id) {
     throw new Error(`El intento ${attempt.id} ya es el aprobado del shot ${shot.order}; la UI no permite rechazar el montaje final sin elegir antes otra toma.`)
   }
-  const rejectedShot = await api.rejectSeriesAttempt(workspace, series.id, episode.id, shot.id, attempt.id)
+  const rejectedShot = await api.rejectSeriesAttempt(workspace, series.id, episode.id, shot.id, attempt.id, 'wizard')
   const rejectedAttempt = rejectedShot.attempts.find(item => item.id === attempt.id)
   if (rejectedShot.id !== shot.id || rejectedAttempt?.reviewDecision !== 'rejected') {
     throw new Error('Series Lab no confirmó el rechazo solicitado; recarga antes de continuar.')

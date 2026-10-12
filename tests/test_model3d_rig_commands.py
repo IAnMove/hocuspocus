@@ -35,6 +35,30 @@ def test_native_rig_body_and_retries_keep_one_job(tmp_path):
         asyncio.run(handlers()["model3d.rig"](request(source="other.glb")))
 
 
+def test_a_replayed_submission_whose_job_the_server_lost_runs_again(tmp_path):
+    calls, known = [], set()
+
+    async def generate(req):
+        calls.append(await req.json())
+        known.add(f"rig-{len(calls)}")
+        return {"workspace": "movie", "job_id": f"rig-{len(calls)}", "status": "queued"}
+
+    def status(job_id):
+        if job_id not in known:
+            raise HTTPException(status_code=404, detail="Rig job not found")
+        return {"workspace": "movie", "job_id": job_id, "status": "completed"}
+
+    def handlers(): return command_handlers(generate=generate, status=status, journal_path=tmp_path / "requests.db")
+    first = asyncio.run(handlers()["model3d.rig"](request()))
+    assert asyncio.run(handlers()["model3d.rig"](request())) == first and len(calls) == 1, "a live job replays"
+    known.clear()                                                      # the server restarted: its job records are gone
+    again = asyncio.run(handlers()["model3d.rig"](request()))
+    assert again["result"]["job_id"] == "rig-2" and len(calls) == 2, "the same intent runs again"
+    assert asyncio.run(handlers()["model3d.rig"](request())) == again and len(calls) == 2, "and the new job replays"
+    with pytest.raises(ValueError, match="different parameters"):
+        asyncio.run(handlers()["model3d.rig"](request(source="other.glb")))
+
+
 def test_model_generation_and_rig_intents_cannot_collide(tmp_path):
     calls = []
 

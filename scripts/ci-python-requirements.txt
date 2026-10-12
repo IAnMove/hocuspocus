@@ -1,17 +1,19 @@
 # CI CPU test dependencies. Hashed into the pip cache key together with
 # app/requirements.txt and app/runtime/locks/*.txt. Not a product lockfile.
-starlette==0.46.1
+# Pins shared with app/runtime/locks/linux-core.txt must match it
+# (tests/test_ci_shards.py): CI tests the FastAPI/Starlette/NumPy users run.
+starlette==0.52.1
 soundfile==0.13.1
-numpy==2.2.6
+numpy==2.1.2
 opencv-python-headless==4.12.0.88
 Pillow==11.3.0
-requests==2.32.4
+requests==2.34.2
 accelerate==1.12.0
 av==16.1.0
 diffusers==0.36.0
 decord==0.6.0
 einops==0.8.2
-fastapi==0.115.12
+fastapi==0.141.1
 ffmpeg-python==0.2.0
 imageio==2.37.2
 imageio-ffmpeg==0.6.0

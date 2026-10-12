@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .spoken_language import infer_h3_spoken_language
+from .spoken_language import spoken_language_of
 from ..h3_prompt_finalization import finalize_h3_prompt
 from ..h3_prompt_policy import audio_policy, h3_field_labels, tagged_dialogue
 
@@ -151,7 +151,7 @@ def _dialogue_sentences(plan: dict, subject_ids: list[str]) -> list[str]:
         cue = f"({speaker_id})"
         if speaker:
             cue += f" {speaker}"
-        cue += f" says {tagged_dialogue(infer_h3_spoken_language(spoken), spoken)}"
+        cue += f" says {tagged_dialogue(spoken_language_of(spoken), spoken)}"
         sentences.append(cue + ".")
     return sentences
 

@@ -16,7 +16,7 @@ from services.scene2d_text_boxes import _sample, contrast_ratio
 from services.video2d_edit import MAX_OPERATIONS, Video2dEditError, edit
 
 _IMAGE = frozenset({"h3", "still"})
-_MOVING = frozenset({"h3", "clip", "scene3d", "screen"})
+_MOVING = frozenset({"h3", "clip", "scene3d", "scene2d", "screen"})
 _CONTRAST_MIN = 3.0
 _BOX_OPAQUE = 0.5
 _DEAD_S = 10.0
@@ -232,6 +232,7 @@ def scene_compile_errors(spec: dict, score: dict, windows: list) -> list[dict]:
     if not windows:
         return []
     host = _Host()
+    host.state["spec"] = spec      # lyric looks read the song's sections from it
     for shot in windows:
         if isinstance(shot, dict) and shot.get("kind") == "h3" and isinstance(shot.get("key"), str):
             host.state["frames"][shot["key"]] = "preview.png"

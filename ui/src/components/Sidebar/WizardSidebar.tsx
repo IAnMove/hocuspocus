@@ -4,6 +4,7 @@ import { useStore } from '../../stores/useStore'
 import { useCanonicalTaskFeed } from '../../features/activity/canonicalTaskFeed'
 import { AgentAvatar } from '../../features/agent/AgentAvatar'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
 
 const AgentAssistantPanel = lazy(() =>
   import('../../features/agent/AgentAssistantPanel').then(module => ({ default: module.AgentAssistantPanel })),
@@ -11,14 +12,14 @@ const AgentAssistantPanel = lazy(() =>
 
 export function WizardSidebar() {
   const [collapsed, setCollapsed] = useState(() =>
-    window.localStorage.getItem('hocuspocus-wizard-sidebar-collapsed') === 'true')
+    safeStorageGet('local', 'hocuspocus-wizard-sidebar-collapsed') === 'true')
   const workspace = useStore(state => state.activeWorkspace)
   const tasks = useCanonicalTaskFeed()
   const isMobile = useIsMobile()
 
   const setWizardCollapsed = (next: boolean) => {
     setCollapsed(next)
-    window.localStorage.setItem('hocuspocus-wizard-sidebar-collapsed', String(next))
+    safeStorageSet('local', 'hocuspocus-wizard-sidebar-collapsed', String(next))
   }
 
   useEffect(() => {

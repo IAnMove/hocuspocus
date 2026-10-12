@@ -31,7 +31,8 @@ _LAYER_TYPES = frozenset({"image", "video", "overlay", "model3d"})
 _CURVES = frozenset({"linear", "ease", "dramatic", "bounce", "hold"})
 _AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"})
 _AUDIO_KINDS = frozenset({"speech", "music", "sfx", "audio"})
-_FINISH_KEYS = frozenset({"grade", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "applyToTexts", "riso"})
+_FINISH_KEYS = frozenset({"grade", "gel", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "vhs", "scanlines", "applyToTexts", "riso"})
+_TONE_CURVES = frozenset({"aces", "agx", "neutral"})
 _TEXTURES = frozenset({"paper", "film-dust", "scratches"})
 _LETTERBOX = {1.85, 2, 2.39}
 _LYRIC_MODES = frozenset({"karaoke", "word-pop", "line-fade", "bounce"})
@@ -231,11 +232,12 @@ def _next_z(layers: list):
 
 
 def _build_layer(document: dict, operation: dict, warnings: list) -> dict:
-    if "id" not in operation or "source" not in operation:
-        _fail("invalid_input", "add_layer needs id and source")
+    camera = operation.get("type") == "camera"      # no picture: it moves the view of every picture layer, and shakes it
+    if "id" not in operation or ("source" in operation) == camera:
+        _fail("invalid_input", "A camera layer has no source" if camera else "add_layer needs id and source")
     identity = _id(operation["id"])
-    source = _source(operation["source"])
-    kind = _layer_type(source, operation.get("type"))
+    source = "" if camera else _source(operation["source"])
+    kind = "camera" if camera else _layer_type(source, operation.get("type"))
     name = operation.get("name", identity)
     if not isinstance(name, str) or not 1 <= len(name) <= 120:
         _fail("invalid_input", "Layer name must be 1..120 characters")
@@ -702,7 +704,28 @@ def _grade(raw) -> dict | None:
     grade["fade"] = _clamp_num(section.get("fade"), 0, 0, 1)
     if section.get("beatFlash") is not None:
         grade["beatFlash"] = _clamp_num(section.get("beatFlash"), 0, 0, 1)
+    if section.get("curve") in _TONE_CURVES:
+        grade["curve"] = section["curve"]
     return grade
+
+
+def _gel(raw) -> dict | None:
+    """A colour over the light; an unreadable colour drops the gel, as the UI parser does."""
+    section = _section(raw, "gel")
+    color = _hex(section.get("color"), "") if section is not None else ""
+    if not color:
+        return None
+    gel = {"color": color, "amount": _clamp_num(section.get("amount"), 0, 0, 1)}
+    if _hex(section.get("shadows"), ""):
+        gel["shadows"] = section["shadows"]
+    return gel
+
+
+def _amount(label: str):
+    def parse(raw) -> dict | None:
+        section = _section(raw, label)
+        return None if section is None else {"amount": _clamp_num(section.get("amount"), 0, 0, 1)}
+    return parse
 
 
 def _bloom(raw) -> dict | None:
@@ -803,7 +826,7 @@ def _parse_finish(raw) -> dict:
     if not isinstance(raw, dict) or any(key not in _FINISH_KEYS for key in raw):
         _fail("invalid_finish", "Finish values are not valid")
     finish = {}
-    for key, parser in (("grade", _grade), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox), ("riso", _riso)):
+    for key, parser in (("grade", _grade), ("gel", _gel), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox), ("vhs", _amount("vhs")), ("scanlines", _amount("scanlines")), ("riso", _riso)):
         parsed = parser(raw.get(key))
         if parsed:
             finish[key] = parsed
@@ -1146,6 +1169,8 @@ def command_catalog() -> list[dict]:
         "At most 32 operations. Ids are 1..160 characters. add_layer, add_title and add_audio_track replace an object with the same id. "
         "add_layer source must be a durable /api/v1/file, /api/v1/uploads or /examples URL. Optional preset ids are the "
         "kind=camera entries of app/shared/motion_presets.json. Other motion ids are not camera presets. "
+        "add_layer type camera takes no source: its preset moves the view of every picture layer (texts and effects stay put), so camera-pan-right "
+        "pans right and a preset's shake shakes the picture; on an image or video layer it moves that picture and its shake is not drawn. "
         "add_title is a Python port of the defaults in kineticText/templates.ts. "
         "set_finish accepts an id from app/shared/finish_presets.json, including risoPress, or raw finish values. "
         "set_lyrics stores lines with start/end/text and does not fetch. set_rhythm stores bpm and beats and does not analyze audio. "
@@ -1157,7 +1182,7 @@ def command_catalog() -> list[dict]:
         "An unknown op fails with invalid_operation."
     ) + character_ops.DESCRIPTION
     operations = {"type": "array", "maxItems": MAX_OPERATIONS, "items": {"oneOf": [
-        _op_schema("add_layer", ["id", "source"], {"id": identity, "source": _schema_string(2000), "preset": preset, "name": _schema_string(120), "type": {"enum": sorted(_LAYER_TYPES)}, "z": {"type": "number"}, "cover": {"type": "boolean"}}),
+        _op_schema("add_layer", ["id"], {"id": identity, "source": _schema_string(2000), "preset": preset, "name": _schema_string(120), "type": {"enum": sorted(_LAYER_TYPES | {"camera"})}, "z": {"type": "number"}, "cover": {"type": "boolean"}}),
         _op_schema("update_layer", ["id", "patch"], {"id": identity, "patch": {"type": "object"}}),
         _op_schema("remove_layer", ["id"], {"id": identity}),
         _op_schema("reorder", ["ids"], {"ids": {"type": "array", "items": identity, "maxItems": MAX_LAYERS}}),

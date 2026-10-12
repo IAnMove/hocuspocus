@@ -16,6 +16,6 @@ export class SceneHandoffRecovery {
 }
 
 // A later edit may have replaced this key while the render was in flight.
-export function releaseStoredSceneCopy(storage: Storage, key: string, savedCopy: string) {
+export function releaseStoredSceneCopy(storage: Pick<Storage, 'getItem' | 'removeItem'>, key: string, savedCopy: string) {
   if (storage.getItem(key) === savedCopy) storage.removeItem(key)
 }

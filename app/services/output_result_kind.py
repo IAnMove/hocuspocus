@@ -1,7 +1,9 @@
 """Classify assembled gallery results (not the clips that compose them)."""
 from __future__ import annotations
 
+import glob
 import json
+import os
 from typing import Any
 
 RESULT_KINDS = ("music_video", "trailer", "series_episode", "chapter")
@@ -103,3 +105,48 @@ def result_kind_for_pipeline(params: dict[str, Any] | None) -> str | None:
     if pipeline_type in {"short_film_story", "short_film_audio"}:
         return "chapter"
     return None
+
+
+# A production (production.run) exports its cut through the Video Editor under its title, so neither the file name nor
+# the sidecar says it is the music video: the gallery's Videoclips section never showed one. Its own state does
+# (``<id>.production.json``: ``format`` and ``final``, which a re-export updates). Only that file counts: the
+# animatics and intermediate exports of the same montage are not the cut.
+PRODUCTION_KINDS = {"music_video": "music_video", "trailer": "trailer", "full_story": "chapter"}
+_PRODUCTION_CACHE: dict[str, tuple[float, str | None, str]] = {}
+
+
+def _production_cut(path: str) -> tuple[str | None, str]:
+    """``(kind, final)`` of one production state file, cached by its mtime."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None, ""
+    cached = _PRODUCTION_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1], cached[2]
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except (OSError, ValueError):
+        state = {}
+    state = state if isinstance(state, dict) else {}
+    # Productions made before ``format`` existed are music videos: that is what production.run makes.
+    kind = PRODUCTION_KINDS.get(str(state.get("format") or "music_video"))
+    final = os.path.basename(state["final"]) if isinstance(state.get("final"), str) else ""
+    _PRODUCTION_CACHE[path] = (mtime, kind, final)
+    return kind, final
+
+
+def production_cuts(out_dir: str) -> dict[str, str]:
+    """The workspace's finished production cuts: file name → result kind."""
+    cuts: dict[str, str] = {}
+    for path in glob.glob(os.path.join(out_dir, "*.production.json")):
+        kind, final = _production_cut(path)
+        if kind and final:
+            cuts[final] = kind
+    return cuts
+
+
+def production_result_kind(name: str, params: dict[str, Any] | None, cuts: dict[str, str]) -> str | None:
+    """The kind of a production's finished cut, else None (``params`` is kept for the listing's call shape)."""
+    return cuts.get(os.path.basename(str(name or "")))

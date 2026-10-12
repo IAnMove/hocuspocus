@@ -13,20 +13,22 @@ export async function supportsSceneAac(channels = 1): Promise<boolean> {
 }
 
 export function sceneAudioWav(buffer: AudioBuffer): Blob {
+  // 32-bit float PCM (WAVE_FORMAT_IEEE_FLOAT): peaks above 0 dBFS survive, so the server's limiter
+  // (services/audio_mix.py) shapes them instead of the hard clip a 16-bit file would have baked in.
   const channels = Math.min(2, Math.max(1, buffer.numberOfChannels || 1))
   if (buffer.duration > 180 || channels < 1) throw new Error('Scene audio supports up to 180 stereo seconds.')
   const frames = buffer.getChannelData(0).length
-  const bytes = new ArrayBuffer(44 + frames * channels * 2)
+  const bytes = new ArrayBuffer(44 + frames * channels * 4)
   const view = new DataView(bytes)
   const text = (at: number, value: string) => [...value].forEach((char, index) => view.setUint8(at + index, char.charCodeAt(0)))
   text(0, 'RIFF'); view.setUint32(4, bytes.byteLength - 8, true); text(8, 'WAVE'); text(12, 'fmt ')
-  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, channels, true)
-  view.setUint32(24, buffer.sampleRate, true); view.setUint32(28, buffer.sampleRate * channels * 2, true)
-  view.setUint16(32, channels * 2, true); view.setUint16(34, 16, true); text(36, 'data'); view.setUint32(40, frames * channels * 2, true)
+  view.setUint32(16, 16, true); view.setUint16(20, 3, true); view.setUint16(22, channels, true)
+  view.setUint32(24, buffer.sampleRate, true); view.setUint32(28, buffer.sampleRate * channels * 4, true)
+  view.setUint16(32, channels * 4, true); view.setUint16(34, 32, true); text(36, 'data'); view.setUint32(40, frames * channels * 4, true)
   const planes = Array.from({ length: channels }, (_, index) => buffer.getChannelData(Math.min(index, buffer.numberOfChannels - 1)))
   for (let frame = 0; frame < frames; frame += 1) {
     for (let channel = 0; channel < channels; channel += 1) {
-      view.setInt16(44 + (frame * channels + channel) * 2, Math.round(Math.max(-1, Math.min(1, planes[channel][frame] ?? 0)) * 32767), true)
+      view.setFloat32(44 + (frame * channels + channel) * 4, planes[channel][frame] ?? 0, true)
     }
   }
   return new Blob([bytes], { type: 'audio/wav' })

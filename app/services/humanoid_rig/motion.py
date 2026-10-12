@@ -11,9 +11,10 @@ pitch > 0 bends forward, yaw > 0 turns to the character's left, roll > 0
 leans to its left. Arms: lift > 0 raises the arm sideways (0 is the T pose),
 swing > 0 carries it forward around the shoulder's side axis, sweep > 0
 carries it forward around the vertical. Elbow flex > 0 bends; legs are solved
-by IK from ankle targets, and their foot pitch > 0 lifts the toes. Foot and root offsets are
-in leg lengths (hip to ankle), so a clip fits a mascot and an adult alike; hand
-targets are in metres, built by the recipes from the arm length and chest depth.
+by IK from ankle targets (or posed by angles when they touch nothing), and
+their foot pitch > 0 lifts the toes. Foot and root offsets are in leg lengths
+(hip to ankle), so a clip fits a mascot and an adult alike; hand targets are in
+metres, built by the recipes from the arm length and chest depth.
 """
 
 from __future__ import annotations
@@ -168,6 +169,18 @@ class Pose:
         offset = np.stack((side_sign(side) * self._vector(out), self._vector(up), self._vector(forward)), axis=1)
         self.feet[side] = {"offset": offset, "pitch": self._vector(pitch).copy(), "yaw": self._vector(yaw).copy()}
 
+    def leg(self, side: str, swing=0.0, spread=0.0, knee=0.0, toes=0.0) -> None:
+        """Pose a leg that touches nothing (a hover) by its angles instead of planting its foot.
+
+        Degrees from the T pose: ``swing`` > 0 carries the thigh forward, ``spread`` > 0 out to its
+        side, ``knee`` > 0 bends the knee and ``toes`` > 0 lifts the toes.
+        """
+        self.feet.pop(side, None)
+        self._set(f"{side}UpLeg", 0, -self._vector(swing))
+        self._set(f"{side}UpLeg", 2, side_sign(side) * self._vector(spread))
+        self._set(f"{side}Leg", 0, self._vector(knee))
+        self._set(f"{side}Foot", 0, -self._vector(toes))
+
     def reach(self, side: str, target, pole=(0.3, -1.0, -0.5)) -> None:
         """Wrist target in metres from the chest joint, in the chest frame (x mirrored for the right)."""
         sign = side_sign(side)
@@ -233,7 +246,7 @@ def _solve_feet(pose: Pose, local: np.ndarray, root: np.ndarray) -> None:
     for side, target in pose.feet.items():
         hip, knee, ankle = (rig.index(f"{side}{part}") for part in ("UpLeg", "Leg", "Foot"))
         positions, worlds = rig.forward(local, root)
-        lift = _sole_lift(rig, side, target["pitch"])
+        lift = sole_lift(rig, side, target["pitch"])
         goal = rig.rest_positions[ankle] + rot.rotate(rig.facing, target["offset"] * rig.leg + np.outer(lift, _Y))
         pelvis = worlds[:, rig.index("Hips")]
         pole = rot.rotate(pelvis, np.broadcast_to(np.array([0.08 * side_sign(side), 0.0, 1.0]), goal.shape))
@@ -277,7 +290,7 @@ def _planted(rig: Rig, ankle: int, pitch: np.ndarray, yaw: np.ndarray | None = N
     return rot.multiply(turn, np.broadcast_to(rig.rest_worlds[ankle], turn.shape))
 
 
-def _sole_lift(rig: Rig, side: str, pitch: np.ndarray) -> np.ndarray:
+def sole_lift(rig: Rig, side: str, pitch: np.ndarray) -> np.ndarray:
     """How far the ankle must rise so a pitched foot rests on its heel or toes, not below them."""
     ankle = rig.index(f"{side}Foot")
     offsets = [rot.rotate(rot.inverse(rig.facing), rig.rest_positions[bone] + rot.rotate(rig.rest_worlds[bone], offset) - rig.rest_positions[ankle])

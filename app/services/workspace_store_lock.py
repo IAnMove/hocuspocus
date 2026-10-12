@@ -1,6 +1,21 @@
 """Cross-process lock for all writers of the Workspace JSON registry."""
 from contextlib import contextmanager
+import errno
 import os
+import time
+
+
+def _windows_lock(handle):
+    import msvcrt
+    while True:
+        try:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as error:
+            if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                raise
+            time.sleep(0.05)
 
 
 @contextmanager
@@ -12,8 +27,7 @@ def workspace_store_lock(path):
             if handle.tell() == 0:
                 handle.write(b"\0")
                 handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            _windows_lock(handle)
         else:
             import fcntl
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)

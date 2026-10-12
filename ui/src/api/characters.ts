@@ -94,35 +94,92 @@ async function failure(response: Response, fallback: string): Promise<Error> {
   return new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : fallback)
 }
 
-async function postJson<T>(path: string, body: unknown, fallback: string): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+async function postJson<T>(path: string, body: unknown, fallback: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })
   if (!response.ok) throw await failure(response, fallback)
   return response.json()
 }
 
+/** What studio.key read from the border and how much of the image it left semi-transparent (a haze when ``haze``). */
+export type StudioKeyReport = { semiTransparentShare: number; transparentShare: number; haze: boolean; screenColor?: string | null; note?: string }
+
 /** Key a workspace image on a plain screen (studio.key). The same intentId returns the same file. */
 export async function keyStudioImage(details: { workspace: string; source: string; mode: 'green' | 'blue' | 'magenta'; intentId?: string }) {
-  const reply = await postJson<{ result: { file: string; url: string; sha256: string } }>('/api/v1/studio/key', {
+  const reply = await postJson<{ result: { file: string; url: string; sha256: string; report?: StudioKeyReport } }>('/api/v1/studio/key', {
     workspace: details.workspace, source: details.source, mode: details.mode,
     ...(details.intentId ? { intent_id: details.intentId } : {}),
   }, 'Could not remove the background')
   return reply.result
 }
 
+/** A pose's hint for the flat rig: points in % of the pose image, `mouthWidth` corner to corner in % of its width. */
+/** A pose's placement hints in % of its keyed image. `exact`: a person placed the mouth on the image, so the rig keeps it
+ * where it is; without it the rig snaps it onto the painted lips, and sure face landmarks overrule a far one. */
+export type FlatRigHint = { mouth?: [number, number]; eyes?: [number, number]; mouthWidth?: number; exact?: boolean }
+/** How a pose's face was read and warped: its head's size class and pixels, whether the face points were read on the
+ * head alone (`pass: 'head'`) and how many times the face was enlarged to warp it (1: not at all). */
+export type FlatRigFaceSize = { size: 'small' | 'normal'; head: number; pass?: 'head' | 'whole' | null; upscale: number }
+/** The mouth line a warp rig or preview used, in % of the pose image. */
+export type FlatRigMouthLine = { mouth: [number, number]; mouthWidth: number; found: boolean; from: 'hint' | 'landmarks' | 'painted' | 'guess'
+  faceSize?: FlatRigFaceSize }
+
 export type FlatRigResult = {
   revision: number
   character: import('../lib/characterKit').CharacterKit
   review: string
   unwipedPoses: string[]
+  warnings?: Record<string, string[]>
+  poses?: Record<string, { mouthLine?: FlatRigMouthLine; hints?: FlatRigHint; faceSize?: FlatRigFaceSize }>
+  /** The look the rig used: the style sent over the kit's own (its last rig's, else its style preset's). */
+  style?: Record<string, number | boolean | string>
 }
 
-/** Wipe painted mouths, draw nine paper mouths and a blink, and save anchors (characters.rig.flat). */
+/** Wipe painted mouths, draw nine paper mouths and a blink, and save anchors (characters.rig.flat). Style keys left
+ * out keep the kit's look, so a warp kit stays warp. */
 export async function rigFlatCharacter(details: { workspace: string; kitId: string; baseRevision: number
-  style?: Record<string, number | boolean>; poses?: string[] }): Promise<FlatRigResult> {
+  style?: Record<string, number | boolean | string>; poses?: string[]; hints?: Record<string, FlatRigHint | null> }): Promise<FlatRigResult> {
   return postJson(`/api/v1/character-kits/library/kits/${encodeURIComponent(details.kitId)}/flat-rig`, {
     workspace: details.workspace, baseRevision: details.baseRevision,
     ...(details.style ? { style: details.style } : {}), ...(details.poses ? { poses: details.poses } : {}),
+    ...(details.hints ? { hints: details.hints } : {}),
   }, 'Could not rig the character')
+}
+
+export type FlatRigMouthPreview = FlatRigMouthLine & {
+  pose: string
+  /** The line through the mouth, in % of the pose image. */
+  line: Array<[number, number]>
+  /** The face area each state image shows, [[x0, y0], [x1, y1]] in % of the pose image. */
+  view: [[number, number], [number, number]]
+  hint: FlatRigHint | null
+  /** mouth_line_guessed: no painted line here; mouth_line_unsure: unsure face points placed the line. */
+  warnings?: string[]
+  states: Partial<Record<import('../lib/characterMouthStates').CharacterMouthState, string>>
+}
+
+/** Warp one pose's mouths at a mouth line without saving (characters.rig.flat.preview). */
+export async function previewFlatRigMouth(details: { workspace: string; kitId: string; pose: string
+  mouth?: [number, number]; mouthWidth?: number; signal?: AbortSignal }): Promise<FlatRigMouthPreview> {
+  return postJson(`/api/v1/character-kits/library/kits/${encodeURIComponent(details.kitId)}/flat-rig/preview`, {
+    workspace: details.workspace, pose: details.pose,
+    ...(details.mouth ? { mouth: details.mouth } : {}), ...(details.mouthWidth ? { mouthWidth: details.mouthWidth } : {}),
+  }, 'Could not preview the mouths', details.signal)
+}
+
+export type RigCheckReason = 'eyes_small' | 'eyes_not_found' | 'sclera_dark' | 'mouth_not_found' | 'face_low_confidence'
+  | 'not_keyed' | 'face_too_light' | 'face_keyed_out'
+
+/** Whether one keyed pose can be rigged (characters.rig.check). Nothing is painted or saved. */
+export type RigCheck = {
+  ready: boolean
+  reasons: RigCheckReason[]
+  face: { box: [number, number, number, number] | null; confidence: number }
+}
+
+export async function checkRigPose(details: { workspace: string; source: string; signal?: AbortSignal }): Promise<RigCheck> {
+  return postJson('/api/v1/character-kits/rig-check', {
+    workspace: details.workspace, source: details.source,
+  }, 'Could not check the pose', details.signal)
 }
 
 export type SpeechCheck = {
@@ -132,6 +189,13 @@ export type SpeechCheck = {
   wordsPerSecond: number
   duration: number
   warnings: string[]
+  pitch_out_of_range?: { medianHz: number; range: [number, number] }
+}
+
+export type AccentCheck = {
+  thetaRate: number | null
+  positions: number
+  verdict: 'castilian' | 'seseo' | 'unknown'
 }
 
 /** Transcript, word error rate, pitch and pace of a workspace take (qa.speech). */
@@ -141,5 +205,13 @@ export async function checkSpeech(details: { workspace: string; file: string; te
     workspace: details.workspace, file: details.file, text: details.text, language: details.language,
     ...(details.pitchRange ? { pitch_range: details.pitchRange } : {}),
   }, 'Could not check the voice')
+  return reply.result
+}
+
+/** Castilian θ against s on the words that should have it (qa.accent). A warning, not a block. */
+export async function checkAccent(details: { workspace: string; file: string; text: string }): Promise<AccentCheck> {
+  const reply = await postJson<{ result: AccentCheck }>('/api/v1/qa/accent', {
+    workspace: details.workspace, file: details.file, text: details.text, accent: 'castilian',
+  }, 'Could not check the accent')
   return reply.result
 }

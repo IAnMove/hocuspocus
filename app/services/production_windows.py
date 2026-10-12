@@ -6,6 +6,8 @@ from typing import Callable
 from services.production_frame_clock import align_native_cuts
 from services.production_shot_plan import is_auto_pad, place_pads
 
+FLASH_S = 0.5     # a cut shorter than this, or than one beat when that is longer, reads as a flash frame
+
 
 def _host():
     import services.music_production as host
@@ -78,4 +80,24 @@ def segments(windows: list[dict], score: dict, clip_ok: Callable[[str], bool], f
                 continue
         if b - a > 0.05:
             out.append((shot, a, b))
-    return align_native_cuts(out)
+    return align_native_cuts(_without_flashes(out, float(score.get("beat") or 0.5)))
+
+
+def _without_flashes(cuts: list[tuple[dict, float, float]], beat: float) -> list[tuple[dict, float, float]]:
+    """A cut shorter than a beat is a flash (an ``after`` shot squeezed between two sung lines lasted 0.17 s):
+    the shot before it holds instead."""
+    shortest = max(FLASH_S, beat)
+    kept: list[tuple[dict, float, float]] = []
+    for shot, a, b in cuts:
+        if kept and b - a < shortest:
+            before, start, _ = kept[-1]
+            kept[-1] = (before, start, b)
+        else:
+            kept.append((shot, a, b))
+    return kept
+
+
+def dropped_flashes(windows: list[dict], cuts: list[tuple[dict, float, float]]) -> list[str]:
+    """The shots that got no cut because their window was a flash."""
+    kept = {shot["key"] for shot, _, _ in cuts}
+    return [shot["key"] for shot in windows if shot["key"] not in kept]

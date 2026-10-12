@@ -7,6 +7,14 @@ import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
 import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
+import { ANIME_TEMPLATE_IDS } from './animeTemplateIds'
+import { MOTION_LAB_IDS, type MotionLabId } from './motionlab/types'
+import { TRANSITION_TEMPLATE_IDS } from './transitionTemplateIds'
+import { SPEED_TEMPLATE_IDS } from './speedTemplateIds'
+import { TITLE_TEMPLATE_IDS } from './titleTemplateIds'
+import { DIALOGUE_TEMPLATE_IDS } from './dialogueTemplateIds'
+import { REACTION_TEMPLATE_IDS } from './reactionTemplateIds'
+import { GROUP_TEMPLATE_IDS } from './groupTemplateIds'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -128,6 +136,14 @@ export const SCENE3D_TEMPLATE_IDS = [
   'voxel-talk',
   ...ATMOS_TEMPLATE_IDS,
   ...TECHNIQUE_TEMPLATE_IDS,
+  ...ANIME_TEMPLATE_IDS,
+  ...MOTION_LAB_IDS,
+  ...TRANSITION_TEMPLATE_IDS,
+  ...SPEED_TEMPLATE_IDS,
+  ...TITLE_TEMPLATE_IDS,
+  ...DIALOGUE_TEMPLATE_IDS,
+  ...REACTION_TEMPLATE_IDS,
+  ...GROUP_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -149,6 +165,8 @@ export type Scene3DMotion = {
   /** Waypoints between the start and `to`, walked on a centripetal Catmull-Rom curve. */
   points?: Vec3[]
   faceTravel?: boolean
+  /** Radians added to the travel heading when `faceTravel` is on: the model's nose is not its +Z (PI / 2 for a nose at -X). */
+  headingOffset?: number
   turnTo?: number
   easing?: 'linear' | 'smooth'
   /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
@@ -162,7 +180,7 @@ export type Scene3DLoop = {
   speed: number
 }
 
-export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza' | AtmosSetId
+export type Scene3DDressing = 'none' | 'street' | 'space' | 'treadmill' | 'cafe' | 'drive-city' | 'drive-coast' | 'drive-tunnel' | 'citadel' | 'workshop' | 'chase-street' | 'retro-lab' | 'observatory' | 'broadcast-plaza' | 'open-sea' | 'lunar' | 'rooftop' | 'hangar' | 'desert' | 'train' | 'space-lane' | 'jungle' | 'snow' | 'casino' | 'pixel-lake' | 'pixel-peaks' | 'pixel-gallery' | 'pixel-city' | 'pixel-desert' | 'pixel-coast' | 'pixel-forest' | 'pixel-viaduct' | 'pixel-volcano' | 'pixel-drivein' | 'pixel-garden' | 'pixel-reef' | 'pixel-valley' | 'pixel-fair' | 'pixel-village' | 'pixel-falls' | 'pixel-orbit' | 'pixel-tulips' | 'pixel-alley' | 'pixel-castle' | 'pixel-beach' | 'pixel-lanterns' | 'pixel-window' | 'pixel-express' | 'pixel-daycycle' | 'pixel-eclipse' | 'pixel-seasons' | 'pixel-cathedral' | 'pixel-koi' | 'pixel-caravan' | 'pixel-synthwave' | 'pixel-monsoon' | 'pixel-marsh' | 'pixel-launch' | 'pixel-grotto' | 'pixel-starry' | 'pixel-dawnmist' | 'pixel-motel' | 'pixel-tidal' | 'pixel-mirage' | 'pixel-meadow' | 'pixel-fjord' | 'pixel-clockwork' | 'pixel-orrery' | 'pixel-rainbow' | 'pixel-risingcity' | 'pixel-abyss' | 'pixel-blizzard' | 'pixel-lantern' | 'pixel-empire' | 'pixel-startrails' | 'pixel-wheat' | 'pixel-pool' | 'pixel-piazza' | AtmosSetId | MotionLabId
 
 export type Scene3DSourceRef = {
   workspaceId: string
@@ -172,6 +190,8 @@ export type Scene3DSourceRef = {
 }
 
 export type Scene3DSlot = {
+  billboard?: boolean
+  setItem?: { heightM: number; prop?: string; at?: { mark?: string; anchor?: string; position?: Vec3 } }
   rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
     libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice
@@ -190,6 +210,10 @@ export type Scene3DSlot = {
   imageLook?: import('./imageLook').ImageLook
   appearance?: { start: number; duration: number; color: string }
   textureRepeat?: number
+  /** Its texture slides this many uv units per second: a set's layers and ground passing a running cast. */
+  drift?: number
+  /** Its clip plays on the spot: the root's travel across the floor is dropped (a runner on a scrolling set). */
+  inPlace?: boolean
   performance?: 'typing' | 'idle'
   grounded?: boolean
   clip: Scene3DClipRef | null
@@ -215,6 +239,8 @@ export type Scene3DCamera = {
   framing?: Scene3DFraming
   /** Authored cameras are landscape; portrait shots store the adapted camera. */
   frameFormat?: 'landscape' | 'portrait'
+  /** Camera shake windows in scene seconds, added after the pose is computed. */
+  shake?: import('./cameraShake').Scene3DCameraShake[]
 }
 
 export type Scene3DFraming = {
@@ -231,6 +257,14 @@ export type Scene3DFraming = {
   fovFrom?: number
   fovTo?: number
   relativeToFacing?: boolean
+  /** Fractions of the shot (0–1) that hold the move; omitted values use the whole shot. */
+  moveStart?: number
+  moveEnd?: number
+  /** `smooth` (default) eases in and out; `snap` leaves at full speed, like a crash zoom. */
+  ease?: 'smooth' | 'snap'
+  /** `rest` (default) frames the point measured when the model mounted and follows only where the slot places it;
+   * `pose` re-reads the head bone or the live bounding box every frame. */
+  track?: 'rest' | 'pose'
 }
 
 export type Scene3DLight = {
@@ -240,10 +274,28 @@ export type Scene3DLight = {
   color: string
 }
 
+/** Whole-frame render presets. `n64`: low resolution, flat shading and close fog. `toon`: cel shading and ink outlines on model slots. */
+export const SCENE3D_RENDER_LOOKS = ['n64', 'toon'] as const
+export type Scene3DRenderLook = (typeof SCENE3D_RENDER_LOOKS)[number]
+
+/** Settings of the `toon` render look; missing values use `DEFAULT_TOON` (`toonLook.ts`). */
+export type Scene3DToon = {
+  /** Light bands of the cel shading, 2 to 4. */
+  steps?: number
+  /** Ink line width in pixels of a 1080-pixel-high frame, 0 to 8; 0 draws no line. */
+  outline?: number
+  /** Ink colour, `#rrggbb`. */
+  ink?: string
+}
+
 export type Scene3DDocument = {
+  room?: import('./roomSet').RoomSet
+  /** Native procedural sets: shared by editor, MCP, Wizard and both export paths. */
+  motionLab?: import('./motionlab/types').MotionLabSettings
   rhythm?: import('./rhythm').Scene3DRhythm
-  /** Whole-frame low-resolution, flat-shaded, close-fog look for authored models. */
-  renderLook?: 'n64'
+  renderLook?: Scene3DRenderLook
+  /** Used while `renderLook` is `toon`; kept when another look is chosen. */
+  toon?: Scene3DToon
   soundtrack?: Scene3DSoundtrack[]
   production?: { kind: 'song' | 'dialogue' | 'episode' | 'trailer'; title: string; sourceId?: string; workspace: string }
   version: 1
@@ -260,14 +312,22 @@ export type Scene3DDocument = {
   pixelWorld?: import('./pixel/pixelWorld').PixelWorld
   /** Spatial effects in world meters. Screen overlays stay on `sfx`. */
   worldSfx?: import('../sceneFx/world').WorldSfx[]
+  /** A flat colour and screen effects painted behind every 3D object (over an environment plate when there is one). */
+  screenBackdrop?: import('./screenBackdrop').ScreenBackdrop
   texts?: import('../../lib/kineticText').KineticText[]
   lyrics?: import('../../lib/kineticText').SceneLyrics
   /** Timeline rate; exported duration is duration / playbackSpeed. */
   playbackSpeed?: number
+  /** Stop-motion hold: the picture changes every 2, 3 or 4 frames. Absent, export time is unchanged. */
+  motionStep?: 2 | 3 | 4
+  /** Deterministic shake of one hold, in pixels, from 0 to 2. */
+  stopMotionJitter?: number
   templateId: Scene3DTemplateId
   camera: Scene3DCamera
   light: Scene3DLight
-  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
+  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road' | import('./groundStyles').GroundStyle; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number
+    /** A ground style's slide under a cast that runs on the spot, and the seed of its painted tile and scattered pieces. */
+    groundScroll?: import('./groundStyles').GroundScroll; groundSeed?: number }
   dressing?: Scene3DDressing
   atmos?: AtmosSettings
   /** Light from the environment (reflections, soft fill). New scenes get a generated room. */

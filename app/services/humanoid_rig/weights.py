@@ -15,6 +15,7 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
+from services.humanoid_rig.drape import drape
 from services.humanoid_rig.names import BONE_BY_NAME, BONE_NAMES, BONE_PARENTS
 
 _INFLUENCES = 4
@@ -24,8 +25,13 @@ _DEFORM = tuple(name for name in BONE_NAMES if not name.endswith("_End"))
 _SEED_SPAN = {"Hand": (0.1, 1.0), "Head": (0.15, 1.0), "ToeBase": (0.0, 1.0), "Foot": (0.0, 1.0), "Hips": (0.0, 0.7)}
 
 
-def compute_weights(vertices: np.ndarray, indices: np.ndarray | None, skeleton: dict) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(joints, weights)`` with shapes (N, 4). Weights sum to 1."""
+def compute_weights(vertices: np.ndarray, indices: np.ndarray | None, skeleton: dict,
+                    cloth: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Return ``(joints, weights)`` with shapes (N, 4). Weights sum to 1.
+
+    ``cloth`` (N,) marks vertices on cloth that hangs off the body (``detect_landmarks``): with a
+    robe in ``skeleton`` they hang from the hips like the robe (see ``drape``).
+    """
     points = np.asarray(vertices, dtype=np.float64)
     height = float(skeleton["height"])
     cells, owner = _cluster(points, height * _CELL, float(skeleton["world"]["Hips"][0]))
@@ -33,12 +39,22 @@ def compute_weights(vertices: np.ndarray, indices: np.ndarray | None, skeleton: 
     segments = _segments(skeleton)
     capsule, along = _capsules(cells, segments)
     head = _head_region(cells, skeleton)
+    above = _above_notch(cells, skeleton)
     seeds = _seeds(capsule, along, head)
     table = _table(graph, seeds, capsule, height, cells)
     base = _base_region(cells, skeleton)
-    table = _only(_head_mask(_side_mask(table, cells, skeleton), head), base, "Hips")
-    table = _only(_head_mask(_side_mask(_smooth(table, graph), cells, skeleton), head), base, "Hips")
+    table = _only(_head_mask(_side_mask(table, cells, skeleton), head, above), base, "Hips")
+    table = _only(_head_mask(_side_mask(_smooth(table, graph), cells, skeleton), head, above), base, "Hips")
+    table = _only(_head_mask(drape(table, _adjacency(graph), cells, _cell_cloth(cloth, owner, len(cells)), skeleton), head, above), base, "Hips")
     return _top(table[owner])
+
+
+def _cell_cloth(cloth: np.ndarray | None, owner: np.ndarray, count: int) -> np.ndarray:
+    """A welded cell is cloth when most of its vertices are."""
+    if cloth is None:
+        return np.zeros(count, dtype=bool)
+    share = np.bincount(owner, weights=np.asarray(cloth, dtype=np.float64), minlength=count)
+    return share > np.bincount(owner, minlength=count) * 0.5
 
 
 def dominant_distance(vertices: np.ndarray, joints: np.ndarray, weights: np.ndarray, skeleton: dict) -> np.ndarray:
@@ -106,6 +122,14 @@ def _head_region(cells: np.ndarray, skeleton: dict) -> np.ndarray:
     if not region:
         return np.zeros(len(cells), dtype=bool)
     return (cells[:, 1] > float(region["y"])) & (np.abs(cells[:, 0] - float(region["x"])) <= float(region["half"]) * 1.05)
+
+
+def _above_notch(cells: np.ndarray, skeleton: dict) -> np.ndarray:
+    """Everything above the neck notch, however wide: hair, a hat, horns, a raised hand."""
+    region = skeleton.get("head_region")
+    if not region:
+        return np.zeros(len(cells), dtype=bool)
+    return cells[:, 1] > float(region["y"])
 
 
 def _seeds(capsule: np.ndarray, along: np.ndarray, head: np.ndarray) -> list[np.ndarray]:
@@ -200,24 +224,34 @@ def _only(table: np.ndarray, region: np.ndarray, bone: str) -> np.ndarray:
     return out
 
 
-def _head_mask(table: np.ndarray, head: np.ndarray) -> np.ndarray:
-    """Inside the head region only the head and neck may pull."""
-    if not np.any(head):
+def _head_mask(table: np.ndarray, head: np.ndarray, above: np.ndarray) -> np.ndarray:
+    """Inside the head region only the head and neck may pull. Above the neck notch no shoulder pulls at all,
+    however far the hair or a hat reaches past the head's width: a shoulder that owned a fringe dragged the whole
+    head sideways with every swing of that arm."""
+    if not np.any(head) and not np.any(above):
         return table
     out = table.copy()
+    shoulders = [_DEFORM.index("LeftShoulder"), _DEFORM.index("RightShoulder")]
+    out[np.ix_(above, shoulders)] = 0.0
     keep = [_DEFORM.index("Head"), _DEFORM.index("Neck")]
     others = np.ones(len(_DEFORM), dtype=bool)
     others[keep] = False
     out[np.ix_(head, others)] = 0.0
     empty = out.sum(axis=1) <= 0
     out[empty & head, _DEFORM.index("Head")] = 1.0
+    stranded = empty & ~head                 # a thing above the notch only a shoulder reached (a pauldron's spike) keeps it
+    out[stranded] = table[stranded]
     return out
 
 
-def _smooth(table: np.ndarray, graph) -> np.ndarray:
+def _adjacency(graph):
     adjacency = graph.copy()
     adjacency.data[:] = 1.0
-    adjacency = adjacency + adjacency.T
+    return adjacency + adjacency.T
+
+
+def _smooth(table: np.ndarray, graph) -> np.ndarray:
+    adjacency = _adjacency(graph)
     degree = np.asarray(adjacency.sum(axis=1)).reshape(-1)
     smoothed = table / np.maximum(table.sum(axis=1, keepdims=True), 1e-12)
     for _index in range(_SMOOTH):
