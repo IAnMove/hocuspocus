@@ -123,7 +123,7 @@ test('gizmo converts translation, yaw and uniform scale into document transforms
 test('all 41 cards get an editable finish without rewriting prompts or assets', () => {
   for (const template of ALL_SCENE_TEMPLATES) {
     const scene = candidateDemoScene(template.id)
-    assert.equal(scene.narrative.controls.finishVersion, 1)
+    assert.equal(scene.narrative.controls.finishVersion, 2)
     assert.equal(scene.narrative.prompt, template.promptExample)
     assert.equal(scene.generationPolicy, 'provided_only')
     // Layer cards get the depth finish per layer; the titled cards carry a scene finish (oldDoc, paperComic).

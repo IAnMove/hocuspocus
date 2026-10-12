@@ -28,7 +28,7 @@ test('resuelve las 41 fichas con un solo vocabulario de slots', () => {
     const contract = describeTemplateComponents(template.id)
     assert.equal(contract.schema, 'hocuspocus.template-components')
     assert.equal(contract.generationPolicy, 'provided_only')
-    assert.equal(contract.status, 'candidate')
+    assert.equal(contract.status, 'approved')
     assert.equal(contract.catalogVersion, templateCatalogVersion(template))
     for (const component of contract.components) assert.ok(TEMPLATE_SLOT_LABELS[component.key], `${template.id}/${component.key} has a label`)
   }
