@@ -62,14 +62,20 @@ def _config(shot: dict) -> dict:
     return config
 
 
-def _check_fields(shot: dict, config: dict) -> None:
-    key, cast = shot.get("key"), config.get("cast")
-    if cast is not None and (not isinstance(cast, dict) or not 0 < len(cast) <= CAST_LIMIT
-                             or not all(isinstance(role, str) and role and _source(value) for role, value in cast.items())):
+def _check_cast(key: Any, cast: Any) -> None:
+    if cast is None:
+        return
+    if not isinstance(cast, dict) or not 0 < len(cast) <= CAST_LIMIT or not all(
+            isinstance(role, str) and role and _source(value) for role, value in cast.items()):
         raise Scene2dError("invalid_spec", f"scene2d {key}: cast maps 1-{CAST_LIMIT} card slots (subject_1, subject_2, prop_1...) "
                                            "to a picture (URL, workspace file, stills name, set or cast id)")
-    if isinstance(cast, dict) and "background" in cast:
+    if "background" in cast:
         raise Scene2dError("invalid_spec", f"scene2d {key}: give the background as scene2d.background, not as a cast slot")
+
+
+def _check_fields(shot: dict, config: dict) -> None:
+    key = shot.get("key")
+    _check_cast(key, config.get("cast"))
     if "background" in config and not _source(config["background"]):
         raise Scene2dError("invalid_spec", f"scene2d {key}: background is a picture or a seamless video loop")
     controls = config.get("controls")
@@ -200,16 +206,23 @@ def make_cutouts(production: Any, spec: dict) -> None:
         production.log(f"scene2d: cutouts of {', '.join(wanted)}")
 
 
+def _made(state: dict, kind: str, field: str) -> dict[str, str]:
+    """name -> the ``field`` of each spec model or set the run made."""
+    return {name: entry[field] for name, entry in (state.get(kind) or {}).items() if isinstance(entry, dict) and entry.get(field)}
+
+
+def _played_cast(state: dict) -> dict[str, str]:
+    """cast id -> its cutout; an animatic made before the cutouts plays the portrait (else the sheet) as it is."""
+    singles, cutouts = state.get("cast_single") or {}, state.get("cast_cutouts") or {}
+    return {cid: (cutouts.get(cid) or {}).get("url") or singles.get(cid) or sheet for cid, sheet in (state.get("cast") or {}).items()}
+
+
 def production_media(production: Any, stills: dict | None) -> dict:
     """The names a scene2d source may use, as URLs: spec models and sets, cast members, stills."""
-    state, ws = production.state, production.ws
-    models = {name: f"/api/v1/file/{quote(entry['file'])}?workspace={quote(ws)}"
-              for name, entry in (state.get("models") or {}).items() if isinstance(entry, dict) and entry.get("file")}
-    sets = {name: entry["url"] for name, entry in (state.get("sets") or {}).items() if isinstance(entry, dict) and entry.get("url")}
-    singles, cutouts = state.get("cast_single") or {}, state.get("cast_cutouts") or {}
-    # The run cuts every played cast member out first; an animatic before that plays the portrait as it is.
-    cast = {cid: (cutouts.get(cid) or {}).get("url") or singles.get(cid) or sheet for cid, sheet in (state.get("cast") or {}).items()}
-    return {"workspace": ws, "root": production.root, "models": models, "sets": sets, "cast": cast, "stills": stills or {}}
+    ws = production.ws
+    models = {name: f"/api/v1/file/{quote(file)}?workspace={quote(ws)}" for name, file in _made(production.state, "models", "file").items()}
+    return {"workspace": ws, "root": production.root, "models": models, "sets": _made(production.state, "sets", "url"),
+            "cast": _played_cast(production.state), "stills": stills or {}}
 
 
 def source_url(value: str, media: dict) -> str:
