@@ -11,10 +11,12 @@ import json
 import os
 import re
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-import fcntl
+from services.workspace_store_lock import workspace_store_lock
 
 
 LINK_FILENAME = ".production-project-links-v1.json"
@@ -797,33 +799,14 @@ def _replace_json(path: str, body: dict[str, Any]) -> None:
                 pass
 
 
+@contextmanager
 def _exclusive(workspace_dir: str):
     os.makedirs(workspace_dir, exist_ok=True)
     key = os.path.realpath(workspace_dir)
     with _LOCKS_GUARD:
         lock = _LOCKS.setdefault(key, threading.RLock())
-    return _FileLock(os.path.join(workspace_dir, LINK_FILENAME + ".lock"), lock)
-
-
-class _FileLock:
-    def __init__(self, path: str, thread_lock: threading.RLock) -> None:
-        self.path = path
-        self.thread_lock = thread_lock
-        self.handle: Any = None
-
-    def __enter__(self) -> "_FileLock":
-        self.thread_lock.acquire()
-        self.handle = open(self.path, "a+", encoding="utf-8")
-        fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX)
-        return self
-
-    def __exit__(self, *_args: Any) -> None:
-        try:
-            if self.handle is not None:
-                fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
-                self.handle.close()
-        finally:
-            self.thread_lock.release()
+    with lock, workspace_store_lock(Path(workspace_dir) / LINK_FILENAME):
+        yield
 
 
 def _token(value: Any, code: str, message: str) -> str:
