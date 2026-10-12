@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.job_lifecycle import new_media_files
+from services.job_lifecycle import collect_job_outputs
 from tests.test_studio_sfx_commands import command, setup_service
 from tests.test_image_generation_commands import _run
 
@@ -56,6 +56,8 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
     def generate(**kwargs):
         calls.append(kwargs)
         Path(kwargs['save_path']).write_bytes(b'provider stand-in; not real media')
+        # Another operation (a studio.key) saves to the same workspace while MMAudio runs.
+        Path(kwargs['save_path']).with_name('prop-key.png').write_bytes(b'not this job')
 
     def finish(_job, status, **kwargs):
         completed.append((status, kwargs))
@@ -82,7 +84,7 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
         'update_job': lambda *_args, **_kwargs: True,
         'finish_job': finish,
         'record_job_outputs': lambda target, files: target.update(outputs=files),
-        'new_media_files': new_media_files,
+        'collect_job_outputs': collect_job_outputs,
         '_publish_generation_sidecar_for_studio_job': lambda _job, path, metadata: sidecars.append((path, copy.deepcopy(metadata))),
     }
     module, filename = worker_source
@@ -105,3 +107,4 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
     assert metadata['params'] == raw_params == job['params']
     assert metadata['upload_filenames'] == ({'video_guide': 'guide.mp4'} if guided else {})
     assert completed[0][0] == 'completed'
+    assert job['outputs'] == [Path(output).name], "another operation's file is not this job's output"
