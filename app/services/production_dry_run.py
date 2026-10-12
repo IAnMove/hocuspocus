@@ -10,6 +10,8 @@ Scene documents are compiled in-process so a bad style is ``scene_invalid`` here
 ``blocking`` lists what production.run refuses in a new spec (see ``production_quality_gate``).
 With ``song.file`` in the workspace, windows, ``gaps`` and ``motion`` use that file's length (the montage runs all
 of it), with ``song_duration_mismatch`` and ``held_tail`` when it outlasts the plan.
+A ``scene2d`` window shows its card (an alias resolved), where each picture comes from and the compiler's warnings
+(``cutout_without_alpha``); ``scene2d_holds`` when the cut outlasts the card's longest move.
 It never calls the client passed as ``mcp``.
 ``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``.
 """
@@ -39,7 +41,8 @@ MISMATCH_S = 1.0       # song.file against song.duration
 HELD_TAIL_S = 2.0      # the pilot's song ran 115 s under 30 s of shots: the last one was held 85 s
 
 
-def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str | None = None) -> dict[str, Any]:
+def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str | None = None,
+            workspace: str | None = None) -> dict[str, Any]:
     """Report the spec. ``mcp`` is accepted so tests can pass a spy and is never called."""
     _ = mcp
     spec = spec if isinstance(spec, dict) else {}
@@ -50,6 +53,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
     score = _score(spec, file_s)
     windows = shot_windows({**spec, "shots": usable}, score) if expanded else []
     rows = _rows(windows)
+    cards = _scene2d_rows(rows, windows, spec, root, workspace, float(score["duration"]))
     holds, extra = preview_extras({**spec, "shots": usable}, score, windows, usable)
     for row, hold in zip(rows, holds):
         row["hold_after_clip"] = hold
@@ -78,7 +82,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
         "motion": motion,
         "blocking": blocking_problems(spec, root),
         "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
-        + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id) + _song_warnings(spec, file_s, windows),
+        + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id) + _song_warnings(spec, file_s, windows) + cards,
     }
 
 
@@ -156,6 +160,18 @@ def _rows(windows: list[dict]) -> list[dict]:
     return rows
 
 
+def _scene2d_rows(rows: list[dict], windows: list[dict], spec: dict, root: Any, workspace: str | None, duration: float) -> list[dict]:
+    """Add each scene2d window's card and sources to its row; return the compiler's warnings."""
+    from services.production_scene2d import dry_run_report, is_scene2d
+    starts = [0.0] + [float(window["t0"]) for window in windows[1:]] + [duration]      # the cuts segments() makes
+    found: list[dict] = []
+    for index, (row, window) in enumerate(zip(rows, windows)):
+        if is_scene2d(window):
+            row["scene2d"], warnings = dry_run_report(window, spec, root, workspace or "default", starts[index + 1] - starts[index])
+            found += warnings
+    return found
+
+
 def _covered(shots: list[dict]) -> set[int]:
     covered: set[int] = set()
     for shot in shots:
@@ -223,11 +239,11 @@ def _static_warnings(motion: dict, profile: dict) -> list[dict]:
 
 def _pace_warnings(spec: dict, shots: list[dict], profile: dict) -> list[dict]:
     minutes = float((spec.get("song") or {}).get("duration") or 0) / 60
-    clips = sum(1 for shot in shots if shot.get("kind") in ("h3", "scene3d"))
+    clips = sum(1 for shot in shots if shot.get("kind") in ("h3", "scene3d", "scene2d"))
     if minutes <= 0 or not clips or clips / minutes >= profile["clips_per_minute"]:
         return []                       # no generated clips at all is a native look (desktop, 3D, stills): too_static covers the stills
     return [{"code": "few_clips", "per_minute": round(clips / minutes, 1), "minimum": profile["clips_per_minute"],
-             "hint": "more H3 or scene3d shots, or a shorter song, or quality: draft"}]
+             "hint": "more H3, scene3d or scene2d shots, or a shorter song, or quality: draft"}]
 
 
 def _reused_stills(shots: list[dict]) -> list[dict]:

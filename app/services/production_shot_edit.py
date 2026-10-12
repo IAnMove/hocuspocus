@@ -284,6 +284,8 @@ def update_shot(production: Any, spec: dict, key: str, *, lyric_style: Any = Non
     changes = {"lyric_style": lyric_style, "title": title, "camera": camera}
     if all(value is None for value in changes.values()):
         raise ShotEditError("empty_update", "pass lyric_style, title or camera")
+    if camera is not None and shot.get("kind") == "scene2d":
+        raise ShotEditError("invalid_update", "a scene2d shot plays its card's own camera: change scene2d.controls")
     checkpoint = _checkpoint(production, spec, key)
     try:
         overrides = shot.setdefault("overrides", {})
