@@ -7,7 +7,8 @@ import { scene3dPlaybackSpeed } from '../src/features/scene3d/clock.ts'
 import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/scene3d/frameFormat.ts'
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
-import { stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
+import { scrollDirection, stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
+import { groundColor, isGroundStyle } from '../src/features/scene3d/groundStyles.ts'
 import { applyGrade, applyLens, applyNamedLight, copyCamera } from '../src/features/scene3d/modifiers.ts'
 import { isCameraTechnique } from '../src/features/scene3d/techniqueTemplates.ts'
 import { pictureInModelSlot, turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
@@ -61,8 +62,15 @@ delete document.soundtrack
 retargetFraming(document)
 if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
 turnPicturesToCamera(document, standIns)
-if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
-if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll })]
+// A ground style, asked by the shot (floor) or named as the set's ground, is drawn by the scene instead of the set's slab.
+const groundStyle = isGroundStyle(config.floor) ? config.floor : isGroundStyle(config.background?.ground?.style) ? config.background.ground.style : undefined
+if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background, { styledGround: Boolean(groundStyle) })]
+if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll, styledGround: Boolean(groundStyle), ...(groundStyle ? { groundColor: groundColor(groundStyle) } : {}) })]
+if (groundStyle) {
+  const { groundScroll: _old, ...environment } = document.environment ?? { reflectiveFloor: false, platform: false, bloom: 0 }
+  document.environment = { ...environment, reflectiveFloor: false, floorStyle: groundStyle,
+    ...(config.scroll ? { groundScroll: { speed: config.scroll, direction: scrollDirection(document) } } : {}) }
+}
 // A runner on a scrolling set runs on the spot: the place moves, the cast stays under the camera.
 if (config.scroll) for (const slot of document.slots) if (slot.media === 'model3d' && !slot.id.startsWith('set-')) slot.inPlace = true
 const parsed = parseScene3DDocument(document)

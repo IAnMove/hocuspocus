@@ -3,6 +3,7 @@ import { applyPsxImageMaterial } from './imageLook'
 import { applyImageColorKey } from './imageColorKey'
 import { imageWindowGeometry } from './imageWindows'
 import { imageContactShadow, textureFootprint } from './imageGrounding'
+import { settledTexture } from './imageSettle'
 import type { Scene3DSlot } from './types'
 
 function cutoutAspect(texture: Texture | null) {
@@ -21,6 +22,10 @@ function cutoutMaterial(slot: Scene3DSlot, texture: Texture | null) {
 
 /** A bottom-anchored image plane with real alpha occlusion and scene lighting. */
 export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
+  if (texture && slot.imageLook?.settle) {
+    const settled = settledTexture(texture, slot.imageLook.colorKey, slot.imageLook.settle)
+    if (settled !== texture) { texture.dispose(); texture = settled }
+  }
   const aspect = cutoutAspect(texture)
   const tiles = slot.imageLook?.tiles ?? 1
   const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))

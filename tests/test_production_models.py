@@ -5,7 +5,7 @@ import struct
 import pytest
 
 from services.production_models import ModelError, check_models, make_models
-from services.production_scene3d import resolve_media
+from services.production_scene3d import resolve_media, validate_scene3d_shot
 
 SPEC = {"song": {"bpm": 96}, "style": {"image": "felt puppets"},
         "cast": [{"id": "hero", "sheet_prompt": "a felt hero"}],
@@ -445,6 +445,21 @@ def test_a_parallax_set_draws_its_far_view_layers_and_ground_and_keys_the_layers
     for bad in ({**PARALLAX, "mid": ""}, {k: v for k, v in PARALLAX.items() if k != "ground"}, {**PARALLAX, "roof": "tiles"}):
         with pytest.raises(ModelError, match="sets.temple"):
             check_models({"style": {}, "sets": {"temple": bad}})
+
+
+def test_a_set_whose_ground_names_a_ground_style_draws_no_ground_and_passes_the_style_on(tmp_path):
+    production = Production(tmp_path)
+    painting(production)
+    spec = {"style": {"image": "Painted fantasy world."}, "sets": {"temple": {**PARALLAX, "ground": "Meadow"}}}
+    check_models(spec)
+    make_models(production, spec, sleep=lambda _: None)
+    assert sorted(image["key"] for image in production.images) == ["set-temple-far", "set-temple-mid", "set-temple-near"]
+    made = production.state["sets"]["temple"]
+    assert made["ground"] == {"style": "meadow"} and made["layers"] and made["sky"]
+    assert not (tmp_path / "set-piece-temple-ground.glb").exists()
+    resolved = resolve_media({"template": "dance-stage", "background": "temple"}, stills={}, root=tmp_path, workspace="w", sets=production.state["sets"])
+    assert resolved["background"]["ground"] == {"style": "meadow"}
+    validate_scene3d_shot({"kind": "scene3d", "scene3d": {**resolved, "cast": {"subject_1": "hero.glb"}}})
 
 
 def test_a_parallax_layers_foot_is_the_empty_key_under_its_lowest_piece(tmp_path):

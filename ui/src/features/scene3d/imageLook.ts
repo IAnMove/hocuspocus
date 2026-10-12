@@ -1,10 +1,14 @@
 import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMaterial, type Texture } from 'three'
 import { parseImageWindows, type ImageWindow } from './imageWindows'
 import { parseImageColorKey, type ImageColorKey } from './imageColorKey'
+import { parseSettleLook } from './imageSettle'
 
 export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey;
   /** Mirrored copies of the picture side by side (1–9): a set layer wide enough for a camera that turns. */
-  tiles?: number }
+  tiles?: number
+  /** Carry each column's lowest piece down to the floor line (a share of the picture's height from its bottom), shading
+   * to the floor's colour, so every painted piece stands on the ground (imageSettle.ts). */
+  settle?: { floor: number; color?: string } }
 
 function isPositiveFinite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -25,6 +29,8 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (isPositiveFinite(value.shadow)) look.shadow = Math.min(1, value.shadow)
   if (isPositiveFinite(value.psx)) look.psx = Math.max(.5, Math.min(2, value.psx))
   if (isPositiveFinite(value.tiles) && value.tiles >= 2) look.tiles = Math.min(9, Math.round(value.tiles))
+  const settle = parseSettleLook(value.settle)
+  if (settle) look.settle = settle
   return Object.keys(look).length ? look : undefined
 }
 
