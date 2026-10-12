@@ -36,8 +36,11 @@ def words(text: str) -> list[str]:
 
 
 def stem(word: str) -> str:
-    """Drop a plural ending: escenas → escena, graficos → grafico, scenes → scen (matched by prefix below)."""
-    if len(word) > 4 and word.endswith("es"):
+    """Drop a plural ending: escenas → escena, graficos → grafico, scenes → scen (matched by prefix below).
+
+    A five-letter «-es» word loses only the «s» (naves → nave, lines → line): two letters off would leave a root too
+    short for the prefix match, and the plural would never meet its singular."""
+    if len(word) > 5 and word.endswith("es"):
         return word[:-2]
     if len(word) > 3 and word.endswith("s"):
         return word[:-1]
