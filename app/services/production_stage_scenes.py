@@ -17,7 +17,7 @@ from services.production_control import sleep_until
 from services.production_package import (
     attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, write_manifest,
 )
-from services.production_scene2d import scene2d_document, scene_inputs
+from services.production_scene2d import resume_clip, scene2d_document
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.video2d_edit import MAX_OPERATIONS
 
@@ -92,8 +92,7 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
         if is_locked(production, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
             continue
         dur = round(end - start, 3)
-        used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file") \
-            or scene_inputs(production.state, shot)
+        used = resume_clip(production.state, shot, clips)
         prior = done.get(shot["key"], {})
         fingerprint = host.scene_fingerprint(shot, style, stills, score, start, end)
         if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
