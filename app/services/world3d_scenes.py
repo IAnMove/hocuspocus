@@ -179,8 +179,9 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     warnings = []
     _set_duration(document, changes)
     bindings = _bindings(changes)
+    stand_ins: set[str] = set()
     for binding in bindings:
-        warnings.extend(_bind(document, binding))
+        warnings.extend(_bind(document, binding, stand_ins))
     _check_carriers(document["slots"], bindings)
     if "camera_template" in changes:
         warnings.extend(_set_camera_template(document, changes["camera_template"]))
@@ -202,6 +203,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     _set_render_look(document, changes)
     _set_modifiers(document, changes)
     _retarget(document)
+    warnings.extend(_turn_pictures(document, stand_ins))
     record["revision"] += 1
     record["warnings"] = warnings
     record["templateId"] = document.get("templateId") or record["templateId"]
@@ -457,7 +459,8 @@ def _bindings(changes: dict) -> list[dict]:
     return bindings
 
 
-def _bind(document: dict, binding: dict) -> list[str]:
+def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
+    """Apply one binding. A picture that takes a model's place without a turn of its own joins ``stand_ins``."""
     if binding.get("add") is True:
         _add_slot(document, binding)
     slot = _target(document["slots"], binding)
@@ -476,6 +479,8 @@ def _bind(document: dict, binding: dict) -> list[str]:
             slot[key] = deepcopy(binding[snake])
     if was_model and slot.get("media") == "image":
         _picture_for_model(slot, binding)
+        if not _given(binding, "rotationY"):
+            stand_ins.add(slot["id"])
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     return warnings
@@ -501,6 +506,25 @@ def _picture_for_model(slot: dict, binding: dict) -> None:
         slot["motion"] = {key: value for key, value in motion.items() if key not in ("faceTravel", "headingOffset")}
         start, end = slot.get("position") or [0, 0, 0], motion.get("to") or [0, 0, 0]
         slot["rotationY"] = math.pi if end[0] < start[0] else 0
+
+
+def _turn_pictures(document: dict, stand_ins: set[str]) -> list[str]:
+    """Pictures that took a model's place turn toward the camera as a production cast does (``turnPicturesToCamera``
+    in pictureStandIn.ts): a model in profile at a table reads, a flat picture in profile is a sliver, so none stays more
+    than 60° from facing the camera along the shot. The camera path is UI code, so the template tool measures it.
+    Without the UI dependencies (a Python-only run) the pictures keep the model's turn; a tool failure keeps it too and
+    says so, since the binding itself is good."""
+    if not stand_ins:
+        return []
+    try:
+        turned = _run_tool("turn-pictures", json.dumps({"document": document, "ids": sorted(stand_ins)}))
+    except World3DSceneError as error:
+        return [] if error.code == "template_tool_missing" else [f"picture_turn_skipped: {error}"]
+    rotations = turned.get("rotations") or {}
+    for slot in document["slots"]:
+        if type(rotations.get(slot.get("id"))) in (int, float):
+            slot["rotationY"] = rotations[slot["id"]]
+    return []
 
 
 def _given(binding: dict, key: str) -> bool:

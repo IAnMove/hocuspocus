@@ -98,7 +98,10 @@ test('the Stages chip lists the server stage cards with their line, marks, camer
   const server = await stageServer()
   try {
     await openLibrary()
-    assert.deepEqual(server.calls, [], 'the other shelves never ask for stages')
+    await screen.findByTestId('world3d-stages-all')
+    fireEvent.click(screen.getByRole('button', { name: 'Action' }))
+    assert.equal(screen.queryByTestId('world3d-stages-all'), null, 'a category shelf shows its own shots only')
+    server.calls.length = 0
     fireEvent.click(screen.getByRole('button', { name: 'Stages' }))
     const kitchen = await screen.findByTestId('world3d-stage-stage-cocina')
     assert.deepEqual(server.calls, [{ operation: 'world3d.templates.list', input: { workspace: 'studio', kind: 'stage', limit: 50 } }])
@@ -120,6 +123,65 @@ test('the Stages chip lists the server stage cards with their line, marks, camer
   } finally {
     server.restore()
     cleanup()
+  }
+})
+
+test('All ends with the stages that match, and a set or a shelf filter leaves them to the Stages shelf', async () => {
+  const { screen, fireEvent, cleanup, within } = await import('@testing-library/react')
+  const server = await stageServer()
+  try {
+    const calls = await openLibrary()
+    const stages = await screen.findByTestId('world3d-stages-all')
+    assert.ok(screen.getByTestId('world3d-template-sea-deck'), 'the built-in shots come first')
+    assert.deepEqual(within(stages).getAllByRole('button').map(button => button.dataset.testid), ['world3d-stage-stage-cocina', 'world3d-stage-stage-plaza'])
+    assert.ok(!(stages.textContent ?? '').includes('Rooms and open places'), 'the help stays on the Stages shelf')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search templates' }), { target: { value: 'fountain' } })
+    assert.deepEqual(within(screen.getByTestId('world3d-stages-all')).getAllByRole('button').map(button => button.dataset.testid), ['world3d-stage-stage-plaza'])
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search templates' }), { target: { value: 'nothing like this' } })
+    assert.equal(screen.queryByTestId('world3d-stages-all'), null, 'no match, no section')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search templates' }), { target: { value: '' } })
+    fireEvent.click(within(await screen.findByTestId('world3d-stages-all')).getByTestId('world3d-stage-stage-plaza'))
+    fireEvent.click(await screen.findByTestId('world3d-use-shot'))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(calls.packs.at(-1)?.id, 'stage-plaza', 'a stage picked under All opens like one picked on its shelf')
+  } finally {
+    server.restore()
+    cleanup()
+  }
+})
+
+test('All shows no stage section when the listing fails or there is no workspace', async () => {
+  const { screen, cleanup } = await import('@testing-library/react')
+  const server = mockServer(() => new Response(JSON.stringify({ detail: 'down' }), { status: 500 }))
+  try {
+    await openLibrary()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(server.calls.length, 1)
+    assert.equal(screen.queryByTestId('world3d-stages-all'), null)
+    assert.equal(screen.queryByRole('alert'), null, 'the Stages shelf is where a failed listing is shown')
+    cleanup()
+    await openLibrary({ workspace: undefined })
+    assert.equal(server.calls.length, 1, 'without a workspace nothing is asked')
+    assert.equal(screen.queryByTestId('world3d-stages-no-workspace'), null)
+  } finally {
+    server.restore()
+    cleanup()
+  }
+})
+
+test('the stage list reads every page up to the total', async () => {
+  const { listWorld3DStageCards } = await import('../src/api/world3dWorkspace')
+  const many = Array.from({ length: 120 }, (_, index) => ({ ...KITCHEN, id: `stage-mold_${String(index).padStart(3, '0')}` }))
+  const server = mockServer(call => {
+    const offset = Number(call.input.offset ?? 0)
+    return ok({ templates: many.slice(offset, offset + Number(call.input.limit)), total: many.length, partial: false, unknown_words: [] })
+  })
+  try {
+    const cards = await listWorld3DStageCards('studio')
+    assert.deepEqual(cards.map(card => card.id), many.map(card => card.id))
+    assert.deepEqual(server.calls.map(call => call.input.offset), [undefined, 50, 100])
+  } finally {
+    server.restore()
   }
 })
 

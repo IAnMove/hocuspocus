@@ -74,11 +74,21 @@ async function templateCommand<T>(operation: string, input: Record<string, unkno
   return body.result
 }
 
-/** The ``stage-<mold>`` cards (rooms and shape molds), one page of the library's maximum in id order. */
+/** The library's page size, its maximum; a shelf reads at most this many pages. */
+const STAGE_PAGE = 50
+const STAGE_PAGES = 20
+
+/** Every ``stage-<mold>`` card (rooms and shape molds) in id order, page by page until the reply's ``total``. */
 export async function listWorld3DStageCards(workspace: string, signal?: AbortSignal): Promise<World3DLibraryCard[]> {
-  const result = await templateCommand<{ templates?: World3DLibraryCard[] }>(
-    'world3d.templates.list', { workspace, kind: 'stage', limit: 50 }, 'Could not list the Video 3D stages', signal)
-  return Array.isArray(result.templates) ? result.templates : []
+  const cards: World3DLibraryCard[] = []
+  for (let page = 0; page < STAGE_PAGES; page++) {
+    const result = await templateCommand<{ templates?: World3DLibraryCard[]; total?: number }>('world3d.templates.list',
+      { workspace, kind: 'stage', limit: STAGE_PAGE, ...(page ? { offset: page * STAGE_PAGE } : {}) }, 'Could not list the Video 3D stages', signal)
+    const found = Array.isArray(result.templates) ? result.templates : []
+    cards.push(...found)
+    if (found.length < STAGE_PAGE || typeof result.total !== 'number' || cards.length >= result.total) break
+  }
+  return cards
 }
 
 /** One library card and the editable document the server builds for it (a stage: ``two-shot`` with its ``room``). */

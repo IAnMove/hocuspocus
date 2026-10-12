@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from services.production_scene3d import compile_document
-from services.world3d_scenes import PICTURE_SCALE, patch_scene
+from services.world3d_scenes import PICTURE_SCALE, compile_template_document, patch_scene
 from services.world3d_stage_documents import room_of
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,10 +112,10 @@ def test_a_picture_in_a_room_and_on_a_stage_is_a_cutout_as_tall_as_the_model():
     assert scales == {"subject_1": PICTURE_SCALE, "subject_2": 0.9}
 
 
-def _scene(tmp_path, slots):
+def _scene(tmp_path, slots, base=None):
     folder = tmp_path / "studio" / "world3d-edits"
     folder.mkdir(parents=True)
-    document = {"templateId": "two-shot", "duration": 6, "slots": slots,
+    document = {**(base or {"templateId": "two-shot"}), "duration": 6, "slots": slots,
                 "camera": {"family": "fixed", "fov": 40, "eye": [0, 1.5, 5], "look": [0, 1.2, 0]}}
     (folder / "w3d-00000000beef.json").write_text(json.dumps({"revision": 1, "templateId": "two-shot", "document": document,
                                                                 "warnings": []}), encoding="utf-8")
@@ -149,6 +149,38 @@ def test_a_series_binding_of_a_picture_to_a_model_object_makes_a_standing_cutout
     again = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"bindings": [
         {"object_id": "hero", "media": "image", "source_url": "/api/v1/file/other.png?workspace=t"}]}, 2)["document"]
     assert next(slot for slot in again["slots"] if slot["id"] == "hero")["scale"] == 0.85, "rebinding a picture does not shrink it again"
+
+
+@NODE
+def test_a_series_picture_in_profile_turns_toward_the_camera_as_far_as_a_production_one(tmp_path):
+    slots = [_model("side", rotationY=1.4), _model("near", position=[1, 0, 0]), _model("given", position=[-1, 0, 0], rotationY=1.4),
+             _model("robot", rotationY=1.4)]
+    workspace_dir = _scene(tmp_path, slots, compile_template_document("two-shot"))
+    out = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"bindings": [
+        {"object_id": "side", "media": "image", "source_url": PICTURE},
+        {"object_id": "near", "media": "image", "source_url": PICTURE},
+        {"object_id": "given", "media": "image", "source_url": PICTURE, "rotationY": 1.4},
+        {"object_id": "robot", "source_url": "/api/v1/file/robot.glb?workspace=t"}]}, 1)
+    turns = {slot["id"]: slot["rotationY"] for slot in out["document"]["slots"]}
+    assert turns["side"] == pytest.approx(math.pi / 3, abs=1e-6), "a picture in profile turns to 60° from the camera"
+    assert turns["near"] == 0.4, "one already within 60° keeps the model's turn"
+    assert (turns["given"], turns["robot"]) == (1.4, 1.4), "a turn the binding gives and a model are kept"
+    assert out["warnings"] == []
+
+
+def test_a_picture_turn_the_tool_cannot_measure_keeps_the_binding_and_says_so(tmp_path, monkeypatch):
+    from services import world3d_scenes
+
+    def broken(command, payload, template_id=None):
+        raise world3d_scenes.World3DSceneError("template_tool_failed", "invalid_world3d_document")
+
+    monkeypatch.setattr(world3d_scenes, "_run_tool", broken)
+    workspace_dir = _scene(tmp_path, [_model("side", rotationY=1.4)])
+    out = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"bindings": [
+        {"object_id": "side", "media": "image", "source_url": PICTURE}]}, 1)
+    side = out["document"]["slots"][0]
+    assert (side["media"], side["surface"], side["rotationY"]) == ("image", "cutout", 1.4)
+    assert out["warnings"] == ["picture_turn_skipped: invalid_world3d_document"]
 
 
 @NODE

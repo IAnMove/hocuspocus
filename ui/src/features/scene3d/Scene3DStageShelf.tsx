@@ -30,17 +30,26 @@ function StageCard({ card, workspace, locale, selected, onPick, onUse }: {
   </button>
 }
 
+/** The list on its own shelf, or under the «All» grid. */
+const SECTION = {
+  shelf: { 'data-testid': 'world3d-stages' },
+  embedded: { 'data-testid': 'world3d-stages-all', className: 'mt-6 border-t border-border pt-4' },
+}
+
 /**
  * Stages in the shot library: the server's ``stage-<mold>`` cards (rooms and shape molds with marks and named
  * cameras). Picking one fetches its document (``world3d.templates.get``) so it opens like a personal template.
+ * ``embedded`` is the same list under the «All» grid: it shows only when stages match, and leaves the help, the
+ * empty states and a failed listing to the Stages shelf.
  */
-export function Scene3DStageShelf({ workspace, query, locale, selectedId, onPick, onUse }: {
+export function Scene3DStageShelf({ workspace, query, locale, selectedId, onPick, onUse, embedded }: {
   workspace?: string
   query: string
   locale: 'en' | 'es'
   selectedId?: string
   onPick: (choice: StageChoice) => void
   onUse: (choice: StageChoice) => void
+  embedded?: boolean
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const grid = useRef<HTMLDivElement>(null)
@@ -61,6 +70,7 @@ export function Scene3DStageShelf({ workspace, query, locale, selectedId, onPick
   if (!workspace) return <p role="status" className="p-4 text-sm text-text-secondary" data-testid="world3d-stages-no-workspace">{t('stages.noWorkspace')}</p>
   const current = listed?.key === key ? listed : null
   const cards = current?.cards ? filterStageCards(current.cards, query, locale) : []
+  if (embedded && !cards.length) return null
   const open = (card: World3DLibraryCard, then: (choice: StageChoice) => void) => {
     setBusy(card.id); setOpenError('')
     loadStageDocument(workspace, card.id)
@@ -80,12 +90,12 @@ export function Scene3DStageShelf({ workspace, query, locale, selectedId, onPick
     buttons[next].focus()
     open(cards[next], onPick)
   }
-  return <section aria-label={t('stages.title')} data-testid="world3d-stages">
+  return <section aria-label={t('stages.title')} {...SECTION[embedded ? 'embedded' : 'shelf']}>
     <h3 className="flex items-center gap-2 px-1 text-sm font-semibold text-text-primary">
       {t('stages.title')} <span className="text-text-muted">{current?.cards ? cards.length : ''}</span>
       {busy || (!current && workspace) ? <Loader2 size={14} className="animate-spin text-text-muted" aria-label={t('stages.loading')} /> : null}
     </h3>
-    <p className="mt-1 px-1 text-xs leading-5 text-text-secondary">{t('stages.help')}</p>
+    {embedded || <p className="mt-1 px-1 text-xs leading-5 text-text-secondary">{t('stages.help')}</p>}
     {current?.error ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs text-red-300">
       {t('stages.error', { reason: current.error })}
       <button type="button" onClick={() => setAttempt(value => value + 1)} className="min-h-8 rounded-lg border border-border px-3 text-text-primary hover:bg-bg-hover">{t('stages.retry')}</button>
