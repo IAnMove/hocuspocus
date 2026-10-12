@@ -343,6 +343,7 @@ jobs:
         run: |
           python -m pip install -r scripts/ci-python-windows-requirements.txt
           python -m pytest tests/test_runtime_profiles.py tests/test_hunyuan3d_windows_patch.py tests/test_launcher_compatibility.py tests/test_ui_distribution.py -q
+          python -m pytest tests/test_production_project_lock.py -q
       - name: Fresh Windows production UI build and verified repeat start
         run: |
           python scripts/build_ui.py
