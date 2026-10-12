@@ -8,7 +8,7 @@ import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
 import { scrollDirection, stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
-import { groundColor, isGroundStyle } from '../src/features/scene3d/groundStyles.ts'
+import { isGroundStyle } from '../src/features/scene3d/groundStyles.ts'
 import { applyGrade, applyLens, applyNamedLight, copyCamera } from '../src/features/scene3d/modifiers.ts'
 import { isCameraTechnique } from '../src/features/scene3d/techniqueTemplates.ts'
 import { pictureInModelSlot, turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
@@ -65,7 +65,7 @@ turnPicturesToCamera(document, standIns)
 // A ground style, asked by the shot (floor) or named as the set's ground, is drawn by the scene instead of the set's slab.
 const groundStyle = isGroundStyle(config.floor) ? config.floor : isGroundStyle(config.background?.ground?.style) ? config.background.ground.style : undefined
 if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background, { styledGround: Boolean(groundStyle) })]
-if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll, styledGround: Boolean(groundStyle), ...(groundStyle ? { groundColor: groundColor(groundStyle) } : {}) })]
+if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll, groundStyle })]
 if (groundStyle) {
   const { groundScroll: _old, ...environment } = document.environment ?? { reflectiveFloor: false, platform: false, bloom: 0 }
   document.environment = { ...environment, reflectiveFloor: false, floorStyle: groundStyle,
