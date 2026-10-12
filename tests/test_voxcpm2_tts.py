@@ -60,6 +60,15 @@ def test_design_takes_a_description_and_clone_mirrors_qwen3_base():
     assert VoxCPM2.get_lora_dir("voxcpm2_base", object(), "/loras") == "/loras/voxcpm2"
 
 
+def test_the_lora_directory_flag_is_read_back():
+    import argparse
+    parser = argparse.ArgumentParser()
+    VoxCPM2.register_lora_cli_args(parser, "/loras")
+    args = parser.parse_args(["--lora-dir-voxcpm2", "/custom/voxcpm2"])
+    assert VoxCPM2.get_lora_dir("voxcpm2_base", args, "/loras") == "/custom/voxcpm2"
+    assert VoxCPM2.get_lora_dir("voxcpm2_base", parser.parse_args([]), "/loras") == "/loras/voxcpm2"
+
+
 @pytest.mark.parametrize("model,inputs,prompt,error", [
     ("voxcpm2_voicedesign", {}, "  ", "cannot be empty"),
     ("voxcpm2_base", {}, "Hola", "reference audio"),

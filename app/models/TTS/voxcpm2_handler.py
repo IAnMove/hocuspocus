@@ -200,7 +200,7 @@ class family_handler:
 
     @staticmethod
     def get_lora_dir(base_model_type, args, lora_root):
-        return getattr(args, "lora_voxcpm2", None) or os.path.join(lora_root, "voxcpm2")
+        return getattr(args, "lora_dir_voxcpm2", None) or os.path.join(lora_root, "voxcpm2")
 
     @staticmethod
     def query_model_def(base_model_type, model_def):
