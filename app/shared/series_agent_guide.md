@@ -81,7 +81,8 @@ character's ink.
 1. **Generate for the rig.** `characters.styles` with `style: "graphic-novel"`, `kind: "character"` (then `"pose"`)
    and the description. The prompt asks for what the rig must find: both eyes with clean white sclera, never in the
    shadow, and the closed mouth painted as one short dark line. Key in the screen colour `characters.styles` returns:
-   magenta when the character or object is green, so green cloth is not keyed away, and green otherwise.
+   magenta when the character or object is green, so green cloth is not keyed away, and green otherwise. A pose's
+   text rarely names the clothes: pass `screen` with the colour its character prompt returned.
 2. **Save and rig.** Save the kit with `provenance: [{"method": "character-style-create", "style": "graphic-novel"}]`;
    `characters.rig.flat` then uses the style's rig, `{"mouthStyle": "warp"}`, with no `style`. Later rigs of the kit (a pose added, a mouth line
    placed) keep warp mouths; only `style.mouthStyle` changes them. The result's `style` is the look used.

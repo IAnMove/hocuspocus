@@ -194,6 +194,9 @@ def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp
     built = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "character",
                                                  "description": "Ana, green jacket"})["result"]["prompt"]
     assert built["screen"] == "magenta" and "Ana, green jacket" in built["prompt"]
+    pose = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "pose", "description": "waving",
+                                                "screen": "magenta"})["result"]["prompt"]
+    assert pose["screen"] == "magenta" and "magenta" in pose["prompt"], "a pose keeps its character's screen"
     assert calls == []
     with pytest.raises(HTTPException) as error:
         call(handlers, "characters.styles", {"style": "oil-painting", "kind": "character"})

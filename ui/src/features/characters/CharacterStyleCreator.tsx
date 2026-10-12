@@ -5,7 +5,7 @@ import { useStore } from '../../stores/useStore'
 import { cancelJob } from '../../api/client'
 import { fetchCharacterKitLibrary, rigFlatCharacter, saveCharacterKit, type FlatRigResult } from '../../api/characters'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../../lib/characterKit'
-import type { CharacterStyle } from '../../lib/characterStyles'
+import { screenFor, type CharacterStyle, type ChromaScreen } from '../../lib/characterStyles'
 import { flaggedRigPoses, isWarpRigged } from '../../lib/flatRigMouth'
 import { randomUuid } from '../../lib/uuid'
 import { generateKeyedCandidates, type KeyedCandidate } from './characterCandidates'
@@ -133,8 +133,9 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
     jobs.current.forEach(id => void cancelJob(id).catch(() => {})); jobs.current = []
     setBusy(''); setMessage(t('imageCreator.cancelled'))
   }
-  const options = (kind: 'character' | 'pose', text: string, references: string[] | undefined, onUpdate: (items: KeyedCandidate[]) => void) =>
-    (signal: AbortSignal) => generateKeyedCandidates({ workspace, style, kind, description: text, model, references, signal, onUpdate,
+  const options = (kind: 'character' | 'pose', text: string, references: string[] | undefined, onUpdate: (items: KeyedCandidate[]) => void,
+    screen?: ChromaScreen) =>
+    (signal: AbortSignal) => generateKeyedCandidates({ workspace, style, kind, description: text, model, references, signal, onUpdate, screen,
       onJobSubmitted: id => { jobs.current.push(id) } }).then(found => {
       setMessage(found.some(item => item.status === 'ready') ? t('styleCreator.pick') : t('styleCreator.noneReady'))
     })
@@ -162,7 +163,9 @@ export function CharacterStyleCreator({ workspace, style, model, disabled }: {
     if (!kit) return
     setPickedPose(undefined)
     const identity = kit.identityReference?.source || kit.base?.source
-    await options('pose', pose.trim(), identity ? [identity] : undefined, setPoseCandidates)(signal)
+    // The pose text rarely names the clothes: a pose goes on the screen its character was made on, so green clothes survive the key.
+    await options('pose', pose.trim(), identity ? [identity] : undefined, setPoseCandidates,
+      screenFor(kit.lookNotes || description))(signal)
   })
   const addPose = () => run('addPose', async signal => {
     const chosen = poseCandidates.find(candidate => candidate.id === pickedPose)

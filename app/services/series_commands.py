@@ -61,13 +61,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "characters.styles": (
         {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
-         "description": {"type": "string", "maxLength": 2000}},
+         "description": {"type": "string", "maxLength": 2000}, "screen": {"enum": ["green", "blue", "magenta"]}},
         [], False,
         "List character style presets (prompt fragments, kit style, rig: the default look for characters.rig.flat). "
         "paper-cutout makes paper mouths; graphic-novel (painted art, bold ink, flat black shadows, clear white eyes, "
         "the rest mouth painted as one line) rigs with warp mouths: each pose talks with its own drawing. "
         "With style, kind and description, also returns the prompt, negative prompt and screen colour to generate "
-        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode. "
+        "with: magenta when the description has green in it, else green, or the screen you pass. A new pose of a "
+        "character goes on the screen its character was made on (the screen of its character prompt): the pose text "
+        "alone rarely names the clothes. Key the result with studio.key in that mode. "
         "Save the kit with provenance [{\"method\": \"character-style-create\", \"style\": \"<style id>\"}] and "
         "characters.rig.flat uses that style's rig with no style given (or pass the rig as its style).",
     ),
@@ -607,7 +609,7 @@ def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_ext
     result: dict[str, Any] = {"styles": style_catalog()["styles"], "screens": sorted(style_catalog()["screens"])}
     if data.get("style") and data.get("kind"):
         try:
-            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "")
+            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "", data.get("screen"))
         except KeyError as error:
             raise SeriesCommandError(f"Unknown style {data['style']}", status=404) from error
     return result

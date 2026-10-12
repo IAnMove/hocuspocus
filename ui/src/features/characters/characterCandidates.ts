@@ -1,6 +1,6 @@
 import { checkRigPose, keyStudioImage, type RigCheck } from '../../api/characters'
 import { generateImageAsset } from '../../lib/imageGeneration'
-import { characterStylePrompt, type CharacterStyle, type CharacterStyleKind } from '../../lib/characterStyles'
+import { characterStylePrompt, screenFor, type CharacterStyle, type CharacterStyleKind, type ChromaScreen } from '../../lib/characterStyles'
 
 export const CANDIDATE_COUNT = 3
 /** Full-body portrait size used for the Uncanny Valley cast. */
@@ -34,11 +34,13 @@ const defaults: CandidateDependencies = {
 /** Three takes of one description on a plain screen; each is keyed as soon as it arrives. */
 export async function generateKeyedCandidates(request: {
   workspace: string; style: CharacterStyle; kind: CharacterStyleKind; description: string; model: string
+  /** The screen to generate on; a new pose passes its character's, since the pose text alone rarely names the clothes. */
+  screen?: ChromaScreen
   references?: string[]; signal: AbortSignal
   onUpdate: (candidates: KeyedCandidate[]) => void; onJobSubmitted?: (jobId: string) => void
 }, dependencies: Partial<CandidateDependencies> = {}): Promise<KeyedCandidate[]> {
   const deps = { ...defaults, ...dependencies }
-  const { prompt, negative, screen } = characterStylePrompt(request.style, request.kind, request.description)
+  const { prompt, negative, screen } = characterStylePrompt(request.style, request.kind, request.description, request.screen ?? screenFor(request.description))
   let candidates: KeyedCandidate[] = Array.from({ length: CANDIDATE_COUNT },
     (_, index) => ({ id: `candidate-${index + 1}`, seed: deps.seed(), status: 'generating' }))
   const update = (id: string, patch: Partial<KeyedCandidate>) => {

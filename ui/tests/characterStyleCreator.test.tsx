@@ -173,12 +173,12 @@ function creatorServer(t: TestContext, rig: (kit: Record<string, unknown>) => Re
 }
 
 /** Name and describe a character, create three options, pick the second and save it: the rig's review appears. */
-async function createAndRig(creatorStyle: typeof style) {
+async function createAndRig(creatorStyle: typeof style, description = 'Nervous founder, red hair') {
   const { render, fireEvent, waitFor, screen } = await import('@testing-library/react')
   const { CharacterStyleCreator } = await import('../src/features/characters/CharacterStyleCreator')
   const view = render(<CharacterStyleCreator workspace="cast" style={creatorStyle} model="qwen_image_21" />)
   fireEvent.change(view.getByLabelText('Character name'), { target: { value: 'Kevin' } })
-  fireEvent.change(view.getByLabelText('Character description'), { target: { value: 'Nervous founder, red hair' } })
+  fireEvent.change(view.getByLabelText('Character description'), { target: { value: description } })
   fireEvent.click(view.getByRole('button', { name: 'Create 3 options' }))
   const second = await waitFor(() => {
     const option = view.getByRole('button', { name: 'Option 2' }) as HTMLButtonElement
@@ -208,6 +208,21 @@ test('description to a saved, rigged kit in the Character Creator', async t => {
   assert.deepEqual(rig, { workspace: 'cast', baseRevision: 5, style: style.rig })
   assert.equal(requests.filter(item => item.url.endsWith('/api/v1/studio/key')).length, 3)
   assert.ok(view.getByTestId('character-new-pose'))
+})
+
+test('a new pose of a character in green goes on the magenta screen its character was made on', async t => {
+  const { cleanup, fireEvent, waitFor } = await import('@testing-library/react')
+  t.after(cleanup)
+  const requests = creatorServer(t)
+  const view = await createAndRig(style, 'Nurse in dark green scrubs')
+  fireEvent.change(view.getByLabelText('New pose'), { target: { value: 'waving hello' } })
+  fireEvent.click(view.getByRole('button', { name: 'Create 3 pose options' }))
+  const keys = () => requests.filter(item => item.url.endsWith('/api/v1/studio/key'))
+  await waitFor(() => assert.equal(keys().length, 6), { timeout: 8000 })
+  const poses = requests.filter(item => item.url.endsWith('/api/v1/generate')).slice(3)
+  assert.equal(poses.length, 3)
+  assert.ok(poses.every(item => /waving hello.*magenta/s.test(JSON.stringify(item.body))), 'the pose text alone would pick green')
+  assert.ok(keys().slice(3).every(item => item.body?.mode === 'magenta'))
 })
 
 test('the graphic novel style is generated for the warp rig and rigged with warp mouths', () => {
