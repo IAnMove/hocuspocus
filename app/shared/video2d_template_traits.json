@@ -1,0 +1,1061 @@
+{
+  "version": 1,
+  "templates": {
+    "cinema-establishing": {
+      "moves": [
+        "pull",
+        "slide"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "establishing"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-reveal": {
+      "moves": [
+        "pull",
+        "slide"
+      ],
+      "moving": [
+        "camera",
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "in",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "entrance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-closeup": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-two-shot": {
+      "moves": [
+        "drift"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-detail": {
+      "moves": [
+        "pull",
+        "slide"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-hero": {
+      "moves": [
+        "pull",
+        "rise"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-isolation": {
+      "moves": [
+        "pull",
+        "rise"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "establishing"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "cinema-tracking": {
+      "moves": [
+        "slide"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-pulse": {
+      "moves": [
+        "push",
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-duet": {
+      "moves": [
+        "roll",
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "props"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-chorus": {
+      "moves": [
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0.2,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-orbit": {
+      "moves": [
+        "push",
+        "orbit",
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "props",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-parallax": {
+      "moves": [
+        "slide"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-stage": {
+      "moves": [
+        "slide",
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-product": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "performance",
+        "product"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-finale": {
+      "moves": [
+        "pull",
+        "roll",
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-cruise": {
+      "moves": [
+        "slide"
+      ],
+      "moving": [
+        "camera",
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-orbit": {
+      "moves": [
+        "pull",
+        "slide",
+        "orbit"
+      ],
+      "moving": [
+        "camera",
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "orbit",
+      "format": "landscape",
+      "uses": [
+        "establishing",
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-docking": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "out",
+      "format": "landscape",
+      "uses": [
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-chase": {
+      "moves": [
+        "slide",
+        "roll",
+        "shake"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "props",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-broadside": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-shield": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-explosion": {
+      "moves": [
+        "push",
+        "shake"
+      ],
+      "moving": [
+        "camera",
+        "props",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "space-warp": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "out",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "exit",
+        "space"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "documentary-history": {
+      "moves": [],
+      "moving": [
+        "particles",
+        "text"
+      ],
+      "still": true,
+      "holdShare": 1,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "documentary"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "trailer-teaser": {
+      "moves": [],
+      "moving": [
+        "particles",
+        "text"
+      ],
+      "still": true,
+      "holdShare": 1,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [],
+      "background": "still",
+      "duration": 6
+    },
+    "lyric-vertical": {
+      "moves": [],
+      "moving": [
+        "particles",
+        "text"
+      ],
+      "still": true,
+      "holdShare": 1,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "portrait",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "city-postcard": {
+      "moves": [],
+      "moving": [
+        "particles",
+        "text"
+      ],
+      "still": true,
+      "holdShare": 1,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-spiral-exit": {
+      "moves": [
+        "spin"
+      ],
+      "moving": [
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "out",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "transition",
+        "exit"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-speed-flight": {
+      "moves": [],
+      "moving": [
+        "subject",
+        "background",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "transition",
+        "entrance",
+        "exit"
+      ],
+      "background": "strip",
+      "duration": 4
+    },
+    "music-infinite-fall": {
+      "moves": [],
+      "moving": [
+        "subject",
+        "background"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "fall",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "transition",
+        "entrance",
+        "exit"
+      ],
+      "background": "strip",
+      "duration": 6
+    },
+    "music-pinball": {
+      "moves": [
+        "bounce"
+      ],
+      "moving": [
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-boomerang": {
+      "moves": [
+        "orbit",
+        "spin"
+      ],
+      "moving": [
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "orbit",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-cannon-launch": {
+      "moves": [],
+      "moving": [
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0.03,
+      "subjects": 1,
+      "props": 0,
+      "travel": "out",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "transition",
+        "exit"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-orbit-duel": {
+      "moves": [
+        "orbit"
+      ],
+      "moving": [
+        "subjects"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 2,
+      "props": 0,
+      "travel": "orbit",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-high-five": {
+      "moves": [],
+      "moving": [
+        "subjects",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 2,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-magnet-pull": {
+      "moves": [],
+      "moving": [
+        "subjects"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 2,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-ricochet-pass": {
+      "moves": [
+        "bounce"
+      ],
+      "moving": [
+        "props"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "performance"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-portal-swap": {
+      "moves": [],
+      "moving": [
+        "subjects",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0.1,
+      "subjects": 2,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-trampoline": {
+      "moves": [
+        "bounce"
+      ],
+      "moving": [
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-pendulum": {
+      "moves": [],
+      "moving": [
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-rubber-band": {
+      "moves": [],
+      "moving": [
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-card-toss": {
+      "moves": [
+        "spin"
+      ],
+      "moving": [
+        "subject"
+      ],
+      "still": false,
+      "holdShare": 0.11,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "transition",
+        "entrance",
+        "exit"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-staircase-pop": {
+      "moves": [],
+      "moving": [
+        "subject"
+      ],
+      "still": true,
+      "holdShare": 0.77,
+      "subjects": 1,
+      "props": 0,
+      "travel": "in",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-accordion-clones": {
+      "moves": [],
+      "moving": [
+        "subjects"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-domino-wave": {
+      "moves": [],
+      "moving": [
+        "subjects"
+      ],
+      "still": false,
+      "holdShare": 0.22,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-conveyor": {
+      "moves": [],
+      "moving": [
+        "subjects",
+        "background"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "strip",
+      "duration": 4
+    },
+    "music-spotlight-relay": {
+      "moves": [],
+      "moving": [
+        "subjects",
+        "particles"
+      ],
+      "still": true,
+      "holdShare": 0.7,
+      "subjects": 2,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dialogue"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-corkscrew-rise": {
+      "moves": [],
+      "moving": [
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "rise",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "transition",
+        "entrance",
+        "exit"
+      ],
+      "background": "still",
+      "duration": 4
+    },
+    "music-shockwave": {
+      "moves": [
+        "bounce"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "dance",
+        "performance"
+      ],
+      "background": "drift",
+      "duration": 4
+    },
+    "music-satellite-swarm": {
+      "moves": [
+        "orbit"
+      ],
+      "moving": [
+        "subject",
+        "props"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "music",
+        "performance"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "music-crowd-surf": {
+      "moves": [
+        "bounce"
+      ],
+      "moving": [
+        "subject",
+        "props"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 1,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "music"
+      ],
+      "background": "still",
+      "duration": 6
+    }
+  }
+}
