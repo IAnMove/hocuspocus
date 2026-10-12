@@ -49,6 +49,7 @@ import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
+import { executeVideo2DTemplates } from './video2dTemplateCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
@@ -190,6 +191,7 @@ export interface WizardApplicationAdapters {
   characterKit: CharacterKitAdapter
   lipsCreator: { command(action: AgentLipsCreatorAction, workspace?: string): Promise<AdapterOutcome>; generate(action: AgentGenerateLipsAction, workspace?: string, context?: { onStep?: (message: string) => void; generationContext?: GenerationSubmissionContext }): Promise<AdapterOutcome> }
   world3dTemplates: { command(action: import('./world3dTemplateCapabilities').AgentWorld3DTemplatesAction, workspace?: string): Promise<AdapterOutcome> }
+  video2dTemplates: { command(action: import('./video2dTemplateCapabilities').AgentVideo2DTemplatesAction): Promise<AdapterOutcome> }
   productionWorks: { command(action: import('./productionWorkCapabilities').AgentProductionWorksAction, workspace?: string): Promise<AdapterOutcome> }
   seriesShots: {
     edit(action: import('./seriesShotEditCapabilities').AgentEditSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
@@ -747,6 +749,9 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const message = world3dTemplateMessage(body)
       return { message, metadata: body as Record<string, unknown>, sceneId: scene?.sceneId, target: { kind: 'video_3d_scene', id: scene?.sceneId || 'world3d', title: scene?.templateId || action.operation } }
     },
+  }
+  adapters.video2dTemplates = {
+    async command(action) { return executeVideo2DTemplates(action) },
   }
   adapters.productionWorks = {
     async command(action, workspace) {

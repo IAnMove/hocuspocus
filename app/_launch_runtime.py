@@ -37005,8 +37005,9 @@ from services.scene_documents import command_catalog as scene_document_catalog, 
 from services.scene2d_validate import command_catalog as scene2d_validate_catalog, command_handlers as scene2d_validate_handlers
 from services.video2d_catalogs import command_catalog as video2d_catalog, command_handlers as video2d_catalog_handlers
 from services.video2d_catalogs import query_operation as video2d_query_operation, query_handlers as video2d_query_handlers
-from routers.video2d_catalog import create_video2d_catalog_router
+from routers.video2d_catalog import create_video2d_catalog_router, create_video2d_template_commands_router
 api.include_router(create_video2d_catalog_router())
+api.include_router(create_video2d_template_commands_router(lambda: _mcp_handlers))
 from services.video2d_compile import command_catalog as video2d_compile_catalog, command_handlers as video2d_compile_handlers
 from services.video2d_preview import command_catalog as video2d_preview_catalog, command_handlers as video2d_preview_handlers
 from services.video2d_edit import command_catalog as video2d_edit_catalog, command_handlers as video2d_edit_handlers

@@ -1379,3 +1379,12 @@ registered by `registerMediaToolCapabilities` in
 `/api/v1/media/commands`, the handlers the MCP tools of the same names run. Each
 result is a workspace file with a provenance sidecar. Coverage is in
 `ui/tests/mediaToolWizard.test.ts` and `tests/test_production_media_router.py`.
+
+## Video 2D music cards
+
+`video2d.templates.suggest` (`video2d_templates`) reads the Video 2D music cards through
+`video2dTemplates.command`, registered by `registerVideo2DTemplateCapabilities` in
+`ui/src/features/agent/video2dTemplateCapabilities.ts`: `scenes.templates.suggest` (a line, its speakers, mood,
+beat and format) or `scenes.catalog`, posted to `/api/v1/scenes/templates/commands`, the handlers the MCP tools of
+the same names run. It is read-only; the Wizard puts the card in a production spec as a `scene2d` shot. Coverage is
+in `ui/tests/video2dTemplatesWizard.test.ts` and `tests/test_video2d_template_commands_router.py`.
