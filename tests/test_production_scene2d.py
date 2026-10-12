@@ -167,6 +167,23 @@ def test_a_drawn_frame_is_the_background_and_a_missing_one_stops_the_scene(tmp_p
     assert scene2d.scene_inputs(run.state, item) != before, "a redrawn background exports the scene again"
 
 
+def test_a_remade_set_or_model_changes_the_reexport_key():
+    item = shot(scene2d={"cast": {"subject_1": "lia"}, "background": "alley"})
+    state = {"cast_cutouts": {"lia": {"url": "/api/v1/file/lia-cut.png?workspace=ws"}},
+             "sets": {"alley": {"url": "/api/v1/file/alley-v1.png?workspace=ws"},
+                      "other": {"url": "/api/v1/file/other.png?workspace=ws"}},
+             "models": {"hero": {"file": "hero-v1.glb"}}}
+    before = scene2d.scene_inputs(state, item)
+    state["sets"]["other"]["url"] = "/api/v1/file/other-v2.png?workspace=ws"
+    assert scene2d.scene_inputs(state, item) == before, "a set the shot does not name stays out of the key"
+    state["sets"]["alley"]["url"] = "/api/v1/file/alley-v2.png?workspace=ws"
+    assert scene2d.scene_inputs(state, item) != before, "a remade background set exports the scene again"
+    modeled = shot(scene2d={"cast": {"subject_1": "hero"}, "background": PLATE})
+    first = scene2d.scene_inputs({"models": {"hero": {"file": "hero-v1.glb"}}}, modeled)
+    second = scene2d.scene_inputs({"models": {"hero": {"file": "hero-v2.glb"}}}, modeled)
+    assert first != second, "a remade model used as a cast source exports the scene again"
+
+
 def test_a_failed_compile_stops_the_scene_with_its_reply(tmp_path):
     run = Run(tmp_path, {scene2d.COMPILE: {"_is_error": True, "error": {"code": "template_bad_asset"}}})
     with pytest.raises(ProductionError) as caught:
@@ -398,6 +415,35 @@ def test_a_shot_edit_rebuilds_the_card_scene_and_records_what_a_resume_compares(
     replies["scenes.video2d.export"] = lambda arguments: calls.append(arguments) or {"receipt": {"commandId": "again"}}
     export_scenes(production, plan, shot_windows(plan, production.score()))
     assert calls == [], "the scene the edit exported is the one a resume would make"
+
+
+def test_a_resume_exports_again_when_the_named_set_was_remade(tmp_path):
+    from services.production_stage_scenes import export_scenes
+    (tmp_path / "score.json").write_text(json.dumps({"duration": 8, "bpm": 120, "beat": 0.5, "lines": []}))
+    item = shot(scene2d={"cast": {"subject_1": SUBJECT}, "background": "alley"})
+    plan = spec(item)
+    calls = []
+    replies = {
+        scene2d.COMPILE: card_document,
+        "scenes.video2d.edit": lambda arguments: {"result": edit(arguments)["result"]},
+        "scenes.video2d.validate": lambda arguments: {"result": {"warnings": []}},
+        "scenes.document.save": lambda arguments: {"result": {"name": "p-s1.scene.json"}},
+        "scenes.video2d.export": lambda arguments: calls.append("export") or {"receipt": {"commandId": f"export-{len(calls)}"}},
+        "scenes.video2d.export.receipt": lambda arguments: {"receipt": {"artifacts": [{"name": "p-s1.mp4"}]}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: replies[tool](arguments))
+    production.state.update(spec=plan, score="score.json", status="completed",
+                            sets={"alley": {"url": "/api/v1/file/alley-v1.png?workspace=ws"}})
+    windows = shot_windows(plan, production.score())
+    export_scenes(production, plan, windows)
+    assert calls == ["export"]
+    calls.clear()
+    export_scenes(production, plan, windows)
+    assert calls == [], "the same set does not export again"
+    production.state["sets"]["alley"]["url"] = "/api/v1/file/alley-v2.png?workspace=ws"
+    export_scenes(production, plan, windows)
+    assert calls == ["export"], "a remade set exports the scene again"
 
 
 def test_the_dry_run_reads_the_runs_own_pictures_for_the_alpha_check(tmp_path):
