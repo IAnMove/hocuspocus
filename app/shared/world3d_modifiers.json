@@ -45,5 +45,14 @@
     "135mm": { "fov": 18, "source": "cine-135mm-telephoto" },
     "200mm": { "fov": 12, "source": "cine-200mm-long" }
   },
-  "cameraFamilies": ["camera-movement", "framing", "camera-angles", "composition", "editing", "time-and-motion", "effects"]
+  "cameraFamilies": ["camera-movement", "framing", "camera-angles", "composition", "editing", "time-and-motion", "effects"],
+  "grounds": {
+    "grass": "Short green grass with blades and scattered tufts.",
+    "meadow": "Long meadow grass with white, yellow and pink flowers.",
+    "sand": "Warm sand with soft ripples and a few pebbles.",
+    "asphalt": "Dark asphalt with grit and hairline cracks.",
+    "dirt": "Packed brown earth with pebbles and a few weeds.",
+    "snow": "Snow with blue shadows and soft lumps.",
+    "cobble": "Grey cobblestones with dark mortar between them."
+  }
 }

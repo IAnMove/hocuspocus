@@ -24,6 +24,8 @@ def modifier_tables() -> dict:
 LIGHT_NAMES = tuple(modifier_tables()["lights"])
 LENS_NAMES = tuple(modifier_tables()["lenses"])
 CAMERA_FAMILIES = tuple(modifier_tables()["cameraFamilies"])
+# Floors the scene draws itself (ui/src/features/scene3d/groundStyles.ts): a named style instead of a ground picture.
+GROUND_STYLES = tuple(modifier_tables()["grounds"])
 
 
 def named_light(name) -> dict:

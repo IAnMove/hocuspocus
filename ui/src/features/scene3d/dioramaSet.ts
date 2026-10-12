@@ -7,7 +7,9 @@ import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
 export interface DioramaHouse { source: string; width: number; height: number }
 export interface DioramaGround { source: string; height: number; size: number; tile?: number }   // tile: metres the picture covers before it repeats (3 when absent)
-export interface DioramaSet { houses: DioramaHouse[]; ground?: DioramaGround; layout?: 'plaza' | 'open' }
+/** A ground the scene draws itself (groundStyles.ts) instead of a slab model. */
+export interface StyledGround { style: import('./groundStyles').GroundStyle }
+export interface DioramaSet { houses: DioramaHouse[]; ground?: DioramaGround | StyledGround; layout?: 'plaza' | 'open' }
 
 const MIN_RADIUS = 7          // the plaza is at least this wide around what the camera looks at
 const CLEARANCE = 2.5         // metres between the furthest camera or cast position and the facades
@@ -138,7 +140,8 @@ function plazaRadius(document: Scene3DDocument, path: Pose[], centre: [number, n
 
 /** The set's ground and a plaza of houses around what the camera looks at, outside where it and the cast go.
  * The whole ring is built, so a later edit can move the camera anywhere in the plaza. */
-export function stageDioramaSet(document: Scene3DDocument, set: DioramaSet): Scene3DSlot[] {
+/** ``styledGround``: the shot draws a ground style, so the set's own ground slab is left out. */
+export function stageDioramaSet(document: Scene3DDocument, set: DioramaSet, options: { styledGround?: boolean } = {}): Scene3DSlot[] {
   const path = cameraPath(document)
   const mid = path[Math.floor(path.length / 2)]
   const centre: [number, number] = [mid.look[0], mid.look[2]]
@@ -149,5 +152,5 @@ export function stageDioramaSet(document: Scene3DDocument, set: DioramaSet): Sce
   const spots = ringSpots(set.houses, radius, back, set.layout === 'open' && !fromAbove, fromAbove)
   const houses = spots.map((spot, index) => houseSlot(spot, index, centre))
   const far = Math.max(radius, ...spots.map(spot => spot.distance)) + HOUSE_DEPTH + GROUND_MARGIN
-  return set.ground ? [groundSlot(set.ground, centre, far), ...houses] : houses
+  return set.ground && 'source' in set.ground && !options.styledGround ? [groundSlot(set.ground, centre, far), ...houses] : houses
 }
