@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from services import production_scene2d as scene2d
-from services.music_production import SPEC_SCHEMA, Production, ProductionError, validate_spec
+from services.music_production import SPEC_SCHEMA, Production, ProductionError, shot_windows, validate_spec
 from services.production_dry_run import dry_run
 from services.production_quality_gate import blocking_problems, plan_warnings
 from services.video2d_edit import edit
@@ -366,3 +366,32 @@ def test_the_run_cuts_the_played_cast_out_after_the_clips_and_before_the_scenes(
     stages.clear()
     production.run(validate_spec(spec(shot())))
     assert "cutouts" not in stages, "no cast id played, nothing to cut out"
+
+
+def test_a_shot_edit_rebuilds_the_card_scene_and_records_what_a_resume_compares(tmp_path):
+    from services.production_shot_edit import reexport_shot
+    from services.production_stage_scenes import export_scenes
+    (tmp_path / "score.json").write_text(json.dumps({"duration": 8, "bpm": 120, "beat": 0.5, "lines": []}))
+    drawn = {**shot(), "scene2d": {"template": "music-pinball", "cast": {"subject_1": SUBJECT}}, "frame": "a plaza"}
+    plan = spec(drawn)
+    replies = {
+        scene2d.COMPILE: card_document,
+        "scenes.video2d.edit": lambda arguments: {"result": edit(arguments)["result"]},
+        "scenes.video2d.validate": lambda arguments: {"result": {"warnings": []}},
+        "scenes.document.save": lambda arguments: {"result": {"name": "p-s1.scene.json"}},
+        "scenes.video2d.export": lambda arguments: {"receipt": {"commandId": "export-s1"}},
+        "scenes.video2d.export.receipt": lambda arguments: {"receipt": {"artifacts": [{"name": "p-s1.mp4"}]}},
+        "montages.get": lambda arguments: {"result": {"revision": 1, "montage": {"revision": 1, "clips": [{"id": "s1", "source": "old.mp4"}]}}},
+        "montages.save": lambda arguments: {"result": {"file": "p.montage.json", "revision": 2}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: replies[tool](arguments))
+    production.state.update(spec=plan, score="score.json", status="completed", frames={"s1": "p-frame-s1.png"}, montage_file="p.montage.json")
+    reexport_shot(production, plan, "s1")
+    record = production.state["scenes"]["s1"]
+    assert record["clip"] == scene2d.scene_inputs(production.state, drawn) and record["file"] == "p-s1.mp4"
+    assert production.state["scene2d"]["s1"]["document"]["layers"][0]["source"] == "/api/v1/file/p-frame-s1.png?workspace=ws"
+    calls = []
+    replies["scenes.video2d.export"] = lambda arguments: calls.append(arguments) or {"receipt": {"commandId": "again"}}
+    export_scenes(production, plan, shot_windows(plan, production.score()))
+    assert calls == [], "the scene the edit exported is the one a resume would make"

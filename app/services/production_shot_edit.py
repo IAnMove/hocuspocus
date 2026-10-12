@@ -15,6 +15,7 @@ from services.production_control import sleep_until
 from services.production_package import (
     clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, workspace_url, write_manifest,
 )
+from services.production_scene2d import scene_inputs
 from services.production_scene_retry import finish_scene_exports
 
 
@@ -214,7 +215,8 @@ def _publish(production: Any, spec: dict, key: str, expected_revision: int | Non
     fingerprint = scene_fingerprint(shot, style, stills, score, start, end)
     lyric = lyric_for(score.get("lines") or [], start, end)
     scene = save_scene_revision(production, key, document, lyric, _note(shot))
-    video = export_scene(production, key, document, dur, clip_file, fingerprint)
+    # The same record export_scenes writes, so a resume does not export this scene again.
+    video = export_scene(production, key, document, dur, clip_file or scene_inputs(production.state, shot), fingerprint)
     replace_montage_clip(production, key, video, expected_revision)
     rewrite_manifest(production, spec)
     production.save()
