@@ -383,6 +383,8 @@ export interface SeriesShotLayout2D {
   camera?: import('./shotLook').SeriesCamera
   /** The shot's own finish; without it the shot takes its series' `look.finish` (series_finish.py). */
   finish?: import('./shotLook').SeriesFinishChoice
+  /** A point of the location's plate (x, y in % of it) framed at `zoom`: the same picture closer. */
+  detail?: { x: number; y: number; zoom: number }
   cast?: SeriesShotCastEntry[]
   timing?: { intro?: number; gap?: number; tail?: number }
   [key: string]: unknown

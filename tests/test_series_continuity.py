@@ -1,7 +1,7 @@
 """A 2D Series shot takes its crop and its camera from its neighbours: a lone character's close-up shows its side of
 the room, and a shot that shows the previous shot's picture goes on from its camera instead of cutting back."""
 from services.series_continuity import CAMERA_LIMIT, camera_start, focus, inputs, ordered, same_picture_warnings
-from services.series_shot_plan import build_shot_spec
+from services.series_shot_plan import background_point, build_shot_spec, normalize_layout2d
 from services.series_take_inputs import render_inputs
 
 
@@ -37,7 +37,7 @@ def test_the_same_still_plate_twice_goes_on_pushing_and_warns():
     assert third["cameraStart"] == {"scale": 1.14, "y": 47.0} and third["camera"] == "static", "a static shot holds there"
     warnings = same_picture_warnings(series(), ep["shots"])
     assert [(item["code"], item["shots"]) for item in warnings] == [("same_picture", ["s1", "s2"]), ("same_picture", ["s2", "s3"])]
-    assert "make it one shot, or give the second its own location" in warnings[0]["message"]
+    assert "make it one shot, or frame a detail of the same plate (detail)" in warnings[0]["message"]
 
 
 def test_another_plate_or_framing_starts_the_camera_at_rest():
@@ -95,7 +95,29 @@ def test_from_script_check_warns_about_the_same_picture_twice():
     script = {"title": "Latencia", "scenes": [{"id": "prologo", "location": "calle"}],
               "shots": [{"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5},
                         {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5},
-                        {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5, "location": "altavoz"}]}
+                        {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5, "location": "altavoz"},
+                        {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5, "location": "altavoz",
+                         "detail": {"x": 56, "y": 18, "zoom": 1.8}}]}
     checked = apply_script(lambda tool, data: {"result": {}}, lambda: project, {}, set(), "lc", script, check_only=True)
     found = [item for item in checked["warnings"] if item["code"] == "same_picture"]
-    assert [item["shots"] for item in found] == [["e1s00", "e1s01"]], "the loudspeaker has its own location"
+    assert [item["shots"] for item in found] == [["e1s00", "e1s01"]], "the loudspeaker has its own location, then a detail of it"
+
+
+def test_a_detail_frames_the_same_plate_closer():
+    assert normalize_layout2d({"detail": {"x": 56, "y": 18, "zoom": 1.8}}) == {"detail": {"x": 56.0, "y": 18.0, "zoom": 1.8}}
+    assert normalize_layout2d({"detail": {"x": 56, "y": 18}}) is None and normalize_layout2d({"detail": {"x": 56, "y": 18, "zoom": 9}}) is None
+    value = series()
+    value["locations"][0]["layout2d"] = {"anchors": {"kiosk": {"u": 0.6, "v": 0.3}}}
+    detail = {"x": 56.0, "y": 18.0, "zoom": 1.8}
+    wide = shot("s1", 1, "calle", "insert")
+    close = shot("s2", 2, "calle", "insert", props=None)
+    close["layout2d"].update(detail=detail, props=[{"file": "prop-sign.png", "anchor": "kiosk", "scale": 0.2}])
+    ep = episode(wide, close)
+    planned = spec(value, ep, "s2")
+    assert planned["background"]["detail"] == detail and "cameraStart" not in planned, "a detail is another picture: its own push"
+    prop = planned["props"][0]
+    assert prop["scale"] == round(0.2 * 1.8, 4)
+    assert (prop["x"], prop["y"] + prop["scale"] * 50) == background_point("insert", 50.0, 0.6, 0.3, detail), "it stays on its anchor"
+    assert background_point("insert", 50.0, 0.56, 0.18, detail) == (50.0, 32.4), \
+        "the point is centred across; near the top it stays high, the plate's edge in the frame's"
+    assert same_picture_warnings(value, ep["shots"]) == []

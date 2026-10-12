@@ -118,6 +118,15 @@ def _prop_entry(value: Any) -> dict[str, Any] | None:
             **({"ground": True} if value.get("ground") is True or value.get("grounded") is True else {})}
 
 
+def _layout_detail(value: Any) -> dict[str, Any]:
+    """``detail``: frame a point of the location's plate (``x``, ``y`` in % of the plate) at ``zoom`` (1.1 to 4), the
+    same picture closer instead of another one."""
+    if not isinstance(value, dict):
+        return {}
+    found = _numbers(value, (("x", 0, 100), ("y", 0, 100), ("zoom", 1.1, 4)))
+    return {"detail": found} if len(found) == 3 else {}
+
+
 def _layout_card(card: Any) -> dict[str, Any]:
     if not isinstance(card, dict):
         return {}
@@ -170,7 +179,7 @@ def normalize_layout2d(value: Any) -> dict[str, Any] | None:
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
               **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
               **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {}),
-              **series_hearing.layout_field(value), **series_stop_motion.stored_fields(value)}
+              **series_hearing.layout_field(value), **series_stop_motion.stored_fields(value), **_layout_detail(value.get("detail"))}
     return layout or None
 
 
@@ -353,12 +362,25 @@ def _text(tid: str, value: str, start: float, end: float, y: float, size: float,
 BACKGROUND_ZOOM = {"wide": 1.0, "two": 1.12, "medium": 1.28, "close": 1.5, "insert": 1.0, "title": 1.0}
 
 
-def background_point(framing: str, focus: float, u: float, v: float) -> tuple[float, float]:
-    """Frame position (%) of a point (u, v) of a full-frame background, zoomed and panned like the compiler does."""
-    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+def shot_detail(shot: dict[str, Any]) -> dict[str, float] | None:
+    """The shot's ``layout2d.detail`` (a point of the plate framed closer), if it has one."""
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    return layout.get("detail") if isinstance(layout.get("detail"), dict) else None
+
+
+def background_view(framing: str, focus: float, detail: dict[str, float] | None = None) -> tuple[float, float, float]:
+    """(zoom, x, y) of the full-frame background: the framing's zoom panned toward ``focus``, or a ``detail`` of the
+    plate at its own zoom, centred on its point as far as the plate's edges allow (as ``seriesShot.ts`` does)."""
+    zoom = detail["zoom"] if detail else BACKGROUND_ZOOM.get(framing, 1.0)
     span = 50 * (zoom - 1)
-    x = max(50 - span, min(50 + span, 50 - (focus / 100 - 0.5) * 100 * zoom))
-    return round(x + (u - 0.5) * 100 * zoom, 3), round(50 + (v - 0.5) * 100 * zoom, 3)
+    pan = lambda point: max(50 - span, min(50 + span, 50 - (point / 100 - 0.5) * 100 * zoom))
+    return zoom, pan(detail["x"] if detail else focus), pan(detail["y"]) if detail else 50.0
+
+
+def background_point(framing: str, focus: float, u: float, v: float, detail: dict[str, float] | None = None) -> tuple[float, float]:
+    """Frame position (%) of a point (u, v) of a full-frame background, zoomed and panned like the compiler does."""
+    zoom, x, y = background_view(framing, focus, detail)
+    return round(x + (u - 0.5) * 100 * zoom, 3), round(y + (v - 0.5) * 100 * zoom, 3)
 
 
 def _prop_source(series: dict[str, Any], prop: dict[str, Any], workspace: str) -> str | None:
@@ -368,26 +390,29 @@ def _prop_source(series: dict[str, Any], prop: dict[str, Any], workspace: str) -
     return f"/api/v1/file/{quote(prop['file'])}?workspace={quote(workspace)}"
 
 
-def _prop_anchor(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float) -> tuple[float, float] | None:
+def _prop_anchor(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float,
+                 detail: dict[str, float] | None = None) -> tuple[float, float] | None:
     anchor = anchors.get(prop.get("anchor", "")) if prop.get("anchor") else None
     if isinstance(anchor, dict) and all(isinstance(anchor.get(key), (int, float)) for key in ("u", "v")):
-        return background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
+        return background_point(framing, focus, float(anchor["u"]), float(anchor["v"]), detail)
     return None
 
 
-def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float) -> tuple[float, float]:
-    point = _prop_anchor(prop, anchors, framing, focus)
+def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float,
+                   detail: dict[str, float] | None = None) -> tuple[float, float]:
+    point = _prop_anchor(prop, anchors, framing, focus, detail)
     if point:
         return point[0], point[1] - scale * 50  # the prop stands on its anchor
     return prop.get("x", 50.0), prop.get("y", 60.0)
 
 
-def _prop_ground(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float) -> dict[str, Any]:
+def _prop_ground(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float,
+                 detail: dict[str, float] | None = None) -> dict[str, Any]:
     """``ground``: the compiler stands the prop's lowest opaque row on its anchor, else on the framing's floor line
     (``seriesShot.ts`` ``floorLine``), once ``series_shot_bridge.measure_props`` has read the image."""
     if not prop.get("ground"):
         return {}
-    point = _prop_anchor(prop, anchors, framing, focus)
+    point = _prop_anchor(prop, anchors, framing, focus, detail)
     return {"ground": {"floor": point[1]} if point else {}}
 
 
@@ -395,17 +420,18 @@ def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), {})
     anchors = ((location.get("layout2d") or {}).get("anchors") if isinstance(location.get("layout2d"), dict) else None) or {}
-    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    detail = shot_detail(shot)
+    zoom = background_view(framing, focus, detail)[0]
     props = []
     for index, prop in enumerate(layout.get("props") or []):
         source = _prop_source(series, prop, workspace)
         if not source:
             continue
         scale = round(prop.get("scale", 0.3) * zoom, 4)
-        x, y = _prop_position(prop, anchors, framing, focus, scale)
+        x, y = _prop_position(prop, anchors, framing, focus, scale, detail)
         props.append({"id": f"prop-{index + 1}", "name": prop.get("anchor") or f"Prop {index + 1}", "source": source,
                       "x": round(x, 3), "y": round(y, 3), "scale": scale, "z": prop.get("z", 8),
-                      **_prop_ground(prop, anchors, framing, focus)})
+                      **_prop_ground(prop, anchors, framing, focus, detail)})
     return props
 
 
@@ -413,14 +439,15 @@ def plan_layers(series: dict[str, Any], shot: dict[str, Any], framing: str, focu
     """The set's layers placed on the framed background, with the cast's depth, or nothing (the spec stays as it was)."""
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
     layers, cast_depth = shot_layers(location, shot)
-    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    detail = shot_detail(shot)
+    zoom = background_view(framing, focus, detail)[0]
     planned = []
     for index, layer in enumerate(layers):
         found = _asset_url(series, layer["assetId"], workspace) if layer.get("assetId") else (
             f"/api/v1/file/{quote(layer['file'])}?workspace={quote(workspace)}", layer_kind(layer["file"]))
         if not found:
             continue
-        x, y = background_point(framing, focus, layer["x"] / 100, layer["y"] / 100)
+        x, y = background_point(framing, focus, layer["x"] / 100, layer["y"] / 100, detail)
         planned.append({"id": f"layer-{index + 1}", "name": f"{'Front' if layer['front'] else 'Back'} layer {index + 1}",
                         "source": found[0], "kind": found[1], "x": x, "y": y, "scale": round(layer["scale"] * zoom, 4),
                         "opacity": layer["opacity"], "depth": layer["depth"], "front": layer["front"],
@@ -542,8 +569,9 @@ def _narrative(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, 
 
 def _with_set(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any], focus: float, workspace: str) -> dict[str, Any]:
     background = background_for(series, shot, workspace)
+    detail = shot_detail(shot)
     if background:
-        spec["background"] = {**background, "focusX": focus}
+        spec["background"] = {**background, "focusX": focus, **({"detail": detail} if detail else {})}
     props = plan_props(series, shot, spec["framing"], focus, workspace)
     if props:
         spec["props"] = props

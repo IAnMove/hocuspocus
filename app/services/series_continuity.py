@@ -8,8 +8,8 @@ Shot and reverse shot then show two sides of the room, not the same patch of wal
 Two shots in a row that show the same picture (the same plate, framing and crop, ``picture``) would cut back to
 where the first one's push started. The second one's camera starts where the first one's ended instead, and a push
 goes on from there (``camera_start``) up to ``CAMERA_LIMIT``, past which the camera holds. ``from_script`` warns about
-each such pair (``same_picture_warnings``): the same still plate twice in a row is one shot, or the second one needs
-its own framing or location.
+each such pair (``same_picture_warnings``): the same still plate twice in a row is one shot, or the second one frames
+a ``detail`` of that plate (a new picture of the same place would not look like it).
 
 Both depend on other shots, so ``series_take_inputs`` fingerprints them (``inputs``) and a take renders again when a
 neighbour moves its picture. A shot whose crop and camera are the plain ones adds nothing and keeps its digest.
@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.series_shot_plan import (_cast_entries, _cast_x, _homes, _shot_camera, _shot_framing, background_for,
-                                       frame_size, spread)
+                                       frame_size, shot_detail, spread)
 
 # The push of ``cameraLayer`` in ui/scripts/seriesShot.ts: it grows the camera this much and lifts it this many %.
 PUSH_SCALE, PUSH_RISE = 0.07, 1.5
@@ -88,13 +88,14 @@ def _plain_focus(series: dict[str, Any], shot: dict[str, Any], framing: str) -> 
 
 
 def picture(series: dict[str, Any], shots: list[dict[str, Any]], shot: dict[str, Any]) -> tuple | None:
-    """What a 2D shot shows behind its cast: its plate, framing and crop. None for a title, a 3D or video shot, or a
-    shot without a plate."""
+    """What a 2D shot shows behind its cast: its plate, framing and crop (or the detail of the plate it frames). None
+    for a title, a 3D or video shot, or a shot without a plate."""
     framing = framing_of(shot)
     plate = background_for(series, shot, "") if _drawn(shot) and framing != "title" else None
     if not plate:
         return None
-    return plate["source"], framing, round(focus(series, shots, shot, framing), 1)
+    detail = shot_detail(shot)
+    return plate["source"], framing, round(focus(series, shots, shot, framing), 1), tuple(sorted(detail.items())) if detail else None
 
 
 def _same(series: dict[str, Any], shots: list[dict[str, Any]], index: int) -> bool:
@@ -145,10 +146,11 @@ def same_picture_warnings(series: dict[str, Any], shots: list[dict[str, Any]]) -
         if not _same(series, shots, index):
             continue
         before, here = shots[index - 1]["id"], shots[index]["id"]
-        _source, framing, _crop = picture(series, shots, shots[index])
+        framing = picture(series, shots, shots[index])[1]
         empty = not _cast_entries(shots[index]) and not _cast_entries(shots[index - 1])
-        advice = ("the same still plate twice: make it one shot, or give the second its own location"
-                  if empty else "give the second another framing, or its own location if it is another place")
+        # Another picture of the same place would not look like it: the same plate closer (``detail``) keeps it.
+        advice = ("the same still plate twice: make it one shot, or frame a detail of the same plate (detail)"
+                  if empty else "give the second another framing or a detail of the plate (detail)")
         warnings.append({"code": "same_picture", "subject": here, "shots": [before, here],
                          "message": f"{before} → {here}: the same picture ({shots[index].get('locationId')}, {framing}) "
                                     f"twice in a row; the camera of {here} goes on from {before}'s; {advice}"})

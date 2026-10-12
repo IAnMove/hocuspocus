@@ -58,9 +58,11 @@ export type SetLayerSpec = {
 /** A screen effect as planned (``series_shot_extras.fx_cues``). A beam's ``from`` is a point in % of the frame, or with
  * ``cast`` (an index in the shot's cast or a character id) in % of that cast member's pose image. */
 export type ShotFxSpec = Omit<SceneFx, 'from'> & { from?: { cast?: number | string; point: [number, number] } }
+/** A point of the plate (x, y in % of it) framed at ``zoom``: the same picture closer (series_shot_plan.background_view). */
+export type PlateDetail = { x: number; y: number; zoom: number }
 export type ShotSpec = {
   name: string; workspace: string; width: number; height: number; fps: 24 | 30 | 60; duration: number
-  framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number }
+  framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number; detail?: PlateDetail }
   cast: CastSpec[]; lines: LineSpec[]; props?: PropSpec[]
   /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
   layers?: SetLayerSpec[]; castDepth?: number
@@ -249,14 +251,14 @@ export function perchTransforms(size: { width: number; height: number }, framing
     prop: { x, y: round(propY), scale: round(propScale) } }
 }
 
-/** The full-frame background, zoomed and panned by the framing. In a layered set it is the far plane (depth 0) and
- * takes only its parallax share of the camera zoom. */
+/** The full-frame background, zoomed and panned by the framing, or framed on a ``detail`` of the plate. In a layered
+ * set it is the far plane (depth 0) and takes only its parallax share of the camera zoom. */
 export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number, layered = false): SceneLayer {
-  const zoom = BACKGROUND_ZOOM[framing]
-  const focus = background.focusX ?? 50
+  const detail = background.detail
+  const zoom = detail?.zoom ?? BACKGROUND_ZOOM[framing]
   const span = 50 * (zoom - 1)
-  const x = Math.max(50 - span, Math.min(50 + span, 50 - (focus / 100 - 0.5) * 100 * zoom))
-  const transform = { x: round(x), y: 50, scale: zoom, opacity: 1, rotation: 0 }
+  const pan = (point: number) => Math.max(50 - span, Math.min(50 + span, 50 - (point / 100 - 0.5) * 100 * zoom))
+  const transform = { x: round(pan(detail?.x ?? background.focusX ?? 50)), y: detail ? round(pan(detail.y)) : 50, scale: zoom, opacity: 1, rotation: 0 }
   return {
     id: 'background', name: 'Background', type: background.kind, source: background.source, visible: true, locked: false, z: 0,
     fill: true, parallax: FAR_PARALLAX, transform,

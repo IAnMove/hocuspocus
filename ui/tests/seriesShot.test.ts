@@ -189,6 +189,14 @@ test('a shot that shows the previous picture goes on from its camera, pushing on
   assert.equal(camera(shot({ camera: 'static' })), undefined, 'a static shot at rest has no camera, as before')
 })
 
+test('a detail frames a point of the same plate closer, as far as its edges allow', () => {
+  const background = (spec: ShotSpec) => compileSeriesShot(kits, spec).layers.find(layer => layer.id === 'background')!
+  const framed = background(shot({ framing: 'insert', cast: [], lines: [], background: { source: '/api/v1/file/street.png?workspace=cast', kind: 'image', focusX: 50, detail: { x: 56, y: 18, zoom: 1.8 } } }))
+  assert.deepEqual([framed.transform.x, framed.transform.y, framed.transform.scale], [39.2, 90, 1.8])
+  const plain = background(shot({ framing: 'insert', cast: [], lines: [] }))
+  assert.deepEqual([plain.transform.y, plain.transform.scale], [50, 1], 'without a detail the plate stays as it was')
+})
+
 test('scene operations mount a character, add a line and animate the talk', () => {
   const empty = runSeriesShot({ mode: 'shot', kits, shot: shot({ cast: [], lines: [], camera: 'static' }) })
   assert.ok(empty.ok)

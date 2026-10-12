@@ -370,7 +370,8 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom", "finish"):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom", "finish",
+                    "detail"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
         layout.update(series_hearing.layout_hearing(shot))
