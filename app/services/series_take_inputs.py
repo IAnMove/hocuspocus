@@ -14,6 +14,9 @@ depends only on a ``deaf`` one, which drops its lines and sounds, and on the roo
 ``ringing`` shot or default renders nothing again. A 2D shot's finish (``series_finish``) counts only when it is not
 the paper default, so a series and a shot that never chose one keep their digests.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
+Given the ``episode``, a 2D shot also depends on what it takes from its neighbours (``series_continuity.inputs``: a
+lone character's place in the room, a camera that goes on from the previous shot); a shot that takes nothing keeps
+its digest.
 """
 from __future__ import annotations
 
@@ -21,7 +24,7 @@ import hashlib
 import json
 from typing import Any
 
-from services import series_finish, series_shot3d
+from services import series_continuity, series_finish, series_shot3d
 from services.series_ambience import shot_sound_design
 from services.series_hearing import hearing_of
 from services.series_layers import digest_location
@@ -43,7 +46,7 @@ _DURATION_STEP = 0.05
 
 
 def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None,
-                  version: int = INPUTS_VERSION) -> str:
+                  version: int = INPUTS_VERSION, episode: dict[str, Any] | None = None) -> str:
     """Fingerprint of everything a shot's render depends on: its layout and lines in this language, the location, the
     sound design, its foley and the kits of the people seen or heard. It is kept on the take, so a production renders again only
     the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint.
@@ -67,6 +70,9 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
         **({"foley": shot["foley"]} if shot.get("foley") else {}),
     }
     payload.update(_extra_inputs(series, shot, root))
+    neighbours = series_continuity.inputs(series, episode, shot)
+    if neighbours:
+        payload["continuity"] = neighbours
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
@@ -131,13 +137,15 @@ def _duration_input(shot: dict[str, Any], beats: list[list[Any]], version: int) 
     return shot.get("durationSeconds") if planned is None else round(planned * FPS)
 
 
-def _legacy_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None) -> list[str]:
+def _legacy_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None,
+                   episode: dict[str, Any] | None = None) -> list[str]:
     """Digests a version-1 take can carry: the raw length, or the length that was asked before the render wrote the
     planner's length back. That asked length is the planned one snapped to 0.05 s."""
-    found = [render_inputs(series, shot, kits, root, version=1)]
+    found = [render_inputs(series, shot, kits, root, version=1, episode=episode)]
     planned = _planned_length(shot)
     if planned is not None:
-        found.append(render_inputs(series, {**shot, "durationSeconds": _snap_duration(planned)}, kits, root, version=1))
+        found.append(render_inputs(series, {**shot, "durationSeconds": _snap_duration(planned)}, kits, root, version=1,
+                                   episode=episode))
     return found
 
 
@@ -151,16 +159,16 @@ def _kept_take(shot: dict[str, Any], assets: dict[str, Any]) -> tuple[Any, Any]:
 
 
 def _fresh(kept: Any, version: Any, series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any],
-           root: str | None) -> bool:
+           root: str | None, episode: dict[str, Any] | None = None) -> bool:
     """A version-2 take matches the planned frame count. An older take still matches the raw length it was saved with,
     and also the planned length snapped to 0.05 s, so the render's write-back of that length does not make it stale."""
     if not isinstance(kept, str):
         return False
-    if kept == render_inputs(series, shot, kits, root):
+    if kept == render_inputs(series, shot, kits, root, episode=episode):
         return True
     if version == INPUTS_VERSION:
         return False
-    return kept in _legacy_inputs(series, shot, kits, root)
+    return kept in _legacy_inputs(series, shot, kits, root, episode)
 
 
 def _attempt_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> list[tuple[Any, str, Any]]:
@@ -175,19 +183,20 @@ def _attempt_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> list[tuple[
     return found
 
 
-def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> str:
+def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None,
+                    episode: dict[str, Any] | None = None) -> str:
     """Fingerprint a review compares with a take.
 
     A take from before version 2 still carries that older digest. The approved take wins: an earlier
     pass can share the new digest by accident while the approved one still has the old one. A changed shot returns
     the current digest."""
-    current = render_inputs(series, shot, kits, root)
+    current = render_inputs(series, shot, kits, root, episode=episode)
     saved = _attempt_inputs(shot, series.get("assets") or {})
     approved = shot.get("approvedAttemptId")
     for attempt_id, kept, version in saved:
-        if attempt_id == approved and _fresh(kept, version, series, shot, kits, root):
+        if attempt_id == approved and _fresh(kept, version, series, shot, kits, root, episode):
             return kept
-    legacy = [kept for _attempt_id, kept, version in saved if _fresh(kept, version, series, shot, kits, root)]
+    legacy = [kept for _attempt_id, kept, version in saved if _fresh(kept, version, series, shot, kits, root, episode)]
     unique = list(dict.fromkeys(legacy))
     return unique[0] if len(unique) == 1 else current
 
@@ -198,4 +207,4 @@ def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[s
     assets = series.get("assets") or {}
     shots = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
     return [shot["id"] for shot in shots if series_shot3d.wants_render(shot)
-            and not _fresh(*_kept_take(shot, assets), series, shot, kits, root)]
+            and not _fresh(*_kept_take(shot, assets), series, shot, kits, root, episode)]

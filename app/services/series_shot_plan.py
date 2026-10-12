@@ -535,11 +535,6 @@ def _shot_camera(layout: dict[str, Any], shot: dict[str, Any]) -> str:
     return layout["camera"] if layout.get("camera") in CAMERAS else classify_camera(shot.get("camera", ""))
 
 
-def _focus(cast: list[dict[str, Any]], framing: str) -> float:
-    """Tighter framings pan the background toward the cast."""
-    return sum(item["x"] for item in cast) / len(cast) if cast and framing in ("two", "medium", "close") else 50.0
-
-
 def _narrative(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
     return {"templateId": "series-shot", "controls": {"seriesId": series["id"], "episodeId": episode["id"], "shotId": shot["id"]},
             "visualIntent": str(shot.get("action") or shot.get("prompt") or "")[:500]}
@@ -585,7 +580,14 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     spec["lines"], spec["audioTracks"] = series_hearing.shape(series, shot, spec["lines"], spec["audioTracks"])
     if document:
         return spec
-    return _with_set(spec, series, shot, _focus(cast, framing), workspace)
+    # Tighter framings pan the plate toward the cast (a lone character toward its place in the room), and a shot that
+    # shows the previous shot's picture goes on from its camera (series_continuity).
+    from services import series_continuity as continuity
+    shots = continuity.ordered(episode)
+    start = continuity.camera_start(series, shots, shot)
+    if start:
+        spec["cameraStart"], spec["camera"] = {"scale": start[0], "y": start[1]}, "push" if start[2] else "static"
+    return _with_set(spec, series, shot, continuity.focus(series, shots, shot, framing), workspace)
 
 
 def recording_key(text: str, voice: dict[str, Any] | None) -> str:

@@ -162,6 +162,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   are `static` (push-in words `push`). Follow the series' `cameraLanguage`, else push on punchlines.
 - **finish:** `paper` (default), `none`, a Video 2D finish id (`scenes.catalog`) or `{texture, grain, vignette}`;
   else the series' `look.finish`.
+- **same picture:** the same plate, framing and crop twice in a row is one camera (`check` warns `same_picture`): a
+  `static` or `push` goes on from where the first one's camera ended. The same still plate twice is one shot, or the
+  second needs its own location; a plate is only its place. A lone `medium` or `close` pans the plate toward the
+  character's place in the room, so shot and reverse shot show two sides of it.
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
   as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,

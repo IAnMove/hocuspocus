@@ -66,6 +66,8 @@ export type ShotSpec = {
   layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
   camera?: CameraMove; narrative?: Scene['narrative']
+  /** Where a static or push camera starts when the shot goes on from the previous one (the same picture); absent, at rest. */
+  cameraStart?: { x?: number; y: number; scale: number }
   /** Picture holds every 2, 3 or 4 frames. Absent, the scene clock is unchanged. */
   motionStep?: 2 | 3 | 4
   /** Deterministic shake of one hold, in pixels, from 0 to 2. */
@@ -429,9 +431,17 @@ export const CAMERA_MOVES: Record<Exclude<CameraMove, 'static'>, readonly [Camer
   drift: [{ x: 49, y: 50, scale: 1.03 }, { x: 51, y: 50, scale: 1.03 }],
 }
 
-function cameraLayer(duration: number, move: Exclude<CameraMove, 'static'>): SceneLayer {
-  const [start, end] = CAMERA_MOVES[move]
-  const from = { ...start, opacity: 1, rotation: 0 }, to = { ...end, opacity: 1, rotation: 0 }
+/** A move's poses. A static or push shot with a ``start`` goes on from the previous shot's camera (the same picture,
+ * series_continuity): a push grows by 0.07 and lifts 1.5 % from there, a static holds there. Other moves ignore it. */
+function cameraPoses(move: CameraMove, start?: ShotSpec['cameraStart']): readonly [CameraPose, CameraPose] {
+  if (move !== 'push' && Object.hasOwn(CAMERA_MOVES, move)) return CAMERA_MOVES[move as Exclude<CameraMove, 'static'>]
+  const from = start ? { x: start.x ?? 50, y: start.y, scale: start.scale } : CAMERA_MOVES.push[0]
+  return [from, move === 'push' ? { ...from, y: round(from.y - 1.5), scale: round(from.scale + 0.07) } : from]
+}
+
+function cameraLayer(duration: number, move: CameraMove, start?: ShotSpec['cameraStart']): SceneLayer {
+  const [first, last] = cameraPoses(move, start)
+  const from = { ...first, opacity: 1, rotation: 0 }, to = { ...last, opacity: 1, rotation: 0 }
   return { id: 'camera', name: 'Camera', type: 'camera', source: '', visible: true, locked: false, z: 1000, transform: { ...from },
     animation: { start: from, end: to, duration, curve: 'ease', keyframes: [key('camera', 0, from, 'ease'), key('camera', duration, to, 'ease')] } } as SceneLayer
 }
@@ -503,7 +513,9 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     layers.push(...mounted.layers)
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
-  if (shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) layers.push(cameraLayer(shot.duration, shot.camera))
+  if ((shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) || shot.cameraStart) {
+    layers.push(cameraLayer(shot.duration, shot.camera ?? 'static', shot.cameraStart))
+  }
   const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthsForLine(shot.cast, line, mouths)))
   const sfx = shotEffects(shot.sfx, shot.cast, poseLayerIds)
   return {

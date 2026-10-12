@@ -329,7 +329,7 @@ class SeriesNativeRender:
             return [{"shot": shot, "pass": None} for shot in shots], {}
         kits = self._kits(workspace, episode)
         root = self.deps.workspace_dir(workspace)
-        planned, waiting = render_passes(series, episode, shots, lambda shot: accepted_inputs(series, shot, kits, root),
+        planned, waiting = render_passes(series, episode, shots, lambda shot: accepted_inputs(series, shot, kits, root, episode),
                                          explicit=explicit, original=original)
         if not planned:
             if waiting:
@@ -419,7 +419,7 @@ class SeriesNativeRender:
         root = self.deps.workspace_dir(workspace)
         stale = stale_shot_ids(series, episode, kits, root)
         stale.extend(shot["id"] for shot in shots if video_promotion(episode, shot) or pending_video_foley(series, episode, shot, root))
-        return actionable_shots(series, episode, shots, lambda shot: accepted_inputs(series, shot, kits, root),
+        return actionable_shots(series, episode, shots, lambda shot: accepted_inputs(series, shot, kits, root, episode),
                                 stale, original=original)
 
     def review_blockers(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> list[dict[str, Any]]:
@@ -525,7 +525,7 @@ class SeriesNativeRender:
         three_d = shot.get("productionMethod") == "animation_3d"
         for _attempt in range(EXPORT_RETRIES + 1):
             if item["stage"] == "scene":
-                item["inputs"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace))
+                item["inputs"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace), episode=episode)
                 if three_d:
                     self._scene3d(workspace, job, item, series, episode, shot, kits)
                 else:

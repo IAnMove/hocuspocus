@@ -178,6 +178,17 @@ test('blinks are repeatable for a seed and stay inside the shot', () => {
   assert.ok(blinkTimes('a', 12).every(time => time > 0.5 && time < 11.7))
 })
 
+test('a shot that shows the previous picture goes on from its camera, pushing on or holding', () => {
+  const camera = (spec: ShotSpec) => compileSeriesShot(kits, spec).layers.find(layer => layer.type === 'camera')
+  const rest = camera(shot())!
+  assert.deepEqual([rest.animation.start.scale, rest.animation.end.scale, rest.animation.end.y], [1, 1.07, 48.5])
+  const onward = camera(shot({ cameraStart: { scale: 1.07, y: 48.5 } }))!
+  assert.deepEqual([onward.transform.scale, onward.animation.start.scale, onward.animation.end.scale, onward.animation.end.y], [1.07, 1.07, 1.14, 47])
+  const held = camera(shot({ camera: 'static', cameraStart: { scale: 1.07, y: 48.5 } }))!
+  assert.deepEqual([held.animation.start.scale, held.animation.end.scale, held.animation.end.y], [1.07, 1.07, 48.5])
+  assert.equal(camera(shot({ camera: 'static' })), undefined, 'a static shot at rest has no camera, as before')
+})
+
 test('scene operations mount a character, add a line and animate the talk', () => {
   const empty = runSeriesShot({ mode: 'shot', kits, shot: shot({ cast: [], lines: [], camera: 'static' }) })
   assert.ok(empty.ok)
