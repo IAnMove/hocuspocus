@@ -230,7 +230,7 @@ def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) ->
         params.update({"audio_prompt_type": "A", "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
         if voice["model"] == "qwen3_tts_base":
             params["model_mode"] = voice.get("language") or language
-        style = voice_direction(voice)[:VOICE_STYLE_MAX_CHARS]
+        style = voice_direction(voice, VOICE_STYLE_MAX_CHARS)
         if style:
             params["custom_settings"] = {"style": style}
     elif voice.get("voiceId"):

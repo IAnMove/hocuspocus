@@ -845,3 +845,10 @@ def test_a_reference_voice_without_style_says_the_line_as_written():
     _, voice, key = _line_voice(KEVIN_ES, delivery="susurrando")
     assert "lineDelivery" not in voice and key == recording_key("Ya voy.", KEVIN_ES)
     assert "custom_settings" not in speech_params(voice, "Ya voy.", "spanish", 7)
+
+
+def test_long_voice_instructions_never_cut_the_line_direction():
+    voice = {**VOX_ES, "instructions": "voz cálida y cansada de enfermera " * 10}
+    _, directed, _ = _line_voice(voice, delivery="muy despacio, arrastrando las palabras")
+    style = speech_params(directed, "Ya voy.", "spanish", 7)["custom_settings"]["style"]
+    assert len(style) <= 300 and style.endswith("muy despacio, arrastrando las palabras")

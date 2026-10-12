@@ -31,10 +31,15 @@ def line_delivery(beat, voice):
     return ", ".join(part for part in parts if part)[:VOICE_STYLE_MAX_CHARS]
 
 
-def voice_direction(voice):
-    """The voice's own instructions followed by the line's direction (``lineDelivery``), as one text."""
-    parts = [str(voice.get(key) or "").strip() for key in ("instructions", "lineDelivery")]
-    return ", ".join(part for part in parts if part)
+def voice_direction(voice, limit=None):
+    """The voice's own instructions followed by the line's direction (``lineDelivery``), as one text. Within
+    ``limit`` the line's direction is kept whole and the instructions are shortened to make room."""
+    instructions = str(voice.get("instructions") or "").strip()
+    delivery = str(voice.get("lineDelivery") or "").strip()
+    if limit is not None and delivery and len(instructions) + len(delivery) + 2 > limit:
+        instructions = instructions[:max(0, limit - len(delivery) - 2)].rstrip(" ,")
+    text = ", ".join(part for part in (instructions, delivery) if part)
+    return text if limit is None else text[:limit]
 
 
 def _voice_reference_query(kind, raw):
