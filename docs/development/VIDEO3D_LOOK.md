@@ -53,6 +53,18 @@ look?: { toneMapping: 'aces' | 'agx' | 'neutral', exposure: -4..4 EV, lut?: { as
   The composer targets are not multisampled in draft (see `VIDEO3D_EXPORT_QUALITY.md` once 1.F1 lands), so a LUT scene
   loses canvas antialiasing in draft unless that is addressed.
 
+## Ground under the cast
+
+`environment.floorStyle` is parsed in `cinematicSettings.ts`. Besides
+`tiles` / `none` / `backdrop` / `mirror` / `road`, a **ground style**
+(`grass`, `meadow`, `sand`, `asphalt`, `dirt`, `snow`, `cobble`) is a
+seamless tile the scene paints itself (`groundStyles.ts`). No picture is
+generated or downloaded; the same `groundSeed` always draws the same
+ground. Scattered 3D pieces (tufts, flowers, pebbles, snow lumps) wrap
+with `"scroll"`. Agent/production usage:
+[WORLD3D_TEMPLATES_AGENTS](WORLD3D_TEMPLATES_AGENTS.md) (`floor`) and
+[VIDEO_PRODUCTION_RUNBOOK](../agents/VIDEO_PRODUCTION_RUNBOOK.md#ground-styles).
+
 ## Render looks
 
 `renderLook` is a whole-frame preset, separate from `look`. The editor chooses it under **Render look**

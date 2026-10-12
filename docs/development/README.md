@@ -35,9 +35,11 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 - [MACOS_COMPATIBILITY.md](MACOS_COMPATIBILITY.md) — contrato · core/remoto en Apple Silicon.
 - [REACT_INSTALLATION.md](REACT_INSTALLATION.md) — guía · instalación, reparación e identidad de build de la UI.
 - [STORAGE_CLEANUP.md](STORAGE_CLEANUP.md) — contrato · liberación de ficheros intermedios al terminar y al arrancar.
+- [LAN_AUTH.md](LAN_AUTH.md) — contrato · autenticación LAN por defecto al compartir; token, cookie y excepciones MCP.
 - [OPTIONAL_EXAMPLES.md](OPTIONAL_EXAMPLES.md) — contrato · colecciones de medios de ejemplo opcionales.
 - [WANGP_1272_ADOPTION.md](WANGP_1272_ADOPTION.md) — contrato · adopción de WanGP 12.72.
 - [WANGP_1300_AUDIO.md](WANGP_1300_AUDIO.md) — contrato · YuE2, AuK y la web móvil de Deepy (WanGP 13.00).
+- [VOXCPM2.md](VOXCPM2.md) — contrato · motor de voz por defecto (diseño y clon); particularidades y medidas.
 - [STUDIO_PANEL_LAYOUT_REVIEW.md](STUDIO_PANEL_LAYOUT_REVIEW.md) — histórico · revisión de la distribución de paneles de Studio (septiembre de 2026).
 
 ## Comandos compartidos: Wizard, MCP y UI
@@ -45,7 +47,8 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 - [SHARED_NATIVE_COMMANDS.md](SHARED_NATIVE_COMMANDS.md) — guía · usar los comandos compartidos desde el Wizard o un cliente MCP.
 - [WIZARD_MCP_USAGE.md](WIZARD_MCP_USAGE.md) — guía · guía de uso del corpus de comandos publicados.
 - [MCP_RECOVERABILITY.md](MCP_RECOVERABILITY.md) — contrato · qué deja cada herramienta MCP y acción del Wizard, dónde lo encuentra y edita el usuario (vista «Agentes» de Actividad) y qué falta.
-- [IMAGE_COMMANDS.md](IMAGE_COMMANDS.md), [MUSIC_COMMANDS.md](MUSIC_COMMANDS.md), [SFX_COMMANDS.md](SFX_COMMANDS.md), [SPEECH_COMMANDS.md](SPEECH_COMMANDS.md), [TOOLS_COMMANDS.md](TOOLS_COMMANDS.md), [WORKSPACE_COMMANDS.md](WORKSPACE_COMMANDS.md) — contrato · admisión de comandos por dominio.
+- [IMAGE_COMMANDS.md](IMAGE_COMMANDS.md), [VIDEO_COMMANDS.md](VIDEO_COMMANDS.md), [MUSIC_COMMANDS.md](MUSIC_COMMANDS.md), [SFX_COMMANDS.md](SFX_COMMANDS.md), [SPEECH_COMMANDS.md](SPEECH_COMMANDS.md), [TOOLS_COMMANDS.md](TOOLS_COMMANDS.md), [WORKSPACE_COMMANDS.md](WORKSPACE_COMMANDS.md) — contrato · admisión de comandos por dominio.
+- [QWEN21_TURBO.md](QWEN21_TURBO.md) — contrato · Qwen Image 2.1 Turbo oficial de 8 pasos (`qwen_image_21_turbo`).
 - [SCENE_EFFECTS_AND_MCP.md](SCENE_EFFECTS_AND_MCP.md) — contrato · SFX de escena, voz y cómo activar y conectar MCP.
 - [WIZARD_ACTION_RUNNER.md](WIZARD_ACTION_RUNNER.md) — contrato · runner de acciones del Wizard y adaptadores de aplicación.
 - [WIZARD_WORKFLOW_RUNTIME.md](WIZARD_WORKFLOW_RUNTIME.md) — contrato · runtime de workflows duraderos del Wizard.
@@ -89,6 +92,7 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 - [procedural-video/ANIME_LIMITED_ANIMATION.md](procedural-video/ANIME_LIMITED_ANIMATION.md), [CAMERAS.md](procedural-video/CAMERAS.md), [FILTERS.md](procedural-video/FILTERS.md), [SCENES_2D_25D.md](procedural-video/SCENES_2D_25D.md), [SCENES_3D.md](procedural-video/SCENES_3D.md) — plan · backlog por bloque de la hoja de ruta procedural.
 - [PROCEDURAL_3D_SCENE_SPEC.md](PROCEDURAL_3D_SCENE_SPEC.md) — contrato · spec de escena procedural 3D (G3) y pestaña Vídeo 2,5D.
 - [PROCEDURAL_MUSIC_VIDEO_V3.md](PROCEDURAL_MUSIC_VIDEO_V3.md) — plan · videoclips procedurales v3.
+- [VIDEO2D_TEMPLATE_MODEL.md](VIDEO2D_TEMPLATE_MODEL.md) — contrato · 41 fichas Video 2D, slots, alias, traits y `scene2d` en producción.
 - [SCENE_TEMPLATE_LIBRARY.md](SCENE_TEMPLATE_LIBRARY.md) — guía · plantillas procedurales con assets de Library.
 - [SCENE_TEMPLATE_REVIEW.md](SCENE_TEMPLATE_REVIEW.md) — guía · sandbox de revisión del catálogo de plantillas.
 - [SCENE_SHOWCASE.md](SCENE_SHOWCASE.md) — guía · showcase portable de escenas.
@@ -115,6 +119,9 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 - [PS1_BACKPLATE_TEMPLATE.md](PS1_BACKPLATE_TEMPLATE.md) — contrato · escena estilo PS1 con gráficos prerenderizados.
 - [QWEN_PS1_BACKPLATES.md](QWEN_PS1_BACKPLATES.md) — contrato · Qwen por defecto y fondos prerenderizados.
 - [WORLD3D_TEMPLATES_AGENTS.md](WORLD3D_TEMPLATES_AGENTS.md) — guía · plantillas de Vídeo 3D para agentes (una sola biblioteca).
+- [TEMPLATE_LIBRARY_MODEL.md](TEMPLATE_LIBRARY_MODEL.md) — contrato · ejes de la biblioteca 3D (intent, kind, place, cámara, modifiers).
+- [WORLD3D_MOTION_LAB.md](WORLD3D_MOTION_LAB.md) — contrato · ocho escenarios 3D nativos de movimiento y música, compartidos con MCP/Wizard.
+- [SETS_ACEPTACION_2026-10-11.md](SETS_ACEPTACION_2026-10-11.md) — histórico · aceptación Z4 de escenarios 3D con cambio de piel (11 octubre 2026).
 - [MODEL3D_ENGINES.md](MODEL3D_ENGINES.md) — contrato · adaptadores TRELLIS.2 y Pixal3D.
 - [HUMANOID_HANDS_RESEARCH.md](HUMANOID_HANDS_RESEARCH.md) — histórico · investigación de manos antes de añadir huesos de dedos (4.F5).
 - [calidad-local/01-render-master.md](calidad-local/01-render-master.md), [02-iluminacion-hdri-lut.md](calidad-local/02-iluminacion-hdri-lut.md), [03-biblioteca-cc0.md](calidad-local/03-biblioteca-cc0.md), [04-personajes-3d.md](calidad-local/04-personajes-3d.md), [05-sonido.md](calidad-local/05-sonido.md), [06-control-calidad.md](calidad-local/06-control-calidad.md) — plan · hoja de ruta de calidad local en seis fases (PRs #770–#801).

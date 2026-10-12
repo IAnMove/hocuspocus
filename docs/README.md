@@ -23,7 +23,10 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 - [character-kits/HOWUSEIT.md](character-kits/HOWUSEIT.md) — guía · kits de personaje 2D y Face Rig.
 - [character-kits/SPEECH_QUALITY.md](character-kits/SPEECH_QUALITY.md) — guía · calidad del habla 2D, packs de bocas y su API.
 - [cut-paper/HOWUSEIT.md](cut-paper/HOWUSEIT.md) — guía · ejemplo Tijeral de animación recortable y descargas opcionales.
-- [image-studio/HOWUSEIT.md](image-studio/HOWUSEIT.md) — guía · intenciones y edición en Studio → Imagen.
+- [image-studio/HOWUSEIT.md](image-studio/HOWUSEIT.md) — guía · intenciones y edición en Studio → Imagen, incluido Qwen 2.1 Turbo.
+- [development/LAN_AUTH.md](development/LAN_AUTH.md) — contrato · autenticación LAN al compartir (token, cookie, MCP aparte).
+- [development/VIDEO_COMMANDS.md](development/VIDEO_COMMANDS.md) — contrato · `generation.video` v2 (Wan t2v) y v3 (H3 / LTX-2.3).
+- [development/VOXCPM2.md](development/VOXCPM2.md) — contrato · motor de voz por defecto.
 - [tools/HOWUSEIT.md](tools/HOWUSEIT.md) — guía · Studio Tools: upscale, revoice, quitar fondo.
 - [video-editor/HOWUSEIT.md](video-editor/HOWUSEIT.md) — guía · Video Editor y mezclas ensambladas.
 - [video-editor/MONTAGES.md](video-editor/MONTAGES.md) — guía · montajes editables y export Video 2D en servidor.
