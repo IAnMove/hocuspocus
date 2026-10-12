@@ -24,8 +24,9 @@ from services.video2d_catalogs import CATALOGS
 FIELDS = frozenset({"template", "cast", "background", "controls"})
 FAMILY = "music-"
 CAST_LIMIT = 6
-# Validation runs before any picture is resolved: every source stands in as this durable URL.
-PLACEHOLDER = "/api/v1/file/scene2d-placeholder.png?workspace=scene2d"
+# Validation runs before any picture is resolved: every source stands in as this durable picture, a transparent pixel,
+# so a check that reads a picture's alpha (cutout_without_alpha) has nothing to warn about.
+PLACEHOLDER = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg=="
 WIDTH, HEIGHT, FPS = 1920, 1080, 24           # production scene documents (production_stage_scenes.scene_document)
 RECIPE = 1                                    # bump when the compile request changes for the same shot
 TRAITS = Path(__file__).resolve().parents[1] / "shared" / "video2d_template_traits.json"
