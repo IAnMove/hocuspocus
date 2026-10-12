@@ -27,6 +27,7 @@ import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, 
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
+import { defaultSpeechModel } from '../../lib/preferredModels'
 import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 
 import type { AssetExplorerPurpose } from '../common/assetExplorer.ts'
@@ -319,7 +320,7 @@ export function SceneAnimatorPanel() {
   const setSidebarMode = useStore(s => s.setSidebarMode)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
-  const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
+  const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? defaultSpeechModel(s.models))
   const [scene, setScene] = useState<AnimatorScene>(blankScene)
   const sceneRef = useRef(scene)
   const sceneRecovery = useRef(new SceneHandoffRecovery())

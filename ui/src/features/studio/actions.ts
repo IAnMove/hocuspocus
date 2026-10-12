@@ -3,6 +3,7 @@ import type { GenerationReceiptLike } from '../../api/generationCommandClient'
 import i18n from '../../i18n'
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import { getFamiliesForMode, getModelsForFamily, useStore, type AppState } from '../../stores/useStore'
+import { defaultSpeechModel, FALLBACK_SPEECH_MODEL } from '../../lib/preferredModels'
 import type { ModelDef } from '../../types'
 import type {
   AttachStudioReferencesCommand,
@@ -30,7 +31,7 @@ export type StudioSfxClip = {
 }
 
 const AUDIO_SUB_MODE_DEFAULTS: Record<PrepareAudioCommand['subMode'], string> = {
-  speech: 'kugelaudio_0_open',
+  speech: FALLBACK_SPEECH_MODEL,
   music: 'ace_step_v1_5_xl_sft_lm_4b',
   sfx: 'mmaudio_v2',
 }
@@ -107,6 +108,11 @@ export function openStudioAudio(subMode: PrepareAudioCommand['subMode']): void {
   state.setAudioSubMode(subMode)
 }
 
+/** Speech follows the installed-first speech default; music and SFX keep their fixed defaults. */
+function audioSubModeFallback(subMode: PrepareAudioCommand['subMode'], models: ModelDef[]): string {
+  return subMode === 'speech' ? defaultSpeechModel(models) : AUDIO_SUB_MODE_DEFAULTS[subMode]
+}
+
 export async function selectAudioModel(
   preferred?: string,
   subMode: PrepareAudioCommand['subMode'] = 'sfx',
@@ -114,7 +120,7 @@ export async function selectAudioModel(
   let state = useStore.getState()
   if (!state.modelsLoaded) await state.loadModels()
   state = useStore.getState()
-  const fallback = AUDIO_SUB_MODE_DEFAULTS[subMode]
+  const fallback = audioSubModeFallback(subMode, state.models)
   const requested = preferred && state.models.some(model => model.model_type === preferred)
     ? preferred
     : state.params.model_type && state.models.some(model => model.model_type === state.params.model_type)

@@ -5,7 +5,7 @@ import { useStore } from '../../stores/useStore'
 import { downloadModel } from '../../api/client'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import { SPOKEN_LANGUAGES, type SpokenLanguage } from '../../lib/speechLanguage'
-import { designVoiceCandidates, referenceVoice, SAMPLE_TEXT, VOICE_ENGINES, type DesignedVoice, type VoiceEngine } from './voiceDesign'
+import { DEFAULT_VOICE_ENGINE, designVoiceCandidates, referenceVoice, SAMPLE_TEXT, VOICE_ENGINES, type DesignedVoice, type VoiceEngine } from './voiceDesign'
 
 const control = 'min-h-10 rounded-lg border border-border bg-bg-primary px-3 text-sm disabled:opacity-40'
 
@@ -30,7 +30,7 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
   const models = useStore(state => state.models)
   const [language, setLanguage] = useState<SpokenLanguage>(initialLanguage)
   const [accent, setAccent] = useState<'' | 'castilian'>('')
-  const [engine, setEngine] = useState<VoiceEngine>('qwen3')
+  const [engine, setEngine] = useState<VoiceEngine>(DEFAULT_VOICE_ENGINE)
   const [description, setDescription] = useState(''), [text, setText] = useState(SAMPLE_TEXT[initialLanguage] ?? '')
   const [voices, setVoices] = useState<DesignedVoice[]>([]), [busy, setBusy] = useState(''), [error, setError] = useState(''), [message, setMessage] = useState('')
   const operation = useRef<AbortController | null>(null)

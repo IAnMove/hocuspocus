@@ -7,12 +7,14 @@ import type { SpokenLanguage } from '../../lib/speechLanguage'
 /** Engines that design a voice from a description, then clone every line from the chosen take.
  * Qwen3 is told the language; VoxCPM2 reads it from the text (30 languages, 48 kHz). */
 export const VOICE_ENGINES = {
-  qwen3: { design: 'qwen3_tts_voicedesign', reference: 'qwen3_tts_base', tellsLanguage: true },
   voxcpm2: { design: 'voxcpm2_voicedesign', reference: 'voxcpm2_base', tellsLanguage: false },
+  qwen3: { design: 'qwen3_tts_voicedesign', reference: 'qwen3_tts_base', tellsLanguage: true },
 } as const
 export type VoiceEngine = keyof typeof VOICE_ENGINES
-export const VOICE_DESIGN_MODEL = VOICE_ENGINES.qwen3.design
-export const REFERENCE_VOICE_MODEL = VOICE_ENGINES.qwen3.reference
+/** VoxCPM2 is the default engine; Qwen3 stays available. */
+export const DEFAULT_VOICE_ENGINE: VoiceEngine = 'voxcpm2'
+export const VOICE_DESIGN_MODEL = VOICE_ENGINES[DEFAULT_VOICE_ENGINE].design
+export const REFERENCE_VOICE_MODEL = VOICE_ENGINES[DEFAULT_VOICE_ENGINE].reference
 export const VOICE_CANDIDATES = 3
 
 /** Calm, plain sentences make a steadier cloning reference than an excited line. */
@@ -71,7 +73,7 @@ export async function designVoiceCandidates(request: {
   onUpdate: (voices: DesignedVoice[]) => void
 }, dependencies: Partial<VoiceDesignDependencies> = {}): Promise<DesignedVoice[]> {
   const deps = { ...defaults, ...dependencies }
-  const engine = VOICE_ENGINES[request.engine ?? 'qwen3']
+  const engine = VOICE_ENGINES[request.engine ?? DEFAULT_VOICE_ENGINE]
   const model = engine.design
   const pitchRange = expectedPitch(request.description)
   const seconds = Math.min(30, Math.max(6, Math.ceil(request.text.split(/\s+/).length / 2.2) + 3))
@@ -117,7 +119,7 @@ export async function designVoiceCandidates(request: {
 
 /** The chosen take becomes the language's reference voice: every later line is cloned from it. */
 export function referenceVoice(voice: DesignedVoice, details: { name: string; text: string; language: SpokenLanguage },
-  engine: VoiceEngine = 'qwen3'): CustomCharacterVoice {
+  engine: VoiceEngine = DEFAULT_VOICE_ENGINE): CustomCharacterVoice {
   if (!voice.url) throw new Error('This voice has no recording yet.')
   return { provider: 'local', model: VOICE_ENGINES[engine].reference, voiceId: 'reference', name: details.name.slice(0, 120),
     referenceAudio: voice.url, transcript: details.text, language: details.language }

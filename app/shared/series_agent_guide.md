@@ -12,10 +12,10 @@ those ids and file names, never invent one.
    - character: `characters.styles` (prompt in the series style; painted art: `graphic-novel`, below) →
      `generation.image` (base, then each pose with the base as `image_refs`) → `studio.key` → `characters.save`
      (approved assets) → `characters.rig.flat` (with the style's `rig` as `style`) → design a voice per
-     language (`generation.speech` with `qwen3_tts_voicedesign`, or `voxcpm2_voicedesign`: 48 kHz, 30 languages, no
-     `model_mode`; check with `qa.speech`) → `characters.save` with `voicesByLanguage` (a reference voice whose model
-     is `qwen3_tts_base` or `voxcpm2_base`, the latter with optional style `instructions`) → add the character to the
-     series (`series.update`) with `voiceProfile.characterKitRef`.
+     language (`generation.speech` with `voxcpm2_voicedesign`, the default: 48 kHz, 30 languages, no `model_mode`;
+     `qwen3_tts_voicedesign` is the alternative; check with `qa.speech`) → `characters.save` with `voicesByLanguage`
+     (a reference voice whose model is `voxcpm2_base`, optionally with style `instructions`, or `qwen3_tts_base`) →
+     add the character to the series (`series.update`) with `voiceProfile.characterKitRef`.
      Check the pitch with `qa.speech` and `pitch_range`: an adult man sits at 85–155 Hz, an adult woman at 165–255 Hz.
      The series render only notes a line outside the character's range (`pitch_out_of_range`) and keeps the take;
    - rig check: look at the review image `characters.rig.flat` returns. A face with realistic proportions (small
