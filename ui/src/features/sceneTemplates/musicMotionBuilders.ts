@@ -21,14 +21,15 @@ export function copySubject(c: BuildContext, index: number, points: Beat[], slot
 }
 
 /** Seamless artwork recommended. A stable overscan underlay covers the viewport
- * even at strip endpoints; no new textures or providers are consulted. */
+ * even at strip endpoints; no new textures or providers are consulted. A video
+ * background already moves, so it plays as one looping layer without a strip. */
 export function musicMotionBackground(id: string, c: BuildContext): SceneLayer[] {
   const base = backdrop(c)
   const scrolling: Record<string, NonNullable<SceneLayer['strip']>['direction']> = {
     'music-speed-flight': 'left', 'music-infinite-fall': 'up', 'music-conveyor': 'left',
   }
   const direction = scrolling[id]
-  if (!direction) return [base]
+  if (!direction || base.type === 'video') return [base]
   const strip = { ...base, id: 'background-scroll', name: 'background · desplazamiento', z: 1,
     strip: { enabled: true, count: 4, spacing: 100, direction, speed: id === 'music-conveyor' ? 28 : 95, phase: 0 },
   }

@@ -2,17 +2,96 @@
   "version": 1,
   "catalogVersion": "2026-09-review-1",
   "expandedCatalogVersion": "2026-09-music-motion-1",
+  "slotAliases": {
+    "hero": "subject_1",
+    "plate": "background",
+    "prop": "prop_1",
+    "foreground": "foreground"
+  },
+  "aliases": {
+    "cinema-isolation": {
+      "card": "cinema-establishing",
+      "preset": {
+        "mood": "lonely"
+      }
+    },
+    "music-parallax": {
+      "card": "cinema-tracking",
+      "preset": {
+        "atmosphere": "streaks"
+      }
+    },
+    "music-stage": {
+      "card": "music-pulse",
+      "preset": {
+        "camera": "sweep"
+      }
+    },
+    "music-finale": {
+      "card": "music-pulse",
+      "preset": {
+        "camera": "open",
+        "atmosphere": "confetti"
+      }
+    },
+    "music-chorus": {
+      "card": "music-pulse",
+      "preset": {
+        "camera": "beat",
+        "atmosphere": "confetti"
+      }
+    },
+    "music-satellite-swarm": {
+      "card": "music-orbit",
+      "preset": {
+        "bounce": "off"
+      }
+    },
+    "music-ricochet-pass": {
+      "card": "music-pinball",
+      "preset": {
+        "bouncer": "prop"
+      }
+    },
+    "space-shield": {
+      "card": "space-broadside",
+      "preset": {
+        "outcome": "shield"
+      }
+    },
+    "space-explosion": {
+      "card": "space-broadside",
+      "preset": {
+        "outcome": "explode"
+      }
+    }
+  },
+  "retired": {
+    "trailer-teaser": {
+      "useInstead": [
+        "title-card",
+        "trailer-slam"
+      ],
+      "note": "A sequence of titles, not a scene: put the text templates title-card or trailer-slam in a scene (scenes.text.template)."
+    },
+    "lyric-vertical": {
+      "useInstead": [
+        "scenes.lyrics.import"
+      ],
+      "note": "Lyrics come from scenes.lyrics.import and the lyric looks (style.lyric_look), over any moving shot."
+    }
+  },
   "entries": [
     {
       "id": "cinema-establishing",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Presenta sujeto y entorno con una entrada de cámara amplia y legible.",
+      "visualIntent": "Figura pequeña en su entorno; la cámara se abre y se desliza con polvo en el aire. Con mood lonely la cámara mira desde arriba, sube y llueve.",
       "title": "Plano de establecimiento",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -21,9 +100,10 @@
           "description": "Sujeto principal que fija la escala y el punto de atención del plano."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de entorno que sitúa la acción y admite un desplazamiento 2.5D."
@@ -54,6 +134,14 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "mood": {
+          "options": [
+            "calm",
+            "lonely"
+          ],
+          "default": "calm",
+          "exposed": true
         }
       },
       "limits": [
@@ -62,11 +150,16 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-establishing\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "twins": [
+        "place-establishing",
+        "high-angle-isolation"
+      ]
     },
     {
       "id": "cinema-reveal",
@@ -77,7 +170,7 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -86,9 +179,10 @@
           "description": "Sujeto que aparece tarde o queda parcialmente oculto al inicio del revelado."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa que sostiene la entrada de cámara y el espacio antes de descubrir al sujeto."
@@ -127,11 +221,15 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-reveal\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "twins": [
+        "foreground-reveal"
+      ]
     },
     {
       "id": "cinema-closeup",
@@ -142,7 +240,7 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -151,9 +249,10 @@
           "description": "Sujeto principal preparado para una escala cercana y una lectura de detalle."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de fondo desenfatizada que conserva el contexto sin competir con el rostro u objeto."
@@ -192,22 +291,26 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-closeup\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "twins": [
+        "emotional-close-up"
+      ]
     },
     {
       "id": "cinema-two-shot",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Encuadra dos presencias en una composición de conversación o tensión compartida.",
+      "visualIntent": "Dos figuras con un leve vaivén propio; la cámara traza un arco lento y empuja, con paralaje entre fondo, figuras y primer término.",
       "title": "Doble plano cinematográfico",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -216,21 +319,22 @@
           "description": "Primer sujeto que ancla el eje y la escala de la conversación."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa común que mantiene la continuidad espacial del encuadre."
         },
         {
-          "id": "prop",
+          "id": "subject_2",
           "types": [
             "image",
             "model3d"
           ],
           "required": true,
-          "description": "Segundo sujeto u objeto de interacción; completa el doble plano y acepta imagen o GLB."
+          "description": "Segunda persona del doble plano; acepta imagen o GLB."
         },
         {
           "id": "foreground",
@@ -266,11 +370,18 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-two-shot\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "slotAliases": {
+        "prop": "subject_2"
+      },
+      "twins": [
+        "two-shot-master"
+      ]
     },
     {
       "id": "cinema-detail",
@@ -281,7 +392,7 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -290,9 +401,10 @@
           "description": "Objeto o gesto principal que debe permanecer legible en el detalle."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de apoyo que aporta escala y contraste al inserto."
@@ -331,22 +443,27 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-detail\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "twins": [
+        "detail-insert",
+        "pov-detail-glance"
+      ]
     },
     {
       "id": "cinema-hero",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "La figura está quieta desde el primer fotograma; la cámara sube y se abre para darle presencia. Nadie entra en el plano.",
+      "visualIntent": "La figura entra en el plano (sube desde abajo o llega por un lado) mientras la cámara sube y se abre para darle presencia.",
       "title": "Entrada de héroe",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -355,9 +472,10 @@
           "description": "Héroe visual que recibe el movimiento de cámara y la mayor prioridad del plano."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa que proporciona horizonte, contraste y dirección para la entrada."
@@ -388,6 +506,15 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "entrance": {
+          "options": [
+            "rise",
+            "left",
+            "right"
+          ],
+          "default": "rise",
+          "exposed": true
         }
       },
       "limits": [
@@ -396,87 +523,27 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-hero\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "cinema-isolation",
-      "family": "cinema",
-      "reviewStatus": "candidate",
-      "visualIntent": "Separa al sujeto del entorno mediante espacio negativo y un desplazamiento sobrio.",
-      "title": "Aislamiento cinematográfico",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Sujeto aislado que conserva una silueta clara contra el espacio negativo."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa sencilla que deja aire alrededor del sujeto y evita competir con él."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de velo o sombra para ampliar la sensación de aislamiento."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Cine en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"cinema-isolation\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "twins": [
+        "hero-arrival",
+        "low-angle-hero"
+      ]
     },
     {
       "id": "cinema-tracking",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Acompaña al sujeto con una deriva lateral estable y una placa en continuidad.",
+      "visualIntent": "La figura cruza el cuadro y la cámara la sigue en lateral sobre la placa. Con atmosphere streaks pasan rayas de velocidad en vez de hojas.",
       "title": "Seguimiento cinematográfico",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -485,9 +552,10 @@
           "description": "Sujeto que permanece centrado mientras el encuadre simula un seguimiento lateral."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa desplazable que conserva el sentido de viaje sin generar un mundo 3D."
@@ -518,6 +586,14 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "atmosphere": {
+          "options": [
+            "leaves",
+            "streaks"
+          ],
+          "default": "leaves",
+          "exposed": true
         }
       },
       "limits": [
@@ -526,22 +602,27 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"cinema-tracking\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "twins": [
+        "run-travel-parallax",
+        "surreal-transit"
+      ]
     },
     {
       "id": "music-pulse",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "La figura rebota al ritmo con cambios de escala y desplazamiento, la cámara empuja y flotan luciérnagas.",
+      "visualIntent": "La figura rebota al ritmo. La cámara empuja (push), barre de lado (sweep), se abre con giro (open) o late al ritmo (beat); flotan luciérnagas, confeti o bokeh.",
       "title": "Pulso musical",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -550,9 +631,10 @@
           "description": "Sujeto principal que recibe pulsos de escala y pequeñas variaciones de energía."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con contraste suficiente para que el pulso sea visible sin audio generado."
@@ -583,6 +665,31 @@
           "max": 1,
           "default": 0.6,
           "exposed": true
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
+        },
+        "camera": {
+          "options": [
+            "push",
+            "sweep",
+            "open",
+            "beat"
+          ],
+          "default": "push",
+          "exposed": true
+        },
+        "atmosphere": {
+          "options": [
+            "fireflies",
+            "confetti",
+            "bokeh"
+          ],
+          "default": "fireflies",
+          "exposed": true
         }
       },
       "limits": [
@@ -591,7 +698,9 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"music-pulse\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
@@ -601,12 +710,12 @@
       "id": "music-duet",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Dos figuras laten a la vez al ritmo mientras la cámara se balancea un poco. No se alternan.",
+      "visualIntent": "Dos figuras se alternan al ritmo: en cada tiempo salta una mientras la otra descansa, y la cámara se balancea.",
       "title": "Dúo musical",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -615,21 +724,22 @@
           "description": "Primera presencia que fija el eje y el ritmo base del dúo."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de escenario o entorno que sostiene la alternancia entre las presencias."
         },
         {
-          "id": "prop",
+          "id": "subject_2",
           "types": [
             "image",
             "model3d"
           ],
           "required": true,
-          "description": "Segunda presencia del dúo; acepta retrato, objeto o GLB proporcionado."
+          "description": "Segunda presencia del dúo, que salta en los tiempos alternos; acepta imagen o GLB."
         },
         {
           "id": "foreground",
@@ -657,6 +767,12 @@
           "max": 1,
           "default": 0.6,
           "exposed": true
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
@@ -665,110 +781,51 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"music-duet\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "music-chorus",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "La figura se queda quieta mientras la cámara late al ritmo y cae confeti, para un estribillo.",
-      "title": "Coro musical",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Figura o motivo principal que lleva el gesto repetible del coro."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa de escenario que admite cambios de escala y paralaje suave."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de formas o luces que multiplica la sensación de coro."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": true
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": true
-        }
-      },
-      "limits": [
-        "Música en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"music-chorus\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
+      "group": "candidate",
+      "slotAliases": {
+        "prop": "subject_2"
+      }
     },
     {
       "id": "music-orbit",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Hace orbitar un accesorio alrededor del motivo principal mediante una relación de capa 2.5D.",
+      "visualIntent": "Copias de un objeto orbitan a la figura, que rebota al ritmo. Con bounce off la figura se queda en su sitio y solo orbitan las copias.",
       "title": "Órbita musical",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
           ],
           "required": true,
-          "description": "Motivo principal que permanece como centro del movimiento orbital de la capa prop."
+          "description": "Motivo principal que permanece como centro de la órbita de prop_1."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa que ofrece líneas de referencia para leer el giro sin geometría 3D global."
         },
         {
-          "id": "prop",
+          "id": "prop_1",
           "types": [
             "image",
             "model3d"
           ],
           "required": true,
-          "description": "Accesorio o segundo motivo que orbita al hero mediante keyframes; acepta imagen o GLB."
+          "description": "Objeto que orbita a subject_1; una imagen se copia hasta cinco veces, un GLB orbita solo."
         },
         {
           "id": "foreground",
@@ -796,6 +853,20 @@
           "max": 1,
           "default": 0.6,
           "exposed": true
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
+        },
+        "bounce": {
+          "options": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "exposed": true
         }
       },
       "limits": [
@@ -804,139 +875,11 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"music-orbit\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "music-parallax",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "Construye profundidad rítmica mediante desplazamientos diferenciados de capas planas.",
-      "title": "Paralaje musical",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Motivo principal que marca el ritmo visual sobre las capas de paralaje."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa con textura o arquitectura suficiente para hacer visible el desplazamiento."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional cercana que amplía la separación entre planos."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Música en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"music-parallax\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "music-stage",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "La figura rebota al ritmo mientras la cámara la barre de lado. No hay escenario: el fondo es la placa.",
-      "title": "Escenario musical",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Artista, objeto o motivo que ocupa el centro compositivo del escenario."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa de escenario que define fondo, suelo visual y contraste del motivo."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de telón, humo gráfico o luces de borde."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": true
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": true
-        }
-      },
-      "limits": [
-        "Música en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"music-stage\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
       "group": "candidate"
     },
@@ -949,7 +892,7 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
             "image",
             "model3d"
@@ -958,15 +901,16 @@
           "description": "Producto o motivo principal que recibe el foco y el desplazamiento de cámara."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de estudio o escenario que conserva una lectura limpia del producto."
         },
         {
-          "id": "prop",
+          "id": "prop_1",
           "types": [
             "image",
             "model3d"
@@ -1000,70 +944,11 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
-        }
-      },
-      "limits": [
-        "Música en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"music-product\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "music-finale",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "Cierra el videoclip con una composición amplia, legible y de energía sostenida.",
-      "title": "Final musical",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Motivo principal que sostiene la imagen final y recibe el último acento visual."
         },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa de cierre que permite una salida amplia sin necesitar audio real."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de destellos, formas o marco para marcar el final."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": true
-        },
-        "intensity": {
+        "drift": {
           "min": 0,
           "max": 1,
-          "default": 0.6,
+          "default": 0.5,
           "exposed": true
         }
       },
@@ -1073,9 +958,11 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
-      "example": "Usa la plantilla candidata \"music-finale\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "example": "Usa la plantilla candidata \"music-product\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
       "group": "candidate"
     },
@@ -1088,17 +975,19 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave principal GLB que define la dirección, escala y lectura del crucero."
+          "description": "Nave principal (imagen recortada o GLB) que define la dirección, escala y lectura del crucero."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de estrellas o espacio profundo que se desplaza como fondo visual."
@@ -1137,7 +1026,8 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"space-cruise\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
@@ -1152,23 +1042,25 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave principal GLB que orbita el planeta o estación prop; no es una cámara orbital real."
+          "description": "Nave que orbita el planeta o estación prop_1; imagen recortada o GLB. No es una cámara orbital real."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa espacial que aporta estrellas, planeta o campo visual de referencia."
         },
         {
-          "id": "prop",
+          "id": "prop_1",
           "types": [
             "image",
             "model3d"
@@ -1211,7 +1103,8 @@
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
         "El BPM no implica música ni audio real en previews.",
-        "La órbita es una relación de capas: no crea oclusión global aunque los objetos permanezcan en la misma capa de composición."
+        "La órbita es una relación de capas: no crea oclusión global aunque los objetos permanezcan en la misma capa de composición.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"space-orbit\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
@@ -1226,23 +1119,25 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave GLB que ejecuta el acercamiento y conserva una silueta estable."
+          "description": "Nave (imagen recortada o GLB) que ejecuta el acercamiento y conserva una silueta estable."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de espacio o hangar que fija la dirección del acoplamiento."
         },
         {
-          "id": "prop",
+          "id": "prop_1",
           "types": [
             "image",
             "model3d"
@@ -1284,7 +1179,8 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"space-docking\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
@@ -1299,28 +1195,31 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave perseguidora GLB que lleva el movimiento y la dirección de la persecución."
+          "description": "Nave perseguidora (imagen recortada o GLB) que lleva el movimiento y la dirección de la persecución."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de estrellas o nebulosa que da continuidad al desplazamiento."
         },
         {
-          "id": "prop",
+          "id": "prop_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave perseguida o escolta GLB; se mueve por keyframes, sin colisiones."
+          "description": "Nave perseguida o escolta; imagen recortada o GLB. Se mueve por keyframes, sin colisiones."
         },
         {
           "id": "foreground",
@@ -1356,7 +1255,8 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"space-chase\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
@@ -1366,33 +1266,36 @@
       "id": "space-broadside",
       "family": "space",
       "reviewStatus": "candidate",
-      "visualIntent": "Presenta dos perfiles de nave como una confrontación visual por capas.",
+      "visualIntent": "Dos naves de perfil se enfrentan y la primera dispara rayos. outcome: miss (fallan), shield (un escudo para el impacto) o explode (explosión: la nave rival estalla con restos y temblor).",
       "title": "Enfrentamiento lateral espacial",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave GLB principal mostrada de perfil para definir el eje del enfrentamiento."
+          "description": "Nave (imagen recortada o GLB) principal mostrada de perfil para definir el eje del enfrentamiento."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de campo estelar que conserva espacio negativo entre las naves."
         },
         {
-          "id": "prop",
+          "id": "prop_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave rival GLB para el perfil enfrentado; no hay colisión ni oclusión global."
+          "description": "Nave rival de perfil; imagen recortada o GLB. Recibe el escudo o explota según outcome."
         },
         {
           "id": "foreground",
@@ -1420,6 +1323,15 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "outcome": {
+          "options": [
+            "miss",
+            "shield",
+            "explode"
+          ],
+          "default": "miss",
+          "exposed": true
         }
       },
       "limits": [
@@ -1428,153 +1340,10 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"space-broadside\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "space-shield",
-      "family": "space",
-      "reviewStatus": "candidate",
-      "visualIntent": "Visualiza un impacto o escudo como acento gráfico sobre una nave compuesta.",
-      "title": "Escudo espacial",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "model3d"
-          ],
-          "required": true,
-          "description": "Nave atacante GLB que marca la dirección del impacto y permanece como referencia espacial."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa de campo estelar que contrasta con el destello del escudo."
-        },
-        {
-          "id": "prop",
-          "types": [
-            "model3d"
-          ],
-          "required": true,
-          "description": "Nave GLB objetivo que recibe el escudo; el impacto se anima sin física."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de energía, humo o partículas en imagen."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Espacio compuesto por capas GLB; sin física, colisiones ni oclusión global.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"space-shield\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "candidate"
-    },
-    {
-      "id": "space-explosion",
-      "family": "space",
-      "reviewStatus": "candidate",
-      "visualIntent": "Representa una explosión gráfica alrededor de una nave mediante capas y keyframes.",
-      "title": "Explosión espacial",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "model3d"
-          ],
-          "required": true,
-          "description": "Nave atacante GLB que fija el origen visual del ataque."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa espacial que da contraste y escala al destello."
-        },
-        {
-          "id": "prop",
-          "types": [
-            "model3d"
-          ],
-          "required": true,
-          "description": "Nave blanco GLB que desaparece al explotar; no simula fragmentación física."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de humo, fuego o fragmentos en imagen."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Espacio compuesto por capas GLB; sin física, colisiones ni oclusión global.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"space-explosion\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
       "group": "candidate"
     },
@@ -1587,17 +1356,19 @@
       "version": 1,
       "slots": [
         {
-          "id": "hero",
+          "id": "subject_1",
           "types": [
+            "image",
             "model3d"
           ],
           "required": true,
-          "description": "Nave GLB que permanece legible durante la aceleración hacia el salto."
+          "description": "Nave (imagen recortada o GLB) que permanece legible durante la aceleración hacia el salto."
         },
         {
-          "id": "plate",
+          "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de estrellas o túnel espacial que admite un desplazamiento continuo."
@@ -1636,7 +1407,8 @@
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"space-warp\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
       "defaultDuration": 4,
@@ -1646,26 +1418,25 @@
       "id": "documentary-history",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Foto quieta con polvo, acabado de archivo, un rótulo de fecha y un contador de años con textos de ejemplo fijos. La foto no se mueve. Candidata, no aprobada.",
+      "visualIntent": "Foto de archivo con movimiento lento: la placa empuja y se desliza con paralaje contra la foto y el primer término. Un rótulo de fecha y un contador de años con tus textos, acabado de archivo y polvo.",
       "title": "Documental histórico",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Fotografía o plano de archivo que sostiene el documental."
-        },
-        {
-          "id": "plate",
+          "id": "subject_1",
           "types": [
             "image"
           ],
           "required": true,
-          "description": "Placa de entorno detrás de la fecha."
+          "description": "Fotografía o figura de archivo que sostiene el documental; imagen."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Placa de entorno detrás de la foto; se mueve despacio."
         },
         {
           "id": "foreground",
@@ -1673,14 +1444,14 @@
             "image"
           ],
           "required": false,
-          "description": "Polvo o primer término opcional."
+          "description": "Polvo, marco o primer término opcional; se mueve más rápido que la placa."
         }
       ],
       "controls": {
         "duration": {
           "min": 3,
           "max": 12,
-          "default": 4
+          "default": 6
         },
         "bpm": {
           "min": 40,
@@ -1693,174 +1464,67 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "caption": {
+          "text": true,
+          "maxLength": 80,
+          "default": "The harbour keeps the light",
+          "exposed": true
+        },
+        "yearFrom": {
+          "text": true,
+          "maxLength": 12,
+          "default": "1960",
+          "exposed": true
+        },
+        "yearTo": {
+          "text": true,
+          "maxLength": 12,
+          "default": "1968",
+          "exposed": true
+        },
+        "yearLabel": {
+          "text": true,
+          "maxLength": 24,
+          "default": "Year",
+          "exposed": true
         }
       },
       "limits": [
-        "Cine en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
+        "Solo imágenes: subject_1, background y foreground no aceptan GLB ni vídeo.",
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "Los textos son controles editables; el acabado y el polvo vienen de serie.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"documentary-history\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "video2d"
-    },
-    {
-      "id": "trailer-teaser",
-      "family": "cinema",
-      "reviewStatus": "candidate",
-      "visualIntent": "Secuencia de rótulos sobre negro opaco (golpes de palabra, tarjeta de título y tarjeta final) con textos de ejemplo fijos y bandas anchas. Tapa todo el plano: las imágenes de sus slots no se ven. Candidata, no aprobada.",
-      "title": "Teaser de tráiler",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Plano corto que golpea el título."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Negro o placa de contraste."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Capa opcional de destello."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Cine en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"trailer-teaser\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
-      "group": "video2d"
-    },
-    {
-      "id": "lyric-vertical",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "Placa quieta en 9:16 con bokeh y una línea de karaoke de ejemplo fija; la compilación no acepta tu letra. Candidata, no aprobada.",
-      "title": "Lyric video vertical",
-      "version": 1,
-      "slots": [
-        {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Fondo de movimiento lento."
-        },
-        {
-          "id": "plate",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa que no compite con la letra."
-        },
-        {
-          "id": "foreground",
-          "types": [
-            "image"
-          ],
-          "required": false,
-          "description": "Detalle opcional en los bordes."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Música en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
-        "Usa únicamente assets proporcionados.",
-        "Sin vídeo generado por IA.",
-        "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
-      ],
-      "example": "Usa la plantilla candidata \"lyric-vertical\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
+      "defaultDuration": 6,
       "group": "video2d"
     },
     {
       "id": "city-postcard",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Placa de ciudad quieta con hojas que cruzan en tira y una pancarta de papel con texto de ejemplo fijo. No hay gaviotas. Candidata, no aprobada.",
+      "visualIntent": "La placa de ciudad se desliza de lado; el sujeto y el primer término la cruzan con paralaje, pasan hojas y una pancarta de papel lleva tu texto. No hay gaviotas: no existe un preset de partículas de pájaros.",
       "title": "Postal de ciudad",
       "version": 1,
       "slots": [
         {
-          "id": "hero",
-          "types": [
-            "image",
-            "model3d"
-          ],
-          "required": true,
-          "description": "Plano de ciudad en tira."
-        },
-        {
-          "id": "plate",
+          "id": "subject_1",
           "types": [
             "image"
           ],
           "required": true,
-          "description": "Cielo o placa detrás del banner."
+          "description": "Figura u objeto recortado delante de la ciudad; imagen."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Placa de ciudad ancha que se desliza de lado; deja margen en los bordes."
         },
         {
           "id": "foreground",
@@ -1868,14 +1532,14 @@
             "image"
           ],
           "required": false,
-          "description": "Gaviotas u otro primer término."
+          "description": "Primer término opcional (ramas, barandilla) con más paralaje que la ciudad."
         }
       ],
       "controls": {
         "duration": {
           "min": 3,
           "max": 12,
-          "default": 4
+          "default": 6
         },
         "bpm": {
           "min": 40,
@@ -1888,18 +1552,25 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "banner": {
+          "text": true,
+          "maxLength": 60,
+          "default": "Salt on the windows",
+          "exposed": true
         }
       },
       "limits": [
-        "Música en 2.5D; solo el objeto GLB aporta profundidad.",
-        "Máximo 2 GLB, sin repeticiones.",
+        "Solo imágenes: subject_1, background y foreground no aceptan GLB ni vídeo.",
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",
         "Sin diálogo incluido.",
-        "El BPM no implica música ni audio real en previews."
+        "Los textos son controles editables; el acabado y el polvo vienen de serie.",
+        "No hay gaviotas ni pájaros: no existe un preset de partículas de pájaros; las hojas cruzan en su lugar.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa la plantilla candidata \"city-postcard\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
-      "defaultDuration": 4,
+      "defaultDuration": 6,
       "group": "video2d"
     },
     {
@@ -1921,7 +1592,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con un centro limpio y contraste suficiente para que el giro y el desvanecimiento sean visibles."
@@ -1944,18 +1616,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La salida es una rotación y escala 2D de dos vueltas; no describe una espiral ascendente, órbita ni profundidad 3D."
+        "La salida es una rotación y escala 2D de dos vueltas; no describe una espiral ascendente, órbita ni profundidad 3D.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-spiral-exit\" (Salida en espiral). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -1981,7 +1661,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con carril, horizonte o rayas gráficas que sugiera velocidad sin depender de motion blur; puede desplazarse hacia la izquierda mediante un strip horizontal que repite la imagen y puede mostrar costuras si la fuente no es tileable en horizontal."
@@ -2004,18 +1685,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La ruta va de izquierda a derecha y el fondo puede usar un strip horizontal hacia la izquierda a 95 unidades por segundo; no garantiza continuidad, requiere revisar artísticamente preview y render, no es sincronización al compás ni vuelo físico."
+        "La ruta va de izquierda a derecha y el fondo puede usar un strip horizontal hacia la izquierda a 95 unidades por segundo; no garantiza continuidad, requiere revisar artísticamente preview y render, no es sincronización al compás ni vuelo físico.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-speed-flight\" (Vuelo de velocidad). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2041,7 +1730,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa vertical o campo gráfico que mantenga legible la entrada superior y la salida inferior; un strip vertical repite la imagen y puede mostrar costuras si la fuente no es tileable en vertical."
@@ -2064,18 +1754,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Es una única ruta de arriba abajo con escala decreciente; el strip vertical no garantiza continuidad y requiere revisar artísticamente preview y render; no hay bucle limpio, mundo infinito, gravedad ni profundidad 3D."
+        "Es una única ruta de arriba abajo con escala decreciente; el strip vertical no garantiza continuidad y requiere revisar artísticamente preview y render; no hay bucle limpio, mundo infinito, gravedad ni profundidad 3D.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-infinite-fall\" (Caída infinita). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,
@@ -2086,7 +1784,7 @@
       "id": "music-pinball",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "El foco recorre una sucesión de rebotes angulares y acentos de escala como una bola de pinball gráfica.",
+      "visualIntent": "El foco rebota en zigzag como una bola de pinball. Con bouncer prop rebota un objeto pequeño y la figura lo sigue con la mirada.",
       "title": "Rebote de pinball",
       "version": 1,
       "slots": [
@@ -2101,10 +1799,22 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con tablero abstracto, bordes y zonas de rebote dibujadas, sin necesidad de piezas 3D."
+        },
+        {
+          "id": "prop_1",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "requiredWhen": {
+            "bouncer": "prop"
+          },
+          "description": "Objeto pequeño recortado (balón, micrófono, carta) que rebota cuando bouncer es prop; obligatorio en ese caso."
         }
       ],
       "controls": {
@@ -2124,18 +1834,34 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
+        },
+        "bouncer": {
+          "options": [
+            "subject",
+            "prop"
+          ],
+          "default": "subject",
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Los rebotes son puntos de una trayectoria escrita; no hay colisiones, flippers ni solver de pinball."
+        "Los rebotes son puntos de una trayectoria escrita; no hay colisiones, flippers ni solver de pinball.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-pinball\" (Rebote de pinball). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2161,7 +1887,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con espacio negativo y una línea de horizonte que haga visible el arco de ida y vuelta."
@@ -2184,18 +1911,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "El arco es keyframeado y estilizado; no simula aerodinámica, lanzamiento ni física de proyectiles."
+        "El arco es keyframeado y estilizado; no simula aerodinámica, lanzamiento ni física de proyectiles.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-boomerang\" (Bumerán). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2221,7 +1956,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con una boca de cañón o carril gráfico integrado en el entorno, sin requerir un asset extra."
@@ -2244,18 +1980,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La ruta arqueada termina fuera del cuadro; no hay aterrizaje, pausa final, balística, fuerzas ni impacto real."
+        "La ruta arqueada termina fuera del cuadro; no hay aterrizaje, pausa final, balística, fuerzas ni impacto real.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-cannon-launch\" (Lanzamiento de cañón). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2289,7 +2033,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con eje central y espacio suficiente para distinguir ambos recorridos."
@@ -2312,18 +2057,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Los dos arcos son trayectorias 2D independientes; no hay órbita física, contacto ni oclusión global."
+        "Los dos arcos son trayectorias 2D independientes; no hay órbita física, contacto ni oclusión global.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-orbit-duel\" (Duelo orbital). Rellena exactamente los slots obligatorios subject_1, subject_2, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,
@@ -2357,7 +2110,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa sencilla con un punto de encuentro despejado y contraste suficiente para las dos figuras."
@@ -2380,18 +2134,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "El encuentro es una pose sincronizada; no detecta manos, contacto ni articulaciones."
+        "El encuentro es una pose sincronizada; no detecta manos, contacto ni articulaciones.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-high-five\" (Choca esos cinco). Rellena exactamente los slots obligatorios subject_1, subject_2, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2425,7 +2187,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con una línea o campo gráfico que haga visible la dirección del tirón."
@@ -2448,88 +2211,28 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
-        }
-      },
-      "limits": [
-        "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
-        "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
-        "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
-        "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
-        "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
-        "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Sólo subject_2 ejecuta la aproximación y el rebote amortiguado; no calcula campos magnéticos, masas ni colisiones."
-      ],
-      "example": "Usa el movimiento musical candidato \"music-magnet-pull\" (Tirón magnético). Rellena exactamente los slots obligatorios subject_1, subject_2, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
-      "defaultDuration": 4,
-      "group": "music-motion",
-      "motionIntensity": "high"
-    },
-    {
-      "id": "music-ricochet-pass",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "Un objeto recortado rebota entre varios puntos mientras el foco permanece quieto como referencia del pase.",
-      "title": "Pase de rebotes",
-      "version": 1,
-      "slots": [
-        {
-          "id": "subject_1",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Personaje u objeto recortado que permanece quieto y sirve de referencia; no necesita un ciclo de caminar."
         },
-        {
-          "id": "background",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa con pasillo o marcas de trayectoria que mantenga el pase dentro de los límites del encuadre."
-        },
-        {
-          "id": "prop_1",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Objeto recortado pequeño, como balón, micrófono o carta, que ejecuta todos los rebotes del pase."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 4
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
+        "drift": {
           "min": 0,
           "max": 1,
-          "default": 0.6,
-          "exposed": false
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "prop_1 es obligatorio y es el único elemento móvil; subject_1 permanece quieto y no hay colisiones físicas."
+        "Sólo subject_2 ejecuta la aproximación y el rebote amortiguado; no calcula campos magnéticos, masas ni colisiones.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
-      "example": "Usa el movimiento musical candidato \"music-ricochet-pass\" (Pase de rebotes). Rellena exactamente los slots obligatorios subject_1, background, prop_1; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
+      "example": "Usa el movimiento musical candidato \"music-magnet-pull\" (Tirón magnético). Rellena exactamente los slots obligatorios subject_1, subject_2, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
       "group": "music-motion",
       "motionIntensity": "high"
@@ -2561,7 +2264,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con dos zonas despejadas para sugerir portales sin añadir geometría o partículas obligatorias."
@@ -2584,18 +2288,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Los portales son estados de opacidad y posición; no hay teletransporte 3D, espacio continuo ni oclusión."
+        "Los portales son estados de opacidad y posición; no hay teletransporte 3D, espacio continuo ni oclusión.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-portal-swap\" (Intercambio de portales). Rellena exactamente los slots obligatorios subject_1, subject_2, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,
@@ -2621,7 +2333,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con una base visual o escenario que marque el punto de despegue y de aterrizaje."
@@ -2644,18 +2357,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "El rebote usa escala uniforme y posición de la capa; no hay squash-and-stretch por ejes, deformación del bitmap ni elasticidad real."
+        "El rebote usa escala uniforme y posición de la capa; no hay squash-and-stretch por ejes, deformación del bitmap ni elasticidad real.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-trampoline\" (Salto de trampolín). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2681,7 +2402,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con una referencia superior o central que haga legible el eje del péndulo."
@@ -2704,18 +2426,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La oscilación usa keyframes angulares; no resuelve gravedad, cuerda, pivote físico ni colisiones."
+        "La oscilación usa keyframes angulares; no resuelve gravedad, cuerda, pivote físico ni colisiones.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-pendulum\" (Péndulo musical). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2741,7 +2471,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con dos extremos o anclajes gráficos que expliquen la dirección de la tensión."
@@ -2764,18 +2495,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La tensión usa desplazamiento en X y rotación, sin escalar la capa; no hay deformación de goma ni solver de fuerzas."
+        "La tensión usa desplazamiento en X y rotación, sin escalar la capa; no hay deformación de goma ni solver de fuerzas.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-rubber-band\" (Goma elástica). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2801,7 +2540,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de mesa, escenario o espacio negativo donde se distinga el arco del lanzamiento."
@@ -2824,18 +2564,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La entrada, pausa legible y salida propulsada están escritas como keyframes 2D; no hay aterrizaje, perspectiva 3D ni física de cartas."
+        "La entrada, pausa legible y salida propulsada están escritas como keyframes 2D; no hay aterrizaje, perspectiva 3D ni física de cartas.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-card-toss\" (Lanzamiento de carta). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2846,7 +2594,7 @@
       "id": "music-staircase-pop",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "El protagonista sube por posiciones discretas con acentos de escala que recuerdan a un sampler.",
+      "visualIntent": "El protagonista sube escalón a escalón con un rebote en cada aterrizaje y la cámara lo sigue; en planos largos sube y vuelve a bajar.",
       "title": "Ascenso por escalones",
       "version": 1,
       "slots": [
@@ -2861,7 +2609,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con escalones o franjas gráficas integradas para que cada salto tenga una referencia visual."
@@ -2884,18 +2633,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Los escalones son posiciones de composición, no una escalera navegable ni un ciclo de locomoción."
+        "Los escalones son posiciones de composición, no una escalera navegable ni un ciclo de locomoción.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-staircase-pop\" (Ascenso por escalones). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -2921,7 +2678,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa amplia y despejada para que las copias temporales no oculten el eje principal."
@@ -2944,18 +2702,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Las copias son instancias acotadas de la misma imagen; no generan personajes nuevos ni crowd simulation."
+        "Las copias son instancias acotadas de la misma imagen; no generan personajes nuevos ni crowd simulation.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-accordion-clones\" (Clones acordeón). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,
@@ -2981,7 +2747,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa horizontal con un eje claro para leer el avance de la ola."
@@ -3004,18 +2771,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "Las copias se inclinan y recuperan su orientación; no entran ni salen como personajes nuevos y no hay dominós físicos ni colisiones."
+        "Las copias se inclinan y recuperan su orientación; no entran ni salen como personajes nuevos y no hay dominós físicos ni colisiones.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-domino-wave\" (Ola de dominó). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,
@@ -3041,7 +2816,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con banda, flechas o módulos repetibles que sugieran una cinta plana; un strip horizontal repite la imagen y puede mostrar costuras si la fuente no es tileable en horizontal."
@@ -3064,18 +2840,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "El transporte es un desplazamiento de capas con bucle opcional; el strip horizontal no garantiza continuidad y requiere revisar artísticamente preview y render; no existe maquinaria, física ni colisión."
+        "El transporte es un desplazamiento de capas con bucle opcional; el strip horizontal no garantiza continuidad y requiere revisar artísticamente preview y render; no existe maquinaria, física ni colisión.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-conveyor\" (Cinta transportadora). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -3086,7 +2870,7 @@
       "id": "music-spotlight-relay",
       "family": "music",
       "reviewStatus": "candidate",
-      "visualIntent": "Dos presencias se alternan el centro de atención mediante entradas y salidas de luz y escala.",
+      "visualIntent": "Dos presencias se pasan el foco una y otra vez durante todo el plano con cambios de luz y escala; la cámara deriva.",
       "title": "Relevo de focos",
       "version": 1,
       "slots": [
@@ -3109,7 +2893,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa oscura o escénica con dos zonas de foco legibles y sin flashes blancos."
@@ -3132,18 +2917,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "El foco se expresa con opacidad, escala y efectos suaves; no hay iluminación física ni seguimiento de rostros."
+        "El foco se expresa con opacidad, escala y efectos suaves; no hay iluminación física ni seguimiento de rostros.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-spotlight-relay\" (Relevo de focos). Rellena exactamente los slots obligatorios subject_1, subject_2, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,
@@ -3169,7 +2962,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa vertical con marcas de altura y suficiente espacio para el recorrido helicoidal."
@@ -3192,18 +2986,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "El sacacorchos es un camino 2D con rotación; no es una trayectoria 3D ni una cámara orbital."
+        "El sacacorchos es un camino 2D con rotación; no es una trayectoria 3D ni una cámara orbital.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-corkscrew-rise\" (Ascenso sacacorchos). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
@@ -3229,7 +3031,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa con espacio negativo alrededor del sujeto para que la expansión no quede recortada."
@@ -3252,89 +3055,29 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "La onda es un acento de movimiento y escala sin cambio de opacidad; no simula explosión, presión ni daño físico."
+        "La onda es un acento de movimiento y escala sin cambio de opacidad; no simula explosión, presión ni daño físico.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-shockwave\" (Onda expansiva). Rellena exactamente los slots obligatorios subject_1, background; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 4,
-      "group": "music-motion",
-      "motionIntensity": "high"
-    },
-    {
-      "id": "music-satellite-swarm",
-      "family": "music",
-      "reviewStatus": "candidate",
-      "visualIntent": "El foco central queda acompañado por un satélite u objeto clonado que recorre órbitas visuales controladas.",
-      "title": "Enjambre de satélites",
-      "version": 1,
-      "slots": [
-        {
-          "id": "subject_1",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Figura u objeto recortado que funciona como centro estable del enjambre."
-        },
-        {
-          "id": "background",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Placa espacial o abstracta con espacio suficiente para separar centro y satélites."
-        },
-        {
-          "id": "prop_1",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "Un satélite u objeto pequeño en un recorte transparente; el compositor puede clonarlo hasta cinco veces alrededor del centro."
-        }
-      ],
-      "controls": {
-        "duration": {
-          "min": 3,
-          "max": 12,
-          "default": 6
-        },
-        "bpm": {
-          "min": 40,
-          "max": 220,
-          "default": 120,
-          "exposed": false
-        },
-        "intensity": {
-          "min": 0,
-          "max": 1,
-          "default": 0.6,
-          "exposed": false
-        }
-      },
-      "limits": [
-        "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
-        "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
-        "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
-        "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
-        "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
-        "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "prop_1 es obligatorio y es un único asset que puede instanciarse cinco veces; no hay IA de enjambre, física ni profundidad 3D."
-      ],
-      "example": "Usa el movimiento musical candidato \"music-satellite-swarm\" (Enjambre de satélites). Rellena exactamente los slots obligatorios subject_1, background, prop_1; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
-      "defaultDuration": 6,
       "group": "music-motion",
       "motionIntensity": "high"
     },
@@ -3357,7 +3100,8 @@
         {
           "id": "background",
           "types": [
-            "image"
+            "image",
+            "video"
           ],
           "required": true,
           "description": "Placa de concierto con espacio superior y contraste para separar protagonista y las copias del público."
@@ -3388,18 +3132,26 @@
           "max": 1,
           "default": 0.6,
           "exposed": false
+        },
+        "drift": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
         }
       },
       "limits": [
         "Sólo usa capas de imagen; no usa GLB, rig, física, colisiones ni caminata automática.",
         "La trayectoria se expresa con keyframes deterministas y editables; no hay simulación física.",
         "subject_1, subject_2 y prop_1 deben ser recortes con alpha limpio cuando sean figuras u objetos; no se repiten assets para cubrir slots.",
-        "background debe ser una placa de imagen durable y legible; no se genera ni se sustituye silenciosamente.",
+        "background debe ser una imagen durable o un vídeo en bucle sin costuras; no se genera ni se sustituye silenciosamente.",
         "No genera vídeo ni audio con IA y no modifica la canción adjunta.",
         "No utiliza estroboscopio ni flashes blancos deliberados. Algunos movimientos incluyen giros o desplazamientos fuertes: evita repetición densa y revisa el resultado para detectar mareo.",
-        "El alpha limpio es un requisito de entrada; este catálogo no inspecciona píxeles ni garantiza que el asset lo cumpla.",
+        "El alpha limpio es un requisito de entrada: scenes.template.compile avisa con cutout_without_alpha si un recorte no tiene píxeles transparentes.",
         "Los movimientos que declaran un strip repiten la misma imagen en el eje indicado; pueden mostrar costuras si el asset no es tileable. No garantizan continuidad y requieren revisión artística de la preview y del render antes de aprobarlos; este catálogo no valida píxeles ni tileabilidad.",
-        "prop_1 es obligatorio y sus copias forman el soporte; no hay una onda de fondo, cuerpos generados, manos, equilibrio ni crowd physics."
+        "prop_1 es obligatorio y sus copias forman el soporte; no hay una onda de fondo, cuerpos generados, manos, equilibrio ni crowd physics.",
+        "La cámara deriva despacio por defecto (control drift, 0–1); drift 0 deja el encuadre quieto.",
+        "En planos largos el movimiento conserva su velocidad: se repite o recorre más, no se ralentiza."
       ],
       "example": "Usa el movimiento musical candidato \"music-crowd-surf\" (Surf entre multitudes). Rellena exactamente los slots obligatorios subject_1, background, prop_1; usa sólo imágenes proporcionadas, con subject_1 como foco principal y background como placa de entorno. Respeta los límites del movimiento y conserva el texto y el audio fuera de esta plantilla.",
       "defaultDuration": 6,

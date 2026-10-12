@@ -120,21 +120,21 @@ const assertSceneShape = scene => {
 
 const assetBySlot = scene => new Map((scene.narrative?.assets ?? []).map(asset => [asset.slot, asset]))
 
-test('expanded catalog keeps the 24 legacy candidates intact and adds 24 music candidates', () => {
-  assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 24)
-  assert.equal(MUSIC_MOTION_TEMPLATES.length, 24)
-  assert.equal(ALL_SCENE_TEMPLATES.length, 48)
+test('the catalog keeps the 17 original grammars first and lists 22 music choreographies', () => {
+  assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 17)
+  assert.equal(MUSIC_MOTION_TEMPLATES.length, 22)
+  assert.equal(ALL_SCENE_TEMPLATES.length, 41)
   assert.deepEqual(
     ALL_SCENE_TEMPLATES.slice(0, CANDIDATE_SCENE_TEMPLATES.length),
     CANDIDATE_SCENE_TEMPLATES,
-    'the expanded list must not rewrite the legacy prefix',
+    'the expanded list must not rewrite the original prefix',
   )
 
   const legacyIds = CANDIDATE_SCENE_TEMPLATES.map(template => template.id)
   const musicIds = MUSIC_MOTION_TEMPLATES.map(template => template.id)
-  assert.equal(new Set(legacyIds).size, 24)
-  assert.equal(new Set(musicIds).size, 24)
-  assert.equal(new Set([...legacyIds, ...musicIds]).size, 48)
+  assert.equal(new Set(legacyIds).size, 17)
+  assert.equal(new Set(musicIds).size, 22)
+  assert.equal(new Set([...legacyIds, ...musicIds]).size, 39)
 
   for (const template of MUSIC_MOTION_TEMPLATES) {
     assert.equal(template.status, 'candidate')
@@ -145,7 +145,7 @@ test('expanded catalog keeps the 24 legacy candidates intact and adds 24 music c
     assert.ok(template.defaultDuration >= 3 && template.defaultDuration <= 12)
     for (const slot of template.slots) {
       assert.ok(MUSIC_SLOT_IDS.has(slot.id), `${template.id} uses only expanded slot names`)
-      assert.deepEqual(slot.kinds, ['image'], `${template.id}/${slot.id} is image-only`)
+      assert.deepEqual(slot.kinds, slot.id === 'background' ? ['image', 'video'] : ['image'], `${template.id}/${slot.id} kinds`)
       assert.ok(slot.description.length > 0, `${template.id}/${slot.id} explains its role`)
     }
     assert.ok(template.slots.some(slot => slot.id === 'subject_1' && slot.required))
@@ -273,17 +273,17 @@ test('musical identity slots reject repeated sources and canonical asset aliases
   }))
 })
 
-test('legacy hero and prop are outside the musical identity duplicate rule', () => {
+test('the original duet is outside the choreographies duplicate rule', () => {
   const legacy = CANDIDATE_SCENE_TEMPLATES.find(template => template.id === 'music-duet')
   assert.ok(legacy)
   const bindings = bindingsFor(legacy)
   assert.doesNotThrow(() => compileCandidateScene(legacy.id, {
     ...bindings,
-    prop: { ...bindings.prop, source: bindings.hero.source },
+    subject_2: { ...bindings.subject_2, source: bindings.subject_1.source },
   }))
 })
 
-test('all 24 music motion builders have distinct choreographies beyond assets and names', () => {
+test('all 22 music motion builders have distinct choreographies beyond assets and names', () => {
   const fingerprints = new Map()
   for (const template of MUSIC_MOTION_TEMPLATES) {
     const fingerprint = motionFingerprint(compileCandidateScene(template.id, bindingsFor(template)))

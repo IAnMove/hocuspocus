@@ -1,16 +1,25 @@
 """Compile Video 2D templates and lyrics through the UI builders.
 
 Catalog ids are checked here before Node starts. The script returns a document
-or cues and does not save, export, or use the GPU.
+or cues and does not save, export, or use the GPU. Template inputs follow the
+2026-10-12 model (docs/development/VIDEO2D_TEMPLATE_MODEL.md): an alias id
+compiles as its card with a control preset, a retired id names what to use
+instead, old slot names translate once, and controls are numbers, choices or
+texts checked as the TypeScript compile checks them.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+import io
 import json
+import re
 import subprocess
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs, unquote, urlparse
 
 from services import resource_scheduler
 from services.mcp_compact import compact_compile
@@ -36,9 +45,12 @@ REQUIRED = {
 }
 DESCRIPTIONS = {
     "scenes.template.compile": (
-        "Compile one scene template with the UI TypeScript builders. assets maps slot id to a durable "
-        "source. Default result is layer ids, text ids, warning codes, duration and size. "
-        "Pass full true for result.document and result.warnings. template_unknown and template_missing_slot "
+        "Compile one scene template with the UI TypeScript builders. assets maps slot id (subject_1, subject_2, "
+        "background, prop_1, prop_2, foreground; old hero/plate/prop are translated) to a durable source; a "
+        "background may be a looping video. controls are numbers, choices or texts the card declares. An alias id "
+        "compiles as its card with a preset. Default result is layer ids, text ids, warning codes (cutout_without_alpha), "
+        "duration and size. Pass full true for result.document and result.warnings. template_unknown, "
+        "template_retired (with use_instead), template_missing_slot, template_bad_control and slot_alias_conflict "
         "are stable errors. Does not save or export. No GPU."
     ),
     "scenes.text.template": (
@@ -52,11 +64,20 @@ DESCRIPTIONS = {
     ),
 }
 _SOURCE_PREFIXES = ("javascript:", "blob:", "file:", "filesystem:")
+# Same reading as slotType in ui/scripts/video2dCompile.ts.
+_MODEL_SOURCE = re.compile(r"^data:model/gltf-binary;|\.glb(?:$|[?#])", re.IGNORECASE)
+_VIDEO_SOURCE = re.compile(r"^data:video/|\.(?:mp4|webm|mov|m4v)(?:$|[?#])", re.IGNORECASE)
+_WORKSPACE_NAME = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)")
+# Cutout slots of the choreographies: a picture without a transparent pixel shows its rectangle.
+CUTOUT_SLOTS = ("subject_1", "subject_2", "prop_1")
+
+WorkspaceDir = Callable[[Any], str]
 
 
 class CompileError(ValueError):
-    def __init__(self, code: str, detail: str) -> None:
+    def __init__(self, code: str, detail: str, **extra: Any) -> None:
         self.code = code
+        self.extra = extra
         super().__init__(f"{code}: {detail}")
 
 
@@ -107,27 +128,85 @@ def _durable(source: str) -> bool:
     return lowered.startswith("https://") or lowered.startswith("http://")
 
 
+def _templates() -> dict:
+    return CATALOGS["scenes.templates.catalog"]
+
+
+def _resolve(template_id: str) -> tuple[dict, dict, str | None]:
+    """The card for a card id or an alias id, the alias's control preset, and the alias (None for a card)."""
+    retired = (_templates().get("retired") or {}).get(template_id)
+    if isinstance(retired, dict):
+        note = str(retired.get("note") or "")
+        raise CompileError("template_retired", f"{template_id} is retired. {note}".strip(), use_instead=list(retired.get("useInstead") or []))
+    alias = (_templates().get("aliases") or {}).get(template_id)
+    template = _find("scenes.templates.catalog", alias["card"] if isinstance(alias, dict) else template_id)
+    if template is None:
+        raise CompileError("template_unknown", template_id)
+    if not isinstance(alias, dict):
+        return template, {}, None
+    return template, dict(alias.get("preset") or {}), template_id
+
+
+def _slots(template: dict) -> dict[str, dict]:
+    return {slot.get("id"): slot for slot in template.get("slots") or [] if isinstance(slot, dict)}
+
+
+def canonical_slot(template: dict, name: str) -> str | None:
+    """The card's slot for a new or an old slot name (hero, plate, prop), or None when the card has no such slot."""
+    aliases = {**(_templates().get("slotAliases") or {}), **(template.get("slotAliases") or {})}
+    slot = aliases.get(name, name)
+    return slot if slot in _slots(template) else None
+
+
+def slot_type(source: str, kinds: list) -> str:
+    """The asset type a source declares by its MIME or extension."""
+    if _MODEL_SOURCE.search(source):
+        return "model3d"
+    if _VIDEO_SOURCE.search(source):
+        return "video"
+    if len(kinds) == 1 and kinds[0] != "image":
+        return str(kinds[0])
+    return "image"
+
+
+def _asset_source(template: dict, slot_id: str, source: str) -> str:
+    if not _durable(source):
+        raise CompileError("template_bad_asset", slot_id)
+    kinds = _slots(template)[slot_id].get("types") or []
+    if slot_type(source.strip(), kinds) not in kinds:
+        raise CompileError("template_bad_asset", slot_id)
+    return source.strip()
+
+
 def _assets(template: dict, raw: Any) -> dict[str, str]:
     if raw is None:
         raw = {}
     if not isinstance(raw, dict) or len(raw) > 16:
         raise CompileError("template_bad_asset", "assets")
-    known = {slot.get("id") for slot in template.get("slots") or []}
     assets: dict[str, str] = {}
-    for slot_id, source in raw.items():
-        if type(slot_id) is not str or slot_id not in known or type(source) is not str:
-            raise CompileError("template_bad_asset", str(slot_id))
-        if not source.strip():
-            continue
-        if not _durable(source):
-            raise CompileError("template_bad_asset", slot_id)
-        assets[slot_id] = source.strip()
+    named: dict[str, str] = {}
+    for name, source in raw.items():
+        slot_id = canonical_slot(template, name) if type(name) is str else None
+        if slot_id is None or type(source) is not str:
+            raise CompileError("template_bad_asset", str(name))
+        if slot_id in named:
+            raise CompileError("slot_alias_conflict", f"{named[slot_id]} and {name} name the same slot {slot_id}")
+        named[slot_id] = name
+        if source.strip():
+            assets[slot_id] = _asset_source(template, slot_id, source)
     return assets
 
 
-def _missing_slot(template: dict, assets: dict[str, str]) -> str | None:
+def _required(slot: dict, controls: dict) -> bool:
+    when = slot.get("requiredWhen")
+    if isinstance(when, dict) and when:
+        return bool(slot.get("required")) or all(controls.get(key) == value for key, value in when.items())
+    return bool(slot.get("required"))
+
+
+def _missing_slot(template: dict, assets: dict[str, str], controls: dict) -> str | None:
     for slot in template.get("slots") or []:
-        if not slot.get("required"):
+        if not _required(slot, controls):
             continue
         source = assets.get(slot.get("id"))
         if not isinstance(source, str) or not source.strip():
@@ -135,8 +214,26 @@ def _missing_slot(template: dict, assets: dict[str, str]) -> str | None:
     return None
 
 
+def _choice_or_text(key: str, value: Any, spec: dict) -> bool:
+    """Checks a choice or text control; False when the spec is numeric."""
+    if "options" in spec:
+        if type(value) is not str or value not in (spec.get("options") or []):
+            raise CompileError("template_bad_control", key)
+        return True
+    if spec.get("text") is True:
+        limit = spec.get("maxLength")
+        if type(value) is not str or type(limit) is not int or len(value) > limit:
+            raise CompileError("template_bad_control", key)
+        return True
+    return False
+
+
 def _control_value(key: str, value: Any, spec: Any) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isinstance(spec, dict):
+    if not isinstance(spec, dict):
+        raise CompileError("template_bad_control", key)
+    if _choice_or_text(key, value, spec):
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise CompileError("template_bad_control", key)
     low, high = spec.get("min"), spec.get("max")
     if isinstance(low, bool) or isinstance(high, bool) or not isinstance(low, (int, float)) or not isinstance(high, (int, float)):
@@ -162,11 +259,14 @@ def _with_duration(data: dict, declared: dict, raw: dict) -> dict:
     return {**raw, "duration": data["duration"]}
 
 
-def _declared_controls(declared: dict, provided: dict) -> dict[str, float]:
-    controls: dict[str, float] = {}
+def _declared_controls(declared: dict, provided: dict, preset: dict) -> dict[str, Any]:
+    """Every control of the card: the caller's value, else the alias preset, else the card default."""
+    controls: dict[str, Any] = {}
     for key, spec in declared.items():
         if key in provided:
             value = provided[key]
+        elif key in preset:
+            value = preset[key]
         elif isinstance(spec, dict):
             value = spec.get("default")
         else:
@@ -182,13 +282,13 @@ def _reject_extra_controls(declared: dict, provided: dict) -> None:
             raise CompileError("template_bad_control", str(key))
 
 
-def _controls(template: dict, data: dict) -> dict[str, float]:
+def _controls(template: dict, data: dict, preset: dict | None = None) -> dict[str, Any]:
     declared = template.get("controls") or {}
     if not isinstance(declared, dict):
         raise CompileError("template_bad_control", "controls")
     provided = _with_duration(data, declared, _control_map(data))
     _reject_extra_controls(declared, provided)
-    return _declared_controls(declared, provided)
+    return _declared_controls(declared, provided, preset or {})
 
 
 def _frame(data: dict) -> None:
@@ -200,26 +300,123 @@ def _frame(data: dict) -> None:
         raise CompileError("template_bad_frame", "fps")
 
 
-def _prepare_template(data: dict) -> dict:
+def _default_workspace_dir(name: Any) -> str:
+    """The workspace folder under ./outputs, without creating it: a compile only reads."""
+    from services import core_workspace
+
+    chosen = core_workspace.active_workspace() if name is None else name
+    if type(chosen) is not str or not _WORKSPACE_NAME.fullmatch(chosen):
+        raise ValueError("workspace")
+    base = (core_workspace.root() / "outputs").resolve()
+    return str(base if chosen == "default" else base / chosen)
+
+
+def _example_path(name: str) -> Path | None:
+    from services.example_assets import example_assets
+
+    try:
+        example_assets.entry(name)
+        return example_assets.cached(name)
+    except (KeyError, OSError):
+        return None
+
+
+def _workspace_path(address: Any, workspace_dir: WorkspaceDir) -> Path | None:
+    name = unquote(address.path[len("/api/v1/file/"):])
+    workspace = (parse_qs(address.query).get("workspace") or [None])[0]
+    try:
+        root = Path(workspace_dir(workspace)).resolve()
+    except Exception:  # noqa: BLE001 - the runtime resolver raises HTTPException for a bad name
+        return None
+    candidate = root.joinpath(*name.split("/")).resolve()
+    return candidate if candidate.is_relative_to(root) and candidate.is_file() else None
+
+
+def _picture(source: str, workspace_dir: WorkspaceDir) -> Any:
+    """A local or inline picture as a file path or bytes; None for remote or unreadable sources (never fetched)."""
+    if source.lower().startswith("data:image/"):
+        header, _, payload = source.partition(",")
+        if ";base64" not in header.lower():
+            return None
+        try:
+            return io.BytesIO(base64.b64decode(payload))
+        except (ValueError, binascii.Error):
+            return None
+    address = urlparse(source)
+    if address.path.startswith("/api/v1/file/"):
+        return _workspace_path(address, workspace_dir)
+    if address.path.startswith("/examples/"):
+        return _example_path(unquote(address.path[len("/examples/"):]))
+    return None
+
+
+def has_transparency(source: str, workspace_dir: WorkspaceDir = _default_workspace_dir) -> bool | None:
+    """True when the picture has a transparent pixel, False when it has none (a JPEG never does), None when it
+    cannot be read here."""
+    picture = _picture(source, workspace_dir)
+    if picture is None:
+        return None
+    try:
+        from PIL import Image
+
+        with Image.open(picture) as image:
+            if "transparency" in image.info:
+                image = image.convert("RGBA")
+            if "A" not in image.getbands():
+                return False
+            return image.getchannel("A").getextrema()[0] < 255
+    except Exception:  # noqa: BLE001 - an unreadable picture is not a compile error
+        return None
+
+
+def _alpha_warnings(template: dict, assets: dict[str, str], workspace_dir: WorkspaceDir) -> list[dict]:
+    if template.get("group") != "music-motion":
+        return []
+    warnings = []
+    for slot_id in CUTOUT_SLOTS:
+        source = assets.get(slot_id)
+        if source and has_transparency(source, workspace_dir) is False:
+            warnings.append({
+                "code": "cutout_without_alpha", "slot": slot_id,
+                "message": f"{slot_id} has no transparent pixel: the cutout will show its rectangle.",
+            })
+    return warnings
+
+
+def _template_id(data: dict) -> str:
     template_id = data.get("templateId")
     if type(template_id) is not str or not template_id.strip():
         raise CompileError("template_unknown", "templateId")
-    template = _find("scenes.templates.catalog", template_id)
-    if template is None:
-        raise CompileError("template_unknown", template_id)
+    return template_id
+
+
+def prepare_template(data: dict, *, workspace_dir: WorkspaceDir | None = None) -> dict:
+    """Check one scenes.template.compile input before Node starts.
+
+    Returns ``request`` (what the TypeScript bridge compiles: assets under the new slot names, every control
+    resolved with the alias preset), ``card`` (the card id), ``alias`` (the alias id or None) and ``warnings``
+    (``cutout_without_alpha``). Production calls it for scene2d shots, so both paths check the same way.
+    """
+    template_id = _template_id(data)
+    template, preset, alias = _resolve(template_id)
     _frame(data)
     assets = _assets(template, data.get("assets", {}))
-    missing = _missing_slot(template, assets)
+    controls = _controls(template, data, preset)
+    missing = _missing_slot(template, assets, controls)
     if missing:
         raise CompileError("template_missing_slot", missing)
-    controls = _controls(template, data)
     request: dict[str, Any] = {"templateId": template_id, "assets": assets, "controls": controls}
     if "duration" in controls:
         request["duration"] = controls["duration"]
     for key in ("width", "height", "fps"):
         if key in data:
             request[key] = data[key]
-    return request
+    warnings = _alpha_warnings(template, assets, workspace_dir or _default_workspace_dir)
+    return {"request": request, "card": template["id"], "alias": alias, "warnings": warnings}
+
+
+def _prepare_template(data: dict) -> dict:
+    return prepare_template(data)["request"]
 
 
 def _text_template(data: dict) -> dict:
@@ -335,12 +532,12 @@ def _bridge_result(bridged: dict) -> dict:
     raise CompileError(code, detail[:500])
 
 
-def _shape(name: str, result: dict) -> dict:
+def _shape(name: str, result: dict, early: list[dict] | None = None) -> dict:
     if name == "scenes.template.compile":
         document, warnings = result.get("document"), result.get("warnings")
         if not isinstance(document, dict) or not isinstance(warnings, list):
             raise CompileError("compile_bridge_failed", "document")
-        return {"document": document, "warnings": [str(item) for item in warnings[:20]]}
+        return {"document": document, "warnings": [*(early or []), *(str(item) for item in warnings)][:20]}
     if name == "scenes.text.template":
         texts = result.get("texts")
         if not isinstance(texts, list):
@@ -352,14 +549,20 @@ def _shape(name: str, result: dict) -> dict:
     return {"lyrics": lyrics}
 
 
-def execute(command: Any) -> dict[str, Any]:
+def execute(command: Any, *, workspace_dir: WorkspaceDir | None = None) -> dict[str, Any]:
     name, raw = _envelope(command)
     data = dict(raw)
     full = data.pop("full", False)
     if type(full) is not bool:
         raise CompileError("compile_bad_envelope", "full")
-    bridged = spawn_bridge({"operation": name, "input": _prepare(name, data)})
-    shaped = _shape(name, _bridge_result(bridged))
+    warnings: list[dict] = []
+    if name == "scenes.template.compile":
+        prepared = prepare_template(data, workspace_dir=workspace_dir)
+        request, warnings = prepared["request"], prepared["warnings"]
+    else:
+        request = _prepare(name, data)
+    bridged = spawn_bridge({"operation": name, "input": request})
+    shaped = _shape(name, _bridge_result(bridged), warnings)
     if full is not True:
         shaped = compact_compile(name, shaped)
     return {"version": 1, "status": "completed", "operation": name, "result": shaped}
@@ -378,11 +581,10 @@ def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
 
 
 def command_catalog() -> list[dict[str, Any]]:
-    number = {"type": "number"}
     size = {"type": "integer", "minimum": 64, "maximum": 7680}
     template_input = {
         "templateId": {"type": "string", "minLength": 1},
-        "controls": {"type": "object", "additionalProperties": number},
+        "controls": {"type": "object", "additionalProperties": {"type": ["number", "string"]}},
         "assets": {"type": "object", "additionalProperties": {"type": "string"}},
         "width": size, "height": size,
         "duration": {"type": "number", "minimum": 3, "maximum": 12},
@@ -413,7 +615,8 @@ def command_catalog() -> list[dict[str, Any]]:
     } for name, (properties, required) in specs.items()]
 
 
-def command_handlers() -> dict[str, Callable[[Any], Any]]:
+def command_handlers(workspace_dir: WorkspaceDir | None = None) -> dict[str, Callable[[Any], Any]]:
+    """MCP handlers; ``workspace_dir`` resolves /api/v1/file sources for the alpha check (default: ./outputs)."""
     def handler(name: str) -> Callable[[Any], Any]:
         async def handle(arguments: Any) -> dict[str, Any]:
             from fastapi import HTTPException
@@ -421,9 +624,10 @@ def command_handlers() -> dict[str, Callable[[Any], Any]]:
 
             payload = arguments if isinstance(arguments, dict) else {}
             try:
-                return await run_in_threadpool(execute, {**payload, "operation": name})
+                return await run_in_threadpool(execute, {**payload, "operation": name}, workspace_dir=workspace_dir)
             except CompileError as error:
-                raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
+                detail = {"code": error.code, "message": str(error), "retryable": False, **error.extra}
+                raise HTTPException(422, detail) from error
 
         return handle
 
@@ -431,9 +635,14 @@ def command_handlers() -> dict[str, Callable[[Any], Any]]:
 
 
 __all__ = [
+    "CUTOUT_SLOTS",
     "CompileError",
+    "canonical_slot",
     "command_catalog",
     "command_handlers",
     "execute",
+    "has_transparency",
+    "prepare_template",
+    "slot_type",
     "spawn_bridge",
 ]

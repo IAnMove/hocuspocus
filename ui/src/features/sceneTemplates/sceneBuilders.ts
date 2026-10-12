@@ -1,13 +1,20 @@
 import type { SceneLayer, SceneKeyframe, SceneAtmosphereKind, SceneCatalogAssetReference } from '../../types'
-import type { TemplateSlotName } from './catalog'
+import type { ControlValue, TemplateAssetKind, TemplateSlotName } from './catalog'
 
-export interface TemplateAsset { source: string; type: 'image' | 'model3d'; name?: string; catalogAtAssignment?: SceneCatalogAssetReference }
+export interface TemplateAsset { source: string; type: TemplateAssetKind; name?: string; catalogAtAssignment?: SceneCatalogAssetReference }
 export type TemplateBindings = Partial<Record<TemplateSlotName, TemplateAsset>>
 export interface TemplateControls { duration: number; bpm: number; intensity: number }
 export type Pose = Partial<Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'curve'>>
 export type Beat = Pose & { at: number }
-export interface BuildContext extends TemplateControls { bindings: TemplateBindings }
+export interface BuildContext extends TemplateControls {
+  bindings: TemplateBindings
+  /** Every resolved control of the card (choices, texts, drift…), by name. */
+  options: Readonly<Record<string, ControlValue>>
+  /** The card's authored duration: motion written for it keeps its speed on longer shots. */
+  base: number
+}
 const basePose = { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1 }
+const POSE_KEYS = ['x', 'y', 'scale', 'rotation', 'opacity'] as const
 
 export function layer(id: string, type: SceneLayer['type'], source: string, duration: number, pose: Pose = {}, z = 10): SceneLayer {
   const transform = { ...basePose, ...pose }
@@ -27,15 +34,76 @@ export function asset(ctx: BuildContext, slot: TemplateSlotName, pose: Pose = {}
   const item = layer(slot, binding.type, binding.source, ctx.duration, pose, z)
   item.name = `${slot} · ${binding.name || slot}`
   if (binding.type === 'model3d') item.transform = { ...item.transform, rotationX: 65, rotationY: -35 }
+  // A video background is a seamless loop on its own clock, whatever the shot length.
+  if (binding.type === 'video') item.playback = { start: 0, loop: 'loop', speed: 1 }
   return item
 }
+
+/** Repeats a choreography written for the card's own duration, so a longer shot repeats it instead of slowing it. */
+export function cycles(ctx: BuildContext): number {
+  return Math.max(1, Math.round(ctx.duration / ctx.base))
+}
+
+const samePose = (a: Pose, b: Pose) => POSE_KEYS.every(key => Math.abs((a[key] ?? 0) - (b[key] ?? 0)) < 1e-6 && (a[key] === undefined) === (b[key] === undefined))
+
+function reversedPath(beats: Beat[]): Beat[] {
+  return beats.map((_, index) => {
+    const source = beats[beats.length - 1 - index]
+    // The curve of a segment lives on its first keyframe; backwards, that is the next one.
+    const reversed: Beat = { ...source, at: 1 - source.at }
+    delete reversed.curve
+    const segment = beats[beats.length - 2 - index]?.curve
+    return segment ? { ...reversed, curve: segment } : reversed
+  })
+}
+
+/** `times` copies of a 0..1 path in one 0..1 timeline. `pingpong` plays every other copy backwards; a copy that does
+ * not start where the last one ended jumps (hold, then switch), which only suits paths that start and end off frame. */
+export function repeatPath(beats: Beat[], times: number, mode: 'loop' | 'pingpong' = 'loop'): Beat[] {
+  if (times <= 1) return beats
+  const out: Beat[] = []
+  const jump = .002 / times
+  for (let cycle = 0; cycle < times; cycle += 1) {
+    const path = mode === 'pingpong' && cycle % 2 ? reversedPath(beats) : beats
+    path.forEach((beat, index) => {
+      const at = (cycle + beat.at) / times
+      if (!cycle || index) return void out.push({ ...beat, at })
+      const previous = out[out.length - 1]
+      if (samePose(previous, beat)) return
+      out[out.length - 1] = { ...previous, curve: 'hold' }
+      out.push({ ...beat, at: at + jump })
+    })
+  }
+  return out
+}
+
+const CAMERA_BOUNDS = { x: [30, 70], y: [35, 65], scale: [.9, 1.6], rotation: [-8, 8] } as const
+
+/** A longer shot travels further (up to twice the authored move, kept inside the frame) instead of moving slower. */
+function reach(ctx: BuildContext, beats: Beat[]): Beat[] {
+  const stretch = Math.min(2, Math.max(1, ctx.duration / ctx.base))
+  if (stretch === 1 || !beats.length) return beats
+  const first = { ...basePose, ...beats[0] }
+  return beats.map(beat => {
+    const out: Beat = { ...beat }
+    for (const key of ['x', 'y', 'scale', 'rotation'] as const) {
+      const value = beat[key]
+      if (value === undefined) continue
+      const [low, high] = CAMERA_BOUNDS[key]
+      const stretched = first[key] + (value - first[key]) * stretch
+      // The bounds never pull an authored pose back: they only stop the stretch.
+      out[key] = Math.min(Math.max(stretched, Math.min(low, value)), Math.max(high, value))
+    }
+    return out
+  })
+}
 export function camera(ctx: BuildContext, beats: Beat[], shake = 0): SceneLayer {
-  const item = keyframes(layer('camera', 'camera', '', ctx.duration, {}, 100), beats)
+  const item = keyframes(layer('camera', 'camera', '', ctx.duration, {}, 100), reach(ctx, beats))
   if (shake) item.animation.shake = { amount: shake, frequency: 3, seed: 2 }
   return item
 }
 export function backdrop(ctx: BuildContext): SceneLayer {
-  return { ...asset(ctx, ctx.bindings.background ? 'background' : 'plate', { scale: 1.15 }, 0), fill: true, parallax: .25 }
+  return { ...asset(ctx, 'background', { scale: 1.15 }, 0), fill: true, parallax: .25 }
 }
 export function foreground(ctx: BuildContext): SceneLayer[] {
   return ctx.bindings.foreground ? [{ ...asset(ctx, 'foreground', { scale: 1.12 }, 80), fill: true, parallax: 1.6 }] : []
@@ -43,14 +111,17 @@ export function foreground(ctx: BuildContext): SceneLayer[] {
 export function atmosphere(ctx: BuildContext, kind: SceneAtmosphereKind, color = '#b9d5ff'): SceneLayer {
   return { ...layer(`atmosphere-${kind}`, 'effect', '', ctx.duration, { opacity: .35 }, 60), atmosphere: { kind, density: 25, speed: .5, size: .6, wind: 1, color } }
 }
-export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'scale' = 'scale'): SceneLayer {
+/** Pulses a layer on the visual BPM: on every beat, or only on the even or odd beats (two figures taking turns). */
+export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'scale' = 'scale', on: 'all' | 'even' | 'odd' = 'all'): SceneLayer {
   if (item.animation.keyframes?.length) throw new Error('El pulso necesita una pose base, no reemplaza keyframes existentes.')
   const beats: Beat[] = []
   const seconds = 60 / ctx.bpm
-  for (let time = 0; time < ctx.duration; time += seconds) {
-    beats.push({ at: time / ctx.duration, scale: item.transform.scale, y: item.transform.y })
-    beats.push({ at: Math.min(1, (time + seconds * .2) / ctx.duration), ...(kind === 'scale' ? { scale: item.transform.scale * (1 + .09 * ctx.intensity) } : { y: item.transform.y - 3 * ctx.intensity }) })
-    beats.push({ at: Math.min(1, (time + seconds * .8) / ctx.duration), scale: item.transform.scale, y: item.transform.y })
+  const rest = { scale: item.transform.scale, y: item.transform.y }
+  for (let time = 0, index = 0; time < ctx.duration; time += seconds, index += 1) {
+    const active = on === 'all' || (index % 2 === 0) === (on === 'even')
+    beats.push({ at: time / ctx.duration, ...rest })
+    if (active) beats.push({ at: Math.min(1, (time + seconds * .2) / ctx.duration), ...(kind === 'scale' ? { scale: item.transform.scale * (1 + .09 * ctx.intensity) } : { y: item.transform.y - 3 * ctx.intensity }) })
+    if (active) beats.push({ at: Math.min(1, (time + seconds * .8) / ctx.duration), ...rest })
   }
   beats.push({ at: 1 })
   return keyframes(item, beats.filter((beat, i) => !i || beat.at > beats[i - 1].at))

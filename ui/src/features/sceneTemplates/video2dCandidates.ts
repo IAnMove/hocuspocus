@@ -1,102 +1,67 @@
-// Video 2D scene documents for the four unapproved candidates. Effect layers
-// keep a compile without files exportable; provided slot images still bind.
+// Video 2D cards with titles and a finish (documentary-history, city-postcard). Their plates move: a slow push or a
+// sideways drift with parallax against the subject and the foreground, and their texts are controls.
 import { buildTextTemplate } from '../../lib/kineticText'
 import type { Scene, SceneLayer } from '../../types'
 import { FINISH_PRESETS } from '../../lib/scene2d/finish'
+import { asset, keyframes, layer, type Beat, type BuildContext, type Pose } from './sceneBuilders'
 
-export type Video2dCandidateSize = { width?: number; height?: number; duration?: number; fps?: number }
-export type Video2dCandidateAssets = Partial<Record<'hero' | 'plate' | 'foreground', string>>
+export type Video2dFrame = { width?: number; height?: number }
+type Video2dBody = Pick<Scene, 'width' | 'height' | 'fps' | 'layers' | 'texts' | 'finish'>
 
-function candidateFrame(id: string, size: Video2dCandidateSize) {
-  const vertical = id === 'lyric-vertical'
-  let width = vertical ? 1080 : 1920
-  let height = vertical ? 1920 : 1080
-  let duration = 6
-  if (typeof size.width === 'number') width = size.width
-  if (typeof size.height === 'number') height = size.height
-  if (typeof size.duration === 'number') duration = size.duration
-  return { start: 0, duration, width, height }
+/** Travel per authored shot; a longer shot travels further at the same speed, up to twice as far. */
+function glide(c: BuildContext, from: Pose, to: Pose): Beat[] {
+  const stretch = Math.min(2, c.duration / c.base)
+  const along = (key: 'x' | 'y' | 'scale') => (from[key] ?? 0) + ((to[key] ?? 0) - (from[key] ?? 0)) * stretch
+  return [{ at: 0, ...from, curve: 'linear' }, { at: 1, x: along('x'), y: along('y'), scale: along('scale') }]
 }
 
-function candidateFps(id: string, fps: number | undefined): 24 | 30 | 60 {
-  if (fps === 24 || fps === 30 || fps === 60) return fps
-  return id === 'lyric-vertical' ? 30 : 24
+function moving(c: BuildContext, slot: 'subject_1' | 'background' | 'foreground', from: Pose, to: Pose, z: number, fill: boolean, parallax = 1): SceneLayer {
+  return { ...keyframes(asset(c, slot, from, z), glide(c, from, to)), fill, parallax }
 }
 
-/** Duration 6 keeps the authored cue times; other durations scale that timeline. */
-function scaled(value: number, duration: number) {
-  if (duration === 6) return value
-  return value * duration / 6
+function particles(c: BuildContext, kind: 'dust' | 'leaves'): SceneLayer {
+  return { ...layer(`atmosphere-${kind}`, 'effect', '', c.duration, {}, 20), atmosphere: { kind, density: 24, speed: .4, size: 1.2, wind: 4, color: '#dbe7f5' } }
 }
 
-const layer = (id: string, kind: 'dust' | 'smoke' | 'bokeh' | 'leaves', duration: number) => ({
-  id, name: id, type: 'effect' as const, source: '', visible: true, z: 0,
-  transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 },
-  animation: { start: { x: 50, y: 50, scale: 1, opacity: 1 }, end: { x: 50, y: 50, scale: 1.04, opacity: 1 }, duration, curve: 'ease' as const },
-  atmosphere: { kind, density: 24, speed: 0.4, size: 1.2, wind: 4, color: '#dbe7f5' },
-})
+const text = (c: BuildContext, key: string) => String(c.options[key] ?? '').trim()
 
-function imageSource(source: string | undefined) {
-  const text = source?.trim() ?? ''
-  if (!text || /^data:model\/gltf-binary;/i.test(text) || /\.glb(?:$|[?#])/i.test(text)) return ''
-  return text
+function documentary(c: BuildContext, frame: { start: number; duration: number; width: number; height: number }): Video2dBody {
+  const [caption, from, to, label] = ['caption', 'yearFrom', 'yearTo', 'yearLabel'].map(key => text(c, key))
+  const layers = [
+    // Ken Burns with parallax: the plate pushes slowest, the photo counters, the foreground passes fastest.
+    moving(c, 'background', { x: 49, y: 50, scale: 1.12 }, { x: 51.5, y: 49, scale: 1.2 }, 0, true, .3),
+    moving(c, 'subject_1', { x: 52, y: 52, scale: .78 }, { x: 50, y: 51, scale: .83 }, 10, false),
+    ...(c.bindings.foreground ? [moving(c, 'foreground', { x: 47, y: 50, scale: 1.14 }, { x: 54, y: 50, scale: 1.24 }, 80, true, 1.6)] : []),
+    particles(c, 'dust'),
+  ]
+  // An empty field adds nothing (the text templates would fall back to sample words); the counter needs two numbers.
+  const counts = [from, to].every(value => value && Number.isFinite(Number(value)))
+  const texts = [
+    ...buildTextTemplate('lower-third-date', { date: to, caption }, frame).filter(cue => (cue.id === 'date' ? to : caption)),
+    ...(counts ? buildTextTemplate('year-counter', { from, to, label }, frame) : []),
+  ]
+  return { width: frame.width, height: frame.height, fps: 24, layers, texts, finish: FINISH_PRESETS.oldDoc }
 }
 
-function imageLayer(id: string, source: string, duration: number, z: number): SceneLayer {
-  const pose = { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 }
+function postcard(c: BuildContext, frame: { start: number; duration: number; width: number; height: number }): Video2dBody {
+  const leaves = { ...particles(c, 'leaves'), strip: { enabled: true, count: 3, spacing: 30, direction: 'left' as const, speed: 6 },
+    animation: { start: { x: 20, y: 60, scale: 1, opacity: 1 }, end: { x: 80, y: 40, scale: 1, opacity: 1 }, duration: c.duration, curve: 'ease' as const, path: { points: [{ x: 15, y: 70 }, { x: 40, y: 42 }, { x: 78, y: 58 }], orient: true } } }
+  const layers = [
+    // The city drifts sideways; the figure and the foreground cross it at their own depths.
+    moving(c, 'background', { x: 54, y: 50, scale: 1.2 }, { x: 47, y: 49, scale: 1.22 }, 0, true, .3),
+    moving(c, 'subject_1', { x: 51, y: 60, scale: .7 }, { x: 48.5, y: 60, scale: .71 }, 10, false),
+    ...(c.bindings.foreground ? [moving(c, 'foreground', { x: 58, y: 50, scale: 1.16 }, { x: 43, y: 50, scale: 1.16 }, 80, true, 1.6)] : []),
+    leaves,
+  ]
+  const banner = text(c, 'banner')
   return {
-    id, name: id, type: 'image', source, visible: true, z, fill: id !== 'hero',
-    transform: pose,
-    animation: { start: pose, end: pose, duration, curve: 'ease' },
-  }
-}
-
-function withSlotImages(layers: SceneLayer[], assets: Video2dCandidateAssets | undefined, duration: number) {
-  const extras: SceneLayer[] = []
-  const plate = imageSource(assets?.plate)
-  const hero = imageSource(assets?.hero)
-  const foreground = imageSource(assets?.foreground)
-  if (plate) extras.push(imageLayer('plate', plate, duration, 0))
-  if (hero) extras.push(imageLayer('hero', hero, duration, 10))
-  if (foreground) extras.push(imageLayer('foreground', foreground, duration, 80))
-  if (!extras.length) return layers
-  const taken = new Set(extras.map(item => item.id))
-  return [...extras, ...layers.map(item => {
-    if (!taken.has(item.id)) return { ...item, z: Math.max(item.z ?? 0, 20) }
-    const id = `atmosphere-${item.id}`
-    return { ...item, id, name: id, z: Math.max(item.z ?? 0, 20) }
-  })]
-}
-
-export function compileVideo2dCandidate(id: string, size: Video2dCandidateSize = {}, assets: Video2dCandidateAssets = {}): Scene | undefined {
-  const frame = candidateFrame(id, size)
-  const fps = candidateFps(id, size.fps)
-  if (id === 'documentary-history') return {
-    version: 1, name: 'Documentary', width: frame.width, height: frame.height, fps, duration: frame.duration,
-    layers: withSlotImages([layer('plate', 'dust', frame.duration)], assets, frame.duration),
-    texts: [...buildTextTemplate('lower-third-date', { date: '1968', caption: 'The harbour keeps the light' }, frame), ...buildTextTemplate('year-counter', { from: '1960', to: '1968', label: 'Year' }, frame)],
-    finish: FINISH_PRESETS.oldDoc,
-  }
-  if (id === 'trailer-teaser') return {
-    version: 1, name: 'Trailer', width: frame.width, height: frame.height, fps, duration: frame.duration,
-    layers: withSlotImages([layer('black', 'smoke', frame.duration)], assets, frame.duration),
-    texts: [...buildTextTemplate('trailer-slam', { lines: 'ONE|LAST|LIGHT' }, frame), ...buildTextTemplate('title-card', { title: 'Musktopia', subtitle: 'A harbour story' }, { ...frame, start: scaled(4.2, frame.duration), duration: scaled(0.8, frame.duration) }), ...buildTextTemplate('end-card', { title: 'Coming soon', cta: '@studio' }, { ...frame, start: scaled(5.1, frame.duration), duration: scaled(0.9, frame.duration) })],
-    finish: { ...FINISH_PRESETS.warmCinema, bloom: { amount: 0.4, threshold: 0.6, radius: 0.4 }, letterbox: { ratio: 2.39, color: '#000000' } },
-  }
-  if (id === 'lyric-vertical') return {
-    version: 1, name: 'Lyric', width: frame.width, height: frame.height, fps, duration: frame.duration,
-    layers: withSlotImages([layer('glow', 'bokeh', frame.duration)], assets, frame.duration),
-    lyrics: { mode: 'karaoke', lines: [{ id: 'line', start: scaled(0.2, frame.duration), end: scaled(5.5, frame.duration), words: [{ text: 'The', start: scaled(0.2, frame.duration), end: scaled(0.8, frame.duration) }, { text: 'bird', start: scaled(0.8, frame.duration), end: scaled(1.6, frame.duration) }, { text: 'is', start: scaled(1.6, frame.duration), end: scaled(2, frame.duration) }, { text: 'freed', start: scaled(2, frame.duration), end: scaled(3.4, frame.duration) }] }], style: { font: 'sans', size: 6, color: '#f4efe6', activeColor: '#9ae7ff', x: 50, y: 70, maxWidth: 76, align: 'center', visibleLines: 2, beatPulse: 0.35 }, source: { kind: 'manual' } },
-    finish: FINISH_PRESETS.nightNeon,
-    rhythm: { bpm: 96, beats: [0.4, 1.0, 1.6, 2.2, 2.8, 3.4].map(beat => scaled(beat, frame.duration)) },
-  }
-  if (id === 'city-postcard') return {
-    version: 1, name: 'Postcard', width: frame.width, height: frame.height, fps, duration: frame.duration,
-    layers: withSlotImages([{ ...layer('sky', 'leaves', frame.duration), strip: { enabled: true, count: 3, spacing: 30, direction: 'left' as const, speed: 6 }, animation: { start: { x: 20, y: 60, scale: 1, opacity: 1 }, end: { x: 80, y: 40, scale: 1, opacity: 1 }, duration: frame.duration, curve: 'ease' as const, path: { points: [{ x: 15, y: 70 }, { x: 40, y: 42 }, { x: 78, y: 58 }], orient: true } } }], assets, frame.duration),
-    texts: buildTextTemplate('chorus-banner', { line: 'Salt on the windows' }, frame),
+    width: frame.width, height: frame.height, fps: 24, layers,
+    texts: banner ? buildTextTemplate('chorus-banner', { line: banner }, frame) : [],
     finish: { ...FINISH_PRESETS.paperComic, rays: { amount: 0.25, x: 70, y: 20, length: 0.4, threshold: 0.7 } },
   }
-  return undefined
 }
 
-export const VIDEO2D_CANDIDATE_IDS = ['documentary-history', 'trailer-teaser', 'lyric-vertical', 'city-postcard'] as const
+export const video2dScenes: Record<string, (c: BuildContext, frame: Video2dFrame) => Video2dBody> = {
+  'documentary-history': (c, size) => documentary(c, { start: 0, duration: c.duration, width: size.width ?? 1920, height: size.height ?? 1080 }),
+  'city-postcard': (c, size) => postcard(c, { start: 0, duration: c.duration, width: size.width ?? 1920, height: size.height ?? 1080 }),
+}

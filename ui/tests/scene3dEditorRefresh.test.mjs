@@ -120,13 +120,14 @@ test('gizmo converts translation, yaw and uniform scale into document transforms
   assert.deepEqual(transformPatch(proxy, 'scale', 'XYZ'), { scale: 0.05 })
 })
 
-test('all 48 layer templates get an editable depth finish without rewriting prompts or assets', () => {
+test('all 41 cards get an editable finish without rewriting prompts or assets', () => {
   for (const template of ALL_SCENE_TEMPLATES) {
     const scene = candidateDemoScene(template.id)
     assert.equal(scene.narrative.controls.finishVersion, 1)
     assert.equal(scene.narrative.prompt, template.promptExample)
     assert.equal(scene.generationPolicy, 'provided_only')
-    assert.ok(scene.layers.some(layer => layer.effects), template.id)
+    // Layer cards get the depth finish per layer; the titled cards carry a scene finish (oldDoc, paperComic).
+    assert.ok(template.group === 'video2d' ? scene.finish : scene.layers.some(layer => layer.effects), template.id)
     assert.ok(scene.layers.length <= 24)
     const restored = parseSceneFile(serializeSceneFile(scene))
     assert.deepEqual(restored.narrative, scene.narrative)
