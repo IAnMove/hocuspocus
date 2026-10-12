@@ -203,11 +203,12 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
-    from services.production_lyric_looks import LyricLookError, check_lyric_looks
+    from services.production_lyric_looks import LyricLookError, check_finish, check_lyric_looks
     from services.production_models import ModelError, check_models
     try:
         check_models(spec)
         check_lyric_looks(spec["style"])
+        check_finish(spec["style"])
     except (ModelError, LyricLookError) as error:
         raise ProductionError("invalid_spec", str(error)) from error
     from services.production_resolution import check_resolution

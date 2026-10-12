@@ -340,13 +340,13 @@
   "lyric_looks": {
     "cinema": {
       "titleEs": "Subtítulo de cine", "titleEn": "Cinema subtitle",
-      "lineEs": "Subtítulo serif claro abajo, con contorno y sombra; entra y sale con un fundido. Va con Cine cálido.",
-      "lineEn": "A light serif subtitle at the bottom with an outline and a shadow; it fades in and out. Pairs with Warm cinema."
+      "lineEs": "Subtítulo serif claro abajo, con contorno y sombra; entra y sale con un fundido. Va con Cine cálido, Verde azulado y naranja, Cálido y Película.",
+      "lineEn": "A light serif subtitle at the bottom with an outline and a shadow; it fades in and out. Pairs with Warm cinema, Teal and orange, Warm and Film."
     },
     "storybook": {
       "titleEs": "Cuento rotulado a mano", "titleEn": "Hand-lettered storybook",
-      "lineEs": "Letra manuscrita oscura con borde claro, un poco inclinada; entra palabra a palabra con la línea y flota.",
-      "lineEn": "Dark handwritten letters with a light outline, slightly tilted; they enter word by word with the line and float."
+      "lineEs": "Letra manuscrita oscura con borde claro, un poco inclinada; entra palabra a palabra con la línea y flota. Va con Sueño.",
+      "lineEn": "Dark handwritten letters with a light outline, slightly tilted; they enter word by word with the line and float. Pairs with Dream."
     },
     "marker-pop": {
       "titleEs": "Rotulador pop", "titleEn": "Marker pop",
@@ -355,8 +355,8 @@
     },
     "neon": {
       "titleEs": "Letrero de neón", "titleEn": "Neon sign",
-      "lineEs": "Mayúsculas rosa claro con resplandor magenta; se enfocan al entrar y parpadean. Va con Neón nocturno.",
-      "lineEn": "Light-pink capitals with a magenta glow; they come into focus and flicker. Pairs with Night neon."
+      "lineEs": "Mayúsculas rosa claro con resplandor magenta; se enfocan al entrar y parpadean. Va con Neón nocturno y Giallo.",
+      "lineEn": "Light-pink capitals with a magenta glow; they come into focus and flicker. Pairs with Night neon and Giallo."
     },
     "big-word": {
       "titleEs": "Estribillo grande", "titleEn": "Big centred chorus",
@@ -365,8 +365,8 @@
     },
     "typewriter": {
       "titleEs": "Documento tecleado", "titleEn": "Typed document",
-      "lineEs": "Letra de máquina de escribir abajo a la izquierda que se teclea con la línea. Va con Documental antiguo.",
-      "lineEn": "Typewriter letters bottom left that type out with the line. Pairs with Old documentary."
+      "lineEs": "Letra de máquina de escribir abajo a la izquierda que se teclea con la línea. Va con Documental antiguo, Sepia y Recuerdo.",
+      "lineEn": "Typewriter letters bottom left that type out with the line. Pairs with Old documentary, Sepia and Flashback."
     },
     "paper-strip": {
       "titleEs": "Tira de papel", "titleEn": "Torn paper strip",
@@ -385,18 +385,18 @@
     },
     "quiet-left": {
       "titleEs": "Discreto abajo a la izquierda", "titleEn": "Quiet lower left",
-      "lineEs": "Texto blanco pequeño abajo a la izquierda que sube al entrar.",
-      "lineEn": "Small white text bottom left that rises in."
+      "lineEs": "Texto blanco pequeño abajo a la izquierda que sube al entrar. Va con Natural, Blanqueo y Frío.",
+      "lineEn": "Small white text bottom left that rises in. Pairs with Natural, Bleach bypass and Cold."
     },
     "engraved": {
       "titleEs": "Mayúsculas grabadas", "titleEn": "Engraved capitals",
-      "lineEs": "Mayúsculas serif claras abajo que aparecen letra a letra con la línea.",
-      "lineEn": "Light serif capitals at the bottom that appear letter by letter with the line."
+      "lineEs": "Mayúsculas serif claras abajo que aparecen letra a letra con la línea. Va con Cine negro.",
+      "lineEn": "Light serif capitals at the bottom that appear letter by letter with the line. Pairs with Noir."
     },
     "arcade": {
       "titleEs": "Mayúsculas arcade", "titleEn": "Arcade capitals",
-      "lineEs": "Mayúsculas monoespaciadas blancas con sombra dura, letra a letra con la línea; desaparecen de golpe.",
-      "lineEn": "White monospace capitals with a hard shadow, letter by letter with the line; they cut out at once."
+      "lineEs": "Mayúsculas monoespaciadas blancas con sombra dura, letra a letra con la línea; desaparecen de golpe. Va con VHS.",
+      "lineEn": "White monospace capitals with a hard shadow, letter by letter with the line; they cut out at once. Pairs with VHS."
     },
     "wave-chant": {
       "titleEs": "Cántico en ola", "titleEn": "Wavy chant",

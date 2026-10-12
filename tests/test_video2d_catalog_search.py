@@ -141,16 +141,14 @@ def test_title_card_and_trailer_slam_say_they_cover_the_frame():
 
 
 def test_the_review_lines_say_what_the_compiled_scene_does():
+    """The cards the review found dishonest now do what their line says, and the merged and retired ones are gone."""
     intents = {entry["id"]: entry["visualIntent"] for entry in CATALOGS["scenes.templates.catalog"]["entries"]}
-    assert "Nadie entra" in intents["cinema-hero"]
-    assert "No hay escenario" in intents["music-stage"]
-    assert "a la vez" in intents["music-duet"] and "No se alternan" in intents["music-duet"]
-    assert "contraste" not in intents["music-pulse"]
-    assert "quieta" in intents["music-chorus"]
-    assert "no se mueve" in intents["documentary-history"]
-    assert "no se ven" in intents["trailer-teaser"]
-    assert "no acepta tu letra" in intents["lyric-vertical"]
+    assert "entra en el plano" in intents["cinema-hero"]
+    assert "se alternan al ritmo" in intents["music-duet"]
+    assert "contraste" not in intents["music-pulse"] and "sweep" in intents["music-pulse"]
+    assert "movimiento lento" in intents["documentary-history"]
     assert "No hay gaviotas" in intents["city-postcard"]
+    assert not {"music-stage", "music-chorus", "trailer-teaser", "lyric-vertical"} & set(intents)
 
 
 def test_a_literal_word_outranks_its_synonym_and_score_is_unchanged():

@@ -18,8 +18,6 @@ TOOL_RE = re.compile(
 )
 # Not registered here. The combined branch will register it.
 PENDING = "production.review"
-# The Video 2D suggest operation lands with the 2D card traits work; the scene2d section already names it.
-PENDING_2D = "scenes.templates.suggest"
 SPEC_KEYS = frozenset({"title", "song", "style", "shots"})
 
 
@@ -60,7 +58,7 @@ def _catalog_groups() -> list:
     from services.world3d_export import command_catalog as world_export
     from services.song_analysis import command_catalog as audio
     from services.video2d_edit import command_catalog as scene_edit
-    from services.video2d_catalogs import query_operation as scene_catalog
+    from services.video2d_catalogs import query_operations as scene_catalog
     from services.video2d_compile import command_catalog as scene_compile
     from services.job_leftovers import command_catalog as leftovers
 
@@ -119,7 +117,7 @@ def test_named_commands_exist_except_pending_review():
     assert PENDING in named
     # production.review is not imported on this branch. The combined branch will register it.
     known = _known_commands()
-    missing = sorted(name for name in named if name not in (PENDING, PENDING_2D) and name not in known)
+    missing = sorted(name for name in named if name != PENDING and name not in known)
     assert missing == []
 
 

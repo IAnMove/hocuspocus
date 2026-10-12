@@ -42,9 +42,11 @@ class Scene2dError(ValueError):
 
 
 def _prepare(data: dict) -> dict:
-    """The 2D template compiler's own check of a card call (aliases, slots, controls, frame), without Node."""
+    """The 2D template compiler's own check of a card call (aliases, slots, controls, frame), without Node. An alias
+    compiles as its card with the alias's preset already in the controls, so ``templateId`` is the card itself."""
     from services import video2d_compile
-    return video2d_compile._prepare_template(data)
+    prepared = video2d_compile.prepare_template(data)
+    return {**prepared["request"], "templateId": prepared["card"], "warnings": prepared["warnings"]}
 
 
 def _source(value: Any) -> bool:

@@ -11,7 +11,7 @@ const ENTRANCES: Record<string, Beat[]> = {
 function idle(c: BuildContext, phase: number): Beat[] {
   const swing = Array.from({ length: 13 }, (_, index) => {
     const turn = index / 12 * Math.PI * 2 + phase
-    return { at: index / 12, curve: 'linear' as const, rotation: 1.4 * Math.sin(turn), y: 64 - .6 * Math.sin(turn * 2), scale: .88 * (1 + .01 * Math.cos(turn)) }
+    return { at: index / 12, curve: 'linear' as const, rotation: 1.4 * Math.sin(turn), y: 64 - .35 * Math.sin(turn * 2), scale: .88 * (1 + .01 * Math.cos(turn)) }
   })
   return repeatPath(swing, Math.max(1, Math.round(c.duration / 2.6)))
 }

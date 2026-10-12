@@ -39,8 +39,9 @@ def stem(word: str) -> str:
     """Drop a plural ending: escenas → escena, graficos → grafico, scenes → scen (matched by prefix below).
 
     A five-letter «-es» word loses only the «s» (naves → nave, lines → line): two letters off would leave a root too
-    short for the prefix match, and the plural would never meet its singular."""
-    if len(word) > 5 and word.endswith("es"):
+    short for the prefix match, and the plural would never meet its singular. After s, x or z the «es» is the plural
+    itself (boxes → box, buses → bus, meses → mes)."""
+    if (len(word) > 5 or (len(word) == 5 and word[-3] in "sxz")) and word.endswith("es"):
         return word[:-2]
     if len(word) > 3 and word.endswith("s"):
         return word[:-1]

@@ -31,41 +31,24 @@ LINE_KEYS = ("titleEs", "titleEn", "lineEs", "lineEn")
 STILL_SHARE = 0.5
 MAX_SUBJECTS = 2
 
-# Decision 1, the merge table: alias id → (card, control preset the alias compiles with).
+# The merge table, the retired ids and the narrative twins live in the catalog (decisions 1, 5 and 8), which the
+# TypeScript and Python compilers read too: one source for every reader.
+_CATALOG = json.loads((ROOT / "scene_templates.json").read_text(encoding="utf-8"))
+# alias id → (card, control preset the alias compiles with)
 ALIASES: dict[str, tuple[str, dict[str, str]]] = {
-    "cinema-isolation": ("cinema-establishing", {"mood": "lonely"}),
-    "music-parallax": ("cinema-tracking", {"atmosphere": "streaks"}),
-    "music-stage": ("music-pulse", {"camera": "sweep"}),
-    "music-finale": ("music-pulse", {"camera": "open", "atmosphere": "confetti"}),
-    "music-chorus": ("music-pulse", {"camera": "beat", "atmosphere": "confetti"}),
-    "music-satellite-swarm": ("music-orbit", {"bounce": "off"}),
-    "music-ricochet-pass": ("music-pinball", {"bouncer": "prop"}),
-    "space-shield": ("space-broadside", {"outcome": "shield"}),
-    "space-explosion": ("space-broadside", {"outcome": "explode"}),
-}
-# Decision 8: retired ids and what does their job now.
+    alias: (entry["card"], dict(entry.get("preset") or {})) for alias, entry in (_CATALOG.get("aliases") or {}).items()}
+TWINS: dict[str, tuple[str, ...]] = {entry["id"]: tuple(entry["twins"]) for entry in _CATALOG["entries"] if entry.get("twins")}
+
+
+def _instead(item: str) -> dict[str, str]:
+    """A catalog ``useInstead`` entry as a pointer: an MCP operation, or a text template id."""
+    return {"operation": item} if "." in item else {"kind": "text", "id": item}
+
+
 RETIRED: dict[str, dict[str, Any]] = {
-    "trailer-teaser": {
-        "use_instead": [{"kind": "text", "id": "title-card"}, {"kind": "text", "id": "trailer-slam"}],
-        "message": "trailer-teaser is retired: it was a sequence of titles. Put the text templates title-card or "
-                   "trailer-slam in a scene (scenes.text.template or add_title).",
-    },
-    "lyric-vertical": {
-        "use_instead": [{"operation": "scenes.lyrics.import"}, {"kind": "lyric_looks"}],
-        "message": "lyric-vertical is retired: lyrics come from scenes.lyrics.import and the lyric looks "
-                   "(scenes.catalog kind lyric_looks) over any moving shot.",
-    },
-}
-# Decision 5 and review §H9: the narrative shot (ui/src/lib/sceneNarrative.ts) that covers each cinema card.
-TWINS: dict[str, tuple[str, ...]] = {
-    "cinema-establishing": ("place-establishing", "high-angle-isolation"),
-    "cinema-reveal": ("foreground-reveal",),
-    "cinema-closeup": ("emotional-close-up",),
-    "cinema-two-shot": ("two-shot-master",),
-    "cinema-detail": ("detail-insert", "pov-detail-glance"),
-    "cinema-hero": ("hero-arrival", "low-angle-hero"),
-    "cinema-tracking": ("run-travel-parallax", "surreal-transit"),
-}
+    identity: {"use_instead": [_instead(item) for item in entry.get("useInstead") or []],
+               "message": f"{identity} is retired. {entry.get('note') or ''}".strip()}
+    for identity, entry in (_CATALOG.get("retired") or {}).items()}
 
 # Words a writer uses for 2D motion that the Video 3D vocabulary groups otherwise (it puts «sube» and «baja» with
 # reveal, «baile» with every music word, «vacío» with empty plates and «cañón» with canyons). A word listed here

@@ -66,7 +66,7 @@ def test_an_alias_of_another_family_is_refused_after_the_compiler_resolves_it(mo
 
 def test_an_unknown_slot_names_the_cards_slots():
     error = refused(shot(scene2d={"cast": {"hero_x": SUBJECT}}))
-    assert "hero_x is not a slot of music-pinball (subject_1, background)" in str(error)
+    assert "hero_x is not a slot of music-pinball (subject_1, background, prop_1)" in str(error)
 
 
 def test_a_missing_slot_is_named():
