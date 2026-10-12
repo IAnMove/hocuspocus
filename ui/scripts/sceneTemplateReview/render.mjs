@@ -6,9 +6,12 @@ import { createRequire } from 'node:module'
 import { chromium } from '@playwright/test'
 import { LANGUAGE_STORAGE_KEY } from '../../src/i18n/storageKey.ts'
 import { animatorLabels } from '../../src/i18n/animatorLabels.ts'
+import { bindingsFor, cardAssets, readAssetPlan, selectCards, stageAssets } from './assets.mjs'
+import { contactSheet, indexRow, writeReviewIndex } from './outputs.mjs'
 
 const catalog = await import(new URL('../../src/features/sceneTemplates/catalog.ts', import.meta.url))
 const demos = await import(new URL('../../src/features/sceneTemplates/demoScenes.ts', import.meta.url))
+const compiler = await import(new URL('../../src/features/sceneTemplates/compile.ts', import.meta.url))
 const copy = animatorLabels('en')
 
 const renderTimeout = 300_000
@@ -52,6 +55,15 @@ async function waitForModels(page, scene) {
   }, expected, { timeout: 60_000 })
 }
 
+async function waitForVideos(page, scene) {
+  const expected = scene.layers.filter(layer => layer.type === 'video').length
+  if (expected === 0) return
+  await page.waitForFunction(expectedCount => {
+    const videos = [...document.querySelectorAll('video[data-layer-id]')]
+    return videos.length >= expectedCount && videos.every(video => video.readyState >= 2)
+  }, expected, { timeout: 60_000 })
+}
+
 async function saveEditableScene(page, server, template) {
   const responsePromise = page.waitForResponse(response => (
     response.url().endsWith('/api/v1/scenes') && response.request().method() === 'POST'
@@ -65,16 +77,32 @@ async function saveEditableScene(page, server, template) {
   const bytes = await fs.readFile(filename)
   const snapshot = JSON.parse(bytes.toString('utf8'))
   assert(snapshot.version === 1 && Array.isArray(snapshot.layers), `Saved scene ${template.id} is not editable JSON.`)
-  assert(snapshot.narrative?.templateId === template.id, `Saved scene ${template.id} lost its template identity.`)
+  assert(snapshot.narrative?.templateId === template.templateId, `Saved scene ${template.id} lost its template identity.`)
   const roundTrip = await fetch(`${server.localOrigin}/api/v1/file/${encodeURIComponent(saved.name)}?workspace=default`)
   assert(roundTrip.ok, `Saved scene ${template.id} could not be read from the sandbox index.`)
   assert(Buffer.from(await roundTrip.arrayBuffer()).equals(bytes), `Saved scene ${template.id} changed during server-index round trip.`)
   return { name: saved.name, snapshot }
 }
 
-async function renderOne({ browser, server, repoRoot, template, runtime }) {
+/** The demo scene: the catalog's inline procedural art, as before --assets existed. */
+function demoCard({ id }) {
+  const scene = demos.candidateDemoScene(id, 'coral')
+  const assets = (scene.narrative?.assets ?? []).map(asset => ({ slot: asset.slot, type: asset.type, file: asset.name ?? 'inline demo art' }))
+  return { scene, assets, controls: {}, variant: 'coral' }
+}
+
+/** The card compiled with the plan's files, served from the sandbox, through the public compile function. */
+async function assetCard({ id, template }, plan, server, staged) {
+  const { assets, controls } = cardAssets(plan, id, template)
+  await stageAssets(server, assets.map(asset => asset.file), staged)
+  const scene = compiler.compileCandidateScene(id, bindingsFor(assets, staged), controls)
+  return { scene, assets: assets.map(asset => ({ ...asset, sha256: staged.get(asset.file).sha256 })), controls, variant: 'assets' }
+}
+
+async function renderOne({ browser, server, repoRoot, card, prepared, runtime }) {
   const source = gitSnapshot(repoRoot)
-  const scene = demos.candidateDemoScene(template.id, 'coral')
+  const { scene } = prepared
+  const template = { ...card.template, id: card.id, templateId: scene.narrative?.templateId }
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'en-US',
@@ -103,6 +131,7 @@ async function renderOne({ browser, server, repoRoot, template, runtime }) {
     await page.getByLabel(copy.sceneNameAria, { exact: true }).blur()
     await waitForImages(page, scene)
     await waitForModels(page, scene)
+    await waitForVideos(page, scene)
     const savedScene = await saveEditableScene(page, server, template)
     await page.waitForFunction(templateId => {
       const raw = localStorage.getItem('maestro-scene-animator-autosave-v1')
@@ -115,7 +144,7 @@ async function renderOne({ browser, server, repoRoot, template, runtime }) {
       } catch {
         return false
       }
-    }, template.id, { timeout: 60_000 })
+    }, template.templateId, { timeout: 60_000 })
 
     const responsePromise = page.waitForResponse(response => (
       response.url().endsWith('/api/v1/scenes/recordings') && response.request().method() === 'POST'
@@ -132,7 +161,7 @@ async function renderOne({ browser, server, repoRoot, template, runtime }) {
     const recordingMetadataPath = path.join(server.exportsDir, `${saved.name}.metadata.json`)
     const recordingMetadata = JSON.parse(await fs.readFile(recordingMetadataPath, 'utf8'))
     const recordedScene = recordingMetadata.params?.scene
-    assert(recordedScene?.narrative?.templateId === template.id, `MP4 metadata for ${template.id} lost its template identity.`)
+    assert(recordedScene?.narrative?.templateId === template.templateId, `MP4 metadata for ${template.id} lost its template identity.`)
     assert(JSON.stringify(recordedScene) === JSON.stringify(savedScene.snapshot), `MP4 metadata for ${template.id} changed the editable scene snapshot.`)
 
     assert(pageErrors.length === 0, `${template.id} page errors:\n${pageErrors.join('\n')}`)
@@ -154,13 +183,18 @@ async function renderOne({ browser, server, repoRoot, template, runtime }) {
     assert(Number.isFinite(duration) && Math.abs(duration - scene.duration) <= .08, `MP4 duration mismatch for ${template.id}.`)
     const posterPath = path.join(server.previewsDir, `${template.id}.png`)
     execFileSync('ffmpeg', ['-y', '-v', 'error', '-ss', '1.5', '-i', previewPath, '-frames:v', '1', posterPath], { cwd: repoRoot })
+    const sheetPath = path.join(server.previewsDir, `${template.id}.sheet.png`)
+    contactSheet(previewPath, sheetPath, duration)
 
     assert(JSON.stringify(gitSnapshot(repoRoot)) === JSON.stringify(source), 'Source changed during rendering; refusing to label this preview as reproducible.')
     const reviewMetadata = {
-      catalogVersion: catalog.templateCatalogVersion(template),
+      catalogVersion: catalog.templateCatalogVersion(card.template),
       templateId: template.id,
+      compiledTemplateId: template.templateId,
       templateVersion: template.version,
-      variant: 'coral',
+      variant: prepared.variant,
+      controls: prepared.controls,
+      assets: prepared.assets,
       status: 'rendered-not-approved',
       generator: 'real SceneAnimatorPanel MP4 exporter',
       sourceCommit: source.headSha,
@@ -188,59 +222,65 @@ async function renderOne({ browser, server, repoRoot, template, runtime }) {
     assert(pageErrors.length === 0, `${template.id} page errors before publication:\n${pageErrors.join('\n')}`)
     server.registerPreview(`${template.id}.mp4`)
     server.registerPreview(`${template.id}.png`)
+    server.registerPreview(`${template.id}.sheet.png`)
     server.registerPreview(`${template.id}.json`)
     console.log(`SAVED ${template.id} ${bytes.length} bytes ${probe.format.duration} seconds`)
-    return { id: template.id, status: 'rendered-not-approved', preview: previewPath, metadata: metadataPath }
+    return { id: template.id, status: 'rendered-not-approved', preview: previewPath, metadata: metadataPath,
+      row: indexRow({ id: template.id, scene, duration, assets: prepared.assets, controls: prepared.controls, variant: prepared.variant }) }
   } finally {
     await context.close()
   }
 }
 
-export async function renderTemplates({ server, repoRoot, templateIds = [] }) {
-  const knownIds = new Set(catalog.ALL_SCENE_TEMPLATES.map(template => template.id))
-  const unknownIds = [...new Set(templateIds.filter(templateId => !knownIds.has(templateId)))]
-  if (unknownIds.length) throw new Error(`Unknown candidate scene template ID(s): ${unknownIds.join(', ')}`)
-  // Keep the default legacy batch within its established disk/output quota.
-  // New pack IDs are opt-in; do not silently double a user's render batch.
-  const candidates = templateIds.length ? catalog.ALL_SCENE_TEMPLATES : catalog.CANDIDATE_SCENE_TEMPLATES
-  const selected = candidates.filter(template => !templateIds.length || templateIds.includes(template.id))
-  if (!selected.length) throw new Error('No matching candidate scene templates were requested.')
-  assert(selected.every(template => /^[a-z0-9][a-z0-9-]*$/.test(template.id)), 'Unsafe template ID; no paths were created.')
+export async function renderTemplates({ server, repoRoot, templateIds = [], assetsFile = null }) {
+  // Every card the catalog lists unless IDs are given; an ID may be any card the catalog resolves (an alias too).
+  const cards = selectCards(catalog, templateIds)
+  assert(cards.every(card => /^[a-z0-9][a-z0-9-]*$/.test(card.id)), 'Unsafe template ID; no paths were created.')
+  const plan = assetsFile ? await readAssetPlan(assetsFile) : null
+  if (plan) selectCards(catalog, Object.keys(plan.cards))
+  const staged = new Map()
   const browser = await chromium.launch({ args: ['--disable-gpu', '--disable-dev-shm-usage'] })
   const results = []
   const failures = []
   try {
     const runtime = runtimeVersions(browser)
-    for (const template of selected) {
+    for (const card of cards) {
       try {
-        results.push(await renderOne({ browser, server, repoRoot, template, runtime }))
+        const prepared = plan ? await assetCard(card, plan, server, staged) : demoCard(card)
+        results.push(await renderOne({ browser, server, repoRoot, card, prepared, runtime }))
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        failures.push({ id: template.id, error: message })
-        const failureMetadata = {
-          catalogVersion: catalog.templateCatalogVersion(template),
-          templateId: template.id,
-          templateVersion: template.version,
-          variant: 'coral',
-          status: 'render-failed',
-          generator: 'real SceneAnimatorPanel MP4 exporter',
-          ...gitSnapshot(repoRoot),
-          error: message,
-          note: 'No placeholder preview was created; rerun after fixing the real failure.',
-        }
-        const failureName = `${template.id}.failure-${randomUUID()}.json`
-        const failurePath = path.join(server.previewsDir, failureName)
-        try {
-          await fs.writeFile(failurePath, JSON.stringify(failureMetadata, null, 2), { flag: 'wx' })
-          server.registerPreview(failureName)
-          console.error(`FAILED ${template.id}: ${message}; failure metadata=${failureName}`)
-        } catch (publicationError) {
-          console.error(`FAILED ${template.id}: ${message}; failure metadata publication failed: ${publicationError instanceof Error ? publicationError.message : String(publicationError)}`)
-        }
+        failures.push({ id: card.id, error: message })
+        await publishFailure(server, repoRoot, card, plan ? 'assets' : 'coral', message)
       }
     }
   } finally {
     await browser.close()
   }
-  return { results, failures }
+  const index = await writeReviewIndex(server.previewsDir, { assetsFile: plan?.file, source: gitSnapshot(repoRoot), rows: results.map(result => result.row), failures })
+  server.registerPreview('review.json')
+  return { results, failures, index }
+}
+
+async function publishFailure(server, repoRoot, card, variant, message) {
+  const failureMetadata = {
+    catalogVersion: catalog.templateCatalogVersion(card.template),
+    templateId: card.id,
+    templateVersion: card.template.version,
+    variant,
+    status: 'render-failed',
+    generator: 'real SceneAnimatorPanel MP4 exporter',
+    ...gitSnapshot(repoRoot),
+    error: message,
+    note: 'No placeholder preview was created; rerun after fixing the real failure.',
+  }
+  const failureName = `${card.id}.failure-${randomUUID()}.json`
+  const failurePath = path.join(server.previewsDir, failureName)
+  try {
+    await fs.writeFile(failurePath, JSON.stringify(failureMetadata, null, 2), { flag: 'wx' })
+    server.registerPreview(failureName)
+    console.error(`FAILED ${card.id}: ${message}; failure metadata=${failureName}`)
+  } catch (publicationError) {
+    console.error(`FAILED ${card.id}: ${message}; failure metadata publication failed: ${publicationError instanceof Error ? publicationError.message : String(publicationError)}`)
+  }
 }
