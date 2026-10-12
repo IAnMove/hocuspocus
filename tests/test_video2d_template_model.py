@@ -170,7 +170,8 @@ def test_cutout_without_alpha_warns_for_choreography_subjects_only(tmp_path, mon
     assert compact["result"]["warningCodes"] == ["cutout_without_alpha", "title moved"]
     assert "warnings" not in seen["payload"]["input"]
     full = execute({"version": 1, "operation": "scenes.template.compile", "input": {**duel, "full": True}}, workspace_dir=folder)
-    assert full["result"]["warnings"][0]["slot"] == "subject_2"
+    assert full["result"]["warnings"] == [
+        {"code": "cutout_without_alpha", "slot": "subject_2", "message": full["result"]["warnings"][0]["message"]}, {"code": "title moved"}], "one shape"
 
 
 @pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
