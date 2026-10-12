@@ -33,3 +33,19 @@ test('a stopped server render is found again, explains the failed shot and resum
   assert.ok(calls.includes('POST /series/native-render/jobs/native-1/resume'))
   assert.equal((view.getByRole('button', { name: 'Render on the server' }) as HTMLButtonElement).disabled, true, 'one render at a time')
 })
+
+test('a take made without its foley says why, and the foley stage has a name', async t => {
+  const { render, cleanup, waitFor } = await import('@testing-library/react')
+  const { SeriesServerRender } = await import('../src/features/series/SeriesServerRender')
+  t.after(cleanup)
+  const job = { jobId: 'native-2', seriesId: 'uv', episodeId: 'ep1', current: 1, total: 2, status: 'running', createdAt: 3,
+    items: [{ shotId: 's01', stage: 'done', status: 'done', warning: 'Foley left out: Required MMAudio files are not installed' },
+      { shotId: 's02', stage: 'foley', status: 'running' }] }
+  const original = globalThis.fetch
+  t.after(() => { globalThis.fetch = original })
+  globalThis.fetch = (async (input: RequestInfo | URL) => new Response(JSON.stringify(String(input).includes('/recovery') ? { jobs: [job] } : job),
+    { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch
+  const view = render(<SeriesServerRender workspace="cast" series={{ id: 'uv' } as never} episode={{ id: 'ep1' } as never} />)
+  await waitFor(() => assert.ok(view.getByTestId('server-render-s01').textContent?.includes('MMAudio files are not installed')))
+  assert.match(view.getByTestId('server-render-s02').textContent ?? '', /s02 · foley/)
+})

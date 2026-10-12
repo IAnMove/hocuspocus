@@ -25,12 +25,15 @@ const SOFTWARE_ARGS = ['--disable-gpu', '--use-angle=swiftshader', '--enable-uns
 function usage() {
   return `Usage: npm run atmos:capture -- <template-id> [more ids] [--export] [--out DIR] [--port N]
          [--palette NAME] [--time NAME] [--subject FILE]
+         [--samples 0,8,20]
 
 Builds the UI and opens Video 3D on 127.0.0.1 with software WebGL.
 Writes a 1920x1080 PNG per template. --export also writes a 6s MP4.
 --palette and --time pick the set controls after the shot loads.
 --subject routes FILE as the character GLB in the open spot.
 Output stays outside the repository (ATMOS_CAPTURE_DIR or the system temp dir).
+--samples writes up to six 640x360 sharp draft frames per shot through the owned
+Video 3D renderer. Times are scene seconds and must be inside each chosen shot.
 `
 }
 
@@ -221,6 +224,27 @@ async function exportTemplate(context, origin, template, outDir) {
   }
 }
 
+async function sampleTemplate(context, origin, template, outDir, times) {
+  const document = await context.pages()[0].evaluate(() => window.__world3dDocument || null)
+  if (!document || document.templateId !== template.id || times.some(time => time >= document.duration)) throw new Error(`Samples must be inside ${template.id} (${document?.duration ?? 0}s).`)
+  const render = await context.newPage()
+  try {
+    await render.goto(`${origin}/world3d-render.html`, { waitUntil: 'domcontentloaded' })
+    await render.waitForFunction(() => window.__world3dExport, null, { timeout: 60_000 })
+    const width = 640, height = Math.max(1, Math.round(width * document.height / document.width))
+    await render.evaluate(({ scene, size }) => window.__world3dExport.load(scene, size), { scene: document, size: { width, height, samples: 0, supersample: 1 } })
+    for (const time of times) {
+      const url = await render.evaluate(seconds => window.__world3dExport.frame(seconds), time / (document.playbackSpeed ?? 1))
+      const filename = path.join(outDir, `${template.id}-${String(time).replace('.', '_')}s.png`)
+      await fs.writeFile(filename, Buffer.from(String(url).split(',')[1], 'base64'))
+      console.log(`${template.id} sample ${time}s ${filename}`)
+    }
+  } finally {
+    await render.evaluate(() => window.__world3dExport?.dispose()).catch(() => {})
+    await render.close()
+  }
+}
+
 async function captureAll(options) {
   const templates = options.ids.map(knownTemplate)
   if (options.subject) await fs.access(options.subject)
@@ -240,6 +264,7 @@ async function captureAll(options) {
       const started = Date.now()
       const png = await shootTemplate(page, template, outDir, options)
       console.log(`${template.id} png ${png} ${Date.now() - started}ms`)
+      if (options.samples) await sampleTemplate(context, preview.url, template, outDir, options.samples)
       if (!options.exportClip) continue
       const startedExport = Date.now()
       const mp4 = await exportTemplate(context, preview.url, template, outDir)

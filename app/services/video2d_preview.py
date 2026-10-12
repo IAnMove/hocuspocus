@@ -4,6 +4,11 @@ Paints the requested times with the Scene Animator export bridge
 (``window.__scene2dExport`` on ``/scene2d-render.html``) and returns one PNG.
 It does not write an MP4 or save the scene. Chromium is launched without a GPU
 and the paint holds the ``scene2d-render`` CPU lane.
+
+``still: true`` with one time paints that frame at the document's own size (up
+to 4096 px) and keeps it as a workspace image, named ``output_name`` when given
+and with a provenance sidecar: a composed still (a start frame for an
+image-to-video shot, a poster) made from a Video 2D scene.
 """
 
 from __future__ import annotations
@@ -34,8 +39,9 @@ from services.world3d_export import _blocked_url, even_dim, playwright_module
 OPERATION = "scenes.video2d.preview"
 MAX_TIMES = 8
 MAX_EDGE = 960
+STILL_EDGE = 4096
 PAINT_TIMEOUT = 120.0
-FIELDS = frozenset({"document", "times", "workspace"})
+FIELDS = frozenset({"document", "times", "workspace", "still", "output_name"})
 WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 _WORKSPACE_DIR: Callable[[str], str] | None = None
 ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +90,10 @@ def _preview_input(data: Any) -> dict:
         raise PreviewError("preview_bad_envelope", "input must be document and times")
     if "workspace" in data and not (isinstance(data["workspace"], str) and WORKSPACE_RE.fullmatch(data["workspace"])):
         raise PreviewError("preview_bad_envelope", "workspace")
+    if "still" in data and not isinstance(data["still"], bool):
+        raise PreviewError("preview_bad_envelope", "still")
+    if "output_name" in data and (not data.get("still") or not isinstance(data["output_name"], str)):
+        raise PreviewError("preview_bad_envelope", "output_name needs still true")
     return data
 
 
@@ -132,10 +142,10 @@ def _edge(document: dict, key: str, default: int) -> float:
     return float(value)
 
 
-def preview_frame_size(document: dict) -> tuple[int, int, int]:
+def preview_frame_size(document: dict, edge: int = MAX_EDGE) -> tuple[int, int, int]:
     width = _edge(document, "width", 1280)
     height = _edge(document, "height", 720)
-    scale = min(1.0, MAX_EDGE / max(width, height))
+    scale = min(1.0, edge / max(width, height))
     fps = document.get("fps", 30)
     return even_dim(width * scale), even_dim(height * scale), int(fps)
 
@@ -150,7 +160,9 @@ def prepare(command: Any) -> tuple[dict, list[float], tuple[int, int, int]]:
     data = _input(command)
     document = _document(data["document"])
     times = _times(data["times"], float(document["duration"]))
-    return document, times, preview_frame_size(document)
+    if data.get("still") and len(times) != 1:
+        raise PreviewError("preview_bad_times", "a still paints one time")
+    return document, times, preview_frame_size(document, STILL_EDGE if data.get("still") else MAX_EDGE)
 
 
 def bind_preview_workspace(workspace_dir: Callable[[str], str] | None) -> None:
@@ -336,9 +348,9 @@ def paint_contact_sheet(document: dict, times: list[float], size: tuple[int, int
     return _paint_on_lane(document, times, size)
 
 
-def _result(png: bytes, times: list[float], size: tuple[int, int, int], workspace: str) -> dict[str, Any]:
+def _result(png: bytes, times: list[float], size: tuple[int, int, int], workspace: str | None) -> dict[str, Any]:
     stored = {"sha256": hashlib.sha256(png).hexdigest(), "bytes": len(png)}
-    if _WORKSPACE_DIR is not None:
+    if _WORKSPACE_DIR is not None and workspace is not None:
         stored = store_contact_sheet(png, workspace=workspace, workspace_dir=_WORKSPACE_DIR)
     return {
         "version": 1,
@@ -356,10 +368,38 @@ def _result(png: bytes, times: list[float], size: tuple[int, int, int], workspac
     }
 
 
+def store_still(png: bytes, *, workspace: str, output_name: str | None, document: dict, at: float) -> dict[str, Any]:
+    """One painted frame as a workspace image: ``output_name`` (else ``<scene>-still``), never over another file."""
+    from services.production_media_common import MediaToolError, output_path, publish_sidecar, sha256_file
+    if _WORKSPACE_DIR is None:
+        raise PreviewError("preview_bad_workspace", "workspace")
+    folder = str(Path(_WORKSPACE_DIR(workspace)))
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", str(document.get("name") or "video2d"))[:60].strip("-") or "video2d"
+    try:
+        target = output_path(folder, output_name, f"{stem}-still", ".png")
+    except MediaToolError as error:
+        raise PreviewError(error.code, error.message) from error
+    temporary = Path(folder) / f".{Path(target).name}.tmp"
+    temporary.write_bytes(png)
+    temporary.replace(target)
+    name = Path(target).name
+    sidecar = publish_sidecar(target, workspace, OPERATION, "still", {"time": at, "scene": document.get("name")}, [])
+    return {"url": "/api/v1/file/" + quote(name) + "?workspace=" + quote(workspace, safe=""), "file": name,
+            "sha256": sha256_file(target), "bytes": len(png), "still": True, "sidecar": sidecar}
+
+
 def execute(command: Any) -> dict[str, Any]:
     document, times, size = prepare(command)
-    workspace = _workspace_name(_input(command))
-    return _result(paint_contact_sheet(document, times, size), times, size, workspace)
+    data = _input(command)
+    workspace = _workspace_name(data)
+    png = paint_contact_sheet(document, times, size)
+    if not data.get("still"):
+        return _result(png, times, size, workspace)
+    reply = _result(png, times, size, None)
+    reply["result"].update(store_still(png, workspace=workspace, output_name=data.get("output_name"), document=document,
+                                       at=times[0]))
+    return reply
 
 
 def command_catalog() -> list[dict[str, Any]]:
@@ -373,7 +413,11 @@ def command_catalog() -> list[dict[str, Any]]:
             "Each time must be from 0 through the document duration. The long edge is capped at 960. "
             "Does not save the scene or write an MP4. CPU lane scene2d-render, no GPU. "
             "input.workspace is optional and does not change the sheet; callers that omit it keep working. "
-            "preview_too_many_times, preview_time_out_of_range and preview_timeout are stable errors."
+            "preview_too_many_times, preview_time_out_of_range and preview_timeout are stable errors. "
+            "still true with one time paints that frame at the document's own size (up to 4096 px) and keeps it "
+            "as a workspace PNG with a provenance sidecar, named output_name (an existing name gets name(2).png): "
+            "a still composed in Video 2D (layers, cutouts, texts), e.g. a start frame for an image-to-video shot, "
+            "instead of compositing it outside HocusPocus. For a few image layers without a scene use media.compose."
         ),
         "mutation": False,
         "inputSchema": {
@@ -393,6 +437,8 @@ def command_catalog() -> list[dict[str, Any]]:
                             "maxItems": MAX_TIMES,
                             "items": {"type": "number", "minimum": 0},
                         },
+                        "still": {"type": "boolean"},
+                        "output_name": {"type": "string", "minLength": 1, "maxLength": 180},
                     },
                     "required": ["document", "times"],
                 },

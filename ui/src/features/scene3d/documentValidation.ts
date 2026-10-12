@@ -1,4 +1,6 @@
+import { validRoomSet } from './roomSet'
 import { validFraming } from './framing'
+import { validCameraShake } from './cameraShake.ts'
 import type { Scene3DCamera, Scene3DDocument, Scene3DLight, Scene3DSlot } from './types.ts'
 
 const CAMERA_FAMILIES = new Set(['fixed', 'establishment', 'follow', 'orbit', 'reveal', 'encounter', 'pursuit', 'product', 'musical', 'side', 'front', 'chase', 'hood', 'wing'])
@@ -7,11 +9,16 @@ const finite = (value: unknown): value is number => typeof value === 'number' &&
 const positive = (value: unknown): value is number => finite(value) && value > 0
 const vector = (value: unknown) => Array.isArray(value) && value.length === 3 && value.every(finite)
 
+/** Optional parts with their own validators: the framing move and the shake windows. */
+function validCameraParts(camera: Scene3DCamera) {
+  return (camera.framing == null || validFraming(camera.framing)) && (camera.shake == null || validCameraShake(camera.shake))
+}
+
 function validCamera(camera: Scene3DCamera) {
   if (!vector(camera.eye) || !vector(camera.look) || !positive(camera.fov) || camera.fov >= 180) return false
   if (!CAMERA_FAMILIES.has(camera.family)) return false
   if (camera.frameFormat != null && camera.frameFormat !== 'portrait' && camera.frameFormat !== 'landscape') return false
-  if (camera.framing != null && !validFraming(camera.framing)) return false
+  if (!validCameraParts(camera)) return false
   if ([camera.targetOffset, camera.eyeOffset].some(value => value != null && !vector(value))) return false
   const optionalNumbers = [camera.orbitRadius, camera.orbitHeight, camera.orbitTurns]
   if (!optionalNumbers.every(value => value == null || finite(value))) return false
@@ -35,6 +42,7 @@ function validSlot(slot: Scene3DSlot) {
 
 /** Validate user-imported geometry before it reaches Three or frame allocation. */
 export function validScene3DShape(value: Partial<Scene3DDocument>) {
+  if (value.room !== undefined && !validRoomSet(value.room)) return false
   if (!positive(value.width) || !positive(value.height) || !positive(value.duration) || value.duration > 600) return false
   if (![24, 30, 60].includes(value.fps!)) return false
   if (!value.camera || !value.light || !Array.isArray(value.slots)) return false

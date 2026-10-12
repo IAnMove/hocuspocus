@@ -84,6 +84,10 @@ def _attach_shot_asset(series: dict, asset: dict, as_take: bool, source_path: st
     updated, attempt = append_shot_render_attempt(shot, manifest=shot.get("referenceManifest") or {},
         model=method, settings={"productionMethod": method, "sourceDurationSeconds": media["duration"]}, seed=None)
     updated["attempts"][-1].update(status="completed", outputAssetIds=[asset["id"]])
+    stage = (asset.get("metadata") or {}).get("reviewStage")
+    if stage in ("preview", "final"):
+        # A staged review's preview or final take (series_review); a take imported by hand has no stage.
+        updated["attempts"][-1]["reviewStage"] = stage
     asset.update(ownerType="attempt", ownerId=attempt["id"])
     asset["metadata"].update(productionMethod=method, **media)
     episode["shots"][index] = updated

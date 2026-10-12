@@ -1,5 +1,18 @@
 /** Newest first. One short line per merged PR; bump the first `pr` to re-show the welcome. */
 export const WHATS_NEW: Array<{ pr: number; en: string; es: string }> = [
+  { pr: 813, en: 'Intermediate files freed when jobs finish', es: 'Archivos intermedios liberados al acabar' },
+  { pr: 810, en: 'Series audio: voices, music and effects balanced', es: 'Audio de series: voces, música y efectos equilibrados' },
+  { pr: 808, en: 'Episodes from one script, produced in one call', es: 'Capítulos desde un guion, producidos en una llamada' },
+  { pr: 807, en: 'MCP series profile with OAuth for ChatGPT', es: 'Perfil MCP series con OAuth para ChatGPT' },
+  { pr: 805, en: 'Language versions, 3D dialogue shots and plates', es: 'Versiones de idioma, planos y fondos 3D' },
+  { pr: 804, en: 'Whole episode rendered on the server', es: 'Capítulo entero renderizado en el servidor' },
+  { pr: 803, en: 'Series characters in one click', es: 'Personajes de serie en un clic' },
+  { pr: 800, en: 'Optional ProRes master, one final encode', es: 'Máster ProRes opcional, una sola codificación' },
+  { pr: 799, en: '4K final and master exports', es: 'Exportaciones final y máster en 4K' },
+  { pr: 771, en: 'Draft, final and master export quality', es: 'Calidad de exportación borrador, final y máster' },
+  { pr: 765, en: 'Humanoid rig for real meshes', es: 'Rig humanoide para mallas reales' },
+  { pr: 722, en: 'Qwen Image 2.1 as default image model', es: 'Qwen Image 2.1 como modelo de imagen por defecto' },
+  { pr: 607, en: 'Core install without Torch; Hunyuan3D optional', es: 'Instalación core sin Torch; Hunyuan3D opcional' },
   { pr: 453, en: 'Wizard and MCP can edit with Qwen 2.1', es: 'Wizard y MCP editan con Qwen 2.1' },
   { pr: 448, en: 'Qwen Image 2.1: t2i+edit, 2K, RGBA', es: 'Qwen Image 2.1: t2i+edición, 2K, RGBA' },
   { pr: 450, en: 'H3 experimental 30-second clips', es: 'H3 experimental a 30 segundos' },

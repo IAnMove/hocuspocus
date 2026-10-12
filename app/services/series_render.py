@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from .h3_prompt_policy import tagged_dialogue
+from services.h3_frame_lattice import frames_for_seconds
 
 
 H3_RESOLUTIONS = {
@@ -229,15 +230,10 @@ def quantize_h3_frames(duration_seconds: Any, *, reference_mode: bool) -> int:
         seconds = 10.0
     if not math.isfinite(seconds):
         seconds = 10.0
-    requested = max(1, math.ceil(seconds * 24))
-    # H3 pixel frames use 17*n+5. FL2VA can continue through sliding windows;
-    # Omni is one native request and therefore caps at its 345-frame window.
-    # Apply the same ceiling to every Series path: the next lattice point is
-    # 362 frames (15.08s at 24fps), which would violate the hard 15-second
-    # per-video contract even though the requested duration was nominally 15.
+    # One lattice for every path (services/h3_frame_lattice.py): FL2VA can continue through
+    # sliding windows, but each native pass stays inside 124..345 frames, rounded up.
     del reference_mode  # Every current Series H3 strategy shares this native lattice.
-    aligned = 5 + max(0, math.ceil((requested - 5) / 17)) * 17
-    return min(345, max(124, aligned))
+    return frames_for_seconds(seconds)
 
 
 def _h3_spoken_language(series: dict) -> tuple[str, str]:

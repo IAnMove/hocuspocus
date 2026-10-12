@@ -1,5 +1,5 @@
 import { fetchAsset, type AssetCatalogItem } from '../../api/assets'
-import type { SceneTemplateDefinition, SceneTemplateSlot, TemplateSlotName } from './catalog'
+import { requiredSlots, type ControlValue, type SceneTemplateDefinition, type SceneTemplateSlot, type TemplateSlotName } from './catalog'
 import type { TemplateAsset, TemplateBindings } from './sceneBuilders'
 import { catalogLocation } from './catalogLocation'
 
@@ -8,7 +8,7 @@ export type CatalogSelections = Partial<Record<TemplateSlotName, AssetCatalogIte
 /** Strict product path. Inline demo artwork is intentionally handled elsewhere. */
 export function catalogAssetBinding(item: AssetCatalogItem, workspace: string, slot: SceneTemplateSlot): TemplateAsset {
   if (!item.id?.trim() || item.metadata_status !== 'canonical') throw new Error('Necesita identidad y metadatos canónicos de Library; los archivos heredados no se migran automáticamente.')
-  if ((item.kind !== 'image' && item.kind !== 'model3d') || !slot.kinds.includes(item.kind)) throw new Error(`El slot ${slot.id} no admite ${item.kind}.`)
+  if ((item.kind !== 'image' && item.kind !== 'model3d' && item.kind !== 'video') || !slot.kinds.includes(item.kind)) throw new Error(`El slot ${slot.id} no admite ${item.kind}.`)
   const location = catalogLocation(item, workspace)
   if (item.kind === 'model3d' && !/\.glb$/i.test(location.filename)) throw new Error('El compositor necesita un GLB, no otro formato 3D.')
   return { source: location.url, type: item.kind, name: location.filename, catalogAtAssignment: {
@@ -25,12 +25,13 @@ export function catalogBindingIssue(item: AssetCatalogItem, workspace: string, s
 
 /** Re-resolve by identity before compiling; a stale filename is never a fallback.
  * Missing metadata/files require user repair, not a call to a generator. */
-export async function resolveCatalogBindings(template: SceneTemplateDefinition, selections: CatalogSelections, workspace: string, signal: AbortSignal): Promise<TemplateBindings> {
+export async function resolveCatalogBindings(template: SceneTemplateDefinition, selections: CatalogSelections, workspace: string, signal: AbortSignal, controls: Readonly<Record<string, ControlValue>> = {}): Promise<TemplateBindings> {
   const bindings: TemplateBindings = {}
+  const needed = new Set(requiredSlots(template, controls).map(slot => slot.id))
   for (const slot of template.slots) {
     const selected = selections[slot.id]
     if (!selected) {
-      if (slot.required) throw new Error(`Falta el slot obligatorio ${slot.id}.`)
+      if (needed.has(slot.id)) throw new Error(`Falta el slot obligatorio ${slot.id}.`)
       continue
     }
     const current = await fetchAsset(selected.id, signal)

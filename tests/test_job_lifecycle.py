@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -15,6 +16,14 @@ _APP_DIR = os.path.abspath(os.path.join(_HERE, "..", "app"))
 if _APP_DIR not in sys.path:
     sys.path.insert(0, _APP_DIR)
 
+from services.gpu_machine_lock import (  # noqa: E402
+    lock_path,
+    machine_lock_enabled,
+    meta_path,
+    queue_dir,
+    read_holder,
+    waiting_message,
+)
 from services.job_lifecycle import (  # noqa: E402
     GENERATED_MEDIA_EXTENSIONS,
     acknowledge_cancel,
@@ -23,6 +32,7 @@ from services.job_lifecycle import (  # noqa: E402
     collect_job_outputs,
     finish_job,
     generation_queue_position,
+    generation_slot,
     record_job_outputs,
     register_abort_state,
     register_generation_job,
@@ -604,6 +614,489 @@ class TestJobLifecycle(unittest.TestCase):
                 interrupt.assert_called_once_with()
                 unregister_abort_state(job["id"], states, state)
                 self.assertEqual(job["status"], "cancelled")
+
+
+_HOLDER_SCRIPT = r"""
+import os
+import sys
+import threading
+import time
+sys.path.insert(0, os.environ["HOCUS_APP"])
+from services.job_lifecycle import generation_slot
+job = {
+    "id": os.environ["JOB_ID"],
+    "model": os.environ["MODEL"],
+    "workspace": "mejoras-lab",
+    "status": "queued",
+    "phase": "queued",
+    "message": "Queued",
+}
+lock = threading.Lock()
+with generation_slot(lock, job, poll_interval=0.02) as acquired:
+    if not acquired:
+        raise SystemExit(2)
+    with open(os.environ["READY"], "w", encoding="utf-8") as handle:
+        handle.write("ready")
+    deadline = time.time() + 20
+    while time.time() < deadline and not os.path.exists(os.environ["RELEASE"]):
+        time.sleep(0.02)
+"""
+
+_WAITER_SCRIPT = r"""
+import os
+import sys
+import threading
+import time
+sys.path.insert(0, os.environ["HOCUS_APP"])
+from services.job_lifecycle import generation_slot
+job = {
+    "id": "waiter",
+    "model": "qwen",
+    "workspace": "mejoras-lab",
+    "status": "queued",
+    "phase": "queued",
+    "message": "Queued",
+}
+seen = os.environ["SEEN"]
+
+def watch():
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        message = str(job.get("message") or "")
+        if message.startswith("waiting for the GPU:"):
+            with open(seen, "w", encoding="utf-8") as handle:
+                handle.write(message)
+            return
+        time.sleep(0.02)
+
+threading.Thread(target=watch, daemon=True).start()
+lock = threading.Lock()
+with generation_slot(lock, job, poll_interval=0.02) as acquired:
+    if not acquired:
+        raise SystemExit(2)
+    if job.get("message") != "Queued":
+        raise SystemExit(3)
+    if os.environ.get("LOG"):
+        with open(os.environ["LOG"], "a", encoding="utf-8") as handle:
+            handle.write("B\n")
+    with open(os.environ["DONE"], "w", encoding="utf-8") as handle:
+        handle.write(job.get("message") or "")
+"""
+
+
+_BACK_TO_BACK_SCRIPT = r"""
+import os
+import sys
+import threading
+import time
+sys.path.insert(0, os.environ["HOCUS_APP"])
+from services.job_lifecycle import generation_slot
+log = os.environ["LOG"]
+
+def note(text):
+    with open(log, "a", encoding="utf-8") as handle:
+        handle.write(text + "\n")
+
+lock = threading.Lock()
+for number in range(1, 13):
+    job = {"id": f"a{number}", "status": "queued", "phase": "queued", "message": "Queued"}
+    with generation_slot(lock, job, poll_interval=0.02) as acquired:
+        if not acquired:
+            raise SystemExit(2)
+        note(f"A{number}")
+        if number == 1:
+            with open(os.environ["READY"], "w", encoding="utf-8") as handle:
+                handle.write("ready")
+            deadline = time.time() + 20
+            while time.time() < deadline and not os.path.exists(os.environ["RELEASE"]):
+                time.sleep(0.02)
+        else:
+            time.sleep(0.05)
+"""
+
+
+class TestGpuMachineLock(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.root = self._tmpdir.name
+        self._saved = {
+            key: os.environ.get(key)
+            for key in ("HOCUS_GPU_LOCK_PATH", "HOCUS_GPU_MACHINE_LOCK", "SERVER_PORT")
+        }
+        self._procs: list[subprocess.Popen[str]] = []
+        os.environ["HOCUS_GPU_LOCK_PATH"] = os.path.join(self.root, "gpu.lock")
+        os.environ["HOCUS_GPU_MACHINE_LOCK"] = "1"
+        os.environ.pop("SERVER_PORT", None)
+
+    def tearDown(self):
+        for proc in self._procs:
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.communicate(timeout=5)
+            except (subprocess.TimeoutExpired, ValueError):
+                proc.wait(timeout=5)
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        self._tmpdir.cleanup()
+
+    def _env(self, **extra: str) -> dict[str, str]:
+        env = os.environ.copy()
+        env.pop("HOCUS_MCP_TOKEN", None)
+        env["HOCUS_APP"] = _APP_DIR
+        env["PYTHONPATH"] = _APP_DIR + os.pathsep + env.get("PYTHONPATH", "")
+        env["HOCUS_GPU_LOCK_PATH"] = os.path.join(self.root, "gpu.lock")
+        env["HOCUS_GPU_MACHINE_LOCK"] = extra.pop("HOCUS_GPU_MACHINE_LOCK", "1")
+        env.update(extra)
+        return env
+
+    def _spawn(self, script: str, env: dict[str, str]) -> subprocess.Popen[str]:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", script],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self._procs.append(proc)
+        return proc
+
+    def _start_holder(self, *, port: str, job_id: str, model: str) -> subprocess.Popen[str]:
+        return self._spawn(_HOLDER_SCRIPT, self._env(
+            SERVER_PORT=port,
+            JOB_ID=job_id,
+            MODEL=model,
+            READY=os.path.join(self.root, "ready"),
+            RELEASE=os.path.join(self.root, "release"),
+        ))
+
+    def _wait_file(self, path: str, timeout: float = 5) -> str:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as handle:
+                    return handle.read()
+            time.sleep(0.02)
+        details = []
+        for proc in self._procs:
+            if proc.poll() is not None:
+                stdout, stderr = proc.communicate()
+                details.append(f"exit {proc.returncode}\n{stdout}\n{stderr}")
+        self.fail(f"timed out waiting for {path}\n" + "\n".join(details))
+
+    def _finish(self, proc: subprocess.Popen[str]) -> None:
+        stdout, stderr = proc.communicate(timeout=5)
+        self.assertEqual(proc.returncode, 0, stderr or stdout)
+
+    def _lock_is_free(self) -> bool:
+        import fcntl
+        path = lock_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return True
+        finally:
+            os.close(fd)
+
+    def test_waiting_message_names_the_holder(self):
+        text = waiting_message(
+            {
+                "port": "42042",
+                "pid": 99,
+                "job_id": "job-7",
+                "model": "minimax_h3",
+                "since": 1000,
+            },
+            now=1000 + 180,
+        )
+        self.assertEqual(
+            text,
+            "waiting for the GPU: held by :42042 "
+            "(pid 99, job job-7, model minimax_h3) for 3 min",
+        )
+        self.assertEqual(
+            waiting_message(None),
+            "waiting for the GPU: held by another process",
+        )
+
+    def test_the_lock_is_opt_in(self):
+        for value in ("0", "false", "no", "off", "FALSE", "", "2"):
+            os.environ["HOCUS_GPU_MACHINE_LOCK"] = value
+            self.assertFalse(machine_lock_enabled(), value)
+        os.environ.pop("HOCUS_GPU_MACHINE_LOCK", None)
+        self.assertFalse(machine_lock_enabled())
+        for value in ("1", "true", "yes", "on", " ON "):
+            os.environ["HOCUS_GPU_MACHINE_LOCK"] = value
+            self.assertTrue(machine_lock_enabled(), value)
+
+    def test_default_lock_path_is_the_user_cache(self):
+        os.environ.pop("HOCUS_GPU_LOCK_PATH", None)
+        self.assertEqual(lock_path().name, "gpu.lock")
+        self.assertEqual(lock_path().parent.name, "hocuspocus")
+        self.assertEqual(meta_path().name, "gpu.lock.json")
+        self.assertEqual(queue_dir().name, "gpu.lock.queue")
+
+    def test_second_process_sees_the_holder_and_then_runs(self):
+        holder = self._start_holder(port="42042", job_id="job-7", model="minimax_h3")
+        self._wait_file(os.path.join(self.root, "ready"))
+        record = read_holder()
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["pid"], holder.pid)
+        self.assertEqual(record["workspace"], "mejoras-lab")
+        seen = os.path.join(self.root, "seen")
+        done = os.path.join(self.root, "done")
+        waiter = self._spawn(_WAITER_SCRIPT, self._env(SEEN=seen, DONE=done))
+        text = self._wait_file(seen)
+        self.assertIn(":42042", text)
+        self.assertIn(f"pid {holder.pid}", text)
+        self.assertIn("job job-7", text)
+        self.assertIn("model minimax_h3", text)
+        self.assertIn("for 0 min", text)
+        with open(os.path.join(self.root, "release"), "w", encoding="utf-8") as handle:
+            handle.write("go")
+        self._wait_file(done)
+        self._finish(holder)
+        self._finish(waiter)
+
+    def test_killing_the_holder_releases_the_lock(self):
+        holder = self._start_holder(port="42042", job_id="job-7", model="minimax_h3")
+        self._wait_file(os.path.join(self.root, "ready"))
+        holder.kill()
+        holder.wait(timeout=5)
+        self.assertIsNone(read_holder())
+        os.environ["SERVER_PORT"] = "42021"
+        job = {
+            "id": "next",
+            "model": "qwen",
+            "workspace": "mejoras-lab",
+            "status": "queued",
+            "message": "Queued",
+        }
+        errors: list[BaseException] = []
+
+        def take_over():
+            try:
+                with generation_slot(threading.Lock(), job, poll_interval=0.02) as acquired:
+                    if acquired is not True:
+                        raise AssertionError(acquired)
+                    record = read_holder()
+                    if record is None or record.get("pid") != os.getpid():
+                        raise AssertionError(record)
+                    if record.get("port") != "42021" or job.get("message") != "Queued":
+                        raise AssertionError((record, job.get("message")))
+            except BaseException as exc:  # noqa: BLE001 - reported on the test thread
+                errors.append(exc)
+
+        thread = threading.Thread(target=take_over)
+        thread.start()
+        thread.join(timeout=5)
+        self.assertFalse(thread.is_alive(), "the lock stayed held after the holder died")
+        self.assertEqual(errors, [])
+        self.assertIsNone(read_holder())
+
+    def test_disabled_lock_does_not_wait_or_replace_the_holder(self):
+        holder = self._start_holder(port="42042", job_id="job-7", model="minimax_h3")
+        self._wait_file(os.path.join(self.root, "ready"))
+        os.environ["HOCUS_GPU_MACHINE_LOCK"] = "0"
+        job = {"id": "local", "status": "queued", "message": "Queued", "phase": "queued"}
+        with generation_slot(threading.Lock(), job, poll_interval=0.02) as acquired:
+            self.assertTrue(acquired)
+            self.assertEqual(job["message"], "Queued")
+            self.assertNotEqual(job.get("phase"), "waiting_gpu")
+        record = read_holder()
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["pid"], holder.pid)
+        with open(os.path.join(self.root, "release"), "w", encoding="utf-8") as handle:
+            handle.write("go")
+        self._finish(holder)
+
+    def _tickets(self) -> list[str]:
+        folder = queue_dir()
+        return sorted(os.listdir(folder)) if folder.is_dir() else []
+
+    def test_the_head_takes_the_machine_lock_before_the_process_lock(self):
+        # The process lock is busy with local work (an LLM, a 3D export). The
+        # head already holds the machine turn; the job behind it holds nothing.
+        process_lock = threading.Lock()
+        process_lock.acquire()
+        head = {"id": "head", "status": "queued", "message": "Queued"}
+        second = {"id": "second", "status": "queued", "message": "Queued"}
+        register_generation_job(process_lock, head)
+        register_generation_job(process_lock, second)
+        entered: list[str] = []
+        release = threading.Event()
+
+        def worker(job):
+            with generation_slot(process_lock, job, poll_interval=0.01) as acquired:
+                self.assertTrue(acquired)
+                entered.append(job["id"])
+                release.wait(timeout=2)
+
+        threads = [threading.Thread(target=worker, args=(job,)) for job in (head, second)]
+        for thread in threads:
+            thread.start()
+        handed = False
+        try:
+            deadline = time.time() + 2
+            while time.time() < deadline and read_holder() is None:
+                time.sleep(0.01)
+            record = read_holder()
+            self.assertIsNotNone(record)
+            assert record is not None
+            self.assertEqual(record["job_id"], "head")
+            self.assertFalse(self._lock_is_free())
+            self.assertEqual(entered, [])
+            self.assertEqual(self._tickets(), [])
+            self.assertEqual(head["message"], "Queued")
+            process_lock.release()
+            handed = True
+            deadline = time.time() + 2
+            while time.time() < deadline and not entered:
+                time.sleep(0.01)
+            self.assertEqual(entered, ["head"])
+        finally:
+            release.set()
+            if not handed:
+                process_lock.release()
+            for thread in threads:
+                thread.join(timeout=3)
+        self.assertEqual(entered, ["head", "second"])
+        self.assertIsNone(read_holder())
+        self.assertTrue(self._lock_is_free())
+        self.assertEqual(self._tickets(), [])
+        self.assertFalse(process_lock.locked())
+
+    def test_waiting_for_another_instance_leaves_the_process_lock_free(self):
+        holder = self._start_holder(port="42042", job_id="job-7", model="minimax_h3")
+        self._wait_file(os.path.join(self.root, "ready"))
+        process_lock = threading.Lock()
+        job = {"id": "cancel-me", "status": "queued", "message": "Queued"}
+        result: list[bool] = []
+
+        def worker():
+            with generation_slot(process_lock, job, poll_interval=0.02) as acquired:
+                result.append(bool(acquired))
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        try:
+            deadline = time.time() + 2
+            while time.time() < deadline and job.get("phase") != "waiting_gpu":
+                time.sleep(0.02)
+            self.assertEqual(job.get("phase"), "waiting_gpu")
+            self.assertEqual(len(self._tickets()), 1)
+            # Local work can still take the process GPU while this job waits.
+            self.assertTrue(process_lock.acquire(timeout=0.5))
+            process_lock.release()
+            request_cancel(job)
+            thread.join(timeout=2)
+        finally:
+            with open(os.path.join(self.root, "release"), "w", encoding="utf-8") as handle:
+                handle.write("go")
+            thread.join(timeout=2)
+            self._finish(holder)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result, [False])
+        self.assertFalse(process_lock.locked())
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(self._tickets(), [])
+
+    def test_an_older_live_ticket_goes_first_and_a_dead_one_is_skipped(self):
+        import fcntl
+        folder = queue_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        dead = folder / "00000000000000000001-1-dead00.ticket"
+        dead.write_text("", encoding="utf-8")
+        older = folder / f"{time.time_ns() - 1_000_000_000:020d}-1-live00.ticket"
+        fd = os.open(str(older), os.O_RDWR | os.O_CREAT, 0o644)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        job = {"id": "younger", "status": "queued", "message": "Queued"}
+        result: list[bool] = []
+
+        def worker():
+            with generation_slot(threading.Lock(), job, poll_interval=0.02) as acquired:
+                result.append(bool(acquired))
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        try:
+            deadline = time.time() + 2
+            while time.time() < deadline and job.get("phase") != "waiting_gpu":
+                time.sleep(0.02)
+            # The lock itself is free: only the older ticket keeps this job waiting.
+            self.assertEqual(job.get("phase"), "waiting_gpu")
+            self.assertTrue(self._lock_is_free())
+            self.assertFalse(dead.exists())
+            self.assertEqual(result, [])
+        finally:
+            os.unlink(older)
+            os.close(fd)
+            thread.join(timeout=3)
+        self.assertEqual(result, [True])
+        self.assertEqual(job["message"], "Queued")
+        self.assertEqual(self._tickets(), [])
+
+    def test_an_instance_running_jobs_back_to_back_lets_a_waiter_in(self):
+        log = os.path.join(self.root, "order.log")
+        busy = self._spawn(_BACK_TO_BACK_SCRIPT, self._env(
+            SERVER_PORT="42042",
+            LOG=log,
+            READY=os.path.join(self.root, "ready"),
+            RELEASE=os.path.join(self.root, "release"),
+        ))
+        self._wait_file(os.path.join(self.root, "ready"))
+        seen = os.path.join(self.root, "seen")
+        done = os.path.join(self.root, "done")
+        waiter = self._spawn(_WAITER_SCRIPT, self._env(SEEN=seen, DONE=done, LOG=log))
+        self._wait_file(seen)
+        with open(os.path.join(self.root, "release"), "w", encoding="utf-8") as handle:
+            handle.write("go")
+        self._wait_file(done, timeout=10)
+        self._finish(waiter)
+        busy.communicate(timeout=10)
+        self.assertEqual(busy.returncode, 0)
+        with open(log, encoding="utf-8") as handle:
+            order = handle.read().split()
+        # The waiter was in line before A's second job asked for the GPU.
+        self.assertEqual(order, ["A1", "B", *(f"A{number}" for number in range(2, 13))])
+
+    def test_instance_table_formats_rows_without_stopping_anyone(self):
+        import importlib.util
+        path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "scripts", "hocus_instances.py",
+        ))
+        spec = importlib.util.spec_from_file_location("hocus_instances_under_test", path)
+        self.assertIsNotNone(spec)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        text = module.format_table([{
+            "port": "42021",
+            "pid": "10",
+            "rss_mib": "3",
+            "vram_mib": "0",
+            "behind": "2",
+            "commit": "abcdef",
+            "folder": "/tmp/hocuspocus",
+        }])
+        self.assertIn("42021", text)
+        self.assertIn("abcdef", text)
+        self.assertFalse(module._is_instance("bash -c python launch.py", "/tmp/hocuspocus", "bash"))
+        self.assertTrue(module._is_instance("python launch.py", "/tmp/hocuspocus", "python"))
+        self.assertEqual(module.format_lock(), "lock: free")
+        rows = module.collect_instances(vram={})
+        self.assertIsInstance(rows, list)
+        self.assertIn("port", module.format_table(rows))
 
 
 if __name__ == "__main__":

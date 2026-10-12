@@ -20,7 +20,7 @@ def animate_humanoid(
     path: dict | None = None,
     interactions: list[dict] | None = None,
 ) -> tuple[bytes, list[dict], list[str]]:
-    """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration, contacts}]``.
+    """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration, contacts}]``, plus ``loop`` for library clips.
 
     ``path`` (``{points: [[x, z], ...], duration, name?}``, model-space metres) adds one walk along it
     with the feet planted in the world; the clip moves the hips, so the slot itself stays still.
@@ -44,7 +44,7 @@ def animate_humanoid(
     data, start = append_animation_clips(bytes(source), clips)
     listed = [
         {"index": start + index, "name": str(clip["name"]), "duration": float(clip["duration"]),
-         "contacts": list(clip.get("contacts", []))}
+         **({"loop": bool(clip["loop"])} if "loop" in clip else {}), "contacts": list(clip.get("contacts", []))}
         for index, clip in enumerate(clips)
     ]
     return data, listed, warnings

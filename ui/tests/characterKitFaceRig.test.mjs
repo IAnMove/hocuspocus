@@ -257,3 +257,15 @@ test('audio-aligned dialogue preview stays within four seconds', () => {
   assert.ok(preview.end <= 4)
   assert.ok(preview.visemes.length > 1)
 })
+
+
+test('moving a pose eye anchor keeps that pose\'s own blink and its hidden-eyes flag', () => {
+  const kit = { ...createCharacterKit('Lola', 'cutout'), anchors: {
+    base: { mouth: { offsetX: 0, offsetY: -20, scale: .05, rotation: 0 }, blinkSource: '/api/v1/file/own-blink.png?workspace=w' },
+    cool: { mouth: { offsetX: 0, offsetY: -20, scale: .05, rotation: 0 }, blink: false } } }
+  const moved = setFaceRigAnchor(kit, 'base', 'blink', { offsetX: 1, offsetY: -30, scale: .12, rotation: 0 })
+  assert.equal(moved.anchors.base.blinkSource, '/api/v1/file/own-blink.png?workspace=w')
+  assert.equal(moved.anchors.base.eyes.offsetY, -30)
+  const mouth = setFaceRigAnchor(kit, 'cool', 'wide', { offsetX: 0, offsetY: -18, scale: .05, rotation: 0 })
+  assert.equal(mouth.anchors.cool.blink, false)
+})

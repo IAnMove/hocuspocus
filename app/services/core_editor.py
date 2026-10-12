@@ -6,6 +6,7 @@ import re
 import threading
 import time
 import uuid
+from urllib.parse import quote
 from typing import Any
 
 from services import core_workspace as core
@@ -66,6 +67,7 @@ def unique_output_name(folder: str, filename: str) -> tuple[str, str]:
 
 
 def screenshot(source: str, time_seconds: float, name: str, workspace: str | None = None) -> dict[str, Any]:
+    workspace = core.active_workspace() if workspace is None else workspace
     folder = core.workspace_dir(workspace)
     os.makedirs(folder, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", str(name or "video_frame")).strip("_")
@@ -73,7 +75,12 @@ def screenshot(source: str, time_seconds: float, name: str, workspace: str | Non
     stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
     filename, dest = unique_output_name(folder, f"{stamp}_{safe}_frame.png")
     info = extract_frame(resolve_media(source, workspace), dest, time_seconds)
-    return {"filename": filename, "url": f"/api/v1/file/{filename}", **info}
+    return {
+        "filename": filename,
+        "url": f"/api/v1/file/{filename}?workspace={quote(workspace, safe='')}",
+        "workspace": workspace,
+        **info,
+    }
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:

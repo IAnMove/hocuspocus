@@ -142,4 +142,4 @@ reemplazables. La prueba pintada adicional no sustituye estos originales.
 
 Para mantener revisables los cambios, C se divide en **C1 galería/editor** y
 **C2 herramienta reproducible**. No se mezclan ~1.800 líneas de UI, pruebas y
-servidor de QA en un único PR. Ver [handoff de sesión](PROCEDURAL_VIDEO_SESSION_HANDOFF.md).
+servidor de QA en un único PR.

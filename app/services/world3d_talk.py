@@ -79,12 +79,25 @@ def blink_times(seed: str, duration: float) -> list[float]:
     return times
 
 
+def pose_mouth_source(kit: dict, pose: str, state: str) -> str | None:
+    """The drawing ``pose`` shows for ``state`` (ui/src/lib/characterKit.ts characterKitMouthSource). Flat-rig warp
+    mouths are cut from each pose's own drawing (``anchors.<pose>.mouthSources``) and the kit's mouth holds the base
+    pose's: while it does, each pose shows its own and a pose without any shows none, never another pose's face."""
+    item = (kit.get("mouth") or {}).get(state) or {}
+    anchors = kit.get("anchors") or {}
+    rigged = ((anchors.get("base") or {}).get("mouthSources") or {}).get(state)
+    if rigged != item.get("source") or pose == "base":
+        return item.get("source")
+    return ((anchors.get(pose) or {}).get("mouthSources") or {}).get(state)
+
+
 def _ready_art(kit: dict, pose: str) -> tuple[dict, dict[str, str]]:
-    """The approved pose asset and the approved mouth drawings by state."""
+    """The approved pose asset and the approved mouth drawings by state, each the pose's own when it has them."""
     asset = kit.get("base") if pose == "base" else (kit.get("poses") or {}).get(pose)
     if not _approved(asset):
         raise TalkError("pose_not_ready", f"Character Kit {kit.get('name') or kit.get('id')} has no approved {pose} pose")
-    mouths = {state: item["source"] for state, item in (kit.get("mouth") or {}).items() if _approved(item)}
+    mouths = {state: pose_mouth_source(kit, pose, state) for state, item in (kit.get("mouth") or {}).items() if _approved(item)}
+    mouths = {state: source for state, source in mouths.items() if source}
     if not mouths:
         raise TalkError("mouths_not_ready", "Approve the kit's mouth drawings in the Face Rig before making it talk")
     return asset, mouths
@@ -101,7 +114,8 @@ def _blink(kit: dict, anchors: dict, duration: float) -> dict:
     eyes = (kit.get("eyes") or {}).get("blink")
     if not _approved(eyes):
         return {}
-    return {"blink": {"source": eyes["source"], "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
+    source = anchors.get("blinkSource") if isinstance(anchors.get("blinkSource"), str) else eyes["source"]
+    return {"blink": {"source": source, "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
             "blinks": blink_times(str(kit.get("id") or ""), duration)}
 
 
@@ -115,7 +129,8 @@ def talk_block(kit: dict, lines: list[dict], *, pose: str = "base", duration: fl
     per_state = {state: dict(anchor) for state, anchor in (anchors.get("mouthStates") or {}).items() if state in mouths}
     if per_state:
         talk["mouthAnchors"] = per_state
-    return {**talk, **(_blink(kit, anchors, duration) if blink else {})}
+    # A pose with hidden eyes (sunglasses) is marked ``blink: false`` by the rig and keeps them still.
+    return {**talk, **(_blink(kit, anchors, duration) if blink and anchors.get("blink") is not False else {})}
 
 
 def _audio(line: dict, index: int, workspace: str) -> dict | None:

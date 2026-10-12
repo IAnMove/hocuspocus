@@ -7,7 +7,7 @@ import type { SceneAtmosphereKind, SceneBlendMode, SceneLayer, SceneMask } from 
 import { normalizeSeamOccluder } from '../seamOccluder'
 import type { AnimatorLayer, Atmosphere, LayerEffects, LayerStrip, VisualAnimatorLayer } from './types'
 export const DEFAULT_EFFECTS: LayerEffects = { blur: 0, brightness: 1, contrast: 1, saturation: 1, hue: 0, glow: 0, shadow: 0, blendMode: 'normal', mask: 'none', maskRadius: 12 }
-export const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, seamOccluder: { enabled: false, kind: 'pole', scale: 1, opacity: .82 } }
+export const DEFAULT_STRIP: LayerStrip = { enabled: false, count: 5, spacing: 24, direction: 'down', speed: 18, phase: 0, mirror: false, seamOccluder: { enabled: false, kind: 'pole', scale: 1, opacity: .82 } }
 type AtmosphereEntry = { id: SceneAtmosphereKind; density: number; speed: number; size: number; wind: number; color: string; opacity: number }
 const atmosphereEntries = atmospheres.entries as AtmosphereEntry[]
 const atmospherePreset = (entry: AtmosphereEntry): Atmosphere => ({
@@ -30,13 +30,19 @@ export const normalizedEffects = (value: SceneLayer['effects'] | undefined): Lay
   mask: ['none', 'rounded', 'ellipse'].includes(value?.mask ?? '') ? value?.mask as SceneMask : 'none',
   maskRadius: boundedNumber(value?.maskRadius, DEFAULT_EFFECTS.maskRadius, 0, 50),
 })
+/** A mirrored strip alternates plain and mirrored copies around its loop, which only closes with an even count. */
+const stripCount = (value: SceneLayer['strip'] | undefined) => {
+  const count = Math.round(boundedNumber(value?.count, DEFAULT_STRIP.count, 1, 12))
+  return value?.mirror === true && count % 2 ? Math.min(12, count + 1) : count
+}
 export const normalizedStrip = (value: SceneLayer['strip'] | undefined): LayerStrip => ({
   enabled: value?.enabled === true,
-  count: Math.round(boundedNumber(value?.count, DEFAULT_STRIP.count, 1, 12)),
+  count: stripCount(value),
   spacing: boundedNumber(value?.spacing, DEFAULT_STRIP.spacing, 2, 200),
   direction: ['up', 'down', 'left', 'right'].includes(value?.direction ?? '') ? value?.direction as LayerStrip['direction'] : DEFAULT_STRIP.direction,
   speed: boundedNumber(value?.speed, DEFAULT_STRIP.speed, 0, 300),
   phase: boundedNumber(value?.phase, DEFAULT_STRIP.phase, -1000, 1000),
+  mirror: value?.mirror === true,
   seamOccluder: normalizeSeamOccluder(value?.seamOccluder),
 })
 export const normalizedAtmosphere = (value: SceneLayer['atmosphere'] | undefined): Atmosphere => {
@@ -149,18 +155,23 @@ export const drawAtmosphere = (context: CanvasRenderingContext2D, atmosphere: At
     context.restore()
   }
 }
-export const stripOffsets = (layer: AnimatorLayer, sceneSeconds: number) => {
+export type StripOffset = { x: number; y: number; flip?: 'x' | 'y' }
+export const stripOffsets = (layer: AnimatorLayer, sceneSeconds: number): StripOffset[] => {
   const strip = normalizedStrip(layer.strip)
   if (!strip.enabled || strip.count <= 1) return [{ x: 0, y: 0 }]
   const period = strip.count * strip.spacing
+  const vertical = strip.direction === 'up' || strip.direction === 'down'
   const sign = strip.direction === 'up' || strip.direction === 'left' ? -1 : 1
   const travel = sign * (strip.phase + sceneSeconds * strip.speed)
   const wrap = (value: number) => ((value + period / 2) % period + period) % period - period / 2
   return Array.from({ length: strip.count }, (_, index) => {
     const offset = wrap((index - (strip.count - 1) / 2) * strip.spacing + travel)
-    return strip.direction === 'up' || strip.direction === 'down' ? { x: 0, y: offset } : { x: offset, y: 0 }
+    const flip = strip.mirror && index % 2 ? { flip: vertical ? 'y' as const : 'x' as const } : {}
+    return vertical ? { x: 0, y: offset, ...flip } : { x: offset, y: 0, ...flip }
   })
 }
+/** The CSS that mirrors a strip copy the way the canvas painter does (empty for a plain copy). */
+export const stripFlipCss = (state: { flip?: 'x' | 'y' }) => state.flip === 'x' ? ' scaleX(-1)' : state.flip === 'y' ? ' scaleY(-1)' : ''
 export const effectFilter = (effects: LayerEffects, pixelUnit: number) => {
   const filters = [`brightness(${effects.brightness})`, `contrast(${effects.contrast})`, `saturate(${effects.saturation})`, `hue-rotate(${effects.hue}deg)`]
   if (effects.blur > 0) filters.unshift(`blur(${(effects.blur * pixelUnit).toFixed(2)}px)`)

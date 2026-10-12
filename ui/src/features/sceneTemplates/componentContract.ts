@@ -1,25 +1,23 @@
 import {
   getCandidateSceneTemplate,
   templateCatalogVersion,
+  type ReviewStatus,
+  type TemplateAssetKind,
   type TemplateSlotName,
 } from './catalog'
 
 /**
- * Stable labels shared by the template picker and the Wizard prompt.
- *
- * The legacy names remain available alongside the explicit music-video role
- * names.  They intentionally describe roles only; they do not bind an asset
- * or authorize a generation request.
+ * Stable labels shared by the template picker and the Wizard prompt: one slot
+ * vocabulary for every card. They describe roles only; they do not bind an
+ * asset or authorize a generation request.
  */
 export const TEMPLATE_SLOT_LABELS: Record<TemplateSlotName, string> = Object.freeze({
-  hero: 'Protagonista',
-  plate: 'Fondo',
-  prop: 'Objeto / segundo sujeto',
-  foreground: 'Primer término',
   subject_1: 'Sujeto 1',
   subject_2: 'Sujeto 2',
   background: 'Fondo',
   prop_1: 'Accesorio 1',
+  prop_2: 'Accesorio 2',
+  foreground: 'Primer término',
 }) as Record<TemplateSlotName, string>
 
 export type TemplateComponent = {
@@ -27,7 +25,7 @@ export type TemplateComponent = {
   readonly label: string
   readonly description: string
   readonly required: boolean
-  readonly kinds: readonly ('image' | 'model3d')[]
+  readonly kinds: readonly TemplateAssetKind[]
 }
 
 export type TemplateComponentContract = {
@@ -36,7 +34,7 @@ export type TemplateComponentContract = {
   readonly templateId: string
   readonly templateVersion: 1
   readonly catalogVersion: string
-  readonly status: 'candidate'
+  readonly status: ReviewStatus
   readonly generationPolicy: 'provided_only'
   readonly description: string
   readonly components: readonly TemplateComponent[]
@@ -52,7 +50,7 @@ export function describeTemplateComponents(id: string): TemplateComponentContrac
     templateId: template.id,
     templateVersion: template.version,
     catalogVersion: templateCatalogVersion(template),
-    status: 'candidate',
+    status: template.status,
     generationPolicy: 'provided_only',
     description: template.description,
     components: template.slots.map(slot => ({

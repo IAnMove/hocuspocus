@@ -23,14 +23,16 @@ no longer matches still needs Install or Update.
 ## Available recipes
 
 All local AI recipes require **x64 and NVIDIA**. Selection checks OS,
-architecture and the NVIDIA driver; an unknown driver is explicitly unverified.
+architecture, the NVIDIA driver and the GPU compute capability
+(`nvidia-smi --query-gpu=compute_cap`); an unknown driver or capability is
+explicitly unverified.
 An unsupported optional engine is reported and skipped. This is installation
 compatibility, not a promise that every model fits in the available VRAM.
 
 Every machine installs exactly one main runtime in `app/env`. `core` declares
 `fallbackFor: "wangp"`: it is selected only where WanGP cannot run (AMD, Intel,
-CPU-only, unknown GPU, Linux ARM, Apple Silicon, or an NVIDIA driver below the
-CUDA minimum) and is marked `supersededBy: "wangp"` elsewhere. Selecting both
+CPU-only, unknown GPU, Linux ARM, Apple Silicon, a pre-Turing NVIDIA GPU or an
+NVIDIA driver below the CUDA minimum) and is marked `supersededBy: "wangp"` elsewhere. Selecting both
 would make each Update replace the other's receipt in the shared environment.
 Installation stops only when neither can run (Intel Mac, Windows ARM, other
 OSes). Core installs FastAPI, the UI and FFmpeg without Torch; `launch.py` boots
@@ -57,6 +59,14 @@ the Hunyuan3D installer checks the Windows compiler.
 
 CUDA 13 requires driver 580 or newer. CUDA 12 recipes use NVIDIA's minor
 compatibility floor; newer drivers are recommended, especially for JIT kernels.
+Every CUDA recipe also needs compute capability **7.5 (Turing) or newer**: the
+cu128 wheels (Torch, xformers, SageAttention, Flash Attention) and CUDA 13 ship
+no kernels for Pascal or older, so a GTX 10xx would download gigabytes and fail
+on the first kernel. Preflight reads `compute_cap` from `nvidia-smi` (the
+weakest GPU counts), reports "GPU older than Turing" and installs core instead;
+an nvidia-smi too old to know the field leaves the capability unverified. The
+floor is `runtime_profiles.COMPUTE_CAPABILITY_MINIMUM`, outside `profiles.json`,
+so it does not change install fingerprints.
 Hunyuan and UniRig still need a compatible CUDA compiler; Hunyuan on Windows
 needs Visual Studio Build Tools. The installer actually imports Torch and runs
 a small CUDA calculation before accepting each environment. It does not execute
@@ -141,7 +151,10 @@ error message. Child scripts explicitly return success; parents check this
 receipt because Pinokio can otherwise continue after an aborted child.
 
 **Reset is destructive:** it removes managed environments, vendor checkouts and
-the UI build, including the existing Hunyuan model cache under `app/ckpts/model3d`.
+the UI build, including the existing Hunyuan model cache under `app/ckpts/model3d`,
+the Seed-VC checkout (`app/postprocessing/seedvc`), SAM checkpoints
+(`app/services/sam/checkpoints`), manually installed 3D runtimes
+(`app/services/model3d_runtimes`) and the UI build lock (`ui/.hocus-ui-build.lock`).
 It is not necessary for routine updates or retries.
 
 Read `/api/v1/runtime-capabilities` on the running app for the selected recipes

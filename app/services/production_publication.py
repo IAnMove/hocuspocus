@@ -1,15 +1,20 @@
-"""Publish a completed production through the app, with an isolated page."""
+"""Publish a completed production through the app, with an isolated page.
+
+Each publication is remembered beside the production (``<id>.publications.json``: page, video, mode, when and who
+published it), so the production's card links its published page (:func:`latest_publication`)."""
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import html
 import json
+import logging
 import os
 import re
 import shutil
 import tempfile
 import threading
+import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -20,6 +25,7 @@ _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}\Z")
 _WORKSPACE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\Z")
 _EXTENSIONS = {".mp4", ".webm", ".png", ".jpg", ".jpeg", ".wav", ".mp3", ".flac", ".m4a", ".glb", ".json"}
 _lock = threading.Lock()
+_LOGGER = logging.getLogger("loreframe.production.publication")
 
 
 def publication_catalog() -> list[dict]:
@@ -89,15 +95,17 @@ def _sources(root, state, extras):
     return files
 
 
-def _page(title: str, files: dict, *, preview: bool = False) -> str:
+def _page(title: str, files: dict, *, preview: bool = False, language: str = "") -> str:
+    """The page chrome is English; the title carries the production's own language when it is known."""
     title = html.escape(title)
+    lang = f' lang="{html.escape(language)}"' if language else ""
     links = "".join(f'<li><a href="{quote(name)}" download>{html.escape(name)}</a></li>' for name in files)
     contact = next((name for name in files if name.startswith("contact.")), None)
     image = f'<img src="{quote(contact)}" alt="Video contact sheet" loading="lazy">' if contact else ""
     notice = '<p role="status"><strong>Review preview · Not approved for release</strong></p>' if preview else ""
     return f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title><style>body{{margin:0;background:#111d2b;color:#f5e9ce;font:18px system-ui,sans-serif}}main{{max-width:1100px;margin:auto;padding:36px 20px}}h1{{font-size:clamp(32px,6vw,64px);color:#65d4ba}}video,img{{display:block;width:100%;border-radius:14px;background:#000;margin:24px 0}}a{{color:#ffcc73}}li{{margin:10px 0;overflow-wrap:anywhere}}footer{{margin:40px 0;font-size:15px;color:#b6c4cf}}</style>
-<main>{notice}<p>Original music · Original 3D models · A couch-night tribute</p><h1>{title}</h1>
+<title{lang}>{title}</title><style>body{{margin:0;background:#111d2b;color:#f5e9ce;font:18px system-ui,sans-serif}}main{{max-width:1100px;margin:auto;padding:36px 20px}}h1{{font-size:clamp(32px,6vw,64px);color:#65d4ba}}video,img{{display:block;width:100%;border-radius:14px;background:#000;margin:24px 0}}a{{color:#ffcc73}}li{{margin:10px 0;overflow-wrap:anywhere}}footer{{margin:40px 0;font-size:15px;color:#b6c4cf}}</style>
+<main>{notice}<p>Original music · Original 3D models · A couch-night tribute</p><h1{lang}>{title}</h1>
 <video controls playsinline preload="metadata" aria-label="{title}"><source src="video.mp4" type="video/mp4"></video>
 {image}<h2>Downloads</h2><ul>{links}</ul><footer>Fan-made homage, not affiliated with Nintendo</footer></main></html>'''
 
@@ -119,8 +127,10 @@ def publish_production(data: dict, workspace_dir) -> dict:
         assert_publishable(root, data["production_id"], state)
     files = _sources(root, state, data["extras"])
     hashes = {name: _digest(path) for name, path in files.items()}
-    title = str((state.get("spec") or {}).get("title") or data["production_id"])
-    page_content = _page(title, files, preview=preview)
+    spec = state.get("spec") or {}
+    title = str(spec.get("title") or data["production_id"])
+    from services.production_song import song_language
+    page_content = _page(title, files, preview=preview, language=song_language(spec.get("song")))
     page_digest = hashlib.sha256(page_content.encode()).hexdigest()
     identity = hashlib.sha256(json.dumps({"workspace": data["workspace"], "production": data["production_id"], "slug": data["slug"], "files": hashes, "page": page_digest}, sort_keys=True).encode()).hexdigest()[:16]
     destination_root = Path(configured).resolve()
@@ -158,8 +168,60 @@ def publish_production(data: dict, workspace_dir) -> dict:
     if os.environ.get("HOCUS_PUBLICATION_SERVE") == "1":
         serve_publication(destination_root, os.environ.get("HOCUS_PUBLICATION_BIND", "127.0.0.1"), url.port or 80)
     prefix = base + "/" + directory + "/"
-    return {"page": prefix + page, "video": prefix + "video.mp4", "files": {name: prefix + quote(name) for name in files}, "publication_id": identity,
-            "mode": "preview" if preview else "release"}
+    result = {"page": prefix + page, "video": prefix + "video.mp4", "files": {name: prefix + quote(name) for name in files},
+              "publication_id": identity, "mode": "preview" if preview else "release"}
+    try:
+        record_publication(root, data["production_id"], result)
+    except OSError as error:  # the page is published; only the card's link to it is missing
+        _LOGGER.warning("Could not record the publication of %s: %s", data["production_id"], error)
+    return result
+
+
+def publications_path(root, production_id: str) -> Path:
+    return Path(root) / f"{production_id}.publications.json"
+
+
+def _publications(root, production_id: str) -> list[dict]:
+    try:
+        body = json.loads(publications_path(root, production_id).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    rows = body.get("publications") if isinstance(body, dict) else None
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+def record_publication(root, production_id: str, result: dict, *, now: float | None = None) -> dict:
+    """Remember a publication beside its production; publishing the same page again updates its time."""
+    from services.agent_activity import actor_label
+    moment = round(now if now is not None else time.time(), 3)
+    row = {"publication_id": result["publication_id"], "page": result["page"], "video": result["video"],
+           "mode": result["mode"], "published_at": moment, "published_by": actor_label()}
+    with _lock:
+        rows, kept = _publications(root, production_id), []
+        for item in rows:
+            if item.get("publication_id") == row["publication_id"]:
+                row["first_published_at"] = item.get("first_published_at") or item.get("published_at")
+            else:
+                kept.append(item)
+        rows = [*kept, row][-50:]
+        path = publications_path(root, production_id)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps({"version": 1, "production_id": production_id, "publications": rows}, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(path)
+    return row
+
+
+def latest_publication(root, production_id: str) -> dict | None:
+    """The newest publication of a production with its page link, or None when it was never published."""
+    rows = _publications(root, production_id)
+    if not rows:
+        return None
+    latest = max(rows, key=lambda item: float(item.get("published_at") or 0))
+    page = latest.get("page")
+    if not isinstance(page, str) or urlsplit(page).scheme not in {"http", "https"}:
+        return None
+    return {"page": page, "mode": latest.get("mode") or "release", "published_at": latest.get("published_at"),
+            "published_by": latest.get("published_by") or "user", "count": len(rows)}
 
 
 def publication_handlers(workspace_dir) -> dict:

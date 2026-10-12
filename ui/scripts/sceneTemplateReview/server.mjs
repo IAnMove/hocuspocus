@@ -10,10 +10,13 @@ const MAX_REQUEST_BYTES = 40 * 1024 * 1024
 const MAX_BLOCKED_REQUESTS = 128
 const MAX_INPUTS = 64
 const MAX_INPUT_FILE_BYTES = 4 * 1024 * 1024
+/** A GLB or a looping video background is bigger than a picture. */
+const MAX_MEDIA_INPUT_FILE_BYTES = 32 * 1024 * 1024
 const MAX_INPUT_BYTES = 128 * 1024 * 1024
 const LOOPBACK_HOST = '127.0.0.1'
-const PREVIEW_PATH = /^\/scene-template-previews\/([a-z0-9][a-z0-9-]*(?:\.failure-[0-9a-f-]+)?)\.(mp4|png|json)$/
-const SAFE_INPUT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}\.(?:jpe?g|png|webp)$/i
+const PREVIEW_PATH = /^\/scene-template-previews\/([a-z0-9][a-z0-9-]*(?:\.failure-[0-9a-f-]+|\.sheet)?)\.(mp4|png|json)$/
+const SAFE_INPUT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}\.(?:jpe?g|png|webp|glb|mp4|webm)$/i
+const MEDIA_INPUT = /\.(?:glb|mp4|webm)$/i
 class RequestTooLargeError extends Error {}
 
 const json = (response, value, status = 200) => {
@@ -70,7 +73,7 @@ async function readBody(request) {
 }
 
 const MIME_TYPES = {
-  '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.glb': 'model/gltf-binary', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml',
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
@@ -81,7 +84,7 @@ const contentType = filename => MIME_TYPES[path.extname(filename).toLowerCase()]
 function validateInputName(name) {
   if (typeof name !== 'string' || !SAFE_INPUT_NAME.test(name)
     || name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
-    throw new Error('Input name must be a safe JPG, JPEG, PNG or WebP basename.')
+    throw new Error('Input name must be a safe JPG, JPEG, PNG, WebP, GLB, MP4 or WebM basename.')
   }
   return name
 }
@@ -414,7 +417,8 @@ export async function startReviewServer({ uiDist, outputDir, host = LOOPBACK_HOS
       }
       if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Review input must be a regular non-symlink file: ${safeName}`)
       if (stat.size === 0) throw new Error(`Review input must not be empty: ${safeName}`)
-      if (stat.size > MAX_INPUT_FILE_BYTES) throw new Error(`Review input exceeds the ${MAX_INPUT_FILE_BYTES} byte file limit: ${safeName}`)
+      const fileLimit = MEDIA_INPUT.test(safeName) ? MAX_MEDIA_INPUT_FILE_BYTES : MAX_INPUT_FILE_BYTES
+      if (stat.size > fileLimit) throw new Error(`Review input exceeds the ${fileLimit} byte file limit: ${safeName}`)
 
       // A registered input is resolved from this fresh directory only. The
       // realpath check also rejects a path that was swapped for a link between
@@ -474,6 +478,7 @@ export {
   MAX_BLOCKED_REQUESTS,
   MAX_INPUTS,
   MAX_INPUT_FILE_BYTES,
+  MAX_MEDIA_INPUT_FILE_BYTES,
   MAX_INPUT_BYTES,
   MAX_REQUEST_BYTES,
   LOOPBACK_HOST,

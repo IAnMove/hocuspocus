@@ -130,6 +130,8 @@ function mergeKeptSlots(next: Scene3DSlot[], previous: Scene3DDocument): Scene3D
 export function remountUserTemplate(pack: World3DUserTemplate, previous: Scene3DDocument, keepAssets: boolean): Scene3DDocument {
   const next = cloneScene3DDocument(pack.document)
   next.playbackSpeed = previous.playbackSpeed
+  if (previous.motionStep) next.motionStep = previous.motionStep
+  if (previous.stopMotionJitter) next.stopMotionJitter = previous.stopMotionJitter
   next.clipNumber = previous.clipNumber
   next.width = previous.width
   next.height = previous.height

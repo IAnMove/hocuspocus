@@ -11,5 +11,6 @@ Permanent Marker has no Latin Extended file in the Fontsource package; character
 | Hocus Serif | Playfair Display 500, latin and latin-ext | Playfair Display 5.2.5 via Fontsource | SIL Open Font License 1.1. Copyright Claus Eggers Sørensen. |
 | Hocus Hand | Caveat 500, latin and latin-ext | Caveat 5.2.5 via Fontsource | SIL Open Font License 1.1. Copyright Impallari Type. |
 | Hocus Marker | Permanent Marker 400, latin | Permanent Marker 5.2.5 via Fontsource | Apache License 2.0. Copyright Font Diner. |
+| Courier Prime | Courier Prime Regular, latin | Courier Prime, latin-400 | SIL Open Font License 1.1. Copyright 2015 The Courier Prime Project Authors. See `CourierPrime-OFL.txt`. |
 
 The wordmark file `cormorant-garamond-600-wordmark.woff2` is a separate six-glyph subset and is not a text face.

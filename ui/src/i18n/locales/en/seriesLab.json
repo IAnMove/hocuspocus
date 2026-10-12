@@ -4,7 +4,8 @@
     "canon": "2 · Bible",
     "episode": "3 · Episode",
     "shots": "4 · Shots",
-    "review": "5 · Results"
+    "approval": "5 · Validation",
+    "review": "6 · Results"
   },
   "review": {
     "orderedAssembly": "Ordered episode assembly",
@@ -55,6 +56,11 @@
     "edit": "Edit",
     "attemptsInSlot": "Attempts in this slot",
     "tryN": "try {{count}}",
+    "decidedBy": {
+      "agent": "by an agent",
+      "wizard": "by the Wizard",
+      "server": "automatically by the render"
+    },
     "tryFinal": "try {{count}} · final",
     "noPlayable": "This slot does not have a playable video yet.",
     "editSource": "Edit source data · shot {{order}}",
@@ -101,7 +107,8 @@
     "shotPlayErrorContinue": "Shot {{order}} could not be played; continuing with the next available shot.",
     "approvePendingLabel": "Approve pending",
     "replaceFinalsLabel": "Replace finals",
-    "seedRandom": "random"
+    "seedRandom": "random",
+    "assembleAnyway": "Some shots still wait for their approval: {{message}}\n\nAssemble the episode anyway?"
   },
   "library": {
     "loading": "Loading Series Lab…",
@@ -380,7 +387,7 @@
     "when": "When",
     "whatHappened": "What happened",
     "voicesTitle": "Voice bible · metadata",
-    "voicesDescription": "TTS comes from the linked library character. Pace, pitch and pronunciation here are series notes; they do not control MiniMax H3. Spoken audio follows the shot dialogue.",
+    "voicesDescription": "TTS comes from the linked library character. Pace and pitch here are series notes and do not control MiniMax H3. The pronunciation dictionary is spoken: each whole word is replaced before speech, and subtitles keep the script. An optional pitch range and a Castilian accent are checks: a voice outside the range, or without θ, is a warning and is still kept.",
     "kitTtsHint": "TTS preset comes from the linked library character.",
     "unlinkedTtsHint": "Link a library character to use its TTS. Provider and voice ID below are fallbacks only.",
     "provider": "Provider",
@@ -390,6 +397,15 @@
     "language": "Language",
     "pace": "Pace",
     "pitch": "Pitch",
+    "gender": "Gender",
+    "genderHint": "Used for the pitch check only when no range is set. Man 75–175 Hz, woman 150–320, child 220–400. The description is not read.",
+    "pitchRange": "Pitch range (Hz)",
+    "pitchRangeHint": "Leave empty to infer it from gender. Outside this range the take warns and is kept.",
+    "pitchMin": "Min",
+    "pitchMax": "Max",
+    "accent": "Accent check",
+    "accentNone": "None",
+    "accentCastilian": "Castilian (θ)",
     "emotion": "Default emotion",
     "pronunciationPlaceholder": "Pronunciation dictionary\nFarnsworth=FARNS-wurth",
     "consent": "Consent/source note",
@@ -409,6 +425,7 @@
   "episode": {
     "heading": "Episode {{number}} · {{title}}",
     "frozen": "Frozen canon revision {{revision}}. Planning cannot mutate the current series canon.",
+    "kitPinBehind": "this episode uses revision {{pinned}} of {{name}}; there is a {{latest}}",
     "title": "Episode title",
     "duration": "Target duration",
     "premise": "Episode premise",
@@ -731,15 +748,45 @@
       "cancelling": "stopping",
       "completed": "done",
       "failed": "some shots failed",
-      "cancelled": "stopped"
+      "cancelled": "stopped",
+      "interrupted": "interrupted by a restart"
     },
     "stage": {
       "voices": "voices",
       "scene": "scene",
       "export": "video",
+      "foley": "foley",
       "import": "take",
       "done": "done"
     }
+  },
+  "productions": {
+    "title": "Productions",
+    "hint": "Each production renders the episode in every language and cuts the chapters (series.episode.produce, started here, by an agent or by the Wizard). A stopped one resumes where it left off.",
+    "stop": "Stop after this step",
+    "resume": "Resume",
+    "status": {
+      "queued": "queued",
+      "running": "producing",
+      "cancelling": "stopping",
+      "completed": "done",
+      "failed": "failed",
+      "cancelled": "stopped",
+      "interrupted": "interrupted by a restart",
+      "waiting": "waiting for the review"
+    },
+    "step": {
+      "render": "Render {{language}}",
+      "assemble": "Cut {{language}}"
+    },
+    "stepStatus": {
+      "queued": "waiting",
+      "running": "running",
+      "done": "done",
+      "failed": "failed"
+    },
+    "chapter": "Chapter {{language}}",
+    "chapterSubtitled": "Chapter {{language}} with subtitles"
   },
   "languages": {
     "title": "Language versions",
@@ -773,7 +820,28 @@
       "create": "Creating the version…",
       "save": "Saving…",
       "assemble": "Starting the assembly…",
-      "remove": "Removing…"
+      "remove": "Removing…",
+      "check": "Saving…"
+    },
+    "versionTitle": "Title in this language",
+    "cards": "Cards",
+    "cardTitleLabel": "Card title of {{id}}",
+    "cardBodyLabel": "Card text of {{id}}",
+    "machine": {
+      "badge": "Machine translation",
+      "badgeTitle": "The language model translated this (series.episode.translate) and no one has checked it yet. Your edit, or Checked, clears the mark.",
+      "check": "Checked",
+      "checkLabel": "Mark {{id}} as checked",
+      "checkAll": "Mark all as checked",
+      "checked": "Marked as checked by you.",
+      "summary_one": "{{count}} text in this version is a machine translation, asked for by {{by}}. Read it before you render: your edit, or Checked, clears the mark.",
+      "summary_other": "{{count}} texts in this version are machine translations, asked for by {{by}}. Read them before you render: your edit, or Checked, clears each mark.",
+      "by": {
+        "user": "a person",
+        "agent": "an agent (MCP)",
+        "wizard": "the Wizard",
+        "server": "the server"
+      }
     }
   },
   "plates": {
@@ -794,5 +862,560 @@
     "language": "Language",
     "contents": "Cast: {{characters}} · pilot of {{shots}} 2D shots",
     "create": "Create “{{title}}”"
+  },
+  "approval": {
+    "title": "Shot validation",
+    "empty": "This episode has no shots yet.",
+    "mode": {
+      "label": "Production mode",
+      "direct": {
+        "label": "All at once",
+        "hint": "Every shot renders straight to its final take, as before. Approvals and notes here are optional."
+      },
+      "plan": {
+        "label": "Approve plans",
+        "hint": "Each shot renders only after you approve its plan (what it shows and says)."
+      },
+      "preview": {
+        "label": "Plan + preview",
+        "hint": "Approve the plan, then watch a quick preview of each shot and approve it or ask for changes before the final render."
+      }
+    },
+    "progress": {
+      "plan": "Plans approved",
+      "preview": "Previews approved",
+      "reviewed": "Takes reviewed",
+      "ready": "Ready for the cut"
+    },
+    "next": {
+      "approve_plan": "Approve the plan of {{count}} shots",
+      "approve_plan_one": "Approve the plan of 1 shot",
+      "render": "Render the {{count}} approved shots",
+      "render_one": "Render the approved shot",
+      "render_previews": "Render previews of the {{count}} approved shots",
+      "render_previews_one": "Render the preview of the approved shot",
+      "approve_previews": "Review {{count}} previews",
+      "approve_previews_one": "Review 1 preview",
+      "render_final": "Render the final of {{count}} approved previews",
+      "render_final_one": "Render the final of the approved preview",
+      "changes": "{{count}} shots wait for the changes you asked for",
+      "changes_one": "1 shot waits for the changes you asked for",
+      "assemble": "Every shot is ready: assemble the episode"
+    },
+    "steps": {
+      "changes": "{{count}} with changes requested",
+      "changes_one": "1 with changes requested",
+      "approve_plan": "{{count}} plans to approve",
+      "approve_plan_one": "1 plan to approve",
+      "render": "{{count}} to render",
+      "render_one": "1 to render",
+      "render_previews": "{{count}} previews to render",
+      "render_previews_one": "1 preview to render",
+      "approve_previews": "{{count}} previews to review",
+      "approve_previews_one": "1 preview to review",
+      "render_final": "{{count}} finals to render",
+      "render_final_one": "1 final to render"
+    },
+    "actions": {
+      "approveVisible": "Approve the visible plans",
+      "approveVisibleConfirm": "Approve the plan of these {{count}} shots?",
+      "showPending": "Show pending",
+      "showChanges": "Show change requests",
+      "render": "Render approved shots",
+      "render_previews": "Render previews",
+      "render_final": "Render finals",
+      "openResults": "Go to Results",
+      "rerenderChanged": "Re-render shots with changes"
+    },
+    "render": {
+      "progress": "Server render: {{done}} of {{total}} · {{status}}",
+      "waiting": "{{count}} waiting for approval",
+      "waiting_one": "1 waiting for approval"
+    },
+    "cast": {
+      "title": "Cast of the episode ({{count}}) · mouths and face rig",
+      "faceRig": "{{name}} · face rig"
+    },
+    "filters": {
+      "label": "Filter shots",
+      "all": "All ({{count}})",
+      "pending": "Pending ({{count}})",
+      "changes": "Changes requested ({{count}})",
+      "approved": "Approved ({{count}})"
+    },
+    "scene": {
+      "title": "Scene {{number}}",
+      "progress": "{{done}} / {{total}} approved"
+    },
+    "status": {
+      "pending": "pending",
+      "approved": "approved",
+      "changes": "changes requested"
+    },
+    "stage": {
+      "plan": "plan",
+      "preview": "preview",
+      "final": "final"
+    },
+    "notes": {
+      "earlier": "Notes on this shot",
+      "by": {
+        "user": "You",
+        "agent": "Agent",
+        "wizard": "Wizard",
+        "server": "Production"
+      },
+      "label": "Your note ({{stage}})",
+      "placeholder": "What should change in this shot? Saved as you type.",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "failed": "Could not save the note",
+      "pending": "Note awaiting save",
+      "retry": "Retry saving"
+    },
+    "card": {
+      "noLines": "No dialogue",
+      "fx": "fx: {{list}}",
+      "sfx": "{{count}} sfx",
+      "props": "{{count}} props",
+      "layers": "{{count}} set layers",
+      "cardKind": "{{kind}} card",
+      "music": "music: {{file}}",
+      "scene3d": "3D {{source}} · {{objects}} objects · {{quality}}",
+      "undo": "Undo",
+      "approvePlan": "Approve plan",
+      "approvePreview": "Approve preview",
+      "requestChange": "Request change",
+      "rerender": "Re-render this shot",
+      "seconds": "{{seconds}} s",
+      "planStatus": "Plan: {{status}}",
+      "previewStatus": "Preview: {{status}}"
+    },
+    "edit": {
+      "framing": "Framing",
+      "camera": "Camera",
+      "auto": "Automatic",
+      "intro": "Intro (s)",
+      "tail": "Tail (s)",
+      "jsonObject": "Write a JSON object"
+    },
+    "framings": {
+      "wide": "Wide",
+      "two": "Two-shot",
+      "medium": "Medium",
+      "close": "Close-up",
+      "insert": "Insert",
+      "title": "Title"
+    },
+    "cameras": {
+      "static": "Static",
+      "push": "Push in"
+    },
+    "editor": {
+      "title": "Editing shot #{{order}}",
+      "exportTake": "Export and use as the shot's take",
+      "chooseExport": "Choose a recent export",
+      "back": "Back to the shot",
+      "discard": "Stop editing this shot",
+      "recent": "Recent exports",
+      "noExports": "No video exported since you opened this shot.",
+      "useThis": "Use {{name}}",
+      "savePlan": "Save to the shot",
+      "planTitle": "3D scene of shot #{{order}}"
+    }
+  },
+  "inspector": {
+    "title": "Shot #{{order}}",
+    "back": "All shots",
+    "previous": "Previous shot (←)",
+    "next": "Next shot (→)",
+    "position": "{{index}} / {{total}}",
+    "parts": "Parts of this shot",
+    "loading": "Reading the shot…",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "unsaved": "unsaved",
+    "partNames": {
+      "plan": "Framing and timing",
+      "cast": "Characters",
+      "cast3d": "Characters",
+      "lines": "Dialogue",
+      "set": "Location and set",
+      "props": "Props",
+      "fx": "Screen effects",
+      "sfx": "Sound effects",
+      "sound": "Music and foley",
+      "card": "Card",
+      "scene3d": "3D scene",
+      "video": "Video take",
+      "takes": "Takes"
+    },
+    "saved": {
+      "done": "Saved ({{keys}}).",
+      "reset": "Its take no longer shows this plan: its approval was reset. Re-render the shot to see the change.",
+      "missing": "The {{language}} version still lacks {{count}} lines.",
+      "missing_one": "The {{language}} version still lacks 1 line.",
+      "plain": "Saved."
+    },
+    "tile": {
+      "open": "Open shot {{order}}",
+      "openButton": "Open",
+      "noTake": "plan only",
+      "unsaved": "unsaved"
+    },
+    "media": {
+      "take": "Take {{number}} of the shot",
+      "takes": "Takes of this shot",
+      "planOnly": "Not rendered yet: the plan"
+    },
+    "regenerate": {
+      "stale": "This shot changed after its take.",
+      "newerVoices": "A line was recorded after the take: the take does not have it yet.",
+      "noTake": "This shot has no take yet.",
+      "record": "records the voice of {{count}} lines ({{lines}})",
+      "record_one": "records the voice of 1 line ({{lines}})",
+      "reuse": "uses the recorded voices",
+      "scene2d": "builds the 2D scene and makes a new take",
+      "scene3d": "builds the 3D scene and makes a new take",
+      "withFoley": "and its foley",
+      "cut": "A generated or imported take is not rendered again: its sound effects, music and clip sound are laid at the cut. Recut the episode (Results) to hear a change.",
+      "foley": "Make its foley",
+      "progress": "Rendering this shot: {{stage}}",
+      "busy": "The server is rendering other shots of this episode; this one can render when it ends.",
+      "stages": {
+        "voices": "voices",
+        "scene": "scene",
+        "export": "export",
+        "foley": "foley",
+        "import": "new take",
+        "done": "done"
+      }
+    },
+    "list": {
+      "up": "Move {{item}} up",
+      "down": "Move {{item}} down",
+      "remove": "Remove {{item}}"
+    },
+    "cast": {
+      "title": "Characters on screen",
+      "empty": "Nobody on screen.",
+      "empty3d": "No character speaks through an object of this scene.",
+      "hint3d": "Each one speaks through an object of the 3D scene, drawn as its Character Kit pose.",
+      "item": "Character {{number}}",
+      "add": "Add a character",
+      "character": "Character",
+      "pose": "Pose",
+      "basePose": "Base pose",
+      "x": "Position x %",
+      "scale": "Scale",
+      "motion": "Motion",
+      "motions": {
+        "idle": "Idle",
+        "still": "Still",
+        "shake": "Shake"
+      },
+      "enterFrom": "Enters from",
+      "noEntrance": "Already there",
+      "sides": {
+        "left": "the left",
+        "right": "the right"
+      },
+      "enterAt": "Enters at (s)",
+      "enterDuration": "Entrance (s)",
+      "enterGait": "Gait",
+      "gaits": {
+        "slide": "Slide",
+        "hop": "Hop",
+        "walk": "Walk"
+      },
+      "at": "at {{x}} %",
+      "enters": "enters from {{side}}",
+      "object": "object {{id}}",
+      "open": "Open {{name}} in Characters (face rig on this pose)",
+      "openShort": "Open"
+    },
+    "lines": {
+      "title": "Dialogue",
+      "empty": "No dialogue in this shot.",
+      "item": "Line {{number}}",
+      "add": "Add a line",
+      "speaker": "Who says it",
+      "emotion": "Emotion",
+      "delivery": "Delivery",
+      "pause": "Pause before (s)",
+      "pauseShort": "pause {{seconds}} s",
+      "room": "Room",
+      "roomInherit": "The shot's room",
+      "text": "Text ({{language}})",
+      "voice": "Voice",
+      "play": "Play line {{number}}",
+      "playRoom": "Play it as heard in the room ({{room}})",
+      "record": "Record voice",
+      "retake": "New take",
+      "recording": "Recording…",
+      "retaking": "Recording a new take…",
+      "notRecorded": "Not recorded yet: the render records it.",
+      "newer": "newer than the take",
+      "hint": "A new take of a line replaces its recording once it is good; render the shot to hear it in the take. Emotion and delivery are notes for the scene; the voice is the character's."
+    },
+    "rooms": {
+      "none": "Dry",
+      "small_room": "Small room",
+      "room": "Room",
+      "hall": "Hall",
+      "cathedral": "Cathedral",
+      "cockpit": "Cockpit",
+      "outdoor": "Outdoors",
+      "radio": "Radio"
+    },
+    "set": {
+      "title": "Location and set",
+      "location": "Location",
+      "variant": "Variant",
+      "noVariant": "No variant",
+      "castDepth": "Cast depth (0.1–1)",
+      "castDepthShort": "cast at depth {{value}}",
+      "ownLayers": "{{count}} own set layers",
+      "ownLayers_one": "1 own set layer",
+      "locationLayers": "{{count}} location layers",
+      "locationLayers_one": "1 location layer",
+      "useOwnLayers": "This shot has its own set layers (instead of the location's)",
+      "locationLayersHint": "The shot uses its location's set layers. Tick the box to give it its own (an empty list turns them off).",
+      "addLayer": "Add a layer",
+      "layer": "Layer {{number}}",
+      "layerFile": "Image or video",
+      "depth": "Depth (0 far, 1 near)",
+      "front": "In front of the cast",
+      "opacity": "Opacity",
+      "scale": "Scale",
+      "drift": "Drift (px/s)",
+      "start": "Clip start (s)",
+      "loop": "Loop",
+      "loops": {
+        "restart": "Restart each shot",
+        "loop": "Loop",
+        "hold": "Hold last frame",
+        "pingpong": "Ping-pong"
+      },
+      "speed": "Speed",
+      "layerShort": "depth {{depth}} · {{side}}",
+      "inFront": "in front",
+      "behind": "behind",
+      "backgroundHint": "Background of this location: it is used by its {{count}} shots.",
+      "backgroundHint_one": "Background of this location: it is used by its 1 shot.",
+      "plateActive": "This location plays a 3D plate (a video) as its background, in its {{count}} shots.",
+      "plateActive_one": "This location plays a 3D plate (a video) as its background.",
+      "images": "Images of this location",
+      "useImage": "Use this image as the location's background",
+      "generate": "New background"
+    },
+    "when": {
+      "title": "When",
+      "modes": {
+        "at": "At a second",
+        "line": "On a line",
+        "enter": "On an entrance"
+      },
+      "seconds": "Second",
+      "line": "Line",
+      "anchor": "Of the line",
+      "start": "start",
+      "end": "end",
+      "cast": "Who enters",
+      "offset": "Offset (s)",
+      "at": "at {{seconds}} s",
+      "lineStart": "on line {{number}}",
+      "lineEnd": "at the end of line {{number}}",
+      "enterOf": "when {{name}} enters"
+    },
+    "sfx": {
+      "title": "Sound effects",
+      "empty": "No sound effects.",
+      "item": "Sound {{number}}",
+      "add": "Add a sound",
+      "file": "Sound file",
+      "volume": "Volume (0–1)",
+      "volumeShort": "vol {{volume}}",
+      "in": "From second (in)",
+      "length": "Length (s)",
+      "cut": "part {{in}} s + {{length}} s",
+      "play": "Play {{file}}",
+      "listen": "Listen"
+    },
+    "fx": {
+      "title": "Screen effects",
+      "empty": "No screen effects.",
+      "item": "Effect {{number}}",
+      "add": "Add an effect",
+      "kind": "Effect",
+      "duration": "Duration (s)",
+      "toEnd": "until the end of the shot",
+      "lasts": "{{seconds}} s",
+      "intensity": "Intensity (0.1–2)",
+      "intensityShort": "intensity {{value}}",
+      "size": "Size",
+      "color": "Colour"
+    },
+    "props": {
+      "title": "Props",
+      "empty": "No props on the set.",
+      "item": "Prop {{number}}",
+      "add": "Add a prop",
+      "file": "Image",
+      "scale": "Scale",
+      "ground": "Stands on the floor",
+      "at": "at {{x}} %, {{y}} %",
+      "onFloor": "on the floor at {{x}} %"
+    },
+    "sound": {
+      "title": "Music, foley and voices",
+      "music": "Music {{file}} (volume {{volume}})",
+      "noMusic": "No music of its own.",
+      "playMusic": "Play the shot's music",
+      "score": "Under the episode score: {{file}}",
+      "scoreSilenced": "The episode score ({{file}}) goes silent under this shot's music.",
+      "playScore": "Play the score cue",
+      "ambience": "Ambience of the location: {{file}}",
+      "ambienceEpisode": "Ambience of the location (laid across the cut): {{file}}",
+      "playAmbience": "Play the location ambience",
+      "room": "Voices heard in: {{room}}",
+      "roomFromLocation": "the location's room",
+      "foley": "Foley: «{{prompt}}» (volume {{volume}})",
+      "noFoley": "No foley.",
+      "musicFile": "Music file",
+      "volume": "Volume (0–1)",
+      "musicStart": "From second",
+      "voiceRoom": "Voices heard in",
+      "roomLocation": "The location's room",
+      "foleyPrompt": "Foley: the sound to generate from the picture",
+      "foleyPlaceholder": "rifles firing, wings flapping, wind",
+      "foleyVolume": "Foley volume",
+      "hint": "The episode score and the location ambience are set for the whole episode (Results, Preparation)."
+    },
+    "plan": {
+      "title": "Framing and timing",
+      "gap": "Gap between lines (s)",
+      "duration": "Length (s)",
+      "fromLines": "{{seconds}} s from its lines",
+      "length": "{{seconds}} s",
+      "introShort": "intro {{seconds}} s",
+      "gapShort": "gap {{seconds}} s",
+      "tailShort": "tail {{seconds}} s"
+    },
+    "card": {
+      "title": "Title card",
+      "empty": "No card.",
+      "kind": "Kind",
+      "kinds": {
+        "title": "Title",
+        "disclaimer": "Disclaimer",
+        "end": "End"
+      },
+      "cardTitle": "Title ({{language}})",
+      "body": "Text ({{language}})"
+    },
+    "scene3d": {
+      "title": "3D scene",
+      "template": "template {{id}}",
+      "scene": "scene {{file}}",
+      "quality": "Quality",
+      "qualities": {
+        "draft": "draft quality",
+        "final": "final quality"
+      },
+      "lookTitle": "Look",
+      "look": "{{look}} look",
+      "looks": {
+        "none": "As modelled",
+        "toon": "Toon (cel anime)",
+        "n64": "N64"
+      },
+      "templateObject": "object of the template",
+      "plays": "plays {{clips}}",
+      "held": "in {{carrier}}'s {{hand}} hand",
+      "hands": {
+        "left": "left",
+        "right": "right"
+      },
+      "moves": "moves to {{to}}",
+      "appears": "appears",
+      "rotation": "Turn (rad)",
+      "scale": "Scale",
+      "grounded": "On the floor",
+      "advanced": "Clips, hold, motion and appearance (JSON)",
+      "openEditor": "Edit in Video 3D",
+      "hint": "Edit in Video 3D opens this shot's scene (its template and objects) in the Video 3D editor; saving there writes it back to this shot.",
+      "editedScene": "its scene, edited in Video 3D"
+    },
+    "video": {
+      "title": "Video take",
+      "source": "Source clip",
+      "generator": "Made with",
+      "ownSound": "Own sound",
+      "yes": "yes",
+      "no": "no",
+      "prompt": "Prompt",
+      "startFrame": "Start frame",
+      "seed": "Seed",
+      "noTake": "No clip yet.",
+      "noRecipe": "The source clip has no recorded prompt.",
+      "replace": "Another clip as this shot's take",
+      "import": "Use as take",
+      "hint": "Its sound effects, music and foley are laid over the clip at the cut; a new clip comes in as a new take to approve.",
+      "audioTitle": "The clip's own sound",
+      "audio": {
+        "keep": "keeps its own sound",
+        "drop": "without its own sound"
+      },
+      "volume": "Clip volume (0–2)",
+      "volumeShort": "clip volume {{volume}}",
+      "fitTitle": "Fit to the episode frame",
+      "fit": {
+        "auto": "Automatic",
+        "cover": "fills the frame",
+        "contain": "fits inside the frame"
+      }
+    },
+    "takes": {
+      "title": "Takes ({{count}})",
+      "empty": "No take yet: re-render the shot.",
+      "failed": "{{count}} failed",
+      "take": "Take {{number}}",
+      "watch": "Watch take {{number}}",
+      "rejected": "rejected",
+      "edited": "edited in the editor",
+      "approved": "the shot's take",
+      "use": "Use this take",
+      "open2d": "Open in Video 2D",
+      "open3d": "Open in Video 3D",
+      "editorHint": "Open in Video 2D / 3D opens the scene that take was made from; export it there to bring it back as a new take.",
+      "failed_one": "1 failed"
+    }
+  },
+  "scripts": {
+    "title": "Scripts this episode was written from",
+    "description": "Each script sent to series.episode.from_script (by an agent, the Wizard or a person) is kept exactly as it was sent. View it, download it, or write the episode again from it.",
+    "revision": "Revision {{revision}}",
+    "by": {
+      "user": "by a person",
+      "agent": "by an agent (MCP)",
+      "wizard": "by the Wizard",
+      "server": "by the server"
+    },
+    "shots_one": "{{count}} shot",
+    "shots_other": "{{count}} shots",
+    "created": "created the episode",
+    "restoredFrom": "rewritten from revision {{revision}}",
+    "applied": "written {{count}} times",
+    "view": "View",
+    "hide": "Hide",
+    "download": "Download",
+    "rewrite": "Rewrite from this script",
+    "viewerLabel": "Script of revision {{revision}}",
+    "confirmTitle": "Rewrite the episode from revision {{revision}}?",
+    "confirmMessage": "The episode becomes this script again. Shots whose content changes lose their takes and go back to pending review; the others keep theirs. The script is checked against the series first.",
+    "confirm": "Rewrite",
+    "rewritten": "Episode rewritten from revision {{revision}} (now revision {{current}})."
   }
 }

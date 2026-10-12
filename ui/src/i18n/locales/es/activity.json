@@ -268,5 +268,51 @@
     "results_other": "{{count}} resultados",
     "noResults": "Sin resultados para «{{query}}»",
     "noResultsHint": "Las palabras coinciden mientras escribes y las tildes dan igual."
-  }
+  },
+  "origin": {
+    "agent": "Agente (MCP)",
+    "wizard": "Wizard",
+    "agentTitle": "Un agente de IA lo pidió por MCP. Puedes abrir y editar el resultado como si fuera tuyo.",
+    "wizardTitle": "Lo pidió Ask to the Wizard.",
+    "startedByAgent": "Iniciado por un agente (MCP) · {{capability}}",
+    "startedByWizard": "Iniciado por Ask to the Wizard",
+    "filterLabel": "Mostrar",
+    "filter": {
+      "all": "Todo",
+      "agents": "Agentes",
+      "allTitle": "Todas las tareas de este workspace",
+      "agentsTitle": "Todo lo que un agente MCP o el Wizard hizo o cambió en este workspace, primero el último cambio"
+    },
+    "emptyAgents": "Ningún agente ha hecho ni cambiado nada en este workspace todavía."
+  },
+  "agentTrail": {
+    "open": {
+      "world3d_template": "Abrir la plantilla {{name}} en Video 3D",
+      "world3d_scene": "Abrir la escena {{name}} en Video 3D",
+      "scene_file": "Editar {{name}}",
+      "character_kit": "Abrir el kit {{name}}",
+      "series_episode": "Abrir el episodio {{name}} en Series Lab",
+      "series": "Abrir la serie {{name}} en Series Lab",
+      "story": "Abrir la historia {{name}} en Story Lab",
+      "montage": "Abrir el montaje {{name}} en el Editor de vídeo",
+      "workspace_collection": "Abrir la colección {{name}}",
+      "file": "Mostrar {{name}}"
+    },
+    "kinds": {
+      "world3d_template": "Plantilla de Video 3D · {{name}}",
+      "world3d_scene": "Escena de Video 3D · {{name}}",
+      "scene_file": "Escena · {{name}}",
+      "character_kit": "Character Kit · {{name}}",
+      "series_episode": "Episodio de serie · {{name}}",
+      "series": "Serie · {{name}}",
+      "story": "Historia · {{name}}",
+      "montage": "Montaje · {{name}}",
+      "template": "Plantilla · {{name}}",
+      "workspace_collection": "Colección · {{name}}",
+      "file": "Archivo · {{name}}"
+    }
+  },
+  "editScene3d": "Editar la escena de Video 3D con la que se renderizó este vídeo",
+  "editScene2d": "Editar la escena de Video 2D con la que se renderizó este vídeo",
+  "editMontage": "Editar el montaje del que se exportó este vídeo ({{name}})"
 }

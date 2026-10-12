@@ -62,7 +62,7 @@ KNOWN_DOCUMENT_KEYS = frozenset({
     "version", "units", "up", "width", "height", "fps", "duration",
     "templateId", "camera", "light", "slots", "soundtrack", "production",
     "clipNumber", "sfx", "worldSfx", "texts", "playbackSpeed",
-    "environment", "dressing", "workshopScreen", "pixelWorld", "renderLook",
+    "environment", "dressing", "workshopScreen", "pixelWorld", "renderLook", "toon",
 })
 KNOWN_WRAPPER_KEYS = frozenset({
     "kind", "version", "id", "title", "description", "includeAssets",

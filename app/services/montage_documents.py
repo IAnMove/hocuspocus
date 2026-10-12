@@ -303,6 +303,22 @@ def export_body(document: dict[str, Any], workspace: str) -> dict[str, Any]:
     }
 
 
+def montage_link(value: Any) -> dict[str, Any] | None:
+    """The saved montage an export was made from (``{"file": "<name>.montage.json", "revision": n}``), or None.
+
+    The export's sidecar keeps it (``params.video_editor.montage``) so the video opens its montage again."""
+    if not isinstance(value, dict):
+        return None
+    file = value.get("file")
+    if not isinstance(file, str) or not FILE_RE.fullmatch(file) or ".." in file:
+        return None
+    revision = value.get("revision")
+    link: dict[str, Any] = {"file": file}
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision > 0:
+        link["revision"] = revision
+    return link
+
+
 def slug_file(name: str) -> str:
     stem = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._")[:120] or "montage"
     return stem + SUFFIX
@@ -383,4 +399,4 @@ class MontageStore:
                 "url": self._url(path.name, workspace)}
 
 
-__all__ = ["MAX_TAKES", "MontageError", "MontageStore", "SUFFIX", "export_body", "normalize_montage", "slug_file"]
+__all__ = ["MAX_TAKES", "MontageError", "MontageStore", "SUFFIX", "export_body", "montage_link", "normalize_montage", "slug_file"]

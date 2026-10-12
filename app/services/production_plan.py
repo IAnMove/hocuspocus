@@ -34,7 +34,7 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
     bpm = _bpm(fields["musica"])
     spec = {
         "title": _title(fields["tema"]),
-        "song": {"lyrics": lyrics, "caption": _clip(fields["musica"], 32), "duration": duration, "bpm": bpm},
+        "song": {"lyrics": lyrics, "caption": _clip(fields["musica"], 32), "duration": duration, "bpm": bpm, **_language(fields, lyrics)},
         "style": {"preset": _preset(fields["estilo"]), **({"footer": fields["footer"]} if fields.get("footer") else {})},
         "cast": [{"id": "hero", "sheet_prompt": fields["protagonista"][:400]}],
         "shots": "auto",
@@ -67,10 +67,13 @@ def _world3d_query(brief: Any) -> str:
 
 def _plan_world3d_shot(spec: dict, brief: dict, query: str) -> dict:
     """Place one real template id. A tied search is refused instead of inventing a shot."""
-    from services.world3d_template_catalog import search_templates
-    hits = search_templates(query, limit=8)
-    if not hits:
-        raise PlanError("unknown_template", f"No Video 3D template matches {query}")
+    from services.world3d_template_catalog import search_report
+    report = search_report(query, limit=8)
+    hits = report["templates"]
+    if not hits or hits[0].get("match") != "full":
+        unknown = ", ".join(report["unknown_words"])
+        detail = f" (unknown words: {unknown})" if unknown else ""
+        raise PlanError("unknown_template", f"No Video 3D template matches {query}{detail}")
     if len(hits) > 1 and hits[0]["score"] == hits[1]["score"]:
         names = ", ".join(str(item["id"]) for item in hits[:8])
         raise PlanError("ambiguous_template", f"Several templates match {query}: {names}")
@@ -109,7 +112,7 @@ def _fields(brief: Any) -> dict[str, Any]:
     if missing:
         raise PlanError("invalid_brief", "brief needs " + ", ".join(missing))
     for optional, names in (("lyrics", ("lyrics", "letra")), ("footer", ("footer", "aviso")), ("quality", ("quality", "calidad")),
-                               ("structure", ("structure", "estructura"))):
+                               ("structure", ("structure", "estructura")), ("language", ("language", "idioma"))):
         value = next((brief[name].strip() for name in names if isinstance(brief.get(name), str) and brief[name].strip()), "")
         if value:
             found[optional] = value
@@ -128,6 +131,19 @@ def _lyrics_text(fields: dict, lyricist: Callable[[dict], str] | None) -> str:
         if isinstance(written, str) and written.strip():
             return written.strip()
     raise PlanError("invalid_brief", "brief needs lyrics: the plan does not write placeholder lines that a singer would perform")
+
+
+def _language(fields: dict, lyrics: str) -> dict:
+    """song.language: the brief's own idioma, else what the lyrics show, else what the brief's prose shows."""
+    from services.lyrics_language import canonical_lyrics_language, detect_language
+    from services.production_song import song_language
+    if fields.get("language"):
+        code = canonical_lyrics_language(fields["language"])
+        if not code:
+            raise PlanError("invalid_brief", "idioma must be a language code or name such as es, en or Spanish")
+        return {"language": code}
+    code = song_language({"lyrics": lyrics}) or detect_language(" ".join(fields[label] for _names, label in _FIELDS))
+    return {"language": code} if code else {}
 
 
 def _title(theme: str) -> str:

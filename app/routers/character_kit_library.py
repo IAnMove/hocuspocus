@@ -58,7 +58,7 @@ def create_character_kit_library_router() -> APIRouter:
 
     @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig")
     def rig_flat_character_kit(kit_id: str, body: dict):
-        """Wipe the painted mouths, draw nine paper mouths and a blink, and save the anchors."""
+        """Wipe the painted mouths, draw nine paper (or ink, or per-pose warp) mouths and a blink, and save the anchors."""
         from services.flat_rig import FlatRigError, rig_character
 
         workspace = str(body.get("workspace") or "")
@@ -66,14 +66,46 @@ def create_character_kit_library_router() -> APIRouter:
         if poses is not None and (not isinstance(poses, list) or not all(isinstance(pose, str) for pose in poses)):
             raise HTTPException(status_code=400, detail="poses must be a list of pose ids")
         try:
-            return rig_character(_workspace_dir(workspace), workspace, kit_id, base_revision=body.get("baseRevision"),
-                                 style=body.get("style"), pose_ids=poses)
+            folder = _workspace_dir(workspace)
+            rigged = rig_character(folder, workspace, kit_id, base_revision=body.get("baseRevision"),
+                                   style=body.get("style"), pose_ids=poses, hints=body.get("hints"))
+            # Every image it wrote names the kit, the rig settings and the poses it came from (tool_sidecars).
+            from services.tool_sidecars import rig_sidecars
+            return rig_sidecars(rigged, workspace=workspace, kit_id=kit_id, folder=folder, request={"poses": poses})
         except FlatRigError as exc:
             raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
         except CharacterKitRevisionConflict as exc:
             raise _conflict(exc) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig/preview")
+    def preview_flat_rig_mouth(kit_id: str, body: dict):
+        """Warp one pose's mouths at a mouth line (point and width) without saving: the Face Rig mouth editor."""
+        from services.flat_rig import FlatRigError
+        from services.flat_rig_preview import preview_mouth
+
+        workspace = str(body.get("workspace") or "")
+        try:
+            return preview_mouth(_workspace_dir(workspace), workspace, kit_id, str(body.get("pose") or "base"),
+                                 mouth=body.get("mouth"), mouth_width=body.get("mouthWidth"), states=body.get("states"),
+                                 sheet=body.get("sheet") is True)
+        except FlatRigError as exc:
+            raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/api/v1/character-kits/rig-check")
+    def check_flat_rig_pose(body: dict):
+        """Say whether one keyed pose can be rigged. Nothing is painted or saved."""
+        from services.flat_rig import FlatRigError
+        from services.flat_rig_metrics import check_pose
+
+        workspace = str(body.get("workspace") or "")
+        try:
+            return check_pose(_workspace_dir(workspace), workspace, str(body.get("source") or ""))
+        except FlatRigError as exc:
+            raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
 
     @router.delete("/api/v1/character-kits/library/kits/{kit_id}")
     def delete_character_kit_library_item(kit_id: str, body: dict):

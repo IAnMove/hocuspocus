@@ -1,7 +1,9 @@
-import { fxRandom } from './types'
+import { fxRandom, type SceneFx } from './types'
 import { withAlpha } from './color'
 import { glow, TAU, type FxPainter } from './energyBrush'
 import { boltChannels, strikeState, type BoltChannel } from './lightningBolt'
+import { css, rgb } from './cinematicPaint'
+import { whiter } from './radiancePaint'
 
 type Point = [number, number]
 
@@ -50,15 +52,15 @@ function skyFlash(ctx: CanvasRenderingContext2D, color: string, amount: number) 
   ctx.restore()
 }
 
-export const lightningStrike: FxPainter = (ctx, cue, time) => {
+/** One strike between the two ends `ends` gives for its shape seed (every strike has its own). */
+function strike(ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, ends: (shapeSeed: number) => [Point, Point]) {
   const state = strikeState(cue.seed, time, cue.end - cue.start)
   if (state.brightness <= .005) return
   const shapeSeed = cue.seed * 31 + state.strike
   const brightness = state.brightness * cue.intensity
   skyFlash(ctx, cue.color, state.flash * cue.intensity)
   ctx.save(); ctx.globalCompositeOperation = 'lighter'
-  const from: Point = [(fxRandom(shapeSeed, 1) - .5) * .25, -.62]
-  const to: Point = [(fxRandom(shapeSeed, 2) - .5) * .35, .52]
+  const [from, to] = ends(shapeSeed)
   for (const channel of boltChannels(shapeSeed)) {
     strokeBolt(ctx, mapChannel(channel, from, to, state.leader), cue.color, .006 * channel.width, brightness * (.55 + channel.width * .45))
   }
@@ -67,6 +69,10 @@ export const lightningStrike: FxPainter = (ctx, cue, time) => {
   }
   ctx.restore()
 }
+
+/** From the sky above the cue point to the ground below it, a little off the vertical. */
+export const lightningStrike: FxPainter = (ctx, cue, time) => strike(ctx, cue, time, shapeSeed => [
+  [(fxRandom(shapeSeed, 1) - .5) * .25, -.62], [(fxRandom(shapeSeed, 2) - .5) * .35, .52]])
 
 export const lightningStorm: FxPainter = (ctx, cue, time, progress) => {
   const fade = Math.min(1, progress * 10, (1 - progress) * 8)
@@ -89,11 +95,13 @@ export const lightningStorm: FxPainter = (ctx, cue, time, progress) => {
   ctx.restore()
 }
 
-export const laserBeam: FxPainter = (ctx, cue, time, progress) => {
+/** A beam shot from `start` toward `to` along +x: it reaches `to` in the first quarter second,
+ * with a muzzle glow where it leaves and sparks where it lands. */
+function laser(ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, start: number, to: number) {
   const span = cue.end - cue.start
   const reach = Math.min(1, time / Math.min(.25, span * .15))
   const fade = Math.min(1, (span - time) * 6)
-  const start = -.62, end = start + reach * 1.3
+  const end = start + reach * (to - start)
   const pulse = 1 + Math.sin(time * 38) * .08 + (fxRandom(cue.seed, Math.floor(time * 30)) - .5) * .1
   const width = .016 * cue.intensity * pulse
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = fade
@@ -117,7 +125,18 @@ export const laserBeam: FxPainter = (ctx, cue, time, progress) => {
     }
     ctx.restore()
   }
-  ctx.restore(); void progress
+  ctx.restore()
+}
+
+/** Across the cue point, from a little before it to a little past it (rotation turns it). */
+export const laserBeam: FxPainter = (ctx, cue, time) => laser(ctx, cue, time, -.62, .68)
+
+/** A beam that leaves its origin (the transform's), runs along +x and lands `length` cue units on. */
+export type AimedPainter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, length: number) => void
+/** The beams a cue can aim with `from`: the catalog's `aim` kinds. */
+export const aimedPainters: Record<string, AimedPainter> = {
+  laser: (ctx, cue, time, length) => laser(ctx, cue, time, 0, length),
+  lightning: (ctx, cue, time, length) => strike(ctx, cue, time, () => [[0, 0], [length, 0]]),
 }
 
 /** Weather fills the frame, not the cue's box: size scales the drops. */
@@ -193,17 +212,25 @@ export const fogBank: FxPainter = (ctx, cue, time) => {
   ctx.restore()
 }
 
+/** A column of smoke: puffs that rise, swell, turn and thin out, each broken into lumps lit from
+ * above (a darker underside, a lighter top), drifting on a slow wind as they climb. */
 export const smokePlume: FxPainter = (ctx, cue, time) => {
   const fade = envelope(time, cue.end - cue.start)
-  const shade = '#1c1a22'
-  for (let i = 0; i < 26; i++) {
-    const life = (time * .22 + fxRandom(cue.seed, i)) % 1
-    const x = (fxRandom(cue.seed, i + 30) - .5) * .12 + Math.sin(life * 3 + i) * .05 + life * life * .18
-    const y = .3 - life * .78
-    const radius = .06 + life * .22
-    const alpha = Math.sin(life * Math.PI) * .32 * fade * cue.intensity
-    puff(ctx, x + .015, y + .02, radius, shade, alpha * .7)
-    puff(ctx, x, y, radius * .92, cue.color, alpha)
+  const shade = '#1c1a22', top = css(whiter(rgb(cue.color), .3))
+  for (let i = 0; i < 40; i++) {
+    const random = (slot: number) => fxRandom(cue.seed, 50 + i * 6 + slot)
+    const life = (time * (.15 + .06 * random(0)) + random(1)) % 1
+    const x = (random(2) - .5) * .1 + Math.sin(life * 4.2 + random(3) * TAU) * .05 * (.3 + life) + Math.sin(life * 9 + i) * .012 + life * life * .2
+    const y = .32 - life * .82
+    const radius = (.035 + life * .19) * (.7 + .5 * random(4))
+    const alpha = Math.sin(life * Math.PI) ** 1.2 * .26 * fade * cue.intensity
+    const turn = random(5) * TAU + time * (random(0) - .5) * .5
+    for (let lump = 0; lump < 3; lump++) {
+      const angle = turn + lump * TAU / 3, lx = x + Math.cos(angle) * radius * .38, ly = y + Math.sin(angle) * radius * .3
+      puff(ctx, lx + radius * .12, ly + radius * .16, radius * .7, shade, alpha * .5)
+      puff(ctx, lx, ly, radius * .66, cue.color, alpha * .75)
+    }
+    puff(ctx, x - radius * .15, y - radius * .3, radius * .45, top, alpha * .3)
   }
 }
 

@@ -138,6 +138,14 @@ def installation_current(engine: str, platform: str) -> bool:
         return False
 
 
+# Torch cu128 wheels and their accelerators (xformers, SageAttention, Flash
+# Attention) ship kernels for compute capability 7.5 (Turing) and newer; CUDA 13
+# dropped Pascal and Volta as well. A GTX 10xx would download gigabytes and fail
+# on the first kernel. Kept here, not in profiles.json, because that file feeds
+# every engine's install fingerprint.
+COMPUTE_CAPABILITY_MINIMUM = (7, 5)
+
+
 def _cuda_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | None:
     """Why the local NVIDIA recipes cannot run on this machine, if they cannot."""
     if platform == "darwin" and arch == "arm64":
@@ -151,7 +159,8 @@ def _cuda_reason(manifest: dict, platform: str, arch: str, gpu: str) -> str | No
     return None
 
 
-def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, cuda_reason: str | None, manifest: dict) -> tuple[str | None, str | None, str | None]:
+def _engine_support(definition: dict, platform: str, arch: str, driver: str | None, cuda_reason: str | None, manifest: dict,
+                    compute_capability: str | None = None) -> tuple[str | None, str | None, str | None]:
     warning = None
     minimum = None
     if not definition.get("cuda"):
@@ -164,6 +173,10 @@ def _engine_support(definition: dict, platform: str, arch: str, driver: str | No
     reason = cuda_reason
     if not reason and platform not in definition["platforms"]:
         reason = definition.get("unsupportedReason", "No compatible engine recipe.")
+    if not reason and compute_capability and _version(compute_capability)[:2] < COMPUTE_CAPABILITY_MINIMUM:
+        floor = ".".join(str(part) for part in COMPUTE_CAPABILITY_MINIMUM)
+        reason = (f"{definition['label']} needs an NVIDIA GPU of compute capability >= {floor} (Turing or newer); "
+                  f"detected {compute_capability}: GPU older than Turing, the core studio is installed instead.")
     minimum = manifest["driverMinimum"][definition["cuda"]].get(platform)
     if not reason and driver and minimum and _version(driver) < _version(minimum):
         reason = f"{definition['label']} needs NVIDIA driver >= {minimum} for CUDA {definition['cuda']} (detected {driver})."
@@ -172,7 +185,8 @@ def _engine_support(definition: dict, platform: str, arch: str, driver: str | No
     return reason, warning, minimum
 
 
-def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None) -> dict:
+def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = None,
+                    compute_capability: str | None = None) -> dict:
     """Pure selection; unknown/unsupported capabilities never silently use CUDA.
 
     An engine with ``fallbackFor`` (core) shares its primary's environment and
@@ -185,7 +199,8 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
     cuda_reason = _cuda_reason(manifest, platform, arch, gpu)
     engines = {}
     for name, definition in manifest["engines"].items():
-        reason, warning, minimum = _engine_support(definition, platform, arch, driver, cuda_reason, manifest)
+        reason, warning, minimum = _engine_support(definition, platform, arch, driver, cuda_reason, manifest,
+                                                   compute_capability)
         engines[name] = {**recipe(name, platform, arch), "supported": reason is None, "reason": reason,
                          "warning": warning, "driverMinimum": minimum}
     partners = {}
@@ -203,6 +218,7 @@ def select_profiles(platform: str, arch: str, gpu: str, driver: str | None = Non
     ]
     return {"version": manifest["version"], "revision": manifest["revision"],
             "platform": platform, "architecture": arch, "gpu": gpu, "driver": driver,
+            "computeCapability": compute_capability,
             "supported": all(required) if required else False,
             "engines": engines}
 
@@ -276,24 +292,85 @@ def find_msvc() -> dict | None:
     return {"vcvars": str(vcvars), "toolset": toolset}
 
 
-def detect_profiles(*, platform: str | None = None, arch: str | None = None,
-                    gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
-    driver = None
+def _nvidia_query(field: str, device: str | None = None) -> list[str]:
+    command = ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader"]
+    if device is not None:
+        command.append(f"--id={device}")
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5, check=True,
+            command, capture_output=True, text=True, timeout=5, check=True,
         )
-        versions = [line.strip() for line in result.stdout.splitlines()
-                    if re.fullmatch(r"\d+(?:\.\d+)+", line.strip())]
-        if versions:
-            driver = min(versions, key=_version)
-            gpu = "nvidia"
     except (OSError, subprocess.SubprocessError):
-        pass
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _nvidia_smi(field: str, device: str | None = None) -> list[str]:
+    """Numeric values for a physical UUID, or all GPUs for a driver-only query."""
+    return [line for line in _nvidia_query(field, device) if re.fullmatch(r"\d+(?:\.\d+)+", line)]
+
+
+def _nvidia_devices() -> list[str]:
+    """UUIDs in CUDA's explicit PCI_BUS_ID order; NVML indices need not have that order."""
+    devices = []
+    for line in _nvidia_query("uuid,pci.bus_id"):
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 2 or not parts[0].startswith("GPU-"):
+            return []
+        if not re.fullmatch(r"[\da-fA-F]{4,8}:[\da-fA-F]{2}:[\da-fA-F]{2}\.[0-7]", parts[1]):
+            return []  # a partial inventory cannot establish ordinal order or a single-GPU machine
+        bus = tuple(int(part, 16) for part in re.split(r"[:.]", parts[1]))
+        devices.append((bus, parts[0]))
+    return [uuid for _bus, uuid in sorted(devices)]
+
+
+def _cuda_device(selector: str) -> tuple[str | None, str | None]:
+    if selector.startswith("GPU-"):
+        return selector, None
+    if not selector.isdecimal():
+        raise ValueError(f"CUDA device {selector!r} is not available.")
+    devices = _nvidia_devices()
+    if not devices:
+        return None, "CUDA device identity could not be verified; the runtime check must confirm CUDA before use."
+    ordinal = int(selector)
+    if ordinal >= len(devices):
+        raise ValueError(f"CUDA device {selector!r} is not available.")
+    # CUDA defaults to FASTEST_FIRST, while nvidia-smi enumerates physical devices independently.
+    if len(devices) > 1 and os.environ.get("CUDA_DEVICE_ORDER") != "PCI_BUS_ID":
+        return None, ("CUDA_DEVICE_ORDER is not PCI_BUS_ID on this multi-GPU machine; the selected compute capability "
+                      "is unverified. The runtime check must confirm CUDA before use.")
+    return devices[ordinal], None
+
+
+def _cuda_probe(gpu: str | None) -> tuple[str, str | None, str | None, str | None, str | None]:
+    """Resolve CUDA lane 0 without mistaking a CUDA ordinal for an NVML index."""
+    selector = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",", 1)[0].strip()
+    if not selector or selector == "-1":
+        return "cpu", None, None, None, None
+    try:
+        device, warning = _cuda_device(selector)
+    except ValueError as error:
+        return "cpu", None, None, None, str(error)
+    versions = _nvidia_smi("driver_version", device)
+    if not versions:
+        if device and _nvidia_devices():
+            return "cpu", None, None, None, f"CUDA device {selector!r} is not available."
+        return gpu or "unknown", None, None, None, warning
+    # Legacy nvidia-smi may not understand compute_cap: keep it unverified.
+    capabilities = _nvidia_smi("compute_cap", device) if device else []
+    warning = warning or (None if capabilities else "The selected GPU's compute capability is unverified; the runtime check must confirm CUDA before use.")
+    return "nvidia", min(versions, key=_version), capabilities[0] if capabilities else None, device, warning
+
+
+def detect_profiles(*, platform: str | None = None, arch: str | None = None,
+                    gpu: str | None = None, inspect_engines: set[str] | None = None) -> dict:
+    gpu, driver, compute_capability, device, warning = _cuda_probe(gpu)
     result = select_profiles(platform or sys.platform, arch or host_platform.machine(),
-                             gpu or "unknown", driver)
+                             gpu or "unknown", driver, compute_capability)
+    result["cudaDevice"] = device
     for name, item in result["engines"].items():
+        if warning and item.get("cuda"):
+            item["warning"] = " ".join(filter(None, (item.get("warning"), warning)))
         if inspect_engines is None or name in inspect_engines:
             item["installed"] = installation_current(name, result["platform"]) if item["supported"] else False
     # Only gate installs that have yet to happen: a working install stays usable.

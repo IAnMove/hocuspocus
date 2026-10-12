@@ -315,6 +315,9 @@ def create_comics_router(
                 except OSError:
                     pass
             raise HTTPException(status_code=500, detail=f"Failed to save comic: {exc}") from exc
+        from pathlib import Path
+        from services.document_origin import write_document_origin
+        write_document_origin(Path(project_path), "comics.save")
         return _comic_output_response(name)
 
     def _run_minimax_image_job(job_id: str) -> None:

@@ -1,7 +1,7 @@
 // Pure Video 2D frame painter shared by the Scene Animator export and the
 // headless scene2d renderer. Media lookup is injected so the same drawing code
 // works with live DOM elements (editor) or preloaded images/videos (headless).
-import { paintSceneFx } from '../../features/sceneFx/paint'
+import { paintSceneFx, type FxLayerPoint } from '../../features/sceneFx/paint'
 import { paintKineticTexts, paintSceneLyrics, type TextInkTrap } from '../kineticText'
 import { paintSceneFinish } from './finish'
 import { coverDrawState } from './cover'
@@ -64,10 +64,37 @@ function layerMedia(layer: VisualAnimatorLayer, instanceIndex: number, lookup: S
   return layer.type === 'effect' ? null : lookup(layer, instanceIndex)
 }
 
-function drawState(canvas: HTMLCanvasElement, layer: VisualAnimatorLayer, state: LayerState, media: SceneMedia | null, seconds: number): LayerState {
+function drawState(canvas: { width: number; height: number }, layer: VisualAnimatorLayer, state: LayerState, media: SceneMedia | null, seconds: number): LayerState {
   if (layer.cover !== true || !media || !mediaReady(media) || layer.type === 'model3d') return state
   const [sourceWidth, sourceHeight] = sourceFrame(layer, media, seconds)
   return coverDrawState(canvas.width, canvas.height, sourceWidth, sourceHeight, layer.fill, layer.focus, state)
+}
+
+/** A point given in % of a layer's picture, in frame % as the layer is drawn at this moment: its
+ * motion, the camera, the fit of its picture in its box (contain, fill or cover) and its rotation.
+ * A layer whose picture is not loaded yet is taken as filling its box. */
+export function layerPicturePoint(canvas: { width: number; height: number }, current: AnimatorScene, evaluator: SceneEvaluator, lookup: SceneMediaLookup,
+  progress: number, seconds: number): FxLayerPoint {
+  return (layerId, x, y) => {
+    const layer = current.layers.find(item => item.id === layerId)
+    if (!layer || !layer.visible || !isVisualLayer(layer) || layer.type === 'effect') return null
+    const state = evaluator.renderedLayerStates(layer, progress)[0]
+    if (!state) return null
+    const media = layerMedia(layer, 0, lookup)
+    const draw = drawState(canvas, layer, state, media, seconds)
+    const model = layer.type === 'model3d'
+    const boxWidth = canvas.width * (model ? .52 : 1) * draw.scale, boxHeight = canvas.height * (model ? .75 : 1) * draw.scale
+    const [sourceWidth, sourceHeight] = media && mediaReady(media) && !model ? sourceFrame(layer, media, seconds) : [boxWidth, boxHeight]
+    const { drawWidth, drawHeight } = fittedSize(layer.fill, sourceWidth / Math.max(1, sourceHeight), boxWidth / Math.max(1, boxHeight), boxWidth, boxHeight)
+    const dx = (x / 100 - .5) * drawWidth, dy = (y / 100 - .5) * drawHeight, angle = draw.rotation * Math.PI / 180
+    return { x: draw.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) / canvas.width * 100,
+      y: draw.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) / canvas.height * 100 }
+  }
+}
+
+/** A mirrored strip copy is drawn flipped about its own centre, after the move and the rotation. */
+export function applyStripFlip(context: Pick<CanvasRenderingContext2D, 'scale'>, state: Pick<LayerState, 'flip'>): void {
+  if (state.flip) context.scale(state.flip === 'x' ? -1 : 1, state.flip === 'y' ? -1 : 1)
 }
 
 function textInk(finish: AnimatorScene['finish']): TextInkTrap | undefined {
@@ -97,6 +124,7 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
     const width = canvas.width * (layer.type === 'model3d' ? .52 : 1) * draw.scale
     const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * draw.scale
     context.translate(canvas.width * draw.x / 100, canvas.height * draw.y / 100); context.rotate(draw.rotation * Math.PI / 180)
+    applyStripFlip(context, draw)
     applyLayerMask(context, effects, width, height)
     if (layer.type === 'effect') {
       drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), sceneSeconds, width, height, effectAnchor(current, layer, evaluator, sceneProgress))
@@ -118,7 +146,8 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
         context.restore()
       })
     })
-  paintSceneFx(context, canvas.width, canvas.height, sceneSeconds, current.sfx)
+  paintSceneFx(context, canvas.width, canvas.height, sceneSeconds, current.sfx, undefined,
+    layerPicturePoint(canvas, current, evaluator, lookup, sceneProgress, sceneSeconds))
   const envelope = beatEnvelope(current.rhythm, sceneSeconds)
   if (!current.finish?.applyToTexts) paintSceneFinish(context, canvas.width, canvas.height, sceneSeconds, current.finish, envelope, current.layers, current.duration)
   paintKineticTexts(context, canvas.width, canvas.height, sceneSeconds, current.texts, envelope, textInk(current.finish))

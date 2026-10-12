@@ -11,10 +11,10 @@ import { parseSceneFile, serializeSceneFile } from '../src/lib/sceneFile.ts'
 
 const WORKSPACE = 'default'
 const template = getCandidateSceneTemplate('cinema-establishing')
-const imageSlot = template.slots.find(slot => slot.id === 'hero')
-const plateSlot = template.slots.find(slot => slot.id === 'plate')
+const imageSlot = template.slots.find(slot => slot.id === 'subject_1')
+const plateSlot = template.slots.find(slot => slot.id === 'background')
 const modelTemplate = getCandidateSceneTemplate('space-cruise')
-const modelSlot = modelTemplate.slots.find(slot => slot.id === 'hero')
+const modelSlot = modelTemplate.slots.find(slot => slot.id === 'subject_1')
 assert.ok(imageSlot)
 assert.ok(plateSlot)
 assert.ok(modelSlot)
@@ -99,7 +99,7 @@ test('re-resolves by durable id and rejects identity, type, or source changes', 
     locations: [{ workspace_id: WORKSPACE, filename: 'plate.png', url: '/api/v1/file/plate.png?workspace=default' }],
     url: '/api/v1/file/plate.png?workspace=default',
   })
-  const selections = { hero: selected, plate: selectedPlate }
+  const selections = { subject_1: selected, background: selectedPlate }
   const originalFetch = globalThis.fetch
   const calls = []
   try {
@@ -109,8 +109,8 @@ test('re-resolves by durable id and rejects identity, type, or source changes', 
       return responseFor(id === selected.id ? selected : selectedPlate)
     }
     const bindings = await resolveCatalogBindings(template, selections, WORKSPACE, new AbortController().signal)
-    assert.deepEqual(bindings.hero.source, selected.locations[0].url)
-    assert.deepEqual(bindings.plate.source, selectedPlate.locations[0].url)
+    assert.deepEqual(bindings.subject_1.source, selected.locations[0].url)
+    assert.deepEqual(bindings.background.source, selectedPlate.locations[0].url)
     assert.deepEqual(calls.map(call => call.input), [
       '/api/v1/assets/asset-selected',
       '/api/v1/assets/asset-plate',
@@ -149,8 +149,8 @@ test('abort and 404 fail closed without invoking a generator endpoint', async ()
       return new Response('missing', { status: 404 })
     }
     controller.abort()
-    await assert.rejects(resolveCatalogBindings(template, { hero: selected }, WORKSPACE, controller.signal), /Abort/i)
-    await assert.rejects(resolveCatalogBindings(template, { hero: selected }, WORKSPACE, new AbortController().signal), /Asset not found/i)
+    await assert.rejects(resolveCatalogBindings(template, { subject_1: selected }, WORKSPACE, controller.signal), /Abort/i)
+    await assert.rejects(resolveCatalogBindings(template, { subject_1: selected }, WORKSPACE, new AbortController().signal), /Asset not found/i)
     assert.ok(calls.every(call => call.input.includes('/api/v1/assets/')))
     assert.equal(calls.some(call => /generate|model3d/i.test(call.input)), false)
   } finally {
@@ -166,8 +166,8 @@ test('compile, serialize, and parse preserve catalog references without shared m
     url: '/api/v1/file/plate.png?workspace=default',
   })
   const bindings = {
-    hero: catalogAssetBinding(hero, WORKSPACE, imageSlot),
-    plate: catalogAssetBinding(plate, WORKSPACE, plateSlot),
+    subject_1: catalogAssetBinding(hero, WORKSPACE, imageSlot),
+    background: catalogAssetBinding(plate, WORKSPACE, plateSlot),
   }
   const scene = compileCandidateScene(template.id, bindings)
   const json = serializeSceneFile(scene)
@@ -180,5 +180,20 @@ test('compile, serialize, and parse preserve catalog references without shared m
   assert.notEqual(parsedAssets[0].catalogAtAssignment, originalAssets[0].catalogAtAssignment)
   parsedAssets[0].catalogAtAssignment.assetId = 'mutated-after-parse'
   assert.equal(originalAssets[0].catalogAtAssignment.assetId, 'asset-hero-roundtrip')
-  assert.equal(bindings.hero.catalogAtAssignment.assetId, 'asset-hero-roundtrip')
+  assert.equal(bindings.subject_1.catalogAtAssignment.assetId, 'asset-hero-roundtrip')
+})
+
+test('a background slot takes a Library video; a subject slot does not', () => {
+  const clip = makeAsset({
+    id: 'asset-loop', kind: 'video', filename: 'loop.mp4',
+    locations: [{ workspace_id: WORKSPACE, filename: 'loop.mp4', url: '/api/v1/file/loop.mp4?workspace=default' }],
+    url: '/api/v1/file/loop.mp4?workspace=default',
+  })
+  const binding = catalogAssetBinding(clip, WORKSPACE, plateSlot)
+  assert.equal(binding.type, 'video')
+  assert.match(catalogBindingIssue(clip, WORKSPACE, imageSlot), /no admite video/)
+  const scene = compileCandidateScene(template.id, { subject_1: catalogAssetBinding(makeAsset(), WORKSPACE, imageSlot), background: binding })
+  const background = scene.layers.find(item => item.id === 'background')
+  assert.equal(background.type, 'video')
+  assert.deepEqual(background.playback, { start: 0, loop: 'loop', speed: 1 })
 })

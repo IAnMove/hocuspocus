@@ -290,9 +290,33 @@ def test_thumbnail_and_screenshot_keep_response_shape(tmp_path):
     assert shot.status_code == 200
     body = shot.json()
     assert body["filename"].endswith("_hero_frame_frame.png")
-    assert body["url"] == f"/api/v1/file/{body['filename']}"
+    assert body["url"] == f"/api/v1/file/{body['filename']}?workspace=default"
+    assert body["workspace"] == "default"
     assert body["time"] == 0.2
     assert (roots["default"] / body["filename"]).is_file()
+
+
+def test_screenshot_is_saved_in_the_requested_workspace(tmp_path):
+    # The active workspace is "default"; the editor works on "film". The frame
+    # must land in "film" and its URL must say so, or thumbnails break as soon
+    # as the user switches workspace.
+    client, roots, _events = _harness(tmp_path)
+    (roots["film"] / "clip.mp4").write_bytes(b"fake-mp4")
+
+    def fake_extract(_source, output_path, _time):
+        Path(output_path).write_bytes(b"png")
+        return {"time": 0.5, "width": 1280, "height": 720}
+
+    with patch("routers.video_editor.extract_frame", side_effect=fake_extract):
+        shot = client.post("/api/v1/video-editor/screenshot", json={
+            "source": "clip.mp4", "time": 0.5, "name": "frame", "workspace": "film",
+        })
+    assert shot.status_code == 200
+    body = shot.json()
+    assert body["workspace"] == "film"
+    assert body["url"] == f"/api/v1/file/{body['filename']}?workspace=film"
+    assert (roots["film"] / body["filename"]).is_file()
+    assert not (roots["default"] / body["filename"]).exists()
 
 
 def test_export_validates_clips_and_missing_or_foreign_sources(tmp_path):

@@ -256,6 +256,14 @@
       "transcript": "Texto exacto de la muestra",
       "transcriptPlaceholder": "Escribe aquí las mismas palabras que se escuchan en el audio. No es el diálogo que se generará.",
       "language": "Idioma para los nuevos diálogos",
+      "engine": "Motor de voz",
+      "engines": {
+        "qwen3_tts_base": "Qwen3 — clona la muestra en 10 idiomas",
+        "voxcpm2_base": "VoxCPM2 — clon a 48 kHz en 30 idiomas, admite estilo de habla"
+      },
+      "style": "Estilo de habla (opcional)",
+      "stylePlaceholder": "susurrando, emocionado, más despacio…",
+      "styleHint": "Cómo habla esta voz por defecto. Con un estilo, VoxCPM2 clona solo a partir de la muestra, sin su transcripción.",
       "saveHint": "Guarda todo el personaje para conservar esta voz. Podrás elegirla en otros personajes; los planos nuevos o regenerados usarán esa configuración.",
       "incomplete": "Para probar o guardar esta voz, añade su nombre, una muestra de audio y su transcripción exacta.",
       "voiceFileSize": "Elige un audio de hasta 20 MB que no esté vacío.",
@@ -313,8 +321,10 @@
   "search": "Buscar plantillas",
   "all": "Todas",
   "allSettings": "Cualquier decorado",
+  "allKinds": "Cualquier clase",
   "filterCategory": "Tipo de plano",
   "filterSetting": "Decorado",
+  "filterKind": "Clase",
   "filterCount": "{{shown}} / {{total}}",
   "noResults": "No hay plantillas para esta búsqueda.",
   "play": "Reproducir",
@@ -364,7 +374,9 @@
     "creative": "Creativas",
     "perspective": "Perspectivas",
     "animated": "Fondos vivos",
-    "pixel": "Mundos pixel"
+    "pixel": "Mundos pixel",
+    "anime": "Anime",
+    "transition": "Transiciones"
   },
   "setting": {
     "sea": "Mar",
@@ -390,6 +402,14 @@
     "grid": "Rejilla",
     "circuit": "Circuito",
     "mainframe": "Unidad central"
+  },
+  "kind": {
+    "scene": "Escenas",
+    "stage": "Escenarios",
+    "camera": "Cámara",
+    "look": "Estilos",
+    "transition": "Transiciones",
+    "title": "Rótulos"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -557,7 +577,7 @@
       "description": "Encuadre oblicuo cercano para observar la superficie del objeto."
     },
     "product-pair": {
-      "title": "Comparación de productos",
+      "title": "Pareja de productos",
       "description": "Dos productos comparten una composición frontal simétrica y pausada."
     },
     "product-pedestal": {
@@ -1961,7 +1981,7 @@
       "description": "Movimiento. Una vista baja y angular desde la altura del regazo, hacia el pecho."
     },
     "cine-car-chasing": {
-      "title": "Persecución en coche",
+      "title": "Persecución en coche desde atrás",
       "description": "Movimiento. Una vista de persecución desde atrás y un poco arriba, en la calle."
     },
     "cine-car-grip": {
@@ -2093,16 +2113,16 @@
       "description": "Encuadre. Una vista amplia y fija que puede cubrir a dos personas."
     },
     "cine-two-shot": {
-      "title": "Plano de dos",
+      "title": "Plano de dos (encuadre)",
       "description": "Encuadre. Dos personas comparten un plano medio-amplio."
     },
     "cine-three-shot": {
       "title": "Plano de tres",
-      "description": "Encuadre. Tres figuras en un solo cuadro."
+      "description": "Encuadre. Tres figuras en un solo cuadro: dos huecos de reparto y una tercera figura de pie en el hueco de atrezo."
     },
     "cine-group-shot": {
       "title": "Plano de grupo",
-      "description": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados."
+      "description": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados: dos huecos de reparto y una tercera figura de pie en el hueco de atrezo."
     },
     "cine-insert": {
       "title": "Plano detalle",
@@ -2718,7 +2738,7 @@
     },
     "cine-stop-motion": {
       "title": "Stop motion",
-      "description": "Tiempo. Una pose fija. El modelo no avanza a saltos como una marioneta."
+      "description": "Tiempo. Una pose fija que avanza a saltos como una marioneta: la imagen se sostiene cada tres fotogramas."
     },
     "cine-low-shutter": {
       "title": "Obturación baja",
@@ -2746,11 +2766,11 @@
     },
     "cine-lens-flare": {
       "title": "Destello de lente",
-      "description": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo. No hay una pasada de destello."
+      "description": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo, con rayos de luz que cruzan el cuadro."
     },
     "cine-anamorphic-flare": {
       "title": "Destello anamórfico",
-      "description": "Efecto. Un cuadro amplio, bajo y brillante. No se dibujan las rayas."
+      "description": "Efecto. Un cuadro amplio, bajo y brillante, con rayos de luz dibujados encima."
     },
     "cine-halation": {
       "title": "Halación",
@@ -2758,7 +2778,7 @@
     },
     "cine-film-grain": {
       "title": "Grano de película",
-      "description": "Efecto. Un encuadre cercano y contrastado. No se aplica grano."
+      "description": "Efecto. Un encuadre cercano y contrastado, con grano de película sobre todo el plano."
     },
     "cine-bokeh": {
       "title": "Bokeh",
@@ -2786,15 +2806,15 @@
     },
     "cine-light-leak": {
       "title": "Fuga de luz",
-      "description": "Efecto. Una luz de borde muy alta desde un lado, en lugar de una fuga."
+      "description": "Efecto. Una luz de borde muy alta desde un lado y rayos de luz que se cuelan por el cuadro."
     },
     "cine-vignette": {
       "title": "Viñeta",
-      "description": "Efecto. Un charco de luz en el centro y un grado más oscuro alrededor."
+      "description": "Efecto. Un charco de luz en el centro y una viñeta que oscurece los bordes."
     },
     "cine-chromatic-aberration": {
       "title": "Aberración cromática",
-      "description": "Efecto. Un angular cerca de la figura, donde se verían los flecos de color. Los flecos no se dibujan."
+      "description": "Efecto. Un angular cerca de la figura, con un glitch leve que desdobla los bordes."
     },
     "cine-infrared": {
       "title": "Infrarrojo",
@@ -2846,7 +2866,7 @@
     },
     "cine-datamosh": {
       "title": "Datamosh",
-      "description": "Efecto. Un avance rápido y roto, con giro. Los píxeles no se derriten."
+      "description": "Efecto. Un avance rápido y roto, con giro, bajo un glitch que rasga la imagen."
     },
     "cine-diorama": {
       "title": "Diorama",
@@ -3399,6 +3419,202 @@
     "cine-ultraviolet": {
       "title": "Ultravioleta",
       "description": "Estilo. Una luz violeta y un rostro cercano, un poco desde arriba."
+    },
+    "anime-speedline-charge": {
+      "title": "Carga con líneas de velocidad",
+      "description": "Una figura sobre líneas de concentración animadas; la cámara salta de plano medio a la cara y tiembla al llegar."
+    },
+    "anime-impact-frame": {
+      "title": "Fotograma de impacto",
+      "description": "Llega el golpe: dos fotogramas en negativo, tres en blanco con líneas de tinta, un estallido y una sacudida que se apaga."
+    },
+    "anime-snap-zoom": {
+      "title": "Zoom relámpago",
+      "description": "Figura entera y, en menos de un tercio de segundo, empujón brusco hasta los ojos, con líneas de velocidad durante el movimiento."
+    },
+    "anime-sword-clash": {
+      "title": "Choque de espadas",
+      "description": "Dos luchadores entran a la carrera por los lados y se cruzan en el centro: tajo, onda expansiva, fotograma blanco y sacudida fuerte."
+    },
+    "anime-face-off": {
+      "title": "Duelo de miradas",
+      "description": "Dos rivales se miran en primer plano, uno en cada mitad, sobre líneas oscuras; empuje lento y un destello final."
+    },
+    "anime-airship-flyby": {
+      "title": "Pasada de aeronave",
+      "description": "Un vehículo cruza un cielo pintado en un arco suave; la cámara lo sigue y las nubes pasan de largo."
+    },
+    "anime-fleet-approach": {
+      "title": "Llegada de la flota",
+      "description": "Cuatro copias de un mismo vehículo salen de un banco de nubes en formación escalonada y vienen hacia la cámara."
+    },
+    "anime-eyecatch": {
+      "title": "Eyecatch (cortinilla)",
+      "description": "Cortinilla breve de cambio de escena: la figura llega girando desde el fondo sobre un fondo gráfico de líneas y estrellas."
+    },
+    "anime-code-rain": {
+      "title": "Lluvia de código",
+      "description": "Código verde cae sobre negro detrás de una figura, que toma un tinte verde; empuje lento. Sin figura, el plano es un fondo que se repite sin corte."
+    },
+    "motion-bouncing-ball": {
+      "title": "Salto a compás",
+      "description": "Una bola 3D cae sobre plataformas afinadas: cada contacto visible coincide con una nota sintetizada localmente."
+    },
+    "motion-music-machine": {
+      "title": "Máquina musical de contactos",
+      "description": "Un mecanismo 3D golpea barras y tambores. Las notas originales siguen el mismo calendario de contactos."
+    },
+    "motion-sunset-flight": {
+      "title": "Vuelo al atardecer",
+      "description": "Aviones originales se inclinan sobre un océano 3D con islas y nubes en movimiento."
+    },
+    "motion-seasonal-carriage": {
+      "title": "Vagón de las cuatro estaciones",
+      "description": "Interior volumétrico de tren con taza, mesa y ventana; el paisaje móvil cambia por las cuatro estaciones."
+    },
+    "motion-data-assembly": {
+      "title": "Montaje del centro de datos",
+      "description": "Racks, procesadores y refrigeración se montan por fases, con flujos de datos en un escenario completamente 3D."
+    },
+    "motion-lighthouse-story": {
+      "title": "El viaje del farero",
+      "description": "Un farero geométrico sube al faro costero; la baliza gira sobre un mar y una isla volumétricos."
+    },
+    "motion-poster-breakout": {
+      "title": "Más allá del marco",
+      "description": "Letras con volumen, anillos y una esfera atraviesan un marco físico. Título editable."
+    },
+    "motion-particle-morph": {
+      "title": "Tipografía de partículas",
+      "description": "Una nube de puntos 3D se transforma entre esfera, toro, corazón y letras editables."
+    },
+    "transition-whip-pan": {
+      "title": "Barrido (whip pan)",
+      "description": "Deslizamiento muy rápido con balanceo sobre líneas de velocidad radiales; la cámara aterriza centrada en la figura con un pequeño asentamiento."
+    },
+    "transition-iris-in": {
+      "title": "Iris de entrada",
+      "description": "Empuje rápido hacia el centro mientras una viñeta se cierra en cuatro pasos sobre un fondo oscuro."
+    },
+    "transition-flash-white": {
+      "title": "Destello a blanco",
+      "description": "Tres fotogramas blancos y luego dos más sobre un empuje corto a la cara; colores planos, sin líneas de tinta."
+    },
+    "transition-wipe-prop": {
+      "title": "Cortinilla con objeto",
+      "description": "Un objeto cruza el encuadre de izquierda a derecha pegado al objetivo y lo cubre a mitad del plano: una puerta, un autobús, una nube. Mira a cámara; gíralo si su lado ancho está en otro eje."
+    },
+    "transition-match-shape": {
+      "title": "Raccord de forma",
+      "description": "Un primer plano centrado aguanta un segundo y luego se abre de golpe hasta la figura entera: la forma en la que aterriza un raccord."
+    },
+    "transition-eyecatch": {
+      "title": "Cortinilla (plana)",
+      "description": "Cortinilla de cambio de escena en dos tonos planos: la figura llega girando desde el fondo sobre líneas de concentración y un título opcional aterriza debajo."
+    },
+    "transition-smash-in": {
+      "title": "Entrada a golpe",
+      "description": "Salto brusco de la figura entera a la cara en una quinta parte de segundo, con una ráfaga de líneas y una sacudida que se apaga."
+    },
+    "transition-rise-off": {
+      "title": "Elevación de salida",
+      "description": "La cámara se eleva desde la figura hacia un fondo vacío con luz suave desde arriba; el siguiente plano puede empezar en cualquier cosa."
+    },
+    "speed-run-toward": {
+      "title": "Carrera hacia cámara",
+      "description": "Un objetivo bajo avanza despacio hacia una figura que corre sin desplazarse sobre líneas de velocidad tenues. La plantilla no trae clip: asigna un GLB con clip de carrera (clip: run)."
+    },
+    "speed-foot-chase": {
+      "title": "Persecución a pie",
+      "description": "Dos figuras esprintan por la calle en carriles paralelos; la cámara sigue al que huye desde delante y tiembla un poco cuando el perseguidor se acerca."
+    },
+    "speed-flyby": {
+      "title": "Pasada en vuelo",
+      "description": "Una nave cruza el cielo de izquierda a derecha, 32 m en seis segundos, dejando humo; la cámara panea con ella por encima de una figura en el suelo."
+    },
+    "speed-rush-lines": {
+      "title": "Líneas de embestida",
+      "description": "Empuje duro de plano medio a la cara sobre líneas de velocidad radiales; la cámara tiembla donde aterriza el empuje."
+    },
+    "speed-side-dash": {
+      "title": "Carrera lateral",
+      "description": "Visto de lado, la figura cruza diez metros del decorado a la carrera mientras el encuadre se desliza rápido de un lado a otro de ella."
+    },
+    "title-lower-third": {
+      "title": "Rótulo inferior",
+      "description": "Un nombre sobre una barra y una línea de cargo entran deslizándose por la izquierda, aguantan bajo la figura y salen, sobre un empuje lento."
+    },
+    "title-kinetic-stage": {
+      "title": "Escenario cinético",
+      "description": "Una palabra grande por tiempo golpea sobre un escenario oscuro de espejo bajo un haz de luz, con un empuje lento sobre la figura. La frase se parte en palabras, hasta ocho."
+    },
+    "title-chapter": {
+      "title": "Cartela de capítulo",
+      "description": "Cartela de capítulo centrada: el antetítulo se teclea, una línea se dibuja sola y el título entra con un barrido, sobre una viñeta y un empuje lento."
+    },
+    "title-end-card": {
+      "title": "Cartela final",
+      "description": "Un título asciende y una llamada a la acción que late aterriza debajo mientras la cámara deriva de lado sobre estrellas tenues."
+    },
+    "dialogue-ots-a": {
+      "title": "Por encima del hombro A",
+      "description": "Dos figuras se miran a 1,7 m; la cámara mira por encima del hombro del que habla a la izquierda hacia la cara del de la derecha, plano medio corto con empuje lento. Usa A para un interlocutor y B para el otro: las miradas casan."
+    },
+    "dialogue-ots-b": {
+      "title": "Por encima del hombro B",
+      "description": "El inverso de A: las mismas dos figuras, la cámara por encima del hombro del de la derecha hacia la cara del de la izquierda, a la misma distancia y con el mismo empuje, para que montar A y B conserve las miradas."
+    },
+    "dialogue-table": {
+      "title": "Sentados a la mesa",
+      "description": "Dos figuras sentadas a una mesa, en tres cuartos hacia la cámara, a la altura de los ojos de alguien sentado (1,15 m) con un deslizamiento suave. El reparto necesita un clip sentado (sit_down mantenido) o recortes sentados; enlaza un GLB de mesa en el hueco table."
+    },
+    "dialogue-triangle": {
+      "title": "Triángulo de tres",
+      "description": "Tres figuras en triángulo: una al fondo de cara a la cámara y dos de perfil delante; plano general con un arco lento. La tercera figura es el hueco prop person_3."
+    },
+    "dialogue-embrace": {
+      "title": "Abrazo",
+      "description": "Dos figuras muy juntas en un plano de dos cerrado a la altura de la cabeza, con empuje lento y un arco corto: un beso, un abrazo, una despedida."
+    },
+    "dialogue-phone-split": {
+      "title": "Llamada a pantalla partida",
+      "description": "Dos figuras lejos una de otra miran a cámara como las dos mitades del cuadro, con un separador oscuro y fino entre ellas; cada mitad un plano medio corto, con un empuje lento y simétrico: una llamada, una videollamada."
+    },
+    "reaction-push-face": {
+      "title": "Empuje a la cara",
+      "description": "Una figura; tras una pausa breve la cámara empuja despacio desde un plano medio corto hasta un primer plano de la cara."
+    },
+    "reaction-orbit-face": {
+      "title": "Arco sobre la cara",
+      "description": "Un arco lento de una décima de vuelta alrededor de la cabeza a corta distancia; la cara sigue encuadrada mientras el lugar gira detrás."
+    },
+    "reaction-turn-to-camera": {
+      "title": "Giro a cámara",
+      "description": "La figura gira sobre sí misma, de perfil a mirar a cámara, mientras la cámara aguanta cerca con un empuje mínimo."
+    },
+    "reaction-look-up": {
+      "title": "Contrapicado a la cara",
+      "description": "Un contrapicado sobre la cara que sube e inclina hacia arriba mientras empuja, cerca."
+    },
+    "reaction-impact": {
+      "title": "Impacto en la cara",
+      "description": "Llega el golpe: dos fotogramas blancos, una sacudida corta y un empuje brusco a la cara sobre colores planos."
+    },
+    "group-arc-five": {
+      "title": "Arco de cinco",
+      "description": "Una figura delante y cuatro detrás en arco, todas de cara a la cámara, con un empuje lento en plano general. Las cuatro de detrás son los huecos prop person_2 a person_5."
+    },
+    "group-line-four": {
+      "title": "Fila de cuatro",
+      "description": "Cuatro figuras en fila de cara a la cámara, con un deslizamiento lateral a la altura del pecho. Las dos de los extremos son los huecos prop person_3 y person_4."
+    },
+    "group-audience": {
+      "title": "Artista y público",
+      "description": "Un artista sobre una tarima baja y un público (crowd) de seis recortes vistos de espaldas en la parte baja del cuadro; la cámara sube en grúa por encima del público hacia el escenario. El público son los huecos prop crowd_1 a crowd_6; una imagen enlazada en crowd los llena todos."
+    },
+    "group-circle": {
+      "title": "Círculo de cinco",
+      "description": "Cinco figuras en círculo mirando al centro; la cámara orbita despacio por encima. Tres de ellas son los huecos prop person_3 a person_5."
     }
   },
   "atmos": {
@@ -3532,7 +3748,10 @@
   "holdOffsetX": "Desplazamiento X",
   "holdOffsetY": "Desplazamiento Y",
   "holdOffsetZ": "Desplazamiento Z",
-  "holdHelp": "El objeto sigue la mano entera en el mismo fotograma. El desplazamiento está en metros de ese hueso. El gizmo descansa mientras está sostenido.",
+  "holdTurnX": "Giro en la mano X (°)",
+  "holdTurnY": "Giro en la mano Y (°)",
+  "holdTurnZ": "Giro en la mano Z (°)",
+  "holdHelp": "El objeto sigue la mano entera en el mismo fotograma. El desplazamiento está en metros de ese hueso. El giro en la mano lo alinea: grados sobre el eje X del hueso, luego el Y y luego el Z; con un giro en la mano, el Giro Y del objeto deja de aplicarse. El gizmo descansa mientras está sostenido.",
   "geometryReview": "Revisar geometría",
   "geometryUnavailable": "Carga los modelos antes de revisar la geometría.",
   "geometryOk": "La geometría no tiene avisos.",
@@ -3674,12 +3893,14 @@
     "name": "Nombre de la escena",
     "save": "Guardar escena en galería",
     "open": "Abrir escena",
-    "help": "Elige una escena de Vídeo 3D guardada. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
+    "help": "Elige una escena de Vídeo 3D guardada, o una escena de trabajo que un agente hizo y no publicó. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
     "saved": "Escena guardada en esta carpeta. Usa Abrir escena para recuperarla.",
     "changed": "La escena cambió mientras se cargaba. Vuelve a elegirla para reemplazar la actual.",
     "previewUnavailable": "Espera a que cargue la vista 3D antes de guardar.",
     "saveFailed": "No se pudo guardar la escena.",
-    "cancelLoad": "Cancelar carga"
+    "cancelLoad": "Cancelar carga",
+    "workingScene": "{{title}} · escena de trabajo sin publicar (revisión {{revision}})",
+    "workingChanged": "{{title}} · escena de trabajo cambiada desde que se publicó (revisión {{revision}})"
   },
   "cinematic": {
     "title": "Entorno cinematográfico",
@@ -3705,6 +3926,16 @@
     "road_speed": "Velocidad (m/s)",
     "road_slope": "Pendiente (°)",
     "road_offset": "Continuidad (s)"
+  },
+  "renderLook": {
+    "title": "Aspecto de render",
+    "none": "Materiales del modelo",
+    "n64": "Nintendo 64",
+    "toon": "Anime (cel)",
+    "steps": "Bandas de luz",
+    "outline": "Grosor de tinta (px a 1080p)",
+    "ink": "Color de tinta",
+    "help": "Anime (cel) da a los modelos 3D bandas planas de luz y un contorno de tinta, para que convivan con recortes planos y fondos pintados. Las imágenes y los recortes no cambian. La vista previa y la exportación coinciden."
   },
   "imageLook": {
     "title": "Aspecto de la imagen",
@@ -3941,5 +4172,83 @@
     "current": "Actual",
     "pickOne": "Elige un plano para verlo aquí.",
     "hint": "Doble clic o Intro para usar un plano directamente"
+  },
+  "workspaceTemplates": {
+    "title": "Guardadas en este workspace",
+    "help": "Plantillas que un agente, el Wizard o tú guardasteis en este workspace (world3d.templates.user.put). Elige una y pulsa «Usar este plano»: se abre como un plano editable.",
+    "objects_one": "{{count}} objeto",
+    "objects_other": "{{count}} objetos",
+    "pending_one": "{{count}} hueco vacío",
+    "pending_other": "{{count}} huecos vacíos",
+    "by": {
+      "agent": "Agente",
+      "wizard": "Wizard"
+    },
+    "invalid": "Esta plantilla del workspace no es un documento de Video 3D válido.",
+    "shotTitle": "Plantilla del workspace · {{id}}"
+  },
+  "stages": {
+    "title": "Escenarios",
+    "help": "Habitaciones y lugares abiertos con marcas para el reparto y cámaras con nombre. Elige uno y pulsa «Usar este plano»: se abre con su sala; después asigna tus personajes y elige una cámara de la sala.",
+    "loading": "Cargando los escenarios",
+    "noWorkspace": "Abre un workspace para ver los escenarios.",
+    "error": "No se pudieron cargar los escenarios: {{reason}}",
+    "retry": "Reintentar",
+    "empty": "La biblioteca no tiene escenarios.",
+    "openError": "No se pudo abrir el escenario: {{reason}}",
+    "invalid": "Este escenario no es un documento de Video 3D válido con sala.",
+    "shape": {
+      "interior": "Interior",
+      "exterior": "Exterior"
+    },
+    "marks_one": "{{count}} marca",
+    "marks_other": "{{count}} marcas",
+    "cameras_one": "{{count}} cámara",
+    "cameras_other": "{{count}} cámaras",
+    "cameraList": "Cámaras: {{cameras}}",
+    "shotTitle": "Escenario · {{id}}"
+  },
+  "roomCamera": {
+    "label": "Cámara de la sala",
+    "custom": "Personalizada",
+    "names": {
+      "two_shot": "Plano a dos",
+      "ots_a": "Sobre el hombro A",
+      "ots_b": "Sobre el hombro B",
+      "wide": "General",
+      "close_1": "Primer plano 1",
+      "close_2": "Primer plano 2",
+      "entrance": "Entrada"
+    }
+  },
+  "motionLab": {
+    "controls": "Escenas de movimiento nativas",
+    "bpm": "Tempo (BPM)",
+    "speed": "Velocidad de movimiento",
+    "amplitude": "Tamaño del movimiento",
+    "color": "Color principal",
+    "secondaryColor": "Color de acento",
+    "seed": "Semilla de variación",
+    "title": "Título de bloques (24 caracteres)",
+    "density": "Número de partículas",
+    "sound": "Música local por contactos",
+    "volume": "Volumen de música",
+    "audioBlocked": "Permite el audio del navegador y vuelve a pulsar Reproducir."
+  },
+  "props": {
+    "title": "Atrezo",
+    "search": "Buscar atrezo",
+    "filterStyle": "Filtrar por estilo",
+    "allStyles": "Todos los estilos",
+    "add": "Añadir atrezo",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "new": "Nuevo objeto",
+    "description": "Descripción del objeto",
+    "height": "Altura (metros)",
+    "style": "Estilo",
+    "generate": "Generar candidatos",
+    "generating": "Generando candidatos de atrezo…",
+    "remove": "Quitar"
   }
 }

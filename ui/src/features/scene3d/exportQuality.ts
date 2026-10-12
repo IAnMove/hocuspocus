@@ -3,7 +3,12 @@
 The server freezes them in the export plan. Draft is today's export: no supersampling
 and no multisampled composer, so its frames stay byte-identical.
 */
-export type ExportRenderQuality = { supersample: number; samples: number }
+export type ExportRenderQuality = {
+  supersample: number
+  samples: number
+  /** A template thumbnail draws empty slots as the editor's placeholders; an export hides empty cutouts. */
+  placeholders?: boolean
+}
 
 export const DRAFT_RENDER: ExportRenderQuality = { supersample: 1, samples: 0 }
 
@@ -12,13 +17,15 @@ export const MAX_SUPERSAMPLED_SIDE = 8192
 /** The server plans 1.5x (final) or 2x (master); 4x is accepted for reference renders. */
 export const MAX_SUPERSAMPLE = 4
 
-/** The plan's render fields. Anything missing, invalid or out of range falls back to draft. */
-export function renderQualityOf(plan: { supersample?: unknown; samples?: unknown } | null | undefined): ExportRenderQuality {
+/** The plan's render fields. Anything missing, invalid or out of range falls back to draft.
+ * `placeholders` is kept only when the plan says exactly true (the server's thumbnail plan). */
+export function renderQualityOf(plan: { supersample?: unknown; samples?: unknown; placeholders?: unknown } | null | undefined): ExportRenderQuality {
   const supersample = Number(plan?.supersample)
   const samples = Number(plan?.samples)
   return {
     supersample: Number.isFinite(supersample) ? Math.min(MAX_SUPERSAMPLE, Math.max(1, supersample)) : 1,
     samples: Number.isInteger(samples) && samples > 0 ? Math.min(8, samples) : 0,
+    ...(plan?.placeholders === true ? { placeholders: true } : {}),
   }
 }
 

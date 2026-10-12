@@ -23,6 +23,7 @@ from ..h3_prompt_policy import (
     h3_field_structure_errors,
     tagged_dialogue,
 )
+from .spoken_language import spoken_language_of
 
 
 class H3DialogueContractError(ValueError):
@@ -270,24 +271,26 @@ def _replace_spans(
     return result
 
 
-def _dialogue_payload(value: Any) -> tuple[str, str]:
-    """Return ``(language, words)`` from plain or nested H3 dialogue."""
+def _dialogue_payload(value: Any, *, detect: bool = True) -> tuple[str, str]:
+    """Return ``(language, words)`` from plain or nested H3 dialogue. ``detect=False``: ``""`` when untagged."""
 
     text = _H3_DIALOGUE_TOKEN_RE.sub("", str(value or "")).strip()
-    language = "English"
+    language = ""
     language_prefix = re.match(r"^\[([^\]]+)\]\s*(.*)$", text, re.DOTALL)
     if language_prefix:
-        language = language_prefix.group(1).strip() or language
+        language = language_prefix.group(1).strip()
         text = language_prefix.group(2).strip()
     if not text:
         raise H3DialogueContractError("MiniMax H3 dialogue contains an empty line.")
+    if not language and detect:     # no [Language] prefix: tell it from the words, English only when they cannot tell
+        language = spoken_language_of(text)
     return language, text
 
 
 def h3_dialogue_tag(spoken_text: Any, forced_language: str = "") -> str:
     """Build exactly one canonical H3 dialogue block."""
 
-    language, words = _dialogue_payload(spoken_text)
+    language, words = _dialogue_payload(spoken_text, detect=not forced_language)
     if forced_language:
         language = forced_language
     return tagged_dialogue(language, words)
@@ -487,7 +490,7 @@ def validate_h3_vocal_contract(
         spoken = normalize_h3_text(_field(beat, "spoken_text", ""))
         if _normalized_space(spoken):
             try:
-                expected_words.append(_normalized_space(_dialogue_payload(spoken)[1]))
+                expected_words.append(_normalized_space(_dialogue_payload(spoken, detect=False)[1]))
             except H3DialogueContractError as exc:
                 errors.append(str(exc))
 
@@ -520,7 +523,7 @@ def compile_h3_vocal_contract(
         spoken = _field(beat, "spoken_text", "")
         if not _normalized_space(spoken):
             continue
-        _, words = _dialogue_payload(spoken)
+        _, words = _dialogue_payload(spoken, detect=False)
         valid_beats.append((beat, words, h3_dialogue_tag(spoken)))
 
     # Older saved projects do not carry structured dialogue metadata. If they
@@ -673,7 +676,7 @@ def h3_dialogue_budget_violations(
             if not _normalized_space(spoken):
                 continue
             try:
-                words = _dialogue_payload(spoken)[1]
+                words = _dialogue_payload(spoken, detect=False)[1]
             except H3DialogueContractError:
                 words = str(spoken or "")
             word_count += len(words.split())
@@ -1196,7 +1199,7 @@ def _compile_official_dialogue(
         spoken = normalize_h3_text(_field(beat, "spoken_text", ""))
         if not _normalized_space(spoken):
             continue
-        authored_language, words = _dialogue_payload(spoken)
+        authored_language, words = _dialogue_payload(spoken, detect=False)
         carries_language = bool(re.search(r"(?:<d>\s*)?\[[^\]]+\]", spoken, re.I))
         speaker_key = _normalized_space(_field(beat, "speaker_id", ""))
         entry = _speaker_registry_entry(registry, speaker_key)
@@ -1225,10 +1228,8 @@ def _compile_official_dialogue(
     # An explicit language in the reviewed/source prompt is authoritative.
     # Previously, rebuilding from plain dialogue_beats silently reverted such
     # lines to English when no project-wide spoken-language contract existed.
-    from .spoken_language import infer_h3_spoken_language
-
     source_languages = [
-        _dialogue_payload(body[start:end])[0]
+        _dialogue_payload(body[start:end], detect=False)[0]
         for start, end in spans
     ]
     for index, beat in enumerate(valid_beats):
@@ -1236,7 +1237,7 @@ def _compile_official_dialogue(
             forced_language
             or (source_languages[index] if index < len(source_languages) else "")
             or beat["authored_language"]
-            or infer_h3_spoken_language(beat["words"])
+            or spoken_language_of(beat["words"])
         )
         beat["tag"] = h3_dialogue_tag(
             f"[{language}] {beat['words']}",

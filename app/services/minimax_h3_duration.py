@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from typing import Any, Mapping, MutableMapping
+from services import h3_frame_lattice
 
 
 _DIALOGUE_BLOCK = re.compile(
@@ -35,6 +36,16 @@ _GENERIC_VOWEL_RUN = re.compile(
 _SPANISH_STRONG_VOWELS = frozenset("aeoáéóíú")
 _SPANISH_STRESSED_WEAK_VOWELS = frozenset("íú")
 DEFAULT_SECONDS_PER_SYLLABLE = 0.22
+# The one speech rate every planner budgets with. Spanish averages about 2.1 syllables a word, so at
+# 0.22 s a syllable a line runs near 2.16 words a second; the Director (2.1), the shot validator (2.5)
+# and the sidecar (syllables) used to disagree, and a line fitted in one and was refused in another.
+DEFAULT_SYLLABLES_PER_WORD = 2.1
+DEFAULT_WORDS_PER_SECOND = round(1 / (DEFAULT_SECONDS_PER_SYLLABLE * DEFAULT_SYLLABLES_PER_WORD), 2)
+
+
+def words_budget(seconds: float) -> int:
+    """How many words fit in ``seconds`` at the shared speech rate."""
+    return max(0, int(math.floor(max(0.0, float(seconds or 0)) * DEFAULT_WORDS_PER_SECOND)))
 
 
 def _h3_timestamp(seconds: float) -> str:
@@ -405,17 +416,17 @@ def apply_h3_dialogue_duration(
         return None
 
     definition = model_def if isinstance(model_def, Mapping) else {}
-    fps = float(definition.get("fps") or 24.0)
-    minimum = _positive_int(definition.get("frames_minimum"), 124)
-    maximum = _positive_int(definition.get("frames_maximum"), 345)
+    fps = float(definition.get("fps") or h3_frame_lattice.FPS)
+    minimum = _positive_int(definition.get("frames_minimum"), h3_frame_lattice.MIN_FRAMES)
+    maximum = _positive_int(definition.get("frames_maximum"), h3_frame_lattice.MAX_FRAMES)
     modulus = _positive_int(
         definition.get("frame_alignment_modulus") or definition.get("frames_steps"),
-        17,
+        h3_frame_lattice.STEP,
     )
     try:
-        remainder = int(definition.get("frame_alignment_remainder", 5))
+        remainder = int(definition.get("frame_alignment_remainder", h3_frame_lattice.OFFSET))
     except (TypeError, ValueError):
-        remainder = 5
+        remainder = h3_frame_lattice.OFFSET
 
     estimate = estimate_h3_dialogue_seconds(segments)
     raw_frames = max(1, math.ceil(float(estimate["estimated_seconds"]) * fps))

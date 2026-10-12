@@ -1,5 +1,8 @@
 """Scene documents, package, montage and the CPU animatic.
 
+A ``scene2d`` shot's scene starts from its compiled music card (``production_scene2d``) instead of an empty document;
+its title, lyric, footer and finish are added the same way.
+
 ``segments``, ``scene_fingerprint``, ``contact_sheet_filter``, ``failure_reason``
 and ``note_held`` stay on ``music_production`` and are read at call time.
 """
@@ -9,10 +12,12 @@ import json
 import subprocess
 from typing import Any
 
+from services.production_camera import background_ops
 from services.production_control import sleep_until
 from services.production_package import (
     attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, write_manifest,
 )
+from services.production_scene2d import scene2d_document, scene_inputs
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.video2d_edit import MAX_OPERATIONS
 
@@ -40,30 +45,22 @@ def scene_layer_ops(production: Any, shot: dict, start: float, end: float, dur: 
     clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
     if shot["kind"] == "scene3d" and not clip:
         raise host.ProductionError("scene3d_export_failed", f"scene3d clip missing: {shot['key']}")
-    if clip:
+    if shot["kind"] == "scene2d":
+        pass        # the compiled card is the scene (scene_document): it brings its own pictures and camera
+    elif clip:
         host.note_held(production.state, shot["key"], False)
-        ops.append({"op": "add_layer", "id": "bg", "source": clip["url"], "type": "video", "preset": shot.get("camera", "camera-locked")})
         skip = round(max(0.0, start - shot.get("t0", start)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
-        # the animation duration is also the video span (sceneTimeline.getSceneLayerTiming): a camera preset's
-        # shorter duration would freeze the clip mid-scene, so it always covers the scene (+ the skipped head)
-        anim: dict[str, Any] = {"end": {"x": 50, "y": 50, "scale": 1.0, "rotation": 0},
-                                "duration": round(dur + skip, 3)}
-        if skip > 0:
-            anim["trimStart"] = skip
-        ops.append({"op": "update_layer", "id": "bg", "patch": {"fill": True, "animation": anim}})
+        ops += background_ops(clip["url"], "video", dur, camera=shot.get("camera"), skip=skip)
     elif shot["kind"] == "screen":
         desktop = {"theme": style.get("theme") or "tokyo-night", "layout": "triple", "apps": "mixed", "focus": "0", "workspace": "1",
                    "switch": "none", **{k: str(v) for k, v in (shot.get("desktop") or {}).items()}}
         ops.append({"op": "add_title", "id": "desk", "template": "desktop", "fields": desktop, "start": 0, "duration": dur})
     else:
-        zoom = shot.get("zoom") or [1.0, 1.1]
         source = stills.get(shot.get("still"), shot.get("still"))
         if not source and shot["kind"] == "h3" and shot["key"] in production.state.get("frames", {}):
             source = production.upload(production.state["frames"][shot["key"]])[1]      # clip failed: hold its start frame
             host.note_held(production.state, shot["key"])
-        ops += [{"op": "add_layer", "id": "bg", "source": source, "type": "image", "preset": shot.get("camera", "camera-push-in")},
-                {"op": "update_layer", "id": "bg", "patch": {"fill": True, "focus": shot.get("focus", {"x": 50, "y": 50}), "animation": {
-                    "start": {"x": 50, "y": 50, "scale": zoom[0], "rotation": 0}, "end": {"x": 50, "y": 50, "scale": zoom[1], "rotation": 0}}}}]
+        ops += background_ops(source, "image", dur, camera=shot.get("camera"), zoom=shot.get("zoom"), focus=shot.get("focus"))
     title_ops, used = production._title_ops(shot, dur, style)
     ops.extend(title_ops)
     ops.extend(production._lyric_ops(shot, start, end, dur, score, style, used))
@@ -81,6 +78,9 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
     clips = production.state.get("clips", {})
     segs = host.segments(windows, score, lambda key: key in clips, spec.get("fill") or [])
     production.state["segments"] = [[shot["key"], start, end] for shot, start, end in segs]
+    from services.production_windows import dropped_flashes
+    for key in dropped_flashes(windows, segs):
+        production.log(f"shot {key} left out: its cut was shorter than a beat; the shot before it holds")
     done = production.state.setdefault("scenes", {})
     style, stills = spec.get("style") or {}, spec.get("stills") or {}
     docs: dict[str, dict] = {}
@@ -92,7 +92,8 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
         if is_locked(production, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
             continue
         dur = round(end - start, 3)
-        used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
+        used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file") \
+            or scene_inputs(production.state, shot)
         prior = done.get(shot["key"], {})
         fingerprint = host.scene_fingerprint(shot, style, stills, score, start, end)
         if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
@@ -119,6 +120,8 @@ def scene_document(production: Any, shot: dict, start: float, end: float, score:
     shot, style = render_shot(shot, style)
     dur = round(end - start, 3)
     doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
+    if shot["kind"] == "scene2d":
+        doc = scene2d_document(production, shot, dur, score, stills)
     return production.edit(doc, production.scene_ops(shot, start, end, dur, score, clips, style, stills))
 
 
@@ -197,6 +200,34 @@ def repackage(production: Any, spec: dict) -> None:
     production._finish_package(previous, previous_error, None)
 
 
+def _made_by(document: dict, production_id: str) -> bool:
+    """Every clip origin that names a production names this one (``attach_origins`` writes them)."""
+    owners = {(clip.get("origin") or {}).get("productionId") for clip in document.get("clips") or [] if isinstance(clip, dict)}
+    return owners - {None} == {production_id}
+
+
+def owned_montage(production: Any) -> tuple[str, int | None]:
+    """The montage file this production saves, and the revision to update (None: a new file).
+
+    The state's file first, then ``<production_id>.montage.json``: a title is not unique in a workspace, an id is.
+    An existing file is updated when the state names it or its clips come from this production; one that belongs to
+    another production moves the name on to ``-2``, ``-3``… The store keeps montages in the workspace folder."""
+    from services.montage_documents import SUFFIX, slug_file
+    named = production.state.get("montage_file")
+    stem = slug_file(production.id)[: -len(SUFFIX)]
+    for file in [*([named] if named else []), f"{stem}{SUFFIX}", *(f"{stem}-{n}{SUFFIX}" for n in range(2, 100))]:
+        path = production.root / file
+        if not path.is_file():
+            return file, None
+        try:
+            current = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if file == named or _made_by(current, production.id):
+            return file, int(current.get("revision", 1))
+    raise _host().ProductionError("montage_failed", f"no free montage name for {production.id}")
+
+
 def build_montage(production: Any, spec: dict) -> None:
     host = _host()
     if skip_montage(production.state):
@@ -209,12 +240,10 @@ def build_montage(production: Any, spec: dict) -> None:
                "soundtrack": {"source": f"/api/v1/file/{production.state['song']['file']}?workspace={production.ws}", "trimStart": 0, "trimEnd": score["duration"], "volume": 1.0, "loop": False}}
     attach_origins(montage, production.state.get("scene_docs") or {}, production.id)
     montage = attach_trailer_audio(production, spec, montage)
-    body: dict[str, Any] = {"workspace": production.ws, "montage": montage}
-    if production.state.get("montage_file"):
-        current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": production.state["montage_file"]}}).get("result") or {})
-        revision = current.get("revision") or (current.get("montage") or {}).get("revision")
-        if revision:
-            body.update(file=production.state["montage_file"], expected_revision=revision)
+    file, revision = owned_montage(production)
+    body: dict[str, Any] = {"workspace": production.ws, "montage": montage, "file": file}
+    if revision:
+        body["expected_revision"] = revision
     saved = production.mcp("montages.save", {"version": 1, "intent_id": f"{production.id}-montage-{int(host.time.time())}", "input": body})
     if "result" not in saved:
         raise host.ProductionError("montage_failed", json.dumps(saved)[:300])

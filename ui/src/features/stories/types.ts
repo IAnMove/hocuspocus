@@ -286,6 +286,7 @@ export interface StoryProductionRecipe {
 }
 
 export interface StoryProject {
+  writingGuide?: import('../writing-guide/model').WritingGuideState
   version: 1
   id: string
   revision: number

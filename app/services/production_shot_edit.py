@@ -15,6 +15,7 @@ from services.production_control import sleep_until
 from services.production_package import (
     clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, workspace_url, write_manifest,
 )
+from services.production_scene2d import scene_inputs
 from services.production_scene_retry import finish_scene_exports
 
 
@@ -214,7 +215,8 @@ def _publish(production: Any, spec: dict, key: str, expected_revision: int | Non
     fingerprint = scene_fingerprint(shot, style, stills, score, start, end)
     lyric = lyric_for(score.get("lines") or [], start, end)
     scene = save_scene_revision(production, key, document, lyric, _note(shot))
-    video = export_scene(production, key, document, dur, clip_file, fingerprint)
+    # The same record export_scenes writes, so a resume does not export this scene again.
+    video = export_scene(production, key, document, dur, clip_file or scene_inputs(production.state, shot), fingerprint)
     replace_montage_clip(production, key, video, expected_revision)
     rewrite_manifest(production, spec)
     production.save()
@@ -270,6 +272,9 @@ def _assign_override(overrides: dict, name: str, value: Any) -> None:
     if name == "camera":
         if not isinstance(value, str) or not value:
             raise ShotEditError("invalid_update", "camera must be a preset name")
+        from services.production_camera import is_camera
+        if not is_camera(value):
+            raise ShotEditError("unknown_camera", f"camera {value} is not a kind: camera preset of motion_presets.json")
     elif not isinstance(value, dict):
         raise ShotEditError("invalid_update", f"{name} must be an object")
     overrides[name] = value
@@ -281,6 +286,8 @@ def update_shot(production: Any, spec: dict, key: str, *, lyric_style: Any = Non
     changes = {"lyric_style": lyric_style, "title": title, "camera": camera}
     if all(value is None for value in changes.values()):
         raise ShotEditError("empty_update", "pass lyric_style, title or camera")
+    if camera is not None and shot.get("kind") == "scene2d":
+        raise ShotEditError("invalid_update", "a scene2d shot plays its card's own camera: change scene2d.controls")
     checkpoint = _checkpoint(production, spec, key)
     try:
         overrides = shot.setdefault("overrides", {})

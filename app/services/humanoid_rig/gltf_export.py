@@ -29,6 +29,8 @@ from services.humanoid_rig.skeleton import world_matrices
 MARKER = "hocuspocus_humanoid"
 # Each animation's foot landings, ``[{t, foot, strength}]`` (see ``contacts``), so footsteps can follow it.
 CONTACTS = "hocuspocus_contacts"
+# ``false`` on a library clip that ends in the pose it holds (Kneel Pray, Crouch): play it once, not looped.
+LOOP = "hocuspocus_loop"
 
 
 def read_primitives(source: bytes) -> list[dict]:
@@ -255,8 +257,13 @@ def _append_clips(gltf, blob, joint_nodes: list[int], clips: list[dict]) -> None
         translation = clip.get("hips_translation")
         if translation is not None:
             _add_channel(gltf, blob, animation, times, np.asarray(translation, dtype=np.float32), joint_nodes[0], "translation")
+        extras = {}
         if "contacts" in clip:
-            animation.extras = {CONTACTS: [dict(item) for item in clip["contacts"]]}
+            extras[CONTACTS] = [dict(item) for item in clip["contacts"]]
+        if clip.get("loop") is False:
+            extras[LOOP] = False
+        if extras:
+            animation.extras = extras
         gltf.animations.append(animation)
 
 

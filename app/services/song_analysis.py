@@ -10,6 +10,7 @@ import difflib
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,10 +30,15 @@ class AudioAnalysisError(ValueError):
         self.code = code
 
 
+def _plain(text: str) -> str:
+    """Lowercase letters and digits with accents folded, so a sung "dormía" or "niña" still matches what ASR wrote."""
+    return re.sub(r"[^a-z0-9]", "", unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower())
+
+
 def words_of(lyrics: str) -> list[str]:
     """Lyric words without [section] tags or punctuation, lowercase."""
     plain = re.sub(r"\[[^\]]*\]", " ", lyrics or "")
-    return [w for w in (re.sub(r"[^a-z0-9]", "", t.lower()) for t in plain.split()) if w]
+    return [w for w in (_plain(t) for t in plain.split()) if w]
 
 
 def lyric_lines(lyrics: str) -> list[str]:
@@ -62,9 +68,8 @@ def tempo_grid(onset: np.ndarray, times: np.ndarray, duration: float, low: float
 
 
 def _matched_times(ref_words: list[str], heard: list[list[Any]]) -> tuple[list[list[float] | None], int]:
-    norm = lambda text: re.sub(r"[^a-z0-9]", "", text.lower())
     times: list[list[float] | None] = [None] * len(ref_words)
-    matcher = difflib.SequenceMatcher(None, [norm(t) for t in ref_words], [norm(str(w[2])) for w in heard], autojunk=False)
+    matcher = difflib.SequenceMatcher(None, [_plain(t) for t in ref_words], [_plain(str(w[2])) for w in heard], autojunk=False)
     for a, b, size in matcher.get_matching_blocks():
         for k in range(size):
             times[a + k] = [float(heard[b + k][0]), float(heard[b + k][1])]
@@ -135,18 +140,19 @@ def _separate_vocals(song: str, out_dir: str) -> str:
     return target
 
 
-def _transcribe(vocals: str, prompt: str) -> list[list[Any]]:
+def _transcribe(vocals: str, prompt: str, language: str | None = None) -> list[list[Any]]:
+    """Word times from faster-whisper. ``language`` None lets Whisper detect it instead of forcing English."""
     import librosa
     from faster_whisper import WhisperModel
     snapshots = CKPTS / "whisper" / "models--Systran--faster-whisper-small" / "snapshots"
     model = WhisperModel(str(next(snapshots.iterdir())), device="cpu", compute_type="int8", cpu_threads=max(2, (os.cpu_count() or 4) // 2))
     audio, _ = librosa.load(vocals, sr=16000)
-    segments, _ = model.transcribe(audio, language="en", word_timestamps=True, initial_prompt=prompt[:800] or None)
+    segments, _ = model.transcribe(audio, language=language or None, word_timestamps=True, initial_prompt=prompt[:800] or None)
     return [[w.start, w.end, w.word.strip()] for segment in segments for w in segment.words]
 
 
-def analyze(song: str, lyrics: str = "", *, out_dir: str | None = None) -> dict[str, Any]:
-    """Full analysis. Writes <song>.score.json and returns it."""
+def analyze(song: str, lyrics: str = "", *, out_dir: str | None = None, language: str | None = None) -> dict[str, Any]:
+    """Full analysis. Writes <song>.score.json and returns it. ``language`` is the sung one (None: Whisper detects)."""
     import librosa
     out_dir = out_dir or os.path.dirname(song)
     y, sr = librosa.load(song, sr=22050, mono=True)
@@ -159,7 +165,7 @@ def analyze(song: str, lyrics: str = "", *, out_dir: str | None = None) -> dict[
     score["beats"] = [round(t, 3) for t in np.arange(beat0 % (60 / bpm), duration, 60 / bpm)]
     if lyrics.strip():
         vocals = _separate_vocals(song, out_dir)
-        lines, recall = align_lines(lyric_lines(lyrics), _transcribe(vocals, re.sub(r"\[[^\]]*\]", "", lyrics)))
+        lines, recall = align_lines(lyric_lines(lyrics), _transcribe(vocals, re.sub(r"\[[^\]]*\]", "", lyrics), language))
         score.update(lines=lines, recall=recall, vocals_file=os.path.basename(vocals))
     score["verdict"] = verdict(score["recall"], tail)
     path = os.path.join(out_dir, Path(song).stem + SCORE_SUFFIX)
@@ -202,6 +208,7 @@ def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[
         from fastapi import HTTPException
         from starlette.concurrency import run_in_threadpool
         from services import resource_scheduler
+        from services.lyrics_language import detect_language
         data = (arguments or {}).get("input") if isinstance(arguments, dict) else None
         if not isinstance(data, dict) or not isinstance(data.get("workspace"), str) or not isinstance(data.get("file"), str):
             raise HTTPException(422, {"code": "invalid_command", "message": "Use version 1 with input.workspace and input.file", "retryable": False})
@@ -214,7 +221,8 @@ def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[
             import uuid
             with resource_scheduler.coordinator.acquire(resource_scheduler.cpu_lane("audio-analysis"),
                                                         task_id=f"audio-analyze-{uuid.uuid4().hex}", description="Song analysis"):
-                return analyze(str(song), data.get("lyrics") or "", out_dir=str(root))
+                lyrics = data.get("lyrics") or ""
+                return analyze(str(song), lyrics, out_dir=str(root), language=detect_language(lyrics) or None)
         score = await run_in_threadpool(run)
         return {"version": 1, "status": "completed", "operation": OPERATION, "result": summary(score)}
 

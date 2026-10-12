@@ -873,6 +873,7 @@ function inferredLocation(state: ReturnType<typeof useStore.getState>): WizardCo
     animate3d: { area: 'video_3d', tab: 'animate_3d', section: 'animate' },
     characters: { area: 'character_kit', tab: 'character_kit', section: '' },
     lips: { area: 'lips_creator', tab: 'lips_creator', section: '' },
+    gameAssets: { area: 'game_assets', tab: 'game_assets', section: '' },
     workspaces: { area: 'workspaces', tab: 'workspaces', section: '' },
     videoclips: { area: 'gallery', tab: 'videos', section: 'videoclips' },
     trailers: { area: 'gallery', tab: 'videos', section: 'trailers' },

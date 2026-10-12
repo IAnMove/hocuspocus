@@ -42,7 +42,7 @@ import type {
 } from './types'
 
 type SideTab = 'assets' | 'inspector' | 'script' | 'characters' | 'quality' | 'video' | 'pre' | 'director'
-type Notice = { kind: 'ok' | 'error'; text: string } | null
+import { useTimedNotice, type Notice } from './useTimedNotice'
 type DirectorActivity = {
   state: 'idle' | 'running' | 'complete' | 'error'
   message: string
@@ -2078,7 +2078,7 @@ export function ComicEditorPanel() {
   const [preDirty, setPreDirty] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewZoom, setPreviewZoom] = useState(1)
-  const [notice, setNotice] = useState<Notice>(null)
+  const [notice, notify] = useTimedNotice()
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -2097,10 +2097,6 @@ export function ComicEditorPanel() {
   const goToPage = (index: number) => {
     const page = project.pages[Math.max(0, Math.min(project.pages.length - 1, index))]
     if (page) useComicStore.getState().setCurrentPage(page.id)
-  }
-  const notify = (value: Notice) => {
-    setNotice(value)
-    if (value) setTimeout(() => setNotice(null), 5000)
   }
   const notifyWorkflow = (kind: 'ok' | 'error', text: string) => notify({ kind, text })
   useComicLineageValidation(project, message => notify({ kind: 'error', text: message }))
@@ -2608,7 +2604,10 @@ export function ComicEditorPanel() {
         </div>
       )}
       {notice && (
-        <div className={`shrink-0 px-3 py-1.5 text-xs ${notice.kind === 'ok' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>{notice.text}</div>
+        <div className={`flex shrink-0 items-start gap-2 px-3 py-1.5 text-xs ${notice.kind === 'ok' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'}`}>
+          <span className="min-w-0 flex-1 break-words">{notice.text}</span>
+          <button type="button" onClick={() => notify(null)} aria-label={tCommon('actions.close')} className="shrink-0 opacity-70 hover:opacity-100">×</button>
+        </div>
       )}
       <div className="flex flex-1 min-h-0">
         {sideTab !== 'pre' && <PagesRail />}

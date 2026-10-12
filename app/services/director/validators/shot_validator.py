@@ -89,12 +89,13 @@ def validate_shot_plan(shot: ShotPlan, plan: Optional[ProductionPlan] = None) ->
 
     # ── Dialogue budget check ────────────────────────────────────
     if shot.dialogue_beats:
+        from services.minimax_h3_duration import DEFAULT_WORDS_PER_SECOND, words_budget
         total_words = sum(len(db.spoken_text.split()) for db in shot.dialogue_beats)
-        budget = int(shot.duration_sec * 2.5)
+        budget = words_budget(shot.duration_sec)
         if total_words > budget * 1.5:
             warnings.append(
                 f"Dialogue over-budget: {total_words} words for {shot.duration_sec}s shot "
-                f"(budget ~{budget} words at ~2 words/sec)"
+                f"(budget ~{budget} words at ~{DEFAULT_WORDS_PER_SECOND} words/sec)"
             )
 
     # ── Action beat count check ──────────────────────────────────

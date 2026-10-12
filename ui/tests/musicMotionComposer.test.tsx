@@ -4,7 +4,7 @@ import React from 'react'
 import { JSDOM } from 'jsdom'
 import type { AssetCatalogItem } from '../src/api/assets.ts'
 import type { Scene } from '../src/types/index.ts'
-import { ALL_SCENE_TEMPLATES } from '../src/features/sceneTemplates/catalog.ts'
+import { COMPOSER_SCENE_TEMPLATES } from '../src/features/sceneTemplates/catalog.ts'
 import { MUSIC_MOTION_TEMPLATES } from '../src/features/sceneTemplates/musicMotionCatalog.ts'
 
 Object.assign(globalThis, { React })
@@ -133,14 +133,14 @@ test('expone claves y descripciones musicales, exige dos sujetos, conserva IDs y
   try {
     const view = await renderDialog({ onApply: scene => { applied.push(scene); return true } })
     const selector = view.screen.getByRole('combobox', { name: 'Action / template' }) as HTMLSelectElement
-    assert.equal(selector.options.length, ALL_SCENE_TEMPLATES.length)
+    assert.equal(selector.options.length, COMPOSER_SCENE_TEMPLATES.length)
 
     view.fireEvent.change(selector, { target: { value: 'music-orbit-duel' } })
     await view.waitFor(() => assert.equal(selector.value, 'music-orbit-duel'))
     const template = MUSIC_MOTION_TEMPLATES.find(item => item.id === 'music-orbit-duel')!
 
     for (const slot of template.slots) {
-      assert.ok(view.screen.getByText(`${slot.id} · image`))
+      assert.ok(view.screen.getByText(`${slot.id} · ${slot.kinds.join(', ')}`))
       assert.ok(view.screen.getByText(slot.description))
     }
     assert.equal((view.screen.getByRole('button', { name: /Create and open in editor/i }) as HTMLButtonElement).disabled, true)
@@ -183,7 +183,7 @@ test('expone claves y descripciones musicales, exige dos sujetos, conserva IDs y
   }
 })
 
-test('mantiene BPM e intensidad desactivados en las 24 nuevas coreografías', { concurrency: false }, async () => {
+test('mantiene BPM e intensidad desactivados en las 22 coreografías', { concurrency: false }, async () => {
   const { calls, restore } = installAssetFetch()
   try {
     const view = await renderDialog()
@@ -212,8 +212,8 @@ test('cambiar entre una plantilla musical y una legacy reinicia selecciones sin 
     await chooseAsset(view, /Subject 1.*required/i, fixture.subject1.filename)
     assert.ok(view.screen.getAllByText(fixture.subject1.filename).length >= 1)
 
-    view.fireEvent.change(selector, { target: { value: 'cinema-establishing' } })
-    await view.waitFor(() => assert.equal(selector.value, 'cinema-establishing'))
+    view.fireEvent.change(selector, { target: { value: 'space-cruise' } })
+    await view.waitFor(() => assert.equal(selector.value, 'space-cruise'))
     assert.equal(view.screen.queryByText('subject_1 · image'), null)
     assert.equal(view.screen.queryAllByText(fixture.subject1.filename).length, 0)
     assert.equal((view.screen.getByRole('button', { name: /Create and open in editor/i }) as HTMLButtonElement).disabled, true)

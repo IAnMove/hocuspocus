@@ -3,8 +3,9 @@
 This tool reviews the candidate SceneTemplate catalog through the real
 `SceneTemplateReviewPage` and `SceneAnimatorPanel`. It does not call a video
 provider, an LLM, a model download service or another HocusPocus application.
-Images and GLBs come from the catalog's procedural data URIs. MP4 export is the
-existing browser compositor/exporter running under Playwright Chromium.
+Images and GLBs come from the catalog's procedural data URIs, or from local files
+given with `--assets` (below). MP4 export is the existing browser
+compositor/exporter running under Playwright Chromium.
 
 ## Run
 
@@ -32,23 +33,71 @@ The process remains open so the user can inspect the gallery and editor. Stop
 it with Ctrl-C. The in-memory output index is intentionally not recovered after
 a restart; the fresh directory remains available for inspection.
 
-To render every candidate with the real browser exporter and leave the server
-open afterwards:
+To render every card the catalog lists (`ALL_SCENE_TEMPLATES`, read at run time)
+with the real browser exporter and leave the server open afterwards:
 
 ```bash
 npm --prefix ui run scene:review -- --render
 ```
 
 Specific IDs may be appended after `--render` for a short review, for example
-`--render cinema-establishing space-cruise`. A render failure sets exit code 1
-and writes a `status: "render-failed"` JSON record. It never creates a fake
-MP4, PNG or success record in place of the failure.
+`--render cinema-establishing space-cruise`. Any ID the catalog resolves is
+accepted, so an alias renders as its surviving card with the alias's preset. A
+render failure sets exit code 1 and writes a `status: "render-failed"` JSON
+record. It never creates a fake MP4, PNG or success record in place of the
+failure.
+
+### Real assets (`--assets`)
+
+Approval needs renders with real pictures, not the demo art:
+
+```bash
+npm --prefix ui run scene:review -- --render --assets review-assets.json [card-id ...]
+```
+
+The path resolves from the folder the command was typed in; the files in the plan
+resolve from the plan's folder. A plan maps slot names to local files:
+`subject_1`, `subject_2`, `background`, `prop_1`, `prop_2`, `foreground`. The old
+names are read too (`hero` is `subject_1`, `plate` is `background`, `prop` is
+`subject_2` on `cinema-two-shot` and `music-duet` and `prop_1` elsewhere); one
+layer naming a slot twice (`hero` and `subject_1`) fails with
+`slot_alias_conflict`. A plain `{slot: file}` object applies to every card. The
+sectioned form layers a default, a family and a card, later layers winning, and a
+layer may carry the card's controls (choice values, `duration`, `bpm`...), which go
+to the compiler as they are:
+
+```json
+{
+  "default": {"subject_1": "singer.png", "subject_2": "dancer.png", "background": "stage.png", "prop_1": "mic.png"},
+  "families": {"space": {"subject_1": "ship.glb", "prop_1": "ship-two.glb", "background": "nebula.png"}},
+  "cards": {"music-pulse": {"controls": {"camera": "sweep"}}, "music-duet": {"background": "loop.mp4"}}
+}
+```
+
+A `.png`, `.jpg` or `.webp` is a picture, a `.glb` a model and an `.mp4` or
+`.webm` a video; the slot must accept that kind. A card with a required slot the
+plan leaves empty fails with a message naming the slot, and the other cards still
+render; a `cards.<id>` entry that names a slot the card does not have fails too.
+Cutouts should carry transparency. The files are copied once into the run's
+`inputs/` directory (named by content, `asset-<sha256>.<ext>`) and served from there
+like any indexed input: pictures up to 4 MiB, GLBs and videos up to 32 MiB, 64
+inputs and 128 MiB in all. Without `--assets` the cards use the inline demo art as
+before. `ui/tests/fixtures/sceneTemplateReview/assets.json` is a small working plan.
 
 The provider-free HTTP contract can be checked without a browser or render:
 
 ```bash
 cd ui
 npm exec --offline -- tsx --tsconfig tsconfig.app.json --test tests/sceneTemplateReviewServer.test.mjs
+```
+
+The asset plan, the staging, the contact sheet and the index are checked the same
+way, with the real catalog and compiler and no browser (the sheet test needs ffmpeg
+and is skipped without it):
+
+```bash
+cd ui
+npm exec --offline -- tsx --tsconfig tsconfig.app.json --test tests/sceneTemplateReviewAssets.test.mjs
 ```
 
 LAN review is opt-in and accepts only an RFC1918 IPv4 address that is present
@@ -107,8 +156,11 @@ also prints `REVIEW_URL_LAN`.
 - Scene saves and MP4 recordings are written only below the run's `exports/`
   directory. Render previews and metadata are written only below `previews/`.
 - The editable scene is saved and read back before each MP4 export. Each
-  successful template has `<template-id>.mp4`, `<template-id>.png`, and
-  `<template-id>.json`. Metadata includes catalog/template versions, variant,
+  successful template has `<template-id>.mp4`, `<template-id>.png` (a poster at
+  1.5 s), `<template-id>.sheet.png` (a 3x2 contact sheet of frames from the middle
+  of six equal slices, painted by ffmpeg from the MP4) and `<template-id>.json`.
+  Metadata includes catalog/template versions, the compiled card id, variant
+  (`coral` or `assets`), the controls and assets used (with the files' SHA-256),
   render status, source HEAD SHA, dirty state, MP4 SHA-256, dimensions,
   duration, measured FPS, editable-scene filename/hash, and the exact scene
   snapshot sent to the recording endpoint. A preview is published only after
@@ -120,8 +172,14 @@ also prints `REVIEW_URL_LAN`.
 - Failed renders receive a uniquely named `*.failure-<uuid>.json` record. The
   failure path never overwrites a success record or masks the original error
   when a same-name write is not available.
+- The run ends with one `review.json` in `previews/` (printed as `REVIEW_INDEX`):
+  per card its id, compiled card id, files (MP4, sheet, poster, metadata),
+  duration, controls and assets, plus the failures, the plan path and the source
+  snapshot.
 - The status is `rendered-not-approved`: a correct local render is evidence for
-  review only, never an automatic catalog approval.
+  review only, never an automatic catalog approval. The integrator sets
+  `reviewStatus: approved` on the cards that pass; the owner can override in the
+  app's review page.
 
 The HTTP status endpoint is available at
 `/api/v1/scene-template-review/status` while the process is running. It reports

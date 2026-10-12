@@ -189,8 +189,9 @@ tasks in that folder. JSON and query destinations are checked independently;
 native submissions require an explicit JSON workspace. Deletion is excluded.
 Do not remove the isolation guard to get a failing case to pass.
 
-See [APP_USER_GUIDE.md](APP_USER_GUIDE.md) for usage and the Wizard capability
-matrix. The tour's `features.json` records screenshot coverage separately from
+See the archived [Wizard coverage audit](archive/2026-09-08/WIZARD_COVERAGE_AUDIT.md)
+for the Wizard capability matrix of that audit (the current user guide is
+[APP_USER_GUIDE.md](APP_USER_GUIDE.md)). The tour's `features.json` records screenshot coverage separately from
 registry support. The native media cases also retain sampled RAM/VRAM data;
 the preflight refuses to submit while host RAM usage is already at 80%.
 This is a preflight check, not a prediction or prevention of model peak memory.
@@ -229,8 +230,8 @@ canonical task.
 For a single real audit index, use separate output roots under one parent
 (`outputs/my-audit/tour`, `outputs/my-audit/native`, etc.), then run
 `python3 scripts/acceptance_report.py outputs/my-audit`. This preserves every
-scenario's resume state. Copy `docs/APP_USER_GUIDE.md` into that parent if you
-want the offline index to link the manual. Only read requests retry brief
+scenario's resume state. Copy `docs/archive/2026-09-08/WIZARD_COVERAGE_AUDIT.md` into that parent if
+you want the offline index to link the capability matrix. Only read requests retry brief
 socket interruptions; a POST is never automatically replayed by the harness.
 
 The simulated artifacts are intentionally tiny, deterministic and structurally

@@ -93,6 +93,19 @@
                 ],
                 "default": null,
                 "title": "Duration Multiplier"
+              },
+              "style": {
+                "anyOf": [
+                  {
+                    "maxLength": 300,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Style"
               }
             },
             "title": "StudioSpeechCustomSettings",
@@ -1020,6 +1033,19 @@
               ],
               "default": null,
               "title": "Duration Multiplier"
+            },
+            "style": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Style"
             }
           },
           "title": "StudioSpeechCustomSettings",
@@ -1914,7 +1940,9 @@
       "qwen3_tts_base",
       "qwen3_tts_customvoice",
       "qwen3_tts_voicedesign",
-      "scenema_audio"
+      "scenema_audio",
+      "voxcpm2_base",
+      "voxcpm2_voicedesign"
     ],
     "effects": {
       "generation_mode": "audio",

@@ -14,6 +14,7 @@ from routers.wangp_mcp import RequestJournal
 from services.asset_manifest import publish_generation_sidecar
 from services.mcp_intent import check_intent_id, intent_digest
 from services.procedural_3d.compose import KINDS, MAX_PIECES, compose_glb
+from services.agent_activity import trusted_tool as agent_trusted_tool
 
 OPERATION = "model3d.compose"
 
@@ -77,7 +78,7 @@ def command_handlers(workspace_dir, journal_path):
             temporary.unlink(missing_ok=True)
         publish_generation_sidecar(target, {"generation_mode": "model3d", "model_type": "procedural-compose",
                                             "command_id": intent, "params": payload},
-                                   output_folder=payload["workspace"], tool="model3d", actor="user", capability=OPERATION)
+                                   output_folder=payload["workspace"], tool=agent_trusted_tool() or "model3d", actor="user", capability=OPERATION)
         result = {"version": 1, "operation": OPERATION, "status": "completed", "result": {
             "file": filename, "name": payload["name"], "workspace": payload["workspace"],
             "url": f"/api/v1/file/{filename}?{urlencode({'workspace': payload['workspace']})}",

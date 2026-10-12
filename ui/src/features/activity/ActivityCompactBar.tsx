@@ -19,6 +19,8 @@ import {
   truncatePrompt,
 } from './taskPresentation'
 import { translatedPhase as phaseText } from './taskPresentation'
+import { OriginBadge } from './AgentChangeDetail'
+import { taskOrigin } from './agentOrigin'
 
 interface ActivityCompactBarProps {
   detailsOpen: boolean
@@ -116,7 +118,8 @@ function CompactSummary({
       {generationResolution(primary) ? <span className="hidden md:inline shrink-0 tabular-nums text-text-muted">{generationResolution(primary)}</span> : null}
       {eta ? <span className="hidden sm:inline shrink-0 tabular-nums text-accent-blue" title={t('etaTitle')}>{t('eta', { value: eta })}</span> : null}
       {primary.model ? <span className="hidden md:inline max-w-64 shrink-0 truncate rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-amber-300" title={generationRecipe(primary)}>{primary.model}</span> : null}
-      {initiator ? <span className="hidden lg:inline max-w-48 shrink-0 truncate text-violet-300" title={initiator}>{initiator}</span> : null}
+      {taskOrigin(primary) ? <span className="hidden lg:inline"><OriginBadge task={primary} /></span> : null}
+      {initiator && !taskOrigin(primary) ? <span className="hidden lg:inline max-w-48 shrink-0 truncate text-violet-300" title={initiator}>{initiator}</span> : null}
       {prompt ? (
         <button type="button" onClick={() => onCopyPrompt(primary)} className="block min-w-16 flex-1 max-w-80 truncate text-left text-text-secondary hover:text-text-primary" title={t('copyPromptTitle', { prompt })} aria-label={t('copyBarPrompt', { title: primary.title })}>
           “{truncatePrompt(prompt, 100)}”

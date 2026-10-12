@@ -4,7 +4,7 @@ import React from 'react'
 import { JSDOM } from 'jsdom'
 import type { AssetCatalogItem } from '../src/api/assets.ts'
 import type { Scene } from '../src/types/index.ts'
-import { ALL_SCENE_TEMPLATES, CANDIDATE_SCENE_TEMPLATES } from '../src/features/sceneTemplates/catalog.ts'
+import { COMPOSER_SCENE_TEMPLATES } from '../src/features/sceneTemplates/catalog.ts'
 
 Object.assign(globalThis, { React })
 
@@ -132,21 +132,35 @@ async function selectHeroAndPlate(view: Awaited<ReturnType<typeof renderDialog>>
   view.fireEvent.click(view.screen.getByRole('checkbox', { name: /I have saved what I need/ }))
 }
 
-test('expone 24 referencias más 24 movimientos y habilita BPM/intensidad sólo en plantillas rítmicas', { concurrency: false }, async () => {
+test('lista 34 fichas sin cine y habilita BPM/intensidad según el flag exposed de la ficha', { concurrency: false }, async () => {
   const installed = installAssetFetch()
   try {
     const view = await renderDialog()
     const selector = view.screen.getByRole('combobox', { name: 'Action / template' }) as HTMLSelectElement
-    assert.equal(selector.options.length, ALL_SCENE_TEMPLATES.length)
-    assert.equal(selector.options.length, 48)
-    assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 24)
-    assert.equal((view.screen.getByRole('spinbutton', { name: 'Visual BPM' }) as HTMLInputElement).disabled, true)
-    assert.equal((view.screen.getByRole('spinbutton', { name: 'Pulse intensity' }) as HTMLInputElement).disabled, true)
-
-    view.fireEvent.change(selector, { target: { value: 'music-pulse' } })
-    const pulseBpm = await view.screen.findByRole('spinbutton', { name: 'Visual BPM' }) as HTMLInputElement
-    assert.equal(pulseBpm.disabled, false)
+    const listed = [...selector.options].map(option => option.value)
+    assert.equal(listed.length, COMPOSER_SCENE_TEMPLATES.length)
+    assert.equal(listed.length, 34)
+    assert.equal(listed.some(id => id.startsWith('cinema-')), false, 'cinema intents live on the narrative grid')
+    assert.ok(listed.includes('documentary-history') && listed.includes('city-postcard'))
+    assert.equal(selector.value, 'music-pulse')
+    assert.equal((view.screen.getByRole('spinbutton', { name: 'Visual BPM' }) as HTMLInputElement).disabled, false)
     assert.equal((view.screen.getByRole('spinbutton', { name: 'Pulse intensity' }) as HTMLInputElement).disabled, false)
+    const camera = view.screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement
+    assert.deepEqual([...camera.options].map(option => option.value), ['push', 'sweep', 'open', 'beat'])
+    assert.equal(camera.value, 'push')
+    assert.equal((view.screen.getByRole('spinbutton', { name: 'Camera drift (0 holds still)' }) as HTMLInputElement).value, '0.5')
+
+    view.fireEvent.change(selector, { target: { value: 'music-spiral-exit' } })
+    const exitBpm = await view.screen.findByRole('spinbutton', { name: 'Visual BPM' }) as HTMLInputElement
+    assert.equal(exitBpm.disabled, true)
+    assert.equal((view.screen.getByRole('spinbutton', { name: 'Pulse intensity' }) as HTMLInputElement).disabled, true)
+    assert.equal(view.screen.queryByRole('combobox', { name: 'Camera' }), null)
+
+    view.fireEvent.change(selector, { target: { value: 'documentary-history' } })
+    const caption = await view.screen.findByRole('textbox', { name: 'Caption' }) as HTMLInputElement
+    assert.equal(caption.value, 'The harbour keeps the light')
+    assert.equal(caption.maxLength, 80)
+    assert.ok(view.screen.getByRole('textbox', { name: 'To year' }))
     view.cleanup()
   } finally {
     installed.restore()
@@ -167,10 +181,12 @@ test('selecciona hero y fondo canónicos y aplica provided_only con lineage de c
     assert.equal(scene.generationPolicy, 'provided_only')
     assert.equal(closed, 1)
     const assets = Object.fromEntries((scene.narrative?.assets || []).map(item => [item.slot, item]))
-    assert.equal(assets.hero?.catalogAtAssignment?.assetId, fixture.hero.id)
-    assert.equal(assets.hero?.catalogAtAssignment?.workspaceId, 'default')
-    assert.equal(assets.plate?.catalogAtAssignment?.assetId, fixture.plate.id)
-    assert.equal(assets.plate?.catalogAtAssignment?.metadataStatus, 'canonical')
+    assert.equal(assets.subject_1?.catalogAtAssignment?.assetId, fixture.hero.id)
+    assert.equal(assets.subject_1?.catalogAtAssignment?.workspaceId, 'default')
+    assert.equal(assets.background?.catalogAtAssignment?.assetId, fixture.plate.id)
+    assert.equal(assets.background?.catalogAtAssignment?.metadataStatus, 'canonical')
+    assert.equal(scene.narrative?.templateId, 'music-pulse')
+    assert.equal(scene.narrative?.controls.camera, 'push')
     assert.equal(calls.some(call => /generate|model3d\/generate/i.test(call.url)), false)
     assert.ok(calls.some(call => call.url.endsWith(`/assets/${fixture.hero.id}`)))
     assert.ok(calls.some(call => call.url.endsWith(`/assets/${fixture.plate.id}`)))
@@ -210,7 +226,7 @@ test('cambia de plantilla y workspace reinicia bindings, y cerrar cancela sin ap
     await pickLibraryFile(view, 'hero-default.png')
 
     const selector = view.screen.getByRole('combobox', { name: 'Action / template' })
-    view.fireEvent.change(selector, { target: { value: 'music-pulse' } })
+    view.fireEvent.change(selector, { target: { value: 'music-orbit' } })
     await view.waitFor(() => assert.equal(view.screen.queryAllByText('hero-default.png').length, 0))
     assert.ok(view.screen.getAllByText('Unassigned').length >= 1)
 
@@ -253,5 +269,25 @@ test('404 y cambio de fuente al revalidar impiden aplicar y nunca generan assets
     }
   } finally {
     for (const restore of restores.reverse()) restore()
+  }
+})
+
+test('una elección del composer llega a la escena: cámara barrida y deriva cero', { concurrency: false }, async () => {
+  const installed = installAssetFetch()
+  const applied: Scene[] = []
+  try {
+    const view = await renderDialog({ onApply: scene => { applied.push(scene); return true } })
+    view.fireEvent.change(view.screen.getByRole('combobox', { name: 'Camera' }), { target: { value: 'sweep' } })
+    view.fireEvent.change(view.screen.getByRole('spinbutton', { name: 'Camera drift (0 holds still)' }), { target: { value: '0' } })
+    await selectHeroAndPlate(view)
+    view.fireEvent.click(view.screen.getByRole('button', { name: 'Create and open in editor' }))
+    await view.waitFor(() => assert.equal(applied.length, 1))
+    assert.equal(applied[0].narrative?.controls.camera, 'sweep')
+    assert.equal(applied[0].narrative?.controls.drift, 0)
+    const camera = applied[0].layers.find(layer => layer.type === 'camera')
+    assert.deepEqual(camera?.animation.keyframes?.map(frame => frame.x), [40, 50, 60], 'drift 0 keeps the sweep as written')
+    view.cleanup()
+  } finally {
+    installed.restore()
   }
 })

@@ -16,6 +16,7 @@ from app.services.mix_concat import (
     driving_soundtrack_bound,
     hold_crossfade_output_seconds,
     probe_audio_flags,
+    probe_duration_seconds,
     probe_has_audio,
     should_use_hold_crossfade,
 )
@@ -57,13 +58,24 @@ def test_hold_crossfade_filter_covers_every_clip_and_xfade():
     filter_str, video, audio = build_hold_crossfade_filter([5.0, 5.0, 5.0])
     assert (
         "[0:v]settb=AVTB,setpts=PTS-STARTPTS,"
-        "tpad=stop_mode=clone:stop_duration=0.500[v0]"
+        "tpad=stop_mode=clone:stop_duration=1.500,trim=end=5.500000[v0]"
     ) in filter_str
-    assert "[1:a]apad=pad_dur=0.500[a1]" in filter_str
+    assert "apad=whole_dur=5.500000,atrim=end=5.500000[a1]" in filter_str
     assert "xfade=transition=fade:duration=0.400" in filter_str
-    assert "acrossfade=d=0.400" in filter_str
+    assert "acrossfade=d=0.400000" in filter_str
     assert video == "vx2"
     assert audio == "ax2"
+
+
+def test_hold_crossfade_cuts_every_clip_to_the_length_its_dissolve_is_placed_by():
+    # A decoded AAC track runs up to a frame past its container duration and silence comes in whole 1024-sample
+    # frames. Chained untrimmed, the sound drifted ~10 ms a join behind the pictures: 2.7 s over a 268-shot episode.
+    filter_str, _video, _audio = build_hold_crossfade_filter([2.25, 3.0], has_audio=[True, False])
+    assert "trim=end=2.750000[v0]" in filter_str and "trim=end=3.500000[v1]" in filter_str
+    assert "[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS," \
+        "apad=whole_dur=2.750000,atrim=end=2.750000[a0]" in filter_str
+    assert "anullsrc=channel_layout=stereo:sample_rate=48000,atrim=end=3.500000," in filter_str
+    assert ":d=" not in filter_str
 
 
 def test_hold_crossfade_forces_a_common_timebase_before_xfade():
@@ -138,7 +150,7 @@ def test_mixed_audio_keeps_dialogue_when_the_first_clip_is_silent():
     assert "[1:a]aresample=48000" in filter_str
     assert "[2:a]aresample=48000" in filter_str
     assert "[0:a]" not in filter_str
-    assert "acrossfade=d=0.400" in filter_str
+    assert "acrossfade=d=0.400000" in filter_str
     assert video == "vx2"
     assert audio == "ax2"
 
@@ -423,3 +435,135 @@ def test_mid_song_offset_does_not_truncate_concat_video(tmp_path):
     )
     frames = int((probe.stdout or "0").strip() or 0)
     assert frames >= 100, frames
+
+
+def test_ffprobe_is_found_beside_ffmpeg_even_in_a_folder_named_after_ffmpeg():
+    """The bug: ``replace("ffmpeg", "ffprobe")`` also rewrote the folder (``/opt/ffmpeg-6/bin/ffmpeg``)."""
+    from app.services.mix_concat import ffprobe_for
+    assert ffprobe_for("ffmpeg") == "ffprobe"
+    assert ffprobe_for("/opt/ffmpeg-6/bin/ffmpeg") == "/opt/ffmpeg-6/bin/ffprobe"
+    assert ffprobe_for("C:/tools/ffmpeg/ffmpeg.exe") == "C:/tools/ffmpeg/ffprobe.exe"
+    assert ffprobe_for("/usr/bin/ffmpeg7") == "/usr/bin/ffprobe7"
+
+
+def test_without_a_transition_the_filter_list_matches_the_hold_crossfade():
+    import hashlib
+
+    from services.series_transitions import filter_for, output_seconds, placed_offsets
+
+    durations = [2.0, 3.5, 1.25, 4.0]
+    flags = [True, False, True, True]
+    plain, video, audio = build_hold_crossfade_filter(durations, has_audio=flags)
+    same, same_video, same_audio = filter_for(durations, transitions=None, has_audio=flags)
+    cuts = [{"kind": "cut", "seconds": 0.4}] * len(durations)
+    cut_filter, cut_video, cut_audio = filter_for(durations, transitions=cuts, has_audio=flags)
+    digest = hashlib.sha256(plain.encode()).hexdigest()
+    assert hashlib.sha256(same.encode()).hexdigest() == digest
+    assert hashlib.sha256(cut_filter.encode()).hexdigest() == digest
+    assert (video, audio) == (same_video, same_audio) == (cut_video, cut_audio)
+    assert output_seconds(durations, None) == hold_crossfade_output_seconds(durations)
+    assert output_seconds(durations, cuts) == hold_crossfade_output_seconds(durations)
+
+
+def test_transition_duration_arithmetic_for_dissolve_and_the_two_fades():
+    from services.series_transitions import output_seconds, placed_offsets
+
+    durations = [2.0, 2.0, 2.0, 2.0, 2.0]
+    dissolve = [None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.5},
+                {"kind": "dissolve", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.5}]
+    # The episode still ends on the last clip's held frame, as every joined episode does.
+    assert output_seconds(durations, dissolve) == pytest.approx(8.5)
+    assert placed_offsets(durations, dissolve) == pytest.approx([0.0, 1.5, 3.0, 4.5, 6.0])
+    fades = [None, {"kind": "fade_black", "seconds": 1.0}, {"kind": "dip_white", "seconds": 0.2},
+             {"kind": "cut"}, {"kind": "fade_black", "seconds": 2.0}]
+    # The cut holds shot 3's last frame 0.5 s and dissolves 0.4 s into shot 4; the fades add nothing.
+    assert output_seconds(durations, fades) == pytest.approx(10.6)
+    assert placed_offsets(durations, fades) == pytest.approx([0.0, 2.0, 4.0, 6.1, 8.1])
+    mixed = [None, {"kind": "fade_black", "seconds": 0.5}, {"kind": "dissolve", "seconds": 0.4},
+             {"kind": "dip_white", "seconds": 0.3}, {"kind": "cut"}]
+    assert output_seconds(durations, mixed) == pytest.approx(10.2)
+    # The first shot's transition has nothing to join from, so it does not change the length.
+    assert output_seconds(durations, [{"kind": "dissolve", "seconds": 1.0}]) == hold_crossfade_output_seconds(durations)
+
+
+def test_a_cut_is_the_same_soft_join_beside_a_transition():
+    from app.services.mix_concat import hold_crossfade_offsets
+    from services.series_transitions import filter_for, output_seconds, placed_offsets, placed_spans
+
+    durations = [2.0, 2.0, 2.0]
+    one_dissolve = [None, None, {"kind": "dissolve", "seconds": 0.5}]
+    # Shot 2 starts where it starts without transitions; only the dissolve into shot 3 is new.
+    assert placed_offsets(durations, one_dissolve)[:2] == pytest.approx(hold_crossfade_offsets(durations)[:2])
+    assert placed_offsets(durations, one_dissolve) == pytest.approx([0.0, 2.1, 3.6])
+    assert output_seconds(durations, one_dissolve) == pytest.approx(6.1)
+    spans = placed_spans(durations, one_dissolve)
+    assert [value for span in spans for value in span] == pytest.approx([0.0, 2.5, 2.1, 4.1, 3.6, 6.1])
+    graph, _video, _audio = filter_for(durations, transitions=one_dissolve)
+    plain, _plain_video, _plain_audio = build_hold_crossfade_filter(durations)
+    plain_parts = plain.split(";")
+    # The clip before the cut and the join are the freeze-tail dissolve's own pieces.
+    for piece in ("[0:v]", "[0:a]"):
+        assert next(part for part in plain_parts if part.startswith(piece)) in graph.split(";")
+    assert "xfade=transition=fade:duration=0.400:offset=2.100[vx1]" in graph
+    assert "[a0][a1]acrossfade=d=0.400000[ax1]" in graph
+    # Shot 2 dissolves on its own last frame: no held tail before the dissolve, which starts 0.5 s early.
+    assert "[1:v]settb=AVTB,setpts=PTS-STARTPTS,trim=end=2.000000" in graph and "whole_dur=2.000000" in graph
+    assert "xfade=transition=fade:duration=0.500:offset=3.600[vx2]" in graph
+    # Many cuts with tiny clips: the same arithmetic as mix_concat.
+    uneven = [0.3, 1.2, 0.08, 2.5, 0.9]
+    with_one = [None, None, None, None, {"kind": "fade_black", "seconds": 0.4}]
+    assert placed_offsets(uneven, with_one)[:4] == pytest.approx(hold_crossfade_offsets(uneven)[:4])
+
+
+def test_an_active_transition_does_not_reuse_the_freeze_tail():
+    from services.series_transitions import filter_for
+
+    graph, _video, _audio = filter_for(
+        [2.0, 2.0, 2.0],
+        transitions=[None, {"kind": "dissolve", "seconds": 0.5}, {"kind": "fade_black", "seconds": 0.4}],
+    )
+    parts = graph.split(";")
+    assert not any(part.startswith(("[0:v]", "[1:v]")) and "tpad=" in part for part in parts)
+    # The episode's last clip keeps the held frame every joined episode ends on.
+    assert any(part.startswith("[2:v]") and "tpad=" in part for part in parts)
+    assert "xfade=transition=fade:duration=0.500" in graph
+    assert "acrossfade=d=0.500000" in graph
+    assert "fade=t=out" in graph and "color=black" in graph
+    white, _video, _audio = filter_for([2.0, 2.0], transitions=[None, {"kind": "dip_white", "seconds": 0.3}])
+    assert "color=white" in white and "xfade=" not in white
+    assert not any(part.startswith("[0:v]") and "tpad=" in part for part in white.split(";"))
+
+
+def _decoded_seconds(path: Path, stream: str) -> float:
+    """Length of a stream as decoded (frames at 24 fps, or samples at 48 kHz), not as the container states it."""
+    if stream == "v":
+        out = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries",
+                              "stream=nb_read_frames", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+        return int(out.stdout.strip()) / 24
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a", "-ac", "1", "-ar", "48000",
+                          "-f", "s16le", "-"], capture_output=True).stdout
+    return len(pcm) / 2 / 48000
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg is required")
+def test_soft_join_keeps_sound_on_the_pictures_over_many_clips(tmp_path):
+    # Twelve talking clips of uneven length, as a Series episode has, plus a silent one: the joined sound must end
+    # with the pictures. Untrimmed, each AAC tail pushed the sound ~10 ms later per join.
+    lengths = [1.07, 1.33, 0.91, 1.58, 1.21, 0.87, 1.44, 1.12, 0.96, 1.66, 1.05, 1.29, 1.17]
+    clips = []
+    for index, seconds in enumerate(lengths):
+        path = tmp_path / f"clip{index:02d}.mp4"
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=c=gray:s=160x120:r=24:d={seconds}"]
+        if index != 6:
+            cmd += ["-f", "lavfi", "-i", f"sine=f={300 + 20 * index}:sample_rate=48000:d={seconds}", "-c:a", "aac"]
+        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-t", f"{seconds}", str(path)]
+        assert subprocess.run(cmd, capture_output=True, timeout=30).returncode == 0
+        clips.append(str(path))
+    out = tmp_path / "joined.mp4"
+    assert concat_with_tail_hold_and_crossfade(clips, str(out)) is True
+    planned = hold_crossfade_output_seconds([probe_duration_seconds(path) for path in clips])
+    video, sound = _decoded_seconds(out, "v"), _decoded_seconds(out, "a")
+    # The sound follows the planned timeline to within one AAC frame of the output's own encoder (it ran 71 ms over
+    # here before the cut); the pictures to within the 24 fps frames the last dissolve rounds to.
+    assert abs(sound - planned) < 0.025, (sound, planned)
+    assert abs(video - planned) < 0.1, (video, planned)

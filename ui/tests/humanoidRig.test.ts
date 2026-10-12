@@ -76,6 +76,8 @@ test('refusals and warnings map to known messages only', () => {
   assert.equal(refusalKey(null), null)
   assert.deepEqual(warningKeys(['arms_steep', 'unknown', 'facing_back']), ['rig.humanoidWarning.arms_steep', 'rig.humanoidWarning.facing_back'])
   assert.deepEqual(warningKeys(['on_a_base']), ['rig.humanoidWarning.on_a_base'])
+  assert.deepEqual(warningKeys(['covered_arms', 'covered_legs', 'legs_hidden']),
+    ['rig.humanoidWarning.covered_arms', 'rig.humanoidWarning.covered_legs', 'rig.humanoidWarning.legs_hidden'])
   assert.equal(rigLabel('2026-10-03-12h00m00s_rigged_hero_ab12cd34.glb'), 'hero_ab12cd34')
   assert.equal(rigLabel('humanoid-hero-0123456789abcdef.glb'), 'humanoid-hero-0123456789abcdef')
   assert.equal(isRigSource('2026-10-03-12h00m00s_hunyuan3d_hero.glb'), true)

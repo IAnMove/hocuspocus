@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../../i18n'
 import { buildTextTemplate, importLyricsText, parseSceneLyrics, TEXT_TEMPLATES, type KineticText, type SceneLyrics } from '../../../lib/kineticText'
 import { randomUuid } from '../../../lib/uuid'
 import { fieldClass } from './textFields'
+
+/** text_templates.json labelKey and field labelKey are keys of the kineticText catalog (templates.*, fields.*). */
+const catalogKey = (key: string) => key as ParseKeys<'kineticText'>
 
 export function TextTemplateInsert({ duration, width, height, disabled, onInsert, onLyrics }: {
   duration: number
@@ -22,9 +26,9 @@ export function TextTemplateInsert({ duration, width, height, disabled, onInsert
   return <div className="space-y-2 rounded border border-border p-2">
     <div className="text-xs font-semibold">{t('insertTemplate')}</div>
     <select value={templateId} onChange={event => { setTemplateId(event.target.value); setValues({}) }} className={fieldClass} disabled={disabled}>
-      {TEXT_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
+      {TEXT_TEMPLATES.map(item => <option key={item.id} value={item.id}>{t(catalogKey(item.labelKey), { defaultValue: item.id })}</option>)}
     </select>
-    {template.fields.map(item => <label key={item.key} className="block text-xs">{item.key}<input value={value(item.key, item.default)} onChange={event => setValues(current => ({ ...current, [item.key]: event.target.value }))} className={fieldClass} disabled={disabled} /></label>)}
+    {template.fields.map(item => <label key={item.key} className="block text-xs">{t(catalogKey(item.labelKey), { defaultValue: item.key })}<input value={value(item.key, item.default)} onChange={event => setValues(current => ({ ...current, [item.key]: event.target.value }))} className={fieldClass} disabled={disabled} /></label>)}
     <button type="button" disabled={disabled} className="min-h-9 rounded border border-cyan-400/40 px-3 text-xs text-cyan-200" onClick={() => {
       const filled = Object.fromEntries(template.fields.map(item => [item.key, value(item.key, item.default)]))
       onInsert(buildTextTemplate(template.id, filled, { start: 0, duration: Math.min(4, duration), width, height }).map(cue => ({ ...cue, id: randomUuid() })))

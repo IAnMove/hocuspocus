@@ -102,6 +102,8 @@ SPEECH_MODEL_TYPES = frozenset(
         "qwen3_tts_customvoice",
         "qwen3_tts_voicedesign",
         "qwen3_tts_base",
+        "voxcpm2_voicedesign",
+        "voxcpm2_base",
         "chatterbox",
         "index_tts2",
         "scenema_audio",
@@ -292,6 +294,8 @@ class StudioSpeechCustomSettings(_ClosedModel):
     vc_steps: StrictInt | None = None
     vc_cfg_rate: _CustomFloat | None = None
     duration_multiplier: _CustomFloat | None = None
+    # VoxCPM2 voice clone: how the cloned voice speaks (whispering, excited...).
+    style: Annotated[StrictStr, StringConstraints(max_length=300)] | None = None
 
 
 def _check_required_speech_texts(params: Any) -> None:

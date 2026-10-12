@@ -3,7 +3,7 @@ import type { RigAnimation, RigCapabilities, RigJob, RigProfile, RigProfileId } 
 const HUMANOID_RECOMMENDED = ['idle', 'walk', 'wave', 'talk']
 const CATEGORY_ORDER = ['Move', 'Gesture', 'Dance', 'Stand', 'Action']
 const REFUSALS = new Set(['hands_stuck', 'arms_raised', 'turned', 'single_leg', 'legs_too_short', 'asymmetry', 'not_upright', 'degenerate'])
-const WARNINGS = new Set(['arms_steep', 'short_legs', 'short_arms', 'neck_not_found', 'facing_back', 'on_a_base'])
+const WARNINGS = new Set(['arms_steep', 'short_legs', 'short_arms', 'neck_not_found', 'facing_back', 'on_a_base', 'covered_arms', 'covered_legs', 'legs_hidden'])
 export const DEFAULT_BPM = 120
 
 export function clipsForEngine(engineId: string, capabilities: RigCapabilities | null, profile: RigProfile | undefined): RigAnimation[] {

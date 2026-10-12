@@ -3,7 +3,7 @@ import type { Scene3DDocument, Scene3DSourceRef } from '../types'
 import { parseScene3DDocument } from '../document'
 import { defaultSpeech, type SpeechClip } from './types'
 import { safeMediaUrl } from './track'
-import { randomUuid } from '../../../lib/uuid'
+import { safeSessionStorage, safeStorageSet } from '../../../lib/safeStorage'
 
 export type SpeechProductionInput = {
   analysis?: import('./types').SpeechAnalysisSettings & { isolateVocals?: boolean }
@@ -52,23 +52,23 @@ export function buildSpeechProduction(input: SpeechProductionInput): Scene3DDocu
 }
 const HANDOFF_KEY = 'hocuspocus:pending-world3d-speech'
 export const SPEECH_HANDOFF_EVENT = 'hocuspocus:world3d-speech'
-export function queueSpeechProduction(document: Scene3DDocument, storage: Pick<Storage, 'setItem'> = sessionStorage) {
+export function queueSpeechProduction(document: Scene3DDocument, storage: Pick<Storage, 'setItem'> = safeSessionStorage) {
   const parsed = parseScene3DDocument(document)
   if (!parsed?.production) throw new Error('Invalid speech handoff.')
   storage.setItem(HANDOFF_KEY, JSON.stringify(parsed))
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(SPEECH_HANDOFF_EVENT))
 }
-export function takeSpeechProduction(workspace: string, storage: Pick<Storage, 'getItem' | 'removeItem'> = sessionStorage, beforeTake?: () => void) {
+export function takeSpeechProduction(workspace: string, storage: Pick<Storage, 'getItem' | 'removeItem'> = safeSessionStorage, beforeTake?: () => void) {
   const raw = storage.getItem(HANDOFF_KEY)
   if (!raw) return null
   const parsed = parseScene3DDocument(JSON.parse(raw))
   if (!parsed?.production || parsed.production.workspace !== workspace) return null
-  beforeTake?.()
+  // Consume the handoff first: a failing backup must not replay it on every event.
   storage.removeItem(HANDOFF_KEY)
+  beforeTake?.()
   return parsed
 }
+/** One copy per workspace: "previous shot" reads it back; nothing read a per-handoff history. */
 export function preserveSpeechDraft(workspace: string, document: Scene3DDocument) {
-  const raw = JSON.stringify(document)
-  sessionStorage.setItem('hocuspocus:world3d-speech-history:' + workspace + ':' + randomUuid(), raw)
-  sessionStorage.setItem('hocuspocus:world3d-before-speech:' + workspace, raw)
+  safeStorageSet('session', 'hocuspocus:world3d-before-speech:' + workspace, JSON.stringify(document))
 }

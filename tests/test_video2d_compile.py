@@ -11,7 +11,7 @@ from services.video2d_compile import CompileError, command_catalog, execute, spa
 
 ROOT = Path(__file__).resolve().parents[1]
 TSX = ROOT / "ui" / "node_modules" / "tsx" / "dist" / "cli.mjs"
-ASSETS = {"hero": "/api/v1/file/hero.png", "plate": "/api/v1/file/plate.png"}
+ASSETS = {"subject_1": "/api/v1/file/hero.png", "background": "/api/v1/file/plate.png"}
 
 
 def _compile(template_id="cinema-establishing", *, full=False, **extra):
@@ -47,7 +47,7 @@ def test_missing_required_slot_is_rejected_before_node_starts(monkeypatch):
     with pytest.raises(CompileError) as caught:
         execute({"version": 1, "operation": "scenes.template.compile", "input": {
             "templateId": "cinema-establishing",
-            "assets": {"hero": "/api/v1/file/hero.png"},
+            "assets": {"subject_1": "/api/v1/file/hero.png"},
         }})
     assert caught.value.code == "template_missing_slot"
 
@@ -99,8 +99,8 @@ def test_bad_envelopes_use_a_stable_code(command, code, monkeypatch):
 @pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
 def test_compile_calls_the_typescript_builders():
     result = execute(_compile(full=True))
-    assert result["result"]["document"]["name"] == "Plano de establecimiento · candidata"
-    assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["plate", "hero", "camera", "atmosphere-dust"]
+    assert result["result"]["document"]["name"] == "Plano de establecimiento", "an approved card is no longer named a candidate"
+    assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["background", "subject_1", "camera", "atmosphere-dust"]
 
 
 def test_example_urls_are_durable_and_reach_the_bridge(monkeypatch):
@@ -112,10 +112,11 @@ def test_example_urls_are_durable_and_reach_the_bridge(monkeypatch):
 
     monkeypatch.setattr("services.video2d_compile.spawn_bridge", fake_bridge)
     examples = {"hero": "/examples/hero.png", "plate": "/examples/plate.png"}
-    execute(_compile("trailer-teaser", assets=examples))
-    assert seen["payload"]["input"]["assets"] == examples
+    renamed = {"subject_1": "/examples/hero.png", "background": "/examples/plate.png"}
+    execute(_compile("documentary-history", assets=examples))
+    assert seen["payload"]["input"]["assets"] == renamed
     execute(_compile("cinema-establishing", assets=examples))
-    assert seen["payload"]["input"]["assets"] == examples
+    assert seen["payload"]["input"]["assets"] == renamed
 
 
 def test_video2d_candidate_forwards_catalog_duration_and_keeps_assets(monkeypatch):
@@ -127,8 +128,9 @@ def test_video2d_candidate_forwards_catalog_duration_and_keeps_assets(monkeypatc
 
     monkeypatch.setattr("services.video2d_compile.spawn_bridge", fake_bridge)
     execute(_compile("documentary-history"))
-    assert seen["payload"]["input"]["duration"] == 4
-    assert seen["payload"]["input"]["controls"]["duration"] == 4
+    assert seen["payload"]["input"]["duration"] == 6
+    assert seen["payload"]["input"]["controls"]["duration"] == 6
+    assert seen["payload"]["input"]["controls"]["caption"] == "The harbour keeps the light"
     assert seen["payload"]["input"]["assets"] == ASSETS
 
 
@@ -136,11 +138,11 @@ def test_video2d_candidate_forwards_catalog_duration_and_keeps_assets(monkeypatc
 def test_video2d_candidate_compile_keeps_slot_images():
     result = execute(_compile("documentary-history", full=True))
     layers = {layer["id"]: layer for layer in result["result"]["document"]["layers"]}
-    assert result["result"]["document"]["duration"] == 4
-    assert layers["hero"]["source"] == ASSETS["hero"]
-    assert layers["plate"]["source"] == ASSETS["plate"]
-    assert layers["plate"]["type"] == "image"
-    assert layers["atmosphere-plate"]["type"] == "effect"
+    assert result["result"]["document"]["duration"] == 6
+    assert layers["subject_1"]["source"] == ASSETS["subject_1"]
+    assert layers["background"]["source"] == ASSETS["background"]
+    assert layers["background"]["type"] == "image"
+    assert layers["atmosphere-dust"]["type"] == "effect"
 
 
 def test_compile_bridge_holds_the_cpu_lane(monkeypatch):

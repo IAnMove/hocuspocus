@@ -9,6 +9,7 @@ import {
 import type { GenerationJob } from '../../types'
 import { UNLOADED_LLM_STATUS } from '../../stores/llmSlice'
 import { prependJob, updateJob, withJobs } from '../../stores/jobReducers'
+import { isGenerationJobSettled } from '../../lib/generationJobState'
 import { finishStudioImageCommand, presentStudioImageCommand } from './imageCommandPresentation'
 import {
   fetchCanonicalImageReferences,
@@ -34,9 +35,9 @@ const inFlight = new Map<string, Promise<GenerationReceiptLike | void>>()
 export type StudioImageJobStatus = {
   status: GenerationJob['status']
   progress: number
-  step: number
-  total_steps: number
-  phase: string
+  step?: number
+  total_steps?: number
+  phase?: string
   message: string
   output_files: string[]
   error: string | null
@@ -248,9 +249,9 @@ function applyPolledStatus(job: GenerationJob, status: StudioImageJobStatus): Ge
     ...job,
     status: status.status,
     progress: status.progress / 100,
-    step: status.step,
-    totalSteps: status.total_steps,
-    phase: status.phase,
+    step: status.step ?? 0,
+    totalSteps: status.total_steps ?? 0,
+    phase: status.phase ?? '',
     message: status.message,
     outputFiles: status.output_files,
     error: status.error,
@@ -277,7 +278,7 @@ function handlePolledStatus(
     void host.get().maybeRefreshGallery?.({ message: 'New output ready' })
     return
   }
-  if (status.status === 'failed' || status.status === 'cancelled') {
+  if (isGenerationJobSettled(status.status)) {
     stop()
     host.set(state => withJobs(state.jobs))
   }

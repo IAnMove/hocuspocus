@@ -2,19 +2,20 @@ import { ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, NoToneMappin
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { exposureFactor, type ToneMappingName } from './look'
 import type { Scene3DDocument } from './types'
+import { isMotionLab } from './motionlab/types'
 
 const TONE_MAPPING: Record<ToneMappingName, ToneMapping> = {
   aces: ACESFilmicToneMapping, agx: AgXToneMapping, neutral: NeutralToneMapping,
 }
 
-/** The scene's environment light: reflections and soft fill for the models' PBR materials. Pixel worlds keep
- * their flat look, and scenes without a model (placeholders, sets or effects only) skip the bake. */
+/** Reflections and soft fill for imported models and complete native motion sets.
+ * Pixel worlds, empty placeholders and legacy effect-only sets skip the bake. */
 export class EnvironmentLighting {
   private room?: Texture
   private applied = false
 
   sync(renderer: WebGLRenderer, scene: Scene, document: Scene3DDocument) {
-    const lit = !document.pixelWorld && document.slots.some(slot => slot.media === 'model3d' && Boolean(slot.sourceUrl))
+    const lit = !document.pixelWorld && (isMotionLab(document.dressing) || document.slots.some(slot => slot.media === 'model3d' && Boolean(slot.sourceUrl)))
     const environment = lit ? document.lighting?.environment : undefined
     if (!environment || environment.source === 'none' || environment.intensity <= 0) {
       if (this.applied) { scene.environment = null; this.applied = false }

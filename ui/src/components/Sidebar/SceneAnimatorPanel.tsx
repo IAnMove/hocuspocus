@@ -8,7 +8,7 @@ import { presentSceneDocument, useSceneDocumentHandoff } from '../../features/sc
 import { galleryWorkspaceEpoch, galleryWorkspaceName } from '../../stores/gallerySlice'
 import { SceneFxControls } from '../../features/sceneFx/SceneFxControls'
 import { SceneFxOverlay } from '../../features/sceneFx/SceneFxOverlay'
-import { isRetroLook } from '../../features/sceneFx/retroPaint'
+import { needsFrameSource } from '../../features/sceneFx/paint'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../../features/sceneFx/showcase'
 import { KineticTextControls } from '../common/KineticTextControls'
 import { Scene2DTemplateDialog } from '../../features/scene2d/Scene2DTemplateDialog'
@@ -27,6 +27,7 @@ import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Box, Camera, 
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
+import { defaultSpeechModel } from '../../lib/preferredModels'
 import { analyzeAudio, deleteCharacterKit, fetchCharacterKitLibrary, fetchOutputs, generateLlmText, saveCharacterKit, saveScene as saveSceneOutput, saveSceneRecording, uploadImage } from '../../api/client'
 
 import type { AssetExplorerPurpose } from '../common/assetExplorer.ts'
@@ -67,14 +68,15 @@ import { consumeFaceRigHandoff, FACE_RIG_HANDOFF_EVENT, kitFromFaceRigHandoff } 
 import { rememberCharacterKitLibrary, rememberVideo3dScene } from '../../features/agent/wizardLabSession'
 import { carrySceneSidecars, createNarrativeScene, getNarrativeTemplate, type NarrativeSceneId, type NarrativeTemplateInput } from '../../lib/sceneNarrative'
 import { applySceneCopilotProposal, buildSceneCopilotSystemPrompt, buildSceneScopeCopilotSystemPrompt, describeSceneCopilotProposal, parseSceneCopilotProposal, SCENE_COPILOT_JSON_SCHEMA, type SceneCopilotProposal } from '../../lib/sceneCopilot'
-import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneProgressFromSeconds, sceneTimeToLayerTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
+import { evaluateSceneLayer, getSceneEvents, getSceneKeyframes, getSceneLayerTiming, mapSceneAnimationPoints, normalizeSceneEvents, normalizeSceneKeyframes, sceneProgressFromSeconds, sceneTimeToLayerTime, sceneVideoTime, withNormalizedSceneTiming, withSceneKeyframes } from '../../lib/sceneTimeline'
 import { seamOccluderDataUri, type SeamOccluderKind } from '../../lib/seamOccluder'
 import type { AudioAnalysisResult, Scene, SceneAnimationEvent, SceneAtmosphereKind, SceneBlendMode, SceneCurve, SceneFrameRate, SceneKeyframe, SceneMask } from '../../types'
 import { canonicalSceneFps } from '../../lib/sceneFps.ts'
-import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
-import { paintScene2D } from '../../lib/scene2d/paint'
+import { createSceneEvaluator, type SceneEvaluator } from '../../lib/scene2d/evaluate'
+import { layerPicturePoint, paintScene2D } from '../../lib/scene2d/paint'
+import { videosSettled } from '../../lib/scene2d/videoSettle'
 import { assignZ, breakDependencyCycles, dependencyWouldCycleIn, normalizeScene2DLayers, normalizeZ } from '../../lib/scene2d/normalize'
-import { ATMOSPHERE_KINDS, ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS, DEFAULT_EFFECTS, drawAtmosphere, effectFilter, finiteNumber, hasCanvasFilterEffects, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip } from '../../lib/scene2d/layerStyle'
+import { ATMOSPHERE_KINDS, ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS, DEFAULT_EFFECTS, drawAtmosphere, effectFilter, finiteNumber, hasCanvasFilterEffects, isVisualLayer, normalizedAtmosphere, normalizedEffects, normalizedStrip, stripFlipCss } from '../../lib/scene2d/layerStyle'
 import type { AnimatorLayer, AnimatorLayerType, AnimatorScene, Atmosphere, LayerEffects, LayerStrip, Point, VisualAnimatorLayer, VisualLayerType } from '../../lib/scene2d/types'
 import { SceneTimeline } from './SceneTimeline'
 import { CylinderPanoramaComparison } from './CylinderPanoramaComparison'
@@ -178,6 +180,11 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const isMissing = (source: string) => source.startsWith('blob:')
 const findLayerElements = (root: HTMLElement | null, id: string) => Array.from(root?.querySelectorAll<HTMLElement>('[data-layer-id]') ?? []).filter(element => element.dataset.layerId === id)
 const findLayerElement = (root: HTMLElement | null, id: string) => findLayerElements(root, id)[0] ?? null
+/** Places the effects that start on a layer (a laser from a cutout's rifle) in the live preview as the export does. */
+const previewLayerPoint = (scene: AnimatorScene, evaluator: SceneEvaluator, stage: { current: HTMLElement | null }, progress: number) =>
+  (scene.sfx ?? []).some(cue => cue.from?.layerId)
+    ? layerPicturePoint(scene, scene, evaluator, layer => findLayerElement(stage.current, layer.id) as HTMLVideoElement | HTMLImageElement | null, progress, progress * scene.duration)
+    : undefined
 const modelViewerCanvas = (element: HTMLElement | null) => {
   const root = element?.shadowRoot
   if (!root) return null
@@ -313,7 +320,7 @@ export function SceneAnimatorPanel() {
   const setSidebarMode = useStore(s => s.setSidebarMode)
   const setMediaFilter = useStore(s => s.setMediaFilter)
   const setSidebarOpen = useStore(s => s.setSidebarOpen)
-  const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? 'kugelaudio_0_open')
+  const selectedSpeechModel = useStore(s => s.selectedModelPerAudioSubMode.speech ?? defaultSpeechModel(s.models))
   const [scene, setScene] = useState<AnimatorScene>(blankScene)
   const sceneRef = useRef(scene)
   const sceneRecovery = useRef(new SceneHandoffRecovery())
@@ -477,6 +484,10 @@ export function SceneAnimatorPanel() {
   const selectedModelSource = selected?.type === 'model3d' ? selected.source : null
   const selectedModelClip = selected?.type === 'model3d' ? selected.animation.clip : undefined
 
+  /** The video elements the stage holds for the scene's video layers (what an export frame must wait for). */
+  const sceneVideoElements = () => sceneRef.current.layers.filter(layer => layer.type === 'video')
+    .flatMap(layer => findLayerElements(canvasRef.current, layer.id))
+    .filter((element): element is HTMLVideoElement => element instanceof HTMLVideoElement)
   const syncSceneMedia = useCallback((sceneSeconds: number) => {
     sceneRef.current.layers.filter(layer => layer.type === 'model3d').forEach(layer => {
       findLayerElements(canvasRef.current, layer.id).forEach(element => {
@@ -498,9 +509,7 @@ export function SceneAnimatorPanel() {
         element.pause()
         const duration = finiteNumber(element.duration, 0)
         if (duration <= 0) return
-        const layerTime = sceneTimeToLayerTime(layer, sceneSeconds)
-        const finalFrame = Math.max(0, duration - 1 / fps)
-        const target = layer.animation.loop ? layerTime % duration : Math.min(finalFrame, layerTime)
+        const target = sceneVideoTime(layer, sceneSeconds, duration, fps)
         if (Math.abs(element.currentTime - target) > 1 / (fps * 2)) {
           try { element.currentTime = target } catch { /* Metadata can disappear while a source is being reassigned. */ }
         }
@@ -1441,7 +1450,7 @@ export function SceneAnimatorPanel() {
       : findLayerElement(canvasRef.current, layer.id) as HTMLVideoElement | HTMLImageElement | null,
   )
   const sceneSecondsNow = progress * scene.duration
-  const retroLive = (scene.sfx ?? []).some(cue => isRetroLook(cue.kind) && sceneSecondsNow >= cue.start && sceneSecondsNow < cue.end)
+  const retroLive = (scene.sfx ?? []).some(cue => needsFrameSource(cue.kind) && sceneSecondsNow >= cue.start && sceneSecondsNow < cue.end)
   useEffect(() => {
     if (!retroLive) return
     const canvas = retroCanvasRef.current
@@ -1708,6 +1717,7 @@ export function SceneAnimatorPanel() {
         const seconds = Math.min(current.duration, index / fps)
         const progress = sceneProgressFromSeconds(seconds, current.duration)
         syncSceneMedia(seconds)
+        await videosSettled(sceneVideoElements())
         await exportStage.renderFrame(progress)
         if (!paintScene(canvas, progress, exportStage.canvases)) throw new Error('Could not paint export frame.')
         const frame = new VideoFrame(canvas, { timestamp: index * frameDurationUs, duration: frameDurationUs })
@@ -2608,7 +2618,7 @@ export function SceneAnimatorPanel() {
     if (!layer.visible) return null
     const edgeMove = (event: ReactPointerEvent<HTMLElement>) => { if (layer.type !== 'model3d') return startGesture(event, layer, 'move'); const box = event.currentTarget.getBoundingClientRect(); const edge = (event.clientX - box.left) / box.width < .18 || (event.clientX - box.left) / box.width > .82 || (event.clientY - box.top) / box.height < .18 || (event.clientY - box.top) / box.height > .82; startGesture(event, layer, edge ? 'move' : 'orbit') }
     return states.map((state, index) => {
-      const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)`, mixBlendMode: effects.blendMode }
+      const common: CSSProperties = { left: `${state.x}%`, top: `${state.y}%`, width: `${(layer.type === 'model3d' ? 52 : 100) * state.scale}%`, height: `${(layer.type === 'model3d' ? 75 : 100) * state.scale}%`, opacity: state.opacity, zIndex: state.z, transform: `translate(-50%, -50%) rotate(${state.rotation}deg)${stripFlipCss(state)}`, mixBlendMode: effects.blendMode }
       const layerShortSide = Math.min(previewWidth * (layer.type === 'model3d' ? .52 : 1) * state.scale, previewHeight * (layer.type === 'model3d' ? .75 : 1) * state.scale)
       const maskStyle: CSSProperties = { overflow: 'hidden', borderRadius: effects.mask === 'ellipse' ? '50%' : effects.mask === 'rounded' ? `${layerShortSide * effects.maskRadius / 100}px` : undefined }
       const isPrimary = index === 0
@@ -2665,7 +2675,7 @@ export function SceneAnimatorPanel() {
         {(composition.safeArea === 'title' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-[10%] z-[992] border border-dashed border-amber-300/80"><span className="absolute right-1 top-1 rounded bg-black/55 px-1 text-[7px] text-amber-200">{t('animator.titleSafeBadge')}</span></div>}
         {(composition.safeArea === 'vertical' || composition.safeArea === 'all') && <div className="pointer-events-none absolute inset-y-0 left-1/2 z-[993] -translate-x-1/2 border-x border-dashed border-fuchsia-300/90 bg-fuchsia-400/[.03]" style={{ width: `${verticalSafeWidth}%` }}><span className="absolute left-1 top-1 rounded bg-black/55 px-1 text-[7px] text-fuchsia-200">{t('animator.verticalBadge')}</span></div>}
         {retroLive && <canvas ref={retroCanvasRef} data-testid="scene-retro-look" className="pointer-events-none absolute inset-0 z-[896] h-full w-full" aria-hidden="true" />}
-        {!retroLive && <SceneFxOverlay cues={scene.sfx} seconds={progress * scene.duration} width={scene.width} height={scene.height} duration={scene.duration} playing={playing} />}
+        {!retroLive && <SceneFxOverlay cues={scene.sfx} seconds={progress * scene.duration} width={scene.width} height={scene.height} duration={scene.duration} playing={playing} layerPoint={previewLayerPoint(scene, evaluator, canvasRef, progress)} />}
         {!retroLive && <KineticTextOverlay cues={scene.texts} lyrics={scene.lyrics} seconds={progress * scene.duration} width={scene.width} height={scene.height} envelope={beatEnvelope(scene.rhythm, progress * scene.duration)} />}
         {activeCamera && <div className="pointer-events-none absolute left-2 top-2 z-[997] flex items-center gap-1 rounded bg-black/55 px-1.5 py-1 text-[8px] text-cyan-200"><Camera size={10} /> {activeCamera.name}</div>}
         {orbitPivot && <div className="pointer-events-none absolute z-[998] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300 bg-cyan-400/20 shadow-[0_0_8px_rgba(103,232,249,.9)]" style={{ left: `${orbitPivot.x}%`, top: `${orbitPivot.y}%` }}><span className="absolute left-1/2 top-[-5px] h-6 w-px -translate-x-1/2 bg-cyan-300/80" /><span className="absolute left-[-5px] top-1/2 h-px w-6 -translate-y-1/2 bg-cyan-300/80" /></div>}

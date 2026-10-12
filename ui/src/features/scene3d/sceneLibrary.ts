@@ -1,5 +1,6 @@
 import { BASE } from '../../api/http'
 import { getFileUrl, type ApiOutput } from '../../api/outputs'
+import { documentSaveHeaders } from '../../lib/documentSaveActor'
 import { parseScene3DDocument } from './document'
 import type { Scene3DDocument } from './types'
 
@@ -17,7 +18,7 @@ export async function loadWorld3DOutput(file: ApiOutput, workspace: string, sign
 
 export async function saveWorld3DOutput(document: Scene3DDocument, preview: string, name: string, workspace: string) {
   const response = await fetch(`${BASE}/api/v1/scenes/world3d`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...documentSaveHeaders() },
     body: JSON.stringify({ document, preview, name, workspace }),
   })
   const result = await response.json()

@@ -2,8 +2,11 @@
 
 A preset holds the prompt fragments that keep a cast consistent (character,
 new pose, prop, plain screen background) and the default mouth look for
-``characters.rig.flat``. The screen colour is green unless the description
-mentions green, then magenta, because keying green removes green clothes.
+``characters.rig.flat`` (``rig``: paper mouths for ``paper-cutout``, warp mouths
+for ``graphic-novel``). A kit made in a preset records it in its provenance
+(``{"method": "character-style-create", "style": "<id>"}``) and its first rig
+uses that look. The screen colour is green unless the description mentions
+green, then magenta, because keying green removes green clothes.
 """
 from __future__ import annotations
 
@@ -27,6 +30,14 @@ def character_style(style_id: str) -> dict[str, Any]:
         if style["id"] == style_id:
             return style
     raise KeyError(style_id)
+
+
+def preset_rig(style_id: Any) -> dict[str, Any]:
+    """A preset's default look for ``characters.rig.flat`` (``style``), ``{}`` for an unknown id."""
+    for style in style_catalog()["styles"]:
+        if style["id"] == style_id:
+            return dict(style.get("rig") or {})
+    return {}
 
 
 def screen_for(description: str) -> str:

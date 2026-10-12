@@ -1,0 +1,796 @@
+{
+  "version": 1,
+  "questions": {
+    "premise": {
+      "question": {
+        "es": "¿Qué ocurre y a quién?",
+        "en": "What happens, and to whom?"
+      },
+      "hint": {
+        "es": "Concreta una situación que obligue a actuar.",
+        "en": "Describe a situation that forces someone to act."
+      },
+      "example": {
+        "es": "Una capitana pierde su nave y debe recuperarla con una tripulación que ya no confía en ella.",
+        "en": "A captain loses her ship and must reclaim it with a crew that no longer trusts her."
+      }
+    },
+    "goal": {
+      "question": {
+        "es": "¿Qué quiere conseguir?",
+        "en": "What do they want to achieve?"
+      },
+      "hint": {
+        "es": "Elige un objetivo que podamos ver cumplirse o fracasar.",
+        "en": "Choose an observable goal that can succeed or fail."
+      },
+      "example": {
+        "es": "Recuperar la nave antes de que salga de puerto.",
+        "en": "Recover the ship before it leaves port."
+      }
+    },
+    "desire": {
+      "question": {
+        "es": "¿Qué quiere este personaje?",
+        "en": "What does this character want?"
+      },
+      "hint": {
+        "es": "Distingue su objetivo consciente de lo que necesita aprender.",
+        "en": "Separate the conscious goal from what they need to learn."
+      },
+      "example": {
+        "es": "Recuperar su puesto como capitana.",
+        "en": "Reclaim her position as captain."
+      }
+    },
+    "need": {
+      "question": {
+        "es": "¿Qué necesita aprender?",
+        "en": "What do they need to learn?"
+      },
+      "hint": {
+        "es": "Piensa en una conducta que debe cambiar, no solo en una lección.",
+        "en": "Think of behaviour that must change, beyond a lesson."
+      },
+      "example": {
+        "es": "Confiar una decisión importante a su tripulación.",
+        "en": "Trust her crew with an important decision."
+      }
+    },
+    "flaw": {
+      "question": {
+        "es": "¿Cómo se pone obstáculos?",
+        "en": "How do they get in their own way?"
+      },
+      "hint": {
+        "es": "Su defecto debe tener consecuencias en sus decisiones.",
+        "en": "The flaw should affect decisions and have consequences."
+      },
+      "example": {
+        "es": "Confunde proteger a los demás con controlarlos.",
+        "en": "She confuses protecting others with controlling them."
+      }
+    },
+    "conflict": {
+      "question": {
+        "es": "¿Qué se lo impide?",
+        "en": "What stands in the way?"
+      },
+      "hint": {
+        "es": "Dale a la oposición un objetivo propio.",
+        "en": "Give the opposing force a goal of its own."
+      },
+      "example": {
+        "es": "Su antigua oficial quiere vender la nave para pagar a la tripulación.",
+        "en": "Her former officer wants to sell the ship to pay the crew."
+      }
+    },
+    "stakes": {
+      "question": {
+        "es": "¿Qué pierde si fracasa?",
+        "en": "What will failure cost?"
+      },
+      "hint": {
+        "es": "Conecta el riesgo con algo que importe al personaje.",
+        "en": "Connect the risk to something the character cares about."
+      },
+      "example": {
+        "es": "Perderá la nave y la última oportunidad de reparar la confianza.",
+        "en": "She will lose the ship and her last chance to restore trust."
+      }
+    },
+    "theme": {
+      "question": {
+        "es": "¿Qué pregunta explora la historia?",
+        "en": "What question does the story explore?"
+      },
+      "hint": {
+        "es": "Plantea una tensión que admita distintas respuestas.",
+        "en": "Choose a tension with more than one possible answer."
+      },
+      "example": {
+        "es": "¿Se puede liderar sin controlar?",
+        "en": "Can you lead without controlling?"
+      }
+    },
+    "ending": {
+      "question": {
+        "es": "¿Qué decisión resuelve el conflicto?",
+        "en": "What decision resolves the conflict?"
+      },
+      "hint": {
+        "es": "Haz que el desenlace nazca de una elección y tenga un precio.",
+        "en": "Let a choice cause the ending, and give it a cost."
+      },
+      "example": {
+        "es": "Cede el mando para salvar a la tripulación, aunque pierda su título.",
+        "en": "She gives up command to save the crew, even at the cost of her title."
+      }
+    },
+    "arc": {
+      "question": {
+        "es": "¿Cómo cambia a través de sus decisiones?",
+        "en": "How do their choices change them?"
+      },
+      "hint": {
+        "es": "Conecta el comienzo, la prueba más difícil y el estado final.",
+        "en": "Connect the starting point, hardest test and final state."
+      },
+      "example": {
+        "es": "Pasa de dar órdenes a pedir ayuda cuando ya no puede salvar la nave sola.",
+        "en": "She moves from giving orders to asking for help when she cannot save the ship alone."
+      }
+    },
+    "voice": {
+      "question": {
+        "es": "¿Cómo habla y qué evita decir?",
+        "en": "How do they speak, and what goes unsaid?"
+      },
+      "hint": {
+        "es": "Describe vocabulario, ritmo y subtexto. Añade una frase de ejemplo.",
+        "en": "Describe vocabulary, rhythm and subtext. Add a sample line."
+      },
+      "example": {
+        "es": "Da órdenes breves; cuando tiene miedo pregunta por los demás: «¿Todos a bordo?»",
+        "en": "She gives short orders; when afraid, she asks about others: “Everyone aboard?”"
+      }
+    },
+    "personality": {
+      "question": {
+        "es": "¿Qué contradicción la hace interesante?",
+        "en": "What contradiction makes them interesting?"
+      },
+      "hint": {
+        "es": "Muestra rasgos mediante acciones concretas.",
+        "en": "Show traits through specific actions."
+      },
+      "example": {
+        "es": "Es valiente ante el peligro, pero evita pedir perdón.",
+        "en": "She faces danger bravely but avoids apologising."
+      }
+    },
+    "role": {
+      "question": {
+        "es": "¿Qué función cumple en la historia?",
+        "en": "What role do they play in the story?"
+      },
+      "hint": {
+        "es": "Piensa en cómo sus decisiones afectan a los demás.",
+        "en": "Consider how their choices affect others."
+      },
+      "example": {
+        "es": "Protagonista; su antigua oficial cuestiona sus decisiones.",
+        "en": "Protagonist; her former officer challenges her decisions."
+      }
+    },
+    "appearance": {
+      "question": {
+        "es": "¿Qué detalle visible cuenta algo de su vida?",
+        "en": "What visible detail reveals their history?"
+      },
+      "hint": {
+        "es": "Busca detalles útiles para reconocerla y contar la historia.",
+        "en": "Choose details that aid recognition and storytelling."
+      },
+      "example": {
+        "es": "Conserva una insignia rota de su primer mando.",
+        "en": "She keeps a broken badge from her first command."
+      }
+    },
+    "logline": {
+      "question": {
+        "es": "¿Cómo lo contarías en una frase?",
+        "en": "How would you pitch it in one sentence?"
+      },
+      "hint": {
+        "es": "Une protagonista, objetivo, oposición y riesgo.",
+        "en": "Connect protagonist, goal, opposition and stakes."
+      },
+      "example": {
+        "es": "Una capitana autoritaria debe ganarse a su antigua tripulación para recuperar su nave.",
+        "en": "An overbearing captain must win back her former crew to reclaim her ship."
+      }
+    },
+    "synopsis": {
+      "question": {
+        "es": "¿Cómo se encadenan los acontecimientos?",
+        "en": "How do events cause one another?"
+      },
+      "hint": {
+        "es": "Cuenta decisiones y consecuencias, incluido el final.",
+        "en": "Describe decisions and consequences, including the ending."
+      },
+      "example": {
+        "es": "Tras perder el mando, intenta recuperarlo por la fuerza; su fracaso la obliga a escuchar.",
+        "en": "After losing command, she tries force; her failure makes her listen."
+      }
+    },
+    "summary": {
+      "question": {
+        "es": "¿Qué hace especial este mundo?",
+        "en": "What makes this world distinctive?"
+      },
+      "hint": {
+        "es": "Relaciona el entorno con las oportunidades y los conflictos.",
+        "en": "Connect the setting to opportunities and conflicts."
+      },
+      "example": {
+        "es": "Un puerto flotante donde cada deuda se paga con años de servicio.",
+        "en": "A floating harbour where every debt costs years of service."
+      }
+    },
+    "rules": {
+      "question": {
+        "es": "¿Qué reglas tienen consecuencias?",
+        "en": "What rules have consequences?"
+      },
+      "hint": {
+        "es": "Una regla por línea. Incluye límites y costes.",
+        "en": "One rule per line. Include limits and costs."
+      },
+      "example": {
+        "es": "Nadie puede abandonar el puerto mientras tenga una deuda.",
+        "en": "Nobody may leave the harbour while in debt."
+      }
+    },
+    "period": {
+      "question": {
+        "es": "¿En qué época ocurre?",
+        "en": "When does it take place?"
+      },
+      "hint": {
+        "es": "Elige una época que afecte a la vida cotidiana.",
+        "en": "Choose a period that affects everyday life."
+      },
+      "example": {
+        "es": "Un futuro cercano tras la subida del nivel del mar.",
+        "en": "A near future after sea levels rise."
+      }
+    },
+    "society": {
+      "question": {
+        "es": "¿Quién tiene poder y quién paga el precio?",
+        "en": "Who holds power, and who pays the price?"
+      },
+      "hint": {
+        "es": "Conecta instituciones y costumbres con decisiones personales.",
+        "en": "Connect institutions and customs to personal choices."
+      },
+      "example": {
+        "es": "Los acreedores gobiernan el puerto; las familias heredan las deudas.",
+        "en": "Creditors rule the harbour; families inherit debts."
+      }
+    },
+    "dynamic": {
+      "question": {
+        "es": "¿Qué une y enfrenta a estas personas?",
+        "en": "What connects and divides these people?"
+      },
+      "hint": {
+        "es": "Incluye lo que cada una necesita de la otra.",
+        "en": "Include what each person needs from the other."
+      },
+      "example": {
+        "es": "La oficial necesita su valentía; la capitana necesita su confianza.",
+        "en": "The officer needs her courage; the captain needs her trust."
+      }
+    },
+    "evolution": {
+      "question": {
+        "es": "¿Qué puede cambiar esta relación?",
+        "en": "What could change this relationship?"
+      },
+      "hint": {
+        "es": "Busca una acción que cambie la confianza o el poder.",
+        "en": "Find an action that changes trust or power."
+      },
+      "example": {
+        "es": "La capitana entrega el mando justo cuando podría recuperarlo.",
+        "en": "The captain hands over command just when she could reclaim it."
+      }
+    },
+    "label": {
+      "question": {
+        "es": "¿Cómo definirías el vínculo?",
+        "en": "How would you describe their bond?"
+      },
+      "hint": {
+        "es": "Usa una descripción breve y concreta.",
+        "en": "Use a short, concrete description."
+      },
+      "example": {
+        "es": "Antiguas compañeras, ahora rivales.",
+        "en": "Former partners, now rivals."
+      }
+    },
+    "turn": {
+      "question": {
+        "es": "¿Qué cambia al terminar?",
+        "en": "What changes by the end?"
+      },
+      "hint": {
+        "es": "Debe cambiar un objetivo, una información, una relación o el riesgo.",
+        "en": "Change a goal, information, a relationship or the stakes."
+      },
+      "example": {
+        "es": "Descubre que la venta salvaría a las familias de su tripulación.",
+        "en": "She learns that selling the ship would save her crew’s families."
+      }
+    },
+    "action": {
+      "question": {
+        "es": "¿Qué sucede en este momento?",
+        "en": "What happens in this moment?"
+      },
+      "hint": {
+        "es": "Describe acciones que podamos ver u oír.",
+        "en": "Describe actions we can see or hear."
+      },
+      "example": {
+        "es": "Interrumpe la subasta y ofrece su insignia como garantía.",
+        "en": "She interrupts the auction and offers her badge as collateral."
+      }
+    },
+    "engine": {
+      "question": {
+        "es": "¿Qué puede generar nuevos episodios?",
+        "en": "What can generate new episodes?"
+      },
+      "hint": {
+        "es": "Busca un conflicto renovable con variaciones y consecuencias.",
+        "en": "Find a renewable conflict with variations and consequences."
+      },
+      "example": {
+        "es": "Cada encargo permite pagar una deuda, pero crea una obligación nueva.",
+        "en": "Each assignment pays one debt but creates a new obligation."
+      }
+    },
+    "promise": {
+      "question": {
+        "es": "¿Qué experiencia promete cada episodio?",
+        "en": "What does each episode promise?"
+      },
+      "hint": {
+        "es": "Combina una situación reconocible con espacio para sorprender.",
+        "en": "Combine a familiar situation with room for surprise."
+      },
+      "example": {
+        "es": "Un rescate ingenioso que pone a prueba una relación de la tripulación.",
+        "en": "An inventive rescue that tests a relationship within the crew."
+      }
+    },
+    "continuity": {
+      "question": {
+        "es": "¿Qué cambia y qué se mantiene entre episodios?",
+        "en": "What changes and what carries across episodes?"
+      },
+      "hint": {
+        "es": "Separa el conflicto del episodio del arco continuado.",
+        "en": "Separate the episode conflict from the continuing arc."
+      },
+      "example": {
+        "es": "Cada encargo termina; las deudas y las heridas de confianza continúan.",
+        "en": "Each assignment ends; debts and wounds to trust carry over."
+      }
+    },
+    "beats": {
+      "question": {
+        "es": "¿Qué pasos y giros conducen al final?",
+        "en": "What steps and turns lead to the ending?"
+      },
+      "hint": {
+        "es": "Un acontecimiento por línea. Cada uno debe causar el siguiente.",
+        "en": "One event per line. Each event should cause the next."
+      },
+      "example": {
+        "es": "Pierde la subasta.\nDescubre quién la financia.\nAcepta una alianza incómoda.",
+        "en": "She loses the auction.\nShe discovers who funds it.\nShe accepts an uneasy alliance."
+      }
+    },
+    "purpose": {
+      "question": {
+        "es": "¿Para qué necesita la historia esta escena?",
+        "en": "Why does the story need this scene?"
+      },
+      "hint": {
+        "es": "Identifica el conflicto o la revelación que aporta.",
+        "en": "Identify the conflict or revelation it adds."
+      },
+      "example": {
+        "es": "Forzar a la capitana a elegir entre su orgullo y su tripulación.",
+        "en": "Force the captain to choose between pride and her crew."
+      }
+    },
+    "entryState": {
+      "question": {
+        "es": "¿Cómo llegan los personajes?",
+        "en": "What state do the characters arrive in?"
+      },
+      "hint": {
+        "es": "Describe qué saben, quieren y sienten al entrar.",
+        "en": "Describe what they know, want and feel on entry."
+      },
+      "example": {
+        "es": "Cree que su oficial la traicionó; viene a exigir el mando.",
+        "en": "She believes her officer betrayed her and comes to demand command."
+      }
+    },
+    "exitState": {
+      "question": {
+        "es": "¿Cómo salen de la escena?",
+        "en": "What state do they leave in?"
+      },
+      "hint": {
+        "es": "La salida debe reflejar una consecuencia concreta.",
+        "en": "The exit should show a specific consequence."
+      },
+      "example": {
+        "es": "Comprende la deuda y propone compartir el mando.",
+        "en": "She understands the debt and proposes sharing command."
+      }
+    }
+  },
+  "scopes": {
+    "story": [
+      {
+        "id": "premise",
+        "path": "premise",
+        "advanced": false
+      },
+      {
+        "id": "goal",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "conflict",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "stakes",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "theme",
+        "path": "theme",
+        "advanced": true
+      },
+      {
+        "id": "ending",
+        "path": "ending",
+        "advanced": true
+      },
+      {
+        "id": "logline",
+        "path": "logline",
+        "advanced": true
+      },
+      {
+        "id": "synopsis",
+        "path": "synopsis",
+        "advanced": true
+      }
+    ],
+    "character": [
+      {
+        "id": "desire",
+        "path": "desire",
+        "advanced": false
+      },
+      {
+        "id": "need",
+        "path": "need",
+        "advanced": false
+      },
+      {
+        "id": "flaw",
+        "path": "flaw",
+        "advanced": false
+      },
+      {
+        "id": "conflict",
+        "path": "conflict",
+        "advanced": true
+      },
+      {
+        "id": "arc",
+        "path": "arc",
+        "advanced": true
+      },
+      {
+        "id": "personality",
+        "path": "personality",
+        "advanced": true
+      },
+      {
+        "id": "voice",
+        "path": "voice",
+        "advanced": true
+      },
+      {
+        "id": "role",
+        "path": "role",
+        "advanced": true
+      },
+      {
+        "id": "appearance",
+        "path": "appearance",
+        "advanced": true
+      }
+    ],
+    "world": [
+      {
+        "id": "summary",
+        "path": "summary",
+        "advanced": false
+      },
+      {
+        "id": "rules",
+        "path": "rules",
+        "advanced": false,
+        "codec": "lines"
+      },
+      {
+        "id": "society",
+        "path": "society",
+        "advanced": false
+      },
+      {
+        "id": "period",
+        "path": "period",
+        "advanced": true
+      }
+    ],
+    "relationship": [
+      {
+        "id": "dynamic",
+        "path": "dynamic",
+        "advanced": false
+      },
+      {
+        "id": "evolution",
+        "path": "evolution",
+        "advanced": false
+      },
+      {
+        "id": "label",
+        "path": "label",
+        "advanced": true
+      }
+    ],
+    "beat": [
+      {
+        "id": "goal",
+        "path": "goal",
+        "advanced": false
+      },
+      {
+        "id": "conflict",
+        "path": "conflict",
+        "advanced": false
+      },
+      {
+        "id": "turn",
+        "path": "turn",
+        "advanced": false
+      },
+      {
+        "id": "action",
+        "path": "summary",
+        "advanced": true
+      }
+    ],
+    "series": [
+      {
+        "id": "premise",
+        "path": "premise",
+        "advanced": false
+      },
+      {
+        "id": "engine",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "promise",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "continuity",
+        "path": null,
+        "advanced": true
+      },
+      {
+        "id": "logline",
+        "path": "logline",
+        "advanced": true
+      },
+      {
+        "id": "goal",
+        "path": null,
+        "advanced": true
+      },
+      {
+        "id": "conflict",
+        "path": null,
+        "advanced": true
+      },
+      {
+        "id": "stakes",
+        "path": null,
+        "advanced": true
+      }
+    ],
+    "seriesCharacter": [
+      {
+        "id": "desire",
+        "path": "desire",
+        "advanced": false
+      },
+      {
+        "id": "need",
+        "path": "need",
+        "advanced": false
+      },
+      {
+        "id": "flaw",
+        "path": "flaw",
+        "advanced": false
+      },
+      {
+        "id": "conflict",
+        "path": null,
+        "advanced": true
+      },
+      {
+        "id": "arc",
+        "path": "longArc",
+        "advanced": true
+      },
+      {
+        "id": "personality",
+        "path": "personality",
+        "advanced": true
+      },
+      {
+        "id": "voice",
+        "path": "voiceAndDialogue",
+        "advanced": true
+      },
+      {
+        "id": "role",
+        "path": "role",
+        "advanced": true
+      },
+      {
+        "id": "appearance",
+        "path": "appearance",
+        "advanced": true
+      }
+    ],
+    "seriesWorld": [
+      {
+        "id": "summary",
+        "path": "worldSummary",
+        "advanced": false
+      },
+      {
+        "id": "rules",
+        "path": "immutableRules",
+        "advanced": false,
+        "codec": "rules"
+      },
+      {
+        "id": "society",
+        "path": null,
+        "advanced": true
+      }
+    ],
+    "season": [
+      {
+        "id": "premise",
+        "path": "premise",
+        "advanced": false
+      },
+      {
+        "id": "arc",
+        "path": "arc",
+        "advanced": false
+      },
+      {
+        "id": "stakes",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "ending",
+        "path": null,
+        "advanced": true
+      }
+    ],
+    "episode": [
+      {
+        "id": "premise",
+        "path": "premise",
+        "advanced": false
+      },
+      {
+        "id": "goal",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "conflict",
+        "path": null,
+        "advanced": false
+      },
+      {
+        "id": "stakes",
+        "path": null,
+        "advanced": true
+      },
+      {
+        "id": "ending",
+        "path": null,
+        "advanced": true
+      },
+      {
+        "id": "beats",
+        "path": "outline.beats",
+        "advanced": true,
+        "codec": "lines"
+      },
+      {
+        "id": "logline",
+        "path": "logline",
+        "advanced": true
+      }
+    ],
+    "scene": [
+      {
+        "id": "purpose",
+        "path": "purpose",
+        "advanced": false
+      },
+      {
+        "id": "entryState",
+        "path": "entryState",
+        "advanced": false
+      },
+      {
+        "id": "exitState",
+        "path": "exitState",
+        "advanced": false
+      },
+      {
+        "id": "beats",
+        "path": "beats",
+        "advanced": true,
+        "codec": "actions"
+      }
+    ]
+  }
+}

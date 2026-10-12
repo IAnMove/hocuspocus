@@ -26,8 +26,9 @@ Two checks:
   A. Forbidden vulgar prose / stale sanitization markers in tracked text files,
      with an allowlist for upstream code that legitimately uses the vocabulary.
   B. Gitignore-boundary assertion — never-publish artifacts (a leftover
-     supplement pack, finetunes/*.json, *.guide.md, *.civitai.json) must NOT
-     be tracked.
+     supplement pack, finetunes/*.json, *.guide.md, *.civitai.json, and the
+     logs / song / pipeline / concat / joke-clip files of personal generation
+     sessions under scripts/) must NOT be tracked.
 
 Run it before publishing a snapshot (Phase 5), or wire it into CI / a pre-commit
 hook once the public repo exists.
@@ -131,11 +132,6 @@ ALLOWED_PATH_FRAGMENTS = [
     "app/README.md",
     # Public safety-rules file — lists what NOT to do (responsible)
     "nsfw_off_safety_rules.md",
-    # Public minor-safety scanner — forbidden vocabulary lives in inline
-    # tuples by design (see safety_scan.py docstring) so the rule cannot
-    # be silenced by removing a data file. Verifier must not flag it.
-    "services/director/safety_scan.py",
-    "tests/test_safety_scan.py",
     "tests/test_prompt_polish_fixes.py",
     # Polish layer's regex sanitizers and LoRA-trigger-guidance text
     # legitimately mention act / anatomy vocabulary to teach the LLM when each
@@ -170,6 +166,19 @@ FORBIDDEN_TRACKED_PATTERNS = [
      "generated per-LoRA prompt guide (must stay gitignored)"),
     (re.compile(r"\.civitai\.json$"),
      "CivitAI metadata sidecar (must stay gitignored)"),
+    # Personal generation sessions run from scripts/ (see .gitignore). Logs are
+    # never source; the JSON/TXT patterns are the song specs, pipeline state,
+    # ffmpeg concat lists and joke-clip queues those sessions write.
+    (re.compile(r"(^|/)scripts/[^/]*\.log$"),
+     "generation session log in scripts/ (personal, must stay gitignored)"),
+    (re.compile(r"(^|/)scripts/[^/]*_song\.json$"),
+     "song spec from a personal generation session (must stay gitignored)"),
+    (re.compile(r"(^|/)scripts/[^/]*_pipeline\.json$"),
+     "pipeline state from a personal generation session (must stay gitignored)"),
+    (re.compile(r"(^|/)scripts/[^/]*_concat\.txt$"),
+     "ffmpeg concat list from a personal generation session (must stay gitignored)"),
+    (re.compile(r"(^|/)scripts/joke_[^/]*\.json$"),
+     "joke-clip queue from a personal generation session (must stay gitignored)"),
 ]
 
 

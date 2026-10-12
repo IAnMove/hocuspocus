@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { ImagePreview } from '../common/ImagePreview'
+import { useUiTranslation } from '../../i18n'
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import type { OutputFile } from '../../types'
 import { galleryThumbnailUrl, tileThumbnailSize } from './galleryThumbnail'
@@ -43,6 +44,7 @@ export const GalleryTile = memo(function GalleryTile({
   // Not every kind publishes a thumbnail — audio and some 3D outputs do not.
   // Without this the tile is a black rectangle with no way to tell an
   // unrenderable kind from a broken file.
+  const { t } = useUiTranslation('activity')
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null)
   const [retry, setRetry] = useState({ src: '', count: 0 })
@@ -112,8 +114,10 @@ export const GalleryTile = memo(function GalleryTile({
           className={`h-full w-full transition-opacity duration-200 [-webkit-touch-callout:none] ${cover ? 'object-cover' : 'object-contain'} ${loaded ? 'opacity-100' : 'opacity-0'}`}
         />
       )}
-      <span className="absolute left-1.5 top-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[8.5px] font-semibold tracking-wider text-white/85 backdrop-blur-sm">
-        {tag}
+      <span className="absolute left-1.5 top-1.5 flex gap-1">
+        <span className="rounded bg-black/65 px-1.5 py-0.5 text-[8.5px] font-semibold tracking-wider text-white/85 backdrop-blur-sm">{tag}</span>
+        {file.origin && <span data-origin={file.origin.actor} title={t(`origin.${file.origin.actor}Title`)}
+          className="rounded bg-fuchsia-950/80 px-1.5 py-0.5 text-[8.5px] font-semibold text-fuchsia-100 backdrop-blur-sm">{t(`origin.${file.origin.actor}`)}</span>}
       </span>
       {file.favorite && !selecting && (
         <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-300" />

@@ -143,3 +143,43 @@ def test_turning_access_off_disables_oauth_tokens(tmp_path):
     ("https://x.example.com/api/v1/mcp/series/extra", "all")])
 def test_the_resource_picks_the_profile(resource, expected):
     assert profile_of(resource) == expected
+
+
+def test_public_oauth_endpoints_refuse_huge_or_malformed_bodies_and_flooded_registrations(tmp_path):
+    client, oauth = app(tmp_path)
+    assert client.post("/oauth/register", content=b"{" , headers={"Content-Type": "application/json"}).status_code == 400
+    token = client.post("/oauth/token", content="{", headers={"Content-Type": "application/json"})
+    assert token.status_code == 400 and token.json()["error"] == "invalid_request"
+    big = client.post("/oauth/token", content=b"a=" + b"b" * (70 * 1024), headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert big.status_code == 413 and big.json()["error"] == "invalid_request"
+    for _ in range(10):
+        assert client.post("/oauth/register", json={"redirect_uris": [REDIRECT]}).status_code == 201
+    flooded = client.post("/oauth/register", json={"redirect_uris": [REDIRECT]})
+    assert flooded.status_code == 429 and flooded.json()["error"] == "rate_limited"
+
+
+def test_a_connected_client_is_never_evicted_by_new_registrations(tmp_path):
+    client, oauth = app(tmp_path)
+    client_id, _code, token = sign_in(client)
+    access = token["access_token"]
+    assert oauth.verify(access, "series")
+    now = [1000.0]
+    oauth.now = lambda: now[0]
+    for index in range(40):
+        now[0] += 1
+        oauth.registrations.clear()
+        oauth.register({"redirect_uris": [REDIRECT]}, peer=f"peer-{index}")
+    assert oauth.client(client_id)["name"], "the client holding a live token stays registered"
+    assert oauth.verify(access, "series")
+
+
+def test_a_key_with_non_ascii_bytes_is_refused_not_a_server_error(tmp_path):
+    client, _oauth = app(tmp_path)
+    registered = client.post("/oauth/register", json={"redirect_uris": [REDIRECT]}).json()
+    params = {"response_type": "code", "client_id": registered["client_id"], "redirect_uri": REDIRECT, "code_challenge": CHALLENGE,
+              "code_challenge_method": "S256", "state": "s", "resource": "https://hocus.example.com/api/v1/mcp/series", "key": "clav\u00e9"}
+    response = client.post("/oauth/authorize", data=params, follow_redirects=False)
+    assert response.status_code == 403 and "<html" in response.text.lower(), "a wrong key, not a traceback"
+    raw = client.post("/api/v1/mcp/series", headers={"Authorization": "Bearer clav\xe9".encode("latin-1")},
+                      json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+    assert raw.status_code == 401

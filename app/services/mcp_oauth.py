@@ -32,6 +32,8 @@ ACCESS_SECONDS = 3600
 REFRESH_SECONDS = 30 * 24 * 3600
 CODE_SECONDS = 120
 MAX_CLIENTS = 32
+# Registrations per peer per window: a connector registers once; a flood used to evict the real client.
+REGISTER_LIMIT, REGISTER_WINDOW = 10, 600
 MAX_FAILURES_PER_MINUTE = 5
 
 
@@ -71,6 +73,7 @@ class McpOAuth:
         self.lock = threading.RLock()
         self.codes: dict[str, dict[str, Any]] = {}
         self.failures: list[float] = []
+        self.registrations: dict[str, list[float]] = {}
 
     # Storage -------------------------------------------------------------
     def _read(self) -> dict[str, Any]:
@@ -90,7 +93,16 @@ class McpOAuth:
             temporary.unlink(missing_ok=True)
 
     # Client registration (RFC 7591) ---------------------------------------
-    def register(self, body: dict[str, Any]) -> dict[str, Any]:
+    def _throttle_register(self, peer: str) -> None:
+        now = self.now()
+        recent = [t for t in self.registrations.get(peer, []) if now - t < REGISTER_WINDOW]
+        if len(recent) >= REGISTER_LIMIT:
+            raise OAuthError("rate_limited", "Too many client registrations; try again later", 429)
+        recent.append(now)
+        self.registrations[peer] = recent
+
+    def register(self, body: dict[str, Any], peer: str = "") -> dict[str, Any]:
+        self._throttle_register(peer or "-")
         uris = body.get("redirect_uris")
         if not isinstance(uris, list) or not uris or len(uris) > 8 or not all(isinstance(u, str) and _redirect_allowed(u) for u in uris):
             raise OAuthError("invalid_redirect_uri", "redirect_uris must be https URLs (or http on localhost)")
@@ -100,8 +112,16 @@ class McpOAuth:
             state = self._read()
             clients = state["clients"]
             clients[client_id] = {"name": name, "redirect_uris": uris, "created": self.now()}
-            for old in sorted(clients, key=lambda key: clients[key]["created"])[:-MAX_CLIENTS]:
-                clients.pop(old, None)
+            # Room is made from clients nobody holds a live token for; a connected client is never evicted.
+            live = {entry.get("client") for entry in state["tokens"].values() if entry.get("expires", 0) > self.now()}
+            for old in sorted(clients, key=lambda key: clients[key]["created"]):
+                if len(clients) <= MAX_CLIENTS:
+                    break
+                if old != client_id and old not in live:
+                    clients.pop(old, None)
+            if len(clients) > MAX_CLIENTS:
+                clients.pop(client_id, None)
+                raise OAuthError("too_many_clients", "Every registered client is in use; revoke one first", 429)
             self._write(state)
         return {"client_id": client_id, "client_name": name, "redirect_uris": uris, "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"], "token_endpoint_auth_method": "none", "client_id_issued_at": int(self.now())}
@@ -139,7 +159,7 @@ class McpOAuth:
             self.failures = [t for t in self.failures if now - t < 60]
             if len(self.failures) >= MAX_FAILURES_PER_MINUTE:
                 raise OAuthError("slow_down", "Too many wrong keys; wait a minute", 429)
-            if not secrets.compare_digest(key.strip(), installed):
+            if not secrets.compare_digest(key.strip().encode("utf-8", "surrogateescape"), installed.encode("utf-8")):
                 self.failures.append(now)
                 raise OAuthError("access_denied", "That is not the HocusPocus MCP key", 403)
             code = secrets.token_urlsafe(32)

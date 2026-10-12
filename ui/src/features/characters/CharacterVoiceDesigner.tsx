@@ -5,7 +5,7 @@ import { useStore } from '../../stores/useStore'
 import { downloadModel } from '../../api/client'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import { SPOKEN_LANGUAGES, type SpokenLanguage } from '../../lib/speechLanguage'
-import { designVoiceCandidates, referenceVoice, REFERENCE_VOICE_MODEL, SAMPLE_TEXT, VOICE_DESIGN_MODEL, type DesignedVoice } from './voiceDesign'
+import { DEFAULT_VOICE_ENGINE, designVoiceCandidates, referenceVoice, SAMPLE_TEXT, VOICE_ENGINES, type DesignedVoice, type VoiceEngine } from './voiceDesign'
 
 const control = 'min-h-10 rounded-lg border border-border bg-bg-primary px-3 text-sm disabled:opacity-40'
 
@@ -13,9 +13,11 @@ function Metrics({ voice }: { voice: DesignedVoice }) {
   const { t } = useUiTranslation('characters')
   if (!voice.check) return null
   const { medianPitchHz, wordsPerSecond, wer, warnings } = voice.check
+  const rate = voice.accent?.thetaRate == null ? 0 : Math.round(voice.accent.thetaRate * 100)
   return <div className="text-xs text-text-secondary">
     <p>{t('voiceDesigner.metrics', { pitch: medianPitchHz ? Math.round(medianPitchHz) : '—', pace: wordsPerSecond.toFixed(1), errors: Math.round(wer * 100) })}</p>
     {warnings.map(warning => <p key={warning} className="text-amber-200">{warning}</p>)}
+    {voice.accent?.verdict === 'seseo' && <p className="text-amber-200">{t('voiceDesigner.accentSeseo', { rate, positions: voice.accent.positions })}</p>}
   </div>
 }
 
@@ -27,11 +29,14 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
   const { t } = useUiTranslation('characters')
   const models = useStore(state => state.models)
   const [language, setLanguage] = useState<SpokenLanguage>(initialLanguage)
+  const [accent, setAccent] = useState<'' | 'castilian'>('')
+  const [engine, setEngine] = useState<VoiceEngine>(DEFAULT_VOICE_ENGINE)
   const [description, setDescription] = useState(''), [text, setText] = useState(SAMPLE_TEXT[initialLanguage] ?? '')
   const [voices, setVoices] = useState<DesignedVoice[]>([]), [busy, setBusy] = useState(''), [error, setError] = useState(''), [message, setMessage] = useState('')
   const operation = useRef<AbortController | null>(null)
   useEffect(() => () => operation.current?.abort(), [])
-  const missing = [VOICE_DESIGN_MODEL, REFERENCE_VOICE_MODEL].filter(type => models.some(model => model.model_type === type && model.is_downloaded === false))
+  const { design: designModel, reference: referenceModel } = VOICE_ENGINES[engine]
+  const missing = [designModel, referenceModel].filter(type => models.some(model => model.model_type === type && model.is_downloaded === false))
 
   const changeLanguage = (next: SpokenLanguage) => {
     if (!text.trim() || text === SAMPLE_TEXT[language]) setText(SAMPLE_TEXT[next] ?? '')
@@ -45,11 +50,11 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
     finally { if (!controller.signal.aborted) { operation.current = null; setBusy('') } }
   }
   const design = () => run('design', async signal => {
-    const found = await designVoiceCandidates({ workspace, description: description.trim(), text: text.trim(), language, signal, onUpdate: setVoices })
+    const found = await designVoiceCandidates({ workspace, description: description.trim(), text: text.trim(), language, signal, engine, onUpdate: setVoices, ...(accent ? { accent } : {}) })
     setMessage(t(found.some(voice => voice.status === 'ready') ? 'voiceDesigner.pick' : 'voiceDesigner.noneReady'))
   })
   const use = (voice: DesignedVoice) => run('use', async () => {
-    await onUse(language, referenceVoice(voice, { name: `${characterName} (${language})`, text: text.trim(), language }))
+    await onUse(language, referenceVoice(voice, { name: `${characterName} (${language})`, text: text.trim(), language }, engine))
     setMessage(t('voiceDesigner.saved', { language: t(`voiceDesigner.languages.${language}`) }))
   })
   const download = () => run('download', async () => {
@@ -64,17 +69,27 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
       <span>{t('voiceDesigner.missing', { models: missing.join(', ') })}</span>
       <button type="button" disabled={blocked} onClick={() => void download()} className={`${control} inline-flex items-center gap-1`}><Download size={14} />{t('voiceDesigner.download')}</button>
     </div>}
-    <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
+    <label className="block text-xs text-text-secondary">{t('voiceDesigner.engine')}
+      <select value={engine} disabled={blocked} data-testid="voice-design-engine" onChange={event => { setEngine(event.target.value as VoiceEngine); setVoices([]) }}
+        className={`${control} mt-1 w-full md:w-auto`}>
+        {(Object.keys(VOICE_ENGINES) as VoiceEngine[]).map(key => <option key={key} value={key}>{t(`voiceDesigner.engines.${key}`)}</option>)}
+      </select></label>
+    <div className="grid gap-3 md:grid-cols-[12rem_12rem_minmax(0,1fr)]">
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.language')}
         <select value={language} disabled={blocked} onChange={event => changeLanguage(event.target.value as SpokenLanguage)} className={`${control} mt-1 w-full`}>
           {SPOKEN_LANGUAGES.map(code => <option key={code} value={code}>{t(`voiceDesigner.languages.${code}`)}</option>)}
+        </select></label>
+      <label className="block text-xs text-text-secondary">{t('voiceDesigner.accent')}
+        <select value={accent} disabled={blocked} onChange={event => setAccent(event.target.value as '' | 'castilian')} className={`${control} mt-1 w-full`}>
+          <option value="">{t('voiceDesigner.accentNone')}</option>
+          <option value="castilian">{t('voiceDesigner.accentCastilian')}</option>
         </select></label>
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.description')}
         <textarea value={description} maxLength={600} rows={2} disabled={blocked} onChange={event => setDescription(event.target.value)} placeholder={t('voiceDesigner.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
     </div>
     <label className="block text-xs text-text-secondary">{t('voiceDesigner.text')}
       <textarea value={text} maxLength={600} rows={2} disabled={blocked} onChange={event => setText(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
-    <button type="button" disabled={blocked || missing.includes(VOICE_DESIGN_MODEL) || !description.trim() || !text.trim()} onClick={() => void design()} className={`${control} inline-flex items-center gap-2 text-cyan-200`}>
+    <button type="button" disabled={blocked || missing.includes(designModel) || !description.trim() || !text.trim()} onClick={() => void design()} className={`${control} inline-flex items-center gap-2 text-cyan-200`}>
       {busy === 'design' ? <Loader2 size={15} className="animate-spin" /> : <Mic size={15} />}{t('voiceDesigner.create')}</button>
     {voices.length > 0 && <ol className="space-y-2">
       {voices.map((voice, index) => <li key={voice.id} className="rounded-lg border border-border p-2" data-testid={`designed-${voice.id}`}>

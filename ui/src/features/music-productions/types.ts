@@ -7,6 +7,19 @@ export interface MusicProductionCard {
   montage: string | null
   video: string | null
   editable: { montage?: string | null; manifest?: string; scene_docs?: number; warnings?: number } | null
+  /** The newest `production.publish` page (`<id>.publications.json`), or null when it was never published. */
+  publication?: MusicProductionPublication | null
+}
+
+export interface MusicProductionPublication {
+  page: string
+  /** A review preview is labelled as not approved for release. */
+  mode: 'release' | 'preview'
+  published_at?: number
+  /** user, agent (MCP) or wizard. */
+  published_by?: string
+  /** How many pages this production has been published as. */
+  count?: number
 }
 
 /** One row of `<id>.shots.json`, as `write_manifest` stored it. */

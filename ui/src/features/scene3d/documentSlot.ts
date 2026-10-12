@@ -11,16 +11,21 @@ import { ATMOS_SET_IDS, isAtmosId } from './atmos/registryIds.ts'
 import { parseClipCues } from './clipCues.ts'
 import { parseHold } from './handHold.ts'
 import type { Scene3DDressing, Scene3DSlot } from './types.ts'
+import { isMotionLab } from './motionlab/types'
 
 const DRESSINGS = new Set<Scene3DDressing>(['none', 'street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino', 'pixel-lake', 'pixel-peaks', 'pixel-gallery', 'pixel-city', 'pixel-desert', 'pixel-coast', 'pixel-forest', 'pixel-viaduct', 'pixel-volcano', 'pixel-drivein', 'pixel-garden', 'pixel-reef', 'pixel-valley', 'pixel-fair', 'pixel-village', 'pixel-falls', 'pixel-orbit', 'pixel-tulips', 'pixel-alley', 'pixel-castle', 'pixel-beach', 'pixel-lanterns', 'pixel-window', 'pixel-express', 'pixel-daycycle', 'pixel-eclipse', 'pixel-seasons', 'pixel-cathedral', 'pixel-koi', 'pixel-caravan', 'pixel-synthwave', 'pixel-monsoon', 'pixel-marsh', 'pixel-launch', 'pixel-grotto', 'pixel-starry', 'pixel-dawnmist', 'pixel-motel', 'pixel-tidal', 'pixel-mirage', 'pixel-meadow', 'pixel-fjord', 'pixel-clockwork', 'pixel-orrery', 'pixel-rainbow', 'pixel-risingcity', 'pixel-abyss', 'pixel-blizzard', 'pixel-lantern', 'pixel-empire', 'pixel-startrails', 'pixel-wheat', 'pixel-pool', 'pixel-piazza', ...ATMOS_SET_IDS])
 
 export function parseDressing(value?: string): Scene3DDressing | undefined {
-  if (value && (DRESSINGS.has(value as Scene3DDressing) || isAtmosId(value))) return value as Scene3DDressing
+  if (value && (DRESSINGS.has(value as Scene3DDressing) || isAtmosId(value) || isMotionLab(value))) return value as Scene3DDressing
   return undefined
 }
 
 function textureRepeat(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(16, Math.max(1, value)) : undefined
+}
+
+function drift(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value !== 0 ? Math.min(10, Math.max(-10, value)) : undefined
 }
 
 function parseSlotMedia(media: Scene3DSlot['media']): Scene3DSlot['media'] {
@@ -61,7 +66,8 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     appearance: parseAppearance(slot.appearance),
     imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
     surface: parseSurface(slot.surface),
-    grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat),
+    grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat), drift: drift(slot.drift),
+    inPlace: slot.inPlace === true ? true : undefined,
     performance: parsePerformance(slot.performance),
     rhythm: parseSlotRhythm(slot.rhythm),
   }
