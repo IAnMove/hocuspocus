@@ -629,15 +629,17 @@ function restoreExportCutouts(world: GpuWorld) {
   exportCutoutVisibility.delete(world)
 }
 
-/** An image cutout with no picture is an editor placeholder. An export draws nothing in its
- * place, so a shot whose figure was left empty still renders as a clean plate. A template
+/** A cutout with no picture is an editor placeholder, whether the slot waits for an image or for a
+ * model (a room template's cast marks are model slots with a cutout surface). An export draws nothing
+ * in its place, so a shot whose figure was left empty still renders as a clean plate. A template
  * thumbnail (`exportPlaceholders`) keeps the placeholder, so the picture shows where the cast stands. */
 export function hideEmptyCutoutsInExport(world: GpuWorld, slots: readonly Scene3DSlot[]) {
   if (!world.exporting || world.exportPlaceholders) { restoreExportCutouts(world); return }
   let hidden = exportCutoutVisibility.get(world)
   if (!hidden) { hidden = new Map(); exportCutoutVisibility.set(world, hidden) }
   for (const slot of slots) {
-    const empty = slot.media === 'image' && slot.surface === 'cutout' && !slot.sourceUrl && !slot.screen?.sourceUrl
+    const empty = (slot.media === 'image' || slot.media === 'model3d') && slot.surface === 'cutout' && !slot.sourceUrl
+      && !slot.screen?.sourceUrl
     const gpu = empty ? world.slots.get(slot.id) : undefined
     if (gpu) {
       if (!hidden.has(gpu.root)) hidden.set(gpu.root, gpu.root.visible)

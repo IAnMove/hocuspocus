@@ -162,17 +162,19 @@ test('the code-rain shot rains over its whole length behind an optional tinted c
 
 test('an export hides a cutout with no picture and keeps every other object', () => {
   const slot = (id: string, patch: Partial<Scene3DSlot>) => ({ id, slot: 'subject_1', media: 'image', surface: 'cutout', sourceUrl: '', clip: null, position: [0, 0, 0], rotationY: 0, scale: 1, ...patch }) as Scene3DSlot
-  const slots = [slot('empty', {}), slot('bound', { sourceUrl: '/a.png' }), slot('model', { media: 'model3d', surface: undefined }), slot('wall', { surface: 'wall' })]
+  const slots = [slot('empty', {}), slot('bound', { sourceUrl: '/a.png' }), slot('model', { media: 'model3d', surface: undefined }), slot('wall', { surface: 'wall' }),
+    // A room template's cast mark: a model slot with a cutout surface, left empty in an establishing shot.
+    slot('mark', { media: 'model3d' }), slot('cast', { media: 'model3d', sourceUrl: '/kit.png' })]
   const world = (exporting: boolean) => ({ exporting, slots: new Map(slots.map(item => [item.id, { root: { visible: true } }])) }) as unknown as GpuWorld
   const visible = (target: GpuWorld) => slots.map(item => target.slots.get(item.id)!.root.visible)
   const exported = world(true), editing = world(false)
   hideEmptyCutoutsInExport(exported, slots)
   hideEmptyCutoutsInExport(editing, slots)
-  assert.deepEqual(visible(exported), [false, true, true, true])
-  assert.deepEqual(visible(editing), [true, true, true, true], 'the editor keeps the placeholder')
+  assert.deepEqual(visible(exported), [false, true, true, true, false, true], 'an empty cast mark draws no coloured box')
+  assert.deepEqual(visible(editing), [true, true, true, true, true, true], 'the editor keeps the placeholder')
   exported.exporting = false
   hideEmptyCutoutsInExport(exported, slots)
-  assert.deepEqual(visible(exported), [true, true, true, true], 'the same world restores placeholders after export')
+  assert.deepEqual(visible(exported), [true, true, true, true, true, true], 'the same world restores placeholders after export')
   exported.slots.get('empty')!.root.visible = false
   exported.exporting = true
   hideEmptyCutoutsInExport(exported, slots)
