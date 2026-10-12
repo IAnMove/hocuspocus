@@ -1,7 +1,7 @@
 {
   "sheet": {
     "stillAlt": "Library identity of {{name}}",
-    "ttsVoice": "TTS · Qwen3 {{voiceId}}",
+    "ttsVoice": "TTS · {{engine}} {{voiceId}}",
     "ttsNone": "No TTS voice on this character yet",
     "linkedHint": "Look and TTS come from the library character. Acting notes stay on this story or series.",
     "languageVoices": "Voices by language: {{voices}}",
@@ -657,6 +657,11 @@
   },
   "voiceDesigner": {
     "hint": "Describe the voice by its traits. Start with “Male voice.” or “Female voice.”, then age, pitch, pace and mood. A calm sample line gives a steadier voice. The pitch check follows the first word that names a man, a woman or a child: 75–175 Hz for a man, 150–320 for a woman and 220–400 for a child.",
+    "engine": "Engine",
+    "engines": {
+      "qwen3": "Qwen3 VoiceDesign",
+      "voxcpm2": "VoxCPM2 (48 kHz, 30 languages)"
+    },
     "missing": "Voice design needs these models: {{models}}.",
     "download": "Download",
     "downloading": "Download started. Try again when it finishes.",

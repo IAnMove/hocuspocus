@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from services.character_speech_definition import is_reference_voice
 from services.command_input_errors import field_error as _field_error, reject_input as _reject_input  # noqa: F401 (tests)
 
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
@@ -537,7 +538,7 @@ def _kit_summary(kit: dict[str, Any]) -> dict[str, Any]:
     def label(voice: Any) -> str | None:
         if not isinstance(voice, dict):
             return None
-        return voice.get("name") if voice.get("model") == "qwen3_tts_base" else voice.get("voiceId")
+        return voice.get("name") if is_reference_voice(voice) else voice.get("voiceId")
     return {"id": kit.get("id"), "name": kit.get("name"), "style": kit.get("style"),
             "poses": ["base", *sorted(kit.get("poses") or {})] if kit.get("base") else sorted(kit.get("poses") or {}),
             "mouths": sorted(kit.get("mouth") or {}), "voice": label(kit.get("voice")),

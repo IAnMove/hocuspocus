@@ -506,6 +506,12 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
+      "file": "tests/test_voxcpm2_tts.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "symbol_importable",
+      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+    },
+    {
       "file": "tests/test_wangp_frame_extraction.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",

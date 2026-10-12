@@ -76,8 +76,9 @@ without creating or moving files. See the
 9. **Voice is local only.** Presets use `qwen3_tts_customvoice` plus a named
    id (`vivian`, `serena`, `uncle_fu`, `dylan`, `eric`, `ryan`, `aiden`,
    `ono_anna`, `sohee`) and optional direction (max 1000 chars). Custom
-   recordings use `qwen3_tts_base` with `voiceId: "reference"`. Do not store
-   credentials on the kit.
+   recordings use `qwen3_tts_base` or `voxcpm2_base` with `voiceId: "reference"`;
+   a VoxCPM2 recording may add a speaking style (`instructions`, max 300 chars).
+   Do not store credentials on the kit.
 
 ---
 
@@ -93,8 +94,8 @@ CharacterKit
   eyes { open?, blink? }
   voice? PresetCharacterVoice | CustomCharacterVoice
     preset: { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
-    custom: { provider: local, model: qwen3_tts_base, voiceId: "reference",
-              name, referenceAudio, transcript, language }
+    custom: { provider: local, model: qwen3_tts_base | voxcpm2_base, voiceId: "reference",
+              name, referenceAudio, transcript, language, instructions? (VoxCPM2 only) }
   lookNotes?
   speech3d? { model, digest, settings? }
   anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources? } }
@@ -211,10 +212,12 @@ does not create audio.
 **Named preset** (`qwen3_tts_customvoice`): pick a catalog speaker and optional
 acting notes. Tijeral ships these presets; they are not cloned actors.
 
-**Add your own voice** (`qwen3_tts_base`):
+**Add your own voice** (`qwen3_tts_base` or `voxcpm2_base`):
 
 1. Choose **Add your own voice: import or record**.
-2. Name the voice (max 120 chars).
+2. Name the voice (max 120 chars) and pick the **Voice engine**: Qwen3, or
+   VoxCPM2 (48 kHz, 30 languages, optional **Speaking style** such as
+   «susurrando»; with a style VoxCPM2 clones from the sample alone).
 3. Import WAV/MP3/M4A/FLAC/OGG (or record on HTTPS / localhost).
 4. Enter the **exact transcript** of that sample (max 4000 chars). This is
    not the dialogue to generate later.

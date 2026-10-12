@@ -188,7 +188,7 @@ The gallery loads bounded 320/640 px previews; opening the details dialog loads 
 |---|---|
 | Video | MiniMax H3 (picture + stereo audio), Wan 2.1 / 2.2, Hunyuan Video, LTX-2.3 |
 | Image | Flux 2 Klein, Qwen Image 2.1, Qwen Image Edit |
-| Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS, MMAudio SFX |
+| Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS / VoxCPM2, MMAudio SFX |
 
 **Qwen Image 2.1 Viggle Turbo v0.2.1** is available in the image model selector for text-to-image and instruction editing with up to three input images (including the source). It reuses the Qwen 2.1 INT8 base files and downloads the pinned rank-256 adapter automatically on first use. Its six-step schedule and CFG 1 are fixed; start at 1024×1024. The LoRA runs without merging into the quantized base. This is a preview: complex edits can be less faithful, and 2K/RGBA/masked editing are not validated by its authors. [Model card and Qwen Research License](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo).
 
@@ -443,7 +443,7 @@ The dataset card does not name a license. We keep author, repo and revision on e
 | **MMAudio** | Ambient audio | [MMAudio](https://github.com/hkchengrex/MMAudio) |
 | **seed-vc** (Plachta) | Voice conversion, GPL-3.0, cloned at install from [maestro-seedvc](https://github.com/Blizaine/maestro-seedvc) | [seed-vc](https://github.com/Plachta/seed-vc) |
 
-Other vendored pieces keep their own licenses, including BigVGAN (MIT), FlashVSR sparse-sage (Apache-2.0), IndexTTS2, Rhubarb lip-sync, BS-RoFormer / audio-separator, Three.js, UniRig (optional), and Tencent’s Hunyuan checkouts. Read those `LICENSE` files before you redistribute.
+Other vendored pieces keep their own licenses, including BigVGAN (MIT), FlashVSR sparse-sage (Apache-2.0), VoxCPM2 (Apache-2.0), IndexTTS2, Rhubarb lip-sync, BS-RoFormer / audio-separator, Three.js, UniRig (optional), and Tencent’s Hunyuan checkouts. Read those `LICENSE` files before you redistribute.
 
 If we missed a name you shipped into this tree, open an issue — we want the list complete.
 

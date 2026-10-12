@@ -1307,6 +1307,13 @@ def _missing_image_model_files(model_type: str) -> list[str]:
     return list(dict.fromkeys(name for name in missing if name))
 
 
+def _folder_model_ready(model_def: dict) -> bool:
+    """A model with no main URL, whose handler downloads a whole folder (VoxCPM2),
+    is ready when every asset it declares is on disk."""
+    assets = model_def.get("required_model_assets") or []
+    return bool(assets) and all(wgp.fl.locate_file(path, error_if_none=False) is not None for path in assets)
+
+
 def _check_model_downloaded(model_type: str) -> bool:
     """Check if a model's checkpoint files are downloaded.
 
@@ -1325,7 +1332,7 @@ def _check_model_downloaded(model_type: str) -> bool:
             return False
         groups = _model_weight_groups(model_type)
         if not groups:
-            return False
+            return _folder_model_ready(model_def)
         if not all(_variant_group_downloaded(g) for g in groups):
             return False
         # Component-folder models can expose a tiny manifest as their primary
@@ -2152,10 +2159,15 @@ def _download_model_files(model_type: str):
             source_type_list.append(1)
             submodel_no_list.append(0)
 
+    fetched = False
     for filename, source_type, submodel_no in zip(model_file_list, source_type_list, submodel_no_list):
         if len(filename) == 0:
             continue
         wgp.download_models(filename, model_type, source_type, submodel_no)
+        fetched = True
+    if not fetched:
+        # No main file: the handler's own file list is the whole download (load_models does the same).
+        wgp.download_models("", model_type, 0, -1)
 
     text_encoder_URLs = wgp.get_model_recursive_prop(model_type, "text_encoder_URLs", return_list=True)
     if text_encoder_URLs is not None:

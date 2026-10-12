@@ -1,4 +1,5 @@
 import { adoptAudio, cancelJob, fetchJobStatus, submitGeneration } from '../api/client'
+import type { CustomCharacterVoice } from './characterVoice'
 
 const AUDIO_FILE = /\.(wav|mp3|m4a|aac|flac|ogg)$/i
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
@@ -45,18 +46,11 @@ async function submitSpeech(options: SceneSpeechOptions, deps: SceneSpeechDepend
   const model = options.model.trim()
   if (!model) throw new Error('Select a speech model first.')
   options.signal?.throwIfAborted()
-  const voice = options.voice ? (await import('./characterVoice')).parseCharacterVoice(options.voice) : undefined
+  const voices = options.voice ? await import('./characterVoice') : undefined
+  const voice = voices?.parseCharacterVoice(options.voice)
+  const reference = voice && voices?.isReferenceVoice(voice) ? voice : undefined
   if (voice && voice.model !== model) throw new Error('The selected voice belongs to a different speech model.')
-  let referencePath: string | undefined
-  if (voice?.model === 'qwen3_tts_base') {
-    const sourceWorkspace = new URLSearchParams(voice.referenceAudio.split('?')[1]).get('workspace') ?? options.workspace
-    const reference = await (deps.adoptAudio ?? adoptAudio)({ audio_path: voice.referenceAudio,
-      ...(sourceWorkspace ? { workspace: sourceWorkspace } : {}) })
-    referencePath = reference.path
-    if (!referencePath) throw new Error('The reference recording is no longer available.')
-    // Only the owned generation is cancellable; adopting a stored file never creates a job.
-    options.signal?.throwIfAborted()
-  }
+  const referencePath = reference ? await adoptedReferencePath(reference, options, deps) : undefined
   const submitted = await deps.submitGeneration({
     model_type: model,
     generation_mode: 'audio',
@@ -67,11 +61,21 @@ async function submitSpeech(options: SceneSpeechOptions, deps: SceneSpeechDepend
     duration_seconds: Math.max(1, options.durationSeconds),
     _audio_sub_mode: 'speech',
     ...(options.workspace ? { workspace: options.workspace } : {}),
-    ...(voice?.model === 'qwen3_tts_base'
-      ? { model_mode: voice.language, audio_prompt_type: 'A', audio_guide: referencePath, alt_prompt: voice.transcript }
+    ...(reference && voices ? voices.referenceVoiceParams(reference, referencePath)
       : voice ? { model_mode: voice.voiceId, alt_prompt: voice.instructions ?? '' } : {}),
   })
   return { prompt, model, jobId: submitted.job_id }
+}
+
+/** The cloned voice's recording, adopted from its source workspace. */
+async function adoptedReferencePath(reference: CustomCharacterVoice, options: SceneSpeechOptions, deps: SceneSpeechDependencies) {
+  const sourceWorkspace = new URLSearchParams(reference.referenceAudio.split('?')[1]).get('workspace') ?? options.workspace
+  const adopted = await (deps.adoptAudio ?? adoptAudio)({ audio_path: reference.referenceAudio,
+    ...(sourceWorkspace ? { workspace: sourceWorkspace } : {}) })
+  if (!adopted.path) throw new Error('The reference recording is no longer available.')
+  // Only the owned generation is cancellable; adopting a stored file never creates a job.
+  options.signal?.throwIfAborted()
+  return adopted.path
 }
 
 /** Wait for an audio job this caller submitted; aborting cancels that job only. */

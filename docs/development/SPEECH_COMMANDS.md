@@ -39,8 +39,9 @@ with another transport identity can be compared by content.
 The accepted speech model registration is deliberately explicit:
 
 `auk`, `auk_flash`, `kugelaudio_0_open`, `qwen3_tts_customvoice`,
-`qwen3_tts_voicedesign`, `qwen3_tts_base`, `chatterbox`, `index_tts2`,
-`scenema_audio`, and `dramabox_audio`. The allowlist is
+`qwen3_tts_voicedesign`, `qwen3_tts_base`, `voxcpm2_voicedesign`,
+`voxcpm2_base`, `chatterbox`, `index_tts2`, `scenema_audio`, and
+`dramabox_audio`. The allowlist is
 `SPEECH_MODEL_TYPES` in `app/services/studio_speech_spec.py`. The preflight
 requires the selected definition to declare `audio_only=true`, no image
 output, and locally downloaded model files. Music and SFX handlers also
@@ -52,6 +53,11 @@ reject non-zero guidance. Receta and GPU notes:
 [WANGP_1300_AUDIO](WANGP_1300_AUDIO.md). `qwen3_tts_customvoice` is a named
 preset; `qwen3_tts_base` is a recorded/imported reference (3–30 s, ≤20 MB)
 stored on the character — [Character Kits](../character-kits/HOWUSEIT.md).
+VoxCPM2 follows the same fields: `voxcpm2_voicedesign` takes the voice
+description in `alt_prompt`, `voxcpm2_base` the reference in `audio_guide`
+and its transcript in `alt_prompt`, plus an optional
+`custom_settings.style`. Neither takes `model_mode`; see
+[VOXCPM2](VOXCPM2.md).
 
 Speech references use exact asset IDs or canonical local API URLs. The
 resource adapter checks source-workspace containment, file identity and

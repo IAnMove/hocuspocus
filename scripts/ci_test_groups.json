@@ -3,13 +3,13 @@
   "suite": "tests",
   "python_files": "test_*.py",
   "weight_unit": "collected_nodeids",
-  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07. Language detection fallbacks add +8 (python-b, test_language_detection_fallbacks), 2026-10-07. Golden shots add +9 (python-a, test_golden_shots), 2026-10-08. Production models add +5 (python-a, test_production_models), 2026-10-08. The production quality gate adds +6 (python-b, test_production_quality_gate), 2026-10-08. Production turns add +3 (python-a, test_production_turn), 2026-10-08. Lyric looks add +8 (python-b, test_production_lyric_looks), 2026-10-08. Diorama sets add +2 (python-a, test_production_models) and +6 (python-b, test_diorama_set and test_production_scene3d), 2026-10-09. GLB cleanup adds +1 (python-b, test_glb_cleanup), 2026-10-10. Template traits add +20 (python-b, test_world3d_template_traits), 2026-10-11. Template library v2 adds +311 (python-b: test_world3d_template_queries, test_world3d_template_suggest, test_world3d_modifiers, test_world3d_stage_documents, node-dependent) and +30 (python-a: test_set_molds_shapes, test_world3d_stage_cards), 2026-10-11. Template round 2 adds pilot fixes, thumbnails and honest 2D cameras/search (test_production_montage_owner, test_set_generation, test_render_template_thumbnails, test_production_camera, test_video2d_catalog_search; node: test_production_scene3d_pictures, test_world3d_thumbnails), 2026-10-11. The official Qwen Image 2.1 Turbo adds +9 (python-a, test_qwen_official_turbo), 2026-10-12.",
+  "weight_note": "Sum of pytest --collect-only -q -p no:cacheprovider nodeids per group on fix/development-audit-20261007 with development 5718797f (2026-10-07): 6145 tests across 499 files; python-a 3061 tests/250 files in 16.75s, python-b 3084 tests/249 files in 15.89s (groups collected concurrently). Game assets J6–J11 add +87 (python-a) and +28 (python-b), 2026-10-07. J15–J17 add +29 (python-a, test_game_qa), 2026-10-07. Every ui/node_modules (tsx) test sits in python-b, the shard that runs npm ci. Count proxy, not execution wall-clock; tests/test_ci_shards.py re-checks the balance from a static test-function count. Look room adds +22 (python-b, test_pose_facing and test_series_look_room), 2026-10-07. Song language and the Qwen image default add +16 (python-b, test_production_song_language), 2026-10-07. Language detection fallbacks add +8 (python-b, test_language_detection_fallbacks), 2026-10-07. Golden shots add +9 (python-a, test_golden_shots), 2026-10-08. Production models add +5 (python-a, test_production_models), 2026-10-08. The production quality gate adds +6 (python-b, test_production_quality_gate), 2026-10-08. Production turns add +3 (python-a, test_production_turn), 2026-10-08. Lyric looks add +8 (python-b, test_production_lyric_looks), 2026-10-08. Diorama sets add +2 (python-a, test_production_models) and +6 (python-b, test_diorama_set and test_production_scene3d), 2026-10-09. GLB cleanup adds +1 (python-b, test_glb_cleanup), 2026-10-10. Template traits add +20 (python-b, test_world3d_template_traits), 2026-10-11. Template library v2 adds +311 (python-b: test_world3d_template_queries, test_world3d_template_suggest, test_world3d_modifiers, test_world3d_stage_documents, node-dependent) and +30 (python-a: test_set_molds_shapes, test_world3d_stage_cards), 2026-10-11. Template round 2 adds pilot fixes, thumbnails and honest 2D cameras/search (test_production_montage_owner, test_set_generation, test_render_template_thumbnails, test_production_camera, test_video2d_catalog_search; node: test_production_scene3d_pictures, test_world3d_thumbnails), 2026-10-11. The official Qwen Image 2.1 Turbo adds +9 (python-a, test_qwen_official_turbo), 2026-10-12. VoxCPM2 speech adds +32 (python-a, test_voxcpm2_tts), 2026-10-12.",
   "groups": [
     {
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 3385,
+      "weight": 3417,
       "paths": [
         "tests/test_about.py",
         "tests/test_access_log_filter.py",
@@ -191,6 +191,7 @@
         "tests/test_qwen_image_21.py",
         "tests/test_qwen_official_turbo.py",
         "tests/test_qwen_viggle_turbo.py",
+        "tests/test_voxcpm2_tts.py",
         "tests/test_recoverability_last.py",
         "tests/test_recoverable_artifacts.py",
         "tests/test_rembg_adapter.py",
@@ -1078,7 +1079,8 @@
     {
       "prefix": "app/services/speech_reference_pauses.py",
       "paths": [
-        "tests/test_speech_reference_pauses.py"
+        "tests/test_speech_reference_pauses.py",
+        "tests/test_voxcpm2_tts.py"
       ]
     },
     {
@@ -1234,7 +1236,8 @@
       "prefix": "app/services/character_speech_definition.py",
       "paths": [
         "tests/test_character_speech_definition.py",
-        "tests/test_character_language_voices.py"
+        "tests/test_character_language_voices.py",
+        "tests/test_voxcpm2_tts.py"
       ]
     },
     {
@@ -2305,7 +2308,8 @@
     {
       "prefix": "app/services/series_native_render.py",
       "paths": [
-        "tests/test_series_native_render.py"
+        "tests/test_series_native_render.py",
+        "tests/test_voxcpm2_tts.py"
       ]
     },
     {
@@ -2455,7 +2459,8 @@
       "paths": [
         "tests/test_series_commands.py",
         "tests/test_series_line_voice.py",
-        "tests/test_series_kit_pins.py"
+        "tests/test_series_kit_pins.py",
+        "tests/test_voxcpm2_tts.py"
       ]
     },
     {
@@ -2464,6 +2469,12 @@
         "tests/test_game_profile.py",
         "tests/test_series_agent_fixes.py",
         "tests/test_series_kit_pins.py"
+      ]
+    },
+    {
+      "prefix": "app/models/TTS/voxcpm2",
+      "paths": [
+        "tests/test_voxcpm2_tts.py"
       ]
     }
   ]

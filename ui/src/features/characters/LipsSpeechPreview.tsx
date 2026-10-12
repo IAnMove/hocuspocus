@@ -16,7 +16,7 @@ import { LipsMorphPreview, type LipsMorphImage } from './LipsMorphPreview'
 type Preview = { url: string; cues: MouthCue[]; text: string }
 
 function speechModelKind(modelType: string) {
-  return /tts|kugelaudio/.test(modelType)
+  return /tts|kugelaudio|voxcpm/.test(modelType)
 }
 
 function chosenSpeechModel(model: string, models: { model_type: string }[], selected: string | undefined) {
