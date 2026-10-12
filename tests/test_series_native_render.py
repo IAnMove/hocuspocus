@@ -818,3 +818,30 @@ def test_a_series_3d_export_uses_the_episode_frame():
     clip = {"width": landscape["width"], "height": landscape["height"], "fps": landscape["fps"], "sar": 1}
     assert not needs_conform(clip, frame)
     assert needs_conform({"width": 1920, "height": 1080, "fps": 30, "sar": 1}, frame)
+
+
+VOX_ES = {"provider": "local", "model": "voxcpm2_base", "voiceId": "reference", "name": "Nerea ES",
+          "referenceAudio": "/api/v1/file/nerea-es.wav?workspace=cast", "transcript": "Hola.", "language": "spanish"}
+
+
+def _line_voice(voice, **beat):
+    series = library()["seriesById"]["uv"]
+    kits = {"kit-gary": {"voice": voice}}
+    return SeriesNativeRender.line_voice(series, {"id": "s01_d1", "characterId": "gary", "text": "Ya voy.", **beat}, kits, "spanish")
+
+
+@pytest.mark.parametrize("voice", [VOX_ES, {**VOX_ES, "instructions": "voz cansada"}, GARY])
+def test_a_line_direction_reaches_voices_that_take_one_and_is_part_of_the_recording(voice):
+    _, plain, plain_key = _line_voice(voice)
+    _, directed, key = _line_voice(voice, emotion="triste", delivery="muy despacio, arrastrando las palabras")
+    assert "lineDelivery" not in plain and plain_key == recording_key("Ya voy.", voice), "no direction keeps the old key"
+    assert directed["lineDelivery"] == "triste, muy despacio, arrastrando las palabras" and key != plain_key
+    params = speech_params(directed, "Ya voy.", "spanish", 7)
+    said = params["custom_settings"]["style"] if voice["model"] == "voxcpm2_base" else params["alt_prompt"]
+    assert said == ", ".join(part for part in (voice.get("instructions"), directed["lineDelivery"]) if part)
+
+
+def test_a_reference_voice_without_style_says_the_line_as_written():
+    _, voice, key = _line_voice(KEVIN_ES, delivery="susurrando")
+    assert "lineDelivery" not in voice and key == recording_key("Ya voy.", KEVIN_ES)
+    assert "custom_settings" not in speech_params(voice, "Ya voy.", "spanish", 7)

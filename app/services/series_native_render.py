@@ -39,7 +39,7 @@ from typing import Any
 
 from services.audio_levels import gain_to, level_file
 from services.audio_mix import track_source
-from services.character_speech_definition import is_reference_voice
+from services.character_speech_definition import is_reference_voice, line_delivery, voice_direction, VOICE_STYLE_MAX_CHARS
 from services.production_control import Cancelled
 from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
 from services.series_jobs import SeriesJobStore
@@ -230,10 +230,11 @@ def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) ->
         params.update({"audio_prompt_type": "A", "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
         if voice["model"] == "qwen3_tts_base":
             params["model_mode"] = voice.get("language") or language
-        if voice.get("instructions"):
-            params["custom_settings"] = {"style": voice["instructions"]}
+        style = voice_direction(voice)[:VOICE_STYLE_MAX_CHARS]
+        if style:
+            params["custom_settings"] = {"style": style}
     elif voice.get("voiceId"):
-        params.update({"model_mode": voice["voiceId"], "alt_prompt": voice.get("instructions") or ""})
+        params.update({"model_mode": voice["voiceId"], "alt_prompt": voice_direction(voice)})
     return params
 
 
@@ -551,6 +552,11 @@ class SeriesNativeRender:
         if not voice:
             raise NativeRenderError("no_voice", f"{beat.get('characterId')} has no voice for {language}")
         noted = line_notes(series, beat, voice)
+        # A direction the voice can take («whispering») is part of the recording: changing it records the line again.
+        # A line without one keeps the key it always had, so its recording is still reused.
+        delivery = line_delivery(beat, voice)
+        if delivery:
+            noted, voice = {**noted, "lineDelivery": delivery}, {**voice, "lineDelivery": delivery}
         # The key follows the spoken words: a dictionary entry that changes the line records it again. A line the
         # dictionary leaves alone keeps the key of the written text, so its recording is still reused.
         return text, noted, recording_key(pronounce(text, noted.get("pronunciationDictionary")), voice)

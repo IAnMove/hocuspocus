@@ -252,6 +252,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   (`at` 0 and `"duration": "shot"`); it repeats over its cue, so a plate as long as the cue loops.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat.
+- **delivery:** a line's `delivery` and `emotion` (`{"who": "ana", "es": "Ven.", "delivery": "susurrando, muy despacio"}`)
+  direct how it is said when the voice takes a direction: VoxCPM2 voices (as their style; such a line clones from the
+  reference alone) and Qwen3 presets (after the voice's instructions). Other voices say it as written. Changing it
+  records that line again; the subtitle keeps the written text.
 - **voiceRoom:** the room this shot's voices are heard in, instead of its location's (see Sound design): `none`,
   `small_room`, `room`, `hall`, `cathedral`, `cockpit`, `outdoor` or `radio`. In a script, `"voiceRoom"` on the shot.
   A place reaches only the speakers in the shot (its `cast`, else `visibleCharacterIds`; a 3D shot's `scene3d.cast`):

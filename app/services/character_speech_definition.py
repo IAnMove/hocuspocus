@@ -14,8 +14,27 @@ STYLED_REFERENCE_VOICE_MODELS = ("voxcpm2_base",)
 VOICE_STYLE_MAX_CHARS = 300
 
 
+# Voices whose engine takes a spoken direction («whispering», «very slowly»): VoxCPM2 references (as a style) and
+# Qwen3 presets (as instructions). A line's direction reaches only these; other voices say the line as written.
+DIRECTED_VOICE_MODELS = (*STYLED_REFERENCE_VOICE_MODELS, "qwen3_tts_customvoice")
+
+
 def is_reference_voice(voice):
     return isinstance(voice, dict) and voice.get("model") in REFERENCE_VOICE_MODELS
+
+
+def line_delivery(beat, voice):
+    """How a dialogue beat is said (its ``emotion`` and ``delivery``), when its voice can take a direction; else ""."""
+    if not isinstance(voice, dict) or voice.get("model") not in DIRECTED_VOICE_MODELS or not isinstance(beat, dict):
+        return ""
+    parts = [" ".join(str(beat.get(key) or "").split()) for key in ("emotion", "delivery")]
+    return ", ".join(part for part in parts if part)[:VOICE_STYLE_MAX_CHARS]
+
+
+def voice_direction(voice):
+    """The voice's own instructions followed by the line's direction (``lineDelivery``), as one text."""
+    parts = [str(voice.get(key) or "").strip() for key in ("instructions", "lineDelivery")]
+    return ", ".join(part for part in parts if part)
 
 
 def _voice_reference_query(kind, raw):
