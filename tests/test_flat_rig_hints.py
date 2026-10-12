@@ -1,4 +1,5 @@
 """A mouth hint is a place to look unless it is exact; sure landmarks overrule a far one."""
+import numpy as np
 import pytest
 
 pytest.importorskip("cv2")
@@ -42,3 +43,28 @@ def test_exact_is_a_boolean_hint_key():
     assert rig_hints({"busto": {"mouth": [40, 20], "exact": True}}) == {"busto": {"mouth": [40.0, 20.0], "exact": True}}
     with pytest.raises(FlatRigError):
         rig_hints({"busto": {"mouth": [40, 20], "exact": "yes"}})
+
+
+def _silver_bob():
+    """A painted bust with silver hair round the face and two white eyes, each cut in two by a grey iris."""
+    from PIL import Image, ImageDraw
+    image = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((70, 20, 330, 330), fill=(236, 236, 234, 255))           # the hair, as light as a sclera
+    draw.ellipse((115, 70, 285, 320), fill=(232, 190, 160, 255))          # the face
+    draw.rectangle((60, 330, 340, 400), fill=(20, 20, 20, 255))           # the blazer
+    for cx in (162, 238):
+        draw.ellipse((cx - 22, 160, cx + 22, 176), fill=(252, 252, 252, 255))
+        draw.ellipse((cx - 8, 158, cx + 8, 178), fill=(110, 110, 120, 255))  # the iris cuts the white in two
+    return image
+
+
+def test_an_eyes_hint_keeps_light_hair_out_of_the_eyes():
+    """The bug: light hair round the face crossed the eye's rows, so it was taken as a piece of the eye, the eye
+    became the whole head and the rig said the face was keyed out."""
+    from services.flat_rig_eyes import find_eyes
+    pixels = np.array(_silver_bob())
+    box, mask = find_eyes(pixels[..., :3], pixels[..., 3], near=(200, 168))
+    x0, y0, x1, y1 = box
+    assert 135 <= x0 and x1 <= 265 and 155 <= y0 and y1 <= 182, box
+    assert mask[168, 145] and mask[168, 178] and not mask[60, 200], "both halves of each eye, none of the hair"

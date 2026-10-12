@@ -165,11 +165,14 @@ def _hinted_pair(parts, near) -> tuple[dict[str, int], dict[str, int]] | None:
 
 
 def _with_fragments(labels: np.ndarray, eye: dict[str, int], parts, other: dict[str, int]) -> dict[str, int]:
-    """One eye's white and the pieces of it a pupil cut off: blobs beside it, within its height, on its rows."""
+    """One eye's white and the pieces of it a pupil cut off: blobs beside it, within its height, on its rows.
+    Within its height means inside its rows (half an eye of slack): light hair round the face crosses the eye's rows
+    too, and taking it made the eye the whole head."""
     eye = dict(eye)
     height = eye["y1"] - eye["y0"]
     for part in parts:
         if (part["label"] in (eye["label"], other["label"]) or part["y1"] <= eye["y0"] or part["y0"] >= eye["y1"]
+                or part["y0"] < eye["y0"] - height / 2 or part["y1"] > eye["y1"] + height / 2
                 or max(part["x0"] - eye["x1"], eye["x0"] - part["x1"]) > height
                 or other["x0"] < _centre(part)[0] < other["x1"]):
             continue
