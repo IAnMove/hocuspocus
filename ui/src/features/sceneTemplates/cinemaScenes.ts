@@ -30,7 +30,8 @@ export const cinemaScenes: Record<string, (ctx: BuildContext) => SceneLayer[]> =
     keyframes(asset(c, 'subject_2', { x: 68, y: 64, scale: .88 }), idle(c, 2.1)),
     camera(c, [{ at: 0, x: 44, y: 51, scale: 1, rotation: -1.2 }, { at: .5, x: 50, y: 49, scale: 1.06, rotation: 0 }, { at: 1, x: 56, y: 50, scale: 1.1, rotation: 1.2 }]),
   ],
-  'cinema-detail': c => [asset(c, 'subject_1', { x: 63, y: 59, scale: 1.35 }), camera(c, [{ at: 0, x: 44, y: 52, scale: 1.28 }, { at: 1, x: 54, y: 48, scale: 1.13 }])],
+  // The object's box stays inside the frame through the whole move, so a tall bottle or a wide car is never cut.
+  'cinema-detail': c => [asset(c, 'subject_1', { x: 50, y: 51, scale: .74 }), camera(c, [{ at: 0, x: 46, y: 51, scale: 1.14 }, { at: 1, x: 55, y: 49.5, scale: 1.04 }])],
   'cinema-hero': c => [
     keyframes(asset(c, 'subject_1', { x: 50, y: 66, scale: 1.04 }), ENTRANCES[String(c.options.entrance)] ?? ENTRANCES.rise),
     camera(c, [{ at: 0, y: 62, scale: 1.17 }, { at: 1, y: 47, scale: 1.02 }]),

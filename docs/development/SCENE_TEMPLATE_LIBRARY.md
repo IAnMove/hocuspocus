@@ -44,6 +44,20 @@ El contrato es `docs/development/VIDEO2D_TEMPLATE_MODEL.md`. En el código:
   solo imagen). Un vídeo es una capa `video` en bucle (`playback.loop`); en las
   coreografías con tira (`speed-flight`, `infinite-fall`, `conveyor`) un vídeo
   sustituye a la tira. Las naves espaciales aceptan una imagen recortada o un GLB.
+- **Encuadre con assets reales** (revisión del 2026-10-12): el pintor encaja cada
+  imagen en una caja con la forma del cuadro (contain), así que una ficha que
+  mantiene la caja dentro del cuadro mantiene dentro cualquier imagen. Así lo hacen
+  el objeto de `cinema-detail` y de `music-product`, la figura de
+  `music-staircase-pop` (la cámara la sigue la mitad del camino) y las naves en
+  imagen de las `space-*` (una nave en imagen usa una parte de la escala de un GLB;
+  en `space-broadside` cada nave cabe en su mitad, ambas se balancean, la primera
+  retrocede al disparar y los disparos son un rayo largo `bolt`). Las tiras de fondo
+  (`speed-flight`, `infinite-fall`, `conveyor`) tienen copias que se tocan y una de
+  cada dos va en espejo (`strip.mirror`), así una placa que no es continua se
+  encuentra consigo misma en cada unión. Los rótulos de `documentary-history` (fecha
+  y pie abajo a la izquierda, contador arriba a la derecha) y la pancarta de
+  `city-postcard` (encima de la cabeza) no tapan al sujeto centrado.
+  `ui/tests/sceneTemplateFraming.test.ts` lo mide con formas reales (1:3, 1:1.9, 3:1).
 - **Alfa de los recortes**: `scenes.template.compile` avisa
   `cutout_without_alpha` cuando `subject_1`, `subject_2` o `prop_1` de una
   coreografía no tienen ningún píxel transparente (se leen los píxeles del PNG; un

@@ -110,3 +110,20 @@ test('cinema-hero enters, the duet takes turns and the two-shot sways', () => {
   const sway = compile('cinema-two-shot').layers.find(layer => layer.id === 'subject_2')!.animation.keyframes!
   assert.ok(Math.max(...sway.map(frame => frame.rotation)) > 1, 'the second figure sways')
 })
+
+test('the cards fixed after the real-asset review still move for more than half of the shot', () => {
+  const picture = (name: string) => ({ type: 'image' as const, source: `/api/v1/file/${name}.png` })
+  const cases: Array<[string, TemplateControlInput]> = [
+    ['music-speed-flight', { drift: 0 }], ['music-infinite-fall', { drift: 0 }], ['music-conveyor', { drift: 0 }],
+    ['cinema-detail', {}], ['music-product', { drift: 0 }], ['music-staircase-pop', { drift: 0 }],
+    ['documentary-history', {}], ['city-postcard', {}],
+    ['space-broadside', {}], ['space-broadside', { outcome: 'shield' }], ['space-broadside', { outcome: 'explode' }],
+    ['space-cruise', {}], ['space-orbit', {}], ['space-docking', {}], ['space-chase', {}], ['space-warp', {}],
+  ]
+  for (const [id, controls] of cases) {
+    const slots = ALL_SCENE_TEMPLATES.find(template => template.id === id)!.slots.filter(slot => slot.required)
+    const scene = compileCandidateScene(id, Object.fromEntries(slots.map(slot => [slot.id, picture(slot.id)])), controls)
+    const share = heldShare(scene)
+    assert.ok(share < .5, `${id} ${JSON.stringify(controls)} holds ${Math.round(share * 100)} % of the shot`)
+  }
+})

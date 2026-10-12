@@ -28,8 +28,9 @@ export const musicScenes: Record<string, (ctx: BuildContext) => SceneLayer[]> = 
   'music-duet': c => [pulse(c, asset(c, 'subject_1', { x: 32, y: 62, scale: .86 }), 'bounce', 'even'), pulse(c, asset(c, 'subject_2', { x: 68, y: 62, scale: .86 }), 'bounce', 'odd'), camera(c, [{ at: 0, rotation: -1.5 }, { at: 1, rotation: 1.5 }])],
   'music-orbit': orbit,
   'music-product': c => {
-    const hero = keyframes(asset(c, 'subject_1', { x: 62, y: 52, scale: .9 }), repeatPath([{ at: 0, rotation: -5 }, { at: 1, rotation: 5 }], cycles(c), 'pingpong'))
+    // Sized so the product's box stays in frame through the push, the drift and the swing, whatever its shape.
+    const hero = keyframes(asset(c, 'subject_1', { x: 56, y: 50, scale: .64 }), repeatPath([{ at: 0, rotation: -5 }, { at: 1, rotation: 5 }], cycles(c), 'pingpong'))
     if (hero.type === 'model3d') hero.animation = { ...hero.animation, spin: true, rotationSpeed: 30 }
-    return [hero, ...(c.bindings.prop_1 ? [asset(c, 'prop_1', { x: 24, y: 59, scale: .3 }, 12)] : []), camera(c, [{ at: 0, x: 47, scale: 1.05 }, { at: 1, x: 52, scale: 1.2 }]), atmosphere(c, 'sparkles', '#ffc185')]
+    return [hero, ...(c.bindings.prop_1 ? [asset(c, 'prop_1', { x: 24, y: 59, scale: .3 }, 12)] : []), camera(c, [{ at: 0, x: 48, scale: 1.02 }, { at: 1, x: 52, scale: 1.12 }]), atmosphere(c, 'sparkles', '#ffc185')]
   },
 }

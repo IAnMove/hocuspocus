@@ -24,7 +24,11 @@ function relayPath(c: BuildContext, who: 0 | 1): Beat[] {
   return beats
 }
 
-const STEPS: Array<[x: number, y: number, scale: number]> = [[15, 80, .38], [32, 65, .5], [48, 51, .62], [65, 38, .74], [79, 24, .85]]
+// A full figure on every step stays whole on screen: the steps climb only as far as the follow camera can keep the
+// head and the feet in frame, and the figure does not grow as it climbs.
+const STEPS: Array<[x: number, y: number, scale: number]> = [[18, 66, .46], [34, 59, .48], [50, 52, .5], [66, 45, .52], [82, 38, .54]]
+const HOP = 6
+const FOLLOW = .5
 
 /** One climb of four hops: an arc up, a landing squash and a small rebound on every step. */
 function climb(): Beat[] {
@@ -35,7 +39,7 @@ function climb(): Beat[] {
     const [x1, y1, s1] = STEPS[hop + 1]
     const at = (part: number) => (hop + part) / hops
     beats.push(
-      { at: at(.45), x: (x0 + x1) / 2, y: Math.min(y0, y1) - 8, scale: (s0 + s1) / 2 * 1.04, rotation: -4 },
+      { at: at(.45), x: (x0 + x1) / 2, y: Math.min(y0, y1) - HOP, scale: (s0 + s1) / 2 * 1.04, rotation: -4 },
       { at: at(.7), x: x1, y: y1 + 1.5, scale: s1 * 1.06, rotation: 2 },
       { at: at(.85), x: x1, y: y1 - 1, scale: s1 * .98, rotation: 0 },
       { at: at(1), x: x1, y: y1, scale: s1, rotation: 0 },
@@ -44,11 +48,11 @@ function climb(): Beat[] {
   return beats
 }
 
-/** The camera follows the climber a third of the way from the centre. */
+/** The camera follows the climber half of the way from the centre. */
 function followCamera(c: BuildContext, path: Beat[]): SceneLayer {
   // Not camera(): the climb already repeats on longer shots, so the follow must not stretch as well.
   return keyframes(layer('camera', 'camera', '', c.duration, {}, 100), path.filter((_, index) => index % 4 === 0).map(beat => ({
-    at: beat.at, x: 50 + ((beat.x ?? 50) - 50) * .33, y: 50 + ((beat.y ?? 50) - 50) * .33, scale: 1.06,
+    at: beat.at, x: 50 + ((beat.x ?? 50) - 50) * FOLLOW, y: 50 + ((beat.y ?? 50) - 50) * FOLLOW, scale: 1.06,
   })))
 }
 

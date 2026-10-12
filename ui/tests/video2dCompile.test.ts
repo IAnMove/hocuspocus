@@ -63,7 +63,7 @@ test('a 9:16 compile keeps title y inside the vertical safe area', () => {
   assert.ok(scene.height > scene.width)
   const texts = scene.texts ?? []
   assert.ok(texts.length > 0)
-  assert.deepEqual(Object.fromEntries(texts.map(cue => [cue.id, cue.y])), { date: 64, caption: 72, count: 42, label: 62 })
+  assert.deepEqual(Object.fromEntries(texts.map(cue => [cue.id, cue.y])), { date: 71, caption: 78, count: 12, label: 17 })
   for (const cue of texts) {
     assert.ok(cue.y >= 12 && cue.y <= 80, cue.id)
     assert.ok(cue.maxWidth == null || cue.maxWidth <= 90, cue.id)

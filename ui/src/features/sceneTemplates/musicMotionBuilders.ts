@@ -20,9 +20,11 @@ export function copySubject(c: BuildContext, index: number, points: Beat[], slot
   return keyframes({ ...source, id, name: `${source.name} · copia ${index + 1}` }, points)
 }
 
-/** Seamless artwork recommended. A stable overscan underlay covers the viewport
- * even at strip endpoints; no new textures or providers are consulted. A video
- * background already moves, so it plays as one looping layer without a strip. */
+/** A stable overscan underlay covers the viewport even at strip endpoints; no new
+ * textures or providers are consulted. Real plates are not seamless, so the copies
+ * touch and every other one is mirrored along the scroll axis: each join shows the
+ * same pixels on both sides. A video background already moves, so it plays as one
+ * looping layer without a strip. */
 export function musicMotionBackground(id: string, c: BuildContext): SceneLayer[] {
   const base = backdrop(c)
   const scrolling: Record<string, NonNullable<SceneLayer['strip']>['direction']> = {
@@ -31,7 +33,8 @@ export function musicMotionBackground(id: string, c: BuildContext): SceneLayer[]
   const direction = scrolling[id]
   if (!direction || base.type === 'video') return [base]
   const strip = { ...base, id: 'background-scroll', name: 'background · desplazamiento', z: 1,
-    strip: { enabled: true, count: 4, spacing: 100, direction, speed: id === 'music-conveyor' ? 28 : 95, phase: 0 },
+    // A filled copy is the frame times its scale on both axes, so this spacing makes the copies touch.
+    strip: { enabled: true, count: 4, spacing: 100 * base.transform.scale, direction, speed: id === 'music-conveyor' ? 28 : 95, phase: 0, mirror: true },
   }
   return [base, strip]
 }

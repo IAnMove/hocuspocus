@@ -67,7 +67,7 @@ test('a longer titled shot travels further at the same speed, and portrait frame
   assert.ok(Math.abs(travel(long, 'background').scale - 2 * travel(short, 'background').scale) < 1e-9)
   const tall = compileCandidateScene('documentary-history', ASSETS, {}, { width: 1080, height: 1920 })
   assert.equal(tall.height, 1920)
-  assert.deepEqual(Object.fromEntries((tall.texts ?? []).map(cue => [cue.id, cue.y])), { date: 64, caption: 72, count: 42, label: 62 })
+  assert.deepEqual(Object.fromEntries((tall.texts ?? []).map(cue => [cue.id, cue.y])), { date: 71, caption: 78, count: 12, label: 17 })
 })
 
 test('the titled cards take pictures only', () => {

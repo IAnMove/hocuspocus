@@ -127,15 +127,21 @@ export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'sca
   return keyframes(item, beats.filter((beat, i) => !i || beat.at > beats[i - 1].at))
 }
 
-function graphic(kind: 'beam' | 'shield' | 'burst' | 'debris'): string {
+export type GraphicKind = 'beam' | 'bolt' | 'shield' | 'burst' | 'debris'
+/** The bolt is long (8:1) so a shot reads at a glance: a cyan glow, a bright body that fades to the tail and a
+ * white-hot core. The thin square `beam` stays as it was for scenes that already use it. */
+const GRAPHIC_SIZE: Record<GraphicKind, [number, number]> = { beam: [512, 512], bolt: [1024, 128], shield: [512, 512], burst: [512, 512], debris: [512, 512] }
+function graphic(kind: GraphicKind): string {
   const shapes = {
     beam: '<path d="M15 256H497" stroke="#4deaff" stroke-width="18"/><path d="M15 256H497" stroke="white" stroke-width="5"/>',
+    bolt: '<defs><linearGradient id="b" x2="1"><stop stop-color="#5ff0ff" stop-opacity="0"/><stop offset=".3" stop-color="#7ff6ff" stop-opacity=".9"/><stop offset="1" stop-color="#ffffff"/></linearGradient></defs><rect x="6" y="16" width="1012" height="96" rx="48" fill="#22d8ff" fill-opacity=".38"/><rect x="40" y="38" width="976" height="52" rx="26" fill="url(#b)"/><rect x="330" y="53" width="680" height="22" rx="11" fill="#ffffff"/>',
     shield: '<ellipse cx="256" cy="256" rx="215" ry="175" fill="#77dcff" fill-opacity=".08" stroke="#87ecff" stroke-width="8"/><ellipse cx="256" cy="256" rx="195" ry="156" fill="none" stroke="#eaffff" stroke-opacity=".5" stroke-width="2"/>',
     burst: '<defs><radialGradient id="f"><stop stop-color="#fff"/><stop offset=".15" stop-color="#fff0a1"/><stop offset=".42" stop-color="#ff9d48" stop-opacity=".95"/><stop offset="1" stop-color="#fa4127" stop-opacity="0"/></radialGradient></defs><circle cx="256" cy="256" r="254" fill="url(#f)"/><path d="M256 15L281 223L486 256L281 282L256 499L233 282L17 256L231 226Z" fill="#ffe0a5" opacity=".8"/>',
     debris: '<path d="M80 105l60 12-23 52-47-15ZM311 52l37 5 12 37-47-8ZM398 323l40 38-12 42-43-18ZM114 373l62-16 22 31-42 33ZM239 211l34-18 36 54-41 20Z" fill="#88919e" stroke="#e8aa7b" stroke-width="3"/>',
   }
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">${shapes[kind]}</svg>`)}`
+  const [width, height] = GRAPHIC_SIZE[kind]
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${shapes[kind]}</svg>`)}`
 }
-export function effect(ctx: BuildContext, kind: 'beam' | 'shield' | 'burst' | 'debris', id: string, beats: Beat[]): SceneLayer {
+export function effect(ctx: BuildContext, kind: GraphicKind, id: string, beats: Beat[]): SceneLayer {
   return keyframes(layer(id, 'image', graphic(kind), ctx.duration, { opacity: 0 }, 35), beats)
 }
