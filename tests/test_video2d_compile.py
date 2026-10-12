@@ -99,7 +99,7 @@ def test_bad_envelopes_use_a_stable_code(command, code, monkeypatch):
 @pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
 def test_compile_calls_the_typescript_builders():
     result = execute(_compile(full=True))
-    assert result["result"]["document"]["name"] == "Plano de establecimiento · candidata"
+    assert result["result"]["document"]["name"] == "Plano de establecimiento", "an approved card is no longer named a candidate"
     assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["background", "subject_1", "camera", "atmosphere-dust"]
 
 

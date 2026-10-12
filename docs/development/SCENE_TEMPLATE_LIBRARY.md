@@ -63,8 +63,23 @@ El contrato es `docs/development/VIDEO2D_TEMPLATE_MODEL.md`. En el código:
   coreografía no tienen ningún píxel transparente (se leen los píxeles del PNG; un
   JPEG no tiene alfa). Una URL remota no se descarga y no avisa.
 - **Estado de revisión**: el cargador acepta `candidate` y `approved`; cualquier
-  otro valor lanza. Hoy las 41 son `candidate` hasta la revisión con render y
-  assets reales.
+  otro valor lanza. Las 41 son `approved` desde el 2026-10-12. Se aprobaron
+  viendo cada render con assets reales hechos en la app:
+  - recortes de Qwen Image 2.1 con `image.remove_background`;
+  - fondos sin nada que debiera moverse;
+  - dos bucles H3 sin costura.
+
+  Se renderizaron las 41 fichas y las opciones de las fusionadas con
+  `npm run scene:review -- --render --assets`. Cada ficha hace lo que dice su
+  línea, se mantiene en cuadro y se mueve durante todo el plano. Esa revisión
+  encontró y arregló cinco cosas:
+  - los vídeos desaparecían del MP4 exportado desde el editor;
+  - las partículas eran invisibles sobre fondos reales;
+  - las tiras tenían costuras;
+  - seis encuadres;
+  - el tiempo límite del render de revisión.
+
+  El dueño puede devolver una ficha a `candidate` en este JSON.
 
 ## Crear una composición nueva
 

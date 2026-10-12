@@ -49,7 +49,7 @@ test('the catalog holds the 41 cards: 17 originals, 2 titled cards and 22 choreo
   assert.deepEqual(ALL_SCENE_TEMPLATES.map(template => template.id), catalogJson.entries.map(entry => entry.id))
   for (const template of ALL_SCENE_TEMPLATES) {
     assert.equal(template.version, 1)
-    assert.equal(template.status, 'candidate', `${template.id} waits for its render review`)
+    assert.equal(template.status, 'approved', `${template.id} passed its real-asset render review (2026-10-12)`)
     assert.equal(getCandidateSceneTemplate(template.id), template)
     assert.match(template.promptExample, new RegExp(template.id.replaceAll('-', '\\-')))
     assert.ok(template.title && template.description && template.limits.length >= 5, template.id)
@@ -162,7 +162,7 @@ test('cinema cards name their narrative twins and stay off the composer shelf', 
 test('the loader accepts candidate and approved and rejects any other status', () => {
   const entry = structuredClone(catalogJson.entries[0])
   assert.equal(parseSceneTemplateEntry({ ...entry, reviewStatus: 'approved' }).status, 'approved')
-  assert.equal(parseSceneTemplateEntry(entry).status, 'candidate')
+  assert.equal(parseSceneTemplateEntry({ ...entry, reviewStatus: 'candidate' }).status, 'candidate')
   assert.throws(() => parseSceneTemplateEntry({ ...entry, reviewStatus: 'keep' }), /candidate or approved/)
   assert.throws(() => parseSceneTemplateEntry({ ...entry, controls: { ...entry.controls, mood: { options: ['a'], default: 'b' } } }), /invalid control mood/)
   assert.throws(() => parseSceneTemplateEntry({ ...entry, slots: [{ ...entry.slots[0], id: 'hero' }] }), /unknown slot/)

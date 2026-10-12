@@ -14,7 +14,9 @@ const demos = await import(new URL('../../src/features/sceneTemplates/demoScenes
 const compiler = await import(new URL('../../src/features/sceneTemplates/compile.ts', import.meta.url))
 const copy = animatorLabels('en')
 
-const renderTimeout = 300_000
+// A 6 s 1080p card with a paper or riso finish takes about 6.5 minutes in headless Chromium on the CPU (no canvas
+// acceleration); 5 minutes failed city-postcard on its own.
+const renderTimeout = 900_000
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 

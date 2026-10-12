@@ -164,7 +164,7 @@ test('all candidate scenes preserve exact slot sources in candidate provenance',
     )
     assert.equal(scene.narrative?.controls.catalogVersion, versionOf(current.id))
     assert.equal(scene.narrative?.controls.templateVersion, 1)
-    assert.equal(scene.narrative?.controls.reviewStatus, 'candidate')
+    assert.equal(scene.narrative?.controls.reviewStatus, 'approved')
   }
 })
 
@@ -239,7 +239,7 @@ test('candidate scenes round-trip through scene JSON and MP4 sidecar payload sha
     assert.equal(recovered.narrative?.templateId, current.id)
     assert.equal(recovered.narrative?.controls.catalogVersion, versionOf(current.id))
     assert.equal(recovered.narrative?.controls.templateVersion, 1)
-    assert.equal(recovered.narrative?.controls.reviewStatus, 'candidate')
+    assert.equal(recovered.narrative?.controls.reviewStatus, 'approved')
     assert.deepEqual(provenanceRecord(recovered), provenanceRecord(original), `${current.id}/${current.variant} recovered provenance`)
   }
 })

@@ -30,7 +30,7 @@ test('a known scene template compiles to the builder layer ids', () => {
   if (!result.ok) return
   assert.ok('document' in result.result)
   if (!('document' in result.result)) return
-  assert.equal(result.result.document.name, 'Plano de establecimiento · candidata')
+  assert.equal(result.result.document.name, 'Plano de establecimiento', 'an approved card is no longer named a candidate')
   assert.deepEqual(result.result.document.layers.map(layer => layer.id), ['background', 'subject_1', 'camera', 'atmosphere-dust'])
   assert.deepEqual(result.result.warnings, [])
 })

@@ -137,7 +137,7 @@ test('the catalog keeps the 17 original grammars first and lists 22 music choreo
   assert.equal(new Set([...legacyIds, ...musicIds]).size, 39)
 
   for (const template of MUSIC_MOTION_TEMPLATES) {
-    assert.equal(template.status, 'candidate')
+    assert.equal(template.status, 'approved')
     assert.equal(template.version, 1)
     assert.equal(template.family, 'music')
     assert.ok(template.description.length > 0)
@@ -165,7 +165,7 @@ test('every music motion compiles deterministically with provided assets and exa
     assert.equal(first.narrative?.templateId, template.id)
     assert.equal(first.narrative?.controls.catalogVersion, EXPANDED_CATALOG_VERSION)
     assert.equal(first.narrative?.controls.templateVersion, 1)
-    assert.equal(first.narrative?.controls.reviewStatus, 'candidate')
+    assert.equal(first.narrative?.controls.reviewStatus, 'approved')
     assertSceneShape(first)
 
     const assets = assetBySlot(first)
