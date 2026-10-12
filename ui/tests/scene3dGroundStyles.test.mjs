@@ -99,26 +99,46 @@ function picture(width, height, paint) {
   return data
 }
 
-test('settling carries each piece down to the floor line and shades it to the floor colour', () => {
+test('settling brings the floor up to the pieces standing just above it, and leaves openings, slivers and posts alone', () => {
   const key = { color: '#ff00ff', tolerance: 0.2, softness: 0.12 }
-  const width = 40, height = 100, MAGENTA = [255, 0, 255], HOUSE = [200, 180, 140], HALO = [230, 120, 220]
-  // A house in columns 5-24 ending at row 59 with a key halo row under it; a post in columns 30-32 down to row 85;
-  // a lone speck high in column 36; the rest key.
-  const data = picture(width, height, (x, y) => {
-    if (x >= 5 && x <= 24 && y >= 20 && y <= 59) return HOUSE
-    if (x >= 5 && x <= 24 && y === 60) return HALO
-    if (x >= 30 && x <= 32 && y >= 30 && y <= 85) return HOUSE
-    if (x === 36 && y >= 8 && y <= 9) return HOUSE
+  const width = 200, height = 100, MAGENTA = [255, 0, 255], HOUSE = [200, 180, 140], HALO = [230, 120, 220], RIM = [200, 150, 175]
+  // Floor line at row 80 (floor 0.2). A house in columns 10-49 down to row 71 (a key halo under it, a pinkish rim at its
+  // foot); an empty 8-column gap; a second house in 58-89 down to row 73; a one-column sliver at 100; an arch at
+  // 120-169 (legs down to row 72, a lintel ending at row 49); a post at 180-182 reaching past the floor line; a speck high
+  // in column 195; the rest key.
+  const paint = (x, y) => {
+    if (x >= 10 && x <= 49 && y >= 69 && y <= 71) return RIM
+    if (x >= 10 && x <= 49 && y >= 30 && y <= 71) return HOUSE
+    if (x >= 10 && x <= 49 && y === 72) return HALO
+    if (x >= 58 && x <= 89 && y >= 40 && y <= 73) return HOUSE
+    if (x === 100 && y >= 50 && y <= 72) return HOUSE
+    if (((x >= 120 && x <= 129) || (x >= 160 && x <= 169)) && y >= 40 && y <= 72) return HOUSE
+    if (x >= 130 && x <= 159 && y >= 40 && y <= 49) return HOUSE
+    if (x >= 180 && x <= 182 && y >= 30 && y <= 85) return HOUSE
+    if (x === 195 && y >= 8 && y <= 9) return HOUSE
     return MAGENTA
-  })
-  const settled = settleColumns(data, width, height, key, { floor: 0.2, color: '#40a040' })
+  }
+  const data = picture(width, height, paint)
+  settleColumns(data, width, height, key, { floor: 0.2, color: '#40a040' })
   const at = (x, y) => Array.from(data.slice((y * width + x) * 4, (y * width + x) * 4 + 4))
-  assert.equal(settled, 20, 'the house columns settle; the post already reaches below the floor line, the speck is not a piece')
-  assert.ok(at(10, 60).slice(0, 3).every((channel, c) => Math.abs(channel - HOUSE[c]) <= 3), 'the band starts in the house\'s own colour (the halo is not paint)')
-  assert.deepEqual(at(10, 80), [64, 160, 64, 255], 'at the floor line (row 80) it is the floor\'s colour')
-  assert.equal(at(10, 99)[3], 255, 'and stays opaque to the bottom, under the floor')
-  assert.deepEqual(at(36, 50), [...MAGENTA, 255], 'a column with only a high speck stays key')
-  assert.deepEqual(at(31, 90), [...MAGENTA, 255], 'a piece already past the floor line is left alone')
+  const keyed = (x, y) => assert.deepEqual(at(x, y), [...MAGENTA, 255], `(${x}, ${y}) stays key`)
+  assert.ok(at(30, 72).slice(0, 3).every((channel, c) => Math.abs(channel - HOUSE[c]) <= 25), 'the band starts in the piece\'s colour (the halo is not paint)')
+  assert.deepEqual(at(30, 80), [64, 160, 64, 255], 'at the floor line it is the floor\'s colour')
+  assert.ok(at(30, 76)[1] < 150, 'and darker above it, in the piece\'s shadow')
+  assert.equal(at(30, 99)[3], 255, 'opaque to the bottom, under the floor')
+  assert.deepEqual(at(30, 70), [175, 150, 150, 255], 'the key colour is taken out of the piece\'s rim')
+  assert.equal(at(53, 78)[3], 255, 'the empty gap between the houses is bridged')
+  assert.notDeepEqual(at(53, 78), [...MAGENTA, 255])
+  keyed(145, 70)                                       // the arch's opening keeps its sky
+  keyed(100, 78); assert.deepEqual(at(100, 60), [...HOUSE, 255], 'a sliver is not a piece')
+  keyed(181, 90)                                       // the post already reaches the floor
+  keyed(195, 50)
+  assert.notDeepEqual(at(92, 79), [...MAGENTA, 255], 'a band ends in a bank sloping down to the floor line')
+  keyed(92, 75)
+  const grained = picture(width, height, paint)
+  settleColumns(grained, width, height, key, { floor: 0.2, ground: 'grass' })
+  const band = Array.from({ length: 40 }, (_, x) => grained[((90) * width + 10 + x) * 4 + 1])
+  assert.ok(Math.max(...band) - Math.min(...band) > 6, 'with a ground style the band carries its grain')
 })
 
 test('parallax layers settle to the floor line under their painted feet, and a styled ground replaces the slab', () => {
@@ -130,9 +150,11 @@ test('parallax layers settle to the floor line under their painted feet, and a s
   const mid = plain.find(slot => slot.id === 'set-layer-mid')
   assert.deepEqual(mid.imageLook.settle, { floor: 0.15 }, 'the floor line is the painted foot plus the sink')
   assert.deepEqual(parseImageLook(mid.imageLook).settle, { floor: 0.15 }, 'parsing keeps it')
-  const styled = stageParallaxSet(doc, set, { styledGround: true, groundColor: '#4a802c' })
+  const styled = stageParallaxSet(doc, set, { groundStyle: 'grass' })
   assert.ok(!styled.some(slot => slot.id === 'set-ground'), 'the style is the floor: no slab')
-  assert.equal(styled.find(slot => slot.id === 'set-layer-mid').imageLook.settle.color, '#4a802c')
+  const settle = styled.find(slot => slot.id === 'set-layer-mid').imageLook.settle
+  assert.deepEqual(settle, { floor: 0.15, color: groundColor('grass'), ground: 'grass' }, 'the layers settle onto the style\'s colour and grain')
+  assert.deepEqual(parseImageLook({ settle }).settle, settle)
 })
 
 test('a shot asks for a ground style by floor or by its set\'s ground; a scrolled one slides it to the camera\'s left', () => {

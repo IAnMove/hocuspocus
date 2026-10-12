@@ -38,8 +38,9 @@ CAST_MEMBERS = 16
 # of a production is then exported again on its next run instead of reusing the stale file. 4: runners in place and
 # the near layer kept off the cast. 5: the head a skin moves, not a former skeleton's loose head. 6: honest technique
 # effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
-# rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third.
-RENDER_RECIPE = 8
+# rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third. 9: set layers settle only
+# under pieces standing just above the floor, bridging gaps and sloping at their ends, in the ground style's grain.
+RENDER_RECIPE = 9
 SURFACES = ("cutout", "environment", "wall", "floor")
 # A ground style (grass, meadow, sand...) is a floor the scene draws itself; on a set it replaces the set's ground slab.
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road", *GROUND_STYLES)

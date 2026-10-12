@@ -525,10 +525,13 @@ an orbit never shows its edge. A shot whose camera would cross the near layer
 (an orbit, a crash zoom) leaves it out. Name the set as the shot's
 `background`, like a diorama. Ask the layers for pieces that stand on their own
 (arches, trees, rocks, posts); the far view and the ground get neither the
-place nor the production's look. Where a piece's painted foot ends above the
-others (a house whose grass stops above a fence post), the renderer carries its
-lowest colour down to the floor line, shading to the floor's colour, so every
-piece stands on the ground.
+place nor the production's look. Where a piece's painted foot ends a little
+above the others (a house whose grass stops above a fence post), the renderer
+brings the floor up to it: a band in the floor's colour (and a ground style's
+grain) with the piece's shadow on it, bridging the sky between two houses and
+sloping down at its ends. A piece far above the floor (an arch's lintel, a
+tree's crown) keeps its opening, and the key colour is taken out of each
+piece's rim where it meets the band.
 
 **Ground styles.** A floor the scene draws itself, in the look of a Nintendo 64 /
 GameCube field: `grass`, `meadow` (with flowers), `sand`, `asphalt`, `dirt`,

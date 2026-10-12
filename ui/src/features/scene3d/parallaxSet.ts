@@ -7,13 +7,14 @@
 // flicker past): a character running on the spot runs through the place.
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 import { cameraPath, castPoints, type DioramaGround, type StyledGround } from './dioramaSet.ts'
+import { groundColor, type GroundStyle } from './groundStyles.ts'
 
 export interface ParallaxLayer { source: string; depth: 'mid' | 'near'; foot?: number }   // foot: share of the picture's height that is empty under its pieces
 export interface ParallaxSet { layers: ParallaxLayer[]; ground?: DioramaGround | StyledGround; key?: string }
 // scroll: metres per second the place slides to the camera's left (the cast runs to its right).
-// styledGround: the shot draws a ground style (groundStyles.ts), so the set's own ground slab is left out; its colour
-// (#rrggbb) is the one the layers' pieces shade to where they meet the floor.
-export interface ParallaxOptions { scroll?: number; styledGround?: boolean; groundColor?: string }
+// groundStyle: the shot draws this ground style (groundStyles.ts), so the set's own ground slab is left out and the
+// layers' pieces settle onto that floor, in its colour and grain.
+export interface ParallaxOptions { scroll?: number; groundStyle?: GroundStyle }
 
 const CUTOUT_HEIGHT = 2        // an image cutout is 2 m tall at scale 1 and stands on its position (imageCutout.ts)
 const MODEL_HEIGHT = 1.7       // the ground slab is a model: fitGltf scales it to this height times its scale
@@ -44,11 +45,11 @@ export function stageParallaxSet(document: Scene3DDocument, set: ParallaxSet, op
   const slots: Scene3DSlot[] = []
   const reach = Math.max(MID_BEHIND, ...castPoints(document).map(point => along(point, centre, ahead))) + MID_BEHIND
   for (const layer of set.layers) {
-    const slot = layer.depth === 'near' ? nearSlot(layer, document, path, mid, ahead, set.key, scroll, options.groundColor)
-      : midSlot(layer, document, path, mid, centre, ahead, reach, set.key, scroll, options.groundColor)
+    const slot = layer.depth === 'near' ? nearSlot(layer, document, path, mid, ahead, set.key, scroll, options.groundStyle)
+      : midSlot(layer, document, path, mid, centre, ahead, reach, set.key, scroll, options.groundStyle)
     if (slot) slots.push(slot)
   }
-  if (set.ground && 'source' in set.ground && !options.styledGround) slots.unshift(groundSlot(set.ground, centre, ahead, reach + GROUND_MARGIN, scroll))
+  if (set.ground && 'source' in set.ground && !options.groundStyle) slots.unshift(groundSlot(set.ground, centre, ahead, reach + GROUND_MARGIN, scroll))
   return slots
 }
 
@@ -103,24 +104,24 @@ function tilesFor(document: Scene3DDocument, path: Pose[], at: Vec3, ahead: Vec3
 
 /** A layer facing the camera, scaled to the view height it must cover, standing on the floor lowered by the
  * empty key colour under its pieces (``foot``) and sunk a little more, so the pieces stand on the ground. */
-function layerSlot(layer: ParallaxLayer, at: Vec3, ahead: Vec3, height: number, key: string | undefined, tiles: number, scroll: number, groundColor?: string): Scene3DSlot {
+function layerSlot(layer: ParallaxLayer, at: Vec3, ahead: Vec3, height: number, key: string | undefined, tiles: number, scroll: number, ground?: GroundStyle): Scene3DSlot {
   const scale = height / CUTOUT_HEIGHT
   const bottom = -((layer.foot ?? 0) + SINK) * height
   const slot = {
     id: `set-layer-${layer.depth}`, slot: 'prop', media: 'image', surface: 'cutout', sourceUrl: layer.source, clip: null,
     position: [at[0], bottom, at[2]], rotationY: Math.atan2(-ahead[0], -ahead[2]), scale, grounded: false,
     imageLook: { unlit: true, colorKey: { color: key ?? '#ff00ff', tolerance: KEY_TOLERANCE, softness: KEY_SOFTNESS },
-      settle: { floor: round((layer.foot ?? 0) + SINK), ...(groundColor ? { color: groundColor } : {}) }, ...(tiles > 1 ? { tiles } : {}) },
+      settle: { floor: round((layer.foot ?? 0) + SINK), ...(ground ? { color: groundColor(ground), ground } : {}) }, ...(tiles > 1 ? { tiles } : {}) },
   } as Scene3DSlot
   if (scroll) slot.drift = round(scroll / (height * LAYER_ASPECT))
   return slot
 }
 
-function midSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], pose: Pose, centre: Vec3, ahead: Vec3, reach: number, key: string | undefined, scroll: number, groundColor?: string): Scene3DSlot {
+function midSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], pose: Pose, centre: Vec3, ahead: Vec3, reach: number, key: string | undefined, scroll: number, ground?: GroundStyle): Scene3DSlot {
   const at: Vec3 = [centre[0] + ahead[0] * reach, 0, centre[2] + ahead[2] * reach]
   const distance = Math.hypot(at[0] - pose.eye[0], at[2] - pose.eye[2])
   const height = viewHeight(document, distance)
-  return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll, groundColor)
+  return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll, ground)
 }
 
 /** The near layer stands on the floor a short way in front of the camera, its picture reaching only the lower part of
@@ -128,7 +129,7 @@ function midSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], 
  * None when the camera would cross it during the shot (an orbit, a crash zoom), when the cast's feet are out of the
  * frame (a close shot: any near piece would cover the body), or on a scrolled shot: a picture this close slides past
  * several times a second and its mirrored copies flicker. */
-function nearSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], pose: Pose, ahead: Vec3, key: string | undefined, scroll: number, groundColor?: string): Scene3DSlot | null {
+function nearSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[], pose: Pose, ahead: Vec3, key: string | undefined, scroll: number, ground?: GroundStyle): Scene3DSlot | null {
   if (scroll) return null
   const toLook = Math.hypot(pose.look[0] - pose.eye[0], pose.look[2] - pose.eye[2])
   const distance = toLook * NEAR_ALONG
@@ -142,7 +143,7 @@ function nearSlot(layer: ParallaxLayer, document: Scene3DDocument, path: Pose[],
   const reach = Math.min(sight + (2 * NEAR_REACH - 1) * half, base + (feet - base) * UNDER_FEET)   // its picture's top
   if (!(reach > 0.05)) return null                                // a camera this low sees nothing of a floor layer
   const height = reach / (1 - (layer.foot ?? 0) - SINK)
-  return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll, groundColor)
+  return layerSlot(layer, at, ahead, height, key, tilesFor(document, path, at, ahead, height), scroll, ground)
 }
 
 /** The height at which the cast's lowest point (its feet) is seen through a plane ``distance`` ahead of the camera;
