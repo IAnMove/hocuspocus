@@ -130,6 +130,7 @@ test('settling brings the floor up to the pieces standing just above it, and lea
   assert.equal(at(53, 78)[3], 255, 'the empty gap between the houses is bridged')
   assert.notDeepEqual(at(53, 78), [...MAGENTA, 255])
   keyed(145, 70)                                       // the arch's opening keeps its sky
+  keyed(130, 78); keyed(159, 78)                       // the taper stops at the jambs instead of sloping into it
   keyed(100, 78); assert.deepEqual(at(100, 60), [...HOUSE, 255], 'a sliver is not a piece')
   keyed(181, 90)                                       // the post already reaches the floor
   keyed(195, 50)
@@ -139,6 +140,26 @@ test('settling brings the floor up to the pieces standing just above it, and lea
   settleColumns(grained, width, height, key, { floor: 0.2, ground: 'grass' })
   const band = Array.from({ length: 40 }, (_, x) => grained[((90) * width + 10 + x) * 4 + 1])
   assert.ok(Math.max(...band) - Math.min(...band) > 6, 'with a ground style the band carries its grain')
+})
+
+test('a taper slopes into empty ground and leaves a narrow doorway open', () => {
+  const key = { color: '#ff00ff', tolerance: 0.2, softness: 0.12 }
+  const width = 200, height = 100, MAGENTA = [255, 0, 255], HOUSE = [200, 180, 140]
+  // Floor line at row 80. Two jambs and a lintel over an 8-column doorway (narrower than the two tapers
+  // together, and narrower than a bridge); a house further along, with empty ground beside it.
+  const paint = (x, y) => {
+    if (x >= 20 && x <= 40 && y >= 40 && y <= 72) return HOUSE
+    if (x >= 41 && x <= 48 && y >= 40 && y <= 49) return HOUSE
+    if (x >= 49 && x <= 70 && y >= 40 && y <= 72) return HOUSE
+    if (x >= 140 && x <= 160 && y >= 40 && y <= 72) return HOUSE
+    return MAGENTA
+  }
+  const data = picture(width, height, paint)
+  settleColumns(data, width, height, key, { floor: 0.2, color: '#40a040' })
+  const at = (x, y) => Array.from(data.slice((y * width + x) * 4, (y * width + x) * 4 + 4))
+  for (let x = 41; x <= 48; x++) assert.deepEqual(at(x, 90), [...MAGENTA, 255], `doorway column ${x} stays open`)
+  assert.notDeepEqual(at(40, 90), [...MAGENTA, 255], 'a jamb still settles onto the floor')
+  assert.notDeepEqual(at(162, 79), [...MAGENTA, 255], 'an empty end still slopes down to the floor line')
 })
 
 test('parallax layers settle to the floor line under their painted feet, and a styled ground replaces the slab', () => {

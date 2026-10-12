@@ -118,10 +118,11 @@ function bandTops(feet: number[], colours: (Rgb | undefined)[], line: number, wi
   for (const [start, end] of runs(settles)) if (settles[start] && end - start < Math.max(2, Math.round(MIN_SPAN * width))) settles.fill(false, start, end)
   const top = feet.map((foot, x) => settles[x] ? foot : -1)
   const tone = top.map((foot, x) => foot >= 0 ? pieceColour(colours, feet, x) : undefined)
+  const lintel = feet.map(foot => foot >= 0 && line - foot > MAX_GAP * height)
   for (const [start, end] of runs(settles)) {
     const left = start - 1, right = end
     if (settles[start] || left < 0 || right >= width) continue
-    const opening = feet.slice(start, end).some(foot => foot >= 0 && line - foot > MAX_GAP * height)   // under a lintel
+    const opening = lintel.slice(start, end).some(Boolean)   // under a lintel
     if (end - start > Math.max(2, Math.round(SLIT * width)) && (opening || end - start > BRIDGE * width)) continue
     for (let x = start; x < end; x++) {
       const t = (x - left) / (right - left)
@@ -129,19 +130,22 @@ function bandTops(feet: number[], colours: (Rgb | undefined)[], line: number, wi
       tone[x] = mix(tone[left] as Rgb, tone[right] as Rgb, t)
     }
   }
-  taperEnds(top, tone, line, Math.max(2, Math.round(TAPER * width)))
+  taperEnds(top, tone, line, Math.max(2, Math.round(TAPER * width)), lintel)
   return { top, tone }
 }
 
-/** Slope each band's ends down to the floor line over ``reach`` columns, so it ends in a bank and not a cliff. */
-function taperEnds(top: number[], tone: (Rgb | undefined)[], line: number, reach: number) {
+/** Slope each band's ends down to the floor line over ``reach`` columns, so it ends in a bank and not a cliff.
+ * The slope stops at an opening (a piece hanging far above the floor): a doorway the bridge left stays open. */
+function taperEnds(top: number[], tone: (Rgb | undefined)[], line: number, reach: number, lintel: boolean[]) {
   const from = top.slice()
   for (const [start, end] of runs(from.map(row => row >= 0))) {
     if (from[start] >= 0) continue
     for (const [edge, step] of [[start - 1, 1], [end, -1]] as const) {
       if (edge < 0 || edge >= from.length) continue
       for (let k = 1; k <= reach && edge + k * step >= start && edge + k * step < end; k++) {
-        const x = edge + k * step, row = Math.round(from[edge] + (line - from[edge]) * smooth(k / reach))
+        const x = edge + k * step
+        if (lintel[x]) break
+        const row = Math.round(from[edge] + (line - from[edge]) * smooth(k / reach))
         if (top[x] < 0 || row < top[x]) { top[x] = row; tone[x] = tone[edge] }
       }
     }
