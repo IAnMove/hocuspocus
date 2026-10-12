@@ -9,8 +9,9 @@ rig will not bake (the export would fail after every GPU stage), and a ``camera`
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
-characters that never play a clip, the same 3D template over and over, and a shot pattern or lyric look
-copied from another production in the workspace.
+characters that never play a clip, the same 3D template over and over, a scene2d card whose derived traits say it
+holds the picture (``template_still``), and a shot pattern or lyric look copied from another production in the
+workspace.
 """
 from __future__ import annotations
 
@@ -26,10 +27,10 @@ from services.video2d_catalogs import CATALOGS
 REUSED_STILL = 3
 # an opaque plate over the whole frame: the text templates marked covers in text_templates.json
 FULL_FRAME_TITLES = tuple(entry["id"] for entry in CATALOGS["scenes.text.catalog"]["entries"] if entry.get("covers") is True)
-MOVING = ("h3", "clip", "scene3d", "screen")
+MOVING = ("h3", "clip", "scene3d", "scene2d", "screen")
 REUSED_TEMPLATE = 4
 SHOT_FIELDS = {"key", "kind", "line", "span", "t0", "t1", "after", "cast", "sing", "frame", "action", "still", "clip", "image_model",
-               "image_steps", "graphic", "scene3d", "desktop", "focus", "zoom", "camera", "title", "allow", "moment", "seed"}
+               "image_steps", "graphic", "scene3d", "scene2d", "desktop", "focus", "zoom", "camera", "title", "allow", "moment", "seed"}
 
 
 def _shots(spec: dict) -> list[dict]:
@@ -145,7 +146,7 @@ def _covered(shot: dict) -> bool:
 def plan_warnings(spec: dict, root: Any = None, production_id: str | None = None) -> list[dict]:
     shots = _shots(spec)
     found = _ignored_fields(shots) + _replayed_clips(shots) + _castless_h3(spec, shots) + _scene3d_warnings(spec, shots, root)
-    found += _stage_warnings(spec, shots)
+    found += _stage_warnings(spec, shots) + _still_cards(shots)
     if root:
         found += _copied_from_siblings(spec, shots, Path(root), production_id)
     return found
@@ -232,6 +233,19 @@ def _scene3d_warnings(spec: dict, shots: list[dict], root: Any) -> list[dict]:
                "hint": "the template animates nothing: give the cast a clip, add motion or a camera, play it in a world, "
                        "or pick a card whose moves are not empty"} for name, keys in frozen.items()]
     return found
+
+
+def _still_cards(shots: list[dict]) -> list[dict]:
+    """A scene2d card whose derived traits say nothing but particles moves for most of the shot."""
+    from services.production_scene2d import card_of, card_traits, is_scene2d
+    frozen: dict[str, list[str]] = {}
+    for shot in shots:
+        card = card_of(shot) if is_scene2d(shot) else None
+        if card and card_traits(card).get("still") is True:
+            frozen.setdefault(card, []).append(str(shot.get("key")))
+    return [{"code": "template_still", "template": card, "shots": keys,
+             "hint": "this 2D card holds the picture for most of the shot: pick a card whose moves are not empty "
+                     "(scenes.templates.suggest), or give it more drift"} for card, keys in frozen.items()]
 
 
 _LIVELY_KEYS = ("motion", "camera", "rhythm", "world", "atmos", "pixelWorld")

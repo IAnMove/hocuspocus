@@ -3472,6 +3472,32 @@
       "notes": "Same handlers as the MCP tools; an output_name that exists gets name(2).ext. studio.key reports the residual semi-transparent share (haze).",
       "prompt_fixture": "",
       "blocking_defect": ""
+    },
+    {
+      "id": "video2d.templates.suggest",
+      "lab": "productions",
+      "surface": "edit",
+      "user_operation": "Find a Video 2D music card (a cutout choreography on the beat) for a production scene2d shot",
+      "control": "Ask to the Wizard; MCP scenes.templates.suggest / scenes.catalog",
+      "ui_handler": "video2dTemplates.command",
+      "domain_function": "registerVideo2DTemplateCapabilities",
+      "domain_module": "ui/src/features/agent/video2dTemplateCapabilities.ts",
+      "adapter": "video2dTemplates.command",
+      "api": "POST /api/v1/scenes/templates/commands",
+      "wizard_capability": "video2d_templates",
+      "wizard_schema": "video2dTemplateCapabilities.video2d_templates.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "operativa",
+      "phase": "out_of_scope",
+      "preconditions": "None: a line, its speakers, mood, beat and format, or catalog words or an exact id",
+      "persistence": "None: read-only; the card goes into a production spec as a scene2d shot",
+      "presentation": "action",
+      "test": "ui/tests/video2dTemplatesWizard.test.ts",
+      "notes": "Same handlers as the MCP tools. Only music-* cards play in production; cinema and space intents stay on the Video 3D library and the narrative shelf.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
     }
   ],
   "audited_control_groups": [

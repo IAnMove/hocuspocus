@@ -1,5 +1,8 @@
 """Scene documents, package, montage and the CPU animatic.
 
+A ``scene2d`` shot's scene starts from its compiled music card (``production_scene2d``) instead of an empty document;
+its title, lyric, footer and finish are added the same way.
+
 ``segments``, ``scene_fingerprint``, ``contact_sheet_filter``, ``failure_reason``
 and ``note_held`` stay on ``music_production`` and are read at call time.
 """
@@ -14,6 +17,7 @@ from services.production_control import sleep_until
 from services.production_package import (
     attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, write_manifest,
 )
+from services.production_scene2d import scene2d_document, scene_inputs
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.video2d_edit import MAX_OPERATIONS
 
@@ -41,7 +45,9 @@ def scene_layer_ops(production: Any, shot: dict, start: float, end: float, dur: 
     clip = clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None)
     if shot["kind"] == "scene3d" and not clip:
         raise host.ProductionError("scene3d_export_failed", f"scene3d clip missing: {shot['key']}")
-    if clip:
+    if shot["kind"] == "scene2d":
+        pass        # the compiled card is the scene (scene_document): it brings its own pictures and camera
+    elif clip:
         host.note_held(production.state, shot["key"], False)
         skip = round(max(0.0, start - shot.get("t0", start)) + ((clip.get("qa") or {}).get("suggested_sync_s") or 0), 3) if shot["kind"] == "h3" else 0
         ops += background_ops(clip["url"], "video", dur, camera=shot.get("camera"), skip=skip)
@@ -86,7 +92,8 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
         if is_locked(production, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
             continue
         dur = round(end - start, 3)
-        used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file")
+        used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file") \
+            or scene_inputs(production.state, shot)
         prior = done.get(shot["key"], {})
         fingerprint = host.scene_fingerprint(shot, style, stills, score, start, end)
         if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
@@ -113,6 +120,8 @@ def scene_document(production: Any, shot: dict, start: float, end: float, score:
     shot, style = render_shot(shot, style)
     dur = round(end - start, 3)
     doc = {"version": 1, "name": shot["key"], "width": 1920, "height": 1080, "fps": 24, "duration": dur, "layers": [], "texts": []}
+    if shot["kind"] == "scene2d":
+        doc = scene2d_document(production, shot, dur, score, stills)
     return production.edit(doc, production.scene_ops(shot, start, end, dur, score, clips, style, stills))
 
 

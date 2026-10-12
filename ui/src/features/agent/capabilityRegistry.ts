@@ -48,6 +48,7 @@ import { registerProductionWorkCapabilities } from './productionWorkCapabilities
 import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
+import { registerVideo2DTemplateCapabilities } from './video2dTemplateCapabilities'
 import { registerStudioCapabilities } from './studioCapabilities'
 export { restoreAuthoredMusicFields, authoredSfxPackInput } from './audioActionParser'
 import { registerNavigationQueueCapabilities } from './navigationQueueCapabilities'
@@ -1205,6 +1206,7 @@ defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Expor
 
 registerLipsCreatorCapabilities(defineCapability)
 registerWorld3DTemplateCapabilities(defineCapability)
+registerVideo2DTemplateCapabilities(defineCapability)
 registerProductionWorkCapabilities(defineCapability)
 registerSeriesShotEditCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)

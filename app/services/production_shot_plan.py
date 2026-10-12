@@ -94,7 +94,7 @@ def _pad_template(spec: dict, look: dict, content: list[dict]) -> dict:
     fill = spec.get("fill")
     if isinstance(fill, list) and fill and isinstance(fill[0], dict):
         template = dict(fill[0])
-        if template.get("kind") in ("h3", "still", "clip", "screen"):
+        if template.get("kind") in ("h3", "still", "clip", "screen", "scene2d"):
             return template
     return _fill_template(look, content)
 

@@ -1181,3 +1181,28 @@ stage or room shows only its mold colours and `looks_samey` when the same templa
 shots in a row.
 Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
 approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.
+
+## Video 2D music cards (`scene2d`)
+
+A `scene2d` shot plays one Video 2D music card: a cutout choreography (a figure that bounces, orbits, falls, swaps or
+dances on the beat) or a music original, compiled into the shot's scene by the 2D template compiler. Choose it over
+`scene3d` for flat cutouts that move on the beat over a painted or filmed background; choose `scene3d` for bodies with
+depth, rigged clips and rooms, and for cinema or space shots. Only `music-*` cards play here; another family fails with
+`scene2d_family_not_allowed`. Find a card with `scenes.templates.suggest` (line, speakers, mood, beat, format) or
+`scenes.catalog` (`kind: "templates"`; an `id` returns its slots and controls).
+
+```json
+{"key": "ch2", "kind": "scene2d", "line": 6, "frame": "a neon rooftop at night, wet floor",
+ "scene2d": {"template": "music-pinball", "cast": {"subject_1": "sorceress"}, "controls": {"intensity": 0.8}}}
+```
+
+- `cast` maps the card's slots (`subject_1`, `subject_2`, `prop_1`…) to a URL, a workspace file, a `stills`, `sets` or
+  `models` name, or a cast id: the run cuts that member out of its portrait once and plays the cutout.
+- `background` is a picture or a seamless video loop. Without it the shot's `still` is the background, or the frames
+  stage draws an empty set from the shot's `frame` prompt.
+- `controls` are the card's own; `bpm` defaults to the song's tempo and the cut sets the duration. The card moves its
+  own camera, so a `scene2d` shot takes no `camera`.
+- Title, lyric, footer and finish are added as on any shot, and the scene document stays editable in Video 2D.
+- The dry run shows each `scene2d` window's card (an alias resolved) and where each picture comes from, and warns
+  `cutout_without_alpha` (a subject picture with no transparent pixel) and `scene2d_holds` (the cut outlasts the card's
+  longest move). `template_still` flags a card whose derived traits hold the picture.
