@@ -183,3 +183,24 @@ test('an empty editor still opens the stock showcase, and apply/speech documents
   assert.equal(isFxShowcaseDocument(preparedApply), false)
   assert.equal(adoptPreparedSceneDocument(current, preparedApply as typeof current).mode, 'replace')
 })
+
+test('an effect speed runs its own time slower or faster, identically in 2D and 3D exports', async () => {
+  const { paintSceneFx } = await import('../src/features/sceneFx/paint')
+  const [slow] = parseSceneFx([{ id: 'slow', kind: 'speedlines', start: 0, end: 4, speed: 0.5 }])
+  assert.equal(slow.speed, 0.5)
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 1 }])[0].speed, undefined, 'normal speed is not stored')
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 0 }])[0].speed, 0.02)
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 99 }])[0].speed, 4)
+  const draw = (seconds: number, cue: typeof slow) => {
+    const log: string[] = []
+    const ctx = new Proxy({}, {
+      get: (_target, key) => (...args: unknown[]) => { log.push(`${String(key)}(${args.map(arg => typeof arg === 'number' ? arg.toFixed(4) : typeof arg).join(',')})`) },
+      set: (_target, key, value) => { log.push(`${String(key)}=${typeof value === 'number' ? value.toFixed(4) : String(value)}`); return true },
+    }) as unknown as CanvasRenderingContext2D
+    paintSceneFx(ctx, 640, 360, seconds, [cue])
+    return log
+  }
+  const normal = { ...slow, speed: undefined }
+  assert.deepEqual(draw(1, slow), draw(0.5, normal))
+  assert.notDeepEqual(draw(1, slow), draw(1, normal))
+})

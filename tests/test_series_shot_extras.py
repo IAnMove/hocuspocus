@@ -534,3 +534,17 @@ def test_a_location_backdrop_replaces_only_the_environment_slot():
     assert "backdrop" not in series_shot3d.normalize_scene3d({"template": "user-mars", "backdrop": {"asset": "../x"}})
     assert series_shot3d.scene3d_problems({"template": "user-mars", "backdrop": 3}) == [
         "scene3d.backdrop must be template, location, or {asset}"]
+
+
+def test_an_effect_speed_reaches_the_shot_cues_and_a_3d_scene():
+    from services.scene2d_validate import _normalize_sfx
+    from services.world3d_scenes import _screen_fx_entry, _screen_fx_kinds
+    layout = normalize_layout2d({"fx": [{"kind": "rain", "at": 0, "duration": "shot", "speed": 0.05}, {"kind": "dust", "speed": 9}]})
+    assert layout["fx"][0]["speed"] == 0.05 and "speed" not in layout["fx"][1], "out of range is dropped"
+    cues = fx_cues(layout, [], 6.0)
+    assert cues[0]["speed"] == 0.05
+    entry = _screen_fx_entry(0, {**cues[0], "id": "shot-fx-0"}, _screen_fx_kinds())
+    assert entry["speed"] == 0.05
+    document = {"version": 1, "sfx": [{"id": "a", "kind": "rain", "start": 0, "end": 2, "speed": 0.001}]}
+    _normalize_sfx(document)
+    assert document["sfx"][0]["speed"] == 0.02

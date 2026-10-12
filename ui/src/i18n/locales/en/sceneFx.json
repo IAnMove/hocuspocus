@@ -10,6 +10,7 @@
   "y": "Y (%)",
   "size": "Size (%)",
   "intensity": "Intensity",
+  "speed": "Speed (1 normal, 0.05 almost still)",
   "volume": "Volume",
   "seed": "Seed",
   "remove": "Remove effect",

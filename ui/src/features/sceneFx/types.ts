@@ -20,7 +20,10 @@ export type SceneFx = {
   seed: number; sound: boolean; volume: number
   rotation?: number
   from?: SceneFxOrigin
+  /** How fast the effect's own time runs: 1 normal, 0.05 rain that hangs in the air, 2 double speed (0.02–4). */
+  speed?: number
 }
+export const FX_SPEED_RANGE = [.02, 4] as const
 const number = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
 /** The kinds a cue can aim with `from`. */
@@ -34,6 +37,11 @@ function originField(kind: string, raw: unknown): { from?: SceneFxOrigin } {
   if (!AIMED_FX_KINDS.has(kind) || !value || ![value.x, value.y].every(item => typeof item === 'number' && Number.isFinite(item))) return {}
   const layerId = typeof value.layerId === 'string' && value.layerId ? value.layerId.slice(0, 160) : undefined
   return { from: { x: number(value.x, 50, ...ORIGIN_RANGE), y: number(value.y, 50, ...ORIGIN_RANGE), ...(layerId ? { layerId } : {}) } }
+}
+
+/** `speed` of a cue: kept when it is a number other than 1, clamped to FX_SPEED_RANGE. */
+function speedField(raw: unknown): { speed?: number } {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw !== 1 ? { speed: number(raw, 1, ...FX_SPEED_RANGE) } : {}
 }
 
 /** Absolute-time, seeded cues: scrubbing and export never advance a random simulation. */
@@ -52,7 +60,7 @@ export function parseSceneFx(raw: unknown): SceneFx[] {
       rotation: number(value.rotation, preset.rotation ?? FX_FIELD_DEFAULTS.rotation, -180, 180),
       color: typeof value.color === 'string' && /^#[\da-f]{6}$/i.test(value.color) ? value.color : preset.color,
       seed: Math.round(number(value.seed, index + 1, 1, 1000000)), sound: value.sound === true,
-      volume: number(value.volume, .25, 0, 1), ...originField(preset.id, value.from) }]
+      volume: number(value.volume, .25, 0, 1), ...originField(preset.id, value.from), ...speedField(value.speed) }]
   })
 }
 /** A cue switched to another effect takes that effect's colour, and its default size, x, y and

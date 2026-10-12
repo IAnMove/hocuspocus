@@ -234,7 +234,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
   `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
-  points right at 0). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
+  points right at 0), `speed` (how fast the effect's own time runs, 0.02–4: `0.05` keeps `rain` or `dust` hanging in
+  the air, a slowed `explosion` is a slow-motion one). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
   in % of that cast member's pose image (`cast`: its index in the shot's `cast`, or a character id), so the beam leaves
   the muzzle wherever the cutout is drawn, at any size, even under a push; `{"point": [70, 40]}` is a frame point.
   The beam runs from `from` to `x`/`y` (where it lands); `rotation` is not used. A `cast` naming no

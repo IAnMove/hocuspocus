@@ -196,7 +196,7 @@ export function paintSceneFx(
   for (const cue of live) if (isEtching(cue.kind)) applyEtchingLook(ctx, width, height)
   for (const cue of live) {
     if (isRetroLook(cue.kind) || isEtching(cue.kind)) continue
-    const time = seconds - cue.start
+    const time = (seconds - cue.start) * (cue.speed ?? 1)
     const frame = framePainter(cue.kind), origin = fxOrigin(cue, layerPoint)
     if (frame) frame(ctx, cue, time, width, height)
     else if (origin) paintAimedCue(ctx, cue, time, width, height, origin)

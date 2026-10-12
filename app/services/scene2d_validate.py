@@ -243,7 +243,7 @@ def _normalize_sfx(document: dict) -> None:
         return
     ranges = {
         "start": (0, 600), "end": (0, 600), "x": (0, 100), "y": (0, 100), "size": (1, 200),
-        "intensity": (0.1, 2), "rotation": (-180, 180), "volume": (0, 1),
+        "intensity": (0.1, 2), "rotation": (-180, 180), "volume": (0, 1), "speed": (0.02, 4),
     }
     for cue in cues:
         if not isinstance(cue, dict):

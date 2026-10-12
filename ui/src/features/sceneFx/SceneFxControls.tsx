@@ -1,5 +1,15 @@
 import { useUiTranslation } from '../../i18n'
-import { FX_CATALOG, parseSceneFx, switchFxKind, type SceneFx } from './types'
+import { FX_CATALOG, FX_SPEED_RANGE, parseSceneFx, switchFxKind, type SceneFx } from './types'
+
+const FIELDS = ['start', 'end', 'x', 'y', 'size', 'rotation', 'intensity', 'speed', 'volume', 'seed'] as const
+type Field = typeof FIELDS[number]
+
+/** Value and limits of one numeric field; `speed` shows 1 when unset. */
+function fieldInput(key: Field, cue: SceneFx, duration: number) {
+  if (key === 'speed') return { value: cue.speed ?? 1, min: FX_SPEED_RANGE[0], max: FX_SPEED_RANGE[1], step: .05 }
+  return { value: cue[key] ?? 0, min: key === 'rotation' ? -180 : key === 'end' ? cue.start + .1 : 0,
+    max: key === 'start' || key === 'end' ? duration : undefined, step: key === 'seed' ? 1 : .1 }
+}
 
 export function SceneFxControls({ cues = [], duration, disabled, onChange, onShowcase }: {
   cues?: SceneFx[]; duration: number; disabled?: boolean; onChange: (cues: SceneFx[]) => void; onShowcase: (collection?: 'all' | 'anime' | 'retro') => void
@@ -18,7 +28,7 @@ export function SceneFxControls({ cues = [], duration, disabled, onChange, onSho
           <label><input type="checkbox" checked={cue.sound} onChange={e => update(cue.id, { sound: e.target.checked })} /> {t('sound')}</label>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {(['start', 'end', 'x', 'y', 'size', 'rotation', 'intensity', 'volume', 'seed'] as const).map(key => <label key={key} className="text-xs">{t(key)}<input type="number" value={cue[key] ?? 0} min={key === 'rotation' ? -180 : key === 'end' ? cue.start + .1 : 0} max={key === 'start' || key === 'end' ? duration : undefined} step={key === 'seed' ? 1 : .1} onChange={e => { const value = e.target.valueAsNumber; if (Number.isFinite(value) && (key !== 'start' || value < cue.end) && (key !== 'end' || value > cue.start)) update(cue.id, { [key]: value }) }} className="mt-1 min-h-9 w-full rounded border border-border bg-bg-tertiary px-2" /></label>)}
+          {FIELDS.map(key => <label key={key} className="text-xs">{t(key)}<input type="number" {...fieldInput(key, cue, duration)} onChange={e => { const value = e.target.valueAsNumber; if (Number.isFinite(value) && (key !== 'start' || value < cue.end) && (key !== 'end' || value > cue.start)) update(cue.id, { [key]: value }) }} className="mt-1 min-h-9 w-full rounded border border-border bg-bg-tertiary px-2" /></label>)}
         </div>
         <button type="button" onClick={() => onChange(cues.filter(item => item.id !== cue.id))} className="min-h-9 text-xs text-red-300">{t('remove')}</button>
       </div>)}
