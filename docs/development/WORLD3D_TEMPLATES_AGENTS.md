@@ -289,7 +289,7 @@ Bind a GLB in a cutout's place, static or with a clip. Send the media with the U
 
 Patch `"renderLook": "toon"` as well to draw GLBs in cel bands with an ink outline next to the flat cutouts. A GLB faces +Z. In the clash, turn a GLB toward its run (`"rotationY": 1.5708` for `subject`, `-1.5708` for `rival`); a cutout stays at 0 and faces the camera. `"rotationY": 3.1416` mirrors a cutout. The anime cameras use `relativeToFacing: false`, so turning or mirroring an object never moves the camera behind it. Vehicles fly nose first (`faceTravel`). The fleet's four objects share the role `prop`, so bind each id: four bindings with the same URL. `applyAnimeTemplate(id, { roles: { vehicle: url } })` in the UI binds the whole family, and `{ text }` adds a title to the eyecatch, which has none by default.
 
-In a production, `scene3d.subject` may be a GLB or a picture: the subject object becomes a model for `.glb`/`.gltf` and a cutout for a picture in a model's place.
+In a production, `scene3d.subject` may be a GLB or a picture: the subject object becomes a model for `.glb`/`.gltf` and a cutout for a picture in a model's place. That cutout stands on its feet, is as tall as the model and turns at most 60° away from the camera; `world3d.scene.patch` does the same for a picture bound to a model object, unless the binding gives `rotationY`.
 
 Cue times are absolute seconds. Patching `duration` alone rescales the camera move and object motion but leaves effects, flashes and shake windows at their seconds; send `"retime": true` with it to stretch them with the shot, backdrop effects and shake windows included (a shake's `decay` is scaled back so it keeps its shape). Series 3D shots retime by default.
 

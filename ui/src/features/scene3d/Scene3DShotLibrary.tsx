@@ -59,7 +59,7 @@ function libraryDownloads(mode: 'templates' | 'examples', picked: Pick | undefin
 
 function ShotLibraryBody(props: ShotLibraryProps) {
   const { t, i18n } = useUiTranslation('scene3dEditor')
-  const locale = i18n.language.startsWith('es') ? 'es' : 'en'
+  const locale: 'en' | 'es' = i18n.language.startsWith('es') ? 'es' : 'en'
   const [mode, setMode] = useState<'templates' | 'examples'>(() => {
     const category = readLibraryView().category
     return LIBRARY_CATEGORIES.includes(category as typeof LIBRARY_CATEGORIES[number]) &&
@@ -89,11 +89,13 @@ function ShotLibraryBody(props: ShotLibraryProps) {
   const settings = browsed ? settingsIn(inCatalog(filterScene3DTemplates({ ...filter, category: browsed, setting: 'all' }))) : []
   const kinds = browsed ? kindsIn(inCatalog(filterScene3DTemplates({ ...filter, category: browsed, setting: view.setting }))) : []
   const downloads = libraryDownloads(mode, picked)
-  const use = (choice = picked) => {
+  const applyShot = (choice = picked) => {
     if (!choice || props.applyDisabled) return
     if (choice.kind === 'template') { setRecent(rememberRecentShot(choice.id)); props.onTemplate(choice.id) } else props.onUserTemplate(choice.pack)
     props.onClose()
   }
+  const stageShelf = { workspace: props.workspace, query: view.query, locale, selectedId: picked?.kind === 'stage' ? picked.card.id : undefined,
+    onPick: (choice: StageChoice) => setPicked({ kind: 'stage', ...choice }), onUse: (choice: StageChoice) => applyShot({ kind: 'stage', ...choice }) }
   return <div className="flex h-full max-h-[56rem] w-full max-w-[96rem] flex-col overflow-hidden rounded-xl border border-border bg-bg-secondary shadow-2xl" data-testid="world3d-shot-library">
     <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
       <h2 className="mr-auto text-base font-semibold text-text-primary">{t('templates')}
@@ -119,10 +121,12 @@ function ShotLibraryBody(props: ShotLibraryProps) {
           ? <Scene3DUserTemplates document={props.document} workspace={props.workspace} preview={props.preview} disabled={props.editingLocked} selectedId={picked?.kind === 'user' ? picked.pack.id : undefined}
             onApply={pack => setPicked({ kind: 'user', pack })} />
           : view.category === 'stages'
-          ? <Scene3DStageShelf workspace={props.workspace} query={view.query} locale={locale} selectedId={picked?.kind === 'stage' ? picked.card.id : undefined}
-            onPick={choice => setPicked({ kind: 'stage', ...choice })} onUse={choice => use({ kind: 'stage', ...choice })} />
-          : <ShotGrid templates={shown} picked={picked?.kind === 'template' ? picked.id : undefined} current={currentId}
-            onPick={id => setPicked({ kind: 'template', id })} onUse={id => use({ kind: 'template', id })} />}
+          ? <Scene3DStageShelf {...stageShelf} />
+          : <>
+            <ShotGrid templates={shown} picked={picked?.kind === 'template' ? picked.id : undefined} current={currentId}
+              onPick={id => setPicked({ kind: 'template', id })} onUse={id => applyShot({ kind: 'template', id })} />
+            {stagesUnderAll(view, mode, kind, props.workspace) ? <Scene3DStageShelf embedded {...stageShelf} /> : null}
+          </>}
       </main>
       <aside className="hidden min-h-0 overflow-y-auto border-l border-border p-3 lg:block">
         <ShotPreview picked={picked} current={currentId} locale={locale} />
@@ -134,10 +138,15 @@ function ShotLibraryBody(props: ShotLibraryProps) {
       </label>
       <span className="hidden text-xs text-text-muted sm:inline">{t('shotLibrary.hint')}</span>
       <button type="button" onClick={props.onClose} className="min-h-10 rounded-lg border border-border px-4 text-sm hover:bg-bg-hover">{t('shotLibrary.cancel')}</button>
-      <button type="button" disabled={!picked || props.applyDisabled} onClick={() => use()} data-testid="world3d-use-shot"
+      <button type="button" disabled={!picked || props.applyDisabled} onClick={() => applyShot()} data-testid="world3d-use-shot"
         className="min-h-10 rounded-lg border border-cyan-300 bg-cyan-300/15 px-4 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/25 disabled:opacity-40">{t('shotLibrary.use')}</button>
     </footer>
   </div>
+}
+
+/** «All» ends with the stages that match, in a workspace: with no set filter, and the shelf on every kind or on stages. */
+function stagesUnderAll(view: LibraryView, mode: 'templates' | 'examples', kind: 'all' | TemplateKind, workspace?: string) {
+  return Boolean(workspace) && view.category === 'all' && mode === 'templates' && view.setting === 'all' && (kind === 'all' || kind === 'stage')
 }
 
 function recentTemplates(ids: Scene3DTemplateId[], matching: Scene3DTemplate[]) {

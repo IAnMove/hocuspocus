@@ -18,6 +18,8 @@ from services.humanoid_rig.silhouette import Silhouette, centerline, components,
 _GAP_SEARCH = 0.10
 _MIN_LEG = 0.08
 _NECK_DEPTH = 0.15
+# A neck with more than this share of the figure above it is a waist when a notch higher up is deep enough.
+_HEAD_SHARE = 1 / 3
 # A row this many lower-torso widths wide is the T-pose arm line; the neck is above it.
 _ARM_SPAN = 2.5
 _ARM_CLEAR = 0.05
@@ -138,25 +140,47 @@ def central_widths(mask: np.ndarray, start: int, top: int, col: float) -> tuple[
 
 
 def find_neck(mask: np.ndarray, legs: dict) -> dict:
-    """The narrowest row between the head and the shoulders."""
+    """The narrowest row between the head and the shoulders.
+
+    A dress's waist can be a deeper notch than a neck that long hair half hides. A neck that leaves more than
+    ``_HEAD_SHARE`` of the figure above it is then the chest and the head together: the deepest notch above the widest
+    row over that waist is the neck when it is deep enough.
+    """
     crotch, top = legs["crotch_row"], legs["top"]
     widths, centers = central_widths(mask, crotch, top, legs["crotch_col"])
     smooth = np.convolve(widths, np.ones(3) / 3.0, mode="same")
     span = top - crotch
     arms = _above_arms(widths, crotch, top)
     low, high = max(crotch + int(span * 0.25), arms), top - max(2, int((top - legs["floor"]) * 0.04))
-    best_row, best_depth = None, 0.0
-    for row in range(low, high):
-        above = float(smooth[row:top + 1].max())
-        below = float(smooth[crotch + int(span * 0.1):row + 1].max())
-        depth = (min(above, below) - float(smooth[row])) / max(min(above, below), 1.0)
-        if depth > best_depth:
-            best_row, best_depth = row, depth
-    found = best_row is not None and best_depth >= _NECK_DEPTH
+    depths = {row: _notch_depth(smooth, row, crotch, top) for row in range(low, high)}
+    best_row = _deepest(depths, low, high)
+    if best_row is not None and depths[best_row] >= _NECK_DEPTH and top - best_row > (top - legs["floor"]) * _HEAD_SHARE:
+        ridge = best_row + int(np.argmax(smooth[best_row:top + 1]))
+        upper = _deepest(depths, ridge + 1, high)
+        if upper is not None and depths[upper] >= _NECK_DEPTH:
+            best_row = upper
+    found = best_row is not None and depths[best_row] >= _NECK_DEPTH
     row = best_row if found else max(crotch + int(span * 0.72), min(arms, high))
     head_width = float(widths[row:top + 1].max()) if top >= row else float(widths[row])
     return {"row": int(row), "col": float(centers[row]), "width": float(widths[row]), "found": bool(found), "widths": widths,
             "head_width": head_width}
+
+
+def _notch_depth(smooth: np.ndarray, row: int, crotch: int, top: int) -> float:
+    """How far ``row`` narrows below the widest rows above it and below it, as a share of the narrower of the two."""
+    span = top - crotch
+    above = float(smooth[row:top + 1].max())
+    below = float(smooth[crotch + int(span * 0.1):row + 1].max())
+    return (min(above, below) - float(smooth[row])) / max(min(above, below), 1.0)
+
+
+def _deepest(depths: dict, low: int, high: int) -> int | None:
+    """The lowest row of the deepest notch in ``[low, high)``, or None when no row there narrows at all."""
+    best_row, best_depth = None, 0.0
+    for row in range(low, high):
+        if depths[row] > best_depth:
+            best_row, best_depth = row, depths[row]
+    return best_row
 
 
 def _above_arms(widths: np.ndarray, crotch: int, top: int) -> int:

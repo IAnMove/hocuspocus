@@ -112,6 +112,17 @@ without a render; the pre-warm reports it as skipped. Before, each one held the
 render lane for minutes. The shipped scene `stage-crane` compiles again: only an
 existing mold makes a `stage-<mold>` id.
 
+A picture bound where a model stood through `world3d.scene.patch` (Series and
+MCP) now turns toward the camera as a production cast does: at most 60° from
+facing it along the shot, unless the binding gives `rotationY`. The editor's
+«All» shelf ends with the stages that match the search, and the Stages shelf
+reads every page of stages instead of the first 50. The humanoid auto-rig no
+longer takes a dress's waist for the neck when long hair half hides the neck: a
+neck that would leave more than a third of the figure above it gives way to a
+notch higher up. The pilot doll's Head bone moves from 66 % to 87 % of its
+height and its shoulders become level. `RIG_VERSION` 5, so a production rigs
+its GLB humanoids again on the next run.
+
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
 journey, volumetric poster lettering and particle morph typography. Editor, MCP

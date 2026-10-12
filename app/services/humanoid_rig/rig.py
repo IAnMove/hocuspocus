@@ -7,7 +7,7 @@ import numpy as np
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import BONE_NAMES
 
-RIG_VERSION = 4
+RIG_VERSION = 5
 
 
 def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 120.0) -> tuple[bytes, dict]:

@@ -72,6 +72,17 @@ def test_long_hair_and_a_skirt_do_not_put_the_neck_at_the_waist():
     assert found["points"]["neck"][1] > item["joints"]["left_shoulder"][1], "the neck is above the arms, not at the waist"
 
 
+def test_a_dress_waist_is_not_the_neck_when_locks_half_hide_the_neck():
+    item = body("dress_locks")
+    found = _found(item)
+    assert found["points"]["neck"][1] > item["joints"]["left_shoulder"][1], "the neck is above the arms, not at the dress's waist"
+    assert _error(found, item, "neck") < 0.03
+    for side in ("left", "right"):
+        for joint in ARM_JOINTS:
+            assert _error(found, item, f"{side}_{joint}") < 0.03, (side, joint)
+    assert "short_arms" not in found["warnings"]
+
+
 def test_a_cape_over_the_shoulders_does_not_hide_the_arms():
     item = body("cape")
     found = _found(item)
