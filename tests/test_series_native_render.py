@@ -852,3 +852,24 @@ def test_long_voice_instructions_never_cut_the_line_direction():
     _, directed, _ = _line_voice(voice, delivery="muy despacio, arrastrando las palabras")
     style = speech_params(directed, "Ya voy.", "spanish", 7)["custom_settings"]["style"]
     assert len(style) <= 300 and style.endswith("muy despacio, arrastrando las palabras")
+
+
+def test_library_placeholder_direction_keeps_the_recording():
+    """A beat with no emotion/delivery is stored as «natural» / «natural delivery». That is not a direction."""
+    from services.series_library import _normalize_dialogue_beat
+    beat = _normalize_dialogue_beat({"id": "s01_d1", "characterId": "gary", "text": "Ya voy."}, "s01_d1")
+    assert beat["emotion"] == "natural" and beat["delivery"] == "natural delivery"
+    series = library()["seriesById"]["uv"]
+    _, voice, key = SeriesNativeRender.line_voice(series, beat, {"kit-gary": {"voice": VOX_ES}}, "spanish")
+    assert "lineDelivery" not in voice and key == recording_key("Ya voy.", VOX_ES)
+    assert "custom_settings" not in speech_params(voice, "Ya voy.", "spanish", 7)
+
+
+def test_a_real_direction_still_reaches_the_voice_after_library_placeholders():
+    from services.series_library import _normalize_dialogue_beat
+    beat = _normalize_dialogue_beat(
+        {"id": "s01_d1", "characterId": "gary", "text": "Ya voy.", "emotion": "natural", "delivery": "susurrando"}, "s01_d1")
+    series = library()["seriesById"]["uv"]
+    _, voice, key = SeriesNativeRender.line_voice(series, beat, {"kit-gary": {"voice": VOX_ES}}, "spanish")
+    assert voice["lineDelivery"] == "susurrando" and key != recording_key("Ya voy.", VOX_ES)
+    assert speech_params(voice, "Ya voy.", "spanish", 7)["custom_settings"]["style"] == "susurrando"
