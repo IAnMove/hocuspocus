@@ -91,7 +91,11 @@ test('the fixture plan compiles every catalog card through the public compile fu
     for (const asset of assets) served.set(asset.file, { url: `/api/v1/file/${path.basename(asset.file)}?workspace=default` })
     const scene = compileCandidateScene(card.id, bindingsFor(assets, served), controls)
     const sources = scene.layers.map(layer => layer.source)
-    for (const asset of assets) assert.ok(sources.includes(served.get(asset.file).url), `${card.id} paints ${asset.slot}`)
+    // A slot that a control switches on (music-pinball's prop_1 with bouncer: prop) stays off at the card's defaults.
+    const switched = new Set((card.template.slots ?? []).filter(slot => slot.requiredWhen).map(slot => slot.id))
+    for (const asset of assets.filter(asset => !switched.has(asset.slot))) {
+      assert.ok(sources.includes(served.get(asset.file).url), `${card.id} paints ${asset.slot}`)
+    }
   }
 })
 
