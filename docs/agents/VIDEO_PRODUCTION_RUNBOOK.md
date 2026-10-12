@@ -294,8 +294,10 @@ Style fields beyond the example:
   from the lyric tags) to looks, so a chorus can land big while verses stay quiet:
   `{"verse": "quiet-left", "chorus": "big-word"}`. Word, letter and typewriter entrances last until the line's
   last sung word. `lyric_style` still overrides single fields. With no lyric template, style, theme or look, a
-  finish preset picks its look (warmCinema cinema, oldDoc typewriter, nightNeon neon, paperComic comic-caption,
-  risoPress riso-offset). Give each piece its own treatment (`same_lyric_look` warns).
+  finish preset picks its look (`finish` in `lyric_looks.json`: warmCinema, teal_orange, warm and film cinema;
+  oldDoc, sepia and flashback typewriter; nightNeon and giallo neon; natural, bleach and cold quiet-left; noir
+  engraved; dream storybook; vhs arcade; paperComic comic-caption; risoPress riso-offset). Give each piece its own
+  treatment (`same_lyric_look` warns).
 - `theme`: an Omarchy colour theme (`tokyo-night`, `catppuccin`, `gruvbox`, `nord`, `rose-pine`, `kanagawa`): lyrics become
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
@@ -320,7 +322,7 @@ Shot fields:
 Style fields for native Video 2D finishing:
 
 - `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21`; `flux2_klein_9b` is the fast alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
-- `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate.
+- `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate. The 3D grade names are 2D finishes too, with the same intention: `natural`, `teal_orange`, `bleach`, `noir`, `sepia`, `flashback`, `dream`, `giallo`, `cold`, `warm`, `vhs`, `film` (next to warmCinema, oldDoc, nightNeon, paperComic and risoPress).
 - `lyric_template` may be `ransom` or `dymo` as well as `social-caption`. `title_style` and `lyric_style` are Video 2D text patches, for example `{"font":"mono","color":"#A9B1D6"}`.
 - `footer` adds a persistent small-print line to every scene. `footer_style` can set its color, font and background through the Video 2D text patch fields.
 

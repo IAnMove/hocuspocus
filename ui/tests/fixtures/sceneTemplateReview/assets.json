@@ -1,0 +1,8 @@
+{
+  "default": {"subject_1": "subject.png", "subject_2": "partner.png", "background": "plate.jpg", "prop_1": "prop.png"},
+  "families": {"space": {"subject_1": "ship.glb", "prop_1": "ship-two.glb", "background": "space.jpg"}},
+  "cards": {
+    "cinema-two-shot": {"prop": "partner.png"},
+    "music-pulse": {"controls": {"bpm": 96}}
+  }
+}

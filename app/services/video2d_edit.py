@@ -31,7 +31,8 @@ _LAYER_TYPES = frozenset({"image", "video", "overlay", "model3d"})
 _CURVES = frozenset({"linear", "ease", "dramatic", "bounce", "hold"})
 _AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"})
 _AUDIO_KINDS = frozenset({"speech", "music", "sfx", "audio"})
-_FINISH_KEYS = frozenset({"grade", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "applyToTexts", "riso"})
+_FINISH_KEYS = frozenset({"grade", "gel", "bloom", "rays", "vignette", "grain", "texture", "letterbox", "vhs", "scanlines", "applyToTexts", "riso"})
+_TONE_CURVES = frozenset({"aces", "agx", "neutral"})
 _TEXTURES = frozenset({"paper", "film-dust", "scratches"})
 _LETTERBOX = {1.85, 2, 2.39}
 _LYRIC_MODES = frozenset({"karaoke", "word-pop", "line-fade", "bounce"})
@@ -703,7 +704,28 @@ def _grade(raw) -> dict | None:
     grade["fade"] = _clamp_num(section.get("fade"), 0, 0, 1)
     if section.get("beatFlash") is not None:
         grade["beatFlash"] = _clamp_num(section.get("beatFlash"), 0, 0, 1)
+    if section.get("curve") in _TONE_CURVES:
+        grade["curve"] = section["curve"]
     return grade
+
+
+def _gel(raw) -> dict | None:
+    """A colour over the light; an unreadable colour drops the gel, as the UI parser does."""
+    section = _section(raw, "gel")
+    color = _hex(section.get("color"), "") if section is not None else ""
+    if not color:
+        return None
+    gel = {"color": color, "amount": _clamp_num(section.get("amount"), 0, 0, 1)}
+    if _hex(section.get("shadows"), ""):
+        gel["shadows"] = section["shadows"]
+    return gel
+
+
+def _amount(label: str):
+    def parse(raw) -> dict | None:
+        section = _section(raw, label)
+        return None if section is None else {"amount": _clamp_num(section.get("amount"), 0, 0, 1)}
+    return parse
 
 
 def _bloom(raw) -> dict | None:
@@ -804,7 +826,7 @@ def _parse_finish(raw) -> dict:
     if not isinstance(raw, dict) or any(key not in _FINISH_KEYS for key in raw):
         _fail("invalid_finish", "Finish values are not valid")
     finish = {}
-    for key, parser in (("grade", _grade), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox), ("riso", _riso)):
+    for key, parser in (("grade", _grade), ("gel", _gel), ("bloom", _bloom), ("rays", _rays), ("vignette", _vignette), ("grain", _grain), ("texture", _texture), ("letterbox", _letterbox), ("vhs", _amount("vhs")), ("scanlines", _amount("scanlines")), ("riso", _riso)):
         parsed = parser(raw.get(key))
         if parsed:
             finish[key] = parsed

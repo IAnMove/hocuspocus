@@ -265,8 +265,9 @@ def _finish() -> dict:
     return _object({
         "grade": _object({
             "exposure": unit, "contrast": unit, "saturation": unit, "temperature": unit, "tint": unit,
-            "fade": _number(0, 1), "beatFlash": _number(0, 1),
+            "fade": _number(0, 1), "beatFlash": _number(0, 1), "curve": _enum(["aces", "agx", "neutral"]),
         }, ["exposure", "contrast", "saturation", "temperature", "tint", "fade"]),
+        "gel": _object({"color": HEX, "amount": _number(0, 1), "shadows": HEX}, ["color", "amount"]),
         "bloom": _object({
             "amount": _number(0, 1), "threshold": _number(0, 1), "radius": _number(0, 1), "beat": _number(0, 1),
         }, ["amount", "threshold", "radius"]),
@@ -278,6 +279,8 @@ def _finish() -> dict:
         "grain": _object({"amount": _number(0, 1), "size": _number(0.5, 4)}, ["amount", "size"]),
         "texture": _object({"kind": _enum(["none", "paper", "film-dust", "scratches"]), "amount": _number(0, 1)}, ["kind", "amount"]),
         "letterbox": _object({"ratio": _enum([1.85, 2, 2.39]), "color": HEX}, ["ratio", "color"]),
+        "vhs": _object({"amount": _number(0, 1)}, ["amount"]),
+        "scanlines": _object({"amount": _number(0, 1)}, ["amount"]),
         "applyToTexts": {"type": "boolean"},
         "riso": _object({
             "paper": HEX, "sepPaper": HEX,

@@ -275,6 +275,66 @@
       "titleEs": "Prensa riso", "titleEn": "Riso press",
       "lineEs": "Reimprime el plano en cuatro tintas de risografía (naranja, rosa, azul y negro) sobre papel, con trama, desajuste de registro y golpes en los cortes y los tiempos.",
       "lineEn": "Reprints the shot in four risograph inks (orange, pink, blue and black) on paper, with halftone, misregistration and kicks on cuts and beats."
+    },
+    "natural": {
+      "titleEs": "Natural", "titleEn": "Natural",
+      "lineEs": "Curva de película suave y el color tal cual. El grado neutro, como «natural» en 3D.",
+      "lineEn": "A gentle film curve and the colour as shot. The neutral grade, as «natural» in 3D."
+    },
+    "teal_orange": {
+      "titleEs": "Verde azulado y naranja", "titleEn": "Teal and orange",
+      "lineEs": "Luces cálidas anaranjadas y sombras verde azuladas, con más contraste. El look de cine de acción.",
+      "lineEn": "Warm orange highlights and teal shadows, with more contrast. The action-film look."
+    },
+    "bleach": {
+      "titleEs": "Blanqueo", "titleEn": "Bleach bypass",
+      "lineEs": "Color muy apagado y plateado, con mucho contraste y la luz algo más baja.",
+      "lineEn": "Strongly drained, silvery colour with hard contrast and slightly lower light."
+    },
+    "noir": {
+      "titleEs": "Cine negro", "titleEn": "Noir",
+      "lineEs": "Casi en blanco y negro, oscuro y frío, con mucho contraste y una viñeta fuerte.",
+      "lineEn": "Nearly black and white, dark and cold, with hard contrast and a heavy vignette."
+    },
+    "sepia": {
+      "titleEs": "Sepia", "titleEn": "Sepia",
+      "lineEs": "Color casi apagado bajo un tono marrón dorado, con una viñeta suave.",
+      "lineEn": "Mostly drained colour under a gold-brown tone, with a soft vignette."
+    },
+    "flashback": {
+      "titleEs": "Recuerdo", "titleEn": "Flashback",
+      "lineEs": "Recuerdo cálido y desvaído: negros levantados, menos color, grano y viñeta.",
+      "lineEn": "A faded warm memory: lifted blacks, less colour, grain and a vignette."
+    },
+    "dream": {
+      "titleEs": "Sueño", "titleEn": "Dream",
+      "lineEs": "Imagen luminosa y suave con tono rosado, resplandor y rayos de luz.",
+      "lineEn": "A bright, soft picture with a pink tone, glow and light rays."
+    },
+    "giallo": {
+      "titleEs": "Giallo", "titleEn": "Giallo",
+      "lineEs": "Tono rojo intenso, color saturado, más contraste y una viñeta: terror italiano de los setenta.",
+      "lineEn": "A strong red tone, saturated colour, more contrast and a vignette: seventies Italian horror."
+    },
+    "cold": {
+      "titleEs": "Frío", "titleEn": "Cold",
+      "lineEs": "Color frío y azulado sobre todo el plano.",
+      "lineEn": "Cold, bluish colour over the whole shot."
+    },
+    "warm": {
+      "titleEs": "Cálido", "titleEn": "Warm",
+      "lineEs": "Color cálido y dorado sobre todo el plano.",
+      "lineEn": "Warm, golden colour over the whole shot."
+    },
+    "vhs": {
+      "titleEs": "VHS", "titleEn": "VHS",
+      "lineEs": "Cinta de vídeo: color corrido, filas que tiemblan, ruido, la barra de arrastre y líneas de barrido.",
+      "lineEn": "Video tape: colour bleed, wobbling rows, noise, the tracking bar and scanlines."
+    },
+    "film": {
+      "titleEs": "Película", "titleEn": "Film",
+      "lineEs": "Curva de película con grano fino.",
+      "lineEn": "A film curve with fine grain."
     }
   },
   "lyric_looks": {
