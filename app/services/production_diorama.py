@@ -4,7 +4,8 @@
 
 - ``houses`` lists 2-8 facade descriptions ("a pale yellow two-storey house with a green door"). Each is drawn
   straight on, filling the picture, and becomes a box of that facade 6-10 m tall (``diorama_set.build_house``).
-- ``ground`` describes the floor ("worn terracotta tiles"), drawn as a seamless top-down tile.
+- ``ground`` describes the floor ("worn terracotta tiles"), drawn as a seamless top-down tile; or names one of the
+  scene's ground styles (``grass``, ``meadow``, ``sand``, ``asphalt``, ``dirt``, ``snow``, ``cobble``), drawn by the scene.
 - ``sky`` describes the sky ("a deep blue summer night with a big moon"), drawn with nothing else in it.
 - ``prompt`` is the place, added to every facade so the houses belong together.
 
@@ -62,6 +63,14 @@ def is_built(record: dict) -> bool:
     return bool(record.get("houses") and record.get("sky"))
 
 
+
+def ground_style(entry: dict) -> str | None:
+    """A ground written as one of the scene's ground styles (grass, meadow, sand...), else None: a ground to paint."""
+    from services.world3d_modifiers import GROUND_STYLES
+    word = str(entry.get("ground") or "").strip().lower()
+    return word if word in GROUND_STYLES else None
+
+
 def picture_jobs(production: Any, name: str, entry: dict, look: str, choice: tuple) -> dict[str, str | None]:
     """Image jobs for the set's facades, ground and sky, keyed ``set:<name>:<part>``."""
     seed = entry.get("seed", 11)
@@ -69,7 +78,10 @@ def picture_jobs(production: Any, name: str, entry: dict, look: str, choice: tup
     place = entry["prompt"].rstrip(". ")
     parts = {f"house-{index + 1}": (f"The front wall of {house.rstrip('. ')}, in {place}. {look} {FACADE_STAGING}", FACADE_SIZE)
              for index, house in enumerate(entry["houses"])}
-    parts["ground"] = (f"A seamless tileable texture seen from straight above: {entry['ground'].rstrip('. ')}. {GROUND_STAGING}", GROUND_SIZE)
+    if ground_style(entry) is None:
+        parts["ground"] = (f"A seamless tileable texture seen from straight above: {entry['ground'].rstrip('. ')}. {GROUND_STAGING}", GROUND_SIZE)
+    else:   # a named ground style is drawn by the scene: no picture, no slab
+        production.state["sets"][name]["ground"] = {"style": ground_style(entry)}
     parts["sky"] = (f"The open sky and nothing else: {entry['sky'].rstrip('. ')}. {SKY_STAGING}", SKY_SIZE)
     return {f"set:{name}:{part}": production.image(f"set-{name}-{part}", prompt, None, size, seed + index, *choice, attempt)
             for index, (part, (prompt, size)) in enumerate(parts.items())}
@@ -88,7 +100,8 @@ def build(production: Any, name: str, record: dict) -> None:
             size = build_house(production.root / file, production.root / pictures[f"house-{index + 1}"], HEIGHTS[index % len(HEIGHTS)])
             houses.append({"source": _url(production, file), **size})
         ground = f"{stem}-ground.glb"
-        record["ground"] = {"source": _url(production, ground), **build_ground(production.root / ground, production.root / pictures["ground"])}
+        if "ground" in pictures:
+            record["ground"] = {"source": _url(production, ground), **build_ground(production.root / ground, production.root / pictures["ground"])}
     except (OSError, ValueError, KeyError) as error:
         record["error"] = f"diorama build failed: {error}"
         return

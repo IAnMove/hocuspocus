@@ -325,7 +325,9 @@ export type Scene3DDocument = {
   templateId: Scene3DTemplateId
   camera: Scene3DCamera
   light: Scene3DLight
-  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
+  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road' | import('./groundStyles').GroundStyle; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number
+    /** A ground style's slide under a cast that runs on the spot, and the seed of its painted tile and scattered pieces. */
+    groundScroll?: import('./groundStyles').GroundScroll; groundSeed?: number }
   dressing?: Scene3DDressing
   atmos?: AtmosSettings
   /** Light from the environment (reflections, soft fill). New scenes get a generated room. */

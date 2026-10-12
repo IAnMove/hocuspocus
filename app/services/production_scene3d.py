@@ -18,7 +18,7 @@ from services.production_scene_retry import receipt_action, _artifact_name
 from services import production_rooms as rooms
 from services.world3d_grades import GRADE_NAMES
 from services.world3d_look import check_document_look
-from services.world3d_modifiers import LENS_NAMES, LIGHT_NAMES, check_camera_template
+from services.world3d_modifiers import GROUND_STYLES, LENS_NAMES, LIGHT_NAMES, check_camera_template
 from services.world3d_stage_documents import resolve_production_stage
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,9 +39,10 @@ CAST_MEMBERS = 16
 # the near layer kept off the cast. 5: the head a skin moves, not a former skeleton's loose head. 6: honest technique
 # effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
 # rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third.
-RENDER_RECIPE = 7
+RENDER_RECIPE = 8
 SURFACES = ("cutout", "environment", "wall", "floor")
-FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
+# A ground style (grass, meadow, sand...) is a floor the scene draws itself; on a set it replaces the set's ground slab.
+FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road", *GROUND_STYLES)
 BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
 LAYER_DEPTHS = ("mid", "near")
 MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scale
@@ -166,10 +167,12 @@ def _check_diorama(entry):
             isinstance(house, dict) and set(house) == {"source", "width", "height"} and _source(house["source"])
             and _measure(house["width"], 0.5, 60) and _measure(house["height"], 0.5, 60) for house in houses):
         raise ValueError("scene3d.background.houses lists 1-16 {source, width, height} house models (metres)")
-    if ground is not None and not (isinstance(ground, dict) and set(ground) == {"source", "height", "size"}
-                                   and _source(ground["source"]) and _measure(ground["height"], 0.01, 5)
-                                   and _measure(ground["size"], 4, 1000)):
-        raise ValueError("scene3d.background.ground is {source, height, size}: a ground slab model and its size in metres")
+    styled = isinstance(ground, dict) and set(ground) == {"style"} and ground["style"] in GROUND_STYLES
+    if ground is not None and not styled and not (isinstance(ground, dict) and set(ground) == {"source", "height", "size"}
+                                                  and _source(ground["source"]) and _measure(ground["height"], 0.01, 5)
+                                                  and _measure(ground["size"], 4, 1000)):
+        raise ValueError("scene3d.background.ground is {source, height, size}: a ground slab model and its size in metres, "
+                         f"or {{style}}: one of {', '.join(GROUND_STYLES)}")
 
 
 def _check_parallax(entry):

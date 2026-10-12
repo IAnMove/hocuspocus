@@ -154,3 +154,22 @@ def test_palms_face_the_way_the_gesture_reads(clip_id, side, at, facing):
         frame = int(len(clip["times"]) * at)
         palm = rot.rotate(worlds[frame, BONE_BY_NAME[f"{side}Hand"]], np.array([0.0, -1.0, 0.0]))
         assert float(palm @ np.asarray(facing)) > 0.55, (kind, clip_id, palm)
+
+
+def test_point_is_not_a_salute():
+    """The rigs have no fingers: a straight arm at shoulder height with the palm down reads as a salute. The point
+    holds the hand below the shoulder, the elbow soft and the hand on its edge."""
+    for kind in ("human_t", "pet"):
+        rig = _rig(kind)
+        clip = clip_library(120.0, ["point"], rig)[0]
+        positions, worlds = rig.forward(_locals(rig, clip), clip["hips_translation"])
+        frame = len(clip["times"]) // 2
+        shoulder, elbow, hand = (positions[frame, BONE_BY_NAME[name]] for name in ("RightArm", "RightForeArm", "RightHand"))
+        arm = np.linalg.norm(elbow - shoulder) + np.linalg.norm(hand - elbow)
+        assert (hand - shoulder)[1] < -0.25 * arm, (kind, "the hand stays well below the shoulder")
+        upper, fore = elbow - shoulder, hand - elbow
+        bend = math.degrees(math.acos(float(np.clip(upper @ fore / np.linalg.norm(upper) / np.linalg.norm(fore), -1, 1))))
+        assert bend > 15, (kind, bend)
+        palm = rot.rotate(worlds[frame, BONE_BY_NAME["RightHand"]], np.array([0.0, -1.0, 0.0]))
+        assert abs(float(palm[1])) < 0.5, (kind, "the hand is on its edge, not palm down", palm)
+        assert (hand - shoulder)[2] > 0.5 * arm, (kind, "it still points ahead")

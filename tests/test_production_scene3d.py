@@ -6,6 +6,7 @@ import math
 import pytest
 
 from services.production_scene3d import compile_document, export_scene3d_clips, validate_scene3d_shot
+from services.world3d_modifiers import GROUND_STYLES
 
 
 def shot(**config):
@@ -715,6 +716,18 @@ def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
 PARALLAX = {"source": "/api/v1/uploads/far.png", "key": "#00ff00",
             "layers": [{"source": "/api/v1/uploads/mid.png", "depth": "mid", "foot": 0.25}, {"source": "/api/v1/uploads/near.png", "depth": "near"}],
             "ground": {"source": "/api/v1/file/ground.glb?workspace=t", "height": 0.2, "size": 80}}
+
+
+def test_a_ground_style_is_a_floor_and_a_set_ground():
+    for style in GROUND_STYLES:
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, floor=style))
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background={**PARALLAX, "ground": {"style": style}}))
+    assert GROUND_STYLES == ("grass", "meadow", "sand", "asphalt", "dirt", "snow", "cobble")
+    with pytest.raises(ValueError, match="scene3d.floor"):
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, floor="lava"))
+    for bad in ({"style": "lava"}, {"style": "grass", "size": 80}):
+        with pytest.raises(ValueError, match="background.ground"):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background={**PARALLAX, "ground": bad}))
 
 
 def test_a_parallax_background_is_checked():

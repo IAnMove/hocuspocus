@@ -414,7 +414,7 @@ picture; `background` puts a picture in the template's background slot. The
 template keeps its camera, props, lights and moves. With a painted background on
 a plane, the floor becomes `backdrop`: the picture is projected onto a real floor,
 so models stand on the painted ground and the camera gets parallax. `floor`
-(`backdrop`, `none`, `tiles`, `mirror`, `road`) overrides it. Sources may be URLs,
+(`backdrop`, `none`, `tiles`, `mirror`, `road`, or a ground style below) overrides it. Sources may be URLs,
 workspace file names or `stills` names. A cast clip may be given by its GLB
 animation name.
 
@@ -525,7 +525,20 @@ an orbit never shows its edge. A shot whose camera would cross the near layer
 (an orbit, a crash zoom) leaves it out. Name the set as the shot's
 `background`, like a diorama. Ask the layers for pieces that stand on their own
 (arches, trees, rocks, posts); the far view and the ground get neither the
-place nor the production's look.
+place nor the production's look. Where a piece's painted foot ends above the
+others (a house whose grass stops above a fence post), the renderer carries its
+lowest colour down to the floor line, shading to the floor's colour, so every
+piece stands on the ground.
+
+**Ground styles.** A floor the scene draws itself, in the look of a Nintendo 64 /
+GameCube field: `grass`, `meadow` (with flowers), `sand`, `asphalt`, `dirt`,
+`snow`, `cobble`. Each is a seamless painted tile with its large patches inside
+it, plus small 3D pieces scattered round the cast (grass tufts, flowers,
+pebbles, snow lumps) that shrink away where a character stands. Ask for one on
+any shot with `"floor": "grass"`; on a parallax or diorama set it replaces the
+set's ground slab, and a `scroll` slides it (and its pieces) with the layers.
+A set can name one as its ground (`"ground": "meadow"`): nothing is drawn for
+the ground and every shot on that set gets the style.
 
 **Running through a place.** A character playing `walk` or `run` on the spot
 reads as running when the place moves: `"scroll": 2.5` on a shot with a
