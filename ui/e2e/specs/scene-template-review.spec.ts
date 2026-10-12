@@ -230,7 +230,7 @@ test('opens cinema-establishing in the real editor, saves exact scene JSON, and 
       controls: expect.objectContaining({
         catalogVersion: CATALOG_VERSION,
         templateVersion: 1,
-        reviewStatus: 'candidate',
+        reviewStatus: 'approved',
       }),
     })
     expect(SAVED_OUTPUT).toMatchObject({ name: 'review.scene.json', type: 'scene', url: expect.stringContaining('/api/v1/file/review.scene.json') })
@@ -254,7 +254,7 @@ test('opens cinema-establishing in the real editor, saves exact scene JSON, and 
     const recoveredScene = await readAutosave(page)
     expect(recoveredScene?.narrative).toMatchObject({
       templateId: 'cinema-establishing',
-      controls: expect.objectContaining({ catalogVersion: CATALOG_VERSION, templateVersion: 1, reviewStatus: 'candidate' }),
+      controls: expect.objectContaining({ catalogVersion: CATALOG_VERSION, templateVersion: 1, reviewStatus: 'approved' }),
     })
     expect(recoveredScene).toEqual(postedScene)
   } finally {
