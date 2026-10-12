@@ -24,13 +24,12 @@ PHRASES = [
     ("close-up of the singer", "cinema-closeup"),
     ("entrada del héroe", "cinema-hero"),
     ("persecución espacial", "space-chase"),
-    ("explosión de una nave", "space-explosion"),
+    ("explosión de una nave", "space-broadside"),
     ("producto girando", "music-product"),
     ("rebota como una bola de pinball", "music-pinball"),
     ("choca esos cinco", "music-high-five"),
     ("documental histórico con fecha", "documentary-history"),
-    ("trailer teaser", "trailer-teaser"),
-    ("lyric video vertical para tiktok", "lyric-vertical"),
+    ("trailer teaser", "trailer-slam"),
     ("rótulo con el nombre", "lower-third-date"),
     ("título de capítulo", "chapter"),
     ("cita", "quote"),
@@ -55,10 +54,20 @@ def test_a_writer_phrase_finds_the_entry_first(phrase, wanted):
     assert within["entries"][0]["id"] == wanted and within["entries"][0]["score"] == found["matches"][0]["score"]
 
 
+def test_merged_and_retired_cards_lead_to_what_replaced_them():
+    """space-explosion is space-broadside with outcome explode; the retired cards point at texts and lyric looks."""
+    assert _search("explosión de una nave")["matches"][0]["id"] == "space-broadside"
+    lyric = _search("lyric video vertical para tiktok")
+    assert lyric["matches"][0]["kind"] == "lyric_looks" and lyric["partial"] is True
+    assert not any(item["id"] in {"trailer-teaser", "lyric-vertical", "space-explosion"} for item in _search("trailer explosión lyric")["matches"])
+
+
 def test_words_no_entry_knows_come_back_and_do_not_count():
     docking = _search("la nave atraca en la estación")
-    assert docking["unknown_words"] == ["atraca"]
-    assert "space-docking" in [item["id"] for item in docking["matches"][:2]]
+    assert docking["unknown_words"] == [] and docking["matches"][0]["id"] == "space-docking"
+    sailing = _search("la nave zarpa de la estación")
+    assert sailing["unknown_words"] == ["zarpa"]
+    assert "space-docking" in [item["id"] for item in sailing["matches"][:2]]
     assert _search("rótulo con el nombre")["unknown_words"] == ["nombre"]
     nothing = _search("zzyzx quux")
     assert nothing["matches"] == [] and nothing["unknown_words"] == ["zzyzx", "quux"]
