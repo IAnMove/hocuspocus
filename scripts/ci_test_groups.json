@@ -1517,7 +1517,8 @@
         "tests/test_production_disk.py",
         "tests/test_production_review_checks.py",
         "tests/test_video_production_runbook.py",
-        "tests/test_production_thin_plan.py"
+        "tests/test_production_thin_plan.py",
+        "tests/test_production_scene2d.py"
       ]
     },
     {

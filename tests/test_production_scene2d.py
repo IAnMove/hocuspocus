@@ -400,6 +400,47 @@ def test_a_shot_edit_rebuilds_the_card_scene_and_records_what_a_resume_compares(
     assert calls == [], "the scene the edit exported is the one a resume would make"
 
 
+def test_scene_fingerprint_includes_score_bpm_for_scene2d_only():
+    from services.music_production import scene_fingerprint
+    card = shot()
+    still = {"key": "s1", "kind": "still", "still": "cover"}
+    style, stills = {}, {}
+    slow = {"bpm": 96, "lines": []}
+    fast = {"bpm": 140, "lines": []}
+    assert scene_fingerprint(card, style, stills, slow, 0, 4) != scene_fingerprint(card, style, stills, fast, 0, 4)
+    assert scene_fingerprint(still, style, stills, slow, 0, 4) == scene_fingerprint(still, style, stills, fast, 0, 4)
+
+
+def test_a_changed_score_bpm_reexports_the_scene2d_card(tmp_path):
+    """compile_input writes the song tempo; a resume must not keep the old card motion."""
+    from services.production_shot_edit import reexport_shot
+    from services.production_stage_scenes import export_scenes
+    (tmp_path / "score.json").write_text(json.dumps({"duration": 8, "bpm": 96, "beat": 0.5, "lines": []}))
+    drawn = {**shot(), "scene2d": {"template": "music-pinball", "cast": {"subject_1": SUBJECT}}, "frame": "a plaza"}
+    plan = spec(drawn)
+    replies = {
+        scene2d.COMPILE: card_document,
+        "scenes.video2d.edit": lambda arguments: {"result": edit(arguments)["result"]},
+        "scenes.video2d.validate": lambda arguments: {"result": {"warnings": []}},
+        "scenes.document.save": lambda arguments: {"result": {"name": "p-s1.scene.json"}},
+        "scenes.video2d.export": lambda arguments: {"receipt": {"commandId": "export-s1"}},
+        "scenes.video2d.export.receipt": lambda arguments: {"receipt": {"artifacts": [{"name": "p-s1.mp4"}]}},
+        "montages.get": lambda arguments: {"result": {"revision": 1, "montage": {"revision": 1, "clips": [{"id": "s1", "source": "old.mp4"}]}}},
+        "montages.save": lambda arguments: {"result": {"file": "p.montage.json", "revision": 2}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: replies[tool](arguments))
+    production.state.update(spec=plan, score="score.json", status="completed", frames={"s1": "p-frame-s1.png"}, montage_file="p.montage.json")
+    reexport_shot(production, plan, "s1")
+    calls = []
+    replies["scenes.video2d.export"] = lambda arguments: calls.append(arguments) or {"receipt": {"commandId": "again"}}
+    export_scenes(production, plan, shot_windows(plan, production.score()))
+    assert calls == [], "the same tempo keeps the scene"
+    (tmp_path / "score.json").write_text(json.dumps({"duration": 8, "bpm": 140, "beat": 0.5, "lines": []}))
+    export_scenes(production, plan, shot_windows(plan, production.score()))
+    assert calls, "a new score tempo exports the card again"
+
+
 def test_the_dry_run_reads_the_runs_own_pictures_for_the_alpha_check(tmp_path):
     from PIL import Image
     Image.new("RGB", (8, 8), (200, 40, 40)).save(tmp_path / "boxed.png")      # a picture with no transparent pixel

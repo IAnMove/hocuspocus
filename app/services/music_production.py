@@ -287,9 +287,16 @@ SCENE_RECIPE = 2      # 2: camera presets play on a camera layer over the whole 
 
 
 def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict, start: float, end: float) -> str:
-    """Invalidate a rendered scene when its spec, window, lyric timing or the scene recipe changes on resume."""
+    """Invalidate a rendered scene when its spec, window, lyric timing or the scene recipe changes on resume.
+
+    A scene2d card also takes the score tempo (``compile_input`` writes ``controls.bpm`` when the card
+    has that control and the shot did not set one). Leaving bpm out kept the old MP4 after a re-score
+    or ``production.song.use`` whose windows stayed put.
+    """
     source = {"shot": shot, "style": style, "stills": stills, "lines": score.get("lines") or [],
               "start": round(float(start), 3), "end": round(float(end), 3), "recipe": SCENE_RECIPE}
+    if shot.get("kind") == "scene2d":
+        source["bpm"] = score.get("bpm")
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 

@@ -6,6 +6,11 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**A scene2d resume re-exports the card when the song tempo changes.**
+`compile_input` writes the score BPM into the music card; `scene_fingerprint`
+did not hash it, so a re-score or `production.song.use` whose windows stayed
+within 0.3 s kept the old MP4 motion. Still and H3 shots are unchanged.
+
 **A hard rule about minors is now in every LLM system prompt, with NSFW mode on or
 off.** It forbids sexual or sexualized content with minors or with characters who
 look like or are described as minors, whatever the fiction, claimed age or art
