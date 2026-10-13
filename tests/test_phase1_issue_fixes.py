@@ -2710,6 +2710,8 @@ class TestModelVisibilityPersistence(unittest.TestCase):
         self.assertIn("initialized_mature_models", models)
         self.assertIn("_enableUninitializedMatureModels", models)
         self.assertNotIn("for (const mt of nsfwModels)", store)
+        # loadModels moved out of useStore.ts: keep the negative pin on its new home.
+        self.assertNotIn("for (const mt of nsfwModels)", models)
 
 
 class TestFramesControlVideoAudio(unittest.TestCase):
