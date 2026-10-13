@@ -72,6 +72,21 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   )
 }
 
+/** Director: what the planner's cleanup removed from the shot's image prompt. */
+function PromptCleanupNote({ cleanup }: { cleanup?: VideoClipInfo['prompt_cleanup'] }) {
+  const { t } = useUiTranslation('extraInfo')
+  if (!cleanup || !Object.values(cleanup).some(Boolean)) return null
+  return (
+    <div className="rounded-md bg-bg-primary/50 px-2.5 py-2 text-[10px] text-text-muted" title={t('clip.promptCleanupHint')}>
+      {t('clip.promptCleanup', {
+        garments: cleanup.garments ?? 0,
+        motion: cleanup.motion_sentences ?? 0,
+        fillers: cleanup.fillers ?? 0,
+      })}
+    </div>
+  )
+}
+
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return ''
   const units = ['B', 'KB', 'MB', 'GB']
@@ -331,6 +346,8 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
                   <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary">{text}</p>
                 </div>
               ))}
+
+              <PromptCleanupNote cleanup={clip.prompt_cleanup} />
 
               {clip.audio_prompt && (
                 <div className="rounded-md bg-bg-primary/50 p-2.5">

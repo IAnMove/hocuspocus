@@ -8,6 +8,30 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
 
+**Director's hidden house rules are now visible.** With no reference image,
+Director still draws one shared picture from shot 1 and draws every shot from
+it, but the Dashboard now shows that picture, its prompt and the run's options
+above the shots, and can replace it with another image of the run or stop
+using it for repairs and reruns. Settings › Services › *Director shared
+reference* chooses Always (default), Only when there are no character
+references, or Off (each shot from its own prompt); a run can override it with
+`reference_anchor`, and the step-by-step Director chat follows it too. The
+shared picture's prompt no longer says "cinematic".
+"Use lighting and color temp from reference image" is gone from the guide used
+when no reference exists, and elsewhere it follows *Light from the reference*
+(default: only with your own reference image, so a story with character
+portraits alone no longer copies the anchor's light). *Keep clothes from
+references* (on by default) can be turned off to describe clothes per shot;
+the clothing words then also survive the optional third-pass polish.
+*Raw prompts* now also skips the planner's cleanup of image prompts, as its
+description promised; otherwise Extra info says how many clothing words,
+motion sentences and filler phrases that cleanup removed. The music-video
+treatment shows its coverage cycle and what choruses do (return to the first
+set by default, rotate through the sets, or the planner chooses), and the
+Dashboard shows each shot's planned set and coverage. When the planner returns
+no shots and Director builds a simple plan itself, the Dashboard says so and
+that plan no longer says "cinematic" either.
+
 **The code-health check now recognizes moved code and no longer misses new
 folders.** It checks every pull request against its base, and the coming
 refactor moves functions out of `_launch_runtime.py` and `useStore.ts`. Before,
