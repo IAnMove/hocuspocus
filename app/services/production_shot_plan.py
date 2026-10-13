@@ -20,7 +20,14 @@ from typing import Any
 
 from services.production_treatment import VARIATIONS, annotate_moments
 
-_FRAME = "Medium close-up of the singer from the cast sheet, facing the camera, lips parted"
+# One framing per sung shot, in turn: with one shared frame text, cast and seed every sung start frame was the
+# same picture. Each keeps the face large and readable for the lip-sync check.
+_FRAMES = (
+    "Medium close-up of the singer from the cast sheet, facing the camera, lips parted",
+    "Waist-up medium shot of the singer from the cast sheet, three-quarter angle, lips parted",
+    "Low-angle medium close-up of the singer from the cast sheet, looking just past the camera, lips parted",
+    "Close-up of the singer from the cast sheet in three-quarter profile, lips parted, background in soft focus",
+)
 _BROLL_FRAME = "Wide cinematic shot of the protagonist from the reference sheet in the scene: {phrase}"
 _BROLL_ACTION = "The protagonist acts out the scene: {phrase}. Clear movement, slow camera."
 _ACTIONS = {
@@ -230,7 +237,7 @@ def _verse_shots(start: int, count: int, cast: list[str], action: str, look: dic
     shots = []
     for offset in range(count):
         if offset % 2 == 0 and look["sings"]:
-            shots.append(_sung(_next(numbers, "v"), start + offset, 1, cast, action))
+            shots.append(_sung(_next(numbers, "v"), start + offset, 1, cast, action, _frame(look, numbers)))
         else:
             shots.append(_content(_next(numbers, "s"), start + offset, look))
     return shots
@@ -242,7 +249,7 @@ def _chorus_shots(start: int, count: int, cast: list[str], action: str, look: di
     while offset < count:
         span = 2 if offset + 1 < count else 1
         if look["sings"]:
-            shot = _sung(_next(numbers, "c"), start + offset, span, cast, action)
+            shot = _sung(_next(numbers, "c"), start + offset, span, cast, action, _frame(look, numbers))
         else:
             shot = _content(_next(numbers, "c"), start + offset, look)
             shot["span"] = span
@@ -277,8 +284,15 @@ def _alone(cast: list[str]) -> str:
     return ALONE if len(cast) == 1 else ""
 
 
-def _sung(key: str, line: int, span: int, cast: list[str], action: str) -> dict:
-    return {"key": key, "kind": "h3", "line": line, "span": span, "sing": True, "cast": list(cast), "frame": _FRAME,
+def _frame(look: dict, numbers: dict) -> str:
+    """The next sung framing, placed in the song's scene."""
+    turn = numbers.get("sung", 0)
+    numbers["sung"] = turn + 1
+    return f"{_FRAMES[turn % len(_FRAMES)]}, in the scene: {look['phrase']}"
+
+
+def _sung(key: str, line: int, span: int, cast: list[str], action: str, frame: str) -> dict:
+    return {"key": key, "kind": "h3", "line": line, "span": span, "sing": True, "cast": list(cast), "frame": frame,
             "action": action + _alone(cast)}
 
 

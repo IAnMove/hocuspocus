@@ -16,6 +16,33 @@ IDs to use instead. Stories saved with `music-3.0` as their old default now read
 the local model and Story Lab tells you so; the file on disk is not rewritten.
 `media.options` lists the installed local music models.
 
+**Honest defaults.** Regenerate makes something new: a Director image, clip or
+H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
+that made the result (comic films keep the seed their approved PRE pinned). Every
+new `production.*` run draws its own seed base, kept in its record, so two
+productions no longer start from the same noise and a resume asks for the same
+jobs; Hunyuan3D and the external 3D engines draw a seed when none is set (-1),
+and a game asset's Regenerate gets its own. Auto-planned music videos give each
+sung shot its own framing and seed, and a style with no named look keeps the
+brief's own words instead of falling back to anime. Published pages no longer
+carry another production's tagline or Nintendo disclaimer.
+
+**Prompts reach the model as written.** Director prompt polish is off by
+default (opt-in in Settings › Services); the 1,450-character cut is gone (only
+MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
+user types for a rerun, changes at the review pause or approves in the
+direct-video review screen keeps the lettering it asks for. *Raw prompts* in
+Settings › Services sends every Director prompt exactly as planned: no
+art-style prefix, locks, motion-word removal or polish, in planning (the plan
+endpoint, the orchestrator and the legacy planner), after the review pause, in
+the H3 validation pass and on every rerun; the planner's own words are not
+compressed either. Continuity anchors of bounded shots, the spoken-language
+line and H3's own contracts still apply. When a model handler rewrites a
+prompt (H3 window timing, outpainting), Extra info shows *What the model
+received* for each window. Until a production profile is saved, a dismissible
+notice says which providers text and pictures use; a saved profile that cannot
+be read is reported instead of silently replaced.
+
 The Video Editor routes now come from one place. The main server mounts the
 extracted Video Editor router and the second copy inside the launch runtime is
 gone, with the same paths, answers and job list as before. Saved montages and

@@ -82,6 +82,12 @@ from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
 )
+from services.director.policies import (
+    TYPED_PROMPTS_KEY,
+    enforce_direct_video_on_clip_plans,
+    enforce_visual_style_on_clip_plans,
+    mark_typed_prompt_edits,
+)
 from services.director_pipeline_state import (
     _DIRECTOR_TEMP_DIRNAME,
     _PIPELINE_FILE_PREFIX,
@@ -859,6 +865,98 @@ def _normalise_master_seed(params: dict) -> int:
     value = secrets.randbelow(2**31 - 1)
     params["master_seed"] = value
     return value
+
+
+def _raw_prompts() -> bool:
+    """Settings › Services › Raw prompts: every prompt reaches the model as the plan wrote it.
+
+    Off by default. When on, the Director adds nothing to the planner's words,
+    in planning, after the review pause or on a rerun: no style prefix, no
+    motion-effect strip, no style, character or no-text locks, no source-style
+    anchor or compression in the orchestrator and no prompt polish. What a
+    model handler itself requires (H3's window timing) still applies and is
+    shown in the output's Extra info.
+    """
+    config = getattr(_wgp, "server_config", None)
+    services = config.get("services") if isinstance(config, dict) else None
+    return isinstance(services, dict) and services.get("raw_prompts") is True
+
+
+def _clip_text_allowed(params: Mapping[str, Any]) -> bool:
+    """No no-visible-text lock: Raw prompts is on, or the project allows on-screen text."""
+    return _raw_prompts() or params.get("allow_clip_text") is True
+
+
+def _apply_final_prompt_locks(
+    clip_plans: list[dict],
+    params: dict,
+    *,
+    direct_video: bool = False,
+) -> list[dict]:
+    """The final style, character-style and no-visible-text locks on planned prompts.
+
+    None of them with Raw prompts. Direct video gets only its own contract
+    (``_apply_direct_video_contract``).
+    """
+    if _raw_prompts():
+        return clip_plans
+    return enforce_visual_style_on_clip_plans(
+        clip_plans,
+        "" if direct_video else params.get("visual_style", ""),
+        preserve=not direct_video and bool(params.get("preserve_visual_style", False)),
+        has_reference=_has_visual_references(params),
+        character_visual_style="" if direct_video else params.get("character_visual_style", ""),
+        allow_clip_text=direct_video or params.get("allow_clip_text") is True,
+    )
+
+
+def _apply_direct_video_contract(
+    clip_plans: list[dict],
+    params: dict,
+    master_prompt: str,
+) -> list[dict]:
+    """Compose each direct-video prompt with its master; no no-text lock with Raw prompts."""
+    return enforce_direct_video_on_clip_plans(
+        clip_plans,
+        master_prompt,
+        audio_direction=str(
+            (params.get("video_params") or {}).get("h3_audio_prompt") or ""
+        ),
+        allow_clip_text=_clip_text_allowed(params),
+    )
+
+
+def _approved_review_plans(provided: Any) -> Optional[list[dict]]:
+    """Prompts approved in the manual review screen (``provided_clip_plans``), marked as typed.
+
+    They are the user's: the final pass keeps their style locks but adds no
+    no-text lock. The plan endpoint already locked the ones the LLM wrote.
+    """
+    if not isinstance(provided, list) or not provided:
+        return None
+    return mark_typed_prompt_edits([], copy.deepcopy(provided))
+
+
+def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> bool:
+    """Whether the user typed this saved prompt at the review pause (see ``continue_pipeline``)."""
+    plans = state.get("clip_plans")
+    plan = plans[clip_index] if isinstance(plans, list) and 0 <= clip_index < len(plans) else None
+    return isinstance(plan, dict) and field in (plan.get(TYPED_PROMPTS_KEY) or ())
+
+
+def _regenerate_seed(state: Mapping[str, Any], stored: Any) -> int:
+    """Seed for a Regenerate: a new attempt draws a new seed.
+
+    Reusing the stored seed made Regenerate return the same picture. Comic
+    movies keep the seed their approved PRE pinned, so their rerun stays exact.
+    """
+    snapshot = state.get("_params_snapshot") or {}
+    if "comic_movie" in (state.get("pipeline_type"), snapshot.get("pipeline_type")):
+        try:
+            return int(stored)
+        except (TypeError, ValueError):
+            pass
+    return secrets.randbelow(2**31 - 1)
 
 
 
@@ -2734,8 +2832,14 @@ def _delete_pipeline_locked(out_dir: str, pid: str) -> dict:
     }
 
 
-def _saved_prompt_contract(state: dict, prompt: str, mode: str) -> str:
-    """Reapply durable Story prompt policies to manual reruns and edits."""
+def _saved_prompt_contract(state: dict, prompt: str, mode: str, typed: bool = False) -> str:
+    """Reapply durable Story prompt policies to manual reruns and edits.
+
+    ``typed`` is a prompt the user wrote for this rerun: the no-text lock no
+    longer deletes the lettering the user asked for in it.
+    """
+    if _raw_prompts():
+        return str(prompt or "").strip()
     snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
     params = {**state, **snapshot}
     try:
@@ -2768,7 +2872,7 @@ def _saved_prompt_contract(state: dict, prompt: str, mode: str) -> str:
             mode=mode,
             preserve=True,
         )
-    if params.get("allow_clip_text") is not True:
+    if params.get("allow_clip_text") is not True and not typed:
         result = apply_no_visible_text_lock(result, mode=mode)
     return result
 
@@ -2792,6 +2896,7 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         state,
         prompt_override or clip.get("image_prompt", ""),
         "image",
+        typed=bool(prompt_override) or _typed_at_review(state, clip_index, "image_prompt"),
     )
     if not prompt:
         raise ValueError("No image prompt for this clip")
@@ -2800,8 +2905,10 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     # (the pipeline prepends it at generation time, so the saved
     # image_prompt does not carry it). Motion-effect strip mirrors
     # _gen_image for the same reason.
-    prompt = _strip_motion_effects(prompt)
-    _style_prefix = _style_prefix_for((state.get("_params_snapshot") or {}).get("_reference_style") or "")
+    raw = _raw_prompts()
+    if not raw:
+        prompt = _strip_motion_effects(prompt)
+    _style_prefix = "" if raw else _style_prefix_for((state.get("_params_snapshot") or {}).get("_reference_style") or "")
     if _style_prefix and not prompt.lower().startswith("maintain the same"):
         prompt = _style_prefix + prompt
 
@@ -2873,10 +2980,7 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     pipeline_file = _find_pipeline_file(out_dir, pid)
     clip_out_dir = os.path.dirname(pipeline_file) if pipeline_file else out_dir
 
-    try:
-        rerun_seed = int(clip.get("seed", -1))
-    except (TypeError, ValueError):
-        rerun_seed = -1
+    rerun_seed = _regenerate_seed(state, clip.get("seed"))
     if image_model == "minimax:image-01":
         new_filename = _generate_minimax_director_image(
             prompt=prompt,
@@ -2934,6 +3038,8 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     # Update the saved pipeline state
     def _update(s):
         s["clips"][clip_index]["start_image_filename"] = new_filename
+        if image_model != "minimax:image-01":
+            s["clips"][clip_index]["start_image_seed"] = rerun_seed
         # A video generated from the previous start image is still useful
         # history, but it no longer represents this clip's current inputs.
         # Keep its filename for playback/ownership and mark it for regeneration.
@@ -3264,6 +3370,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         state,
         prompt_override or clip.get("video_prompt", ""),
         "video",
+        typed=bool(prompt_override) or _typed_at_review(state, clip_index, "video_prompt"),
     )
     if not prompt:
         raise ValueError("No video prompt for this clip")
@@ -3563,10 +3670,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
             "Use Generate only this clip there so renderer, fit, seed, "
             "negative prompt and frame contract remain exact."
         )
-    try:
-        rerun_seed = int(clip.get("seed", -1))
-    except (TypeError, ValueError):
-        rerun_seed = -1
+    rerun_seed = _regenerate_seed(state, clip.get("seed"))
     camera_locked = is_comic_movie and _comic_camera_is_locked(snapshot, clip_index)
     negative_prompt = str(video_params.get("negative_prompt") or "").strip()
     if camera_locked:
@@ -3856,6 +3960,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         saved_clip["selected_video_filename"] = new_filename
         saved_clip["video_stale"] = False
         saved_clip["video_prompt"] = prompt
+        saved_clip["seed"] = gen_params.get("seed")
         attempts = [
             item for item in (saved_clip.get("video_attempts") or [])
             if isinstance(item, dict) and item.get("filename") != new_filename
@@ -3965,6 +4070,8 @@ def rerun_h3_segment(
     snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
     direct_params = {**state, **snapshot}
     direct_video, direct_video_master_prompt = _direct_video_settings(direct_params)
+    # A prompt the user typed keeps its lettering; Raw prompts adds no lock.
+    allow_segment_text = bool(prompt_override) or _clip_text_allowed(direct_params)
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs, video_refs, audio_refs = (
         ([], [], []) if direct_video else _h3_edit_references(state, clip_index)
@@ -3981,7 +4088,7 @@ def rerun_h3_segment(
                 str(video_params.get("h3_audio_prompt") or ""),
                 mode,
                 direct_video_master_prompt,
-                direct_params.get("allow_clip_text") is True,
+                allow_segment_text,
             )
         clip["video_prompt"] = prompt_override
     elif prompt_override:
@@ -4026,6 +4133,7 @@ def rerun_h3_segment(
                 raise ValueError(f"Start image for H3 segment {index + 1} is missing")
 
             segment_mode = "references" if identity_safe and index > 0 else base_mode
+            record["seed"] = _regenerate_seed(state, record.get("seed"))
             try:
                 from services.director.minimax_h3_prompting import format_minimax_h3_prompt
             except ImportError:
@@ -4046,7 +4154,7 @@ def rerun_h3_segment(
                     str(record.get("prompt") or ""),
                     plan=segment_plan,
                     audio_direction=str(video_params.get("h3_audio_prompt") or ""),
-                    allow_clip_text=direct_params.get("allow_clip_text") is True,
+                    allow_clip_text=allow_segment_text,
                 )
             else:
                 prompt = format_minimax_h3_prompt(
@@ -4060,7 +4168,7 @@ def rerun_h3_segment(
                         video_params,
                     ),
                 )
-            prompt = _saved_prompt_contract(state, prompt, "video")
+            prompt = _saved_prompt_contract(state, prompt, "video", typed=bool(prompt_override))
             prompt = _h3_apply_portrait_composition_contract(
                 prompt,
                 str(video_params.get("resolution") or "960x544"),
@@ -4074,7 +4182,7 @@ def rerun_h3_segment(
                 "guidance_scale": video_params.get("guidance_scale", 1),
                 "resolution": video_params.get("resolution", "960x544"),
                 "video_length": int(record.get("frames") or 124),
-                "seed": int(record.get("seed") or 0),
+                "seed": record["seed"],
                 "settings_version": 2.52,
                 "generation_mode": "video",
                 "repeat_generation": 1,
@@ -5768,7 +5876,11 @@ def continue_pipeline(pid: str, updates: Optional[dict] = None):
             return False
         if updates:
             if "clip_plans" in updates:
-                p["clip_plans"] = updates["clip_plans"]
+                # A prompt the user changed at the review pause is typed: the
+                # re-check after the pause does not put the no-text lock back.
+                p["clip_plans"] = mark_typed_prompt_edits(
+                    p.get("clip_plans"), updates["clip_plans"],
+                )
         p["status"] = "running"
         p["pause_reason"] = None
         p["updated_at"] = time.time()
@@ -7422,13 +7534,10 @@ def _run_pipeline(pid: str, resume: bool = False):
         # prompts enter the same durable server pipeline without asking the
         # LLM to rewrite them or falling back to Studio's generic multiclip
         # submission path.
-        provided_plans = params.get("provided_clip_plans")
         resume_plans = (
             (p.get("clip_plans") or None)
             if resume else
-            copy.deepcopy(provided_plans)
-            if isinstance(provided_plans, list) and provided_plans else
-            None
+            _approved_review_plans(params.get("provided_clip_plans"))
         )
         resume_images = (p.get("clip_images") or None) if resume else None
 
@@ -7640,12 +7749,12 @@ def _run_pipeline(pid: str, resume: bool = False):
 
         # ── Optional: Third-pass prompt polish ────────────────────────
         services = _wgp.server_config.get("services", {}) if _wgp else {}
-        # Default "third_pass" is model-aware. Architectures that benefit
-        # from a dialect rewrite keep it; native H3 video prompts bypass the
-        # creative rewrite and proceed to deterministic continuity/dialogue
-        # preflight. H3-generated image prompts can still be polished for the
-        # selected image model.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        # Off by default: an LLM rewrite of every prompt (and its sentence
+        # sanitizer) is opt-in in Settings. "third_pass" is model-aware: native
+        # H3 video prompts bypass the creative rewrite and proceed to
+        # deterministic continuity/dialogue preflight; H3-generated image
+        # prompts can still be polished for the selected image model.
+        polish_mode = "off" if _raw_prompts() else services.get("director_prompt_polish", "off")
 
         # Snapshot pre-polish prompts for comparison
         _update_pipeline(pid, _clip_plans_pre_polish=copy.deepcopy(clip_plans))
@@ -7769,31 +7878,10 @@ def _run_pipeline(pid: str, resume: bool = False):
         # Prompt polish is allowed to improve model dialect, never to erase the
         # Story's authored medium.  This deterministic final pass also covers
         # remote writing providers, for which third-pass polish is skipped.
-        from services.director.policies import enforce_visual_style_on_clip_plans
-        clip_plans = enforce_visual_style_on_clip_plans(
-            clip_plans,
-            "" if direct_video else params.get("visual_style", ""),
-            preserve=(
-                False if direct_video
-                else bool(params.get("preserve_visual_style", False))
-            ),
-            has_reference=_has_visual_references(params),
-            character_visual_style=(
-                "" if direct_video else params.get("character_visual_style", "")
-            ),
-            allow_clip_text=(
-                True if direct_video else params.get("allow_clip_text") is True
-            ),
-        )
+        clip_plans = _apply_final_prompt_locks(clip_plans, params, direct_video=direct_video)
         if direct_video:
-            from services.director.policies import enforce_direct_video_on_clip_plans
-            clip_plans = enforce_direct_video_on_clip_plans(
-                clip_plans,
-                direct_video_master_prompt,
-                audio_direction=str(
-                    (params.get("video_params") or {}).get("h3_audio_prompt") or ""
-                ),
-                allow_clip_text=params.get("allow_clip_text") is True,
+            clip_plans = _apply_direct_video_contract(
+                clip_plans, params, direct_video_master_prompt,
             )
         else:
             # Bounded shots have no semantic memory of the preceding
@@ -7839,32 +7927,14 @@ def _run_pipeline(pid: str, resume: bool = False):
             _wait_for_resume(pid)
             if _pipeline_cancel_requested(pid):
                 return
-            # Reload clip_plans in case user edited them
+            # Reload clip_plans in case user edited them. continue_pipeline
+            # marked the prompts the user changed as typed: they keep the
+            # style locks but never get the no-text lock back.
             clip_plans = _pipelines[pid]["clip_plans"]
-            clip_plans = enforce_visual_style_on_clip_plans(
-                clip_plans,
-                "" if direct_video else params.get("visual_style", ""),
-                preserve=(
-                    False if direct_video
-                    else bool(params.get("preserve_visual_style", False))
-                ),
-                has_reference=_has_visual_references(params),
-                character_visual_style=(
-                    "" if direct_video else params.get("character_visual_style", "")
-                ),
-                allow_clip_text=(
-                    True if direct_video else params.get("allow_clip_text") is True
-                ),
-            )
+            clip_plans = _apply_final_prompt_locks(clip_plans, params, direct_video=direct_video)
             if direct_video:
-                from services.director.policies import enforce_direct_video_on_clip_plans
-                clip_plans = enforce_direct_video_on_clip_plans(
-                    clip_plans,
-                    direct_video_master_prompt,
-                    audio_direction=str(
-                        (params.get("video_params") or {}).get("h3_audio_prompt") or ""
-                    ),
-                    allow_clip_text=params.get("allow_clip_text") is True,
+                clip_plans = _apply_direct_video_contract(
+                    clip_plans, params, direct_video_master_prompt,
                 )
             _update_pipeline(pid, clip_plans=clip_plans)
 
@@ -7897,14 +7967,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                     clip_plans,
                     planned_clips,
                 )
-                clip_plans = enforce_visual_style_on_clip_plans(
-                    clip_plans,
-                    params.get("visual_style", ""),
-                    preserve=bool(params.get("preserve_visual_style", False)),
-                    has_reference=_has_visual_references(params),
-                    character_visual_style=params.get("character_visual_style", ""),
-                    allow_clip_text=params.get("allow_clip_text") is True,
-                )
+                clip_plans = _apply_final_prompt_locks(clip_plans, params)
                 _update_pipeline(
                     pid,
                     clip_plans=clip_plans,
@@ -9019,6 +9082,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     # Build feature flags from params
     flags_dict = params.get("director_flags", {})
     flags = DirectorFlags.from_dict(flags_dict) if flags_dict else DirectorFlags()
+    flags.raw_prompts = _raw_prompts()
 
     writing_llm = _scoped_writing_llm(params)
     direct_video, _direct_master_prompt = _direct_video_settings(params)
@@ -9255,11 +9319,11 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
         })
 
     # Inject LoRA guides + model dialect guides into the planner only for
-    # the full/light_guide inject modes (legacy paths). Default mode
-    # "third_pass" deliberately skips this. Architectures that need a
+    # the full/light_guide inject modes (legacy paths). The default "off"
+    # and "third_pass" deliberately skip this. Architectures that need a
     # separate dialect rewrite receive it after planning; native H3 keeps its
     # dedicated Pass 2 output and proceeds directly to deterministic preflight.
-    polish_mode = services_cfg.get("director_prompt_polish", "third_pass")
+    polish_mode = "off" if services_cfg.get("raw_prompts") is True else services_cfg.get("director_prompt_polish", "off")
     if polish_mode in ("full_guide", "light_guide"):
         from services.director.prompt_polish import build_polish_block
         guide_mode = "full" if polish_mode == "full_guide" else "light"
@@ -9493,6 +9557,7 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
             frames_minimum=frames_minimum,
             visual_style=params.get("visual_style", ""),
             preserve_visual_style=params.get("preserve_visual_style", False),
+            raw_prompts=_raw_prompts(),
         )
         planned_clips = result.get("clips", [])
         clip_plans = result.get("clip_plans", [])
@@ -9531,15 +9596,7 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
     if clip_plans and isinstance(clip_plans[0], str):
         clip_plans = [{"video_prompt": p, "image_prompt": ""} for p in clip_plans]
 
-    from services.director.policies import enforce_visual_style_on_clip_plans
-    clip_plans = enforce_visual_style_on_clip_plans(
-        clip_plans,
-        params.get("visual_style", ""),
-        preserve=bool(params.get("preserve_visual_style", False)),
-        has_reference=_has_visual_references(params),
-        character_visual_style=params.get("character_visual_style", ""),
-        allow_clip_text=params.get("allow_clip_text") is True,
-    )
+    clip_plans = _apply_final_prompt_locks(clip_plans, params)
     return clip_plans, planned_clips
 
 
@@ -10231,7 +10288,8 @@ def _run_image_generation(
     # Klein to a stylized medium. Applied to EVERY image prompt (start
     # images, keyframes, anchor) at generation time — after polish, and
     # regardless of whether the planner remembered to name the medium.
-    _style_prefix = _style_prefix_for(params.get("_reference_style") or "")
+    raw_prompts = _raw_prompts()
+    _style_prefix = "" if raw_prompts else _style_prefix_for(params.get("_reference_style") or "")
 
     def _gen_image(
         prompt: str,
@@ -10239,11 +10297,12 @@ def _run_image_generation(
         shot_extra_refs: Optional[list[str]] = None,
         include_extra_refs: bool = True,
         supplemental_refs: Optional[list[str]] = None,
+        seed: int = -1,
     ) -> str:
         """Generate a single image using source_ref + optional extra refs."""
         nonlocal image_count
         _pre_strip = prompt
-        prompt = _strip_motion_effects(prompt or "")
+        prompt = (prompt or "") if raw_prompts else _strip_motion_effects(prompt or "")
         if prompt != _pre_strip:
             print(f"[Pipeline {pid}] Stripped motion-effect language from image prompt")
         if _style_prefix and not prompt.lower().startswith("maintain the same"):
@@ -10302,7 +10361,7 @@ def _run_image_generation(
             # 'I' carries an image reference; a ref-less anchor is plain T2I.
             "video_prompt_type": "KI" if all_refs else "",
             "resolution": resolution,
-            "seed": -1,
+            "seed": seed,
             "settings_version": 2.52,
             "generation_mode": "image",
             "repeat_generation": 1,
@@ -10455,9 +10514,15 @@ def _run_image_generation(
                     prompt,
                     source_ref,
                     [ref_image_path, *shot_extra_refs],
+                    seed=_comic_shot_seed(params, i, plan),
                 )
             else:
-                start_img = _gen_image(prompt, ref_image_path, shot_extra_refs)
+                start_img = _gen_image(
+                    prompt,
+                    ref_image_path,
+                    shot_extra_refs,
+                    seed=_comic_shot_seed(params, i, plan),
+                )
             clip_images.append(start_img)
         except _GenerationTimeoutError:
             raise
@@ -12776,7 +12841,7 @@ def _run_minimax_h3_story_video(
                     str(video_params.get("h3_audio_prompt") or ""),
                     segment_reference_mode,
                     direct_video_master_prompt,
-                    params.get("allow_clip_text") is True,
+                    _clip_text_allowed(params),
                 ),
                 segment_reference_mode,
             ))
@@ -13375,8 +13440,12 @@ def _run_video_generation(pid: str, params: dict, clip_plans: list[dict],
         else []
     )
     generation_seed = (
-        comic_seeds[0] if comic_seeds else -1
+        comic_seeds[0] if comic_seeds else _normalise_master_seed(params)
     )
+    if not comic_seeds:
+        # One generation renders every clip, so every clip records its seed.
+        for plan in clip_plans:
+            plan["seed"] = generation_seed
 
     if seamless:
         window_prompts_all = []  # One prompt per rolling window

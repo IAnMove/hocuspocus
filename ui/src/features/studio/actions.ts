@@ -343,7 +343,7 @@ export async function prepare3d(action: Prepare3dCommand): Promise<CommandResult
   if (state.params.model_type !== selected.model_type) state.selectModel(selected.model_type)
   useStore.getState().setParams({
     prompt: action.prompt,
-    seed: action.seed ?? 1234,
+    seed: action.seed ?? -1,
   })
   prepared3dPreset = action.preset || 'balanced'
   return studioResult(
@@ -449,7 +449,7 @@ export async function startPreparedGeneration(context?: GenerationSubmissionCont
       prompt: String(state.params.prompt || ''),
       workspace: state.activeWorkspace || 'default',
       preset: prepared3dPreset,
-      seed: typeof state.params.seed === 'number' ? state.params.seed : 1234,
+      seed: typeof state.params.seed === 'number' ? state.params.seed : -1,
       provenance: generationProvenancePayload(context),
     })
     if (!job.task_id) throw new Error('Hunyuan3D devolvió éxito sin taskId; no considero la generación encolada.')

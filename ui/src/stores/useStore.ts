@@ -1802,6 +1802,10 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   // Credential-free defaults shared by Studio and every Lab.
   productionProfile: ProductionProfile
   productionProfileConfigured: boolean
+  /** Set when the saved profile could not be read and the defaults stand in. */
+  productionProfileInvalidReason: string
+  /** True once the profile has been read from the server at least once. */
+  productionProfileLoaded: boolean
   productionProfileLoading: boolean
   loadProductionProfile: () => Promise<void>
   updateProductionProfile: (profile: ProductionProfile) => Promise<void>
@@ -6620,6 +6624,8 @@ export const useStore = create<AppState>((set, get) => {
   servicesConfigLoading: false,
   productionProfile: DEFAULT_PRODUCTION_PROFILE,
   productionProfileConfigured: false,
+  productionProfileInvalidReason: '',
+  productionProfileLoaded: false,
   productionProfileLoading: false,
   loadProductionProfile: async () => {
     set({ productionProfileLoading: true })
@@ -6628,6 +6634,8 @@ export const useStore = create<AppState>((set, get) => {
       set({
         productionProfile: result.profile,
         productionProfileConfigured: result.configured,
+        productionProfileInvalidReason: result.invalid_reason || '',
+        productionProfileLoaded: true,
         productionProfileLoading: false,
       })
       await _syncGlobalProductionVideoFormat(
@@ -6652,6 +6660,7 @@ export const useStore = create<AppState>((set, get) => {
       set(state => ({
         productionProfile: result.profile,
         productionProfileConfigured: result.configured,
+        productionProfileInvalidReason: result.invalid_reason || '',
         productionProfileLoading: false,
         selectedModelPerMode: {
           ...state.selectedModelPerMode,

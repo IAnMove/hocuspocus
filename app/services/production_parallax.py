@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.production_diorama import GROUND_SIZE, GROUND_STAGING
+from services.production_seeds import default_seed
 
 LAYER_SIZE = "1664x928"
 KEY = "#ff00ff"
@@ -74,7 +75,7 @@ def ground_style(entry: dict) -> str | None:
 
 def picture_jobs(production: Any, name: str, entry: dict, look: str, choice: tuple) -> dict[str, str | None]:
     """Image jobs for the set's far view, layers and ground, keyed ``set:<name>:<part>``."""
-    seed = entry.get("seed", 11)
+    seed = entry.get("seed", default_seed(production, 11))
     attempt = production._attempt("set_attempts", name)
     place = entry["prompt"].rstrip(". ")
     parts = {"far": (f"{entry['far'].rstrip('. ')}, in {place}. {look} {FAR_STAGING}", LAYER_SIZE),

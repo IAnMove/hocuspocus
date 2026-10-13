@@ -319,6 +319,16 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
                 </p>
               </div>
 
+              {Object.entries(clip.model_prompts || {}).map(([window, text]) => (
+                <div key={window} className="rounded-md bg-bg-primary/50 p-2.5">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider text-text-muted" title={t('clip.modelPromptHint')}>{t('clip.modelPrompt', { window })}</span>
+                    <CopyButton value={text} label={t('copy.modelPrompt')} />
+                  </div>
+                  <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary">{text}</p>
+                </div>
+              ))}
+
               {clip.audio_prompt && (
                 <div className="rounded-md bg-bg-primary/50 p-2.5">
                   <div className="mb-1 flex items-center justify-between gap-2">

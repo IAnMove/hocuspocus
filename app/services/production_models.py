@@ -34,6 +34,7 @@ from services import production_rooms as rooms
 from services.glb_cleanup import CLEANUP as GLB_CLEANUP
 from services.humanoid_rig.rig import RIG_VERSION
 from services.production_control import sleep_until
+from services.production_seeds import default_seed
 from services.production_diorama import (
     build as build_diorama, check_diorama, is_built as diorama_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
 )
@@ -249,7 +250,7 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
             jobs.update(kind["jobs"](production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
             continue
         prompt = f"{SET_LEAD} {entry['prompt']}. {scenery_look(style.get('image', ''))} {SET_STAGING}"
-        jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", 11),
+        jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", default_seed(production, 11)),
                                                *image_choice(entry, style), production._attempt("set_attempts", name))
     return jobs
 
@@ -294,7 +295,7 @@ def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, s
         else:
             staged = f"{entry['prompt']}. Style: {look} {OBJECT_STAGING}".replace("Style:  ", "")
         jobs[name] = production.image(f"model-{name}", staged, [source] if source else None, PICTURE_SIZE,
-                                      entry.get("seed", 7), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
+                                      entry.get("seed", default_seed(production, 7)), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
     return pictures, jobs
 
 

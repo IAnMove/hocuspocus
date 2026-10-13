@@ -14,6 +14,7 @@ from typing import Any
 
 from services.production_control import checkpoint, sleep_until
 from services.production_disk import discard
+from services.production_seeds import default_seed
 from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
 
 
@@ -91,7 +92,7 @@ def shoot_clips(production: Any, spec: dict, windows: list[dict], retake: tuple[
 
         production.on_landed = land
         try:
-            names = production.wait({window["key"]: production.clip_job(spec, window, 7000 + window["i"] * 10 + tried[window["key"]], tried[window["key"]]) for window in pending})
+            names = production.wait({window["key"]: production.clip_job(spec, window, default_seed(production, 7000 + window["i"] * 10 + tried[window["key"]]), tried[window["key"]]) for window in pending})
         finally:
             production.on_landed = None
         for window in pending:

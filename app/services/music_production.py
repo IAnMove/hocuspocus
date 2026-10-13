@@ -119,7 +119,7 @@ SPEC_SCHEMA: dict[str, Any] = {
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
         "structure": {"enum": ["clip", "trailer"], "description": "clip (default): verse/chorus shots on the song's lines; trailer: five beats on time (presentation, tension, escalation, reveal, close) with designed silence, risers and hits"},
         "treatment": {"type": "object", "description": "what happens: arc (what changes first image to last), want, obstacle, moments [{at, event}] (at: chorus2, bridge, line:N), motifs. dry_run checks the plan carries it"},
-        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"},
+        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: picks how many song candidates are made, fills max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"},
         "resolution": {"type": "object", "properties": {
             "frames": {"enum": ["1280x704", "1152x640", "1024x576", "1536x1024", "1024x1536"]},
             "clips": {"enum": ["1280x704", "1152x640", "1024x576"]}}},

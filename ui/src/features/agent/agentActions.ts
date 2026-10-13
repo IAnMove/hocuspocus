@@ -2635,7 +2635,7 @@ export async function reconcileAgentTurnWithRequest(
         type: 'prepare_3d',
         prompt: request.trim().slice(0, 8_000),
         preset: 'balanced',
-        seed: 1234,
+        seed: -1,
       } satisfies AgentPrepare3dAction
     return {
       reply: 'Prepararé Studio → 3D (Hunyuan3D) con un preset equilibrado y lo enviaré a generar. 🪄',
