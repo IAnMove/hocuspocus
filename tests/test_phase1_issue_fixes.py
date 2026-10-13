@@ -50,6 +50,9 @@ _LORAS_MULTIPLIERS_PATH = os.path.join(
     "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_OUTPAINT_SUBMISSION_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "outpaintSubmission.ts",
+)
 _STUDIO_EDIT_SLICE_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
 )
@@ -162,7 +165,7 @@ class TestOutpaintSampling(unittest.TestCase):
 
     def test_frontend_sends_the_visible_advanced_values(self):
         client = api_client_source()
-        store = _read(_STORE_PATH)
+        outpaint = _read(_OUTPAINT_SUBMISSION_PATH)
         for field in (
             "num_inference_steps?: number",
             "guidance_scale?: number",
@@ -172,11 +175,11 @@ class TestOutpaintSampling(unittest.TestCase):
         self.assertIn(
             "num_inference_steps: "
             "(state.params.num_inference_steps as number)",
-            store,
+            outpaint,
         )
         self.assertIn(
             "guidance_scale: (state.params.guidance_scale as number)",
-            store,
+            outpaint,
         )
 
 
@@ -1734,6 +1737,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         controls = _read(_OUTPAINT_CONTROLS_PATH)
         client = api_client_source()
         store = _read(_STORE_PATH)
+        outpaint = _read(_OUTPAINT_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn("t('outpaint.preserveScene')", controls)
@@ -1741,11 +1745,11 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         self.assertIn("outpaintMaskPreserving: true", edit_store)
         self.assertIn("mask_preserving_outpaint?: boolean", client)
         self.assertIn("outpaint_aspect?:", client)
-        self.assertIn("outpaint_aspect: state.outpaintAspect", store)
+        self.assertIn("outpaint_aspect: state.outpaintAspect", outpaint)
         self.assertIn("_inferOutpaintAspect", store)
-        self.assertIn("source_preservation: 1.0", store)
-        self.assertIn("outpaint_lora_strength: 1.0", store)
-        self.assertIn("lock_source_pixels: false", store)
+        self.assertIn("source_preservation: 1.0", outpaint)
+        self.assertIn("outpaint_lora_strength: 1.0", outpaint)
+        self.assertIn("lock_source_pixels: false", outpaint)
         self.assertNotIn("Outpaint LoRA Strength", controls)
         self.assertNotIn("Lock source pixels", controls)
         self.assertNotIn(">Source Preservation<", controls)
