@@ -49,7 +49,7 @@ export type DirectorMusicSourceSlice = {
   directorSetPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
 }
 
-/** Audio source and song setup read and write the director fields listed here. directorConfirmStructure stays on the store until the music-video actions move. */
+/** Audio source and song setup read and write the director fields listed here. directorConfirmStructure is owned by the music-video slice. */
 export type DirectorMusicSourceSliceHost = DirectorMusicSourceSlice & ActivitySlice & Pick<DirectorSlice,
   | 'directorLoading'
   | 'directorLoadingMessage'
