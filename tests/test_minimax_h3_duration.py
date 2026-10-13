@@ -22,13 +22,15 @@ MODEL = {
 
 
 def test_every_h3_job_crosses_the_mandatory_duration_gate():
-    launch = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
-    job_factory = launch[launch.index("def _new_generation_job("):]
-    job_factory = job_factory[:job_factory.index("def _register_manual_generation_job(")]
+    root = Path(__file__).parents[1]
+    launch = (root / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
+    queue = (root / "app" / "services" / "kernel" / "jobs.py").read_text(encoding="utf-8")
+    job_factory = queue[queue.index("    def new_job("):]
+    job_factory = job_factory[:job_factory.index("    def register_manual_job(")]
     assert "apply_h3_dialogue_duration(frozen_params, duration_model_def)" in job_factory
     assert "apply_h3_vocal_timeline(frozen_params, duration_model_def)" in job_factory
     assert "raise ValueError(h3_dialogue_split_error(contract))" in job_factory
-    assert launch.count("apply_h3_dialogue_duration(") >= 2
+    assert (launch + queue).count("apply_h3_dialogue_duration(") >= 2
 
 
 def test_extracts_only_authored_speech_and_preserves_exact_payload():

@@ -51,7 +51,6 @@ import asyncio
 import threading
 import traceback
 import requests
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
@@ -121,23 +120,57 @@ print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
 from services.generation import bind_wgp, get_model_def
 bind_wgp(wgp)
+from services.kernel.context import build_context
+ctx = build_context(
+    profile="full",
+    # Late-bound: these are defined further down, and the task publisher may not exist yet.
+    is_legacy_h3_model=lambda model_type: _is_legacy_h3_model(model_type),
+    is_minimax_h3_model=lambda model_type: _is_minimax_h3_model(model_type),
+    cancel_legacy_h3=lambda: minimax_h3_service.cancel(),
+    task_publisher=lambda: globals().get("_publish_generation_task"),
+)
+
+# The kernel's services (services/kernel). These names are launch's historical handles to
+# the same objects: code that has not moved yet keeps using them, and a dictionary or a
+# lock here is the one the context holds, never a copy.
+_save_server_config = ctx.config.save
+_get_active_workspace = ctx.workspaces.active
+_workspace_dir = ctx.workspaces.workspace_dir
+_list_workspaces = ctx.workspaces.list
+_persist_active_workspace = ctx.workspaces.persist_active
+_safe_join = ctx.paths.safe_join
+_resolve_output_move_path = ctx.paths.resolve_output_move_path
+_resolve_request_media_path = ctx.paths.resolve_request_media_path
+_story_cover_reference_path = ctx.paths.story_cover_reference_path
+_UPLOAD_TRANSCODE_SLOTS = ctx.paths.transcode_slots
+_stream_upload = ctx.paths.stream_upload
+_transcode_upload = ctx.paths.transcode_upload
+_task_registry = ctx.tasks.for_workspace
+_jobs = ctx.jobs.registry
+_local_gpu_lane = ctx.jobs.local_gpu_lane
+_gen_lock = ctx.jobs.gen_lock
+_active_gen_states = ctx.jobs.active_states
+_queue_recovery_lock = ctx.jobs.recovery_lock
+_durable_generation_queue = ctx.jobs.durable_queue
+_coordinated_generation_slot = ctx.jobs.slot
+_is_durable_generation_job = ctx.jobs.is_durable_job
+_persist_generation_job = ctx.jobs.persist_job
+_remove_persisted_generation_job = ctx.jobs.remove_persisted_job
+_new_generation_job = ctx.jobs.new_job
+_register_manual_generation_job = ctx.jobs.register_manual_job
+_generation_job_acceptance = ctx.jobs.job_acceptance
+_public_generation_details = ctx.jobs.public_details
+_pending_gpu_jobs = ctx.jobs.pending_gpu_jobs
+_request_generation_cancel = ctx.jobs.cancel
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import tools_upscale as tools_upscale_service
 from services import debug_trace
 from routers.lan_auth import create_lan_auth_router
-from services.durable_generation_queue import DurableGenerationQueue
 from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
-from services.media_paths import (
-    MediaPathNotAllowed,
-    resolve_permitted_media_path,
-    resolve_story_cover_audio,
-    resolve_voice_ref_paths,
-)
+from services.media_paths import resolve_voice_ref_paths
 from services.upload_stream import (
     UploadTooLargeError,
     UploadTranscodeError,
-    stream_upload_file,
-    transcode_upload,
 )
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
@@ -170,30 +203,6 @@ try:
     _sweep_trash(wgp.server_config.get("save_path", "outputs"))
 except Exception as _sweep_err:
     print(f"[Workspace] Trash sweep skipped: {_sweep_err}")
-
-def _save_server_config() -> None:
-    """Write wgp.server_config atomically with owner-only permissions.
-
-    The file holds API keys and the workspace list. open("w") truncated it
-    before writing, so a crash or two concurrent saves could leave it empty,
-    and the next start failed to import wgp.
-    """
-    path = wgp.server_config_filename
-    folder = os.path.dirname(os.path.abspath(path)) or "."
-    temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
-    try:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(wgp.server_config, indent=4))
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        try:
-            os.remove(temporary)
-        except OSError:
-            pass
-
-
 
 # Performance auto-tune migration: pre-existing installs (config file
 # was loaded from disk, not freshly created) have no auto_performance
@@ -258,6 +267,7 @@ from services.access_log_filter import install_quiet_access_filter
 install_quiet_access_filter()
 
 api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
+api.state.runtime = ctx
 
 
 @api.exception_handler(execution_mode.ExecutionModeError)
@@ -289,62 +299,6 @@ from routers.uploads import MAX_IMAGE_UPLOAD_BYTES   # 500 MB, defined with the 
 # music video runs ~30-100 MB; longer reference clips can push
 # higher. 500 MB covers ~25-50 min of typical music-video bitrates.
 MAX_AUDIO_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (also covers video-for-audio-extract)
-
-# Uploads are deliberately bounded independently from GPU/model lanes.  A
-# handful of concurrent clients may ingest at once, while only two ffmpeg
-# workers can compete for CPU, disk and decoder resources.  Waiting on these
-# semaphores is cancellable and never holds a global application lock.
-_UPLOAD_INGEST_SLOTS = asyncio.Semaphore(4)
-_UPLOAD_TRANSCODE_SLOTS = asyncio.Semaphore(2)
-
-
-async def _stream_upload(upload, destination: str, *, max_bytes: int) -> int:
-    async with _UPLOAD_INGEST_SLOTS:
-        return await stream_upload_file(
-            upload,
-            destination,
-            max_bytes=max_bytes,
-        )
-
-
-async def _transcode_upload(source: str, destination: str, *, is_video: bool) -> None:
-    async with _UPLOAD_TRANSCODE_SLOTS:
-        await transcode_upload(source, destination, is_video=is_video)
-
-
-def _safe_join(base: str, *parts: str) -> str | None:
-    """Join `parts` under `base` and return the absolute path only if it
-    stays inside `base`. Returns None on traversal attempts (`..`, absolute
-    paths, symlinks escaping the base, etc.). Use for any endpoint that
-    accepts a user-supplied filename."""
-    from services.kernel.paths import safe_join
-    return safe_join(base, *parts)
-
-
-def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
-    """Resolve one output path for a cross-workspace move.
-
-    The move endpoint accepts a path parameter, so it needs a stricter
-    contract than a generic join: only explicit relative components using
-    URL separators are accepted. Both source and destination are then
-    resolved through ``_safe_join`` so existing symlinks cannot escape their
-    workspace.
-    """
-    if not isinstance(relative_name, str):
-        return None
-    value = relative_name.strip()
-    if not value or "\x00" in value or "\\" in value:
-        return None
-    drive, _tail = os.path.splitdrive(value)
-    if drive or os.path.isabs(value):
-        return None
-    parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        return None
-    resolved = _safe_join(base, *parts)
-    if not resolved or resolved == os.path.realpath(base):
-        return None
-    return resolved
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
@@ -463,12 +417,10 @@ from services.job_lifecycle import (
     ensure_generation_priority,
     finish_job,
     generation_queue_position,
-    generation_slot,
     is_cancel_requested,
     new_media_files,
     record_job_outputs,
     register_abort_state,
-    register_generation_job,
     request_cancel,
     set_job_state_observer,
     snapshot_job,
@@ -480,20 +432,6 @@ from services.job_lifecycle import (
 from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
 from services import resource_scheduler
 
-_jobs: dict = {}
-_local_gpu_lane = resource_scheduler.local_gpu_lane(0)
-# This is the coordinator's physical GPU-0 primitive. The existing generation
-# FIFO keeps using its proven job-lifecycle wrapper around the same object,
-# while migrated 3D/Rig/audio/LLM workers acquire it through the coordinator.
-_gen_lock = resource_scheduler.coordinator.shared_lock(_local_gpu_lane)
-_active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
-_queue_recovery_lock = threading.Lock()
-_durable_generation_queue = DurableGenerationQueue(
-    os.path.join(
-        os.path.realpath(wgp.server_config.get("save_path", "outputs")),
-        ".maestro_generation_queue.json",
-    )
-)
 _H3_IDLE_RELEASE_SECONDS = 10.0
 _h3_idle_release_timer: threading.Timer | None = None
 _h3_idle_release_lock = threading.RLock()
@@ -550,176 +488,6 @@ resource_scheduler.coordinator.set_prepare_hook(
 )
 
 
-@contextmanager
-def _coordinated_generation_slot(
-    job: dict,
-    *,
-    description: str | None = None,
-):
-    """Keep the legacy FIFO while exposing its acquired GPU lease centrally."""
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    model_type = str(params.get("model_type") or "").strip()
-    if not description:
-        if _is_legacy_h3_model(model_type):
-            description = resource_scheduler.gpu_engine_description(
-                resource_scheduler.GPU_ENGINE_H3_LEGACY,
-                "HocusPocus Lab H3 Legacy generation",
-            )
-        elif model_type:
-            description = resource_scheduler.gpu_engine_description(
-                resource_scheduler.GPU_ENGINE_WGP,
-                f"HocusPocus Lab WGP generation · {model_type}",
-            )
-        else:
-            description = "HocusPocus Lab GPU generation"
-    # Stand aside for a Video 3D export or another coordinator ticket that has
-    # waited longer than this job, or past HOCUS_GPU_WAITER_MAX_WAIT_SECONDS.
-    def owed_turn(waited: float) -> bool:
-        return resource_scheduler.coordinator.has_waiter_owed_turn(_local_gpu_lane, waited=waited)
-
-    with generation_slot(_gen_lock, job, yield_to=owed_turn) as acquired:
-        if not acquired:
-            yield False
-            return
-        with resource_scheduler.coordinator.adopt_acquired(
-            _local_gpu_lane,
-            task_id=str(job.get("task_id") or job.get("id") or "generation"),
-            description=description,
-        ):
-            yield True
-
-
-def _is_durable_generation_job(job: dict) -> bool:
-    """Only persist ordinary Studio generations, not Director sub-jobs."""
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    return (
-        bool(params.get("model_type"))
-        and not params.get("_director_pipeline_id")
-        and not params.get("_non_durable_tool")
-    )
-
-
-def _persist_generation_job(job: dict) -> None:
-    if not _is_durable_generation_job(job):
-        return
-    try:
-        _durable_generation_queue.upsert({
-            "id": job["id"],
-            "status": job.get("status", "queued"),
-            "created_at": job.get("created_at", time.time()),
-            "params": copy.deepcopy(job.get("params") or {}),
-            "workspace": job.get("workspace") or "default",
-            "provenance": copy.deepcopy(job.get("provenance") or {}),
-        })
-    except Exception as exc:
-        # Persistence should protect a generation, never prevent it from
-        # starting if the disk is temporarily read-only or full.
-        print(f"[Queue recovery] Could not persist job {job.get('id')}: {exc}")
-
-
-def _remove_persisted_generation_job(job: dict) -> None:
-    if not _is_durable_generation_job(job):
-        return
-    try:
-        _durable_generation_queue.remove(str(job.get("id") or ""))
-    except Exception as exc:
-        print(f"[Queue recovery] Could not remove job {job.get('id')}: {exc}")
-
-
-def _new_generation_job(
-    params: dict,
-    workspace: str,
-    *,
-    job_id: str | None = None,
-    created_at: float | None = None,
-    recovered: bool = False,
-    reserve_generation: bool = True,
-    provenance: dict | None = None,
-    publish_task: bool = True,
-) -> dict:
-    frozen_params = copy.deepcopy(params)
-    execution_mode.validate_generation(workspace)
-    frozen_params["_execution_mode"] = execution_mode.policy().mode
-    if _is_minimax_h3_model(frozen_params.get("model_type")):
-        from services.minimax_h3_duration import (
-            apply_h3_dialogue_duration,
-            apply_h3_vocal_timeline,
-            h3_dialogue_split_error,
-        )
-
-        try:
-            duration_model_def = wgp.get_model_def(frozen_params.get("model_type")) or {}
-        except Exception:
-            duration_model_def = {}
-        contract = apply_h3_dialogue_duration(frozen_params, duration_model_def)
-        if contract:
-            if contract.get("requires_split"):
-                raise ValueError(h3_dialogue_split_error(contract))
-            print(
-                "[MiniMax H3] Mandatory dialogue duration: "
-                f"{contract['syllable_count']} syllables × "
-                f"{contract['seconds_per_syllable']:.3f}s -> "
-                f"{contract['effective_seconds']:.3f}s "
-                f"({contract['effective_frames']} frames)."
-            )
-        timeline = apply_h3_vocal_timeline(frozen_params, duration_model_def)
-        if timeline:
-            print(
-                "[MiniMax H3] Vocal timeline locked: "
-                f"{timeline['segment_count']} authored line(s), "
-                f"{len(timeline['intervals'])} timed interval(s) across "
-                f"{timeline['duration_seconds']:.3f}s."
-            )
-    resolved_job_id = job_id or uuid.uuid4().hex[:8]
-    canonical_task_id = f"task-generation-{resolved_job_id}"
-    owner_id = str(frozen_params.get("_director_pipeline_id") or "")
-    if owner_id.startswith("series:"):
-        canonical_root_task_id = f"task-series-render-{owner_id.split(':', 1)[1]}"
-    elif owner_id:
-        canonical_root_task_id = f"task-director-{owner_id}"
-    else:
-        canonical_root_task_id = canonical_task_id
-    job = {
-        "id": resolved_job_id,
-        "task_id": canonical_task_id,
-        "root_task_id": canonical_root_task_id,
-        "status": "queued",
-        "progress": 0,
-        "step": 0,
-        "total_steps": 0,
-        "phase": "",
-        "message": "Recovered · queued" if recovered else "Queued",
-        "created_at": created_at or time.time(),
-        "started_at": None,
-        "finished_at": None,
-        "params": frozen_params,
-        "output_files": [],
-        "acquired_resources": [],
-        "error": None,
-        "workspace": workspace,
-        "out_dir": _workspace_dir(workspace),
-        "provenance": copy.deepcopy(provenance or {}),
-        "recovered": recovered,
-    }
-    # Reserve FIFO order synchronously. Starting one thread per request is
-    # still useful for cancellation/recovery, but thread scheduling no longer
-    # decides which submitted generation reaches the GPU first.
-    if reserve_generation:
-        register_generation_job(_gen_lock, job)
-    publisher = globals().get("_publish_generation_task")
-    if publish_task and callable(publisher):
-        try:
-            task = publisher(job)
-            if isinstance(task, dict):
-                job["task_id"] = task.get("id") or job["task_id"]
-                job["root_task_id"] = (
-                    task.get("root_id") or task.get("id") or job["root_task_id"]
-                )
-        except Exception as exc:
-            print(f"[Task registry] Could not publish generation {job['id']}: {exc}")
-    return job
-
-
 def _publish_generation_sidecar_for_studio_job(
     job: dict,
     output_path: str,
@@ -737,177 +505,6 @@ def _publish_generation_sidecar_for_studio_job(
         output_folder=job.get("workspace"),
         tool=tool,
     )
-
-
-def _register_manual_generation_job(job: dict) -> dict:
-    """Publish older edit/tool jobs before their background thread starts."""
-    job_id = str(job.get("id") or "")
-    if not job_id:
-        raise ValueError("A manual generation job requires an id")
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    execution_mode.validate_generation(str(job.get("workspace") or _get_active_workspace()))
-    params["_execution_mode"] = execution_mode.policy().mode
-    if not str(params.get("model_type") or "").strip():
-        params["model_type"] = "post_processing"
-    params.setdefault("generation_mode", "video")
-    job["params"] = params
-    job.setdefault("acquired_resources", [])
-    job.setdefault("started_at", None)
-    job.setdefault("finished_at", None)
-    job.setdefault("task_id", f"task-generation-{job_id}")
-    job.setdefault("root_task_id", job["task_id"])
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
-    publisher = globals().get("_publish_generation_task")
-    if callable(publisher):
-        try:
-            task = publisher(job)
-            if isinstance(task, dict):
-                job["task_id"] = task.get("id") or job["task_id"]
-                job["root_task_id"] = (
-                    task.get("root_id") or task.get("id") or job["root_task_id"]
-                )
-        except Exception as exc:
-            print(f"[Task registry] Could not publish manual job {job_id}: {exc}")
-    return job
-
-
-def _generation_job_acceptance(job: dict) -> dict:
-    return {
-        "task_id": job.get("task_id"),
-        "root_task_id": job.get("root_task_id") or job.get("task_id"),
-        "generation_details": _public_generation_details(job.get("params")),
-    }
-
-
-_PUBLIC_MODEL_LABELS = {
-    "minimax:image-01": "MiniMax Image-01",
-    "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
-    "post_processing": "Post-processing",
-    "rembg-u2net": "rembg U2Net",
-}
-
-
-def _public_generation_details(params: dict | None) -> dict:
-    """Return frozen settings suitable for the canonical Activity UI.
-
-    Local paths and reference media stay private.  The authored prompt is
-    intentionally retained: Activity is the user's durable audit trail and
-    must identify what a model is actually generating after the editable form
-    has changed.  It is bounded before persistence and never treated as HTML.
-    """
-    if not isinstance(params, dict):
-        return {}
-
-    model_type = str(params.get("model_type") or "").strip()
-    if not model_type:
-        return {}
-    try:
-        model_def = wgp.get_model_def(model_type) or {}
-    except Exception:
-        model_def = {}
-    details = {
-        "model_type": model_type,
-        "model_name": str(
-            model_def.get("name")
-            or _PUBLIC_MODEL_LABELS.get(model_type)
-            or model_type
-        ),
-    }
-
-    public_values = {
-        "generation_mode": params.get("generation_mode"),
-        "execution_mode": params.get("_execution_mode"),
-        "simulated": params.get("_execution_mode") == "simulate",
-        "capability": params.get("capability"),
-        "source_kind": params.get("source_kind"),
-        "source_asset_id": params.get("source_asset_id"),
-        "source_filename": params.get("source_filename"),
-        "method": params.get("method"),
-        "resolution": params.get("resolution"),
-        "seed": params.get("seed"),
-        "steps": params.get("num_inference_steps"),
-        "guidance": params.get("guidance_scale"),
-        "frames": params.get("video_length") or params.get("total_frames"),
-        "duration_seconds": params.get("duration_seconds"),
-        "dialogue_words": (
-            params.get("_h3_dialogue_duration_contract", {}).get("word_count")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_syllables": (
-            params.get("_h3_dialogue_duration_contract", {}).get("syllable_count")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_seconds_per_syllable": (
-            params.get("_h3_dialogue_duration_contract", {}).get("seconds_per_syllable")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_duration_calculated": (
-            params.get("_h3_dialogue_duration_contract", {}).get("estimated_seconds")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_duration_minimum_limited": (
-            params.get("_h3_dialogue_duration_contract", {}).get("minimum_limited")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "repeat": params.get("repeat_generation"),
-        "profile": params.get("h3_model_profile"),
-        "flow_shift": params.get("flow_shift"),
-        "audio_shift": params.get("h3_audio_shift"),
-        "turbo": params.get("minimax_h3_turbo_mode"),
-    }
-    for key, value in public_values.items():
-        if value is not None and value != "":
-            details[key] = value
-
-    prompt = str(params.get("prompt") or "").replace("\x00", "").strip()
-    style_prompt = str(params.get("alt_prompt") or "").replace("\x00", "").strip()
-    if prompt or style_prompt:
-        details["prompt"] = (
-            f"{style_prompt}\n\n{prompt}" if style_prompt and prompt else style_prompt or prompt
-        )[:32_000]
-    initiator = str(params.get("_initiator") or "").replace("\x00", "").strip()
-    if initiator:
-        details["initiator"] = initiator[:200]
-
-    cache_type = str(params.get("skip_steps_cache_type") or "").strip()
-    if cache_type or model_type.startswith("minimax_h3"):
-        details["cache"] = bool(cache_type)
-        if cache_type:
-            details["cache_type"] = cache_type
-
-    raw_loras = params.get("activated_loras")
-    selected_loras = raw_loras if isinstance(raw_loras, (list, tuple)) else []
-    public_loras = [
-        os.path.basename(str(item).replace("\\", "/"))
-        for item in selected_loras
-        if str(item or "").strip()
-    ]
-    details["lora_count"] = len(public_loras)
-    if public_loras:
-        details["loras"] = public_loras
-    return details
-
-
-def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
-    """Return queued/running GPU-generation jobs, excluding a terminalizing job."""
-    pending: list[dict] = []
-    for candidate_id, candidate in _jobs.items():
-        if candidate_id == exclude_job_id:
-            continue
-        if candidate.get("status") not in {"queued", "running"}:
-            continue
-        # Auxiliary tasks such as audio analysis share the status dictionary
-        # but do not own the GPU generation lock or require a model runtime.
-        if not candidate.get("params", {}).get("model_type"):
-            continue
-        pending.append(candidate)
-    return pending
 
 
 def _is_legacy_h3_model(model_type: str | None) -> bool:
@@ -1026,140 +623,10 @@ def _interrupt_wan_model() -> None:
     if model is not None and hasattr(model, "_interrupt"):
         model._interrupt = True
 
-# --- Workspace support ---
-# Base path read from wgp.server_config["save_path"] wherever needed
-
-
-def _get_active_workspace() -> str:
-    """Get current workspace name from server config."""
-    return wgp.server_config.get("services", {}).get("active_workspace", "default")
-
-
-def _workspace_dir(workspace: str = None) -> str:
-    """Return a contained output directory for one validated workspace."""
-    ws = _get_active_workspace() if workspace is None else workspace
-    if not isinstance(ws, str) or not re.fullmatch(
-        r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", ws
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Invalid workspace name. Use letters, numbers, hyphens, "
-                "underscores, without spaces or path separators."
-            ),
-        )
-
-    # Always read base from config, never from wgp.save_path (which may already include workspace)
-    base = os.path.realpath(os.path.abspath(
-        wgp.server_config.get("save_path", "outputs")
-    ))
-    ws_dir = base if ws == "default" else os.path.realpath(os.path.join(base, ws))
-    try:
-        contained = os.path.commonpath((base, ws_dir)) == base
-    except (TypeError, ValueError):
-        contained = False
-    if not contained:
-        raise HTTPException(status_code=400, detail="Invalid workspace path.")
-    if ws != "default":
-        os.makedirs(ws_dir, exist_ok=True)
-    return ws_dir
-
-
-def _resolve_request_media_path(
-    value: str,
-    *,
-    workspace: str | None = None,
-    kinds: tuple[str, ...] = ("audio", "video"),
-) -> str:
-    """Resolve request media without exposing host paths in API errors."""
-    try:
-        return resolve_permitted_media_path(
-            value,
-            uploads_root=os.path.join(os.getcwd(), "uploads"),
-            workspace_root=_workspace_dir(workspace),
-            kinds=kinds,
-            workspace_name=workspace or _get_active_workspace(),
-        )
-    except MediaPathNotAllowed:
-        raise HTTPException(status_code=400, detail="Media path is not allowed") from None
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Media file not found") from None
-
-
-def _story_cover_reference_path(filename: str, workspace: str) -> str | None:
-    """Resolve a cover reference from uploads/audio or the active workspace."""
-    try:
-        return resolve_story_cover_audio(
-            filename,
-            uploads_audio_root=os.path.join(os.getcwd(), "uploads", "audio"),
-            uploads_root=os.path.join(os.getcwd(), "uploads"),
-            workspace_root=_workspace_dir(workspace),
-        )
-    except (MediaPathNotAllowed, FileNotFoundError, ValueError):
-        return None
-
-
-def _workspace_file_count(path: str) -> int:
-    """Non-hidden files directly inside a workspace folder (for delete
-    confirms). scandir answers is_file() from the enumeration data on
-    Windows — no per-entry stat syscall."""
-    try:
-        with os.scandir(path) as entries:
-            return sum(1 for e in entries if not e.name.startswith(".") and e.is_file())
-    except OSError:
-        return 0
-
-
-def _list_workspaces() -> list[dict]:
-    """List all workspaces (subdirectories of the base output path + default)."""
-    base = wgp.server_config.get("save_path", "outputs")
-    workspaces = [{"name": "default", "path": base, "file_count": _workspace_file_count(base)}]
-    if os.path.isdir(base):
-        for name in sorted(os.listdir(base)):
-            full = os.path.join(base, name)
-            if os.path.isdir(full) and not name.startswith(("_", ".")):
-                workspaces.append({"name": name, "path": full, "file_count": _workspace_file_count(full)})
-    return workspaces
-
-
-def _persist_active_workspace(name: str, apply_save_paths: bool = True) -> str:
-    """Write services.active_workspace to config and (optionally) point
-    wgp's save paths at it. Pass apply_save_paths=False while a generation
-    is running — the in-flight job has locked wgp.save_path to its target
-    and the new value takes effect on the next job / restart."""
-    services = wgp.server_config.setdefault("services", {})
-    services["active_workspace"] = name
-    wgp.server_config["services"] = services
-    _save_server_config()
-    ws_dir = _workspace_dir(name)
-    if apply_save_paths:
-        wgp.save_path = ws_dir
-        wgp.image_save_path = ws_dir
-    return ws_dir
-
 # --- Director pipeline (lazy init after _run_generation is defined) ---
 _pipeline_initialized = False
 
 
-def _request_generation_cancel(job_id: str) -> dict:
-    """Atomically cancel a queued/running generation and signal its owner."""
-    job = _jobs.get(job_id)
-    if not job:
-        return {"status": "missing", "was_running": False}
-    result = request_cancel(
-        job,
-        job_id=job_id,
-        active_states=_active_gen_states,
-    )
-    if result.was_running and _is_legacy_h3_model(
-        job.get("params", {}).get("model_type")
-    ):
-        minimax_h3_service.cancel()
-    if result.abort_signalled:
-        print(f"[Cancel] Signalling abort for job {job_id}")
-    if not result.was_running and job.get("status") == "cancelled":
-        _remove_persisted_generation_job(job)
-    return {"status": job.get("status"), "was_running": result.was_running}
 
 
 def _init_pipeline():
@@ -1174,6 +641,7 @@ def _init_pipeline():
             _request_generation_cancel,
             _active_gen_states,
             state_observer=_publish_director_task,
+            get_cached_hardware=_get_cached_hardware,
         )
         _pipeline_initialized = True
 
@@ -34096,13 +33564,6 @@ api.include_router(create_uploads_router(
 # ============================================================================
 # Canonical task registry and compatibility adapters
 # ============================================================================
-
-def _task_registry(workspace: str | None = None):
-    from services.task_manager import get_task_registry
-
-    target = _get_active_workspace() if workspace is None else workspace
-    return get_task_registry(_workspace_dir(target))
-
 
 def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
     """Explicitly reopen a terminal adapter task before its worker publishes."""
