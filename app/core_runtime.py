@@ -627,14 +627,13 @@ def run_server() -> None:
     for name, entry in snapshot["capabilities"].items():
         print(f"  {name}: {entry['state']}")
     print(f"[HocusPocus] profile {snapshot['profile']}")
-    from services.lan_auth import describe_lan_auth_startup
     from services.server_entry import run
     run(
         api,
         ui_ready=_ui_ready,
         endpoint_path=os.path.join(_app_dir, "settings", "server-endpoint.json"),
         prepare=lambda _display_host, _port: None,
-        lan_messages=describe_lan_auth_startup(),
+        lan_messages=[],  # core has no LanAuthMiddleware: it must not announce LAN protection
     )
 
 

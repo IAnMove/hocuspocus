@@ -1097,6 +1097,12 @@ class CoreRuntimeTests(unittest.TestCase):
             record = json.loads(endpoint.read_text(encoding="utf-8"))
             self.assertEqual(record["port"], seen["port"])
             self.assertEqual(record["url"], f"http://127.0.0.1:{seen['port']}")
+            # Core has no LanAuthMiddleware, so it must not announce a protected LAN session.
+            sharing = {"PINOKIO_SHARE_LOCAL": "true", "LOREFRAME_LAN_TOKEN": "t" * 32}
+            with patch.dict(os.environ, sharing), patch("services.server_entry.run") as entry, redirect_stdout(io.StringIO()):
+                os.environ.pop("LOREFRAME_LAN_AUTH", None)
+                core_runtime.run_server()
+            self.assertEqual(entry.call_args.kwargs["lan_messages"], [])
         finally:
             held.close()
             for sock in seen.get("sockets") or []:
