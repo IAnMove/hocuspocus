@@ -110,6 +110,7 @@ def publish_music_activity(job: dict, adapter: str) -> dict | None:
     parent = _editor_text(job.get("parentTaskId"), "") or None
     root = _editor_text(job.get("rootTaskId"), "") or task_id
     title = "MiniMax Music candidate" if adapter == "minimax-music-candidate" else "MiniMax Music"
+    raw_status = str(job.get("status") or "").lower()
     return upsert_task(
         _editor_text(job.get("workspace"), "default"),
         task_id,
@@ -127,6 +128,10 @@ def publish_music_activity(job: dict, adapter: str) -> dict | None:
         acquired_resources=_editor_list(job.get("acquired_resources")),
         result_refs=_editor_list(job.get("output_files")),
         backend_job_id=_editor_text(job.get("jobId"), ""),
+        cancelable=(
+            status in {"created", "queued", "waiting_resource", "running"}
+            and raw_status != "cancelling"
+        ),
         metadata={"adapter": adapter},
     )
 
@@ -161,6 +166,13 @@ def control_task(task: dict, action: str):
     job_id = str(task.get("backend_job_id") or "")
     if action != "cancel":
         raise HTTPException(status_code=409, detail=f"Task does not support {action}")
+    adapter = str((task.get("metadata") or {}).get("adapter") or "")
+    if adapter in {"minimax-music", "minimax-music-candidate"}:
+        from routers.story_music import cancel_story_music_candidates_job
+        # Reservation stores task_id as "task-{jobId}". A candidate's backend_job_id
+        # is "{jobId}-candidate-N", so the parent job is the root task without "task-".
+        music_id = str(task.get("root_id") or "").removeprefix("task-") or job_id
+        return cancel_story_music_candidates_job(music_id)
     if job_id:
         cancelled = core_remote_image.cancel_job(job_id)
         if cancelled is None:

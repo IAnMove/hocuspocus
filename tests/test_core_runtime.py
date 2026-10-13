@@ -981,8 +981,97 @@ class CoreRuntimeTests(unittest.TestCase):
         parent = tasks[body["taskId"]]
         self.assertEqual(parent["provider"], "minimax")
         self.assertEqual(parent["metadata"]["adapter"], "minimax-music")
+        self.assertTrue(parent["cancelable"])
         child_id = body["children"][0]["taskId"]
         self.assertEqual(tasks[child_id]["metadata"]["adapter"], "minimax-music-candidate")
+        self.assertTrue(tasks[child_id]["cancelable"])
+
+    def test_activity_cancel_stops_a_queued_minimax_music_job(self):
+        """Activity Cancel must stop Story MiniMax Music, not look for a MiniMax image job."""
+        from routers import story_music
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        payload = {
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nAcross the night",
+            "count": 1,
+            "workspace": "default",
+            "paid_music_confirmed": True,
+            "idempotencyKey": "activity-cancel-song-key",
+        }
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                story_music.threading, "Thread", QuietThread,
+            ):
+                started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                self.assertEqual(started.status_code, 202, started.text)
+                job_id = started.json()["jobId"]
+                task_id = started.json()["taskId"]
+                cancelled = self.client.post(
+                    f"/api/v1/tasks/{task_id}/cancel",
+                    params={"workspace": "default"},
+                )
+                job = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(job.status_code, 200, job.text)
+        self.assertEqual(job.json()["status"], "cancelled")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        tasks = {task["id"]: task for task in listed.json()["tasks"]}
+        self.assertEqual(tasks[task_id]["status"], "cancelled")
+        self.assertFalse(tasks[task_id]["cancelable"])
+
+    def test_activity_cancel_of_a_music_candidate_stops_the_parent_job(self):
+        """A child Activity row must cancel the parent MiniMax Music job, not a MiniMax image id."""
+        from routers import story_music
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        payload = {
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nAcross the night",
+            "count": 1,
+            "workspace": "default",
+            "paid_music_confirmed": True,
+            "idempotencyKey": "activity-cancel-candidate-key",
+        }
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                story_music.threading, "Thread", QuietThread,
+            ):
+                started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                self.assertEqual(started.status_code, 202, started.text)
+                job_id = started.json()["jobId"]
+                child_id = started.json()["children"][0]["taskId"]
+                cancelled = self.client.post(
+                    f"/api/v1/tasks/{child_id}/cancel",
+                    params={"workspace": "default"},
+                )
+                job = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(job.status_code, 200, job.text)
+        self.assertEqual(job.json()["status"], "cancelled")
 
     def test_minimax_music_null_or_empty_workspace_means_the_active_workspace(self):
         """Core's old music route turned a null or empty workspace into the active one."""
