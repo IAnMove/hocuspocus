@@ -275,6 +275,7 @@ async def publish_from_form(
     transcode_slots: asyncio.Semaphore | None = None,
     sidecar_error_prefix: str = "Could not save MP4 recording",
     safe_join: Callable[..., str | None] | None = None,
+    strip_workspace: bool = True,
 ) -> dict[str, Any]:
     upload = form.get("file")
     if upload is None or not hasattr(upload, "read"):
@@ -288,7 +289,11 @@ async def publish_from_form(
     scene = details["scene"]
     recipe = details.get("recipe") if isinstance(details.get("recipe"), dict) else None
     prompt = str(details.get("prompt") or "")
-    workspace = str(details.get("workspace") or "").strip() or None
+    if strip_workspace:
+        workspace = str(details.get("workspace") or "").strip() or None
+    else:
+        # The full server hands the name to its workspace check as sent, so " lab " is refused.
+        workspace = details.get("workspace") or None
     resolve = workspace_dir or core.workspace_dir
     folder = resolve(workspace)
     os.makedirs(folder, exist_ok=True)

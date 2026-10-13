@@ -289,9 +289,21 @@
     },
     "status": 400
   },
+  "scene recording metadata too large": {
+    "body": {
+      "detail": "Part exceeded maximum size of 1024KB."
+    },
+    "status": 400
+  },
   "scene recording needs version 1": {
     "body": {
       "detail": "A version 1 scene is required"
+    },
+    "status": 400
+  },
+  "scene recording workspace must be exact": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
     },
     "status": 400
   },

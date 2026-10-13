@@ -235,7 +235,7 @@ class TestSharedLlmReload(unittest.TestCase):
             )
         return unloaded, loaded
 
-    def test_anthropic_url_change_reloads(self):
+    def test_an_anthropic_url_that_the_service_reports_and_changed_reloads(self):
         unloaded, loaded = self._load(
             provider="anthropic",
             model="claude",
