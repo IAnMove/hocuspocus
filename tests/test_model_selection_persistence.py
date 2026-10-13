@@ -12,6 +12,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
 
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
+MODELS_PATH = os.path.join(ROOT, "ui", "src", "stores", "modelsSlice.ts")
 SERVICES_PATH = os.path.join(ROOT, "ui", "src", "stores", "servicesSlice.ts")
 PERSISTENCE_PATH = os.path.join(ROOT, "ui", "src", "stores", "modeSettingsPersistence.ts")
 STORY_PATH = os.path.join(
@@ -96,15 +97,15 @@ class TestModelSelectionPersistence(unittest.TestCase):
     def test_client_and_boot_hydration_use_server_preferences(self):
         launch = _source(LAUNCH_PATH)
         client = api_client_source()
-        store = _source(STORE_PATH)
+        models = _source(MODELS_PATH)
 
         self.assertIn('@api.get("/api/v1/model-selections")', launch)
         self.assertIn('@api.put("/api/v1/model-selections")', launch)
         self.assertIn("fetchModelSelections", client)
         self.assertIn("updateModelSelections", client)
-        self.assertIn("api.fetchModelSelections()", store)
+        self.assertIn("api.fetchModelSelections()", models)
         self.assertIn("api.updateModelSelections(payload)", _source(PERSISTENCE_PATH))
-        self.assertIn("durableSelections?.selected_models || {}", store)
+        self.assertIn("durableSelections?.selected_models || {}", models)
 
     def test_story_lab_explains_the_ltx_gemma_dependency(self):
         story = _story_ui()
@@ -165,7 +166,8 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("directorAspectRatio: format.aspectRatio", helper)
         self.assertGreaterEqual(
             store.count("_syncGlobalProductionVideoFormat(")
-            + services.count("_syncGlobalProductionVideoFormat("),
+            + services.count("_syncGlobalProductionVideoFormat(")
+            + _source(MODELS_PATH).count("_syncGlobalProductionVideoFormat("),
             4,
         )
 

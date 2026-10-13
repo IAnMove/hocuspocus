@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**The model catalog, which models are shown, and the selected model's options left the main Studio store.** Loading the catalog, showing or hiding a model, and filling in that model's settings still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
 **Tools, recipes, services, and LoRAs left the main Studio store.** Those controls still show up in the same places, and the screen still reads and writes them through the same `useStore` hook. Saving a mode's settings, including the chosen model and the LoRAs that were on, works the same way as before.
 
 **The Studio store is starting to split.** System settings, generation presets, foreground activity, and the CivitAI browser now live in their own slices. The screen still reads and writes them through the same `useStore` hook.
