@@ -926,6 +926,17 @@ def _apply_direct_video_contract(
     )
 
 
+def _approved_review_plans(provided: Any) -> Optional[list[dict]]:
+    """Prompts approved in the manual review screen (``provided_clip_plans``), marked as typed.
+
+    They are the user's: the final pass keeps their style locks but adds no
+    no-text lock. The plan endpoint already locked the ones the LLM wrote.
+    """
+    if not isinstance(provided, list) or not provided:
+        return None
+    return mark_typed_prompt_edits([], copy.deepcopy(provided))
+
+
 def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> bool:
     """Whether the user typed this saved prompt at the review pause (see ``continue_pipeline``)."""
     plans = state.get("clip_plans")
@@ -7523,13 +7534,10 @@ def _run_pipeline(pid: str, resume: bool = False):
         # prompts enter the same durable server pipeline without asking the
         # LLM to rewrite them or falling back to Studio's generic multiclip
         # submission path.
-        provided_plans = params.get("provided_clip_plans")
         resume_plans = (
             (p.get("clip_plans") or None)
             if resume else
-            copy.deepcopy(provided_plans)
-            if isinstance(provided_plans, list) and provided_plans else
-            None
+            _approved_review_plans(params.get("provided_clip_plans"))
         )
         resume_images = (p.get("clip_images") or None) if resume else None
 

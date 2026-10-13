@@ -288,3 +288,17 @@ def test_only_changed_prompts_are_marked_typed():
     assert marked[2]["_director_typed_prompts"] == ["image_prompt"]
     assert "_director_typed_prompts" not in edited[0]
     assert mark_typed_prompt_edits(shown, None) is None
+
+
+def test_prompts_approved_in_the_review_screen_keep_their_lettering():
+    # The UI's direct-video review sends its approved prompts as
+    # provided_clip_plans; they are the user's, so no no-text lock comes back.
+    params = {"allow_clip_text": False}
+    with _services():
+        plans = director_pipeline._approved_review_plans(
+            [{"video_prompt": "A neon sign reads 'OPEN' in the rain."}],
+        )
+        sent = director_pipeline._apply_direct_video_contract(plans, params, "Night city.")
+    assert "NO VISIBLE TEXT LOCK" not in sent[0]["video_prompt"] and "'OPEN'" in sent[0]["video_prompt"]
+    assert plans[0]["_director_typed_prompts"] == ["video_prompt"]
+    assert director_pipeline._approved_review_plans([]) is None
