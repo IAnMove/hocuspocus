@@ -6,8 +6,8 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 
-from routers.model3d_commands import command_handlers as model_handlers
-from routers.model3d_rig_commands import command_catalog, command_handlers
+from services.model3d_commands import command_handlers as model_handlers
+from services.model3d_rig_commands import command_catalog, command_handlers
 from routers.wangp_mcp import create_wangp_mcp_router
 
 

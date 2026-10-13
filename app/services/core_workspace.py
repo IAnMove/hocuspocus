@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app_identity import read_app_version
+from services.kernel.paths import safe_join
 
 _LOCK = threading.Lock()
 _WORKSPACE_NAME = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)")
@@ -101,17 +102,6 @@ def workspace_dir(workspace: str | None = None) -> str:
     if name != "default":
         target.mkdir(parents=True, exist_ok=True)
     return str(target)
-
-
-def safe_join(base: str, *parts: str) -> str | None:
-    try:
-        candidate = Path(base).joinpath(*parts).resolve()
-        root = Path(base).resolve()
-        if os.path.commonpath((str(root), str(candidate))) != str(root):
-            return None
-        return str(candidate)
-    except (OSError, ValueError):
-        return None
 
 
 def _file_count(path: str) -> int:

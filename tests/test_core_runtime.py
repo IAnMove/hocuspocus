@@ -1729,5 +1729,24 @@ class CoreRuntimeTests(unittest.TestCase):
         })
 
 
+def test_safe_join_copies_use_the_launch_containment_check():
+    """A child of ``/`` stays inside ``/``. The prefix copy rejected it."""
+    import tempfile
+
+    from services.core_workspace import safe_join as core_safe_join
+    from services.kernel.paths import safe_join
+    from services.win_safe_files import safe_join_under
+
+    expected = os.path.realpath("/tmp")
+    assert safe_join("/", "tmp") == expected
+    assert safe_join_under("/", "tmp") == expected
+    assert core_safe_join("/", "tmp") == expected
+    assert safe_join_under is safe_join
+    assert core_safe_join is safe_join
+    with tempfile.TemporaryDirectory() as base:
+        assert safe_join(base, "..", "secret.txt") is None
+        assert safe_join(base, "clip.mp4") == os.path.realpath(os.path.join(base, "clip.mp4"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -30,7 +30,7 @@ from services.wizard_workflow_executor import (
 )
 from services.wizard_workflows import read_workflows, write_workflows
 from tests.test_image_generation_commands import FakeNative, _mcp_call
-from routers.tools_upscale_commands import tools_upscale_command_catalog
+from services.tools_upscale_commands import tools_upscale_command_catalog
 
 
 WORKSPACE = "workspace-a"

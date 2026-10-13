@@ -317,19 +317,8 @@ def _safe_join(base: str, *parts: str) -> str | None:
     stays inside `base`. Returns None on traversal attempts (`..`, absolute
     paths, symlinks escaping the base, etc.). Use for any endpoint that
     accepts a user-supplied filename."""
-    try:
-        base_real = os.path.realpath(base)
-        joined = os.path.realpath(os.path.join(base_real, *parts))
-        # commonpath compares path components rather than string prefixes.
-        # normcase preserves correct behaviour on case-insensitive Windows
-        # filesystems and ValueError handles paths on different drives.
-        base_cmp = os.path.normcase(base_real)
-        joined_cmp = os.path.normcase(joined)
-        if os.path.commonpath((base_cmp, joined_cmp)) != base_cmp:
-            return None
-        return joined
-    except (ValueError, OSError):
-        return None
+    from services.kernel.paths import safe_join
+    return safe_join(base, *parts)
 
 
 def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
@@ -28603,7 +28592,7 @@ def import_story_as_series_endpoint(body: dict):
 
 @api.post("/api/v1/series/{series_id}/episodes")
 def create_series_episode_endpoint(series_id: str, body: dict):
-    from routers.series_episode import create_checked_episode
+    from services.series_episode import create_checked_episode
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -28757,7 +28746,7 @@ def import_series_asset_endpoint(series_id: str, body: dict):
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
 def put_series_episode_endpoint(series_id: str, episode_id: str, body: dict):
-    from routers.series_episode import apply_series_episode_update
+    from services.series_episode import apply_series_episode_update
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -36261,12 +36250,12 @@ _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 # qa.people C3 duplicate-person flag: register beside the MCP router (feat/qa-people).
 from services.qa_people import command_catalog as qa_people_catalog, command_handlers as qa_people_handlers
 _qa_people_handlers = qa_people_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
-from routers.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
+from services.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
 _model3d_command_handlers = model3d_command_handlers(
     generate=generate_model3d, status=model3d_job_status,
     journal_path=os.path.join(os.getcwd(), "settings", "model3d-mcp-requests.sqlite3"),
 )
-from routers.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
+from services.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
 _model3d_rig_handlers = model3d_rig_handlers(
     generate=generate_rig, status=rig_job_status,
     journal_path=os.path.join(os.getcwd(), "settings", "model3d-rig-mcp-requests.sqlite3"),
