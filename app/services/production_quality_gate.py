@@ -6,6 +6,12 @@ than the quality allows, and a full-frame title (title-card, trailer-slam) over 
 clip it paid for (``allow: ["title_card"]`` keeps a deliberate one), a 3D shot asking a spec model for a clip its
 rig will not bake (the export would fail after every GPU stage), and a ``camera`` that is not a camera preset
 (``unknown_camera``; the scene edit would fail after the GPU work). A resume of an unchanged spec is never refused.
+Each problem carries a plain ``message`` that names the shots, the pictures, models or cameras and the limit.
+
+The first three only make the video look static (``THIN_CODES``): ``allow_thin: true`` on ``production.run`` (and
+its dry run) turns them into warnings and the run goes ahead. A clip or camera that does not exist is always refused.
+What ``allow_thin`` let through is kept in the state (``allow_thin``) so ``production.status`` shows it for as long as
+that spec runs; the record is never read as permission.
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
@@ -21,8 +27,9 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from services.production_camera import unknown_cameras
-from services.production_quality import profile_of
+from services.production_quality import DEFAULT, PROFILES, profile_of
 from services.video2d_catalogs import CATALOGS
+from services.video2d_preset_catalog import camera_presets
 
 REUSED_STILL = 3
 # an opaque plate over the whole frame: the text templates marked covers in text_templates.json
@@ -31,6 +38,12 @@ MOVING = ("h3", "clip", "scene3d", "scene2d", "screen")
 REUSED_TEMPLATE = 4
 SHOT_FIELDS = {"key", "kind", "line", "span", "t0", "t1", "after", "cast", "sing", "frame", "action", "still", "clip", "image_model",
                "image_steps", "graphic", "scene3d", "scene2d", "desktop", "focus", "zoom", "camera", "title", "allow", "moment", "seed"}
+# What only makes the video look static: allow_thin lets these through as warnings. The other blocking problems
+# (a clip a model will not have, a camera that does not exist) would fail after the GPU work, so nothing skips them.
+THIN_CODES = ("still_reused", "too_static", "title_card_hides_shot")
+ALLOW_THIN = "allow_thin"
+LISTED_CLIPS = 12          # a GLB can bring dozens of clips: name the first ones
+MOVING_KINDS = "kind h3, scene3d or scene2d"
 
 
 def _shots(spec: dict) -> list[dict]:
@@ -38,57 +51,178 @@ def _shots(spec: dict) -> list[dict]:
     return [shot for shot in shots if isinstance(shot, dict)] if isinstance(shots, list) else []
 
 
-def _still_runtime(spec: dict, shots: list[dict]) -> float:
+def _quoted(names: list[str]) -> str:
+    """'"a"', '"a" and "b"', '"a", "b" and "c"'."""
+    items = [f'"{name}"' for name in names]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _shot_names(keys: list[str]) -> str:
+    return ("shot " if len(keys) == 1 else "shots ") + _quoted(keys)
+
+
+def _sentence(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def _number(value: float) -> str:
+    return f"{value:.1f}".rstrip("0").rstrip(".")
+
+
+def _percent(ratio: float) -> str:
+    return _number(ratio * 100) + "%"
+
+
+def _allowed(shot: dict, token: str) -> bool:
+    return token in (shot.get("allow") or ())
+
+
+def _still_time(spec: dict, shots: list[dict]) -> tuple[float, float, list[str]]:
+    """Seconds on still images not marked deliberate, the song's seconds and those shots' keys. Nothing is counted
+    unless every shot has its own ``t0``."""
     duration = float((spec.get("song") or {}).get("duration") or 0)
     # Sorted by start only: two shots at one t0 would otherwise compare their dicts and raise.
     timed = sorted(((float(shot["t0"]), shot) for shot in shots if isinstance(shot.get("t0"), (int, float))), key=lambda pair: pair[0])
     if duration <= 0 or len(timed) != len(shots):
-        return 0.0
+        return 0.0, duration, []
     ends = [start for start, _ in timed[1:]] + [duration]
-    still = sum(end - start for (start, shot), end in zip(timed, ends)
-                if shot.get("kind") == "still" and "still" not in (shot.get("allow") or ()))
-    return still / duration
+    held = [(end - start, shot) for (start, shot), end in zip(timed, ends) if shot.get("kind") == "still" and not _allowed(shot, "still")]
+    return sum(seconds for seconds, _ in held), duration, [str(shot.get("key")) for _, shot in held]
 
 
-def refuse_thin_plan(spec: dict, stored: Any, root: Any = None) -> None:
-    """production.run: a new or changed spec that would look thin is HTTP 422 quality_gate; a resume never is."""
+def gate_run(state: dict, spec: dict, root: Any = None, *, allow_thin: bool = False) -> list[dict]:
+    """production.run's check (``refuse_thin_plan``) against the saved spec. A new or changed spec also replaces
+    ``state["allow_thin"]``, the shots and checks the flag let through; a resume keeps the record of its spec."""
+    stored = state.get("spec")
+    allowed = refuse_thin_plan(spec, stored, root, allow_thin=allow_thin)
+    if spec != stored:
+        state.pop(ALLOW_THIN, None)
+        if allowed:
+            state[ALLOW_THIN] = [{"code": item["code"], "shots": item["shots"]} for item in allowed]
+    return allowed
+
+
+def allow_thin_status(state: dict) -> dict:
+    """production.status: what ``allow_thin`` let through for the spec this production runs, if anything."""
+    record = state.get(ALLOW_THIN)
+    return {ALLOW_THIN: record} if isinstance(record, list) and record else {}
+
+
+def refuse_thin_plan(spec: dict, stored: Any, root: Any = None, *, allow_thin: bool = False) -> list[dict]:
+    """production.run: a new or changed spec that would look thin is HTTP 422 quality_gate; a resume never is.
+
+    With ``allow_thin`` the thin checks are returned as warnings instead; a clip or camera that does not exist is
+    refused all the same."""
     if spec == stored:
-        return
-    problems = blocking_problems(spec, root)
-    if problems:
+        return []
+    refused, allowed = gate(spec, root, allow_thin=allow_thin)
+    if refused:
         from fastapi import HTTPException
-        summary = "; ".join(f"{item['code']} ({item.get('still') or item.get('ratio') or ', '.join(item.get('cameras') or [])})"
-                            for item in problems)
-        raise HTTPException(422, {"code": "quality_gate", "message": f"The plan would look thin: {summary}. See problems.",
-                                  "problems": problems, "retryable": False})
+        raise HTTPException(422, {"code": "quality_gate", "message": refusal_message(refused), "problems": refused,
+                                  "retryable": False})
+    return allowed
+
+
+def gate(spec: dict, root: Any = None, *, allow_thin: bool = False) -> tuple[list[dict], list[dict]]:
+    """``(refused, allowed)``: what production.run refuses, and the thin checks ``allow_thin`` lets through as
+    warnings (each marked ``allowed_by: "allow_thin"``). The dry run and the run both read this."""
+    problems = blocking_problems(spec, root)
+    if not allow_thin:
+        return problems, []
+    return ([item for item in problems if item["code"] not in THIN_CODES],
+            [{**item, "allowed_by": ALLOW_THIN} for item in problems if item["code"] in THIN_CODES])
+
+
+def refusal_message(problems: list[dict]) -> str:
+    """The 422 message: every problem in plain words, the thin ones apart from the ones nothing can skip."""
+    thin = [item["message"] for item in problems if item["code"] in THIN_CODES]
+    broken = [item["message"] for item in problems if item["code"] not in THIN_CODES]
+    lines = ["Nothing was started: fix the plan and send it again."]
+    if thin:
+        lines.append("These would make the video look static. Fix them, or send allow_thin: true next to spec (not inside "
+                     "it) to make it as planned; they come back as warnings:")
+        lines += [f"- {message}" for message in thin]
+    if broken:
+        lines.append("These would fail after the GPU work, so allow_thin does not skip them:")
+        lines += [f"- {message}" for message in broken]
+    return "\n".join(lines)
 
 
 def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
+    spec = _named(spec)
     shots = _shots(spec)
-    problems = []
+    problems = _reused_stills(shots) + _too_static(spec, shots)
+    problems += _unbaked_clips(spec, shots, root)
+    problems += [{**item, "message": _camera_message(item)} for item in unknown_cameras(spec)]
+    problems += _hidden_by_titles(shots)
+    return problems
+
+
+def _named(spec: dict) -> dict:
+    """A shot with no key is named by its place (``shots[2]``) so no message says "None". production.run refuses
+    such a shot before the gate; only the dry run sees one."""
+    shots = spec.get("shots")
+    if not isinstance(shots, list) or all(not isinstance(shot, dict) or shot.get("key") for shot in shots):
+        return spec
+    return {**spec, "shots": [{**shot, "key": f"shots[{index}]"} if isinstance(shot, dict) and not shot.get("key") else shot
+                              for index, shot in enumerate(shots)]}
+
+
+def _reused_stills(shots: list[dict]) -> list[dict]:
     uses: dict[str, list[str]] = {}
     for shot in shots:
-        if shot.get("kind") == "still" and isinstance(shot.get("still"), str) and "still" not in (shot.get("allow") or ()):
+        if shot.get("kind") == "still" and isinstance(shot.get("still"), str) and not _allowed(shot, "still"):
             uses.setdefault(shot["still"], []).append(str(shot.get("key")))
-    for name, keys in uses.items():
-        if len(keys) >= REUSED_STILL:
-            problems.append({"code": "still_reused", "still": name, "shots": keys,
-                             "hint": "one picture panned across many shots reads as filler: give each moment its own clip, "
-                                     "3D shot or picture, or mark a deliberate repeat with allow: [\"still\"]"})
-    ratio = _still_runtime(spec, shots)
+    return [{"code": "still_reused", "still": name, "shots": keys,
+             "message": f"{_sentence(_shot_names(keys))} all show the same still picture \"{name}\". Give each one its own "
+                        f"picture, turn some of them into moving shots ({MOVING_KINDS}), or add allow: [\"still\"] to the "
+                        "ones that repeat it on purpose.",
+             "hint": "one picture panned across many shots reads as filler: give each moment its own clip, "
+                     "3D shot or picture, or mark a deliberate repeat with allow: [\"still\"]"}
+            for name, keys in uses.items() if len(keys) >= REUSED_STILL]
+
+
+def _too_static(spec: dict, shots: list[dict]) -> list[dict]:
+    seconds, duration, keys = _still_time(spec, shots)
+    ratio = seconds / duration if duration > 0 else 0.0
     limit = profile_of(spec)["static"]
-    if ratio > limit:
-        problems.append({"code": "too_static", "ratio": round(ratio, 2), "limit": limit,
-                         "hint": "replace still shots with H3 or scene3d shots"})
-    problems += _unbaked_clips(spec, shots, root)
-    problems += unknown_cameras(spec)
-    hidden = [str(shot.get("key")) for shot in shots if _covered(shot)]
-    if hidden:
-        problems.append({"code": "title_card_hides_shot", "shots": hidden,
-                         "hint": "title-card and trailer-slam paint an opaque plate over the whole frame, so the clip under "
-                                 "it is never seen: use lower-third-date, social-caption, dymo, card, chapter or quote, or "
-                                 "mark a deliberate card with allow: [\"title_card\"]"})
-    return problems
+    if ratio <= limit:
+        return []
+    chosen = spec.get("quality") in PROFILES          # profile_of: a missing or unknown quality is the default's bar
+    bar = f"quality \"{spec['quality'] if chosen else DEFAULT}\"" + ("" if chosen else " (the default)")
+    return [{"code": "too_static", "ratio": round(ratio, 2), "limit": limit, "shots": keys,
+             "message": f"Still pictures fill {_percent(ratio)} of the song ({_number(seconds)} s of {_number(duration)} s, in "
+                        f"{_shot_names(keys)}), and {bar} allows at most {_percent(limit)}. Turn some of these shots into "
+                        f"moving shots ({MOVING_KINDS}), make them shorter, or add allow: [\"still\"] to the ones that must "
+                        "stay still.",
+             "hint": "replace still shots with H3 or scene3d shots"}]
+
+
+def _hidden_by_titles(shots: list[dict]) -> list[dict]:
+    hidden = [shot for shot in shots if _covered(shot)]
+    if not hidden:
+        return []
+    templates: dict[str, list[str]] = {}
+    for shot in hidden:
+        templates.setdefault(shot["title"]["template"], []).append(str(shot.get("key")))
+    where = "; ".join(f"\"{template}\" on {_shot_names(keys)}" for template, keys in templates.items())
+    head = "A full-frame title hides the moving picture under it" if len(hidden) == 1 else \
+        "Full-frame titles hide the moving picture under them"
+    return [{"code": "title_card_hides_shot", "shots": [str(shot.get("key")) for shot in hidden],
+             "message": f"{head}: {where}. Use a title that leaves the picture visible (lower-third-date, social-caption, "
+                        "dymo, card, chapter or quote), or add allow: [\"title_card\"] to a shot that should show only the "
+                        "card.",
+             "hint": "title-card and trailer-slam paint an opaque plate over the whole frame, so the clip under "
+                     "it is never seen: use lower-third-date, social-caption, dymo, card, chapter or quote, or "
+                     "mark a deliberate card with allow: [\"title_card\"]"}]
+
+
+def _camera_message(problem: dict) -> str:
+    uses = problem.get("uses") or []
+    asked = "; ".join(f"{_shot_names([use['shot']])} asks for the camera \"{use['camera']}\"" for use in uses)
+    missing = "That camera does not exist" if len(uses) == 1 else "Those cameras do not exist"
+    return (f"{_sentence(asked)}. {missing}, so the scene edit would fail after the GPU work. Use one of: "
+            f"{', '.join(camera_presets())}.")
 
 
 def _baked(entry: dict, rig: str, root: Any = None) -> list[str] | None:
@@ -130,17 +264,33 @@ def _unbaked_clips(spec: dict, shots: list[dict], root: Any = None) -> list[dict
                 continue
             known = {_clip_key(clip) for clip in baked} | {_clip_key(labels.get(clip, clip)) for clip in baked}
             asked = [entry.get("clip")] + [cue.get("clip") for cue in entry.get("clips") or [] if isinstance(cue, dict)]
-            missing += [f"{shot.get('key')}:{role} {clip}" for clip in asked if isinstance(clip, str) and _clip_key(clip) not in known]
+            missing += [(str(shot.get("key")), role, str(entry.get("source")), clip, baked)
+                        for clip in asked if isinstance(clip, str) and _clip_key(clip) not in known]
     if not missing:
         return []
-    return [{"code": "clip_not_baked", "shots": missing,
+    return [{"code": "clip_not_baked", "shots": [f"{key}:{role} {clip}" for key, role, _model, clip, _baked in missing],
+             "message": _clips_message(missing),
              "hint": "add the clip to that model's animations, or ask for one it bakes"}]
+
+
+def _clips_message(missing: list[tuple[str, str, str, str, list[str]]]) -> str:
+    asked = "; ".join(f"{_shot_names([key])} ({role}) asks model \"{model}\" for the clip \"{clip}\", but {_clip_list(model, baked)}"
+                      for key, role, model, clip, baked in missing)
+    return (f"{_sentence(asked)}. The 3D export would fail after the GPU work: add the clip to that model's animations in "
+            "spec.models, or ask for one it has.")
+
+
+def _clip_list(model: str, baked: list[str]) -> str:
+    if not baked:
+        return f"\"{model}\" has no clips"
+    more = f" and {len(baked) - LISTED_CLIPS} more" if len(baked) > LISTED_CLIPS else ""
+    return f"\"{model}\" only has: {', '.join(baked[:LISTED_CLIPS])}{more}"
 
 
 def _covered(shot: dict) -> bool:
     title = shot.get("title")
     return (shot.get("kind") in MOVING and isinstance(title, dict) and title.get("template") in FULL_FRAME_TITLES
-            and "title_card" not in (shot.get("allow") or ()))
+            and not _allowed(shot, "title_card"))
 
 
 def plan_warnings(spec: dict, root: Any = None, production_id: str | None = None) -> list[dict]:

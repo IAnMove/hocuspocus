@@ -41,7 +41,8 @@ def test_one_picture_panned_across_many_shots_is_refused_but_title_cards_are_not
 def test_too_much_still_runtime_is_refused_at_the_quality_bar():
     shots = [card("a", 0), {**card("b", 10), "still": "other"}, h3("c", 20)]
     problems = blocking_problems({"song": SONG, "shots": shots})
-    assert problems == [{"code": "too_static", "ratio": 0.5, "limit": 0.35, "hint": problems[0]["hint"]}]
+    assert problems == [{"code": "too_static", "ratio": 0.5, "limit": 0.35, "shots": ["a", "b"], "message": problems[0]["message"],
+                         "hint": problems[0]["hint"]}]
     assert blocking_problems({"song": SONG, "shots": shots, "quality": "draft"}) == []
 
 

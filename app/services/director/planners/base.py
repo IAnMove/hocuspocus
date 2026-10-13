@@ -26,6 +26,7 @@ except ImportError:
     json_repair = None  # type: ignore
     _HAVE_JSON_REPAIR = False
 
+from ...minors_rule import with_minors_rule
 from ..schema import ProductionPlan, ShotPlan
 from services.operation_logging import log_operation
 
@@ -127,6 +128,8 @@ class BasePlanner(ABC):
         gen_fn = self._generate_streaming if (streaming and self._generate_streaming) else self._generate
         if gen_fn is None:
             raise RuntimeError("No LLM generate function provided to planner")
+        # Every planner pass carries the hard rule about minors (once).
+        system_prompt = with_minors_rule(system_prompt)
 
         # Model-aware thinking budget when caller didn't specify
         if thinking_budget is None:

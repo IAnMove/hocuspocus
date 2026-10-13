@@ -137,10 +137,10 @@ def _axis(offset: float, focus: float) -> float:
 
 
 def unknown_cameras(spec: dict) -> list[dict]:
-    """``unknown_camera`` for each shot, fill or shot override whose ``camera`` is not a camera preset id."""
+    """``unknown_camera`` for each shot, fill or shot override whose ``camera`` is not a camera preset id; ``uses``
+    pairs each shot with the camera it asked for."""
     known = camera_presets()
-    bad: list[str] = []
-    names: list[str] = []
+    uses: list[dict] = []
     shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
     fills = spec.get("fill") if isinstance(spec.get("fill"), list) else []
     rows = [(str(shot.get("key")), shot) for shot in shots if isinstance(shot, dict)]
@@ -149,12 +149,11 @@ def unknown_cameras(spec: dict) -> list[dict]:
         overrides = shot.get("overrides") if isinstance(shot.get("overrides"), dict) else {}
         for value in (shot.get("camera"), overrides.get("camera")):
             if value is not None and value not in known:
-                bad.append(label)
-                names.append(str(value))
-    if not bad:
+                uses.append({"shot": label, "camera": str(value)})
+    if not uses:
         return []
-    return [{"code": "unknown_camera", "shots": bad, "cameras": sorted(set(names)),
-             "hint": "camera is a kind: camera preset of motion_presets.json: " + ", ".join(known)}]
+    return [{"code": "unknown_camera", "shots": [use["shot"] for use in uses], "cameras": sorted({use["camera"] for use in uses}),
+             "uses": uses, "hint": "camera is a kind: camera preset of motion_presets.json: " + ", ".join(known)}]
 
 
 def is_camera(value: Any) -> bool:

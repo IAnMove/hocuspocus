@@ -19,6 +19,7 @@ from functools import wraps
 from typing import Optional
 from . import debug_trace
 from .debug_trace import trace_llm_call
+from .minors_rule import with_minors_rule
 
 logger = logging.getLogger(__name__)
 
@@ -2181,6 +2182,9 @@ def generate(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
+
     # Routing is locked by _scheduled_llm_request here, after acquiring its lane.
     if require_vision and not supports_vision():
         raise ValueError("Select a vision-capable LLM before attaching visual evidence")
@@ -2481,6 +2485,8 @@ def generate_openai_compatible(
     application's normal internal LLM active.
     """
     cancellation_token = _resolve_cancellation_token(cancellation_token)
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
     model_id = (model_id or "").strip()
     base_url = (base_url or "").strip().rstrip("/")
     if not model_id:
@@ -2851,6 +2857,9 @@ def generate_streaming(
 
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
+
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
 
     # MiniMax/Grok streaming used the generic max_tokens payload and could
     # return empty content. Reuse the hardened non-streaming path and publish

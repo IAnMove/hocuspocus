@@ -33,7 +33,7 @@
     "nsfwMode": "Modo NSFW",
     "nsfwPublic": "NSFW no está disponible con proveedores LLM públicos ({{provider}}). Cambia a un modelo local o autoalojado para activarlo.",
     "nsfwOn": "La generación de contenido para adultos está activa. Los prompts del LLM incluyen guía explícita. Úsalo con responsabilidad.",
-    "nsfwOff": "Las barreras de seguridad de contenido están activas. El contenido explícito se bloquea en todas las salidas del LLM.",
+    "nsfwOff": "El modo de contenido para adultos está desactivado. Los prompts del LLM no reciben guía de contenido maduro. La regla contra el contenido sexual con menores se aplica en los dos modos.",
     "nsfwTitle": "Activar el modo de contenido para adultos",
     "nsfwRead": "Lee y acepta antes de continuar",
     "nsfwLead": "Al activar el modo NSFW, reconoces y aceptas lo siguiente:",
