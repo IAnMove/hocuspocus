@@ -42,6 +42,18 @@ def sound(path: Path, *, seconds: float = 0.5, rate: int = 8000) -> Path:
     return path
 
 
+def compressed_sound(path: Path, *, seconds: float = 0.5) -> Path:
+    """Silent AAC (ADTS) audio: the AAC encoder is built into every ffmpeg."""
+    need_ffmpeg()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=8000:cl=mono", "-t", str(seconds),
+         "-c:a", "aac", str(path)],
+        check=True, timeout=60,
+    )
+    return path
+
+
 def image(path: Path, *, size: tuple[int, int] = (8, 8)) -> Path:
     from PIL import Image
 

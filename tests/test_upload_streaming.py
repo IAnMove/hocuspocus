@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import sys
 import threading
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from app.services import upload_stream
 from app.services.upload_stream import (
     UploadTooLargeError,
+    UploadTranscodeError,
     stream_upload_file,
     transcode_upload,
 )
@@ -194,3 +196,32 @@ def test_colliding_upload_cannot_truncate_an_existing_partial(tmp_path):
     assert partial.read_bytes() == b"owned by another upload"
     assert not destination.exists()
     assert upload.closed
+
+
+def test_transcode_without_the_ffmpeg_python_package_uses_the_ffmpeg_program(monkeypatch, tmp_path):
+    from tests.characterization import media
+
+    tone = media.compressed_sound(tmp_path / "tone.aac")
+    monkeypatch.setitem(sys.modules, "ffmpeg", None)  # "import ffmpeg" raises ImportError, as on the core server
+    destination = tmp_path / "tone.wav"
+    run(transcode_upload(tone, destination, is_video=False))
+    assert destination.read_bytes()[:4] == b"RIFF"
+
+
+def test_transcode_without_the_package_reports_audio_it_cannot_decode(monkeypatch, tmp_path):
+    from tests.characterization import media
+
+    media.need_ffmpeg()
+    broken = tmp_path / "broken.mp3"
+    broken.write_bytes(b"this is not audio")
+    monkeypatch.setitem(sys.modules, "ffmpeg", None)
+    with pytest.raises(UploadTranscodeError) as caught:
+        run(transcode_upload(broken, tmp_path / "broken.wav", is_video=False))
+    assert caught.value.stderr
+
+
+def test_transcode_without_the_package_or_the_program_says_ffmpeg_is_missing(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "ffmpeg", None)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(RuntimeError, match="ffmpeg was not found on PATH"):
+        run(transcode_upload(tmp_path / "in.mp3", tmp_path / "out.wav", is_video=False))

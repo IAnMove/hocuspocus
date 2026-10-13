@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +13,6 @@ from fastapi.testclient import TestClient
 
 import core_runtime
 from core_runtime import api
-from services import core_upload
 from services.platform_capabilities import FEATURE_UNAVAILABLE
 from services.scene_commands import SceneCommands
 from services import core_remote_image
@@ -1304,9 +1304,69 @@ class CoreRuntimeTests(unittest.TestCase):
             self._leave_temp_workspace(folder, previous)
 
     def test_local_llm_load_is_blocked(self):
-        blocked = self.client.post("/api/v1/llm/load", json={"provider": "local"})
+        with patch("services.llm_service.load_model") as load:
+            blocked = self.client.post("/api/v1/llm/load", json={"provider": "local"})
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(blocked.json()["detail"]["code"], FEATURE_UNAVAILABLE)
+        load.assert_not_called()
+
+    @staticmethod
+    def _served_core_routes():
+        from tests.support.full_server import served_route_table
+
+        return [row for row in served_route_table(api) if row["method"] not in {"MOUNT", "?"}]
+
+    def test_core_defines_each_method_and_path_once(self):
+        from collections import Counter
+
+        served = Counter((row["method"], re.sub(r"\{[^}]*\}", "{}", row["path"])) for row in self._served_core_routes())
+        self.assertEqual({key: count for key, count in served.items() if count > 1}, {})
+
+    def test_core_series_get_comes_from_the_shared_library_router(self):
+        owners = [
+            row["source"] for row in self._served_core_routes()
+            if row["method"] == "GET" and row["path"] == "/api/v1/series/{series_id}"
+        ]
+        self.assertEqual(owners, ["app/routers/series_library.py"])
+
+    def test_core_llm_load_uses_the_stored_provider_key_and_routing(self):
+        from services import core_workspace as core
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            core.save_config({"services": {"active_workspace": "default", "openai_api_key": "sk-stored-key"}})
+            with patch("services.llm_service.load_model") as load, patch(
+                "services.llm_service.get_status", return_value={"loaded": True, "provider": "openai"},
+            ):
+                response = self.client.post(
+                    "/api/v1/llm/load", json={"provider": "openai", "model_id": "gpt-test"},
+                )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        load.assert_called_once()
+        self.assertEqual(load.call_args.kwargs["api_key"], "sk-stored-key")
+        self.assertEqual(load.call_args.kwargs["provider"], "openai")
+        self.assertEqual(load.call_args.kwargs["model_id"], "gpt-test")
+        self.assertEqual(load.call_args.kwargs["device"], "cpu")
+
+    def test_plan_h3_windows_is_blocked_whatever_the_body(self):
+        with_body = self.client.post(
+            "/api/v1/llm/plan-h3-windows", json={"prompt": "Clark turns toward the truck", "model_type": "minimax_h3"},
+        )
+        without_body = self.client.post("/api/v1/llm/plan-h3-windows")
+        self.assertEqual(with_body.status_code, 409, with_body.text)
+        self.assertEqual(with_body.json()["detail"]["code"], FEATURE_UNAVAILABLE)
+        self.assertEqual((without_body.status_code, without_body.json()), (409, with_body.json()))
+
+    def test_jobs_recovery_does_not_offer_active_jobs_as_crash_leftovers(self):
+        active = [{"job_id": "image-live", "status": "running"}]
+        with patch("services.core_remote_image.list_active", return_value=active):
+            listed = self.client.get("/api/v1/jobs")
+            recovery = self.client.get("/api/v1/jobs/recovery")
+        self.assertEqual(listed.json()["jobs"], active)
+        self.assertEqual(recovery.status_code, 200, recovery.text)
+        self.assertEqual(recovery.json(), {"jobs": []})
 
     def test_scene_recording_muxes_sidecar_audio_and_keeps_unique_names(self):
         from services import core_scene_recording
@@ -1538,25 +1598,135 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(served.status_code, 200)
         self.assertEqual(served.content, png)
 
-    def test_extract_upload_prefers_file_part_and_rejects_empty_multipart(self):
-        extra = (
-            b"------Part\r\n"
-            b'Content-Disposition: form-data; name="note"\r\n\r\n'
-            b"ignore\r\n"
-            b"------Part\r\n"
-            b'Content-Disposition: form-data; name="file"; filename="hero.png"\r\n'
-            b"Content-Type: image/png\r\n\r\n"
-            b"PIXELS\r\n"
-            b"------Part--\r\n"
+    def _upload(self, name: str, payload: bytes, content_type: str = "application/octet-stream"):
+        return self.client.post("/api/v1/upload", files={"file": (name, payload, content_type)})
+
+    def test_page_and_script_uploads_are_stored_as_bin_and_never_run_as_a_page(self):
+        page = b"<script>alert(document.domain)</script>"
+        folder, previous = self._in_temp_workspace()
+        try:
+            for name, content_type in (
+                ("evil.html", "text/html"), ("evil.svg", "image/svg+xml"), ("evil.js", "application/javascript"),
+            ):
+                with self.subTest(name=name):
+                    uploaded = self._upload(name, page, content_type)
+                    self.assertEqual(uploaded.status_code, 200, uploaded.text)
+                    self.assertTrue(uploaded.json()["filename"].endswith(".bin"), uploaded.json())
+                    served = self.client.get(uploaded.json()["url"])
+                    self.assertEqual(served.status_code, 200)
+                    self.assertEqual(served.content, page)
+                    self.assertEqual(served.headers["content-type"], "application/octet-stream")
+                    self.assertEqual(served.headers["x-content-type-options"], "nosniff")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_png_upload_is_served_back_with_nosniff(self):
+        png = b"\x89PNG\r\n\x1a\nfirst-clip"
+        folder, previous = self._in_temp_workspace()
+        try:
+            uploaded = self._upload("take.PNG", png, "image/png")
+            served = self.client.get(uploaded.json()["url"])
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertTrue(uploaded.json()["filename"].endswith(".png"))
+        self.assertEqual((served.status_code, served.content), (200, png))
+        self.assertEqual(served.headers["content-type"], "image/png")
+        self.assertEqual(served.headers["x-content-type-options"], "nosniff")
+
+    def test_upload_over_the_cap_is_refused_and_leaves_nothing(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("routers.uploads.MAX_IMAGE_UPLOAD_BYTES", 8):
+                refused = self._upload("big.png", b"123456789", "image/png")
+                allowed = self._upload("small.png", b"12345678", "image/png")
+            left = sorted(os.listdir("uploads"))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual((refused.status_code, refused.json()["detail"]), (413, "File too large (max 500 MB)"))
+        self.assertEqual(allowed.status_code, 200, allowed.text)
+        self.assertEqual(left, [allowed.json()["filename"]])
+
+    def test_a_name_outside_uploads_falls_back_to_outputs_and_never_leaves_the_folders(self):
+        from services import core_workspace as core
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path(core.workspace_dir("default"), "keyframe.png").write_bytes(b"keyframe pixels")
+            Path("secret.txt").write_text("outside the uploads folder", encoding="utf-8")
+            fallback = self.client.get("/api/v1/uploads/keyframe.png")
+            missing = self.client.get("/api/v1/uploads/never-uploaded.png")
+            attempts = [
+                self.client.get(f"/api/v1/uploads/{name}")
+                for name in ("%2e%2e", "%2e%2e%2fsecret.txt", "..%5C..%5Csecret.txt")
+            ]
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual((fallback.status_code, fallback.content), (200, b"keyframe pixels"))
+        self.assertEqual(fallback.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(missing.status_code, 404)
+        for attempt in attempts:
+            self.assertEqual(attempt.status_code, 404)
+            self.assertNotIn("outside the uploads folder", attempt.text)
+
+    def test_a_multipart_without_a_file_part_is_refused(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            refused = self.client.post("/api/v1/upload", files={"note": (None, "no file here")})
+            nothing_stored = not os.path.isdir("uploads") or os.listdir("uploads") == []
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(refused.status_code, 422)
+        self.assertTrue(nothing_stored)
+
+    def test_video_upload_reports_its_frame_rate_duration_and_audio(self):
+        from tests.characterization import media
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            clip = media.video(Path("source") / "clip.mp4")
+            with clip.open("rb") as handle:
+                uploaded = self._upload("clip.mp4", handle.read(), "video/mp4")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        body = uploaded.json()
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        self.assertEqual(
+            {key: body.get(key) for key in ("fps", "frame_count", "duration_seconds", "has_audio")},
+            {"fps": 8.0, "frame_count": 8, "duration_seconds": 1.0, "has_audio": False},
         )
-        data, name = core_upload.extract_upload(extra, "multipart/form-data; boundary=----Part")
-        self.assertEqual(name, "hero.png")
-        self.assertEqual(data, b"PIXELS")
-        with self.assertRaises(ValueError):
-            core_upload.extract_upload(
-                b"------Part\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nx\r\n------Part--\r\n",
-                "multipart/form-data; boundary=----Part",
-            )
+
+    def test_compressed_audio_upload_is_transcoded_to_wav(self):
+        from tests.characterization import media
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            tone = media.compressed_sound(Path("source") / "tone.aac")
+            # The core install has the ffmpeg program but not the ffmpeg-python package.
+            with patch.dict("sys.modules", {"ffmpeg": None}):
+                uploaded = self._upload("tone.aac", tone.read_bytes(), "audio/aac")
+                left = sorted(os.listdir("uploads"))
+                served = self.client.get(uploaded.json()["url"])
+                broken = self._upload("broken.mp3", b"this is not audio", "audio/mpeg")
+                left_after_broken = sorted(os.listdir("uploads"))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(uploaded.status_code, 200, uploaded.text)
+        self.assertTrue(uploaded.json()["filename"].endswith(".wav"))
+        self.assertEqual(left, [uploaded.json()["filename"]])
+        self.assertEqual(served.content[:4], b"RIFF")
+        self.assertEqual(broken.status_code, 400)
+        self.assertTrue(broken.json()["detail"].startswith("Failed to decode .mp3 audio:"))
+        self.assertEqual(left_after_broken, left)
+
+    def test_both_upload_routes_come_from_the_shared_uploads_router(self):
+        owners = {
+            (row["method"], row["path"]): row["source"] for row in self._served_core_routes()
+            if row["path"] in {"/api/v1/upload", "/api/v1/uploads/{filename}"}
+        }
+        self.assertEqual(owners, {
+            ("POST", "/api/v1/upload"): "app/routers/uploads.py",
+            ("GET", "/api/v1/uploads/{filename}"): "app/routers/uploads.py",
+        })
 
 
 if __name__ == "__main__":

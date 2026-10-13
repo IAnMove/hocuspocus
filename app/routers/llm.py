@@ -309,8 +309,14 @@ def create_llm_router(
     ensure_llm_loaded: Callable[[], None],
     comic_writing_llm: Callable[[dict], dict | None],
     resolve_visual_media: Callable[[str, str | None], str] | None = None,
+    require_local_llm: Callable[[], None] | None = None,
 ) -> APIRouter:
-    """Build the contiguous LLM control/generate/song-writer router."""
+    """Build the contiguous LLM control/generate/song-writer router.
+
+    ``require_local_llm`` runs when a load asks for the ``local`` provider, and
+    raises the HTTP error that refuses it. A server without a local engine
+    passes it; the full server passes nothing.
+    """
 
     router = APIRouter()
 
@@ -334,6 +340,8 @@ def create_llm_router(
         model_id = body.get("model_id", profile_model or default_llm_repo)
         device = body.get("device", services.get("llm_device", llm_default_device()))
         provider = body.get("provider", profile_provider)
+        if provider == "local" and require_local_llm is not None:
+            require_local_llm()
         remote_url = client_remote_url(provider, str(body.get("remote_url") or ""), profile_remote_url)
         api_key, remote_url = llm_provider_credentials(provider, services, remote_url)
 
@@ -712,8 +720,14 @@ def create_llm_prompt_router(
     get_cached_hardware: Callable[[], dict],
     get_enhancer_enabled: Callable[[], int],
     enhance_with_wangp: Callable[..., Any],
+    plan_h3_gate: Callable[[], None] | None = None,
 ) -> APIRouter:
-    """Build the LLM prompt tools that sit after Director generate-music."""
+    """Build the LLM prompt tools that sit after Director generate-music.
+
+    ``plan_h3_gate`` runs first in the H3 window planner, before the body is
+    read, and raises the HTTP error that refuses it. A server without a local
+    video engine passes it; the full server passes nothing.
+    """
 
     router = APIRouter()
 
@@ -721,6 +735,8 @@ def create_llm_prompt_router(
     async def llm_plan_h3_windows(request: Request):
         """Expand one H3 First/Last concept into exact per-window prompts."""
 
+        if plan_h3_gate is not None:
+            plan_h3_gate()
         body = await request.json()
         prompt = str(body.get("prompt") or "").strip()
         model_type = str(body.get("model_type") or "")

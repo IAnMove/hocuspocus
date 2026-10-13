@@ -1,7 +1,7 @@
 """Versioned MCP upload of one workspace asset.
 
-Base64 bytes are stored with the same ``save_upload`` writer as
-``core_runtime.upload_file``, but only inside the selected workspace.
+Base64 bytes are stored under a unique name by ``save_upload``, but only inside
+the selected workspace.
 An existing file is accepted only after the shared media-path check.
 """
 from __future__ import annotations
@@ -15,19 +15,21 @@ import json
 import os
 import re
 import shutil
+import uuid
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from fastapi import HTTPException
 
 from services.asset_catalog import _stable_unmanaged_id
-from services.core_upload import MAX_UPLOAD_BYTES, extract_upload, save_upload, unique_upload_name
 from services.media_paths import MediaPathNotAllowed, _KIND_EXTENSIONS, resolve_permitted_media_path
 from services.wangp_submission import wangp_media_url
 from services.workspace_store_lock import workspace_store_lock
 from services.media_publication import file_sha256 as _file_sha256, publication_lock, publication_transaction
 
 
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 MAX_ASSETS_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_ASSETS_UPLOAD_CHARS = 4 * ((MAX_ASSETS_UPLOAD_BYTES + 2) // 3)
 _JOURNAL_NAME = ".assets-upload-intents.json"
@@ -35,7 +37,31 @@ _DATA_KEYS = frozenset({"workspace", "filename", "data_base64"})
 _SOURCE_KEYS = frozenset({"workspace", "source"})
 _COPY_OPTIONS = frozenset({"copy_to_workspace", "destination_filename", "expected_destination_sha256"})
 _WORKSPACE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)")
+_SAFE_EXT = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
 _TOO_LARGE = f"Payload exceeds {MAX_ASSETS_UPLOAD_BYTES} bytes"
+
+
+def unique_upload_name(original: str) -> str:
+    base = os.path.basename((original or "upload.bin").replace("\\", "/"))
+    ext = os.path.splitext(base)[1].lower()
+    if not _SAFE_EXT.fullmatch(ext):
+        ext = ".bin"
+    return f"{uuid.uuid4().hex}{ext}"
+
+
+def save_upload(folder: str, data: bytes, original_name: str) -> dict[str, Any]:
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError("File too large (max 500 MB)")
+    os.makedirs(folder, exist_ok=True)
+    name = unique_upload_name(original_name)
+    dest = os.path.join(folder, name)
+    with open(dest, "wb") as handle:
+        handle.write(data)
+    return {
+        "filename": name,
+        "path": dest,
+        "url": f"/api/v1/uploads/{name}",
+    }
 
 
 class AssetsUploadError(Exception):
@@ -170,8 +196,7 @@ def _store_upload(folder: str, data: bytes, filename: str) -> str:
     if len(data) > MAX_ASSETS_UPLOAD_BYTES:
         raise AssetsUploadError("payload_too_large", _TOO_LARGE, 413)
     try:
-        payload, original = extract_upload(data, "", filename)
-        saved = save_upload(folder, payload, original)
+        saved = save_upload(folder, data, filename)
     except ValueError as error:
         raise _upload_error(error) from error
     path = str(saved.get("path") or "")

@@ -46,14 +46,8 @@ NOT_MOUNTED_IN_MAIN = {
     ),
 }
 # Pre-existing duplicates. Starlette serves the first registration; the later one never runs.
-KNOWN_DUPLICATES = {
-    ("core_runtime.py", "GET", "/api/v1/series/{series_id}"): (
-        f"{PENDING} core_labs mounts series_library first, so its own get_series never runs."
-    ),
-    ("core_runtime.py", "POST", "/api/v1/llm/load"): (
-        f"{PENDING} The core's inline llm_load (local_llm capability check) shadows the llm router's."
-    ),
-}
+# None are left: a new one fails test_no_method_and_path_is_defined_twice_in_a_server.
+KNOWN_DUPLICATES: dict[tuple[str, str, str], str] = {}
 
 
 def _parse(path: Path) -> ast.Module:
