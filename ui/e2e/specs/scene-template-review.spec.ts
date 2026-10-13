@@ -347,7 +347,7 @@ test('rejects a mismatched saved reference without navigating or handing it to t
     const card = page.locator('[data-template-id="cinema-establishing"]')
     await card.getByTestId('open-scene-cinema-establishing').click()
     await expect(page).toHaveURL(/\/scene-template-review$/)
-    await expect(card.getByRole('alert').filter({ hasText: 'La escena guardada no coincide' })).toBeVisible()
+    await expect(card.getByRole('alert').filter({ hasText: 'The saved scene does not match' })).toBeVisible()
     await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), PENDING_SCENE_KEY)).toBeNull()
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('__scene_template_test_handoff'))).toBeNull()
     expect(state.referenceRequests).toHaveLength(1)
@@ -361,7 +361,7 @@ test('keeps review decisions across reload and exports catalog/template versions
   try {
     await openGallery(page)
     const card = page.locator('[data-template-id="cinema-establishing"]')
-    const keep = card.getByRole('button', { name: 'Conservar', exact: true })
+    const keep = card.getByRole('button', { name: 'Keep', exact: true })
     await keep.click()
     await expect(keep).toHaveAttribute('aria-pressed', 'true')
     await expect.poll(() => page.evaluate(key => {
@@ -373,7 +373,7 @@ test('keeps review decisions across reload and exports catalog/template versions
     })
 
     await page.reload()
-    const reloadedKeep = page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Conservar', exact: true })
+    const reloadedKeep = page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Keep', exact: true })
     await expect(reloadedKeep).toHaveAttribute('aria-pressed', 'true')
 
     const downloadPromise = page.waitForEvent('download')
@@ -410,10 +410,10 @@ test('keeps one active preview player when switching candidate previews', async 
     await openGallery(page)
     const first = page.locator('[data-template-id="cinema-establishing"]')
     const second = page.locator('[data-template-id="music-pulse"]')
-    await first.getByRole('button', { name: /Ver escena/ }).click()
+    await first.getByRole('button', { name: /Watch scene/ }).click()
     await expect(page.locator('video')).toHaveCount(1)
     await expect(first.locator('video')).toHaveCount(1)
-    await second.getByRole('button', { name: /Ver escena/ }).click()
+    await second.getByRole('button', { name: /Watch scene/ }).click()
     await expect(page.locator('video')).toHaveCount(1)
     await expect(first.locator('video')).toHaveCount(0)
     await expect(second.locator('video')).toHaveCount(1)
@@ -458,8 +458,8 @@ test('migrates legacy decisions without overwriting them or approving the new mu
       localStorage.setItem(key, raw)
     }, { key: legacyKey, raw: legacy, expanded: CATALOG_REVIEW_STORAGE_KEY })
     await page.reload()
-    await expect(page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Conservar', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.locator('[data-template-id="music-spiral-exit"]').getByRole('button', { name: 'Pendiente', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Keep', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('[data-template-id="music-spiral-exit"]').getByRole('button', { name: 'Pending', exact: true })).toHaveAttribute('aria-pressed', 'true')
     expect(await page.evaluate(key => localStorage.getItem(key), legacyKey)).toBe(legacy)
   } finally {
     await closeApp(page, session)
