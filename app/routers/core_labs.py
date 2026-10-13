@@ -212,11 +212,6 @@ def create_core_labs_router() -> APIRouter:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
-    @router.get("/api/v1/series/{series_id}")
-    def get_series(series_id: str, workspace: str | None = None):
-        with _LOCK:
-            return _series_or_404(_read_series(_series_workspace(workspace)), series_id)
-
     @router.put("/api/v1/series/{series_id}")
     def put_series(series_id: str, body: dict):
         workspace = _series_workspace(body.get("workspace"))

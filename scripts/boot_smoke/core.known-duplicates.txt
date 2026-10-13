@@ -1,6 +1,0 @@
-# Routes the core server registers twice today. Starlette serves the first one.
-# One "METHOD /path  # reason" per line. Step 0.1 of the architecture refactor removes these
-# duplicates; the PR that removes one deletes its line here.
-GET /api/v1/series/{series_id}  # routers/series_library.py (via core_labs) and a leftover copy in core_labs.py
-POST /api/v1/llm/load  # inline core_runtime.py route shadows routers/llm.py (the inline one is the weaker)
-POST /api/v1/llm/plan-h3-windows  # the BLOCKED gate in core_runtime.py on purpose, plus routers/llm.py

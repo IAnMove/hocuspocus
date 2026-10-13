@@ -199,7 +199,6 @@ BLOCKED = (
     ("POST", "/api/v1/audio/analyze/jobs", "whisper_local"),
     ("POST", "/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video", "wangp_local"),
     ("POST", "/api/v1/director/pipelines/{pid}/repair", "wangp_local"),
-    ("POST", "/api/v1/llm/plan-h3-windows", "wangp_local"),
 )
 
 
@@ -373,10 +372,15 @@ async def put_services_config(request: Request):
 
 
 @api.get("/api/v1/jobs")
-@api.get("/api/v1/jobs/recovery")
 def list_jobs():
     jobs = core_remote_image.list_active()
     return {"jobs": jobs, "pipelines": [], "total": len(jobs)}
+
+
+@api.get("/api/v1/jobs/recovery")
+def jobs_recovery():
+    """The core keeps no durable generation queue, so a crash leaves nothing to offer back."""
+    return {"jobs": []}
 
 
 @api.get("/api/v1/system-stats")
@@ -707,22 +711,6 @@ def serve_upload(filename: str):
     return FileResponse(path)
 
 
-@api.post("/api/v1/llm/load")
-async def llm_load(request: Request):
-    body = await request.json()
-    provider = str((body or {}).get("provider") or core.services_config().get("llm_provider") or "local")
-    if provider == "local":
-        require_capability_http("local_llm")
-    from services import llm_service
-    llm_service.load_model(
-        model_id=str((body or {}).get("model_id") or ""),
-        provider=provider,
-        remote_url=str((body or {}).get("remote_url") or ""),
-        api_key=str((body or {}).get("api_key") or ""),
-    )
-    return {"status": "ok", **llm_service.get_status()}
-
-
 api.include_router(create_llm_router(
     get_services_config=core.services_raw,
     effective_llm_routing=core_production.effective_llm_routing,
@@ -732,6 +720,7 @@ api.include_router(create_llm_router(
     ensure_llm_loaded=core_production.ensure_llm_loaded,
     comic_writing_llm=core_production.comic_writing_llm,
     resolve_visual_media=core_production.resolve_visual_media,
+    require_local_llm=lambda: require_capability_http("local_llm"),
 ))
 api.include_router(create_llm_prompt_router(
     get_services_config=core.services_raw,
@@ -743,6 +732,7 @@ api.include_router(create_llm_prompt_router(
     get_cached_hardware=lambda: {},
     get_enhancer_enabled=lambda: 0,
     enhance_with_wangp=_hidden_wangp_enhance,
+    plan_h3_gate=lambda: require_capability_http("wangp_local"),
 ))
 
 

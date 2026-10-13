@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -1304,9 +1305,69 @@ class CoreRuntimeTests(unittest.TestCase):
             self._leave_temp_workspace(folder, previous)
 
     def test_local_llm_load_is_blocked(self):
-        blocked = self.client.post("/api/v1/llm/load", json={"provider": "local"})
+        with patch("services.llm_service.load_model") as load:
+            blocked = self.client.post("/api/v1/llm/load", json={"provider": "local"})
         self.assertEqual(blocked.status_code, 409)
         self.assertEqual(blocked.json()["detail"]["code"], FEATURE_UNAVAILABLE)
+        load.assert_not_called()
+
+    @staticmethod
+    def _served_core_routes():
+        from tests.support.full_server import served_route_table
+
+        return [row for row in served_route_table(api) if row["method"] not in {"MOUNT", "?"}]
+
+    def test_core_defines_each_method_and_path_once(self):
+        from collections import Counter
+
+        served = Counter((row["method"], re.sub(r"\{[^}]*\}", "{}", row["path"])) for row in self._served_core_routes())
+        self.assertEqual({key: count for key, count in served.items() if count > 1}, {})
+
+    def test_core_series_get_comes_from_the_shared_library_router(self):
+        owners = [
+            row["source"] for row in self._served_core_routes()
+            if row["method"] == "GET" and row["path"] == "/api/v1/series/{series_id}"
+        ]
+        self.assertEqual(owners, ["app/routers/series_library.py"])
+
+    def test_core_llm_load_uses_the_stored_provider_key_and_routing(self):
+        from services import core_workspace as core
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            core.save_config({"services": {"active_workspace": "default", "openai_api_key": "sk-stored-key"}})
+            with patch("services.llm_service.load_model") as load, patch(
+                "services.llm_service.get_status", return_value={"loaded": True, "provider": "openai"},
+            ):
+                response = self.client.post(
+                    "/api/v1/llm/load", json={"provider": "openai", "model_id": "gpt-test"},
+                )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        load.assert_called_once()
+        self.assertEqual(load.call_args.kwargs["api_key"], "sk-stored-key")
+        self.assertEqual(load.call_args.kwargs["provider"], "openai")
+        self.assertEqual(load.call_args.kwargs["model_id"], "gpt-test")
+        self.assertEqual(load.call_args.kwargs["device"], "cpu")
+
+    def test_plan_h3_windows_is_blocked_whatever_the_body(self):
+        with_body = self.client.post(
+            "/api/v1/llm/plan-h3-windows", json={"prompt": "Clark turns toward the truck", "model_type": "minimax_h3"},
+        )
+        without_body = self.client.post("/api/v1/llm/plan-h3-windows")
+        self.assertEqual(with_body.status_code, 409, with_body.text)
+        self.assertEqual(with_body.json()["detail"]["code"], FEATURE_UNAVAILABLE)
+        self.assertEqual((without_body.status_code, without_body.json()), (409, with_body.json()))
+
+    def test_jobs_recovery_does_not_offer_active_jobs_as_crash_leftovers(self):
+        active = [{"job_id": "image-live", "status": "running"}]
+        with patch("services.core_remote_image.list_active", return_value=active):
+            listed = self.client.get("/api/v1/jobs")
+            recovery = self.client.get("/api/v1/jobs/recovery")
+        self.assertEqual(listed.json()["jobs"], active)
+        self.assertEqual(recovery.status_code, 200, recovery.text)
+        self.assertEqual(recovery.json(), {"jobs": []})
 
     def test_scene_recording_muxes_sidecar_audio_and_keeps_unique_names(self):
         from services import core_scene_recording
