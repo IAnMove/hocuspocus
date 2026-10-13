@@ -21,6 +21,17 @@ H3_RESOLUTIONS = {
     ("landscape", "768p"): "1344x768",
     ("portrait", "768p"): "768x1344",
 }
+# The tiers a Series offers, 480p by default. H3 Legacy and H3 render each one
+# (minimax_h3_service and minimax_h3_handler presets); 1080p stays an experimental
+# Studio tier. A shot's ``resolution`` overrides its series.
+SERIES_RESOLUTIONS = ("480p", "540p", "720p", "768p")
+DEFAULT_SERIES_RESOLUTION = "480p"
+_RESOLUTION_NAMES = {
+    "480p": frozenset({"480", "480p", "864x480", "480x864"}),
+    "540p": frozenset({"540", "540p", "960x544", "544x960"}),
+    "720p": frozenset({"720", "720p", "1280x720", "720x1280", "1280x704", "704x1280"}),
+    "768p": frozenset({"768", "768p", "1344x768", "768x1344"}),
+}
 
 SERIES_SHOT_DURATIONS = (5, 10, 15)
 H3_DURATION_CAPABILITIES = {
@@ -193,33 +204,42 @@ def apply_series_shot_duration(series: dict, shot: dict) -> dict:
     return shot
 
 
+def series_resolution_preset(value: Any) -> str | None:
+    """The Series tier a value names (``720``, ``720p``, ``1280x704``...); None when it is empty or not a tier."""
+    raw = str(value or "").strip().lower()
+    return next((preset for preset, names in _RESOLUTION_NAMES.items() if raw in names), None)
+
+
+def shot_resolution(shot: Any) -> str | None:
+    """A shot's own Series tier (``resolution``); None when the shot follows its series."""
+    return series_resolution_preset(shot.get("resolution")) if isinstance(shot, dict) else None
+
+
+def shot_render_settings(settings: dict, shot: dict) -> dict:
+    """The series' frozen render settings, with the shot's own resolution when it names one."""
+    preset = shot_resolution(shot)
+    if preset is None:
+        return dict(settings)
+    resolution, _orientation = normalize_series_resolution(preset, settings.get("orientation"))
+    return {**settings, "resolution": resolution}
+
+
 def normalize_series_resolution(
     value: Any,
     orientation: Any = "landscape",
     requested_model: Any = "minimax_h3",
 ) -> tuple[str, str]:
+    """The H3 canvas of a Series tier in the series frame, and that frame's orientation.
+
+    H3 Legacy and H3 both render all four tiers, so a choice is kept as made: an
+    older rule turned 540p and 768p into 720p for H3. This function runs when an
+    attempt is frozen and again when its payload is built, so a canvas maps back
+    to its own tier (1280x704 is 720p, 960x544 is 540p). An empty or unknown value
+    is the 480p default for both models."""
+    del requested_model  # every Series tier is a released canvas of both H3 models
     raw_orientation = str(orientation or "landscape").strip().lower()
     normalized_orientation = "portrait" if raw_orientation in {"portrait", "vertical", "9:16"} else "landscape"
-    legacy = str(requested_model or "") == "minimax_h3_legacy"
-    raw = str(value or ("540p" if legacy else "480p")).strip().lower()
-    if legacy:
-        # Keep all four H3 Legacy tiers distinct.  This function is called when
-        # an attempt is frozen and again when its generation payload is built,
-        # so exact model-aligned canvases must be idempotent: 1280x704 is the
-        # 720p tier, not a signal to promote the job to the 1344x768 maximum.
-        if raw in {"480", "480p", "864x480", "480x864"}:
-            quality = "480p"
-        elif raw in {"720", "720p", "1280x704", "704x1280"}:
-            quality = "720p"
-        elif raw in {"768", "768p", "1344x768", "768x1344"}:
-            quality = "768p"
-        else:
-            quality = "540p"
-    else:
-        quality = "720p" if raw in {
-            "540", "540p", "720", "720p", "768", "768p", "1280x720",
-            "1280x704", "720x1280", "704x1280", "1344x768", "768x1344",
-        } else "480p"
+    quality = series_resolution_preset(value) or DEFAULT_SERIES_RESOLUTION
     return H3_RESOLUTIONS[(normalized_orientation, quality)], normalized_orientation
 
 

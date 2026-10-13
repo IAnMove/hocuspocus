@@ -15,7 +15,9 @@ never clears an approval. Changing only the volume of an sfx does not clear
 approval; changing its file, its timing or adding a cue does. A generated or
 imported take also keeps its approval when only the sound laid at the cut
 changed (``sfx``, ``music``, ``clipAudio``, ``clipVolume``, ``clipFit``,
-``foley``). Lines in other languages update that language version's text.
+``foley``). A video shot's ``resolution`` (its H3 size) is not what it shows:
+changing it clears only the take's approval, so the next render makes the
+take at that size. Lines in other languages update that language version's text.
 """
 from __future__ import annotations
 
@@ -28,7 +30,8 @@ from services.series_video_foley import VIDEO_METHODS
 
 SCRIPT_KEYS = ("scene", "location", "variant", "framing", "camera", "cast", "lines", "card", "music", "sfx", "fx",
                "props", "timing", "voiceRoom", "layers", "castDepth", "clipAudio", "clipVolume", "clipFit", "kind",
-               "scene3d", "foley", "duration", "lookRoom", "transitionIn", "hearing", "motionStep", "stopMotionJitter")
+               "scene3d", "foley", "duration", "lookRoom", "transitionIn", "hearing", "motionStep", "stopMotionJitter",
+               "resolution")
 LIST_KEYS = ("cast", "lines", "sfx", "fx", "props", "layers")
 LAYOUT_KEYS = ("framing", "camera", "cast", "card", "music", "sfx", "fx", "props", "timing", "voiceRoom", "layers",
                "castDepth", "clipAudio", "clipVolume", "clipFit", "lookRoom", "hearing", "motionStep", "stopMotionJitter")
@@ -148,7 +151,8 @@ def to_script(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, A
         script["lines"] = lines
     optional = {"card": _card(layout, shot["id"], original, versions), "music": _music(layout, shot["id"], versions),
                 "kind": KIND_OF.get(shot.get("productionMethod")), "scene3d": copy.deepcopy(shot.get("scene3d")),
-                "foley": copy.deepcopy(shot.get("foley")), "duration": None if lines else shot.get("durationSeconds")}
+                "foley": copy.deepcopy(shot.get("foley")), "duration": None if lines else shot.get("durationSeconds"),
+                "resolution": shot.get("resolution")}
     script.update({key: value for key, value in optional.items() if value is not None})
     if shot.get("transitionIn"):
         script["transitionIn"] = copy.deepcopy(shot["transitionIn"])
@@ -236,7 +240,7 @@ def build_patch(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
         same_scene = merged.get("scene") == _scene_key(episode, shot.get("sceneId"))
         patch.update(sceneId=shot.get("sceneId") if same_scene else built["sceneId"], locationId=built["locationId"])
         patch["locationVariantId"] = built.get("locationVariantId")
-    for key, field in (("kind", "productionMethod"), ("scene3d", "scene3d"), ("foley", "foley")):
+    for key, field in (("kind", "productionMethod"), ("scene3d", "scene3d"), ("foley", "foley"), ("resolution", "resolution")):
         if key in changed:
             patch[field] = built.get(field)
     if "transitionIn" in changed:
