@@ -63,7 +63,7 @@ test('T2V production issues do not demand images; image-guided and refs still bl
   film.musicVideoGenerationMode = 'direct_references'
   const refIssues = collectStoryProductionIssues(film, 'direct_references', t)
   assert.ok(refIssues.some(issue => issue.id === 'recipe:references'))
-  assert.throws(() => assertStoryVisualRecipeReady(film), /referencia/)
+  assert.throws(() => assertStoryVisualRecipeReady(film), /at least one approved attached image/)
 })
 
 test('project-local generate recipe survives normalize and is independent of Studio globals', async () => {
