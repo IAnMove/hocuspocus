@@ -21,7 +21,7 @@ export const SECTION_FIELDS: Record<SectionKey, readonly string[]> = {
   sound: ['music', 'foley', 'voiceRoom'],
   card: ['card'],
   scene3d: ['scene3d'],
-  video: ['clipAudio', 'clipVolume', 'clipFit'],
+  video: ['clipAudio', 'clipVolume', 'clipFit', 'resolution'],
 }
 
 /** The part a script key belongs to (the first that edits it), to name a saved change. */

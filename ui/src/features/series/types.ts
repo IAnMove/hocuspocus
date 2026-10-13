@@ -308,6 +308,9 @@ export interface SeriesShotFoley {
   volume?: number
 }
 
+/** The H3 sizes a Series offers (series_render.SERIES_RESOLUTIONS); 480p by default. */
+export type SeriesVideoResolution = '480p' | '540p' | '720p' | '768p'
+
 export interface SeriesShot {
   id: string
   sceneId: string
@@ -365,6 +368,10 @@ export interface SeriesShot {
   foley?: SeriesShotFoley
   layout2d?: SeriesShotLayout2D
   scene3d?: SeriesShotScene3D
+  /** A script video shot's H3 request (series_video_shots.normalize_video). */
+  video?: Record<string, unknown>
+  /** A video shot's own H3 size; without it the shot follows its series (videoResolution.ts). */
+  resolution?: SeriesVideoResolution
 }
 
 /** A shot's 2D plan (series_shot_plan.normalize_layout2d); only the set layers are typed here. Its `layers` replace the
@@ -519,6 +526,8 @@ export interface SeriesSoundDesign {
 export interface SeriesProject {
   writingGuide?: import('../writing-guide/model').WritingGuideState
   allowedProductionMethods?: SeriesProductionMethod[]
+  /** The H3 size of the script's video shots (480p when absent); a shot's own `resolution` overrides it. */
+  videoShotResolution?: SeriesVideoResolution
   version: 1
   id: string
   revision: number

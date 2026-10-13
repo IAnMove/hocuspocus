@@ -221,6 +221,11 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   from the episode's (1920x1080 or 1080x1920, 24 fps) is conformed at the cut: scaled and centre-cropped when its
   shape is within 6 % of the frame's, else fitted with bars (`"clipFit": "cover" | "contain"` forces it). The take
   file never changes, and a new sound only recuts. Do not mux sound or re-encode clips with ffmpeg before importing.
+  An H3 clip made here (a `video` shot with a `video` request, or a Series Lab render) takes its shot's
+  `"resolution": "480p" | "540p" | "720p" | "768p"`. Without it, a `video` request follows the series'
+  `videoShotResolution` (480p when absent) and a Series Lab render `provider.videoSettings.resolution`. The next
+  `produce` makes a `video` request again when its size changes; `series.shot.update` with a new `resolution` also
+  clears that shot's take approval.
 - **transitionIn** (optional, on the shot): `{kind, seconds}` is how this shot enters from the previous one. `kind` is `cut` (the default), `fade_black`, `dissolve` or `dip_white`; `seconds` is from 0.2 to 2. A `cut` holds the previous shot's last frame 0.5 s and dissolves 0.4 s into this one, also when other shots have transitions. A `dissolve` overlaps picture and sound and shortens the cut by that much; `fade_black` and `dip_white` fade the previous shot out and this one in and do not overlap. A shot before any of these three ends on its own last frame, with no held frame.
 - **foley** (on the shot, not in `layout2d` or `scene3d`; same key in the script)**:** `{"prompt": "wooden airship
   creaking, wind, cannon shots", "volume": 0.5}`. After the export, MMAudio (`generation.sfx` with the export as

@@ -19,7 +19,8 @@ function shots(): SeriesShot[] {
         fx: [{ kind: 'vignette', at: 0, duration: 30, intensity: 0.5 }] }, attempts: [take('a1', { completedAt: '2026-10-06T10:00:00Z' })] }),
     shot('s2', 2, { productionMethod: 'animation_3d', durationSeconds: 5, dialogueBeats: [], visibleCharacterIds: [],
       scene3d: { template: 'user-plaga', cast: [], objects: [{ objectId: 'e1', file: 'escolta.glb', add: true, clips: [{ clip: 'Aim', start: 0 }] }, RIFLE], quality: 'final' } }),
-    shot('s3', 3, { productionMethod: 'imported_video', durationSeconds: 5.2, attempts: [take('a3')], layout2d: { sfx: [] } }),
+    shot('s3', 3, { productionMethod: 'imported_video', durationSeconds: 5.2, attempts: [take('a3')], layout2d: { sfx: [] },
+      video: { prompt: 'Inés salutes', start: 'plan', frames: 124, model: 'minimax_h3' } }),
   ]
 }
 
@@ -189,6 +190,23 @@ test('a video take shows how its sound plays at the cut and saves its clip sound
   fireEvent.change(video.getByLabelText('The clip\'s own sound'), { target: { value: 'drop' } })
   fireEvent.click(video.getByRole('button', { name: 'Save' }))
   await waitFor(() => assert.deepEqual(server.posts('/shots/edit')[0]?.changes, { clipAudio: 'drop' }))
+  assert.equal(server.posts('/native-render').length, 0)
+})
+
+test('a script video shot follows the series size and saves its own H3 size', { concurrency: false }, async t => {
+  const { view, server } = await mount(t)
+  const { fireEvent, waitFor, within } = await import('@testing-library/react')
+  await open(view, 3)
+  const video = within(await waitFor(() => view.getByTestId('series-inspector-s3-video')))
+  fireEvent.click(video.getByRole('button', { name: 'Edit' }))
+  const size = video.getByLabelText('H3 clip size') as HTMLSelectElement
+  assert.equal(size.value, '')
+  assert.deepEqual([...size.options].map(option => option.textContent), ['Series default (480p)', '480p · 864×480 / 480×864',
+    '540p · 960×544 / 544×960', '720p · 1280×704 / 704×1280', '768p · 1344×768 / 768×1344'])
+  fireEvent.change(size, { target: { value: '720p' } })
+  fireEvent.click(video.getByRole('button', { name: 'Save' }))
+  await waitFor(() => assert.deepEqual(server.posts('/shots/edit')[0]?.changes, { resolution: '720p' }))
+  await waitFor(() => assert.ok(video.getByText(/720p clip/)))
   assert.equal(server.posts('/native-render').length, 0)
 })
 

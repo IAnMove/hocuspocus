@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from .schema import ShotPlan, ProductionPlan, CharacterProfile
 
@@ -599,6 +599,35 @@ def apply_character_visual_style_lock(
     return f"{lock} {text}".strip()
 
 
+#: Director workflows whose shots are cut to a song with lyrics. ``music_video``
+#: is also the Director's workflow when a project saved none.
+LYRICS_PIPELINE_TYPES = frozenset({"music_video"})
+
+
+def project_has_lyrics(params: Mapping[str, Any] | None) -> bool:
+    """Whether a Director project is sung: its shots are cut to a song with lyrics.
+
+    The pipeline type is the signal. Every project saves it, and it is the same
+    on the first run, on resume and on every rerun. Director music videos and
+    Story Lab song-led music videos are ``music_video``. Stories, comic movies
+    and audio short films are not sung: the audio of a short film is dialogue,
+    so its ``lyrics`` field is a transcript, not a song.
+    """
+    values = params if isinstance(params, Mapping) else {}
+    return str(values.get("pipeline_type") or "music_video") in LYRICS_PIPELINE_TYPES
+
+
+def no_visible_text_lock_applies(params: Mapping[str, Any] | None) -> bool:
+    """Whether the Director adds the no-visible-text lock to the prompts its LLM wrote.
+
+    The lock exists because planners put the song's lyrics on screen, so only
+    sung projects get it, and only while the project does not allow on-screen
+    text (``allow_clip_text``). A prompt the user types never gets it.
+    """
+    values = params if isinstance(params, Mapping) else {}
+    return values.get("allow_clip_text") is not True and project_has_lyrics(values)
+
+
 def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
     """Strip visible-lettering directions and prepend the final render guard."""
     text = str(prompt or "").strip()
@@ -722,6 +751,8 @@ def enforce_visual_style_on_clip_plans(
 ) -> list[dict]:
     """Apply final style, character-medium and visible-text locks.
 
+    ``allow_clip_text=False`` adds the no-visible-text lock. Director callers
+    pass ``not no_visible_text_lock_applies(params)``: only sung projects get it.
     A prompt the user typed at the review pause (``TYPED_PROMPTS_KEY``) keeps
     the style locks but never gets the no-visible-text lock.
     """
