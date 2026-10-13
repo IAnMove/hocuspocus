@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "path": "ui/src/features/studio/outpaintSubmission.ts",
+    "rule": "complexity_hotspot",
+    "reason": "submitOutpaintEdit is the outpaint branch of startGeneration, moved verbatim in U12a. Complexity is 27. The body was not edited to lower it.",
+    "owner": "ina",
+    "issue": "refactor program 2026-10, design §6.6 U12",
+    "expires": "2026-12-12"
+  },
+  {
+    "path": "ui/src/features/studio/retakeInpaintSubmission.ts",
+    "rule": "complexity_hotspot",
+    "reason": "submitRetakeInpaintEdit is the retake, inpaint, and edit-anything branch of startGeneration, moved verbatim in U12c. Complexity is 31. The body was not edited to lower it.",
+    "owner": "ina",
+    "issue": "refactor program 2026-10, design §6.6 U12",
+    "expires": "2026-12-12"
+  }
+]

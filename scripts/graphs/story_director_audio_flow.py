@@ -53,6 +53,7 @@ TS_SCOPE_FILES = (
     "ui/src/api/director.ts",
     "ui/src/api/outputs.ts",
     "ui/src/stores/useStore.ts",
+    "ui/src/features/director/store/directorMusicSourceSlice.ts",
 )
 BACKEND_SCOPE_FILES = (
     "app/_launch_runtime.py",
