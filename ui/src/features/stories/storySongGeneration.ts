@@ -1,7 +1,7 @@
 import { compileProviderPrompt } from '../../lib/languageIntent'
 import * as api from '../../api/client'
 import type { MiniMaxMusicJob } from '../../api/stories'
-import { clampStoryMusicDuration, isLocalMusicModel } from './musicModel'
+import { clampStoryMusicDuration, isLocalMusicModel, paidMusicDisabledError } from './musicModel'
 import {
   buildPendingSongCandidate,
   patchSongCandidateFailed,
@@ -32,6 +32,8 @@ export interface GenerateStoryCueSongInput {
   cueId: string
   actor: 'user' | 'wizard'
   capability?: string
+  /** The person confirmed the paid MiniMax API cost in Story Lab; without it no paid request is sent. */
+  paidMusicConfirmed?: boolean
   onJobSubmitted?: (job: MiniMaxMusicJob) => void | Promise<void>
   onProgress?: (job: MiniMaxMusicJob) => void | Promise<void>
 }
@@ -335,6 +337,7 @@ async function generateRemoteStorySong(
       instrumental: cue.instrumental,
       count: 1,
       model,
+      paid_music_confirmed: true,
       workspace: input.workspace,
       idempotency_key: storySongIdempotencyKey(
         input.workspace,
@@ -392,6 +395,16 @@ function resolvePendingCandidate(
   }
 }
 
+/** A new paid request needs the person's confirmation; watching a job they already started does not. */
+function requirePaidMusicConfirmation(
+  input: GenerateStoryCueSongInput,
+  model: StoryProject['music']['model'],
+  pending: StoryMusicCandidate,
+): void {
+  if (isLocalMusicModel(model) || input.paidMusicConfirmed === true || pending.provenance?.jobId?.trim()) return
+  throw paidMusicDisabledError(model)
+}
+
 function cueSongKey(input: GenerateStoryCueSongInput): string {
   return `${input.workspace}:${input.projectId}:${input.cueId}`
 }
@@ -401,6 +414,7 @@ async function generateStoryCueSongOnce(
 ): Promise<GenerateStoryCueSongResult> {
   const { project, cue } = requireOpenCue(useStoryStore.getState().projects[input.projectId], input.cueId)
   const minted = resolvePendingCandidate(input, project, cue)
+  requirePaidMusicConfirmation(input, project.music.model, minted.pending)
   if (!minted.reused) {
     await persistCueCandidate(input.workspace, input.projectId, input.cueId, minted.candidateId, () => minted.pending)
   }

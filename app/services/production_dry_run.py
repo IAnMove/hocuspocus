@@ -16,14 +16,20 @@ of it), with ``song_duration_mismatch`` and ``held_tail`` when it outlasts the p
 A ``scene2d`` window shows its card (an alias resolved), where each picture comes from and the compiler's warnings
 (``cutout_without_alpha``); ``scene2d_holds`` when the cut outlasts the card's longest move.
 It never calls the client passed as ``mcp``.
-``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``.
+``shots: "auto"`` expands through ``services.production_shot_plan.plan_shots``; ``auto_plan`` shows what it filled in
+(the scene phrase and its source, the framings and the sung actions). A sung window says ``sing``; a trailer window
+shows its ``beat`` and ``action``.
+The defaults a spec can change are shown as chosen: ``video_model`` (``spec.video``: model, steps and whether they
+came from the spec or the default, with ``error`` when the run would refuse it) and ``sets`` (each set's ``staging``,
+the prompt a painted set sends and the sentences of ``style.image`` left out of it, or ``error`` for a staging the
+run would refuse).
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from services.music_production import h3_frames_for, shot_windows
+from services.music_production import ProductionError, h3_frames_for, shot_windows
 from services.production_preview import preview_extras
 from services.production_quality_gate import gate, plan_warnings
 from services.production_quality import expand_quality, profile_of
@@ -49,6 +55,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
     """Report the spec. ``mcp`` is accepted so tests can pass a spy and is never called."""
     _ = mcp
     spec = spec if isinstance(spec, dict) else {}
+    auto = _auto_plan(spec)
     spec, expanded, pending = _expand_shots(spec)
     shots = spec.get("shots") if isinstance(spec.get("shots"), list) else []
     usable = [shot for shot in shots if isinstance(shot, dict)]
@@ -71,6 +78,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
     return {
         "dry_run": True,
         **dry_run_images(spec),
+        **_visible_defaults(spec, auto),
         "running": False,
         "expanded": expanded,
         "shots": spec.get("shots") if not expanded else "expanded",
@@ -89,6 +97,34 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
         + _unrepeated(_quality_warnings(spec, usable, motion), allowed) + extra
         + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id) + _song_warnings(spec, file_s, windows) + cards,
     }
+
+
+def _visible_defaults(spec: dict, auto: dict | None) -> dict[str, Any]:
+    """The defaults a spec can change, as this spec gets them."""
+    from services.production_models import set_report
+    from services.production_video_model import check_video, resolve_video
+    shown: dict[str, Any] = {"video_model": resolve_video(spec)}
+    try:
+        check_video(spec)
+    except ProductionError as error:        # the run refuses it: do not show a fallback as if it were chosen
+        shown["video_model"]["error"] = str(error)
+    if auto:
+        shown["auto_plan"] = auto
+    sets = set_report(spec)
+    if sets:
+        shown["sets"] = sets
+    return shown
+
+
+def _auto_plan(spec: dict) -> dict | None:
+    """``plan_report`` of a ``shots: "auto"`` spec after its preset (a preset may say nobody sings)."""
+    if spec.get("shots") != "auto":
+        return None
+    try:
+        from services.production_shot_plan import plan_report
+    except ImportError:
+        return None
+    return plan_report(expand_quality(expand_style_preset(spec)))
 
 
 def _expand_shots(spec: dict) -> tuple[dict, bool, list[dict]]:
@@ -161,6 +197,10 @@ def _rows(windows: list[dict]) -> list[dict]:
         row = {"key": shot.get("key"), "kind": shot.get("kind"), "t0": shot["t0"], "t1": shot["t1"]}
         if shot.get("kind") == "h3":
             row["frames"] = h3_frames_for(max(0.0, shot["t1"] - shot["t0"]))
+        if shot.get("sing"):
+            row["sing"] = True
+        if shot.get("beat"):            # a trailer beat is the structure's own prose: show it
+            row.update(beat=shot["beat"], **({"action": shot["action"]} if shot.get("action") else {}))
         rows.append(row)
     return rows
 

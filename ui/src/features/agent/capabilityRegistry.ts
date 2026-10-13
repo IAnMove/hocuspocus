@@ -35,6 +35,8 @@ import type {
   AgentOpenTabAction,
 } from './agentActions'
 import { useStore } from '../../stores/useStore'
+import { isPaidMinimaxMusicModel } from '../../lib/musicGenerationSpec'
+import { isLocalStoryMusicModel, paidMusicDisabledError } from '../stories/musicModel'
 import type { AgentExecutionReport } from './agentContract'
 import type { AgentExecutionTarget } from './agentContract'
 import { executionKey, executionReport } from './agentContract'
@@ -1031,7 +1033,7 @@ defineCapability<AgentConfigureStorySongAction>({
       write_lyrics: { type: 'boolean' },
       lyrics_language: { type: 'string', maxLength: 120 },
       instrumental: { type: 'boolean' },
-      model_type: { type: 'string', enum: ['ace_step_v1_5_xl_sft_lm_4b', 'minimax_music3', 'music-3.0', 'music-2.6'] },
+      model_type: { type: 'string', enum: ['ace_step_v1_5_xl_sft_lm_4b', 'minimax_music3'] },
       target_duration_seconds: { type: 'number', minimum: 20, maximum: 360 },
     },
     required: ['type', 'music_style', 'instrumental'],
@@ -1056,16 +1058,16 @@ defineCapability<AgentConfigureStorySongAction>({
       writeLyrics,
       lyricsLanguage: text(raw.lyrics_language, 120),
       instrumental,
-      ...(model === 'minimax_music3' || model === 'music-3.0' || model === 'music-2.6' || model === 'ace_step_v1_5_xl_sft_lm_4b'
-        ? { model: model as AgentConfigureStorySongAction['model'] }
-        : {}),
+      ...(isLocalStoryMusicModel(model) ? { model } : {}),
+      ...(isPaidMinimaxMusicModel(model) ? { refusedPaidModel: model } : {}),
       durationSeconds: raw.target_duration_seconds === undefined ? undefined : boundedNumber(
         raw.target_duration_seconds, 20, model === 'minimax_music3' ? 300 : 360, 90,
       ),
     }
   },
   validate(action) { return action.style && (action.instrumental || action.lyrics || action.writeLyrics) ? [] : ['music style and vocal lyrics or write_lyrics are required'] },
-  async prepare(action) { return action },
+  // Paid MiniMax music is never an agent's choice: refuse with the local ids, before any call.
+  async prepare(action) { if (action.refusedPaidModel) throw paidMusicDisabledError(action.refusedPaidModel); return action },
   async execute(action, context) { return context.adapters.storyLab.configureSong(action) },
   correlate(_action, outcome) { return outcome.target }, async track(_action, outcome) { return outcome },
   report: { targetKind: 'story_song', successState: 'completed' }, summarize(_action, outcome) { return outcome.message },
