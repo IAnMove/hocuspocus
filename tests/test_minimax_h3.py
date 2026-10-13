@@ -38,6 +38,7 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_MODEL_OPTIONS_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "modelOptionsSlice.ts"
 _H3_DURATION_PATH = _ROOT / "ui" / "src" / "lib" / "h3ExtendedDuration.ts"
 _STUDIO_CONFIGURATION_SLICE_PATH = (
     _ROOT / "ui" / "src" / "stores" / "studioConfigurationSlice.ts"
@@ -1201,7 +1202,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
         store = _read(_STORE_PATH)
         self.assertIn("params.video_length = requestedVideoFrames(", store)
-        self.assertIn("h3AlignmentOptions", store)
+        self.assertIn("h3AlignmentOptions", _read(_MODEL_OPTIONS_SLICE_PATH))
         helper = _read(_H3_DURATION_PATH)
         submit_block = helper[helper.index("let requestedFrames = Math.max("):]
         submit_block = submit_block[:submit_block.index("if (!supportsSlidingWindows")]

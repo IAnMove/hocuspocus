@@ -4,14 +4,7 @@ import type { GenerateParams, GenerationMode } from '../types'
 import { getModelMode } from './modelCatalog'
 import type { SliceCreator } from './storeApi'
 import type { AppState } from './useStore'
-
-// Monotonic sequence for loadModelOptions staleness detection — only the
-// most recently requested model's options may touch the store.
-export let _modelOptionsSeq = 0
-
-export function advanceModelOptionsSeq(): number {
-  return ++_modelOptionsSeq
-}
+import { advanceModelOptionsSeq } from './modelOptionsSlice'
 
 export type RecipesSlice = {
   // Recipes (one-click Studio presets)
@@ -61,7 +54,7 @@ export const createRecipesSlice: SliceCreator<RecipesSlice, RecipesSliceHost> = 
     const mode = model ? getModelMode(recipe.model_type, model.family) : ((recipe.mode as GenerationMode) || 'video')
     if (mode === 'image') {
       if (!recipeChange.current()) throw new Error('The image form changed while loading the recipe')
-      _modelOptionsSeq += 1
+      advanceModelOptionsSeq()
       set({ modelOptionsLoading: false })
       const restored = await restoreStudioImageSettings({ ...recipe.params, model_type: recipe.model_type,
         prompt: recipe.prompt_example || '', seed: -1,
