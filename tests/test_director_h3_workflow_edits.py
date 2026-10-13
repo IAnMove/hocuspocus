@@ -142,6 +142,35 @@ def test_rerun_h3_video_initializes_a_missing_saved_shot(tmp_path: Path):
     assert saved["clips"][0]["h3_segments"][0]["stale"] is True
 
 
+def test_saved_h3_prompt_drives_regenerate_without_override(tmp_path: Path):
+    """Workspaces Save then Repeat sends no prompt_override; segments must follow."""
+    state = _saved_state(tmp_path)
+    _write_pipeline(tmp_path, state)
+    director_pipeline.update_clip_prompts(
+        str(tmp_path),
+        "editable",
+        0,
+        video_prompt="A dragon flies over the castle.",
+    )
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"new_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch("app.services.video_editor.probe_media", return_value={"duration": 5.16}), \
+            patch("app.services.video_editor.extract_frame",
+                  side_effect=lambda _s, destination, _t: Path(destination).write_bytes(b"frame")):
+        director_pipeline.rerun_clip_video(str(tmp_path), "editable", 0)
+
+    assert submitted, "H3 regenerate should submit at least one segment"
+    assert all("A dragon flies over the castle." in item["prompt"] for item in submitted)
+    assert all("Segment 0. Audio: wind." not in item["prompt"] for item in submitted)
+
+
 def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Path):
     state = _saved_state(tmp_path)
     state["video_model"] = "minimax_h3_legacy"

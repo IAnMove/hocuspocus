@@ -2296,6 +2296,23 @@ def _update_clip_tag_locked(out_dir: str, pid: str, clip_index: int, tag: Option
 
 
 @_exclusive_pipeline_operation
+def _sync_h3_segment_prompts(clip: dict, text: str) -> None:
+    """Write a saved shot prompt onto every H3 segment of that clip.
+
+    Workspaces Repeat after Save sends no ``prompt_override``, so generation
+    reads ``h3_segments[*].prompt``. Leaving those as the previous take
+    discarded the edit.
+    """
+    segments = clip.get("h3_segments")
+    if not isinstance(segments, list):
+        return
+    clip["h3_segment_prompts"] = []
+    for record in segments:
+        if isinstance(record, dict):
+            record["prompt"] = text
+            record["stale"] = True
+
+
 def update_clip_prompts(
     out_dir: str,
     pid: str,
@@ -2323,6 +2340,7 @@ def update_clip_prompts(
             if clip_index < len(clips) and isinstance(clips[clip_index], dict):
                 clips[clip_index]["video_prompt"] = text
                 clips[clip_index]["_director_h3_source_prompt"] = text
+                _sync_h3_segment_prompts(clips[clip_index], text)
             if clip_index < len(plans) and isinstance(plans[clip_index], dict):
                 plans[clip_index]["video_prompt"] = text
                 plans[clip_index]["_director_h3_source_prompt"] = text

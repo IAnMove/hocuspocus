@@ -92,6 +92,55 @@ class TestDirectorWorkspaceQueue(unittest.TestCase):
             "Edited closed-mouth shot.",
         )
 
+    def test_prompt_edits_overwrite_stale_h3_segment_prompts(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            path = os.path.join(output_dir, "_director_pipeline_h3edit.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({
+                    "pipeline_id": "h3edit",
+                    "status": "completed",
+                    "video_model": "minimax_h3",
+                    "clips": [{
+                        "index": 0,
+                        "video_prompt": "A wizard walks through a door.",
+                        "h3_segment_prompts": ["A wizard walks through a door."],
+                        "h3_segments": [
+                            {
+                                "index": 0,
+                                "filename": "old_0.mp4",
+                                "prompt": "A wizard walks through a door.",
+                                "stale": False,
+                            },
+                            {
+                                "index": 1,
+                                "filename": "old_1.mp4",
+                                "prompt": "The wizard closes the door.",
+                                "stale": False,
+                            },
+                        ],
+                    }],
+                    "clip_plans": [{"video_prompt": "A wizard walks through a door."}],
+                    "planned_clips": [],
+                }, handle)
+
+            updated = pipeline.update_clip_prompts(
+                output_dir,
+                "h3edit",
+                0,
+                video_prompt="A dragon flies over the castle.",
+            )
+            with open(path, encoding="utf-8") as handle:
+                saved = json.loads(handle.read())
+
+        segments = saved["clips"][0]["h3_segments"]
+        self.assertEqual(updated["clips"][0]["video_prompt"], "A dragon flies over the castle.")
+        self.assertEqual(
+            [record["prompt"] for record in segments],
+            ["A dragon flies over the castle.", "A dragon flies over the castle."],
+        )
+        self.assertTrue(all(record["stale"] for record in segments))
+        self.assertEqual(saved["clips"][0]["h3_segment_prompts"], [])
+
     def test_soundtrack_drive_toggle_persists_on_planned_clips(self):
         with tempfile.TemporaryDirectory() as output_dir:
             path = os.path.join(output_dir, "_director_pipeline_drive.json")

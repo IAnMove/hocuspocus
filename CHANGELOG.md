@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**A saved Director prompt now drives the next H3 Repeat.** Editing a MiniMax
+H3 shot in Workspaces (or via the API) and clicking Repeat no longer regenerates
+from the previous take's segment prompts.
+
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
 Design*, and the Character Creator voice designer and new reference voices start on
