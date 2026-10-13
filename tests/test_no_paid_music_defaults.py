@@ -79,8 +79,9 @@ def test_the_runtime_minimax_worker_fills_no_model(tmp_path, monkeypatch):
     del job["request"]["model"]
     namespace["_minimax_music_jobs"][job_id] = job
     posted = []
-    monkeypatch.setattr(minimax_music_service.requests, "Session", lambda: SimpleNamespace(
-        post=lambda *args, **kwargs: posted.append(args), close=lambda: None))
+    # Only the client's own reference: the global requests module stays untouched for other tests.
+    monkeypatch.setattr(minimax_music_service, "requests", SimpleNamespace(Session=lambda: SimpleNamespace(
+        post=lambda *args, **kwargs: posted.append(args), close=lambda: None)))
     namespace["_run_minimax_music_job"](job_id)
     failed = namespace["_minimax_music_jobs"][job_id]
     assert (failed["status"], failed["statusCode"]) == ("failed", 400) and "explicitly" in failed["error"]
