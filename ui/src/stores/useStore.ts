@@ -17,7 +17,7 @@ import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } fr
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
-import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import i18n from '../i18n'
@@ -36,6 +36,7 @@ import { createDirectorSlice, type DirectorSlice } from './directorSlice'
 import { createRetakeDialogSlice, type RetakeDialogSlice } from './retakeDialogSlice'
 import { createSettingsSlice, type SettingsSlice } from './settingsSlice'
 import { createSidebarSlice, type SidebarSlice } from './sidebarSlice'
+import { createSystemSlice, type SystemSlice } from './systemSlice'
 import { bindSlice } from './storeApi'
 import { createThemeSlice, type ThemeSlice } from './themeSlice'
 import { createGallerySlice, type GallerySlice } from './gallerySlice'
@@ -103,7 +104,6 @@ const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
 const _directorRepairDiscoveries = new Map<string, object>()
 let _dashboardPipelineLoadToken = 0
 let _dashboardPipelineListLoadToken = 0
-let _systemStatsInFlight = false
 
 type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 
@@ -1096,7 +1096,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1530,21 +1530,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   modelOptionsLoading: boolean
   loadModelOptions: (modelType: string, preservedRecipe?: Partial<GenerateParams>) => Promise<void>
 
-  // System config
-  systemConfig: SystemConfig | null
-  systemConfigLoading: boolean
-  loadSystemConfig: () => Promise<void>
-  updateSystemConfig: (partial: Partial<SystemConfig>) => Promise<void>
-
-  // Hardware detect — populated lazily when Settings → System opens.
-  // Shared between AutoPerformanceCard (the readout) and the rest of
-  // the System panel (e.g. the VRAM coefficient subtext that needs to
-  // know the user's actual VRAM size, not a hardcoded 24GB).
-  systemDetect: SystemDetectResponse | null
-  loadSystemDetect: () => Promise<void>
-  systemStats: SystemStats | null
-  loadSystemStats: () => Promise<void>
-
   // Select model (triggers side effects)
   selectModel: (modelType: string, preserveAudioReferences?: boolean) => void
 
@@ -1927,6 +1912,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createLlmSlice),
   ...bindSlice(set, get, createStudioConfigurationSlice({ alignFrameCount, resolveResolution })),
   ...bindSlice(set, get, createStudioMusicSlice),
+  ...bindSlice(set, get, createSystemSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -6126,62 +6112,6 @@ export const useStore = create<AppState>((set, get) => {
       if (seq === _modelOptionsSeq) {
         set({ modelOptions: null, modelOptionsLoading: false })
       }
-    }
-  },
-
-  // System config
-  systemConfig: null,
-  systemConfigLoading: false,
-  loadSystemConfig: async () => {
-    set({ systemConfigLoading: true })
-    try {
-      const config = await api.fetchSystemConfig()
-      set({ systemConfig: config, systemConfigLoading: false })
-    } catch (e) {
-      console.error('Failed to load system config:', e)
-      set({ systemConfigLoading: false })
-    }
-  },
-  updateSystemConfig: async (partial) => {
-    try {
-      await api.updateSystemConfig(partial)
-      set(s => ({
-        systemConfig: s.systemConfig ? { ...s.systemConfig, ...partial } : null,
-      }))
-    } catch (e) {
-      console.error('Failed to update system config:', e)
-      get().loadSystemConfig()
-    }
-  },
-
-  // Hardware detect — see type definition above. Initial value null;
-  // populated when AutoPerformanceCard mounts (Settings → System).
-  // Refreshed when the user clicks Re-detect on the auto card.
-  systemDetect: null,
-  loadSystemDetect: async () => {
-    try {
-      const detect = await api.fetchSystemDetect()
-      set({ systemDetect: detect })
-    } catch (e) {
-      console.error('Failed to load system detect:', e)
-    }
-  },
-
-  // Live hardware telemetry (HardwareStatusBar). Polled ~2s from the
-  // component while mounted. Swallows a single failed tick (e.g. backend
-  // restarting) instead of spamming the console at 2s cadence. Skip if a
-  // tick is already in flight so a slow LAN/backend cannot stack fetches.
-  systemStats: null,
-  loadSystemStats: async () => {
-    if (_systemStatsInFlight) return
-    _systemStatsInFlight = true
-    try {
-      const stats = await api.fetchSystemStats()
-      set({ systemStats: stats })
-    } catch {
-      /* transient poll failure — ignore this tick */
-    } finally {
-      _systemStatsInFlight = false
     }
   },
 
