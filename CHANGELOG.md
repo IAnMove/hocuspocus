@@ -20,12 +20,14 @@ carry another production's tagline or Nintendo disclaimer.
 **Prompts reach the model as written.** Director prompt polish is off by
 default (opt-in in Settings › Services); the 1,450-character cut is gone (only
 MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
-user types for a rerun, or changes at the review pause, keeps the lettering it
-asks for. *Raw prompts* in Settings › Services sends every Director prompt
-exactly as planned: no art-style prefix, locks, motion-word removal or polish,
-in planning (the plan endpoint, the orchestrator and the legacy planner), after
-the review pause, in the H3 validation pass and on every rerun; the planner's
-own words are not compressed either. When a model handler rewrites a
+user types for a rerun, changes at the review pause or approves in the
+direct-video review screen keeps the lettering it asks for. *Raw prompts* in
+Settings › Services sends every Director prompt exactly as planned: no
+art-style prefix, locks, motion-word removal or polish, in planning (the plan
+endpoint, the orchestrator and the legacy planner), after the review pause, in
+the H3 validation pass and on every rerun; the planner's own words are not
+compressed either. Continuity anchors of bounded shots, the spoken-language
+line and H3's own contracts still apply. When a model handler rewrites a
 prompt (H3 window timing, outpainting), Extra info shows *What the model
 received* for each window. Until a production profile is saved, a dismissible
 notice says which providers text and pictures use; a saved profile that cannot
@@ -34,9 +36,8 @@ be read is reported instead of silently replaced.
 **Narrower Director layers.** The no-visible-text lock now goes only on music
 videos, where planners used to put the song's lyrics on screen, and only on the
 prompts the LLM wrote. Stories, audio short films and comic movies send their
-prompts without it. A direct-video H3 segment the user types keeps its
-lettering too, and so do the prompts approved in the direct-video review
-screen. The project's *allow text* switch still turns the lock off. The
+prompts without it, and a direct-video H3 segment the user types keeps its
+lettering too. The project's *allow text* switch still turns the lock off. The
 "Maintain the same … art style." prefix, and the vision call that names the
 reference's style for it, are used only with Flux.2 Klein models, the only ones
 it was tested with, and the call is skipped with *Raw prompts*. Other image
