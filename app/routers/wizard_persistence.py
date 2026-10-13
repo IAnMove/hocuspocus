@@ -2,8 +2,9 @@
 
 ``workspace_dir(value)`` returns the workspace directory. A ``ValueError`` from it
 is an invalid workspace name and answers 400. ``HTTPException`` is left alone, so
-the full server's own name check still answers as it does today. ``lock`` is held
-around the read and the write.
+the full server's own name check still answers as it does today. An ``OSError``
+from it (a folder that cannot be created) answers 500 with the Wizard message, as
+both servers did before. ``lock`` is held around the read and the write.
 """
 from __future__ import annotations
 
@@ -26,8 +27,8 @@ def create_wizard_persistence_router(*, workspace_dir, lock) -> APIRouter:
         """Load the durable Wizard conversation for one workspace."""
         from services.wizard_conversations import read_conversation
 
-        directory = _directory(workspace)
         try:
+            directory = _directory(workspace)
             with lock:
                 return read_conversation(directory)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -44,8 +45,8 @@ def create_wizard_persistence_router(*, workspace_dir, lock) -> APIRouter:
             write_conversation,
         )
 
-        directory = _directory(body.get("workspace"))
         try:
+            directory = _directory(body.get("workspace"))
             with lock:
                 base_revision = body.get("baseRevision")
                 if type(base_revision) is not int:
@@ -78,8 +79,8 @@ def create_wizard_persistence_router(*, workspace_dir, lock) -> APIRouter:
         """Load durable Wizard workflow checkpoints for one workspace."""
         from services.wizard_workflows import read_workflows
 
-        directory = _directory(workspace)
         try:
+            directory = _directory(workspace)
             with lock:
                 return read_workflows(directory)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -96,8 +97,8 @@ def create_wizard_persistence_router(*, workspace_dir, lock) -> APIRouter:
             write_workflows,
         )
 
-        directory = _directory(body.get("workspace"))
         try:
+            directory = _directory(body.get("workspace"))
             with lock:
                 base_revision = body.get("baseRevision")
                 if type(base_revision) is not int:

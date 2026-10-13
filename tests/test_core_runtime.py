@@ -441,6 +441,14 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(workflows.status_code, 400, workflows.text)
         self.assertNotIn("Could not read", conversation.text)
         self.assertNotIn("Could not read", workflows.text)
+        # A workspace folder that cannot be created is a 500 with the Wizard message, as before the router was shared.
+        with patch("services.core_workspace.workspace_dir", side_effect=OSError("disk full")):
+            unreadable = self.client.get("/api/v1/wizard/conversations")
+            unsaved = self.client.put("/api/v1/wizard/workflows", json={"workspace": "default", "collection": {}})
+        self.assertEqual(unreadable.status_code, 500, unreadable.text)
+        self.assertIn("Could not read the Wizard conversation: disk full", unreadable.json()["detail"])
+        self.assertEqual(unsaved.status_code, 500, unsaved.text)
+        self.assertIn("Could not save Wizard workflows: disk full", unsaved.json()["detail"])
 
     def test_wizard_put_rejects_a_json_array(self):
         conversation = self.client.put("/api/v1/wizard/conversations", json=["not", "an", "object"])
