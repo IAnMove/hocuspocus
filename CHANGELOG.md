@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Generation, the job queue, and Director pipeline reconnect left the main Studio store.** Starting a picture, a video, speech, music, a sound effect, or an avatar edit still uses the same Generate button, including a prompt split across several lines. Stopping a job, dismissing one, and picking the queue back up after a reload still work the same way. A Director pipeline still checks its own progress and reconnects on its own. Director post-processing, the storage manager, the LoRA list sort, the streaming text from the language model, and the Viggle restore message now sit with the code that uses them. The screen still reads and writes all of it through the same `useStore` hook. The main store file only wires the slices together.
+
 **Loading a finished clip's settings, and the Studio form, left the main Studio store.** Opening an output still fills in the same mode, model, prompt, and edit settings. Switching mode, changing a setting, picking a model, and resetting Image Studio still work the same way. The screen still reads and writes them through the same `useStore` hook.
 
 **Music-video Director actions, and five Studio edit submissions, left the main Studio store.** Blend, outpaint, restyle, recast, and retake, inpaint, or edit-anything still start from the same Generate button. Adopting or uploading a track, writing a song, planning a music video, generating start images, and generating the video still work the same way. The screen still reads and writes them through the same `useStore` hook.

@@ -70,47 +70,7 @@ if (import.meta.hot) {
   })
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice, ServicesSlice, LorasSlice, ModelOptionsSlice, ModelsSlice, DirectorDashboardSlice, ShortFilmSlice, DirectorPipelineSlice, StudioEditSlice, DirectorMusicSourceSlice, DirectorMusicVideoSlice, OutputRestoreSlice, StudioFormSlice, JobsSlice, GenerationSlice {
-  wangpRestoreError: string
-  /** Snapshot of lora_id → filename loaded from localStorage at boot.
-   *  Used by `refreshLoraIdMap` reconciliation to rewrite filenames that
-   *  changed since save (LoRA version updates). Internal-only; not part
-   *  of the persisted runtime state. */
-  _loraFilenameSnapshotAtLoad?: Record<string, string>
-
-  // Director-mode post-processing (separate image/video)
-  directorImageSpatialUpsampling: string
-  setDirectorImageSpatialUpsampling: (v: string) => void
-  directorImageFilmGrainIntensity: number
-  setDirectorImageFilmGrainIntensity: (v: number) => void
-  directorImageFilmGrainSaturation: number
-  setDirectorImageFilmGrainSaturation: (v: number) => void
-  directorVideoSpatialUpsampling: string
-  setDirectorVideoSpatialUpsampling: (v: string) => void
-  directorVideoFilmGrainIntensity: number
-  setDirectorVideoFilmGrainIntensity: (v: number) => void
-  directorVideoFilmGrainSaturation: number
-  setDirectorVideoFilmGrainSaturation: (v: number) => void
-  directorVideoSelfRefiner: number
-  setDirectorVideoSelfRefiner: (v: number) => void
-  directorAudioScale: number
-  setDirectorAudioScale: (v: number) => void
-
-  // Storage Manager overlay
-  storageDashboardOpen: boolean
-  setStorageDashboardOpen: (open: boolean) => void
-
-  // LoRA picker sort order — store-backed (not per-component state) so
-  // simultaneously mounted pickers (e.g. Director's Image + Video
-  // accordions) stay in sync; persisted to localStorage.
-  loraPickerSort: 'name' | 'newest'
-  setLoraPickerSort: (sort: 'name' | 'newest') => void
-
-  // LLM streaming
-  llmStreamText: string
-  llmStreamDone: boolean
-
-}
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice, ServicesSlice, LorasSlice, ModelOptionsSlice, ModelsSlice, DirectorDashboardSlice, ShortFilmSlice, DirectorPipelineSlice, StudioEditSlice, DirectorMusicSourceSlice, DirectorMusicVideoSlice, OutputRestoreSlice, StudioFormSlice, JobsSlice, GenerationSlice {}
 
 export const useStore = create<AppState>((set, get) => {
   const developerMode = bindSlice(set, get, createDeveloperModeSlice)
@@ -150,39 +110,6 @@ export const useStore = create<AppState>((set, get) => {
     if (!enabled && get().mediaFilter === 'auditdev') {
       get().setMediaFilter('all')
     }
-  },
-
-  // Director-mode post-processing (separate image/video)
-  directorImageSpatialUpsampling: '',
-  setDirectorImageSpatialUpsampling: (v) => set({ directorImageSpatialUpsampling: v }),
-  directorImageFilmGrainIntensity: 0,
-  setDirectorImageFilmGrainIntensity: (v) => set({ directorImageFilmGrainIntensity: v }),
-  directorImageFilmGrainSaturation: 0.5,
-  setDirectorImageFilmGrainSaturation: (v) => set({ directorImageFilmGrainSaturation: v }),
-  directorVideoSpatialUpsampling: '',
-  setDirectorVideoSpatialUpsampling: (v) => set({ directorVideoSpatialUpsampling: v }),
-  directorVideoFilmGrainIntensity: 0,
-  setDirectorVideoFilmGrainIntensity: (v) => set({ directorVideoFilmGrainIntensity: v }),
-  directorVideoFilmGrainSaturation: 0.5,
-  setDirectorVideoFilmGrainSaturation: (v) => set({ directorVideoFilmGrainSaturation: v }),
-  directorVideoSelfRefiner: 0,
-  setDirectorVideoSelfRefiner: (v) => set({ directorVideoSelfRefiner: v }),
-  directorAudioScale: 1.0,
-  setDirectorAudioScale: (v) => set({ directorAudioScale: v }),
-
-  llmStreamText: '',
-  llmStreamDone: true,
-
-  wangpRestoreError: '',
-  storageDashboardOpen: false,
-  setStorageDashboardOpen: (open) => set({ storageDashboardOpen: open }),
-
-  loraPickerSort: (() => {
-    try { return localStorage.getItem('maestro_lora_picker_sort') === 'newest' ? 'newest' as const : 'name' as const } catch { return 'name' as const }
-  })(),
-  setLoraPickerSort: (sort) => {
-    try { localStorage.setItem('maestro_lora_picker_sort', sort) } catch { /* private mode */ }
-    set({ loraPickerSort: sort })
   },
 
   }
