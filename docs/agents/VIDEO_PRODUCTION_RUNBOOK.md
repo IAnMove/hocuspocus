@@ -337,23 +337,29 @@ A verse alternates a sung H3 shot with a content shot (a still, a screen or a sh
 sung two lines per shot, the intro and outro are end cards, and fill shots cover any gap longer than two bars. That skeleton
 is what `"auto"` means; write `shots` yourself for another one. Sung shots and H3 content shots each take the next of four
 framings in turn (content: wide establishing, medium in the action, a detail insert, over the shoulder), each "in the scene:"
-the scene phrase. The content action is "The protagonist acts out the scene: <scene>. Clear movement." with no camera
-words: the move is the shot's `camera`. `dry_run` shows what was filled in under `auto_plan` (`scene` and `scene_from`,
-`content_framings`, `content_action`, `sung_framings`, and `sung_actions` with `from`: `section_actions` or `default`), and
-marks sung windows `sing`. `production.plan` puts the brief's `tema` in `section_actions.scene` only; its `cta` goes on the
+the scene phrase. The content action is "The protagonist acts out the scene: <scene>. Clear movement." plus the camera move
+of its framing (glides forward, tracks sideways, pushes in, drifts to one side). Those words are the move: H3 makes it,
+and the scene keeps the clip still (`camera-locked`) because the planner gives no shot a `camera`; give a shot `camera` to
+add a 2D move over the clip. In a trailer each beat opens on its own framing (wide for the presentation and the reveal,
+closer ones for the tension, over the shoulder for the close) and keeps the beat's own camera words. `dry_run` shows what
+was filled in under `auto_plan` (`scene` and `scene_from`, `content_framings`, `content_actions`, `sung_framings`, and
+`sung_actions` with `from`: `section_actions` or `default`), and marks sung windows `sing`. `production.plan` puts the brief's `tema` in `section_actions.scene` only; its `cta` goes on the
 end cards, never into a sung action. A spec that has already run is stored expanded, so its shots keep their texts.
 
 `video` picks the model that shoots the H3 clips, for example `{"model": "minimax_h3"}`. Without it the clips are shot as
 they always were: `minimax_h3_fused_turbo` at 4 steps, the audio-driven lip-sync model the pipeline and its lip-sync
 thresholds were tuned on. `model` is one of `minimax_h3` (base: slower, finer detail), `minimax_h3_full`,
 `minimax_h3_fused_turbo` and `minimax_h3_legacy`: the first frame + audio H3 models with a definition in `app/defaults`,
-which take the same request and the same 124 + 17k frame lattice. `steps` (1-100) defaults to that definition (4 for Fused
-Turbo, 20 for the others). LTX-2 and the Ref2VA models are refused with `invalid_spec` and the list. `dry_run` and
-`production.status` show the choice as `video_model` (`model`, `steps`, `source`: `spec` or `default`); `video` on the
-status stays the finished video's URL. Each kept clip and each take records the model and steps it was shot with. A run
-whose spec asks for another model or other steps shoots the kept clips of unlocked shots again and logs which (like a
-song switch); a locked shot keeps its take. A clip from before this field counts as Fused Turbo at 4 steps, so an
-existing production shoots nothing again. `dry_run.minutes` keeps clip minutes per model: until this workspace has
+which take the same request and the same 124 + 17k frame lattice. `steps` defaults to that definition (4 for Fused
+Turbo, 20 for the others) and must be in the model's range: 4-8 for Fused Turbo, 1-50 for the others (the generate call
+refuses other values, so `invalid_spec` says so before any GPU work). LTX-2 and the Ref2VA models are refused with
+`invalid_spec` and the list. `dry_run` and `production.status` show the choice as `video_model` (`model`, `steps`,
+`source`: `spec` or `default`; in `dry_run`, `error` when the run would refuse it); `video` on the status stays the
+finished video's URL. Each kept clip and each take records the model and steps it was shot with. A run whose spec asks
+for another model or other steps shoots the kept clips of unlocked shots again and logs which; the new take replaces the
+old one whatever its score. A locked shot keeps its take, so its clip may come from another model. Nothing is marked on
+the kept clip: a spec that goes back to the model that shot it keeps it. A clip from before this field counts as Fused
+Turbo at 4 steps, so an existing production shoots nothing again. `dry_run.minutes` keeps clip minutes per model: until this workspace has
 finished a run with the chosen model, a take is the Fused Turbo default scaled by steps (`estimate_source`
 `defaults+model_steps`).
 
@@ -544,13 +550,14 @@ default (`staging: "floor"`) each is drawn eye-level, with an open empty floor a
 the lower third, a clear horizon and nobody in it, so the projected floor has ground
 for the cast to stand on, and the sentences of `style.image` that put people in the
 picture are left out (a sentence naming people, characters, a crowd, figures, figurines
-or dolls; words that name a medium, such as "figurine look", "doll-like" or "cast
-shadows", stay). `staging: "backdrop"` asks only for a far view with a clear horizon and
+or dolls, the whole sentence; words that name a medium or a material, such as
+"figurine look", "doll-like", "cast shadows", "cast iron" or "crowd-pleasing", stay). `staging: "backdrop"` asks only for a far view with a clear horizon and
 nobody in it, without the floor: give the shot a `floor` other than `backdrop` (a ground
 style, `tiles`, `none`) so the picture is not projected as ground. `staging: "none"`
 sends the prompt and the whole look as written, so people may appear in the plate.
 `dry_run` lists each set under `sets` with its `staging`, the `prompt_sent` and the
-`look_sentences_dropped`. A set painted before `staging` existed is not painted again.
+`look_sentences_dropped` (or an `error` for a staging the run would refuse). A set painted
+before `staging` existed is not painted again.
 On the projected floor the renderer holds a template's orbit to 0.06 turn
 (`SET_MAX_TURNS` in `ui/scripts/production-scene3d.mjs`), because a wider arc swings
 past the edge of a flat picture: an orbit template on a painted set is a short arc, and a

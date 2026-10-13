@@ -16,7 +16,7 @@ from services.production_control import checkpoint, sleep_until
 from services.production_disk import discard
 from services.production_seeds import default_seed
 from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
-from services.production_video_model import mark_model_changes, resolve_video, stamp
+from services.production_video_model import model_changes, other_model, resolve_video, stamp
 
 
 def _host():
@@ -58,16 +58,17 @@ def shoot_clips(production: Any, spec: dict, windows: list[dict], retake: tuple[
     host = _host()
     windows = production._unlocked(windows, retake)
     production.state.setdefault("clips", {})
-    # The model and steps these takes are shot with. A kept clip another model shot is shot again, like a song switch.
+    # The model and steps these takes are shot with. A kept clip another model shot is shot again, like a song switch,
+    # but nothing is written on it: a spec that goes back to that model keeps it.
     production.state["video_model"] = resolve_video(spec)
-    mark_model_changes(production, production.state["video_model"], windows)
+    changed = model_changes(production, production.state["video_model"], windows)
     tried = production.state.setdefault("clip_takes", {})
     max_takes = int(spec.get("max_takes", 3))
     vocals = production.score().get("vocals_file")
     # A song switch leaves files on disk and flags the shot. Treat those keys
     # like an explicit retake so the new window can spend max_takes again.
     stale = tuple(key for key, clip in production.state["clips"].items() if obsolete_clip(clip))
-    retake = tuple(dict.fromkeys((*retake, *stale)))
+    retake = tuple(dict.fromkeys((*retake, *stale, *changed)))
     pending = pending_windows(windows, production.state, retake)
     for window in pending:          # productions saved before clip_takes existed: count their logged takes
         tried.setdefault(window["key"], sum(1 for line in production.state.get("log") or [] if line.startswith(f"clip {window['key']} take ")))
@@ -131,8 +132,9 @@ def judge_take(production: Any, window: dict, name: str | None, take: int, vocal
         stamp({"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive}, video))
     best = clips.get(key)
     # Obsolete r was measured on the previous song; ranking it would keep the
-    # old take and throw away the clip shot against the new window.
-    ranking = None if obsolete_clip(best) else best
+    # old take and throw away the clip shot against the new window. A clip
+    # another model shot is not ranked either: the spec asked for this model.
+    ranking = None if obsolete_clip(best) or other_model(best, video) else best
     previous = (ranking.get("qa") or {}).get("best_r") if ranking else None
     if not ranking or better_take(qa, (ranking.get("qa") or {})):
         if ranking and ranking.get("file") and ranking["file"] != name:

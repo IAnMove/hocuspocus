@@ -234,6 +234,8 @@ def test_dry_run_shows_each_set_prompt_staging_and_the_look_it_left_out():
     assert sets["raw"] == {"staging": "none", "prompt_sent": "a market. Stop-motion figurine look. People dance in the street.",
                            "look_sentences_dropped": []}
     assert sets["town"] == {"staging": "diorama", "look_sentences_dropped": ["People dance in the street."]}
+    wrong = dry_run(_spec(title="Short", sets={"roof": {"prompt": "a roof", "staging": "wall"}}))["sets"]["roof"]
+    assert wrong == {"staging": "wall", "error": "sets.roof.staging must be one of floor, backdrop, none"}
     assert "sets" not in dry_run(_spec(title="Short"))
 
 

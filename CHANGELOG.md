@@ -11,18 +11,23 @@ music videos no longer turn the brief's call to action into every chorus's sung
 action, or its theme into every verse's: the theme is now only where the shots take
 place (`section_actions.scene`) and the call to action stays on the end cards. Content
 shots no longer share one "Wide cinematic shot… slow camera" text: they rotate four
-framings, and the camera move is the shot's own. `dry_run` shows what the planner
-filled in (`auto_plan`), which windows are sung, and each trailer beat's action.
+framings, each with its own camera move in words (H3 makes the move), and a trailer
+beat opens on a framing of its own scale. `dry_run` shows what the planner filled in
+(`auto_plan`), which windows are sung, and each trailer beat's action.
 `spec.video` picks the H3 model and steps (Fused Turbo at 4 steps stays the
-default; base, full and legacy H3 can be chosen); `dry_run` and `production.status`
-show it as `video_model`, and a change shoots the kept clips again instead of mixing
-models. Painted sets keep the empty-floor recipe by default and can ask for a
-`backdrop` or no staging (`sets.<name>.staging`); `dry_run` shows each set's prompt
-and the look sentences it leaves out, and a look that names its medium ("figurine
-look", "doll-like") keeps it. Productions that already ran resume unchanged: the
-same spec, seeds and jobs, and no set or clip is made again. A new set, or a model
+default; base, full and legacy H3 can be chosen; steps must be in the model's range,
+4-8 for Fused Turbo); `dry_run` and `production.status` show it as `video_model`, and
+a change shoots the kept clips of unlocked shots again instead of mixing models, while
+going back to the earlier model keeps the clips it shot. Painted sets keep the
+empty-floor recipe by default and can ask for a `backdrop` or no staging
+(`sets.<name>.staging`); `dry_run` shows each set's prompt and the look sentences it
+leaves out, and a look that names its medium or material ("figurine look",
+"doll-like", "cast iron") keeps it. Productions that already ran resume unchanged:
+the same spec, seeds and jobs, and no set or clip is made again. A new set, or a model
 drawn from a prompt, whose look names a figurine or doll medium now keeps that
-sentence, and a sentence about a crowd is now left out.
+sentence, and a sentence about a crowd is now left out. A scene2d shot that draws its
+own background from such a look draws it again on its next run (lock the shot to
+keep it).
 
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one

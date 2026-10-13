@@ -20,15 +20,16 @@ It never calls the client passed as ``mcp``.
 (the scene phrase and its source, the framings and the sung actions). A sung window says ``sing``; a trailer window
 shows its ``beat`` and ``action``.
 The defaults a spec can change are shown as chosen: ``video_model`` (``spec.video``: model, steps and whether they
-came from the spec or the default) and ``sets`` (each set's ``staging``, the prompt a painted set sends and the
-sentences of ``style.image`` left out of it).
+came from the spec or the default, with ``error`` when the run would refuse it) and ``sets`` (each set's ``staging``,
+the prompt a painted set sends and the sentences of ``style.image`` left out of it, or ``error`` for a staging the
+run would refuse).
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from services.music_production import h3_frames_for, shot_windows
+from services.music_production import ProductionError, h3_frames_for, shot_windows
 from services.production_preview import preview_extras
 from services.production_quality_gate import gate, plan_warnings
 from services.production_quality import expand_quality, profile_of
@@ -101,8 +102,12 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
 def _visible_defaults(spec: dict, auto: dict | None) -> dict[str, Any]:
     """The defaults a spec can change, as this spec gets them."""
     from services.production_models import set_report
-    from services.production_video_model import resolve_video
+    from services.production_video_model import check_video, resolve_video
     shown: dict[str, Any] = {"video_model": resolve_video(spec)}
+    try:
+        check_video(spec)
+    except ProductionError as error:        # the run refuses it: do not show a fallback as if it were chosen
+        shown["video_model"]["error"] = str(error)
     if auto:
         shown["auto_plan"] = auto
     sets = set_report(spec)

@@ -82,7 +82,9 @@ def test_a_spec_can_pick_base_h3_and_gets_its_own_steps(tmp_path, monkeypatch):
     ({"model": "ltx2_22B"}, "video.model must be one of minimax_h3, minimax_h3_full, minimax_h3_fused_turbo, minimax_h3_legacy"),
     ({"model": "minimax_h3_ref2va"}, "video.model must be one of"),
     ({"model": "minimax_h3", "lora": "x"}, "spec.video is {model, steps}"),
-    ({"steps": 0}, "video.steps is a whole number from 1 to 100"),
+    ({"steps": 0}, "video.steps for minimax_h3_fused_turbo is a whole number from 4 to 8"),
+    ({"steps": 12}, "video.steps for minimax_h3_fused_turbo is a whole number from 4 to 8"),
+    ({"model": "minimax_h3", "steps": 60}, "video.steps for minimax_h3 is a whole number from 1 to 50"),
     ({"steps": True}, "video.steps"),
     ("minimax_h3", "spec.video is {model, steps}"),
 ])
@@ -140,6 +142,30 @@ def test_another_model_marks_the_kept_clip_and_shoots_it_again(tmp_path, monkeyp
     assert asked_again == [], "a clip the chosen model shot is kept"
 
 
+def test_going_back_to_the_model_that_shot_a_clip_keeps_it(tmp_path, monkeypatch):
+    """A run with another model that shoots nothing (cancelled, every take failed) leaves no mark on the kept clips."""
+    state = _legacy_state()
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    production.state = state
+    production.upload = lambda name: (name, "/u/" + name)
+    production.score = lambda: {"lines": [], "vocals_file": None}
+    production.clip_job = lambda spec, window, seed, take: f"job-{window['key']}"
+    production.wait = lambda jobs: {key: None for key in jobs}
+    production.failures = {}
+    windows = [{"key": "v0", "kind": "h3", "i": 0, "t0": 2.0, "t1": 6.0, "sing": True}]
+    production.clips({"max_takes": 2, "video": {"model": "minimax_h3"}}, windows, pause=0)
+    assert production.state["clips"]["v0"] == _legacy_state()["clips"]["v0"]
+    _again, asked = _shoot(tmp_path, monkeypatch, {"max_takes": 3}, production.state)
+    assert asked == [], "the Fused Turbo clip is what the default spec asks for"
+
+
+def test_the_default_steps_do_not_follow_the_model_file(monkeypatch):
+    """A new num_inference_steps in app/defaults must not make every earlier clip look shot with other steps."""
+    monkeypatch.setattr("services.production_video_model.model_image_steps", lambda model: 6)
+    assert resolve_video({})["steps"] == 4 and resolve_video({"video": {"model": DEFAULT_MODEL}})["steps"] == 4
+    assert resolve_video({"video": {"model": "minimax_h3"}})["steps"] == 6
+
+
 def test_a_locked_shot_keeps_its_take_when_the_model_changes(tmp_path, monkeypatch):
     (tmp_path / "p.review.json").write_text(json.dumps({"shots": {"v0": {"locked": True}}}))
     production, asked = _shoot(tmp_path, monkeypatch, {"max_takes": 3, "video": {"model": "minimax_h3"}}, _legacy_state())
@@ -162,6 +188,10 @@ def test_dry_run_and_status_show_the_model_and_where_it_came_from():
     summary = status_summary({"status": "running", "spec": _raw(video={"model": "minimax_h3"})}, "ws")
     assert summary["video_model"]["model"] == "minimax_h3" and "video" in summary      # "video" stays the finished video's URL
     assert status_summary({"status": "running"}, "ws")["video_model"]["source"] == "default"
+    refused = dry_run(_raw(video={"model": "ltx2_22B"}))["video_model"]
+    assert refused["error"].startswith("video.model must be one of") and refused["source"] == "spec"
+    assert "error" in dry_run(_raw(video={"steps": 20}))["video_model"]
+    assert "error" not in dry_run(_raw(video={"model": "minimax_h3", "steps": 20}))["video_model"]
 
 
 def test_the_estimate_is_per_model_and_keeps_the_default_history(tmp_path):

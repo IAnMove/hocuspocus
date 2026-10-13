@@ -532,4 +532,9 @@ def test_the_look_keeps_its_medium_and_reports_what_it_leaves_out():
     assert scenery_parts("Doll-like style, soft felt. A busy crowd fills the square. Strong cast shadows.") == (
         "Doll-like style, soft felt. Strong cast shadows.", ["A busy crowd fills the square."])
     assert scenery_parts("Characters have a figurine look. Matte paint.") == ("Matte paint.", ["Characters have a figurine look."])
+    for scenery in ("A crowd-pleasing summer blockbuster look, saturated colours.", "Cast iron lamps and brick arches, London fog."):
+        assert scenery_parts(scenery) == (scenery, []), "a word that names a material or a tone is not a person"
+    assert scenery_parts("Neon city, bustling crowds. Rain.") == ("Rain.", ["Neon city, bustling crowds."])
+    for people in ("Characters look at the camera.", "The dolls look out the window.", "Figures like ghosts drift by."):
+        assert scenery_parts(f"{people} Rain.") == ("Rain.", [people]), "a verb after people is not a medium"
     assert scenery_parts("") == ("", [])

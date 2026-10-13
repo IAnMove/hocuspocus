@@ -75,11 +75,15 @@ SET_STAGING = ("wide eye-level view, a large open EMPTY floor across the foregro
 BACKDROP_STAGING = "wide view of the scenery, clear horizon, nobody in it, no text"
 STAGINGS = ("floor", "backdrop", "none")
 RECIPE = 2                      # the picture recipes above; a change remakes pictures, meshes and sets
-# A sentence that puts people in the picture. The same words naming a medium ("a figurine look", "doll-like faces",
-# "toy-like", "cast shadows") are masked first, so the look keeps its medium.
+# A sentence that puts people in the picture. The same words naming a medium or a material ("a figurine look",
+# "doll-like faces", "toy-like", "cast shadows", "cast iron", "crowd-pleasing") are masked first, so the look keeps them.
+# A medium is a hyphenated word or a singular noun before the word: "the dolls look out" and "characters feel" are
+# people doing something, and "character style" names no medium, so those sentences still go.
 _PEOPLE = re.compile(r"\b(characters?|figurines?|figures?|people|persons?|actors?|dolls?|toys? figures?|cast|crowds?)\b", re.IGNORECASE)
-_MEDIUM = re.compile(r"\b(?:characters?|figurines?|figures?|dolls?|toys?|puppets?)[- ](?:like|look|style|aesthetic|textures?|finish|feel)\b"
-                     r"|\bcast (?:shadows?|light|glow|reflections?)\b", re.IGNORECASE)
+_MEDIUM = re.compile(r"\b(?:figurine|figure|doll|toy|puppet)s?-(?:like|look|style|aesthetic|textures?|finish|feel)\b"
+                     r"|\b(?:figurine|figure|doll|toy|puppet) (?:look|style|aesthetic|textures?|finish|feel)\b"
+                     r"|\bcasts?[- ](?:shadows?|light|glow|reflections?|iron|bronze|steel|metal|concrete|stone|resin|plaster)\b"
+                     r"|\bcrowd[- ]pleas\w*", re.IGNORECASE)
 SET_SIZE = "1664x928"         # 16:9 on the 32-pixel grid the image models need
 MESH_PRESET = "balanced"        # Hunyuan3D 2 Turbo geometry with Paint 2.0 Turbo texture
 WAVE = 4                        # model3d_service._MAX_ACTIVE_JOBS
@@ -215,6 +219,9 @@ def set_report(spec: dict) -> dict[str, dict]:
             report[name] = {"staging": kind["name"] if kind else None, "look_sentences_dropped": dropped}
             continue
         staging = entry.get("staging", "floor")
+        if staging not in STAGINGS:         # dry_run does not validate: say so instead of showing the floor prompt
+            report[name] = {"staging": staging, "error": f"sets.{name}.staging must be one of {', '.join(STAGINGS)}"}
+            continue
         report[name] = {"staging": staging, "prompt_sent": set_prompt(entry, look),
                         "look_sentences_dropped": [] if staging == "none" else dropped}
     return report
