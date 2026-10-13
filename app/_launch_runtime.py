@@ -1386,69 +1386,29 @@ _model_downloads_lock = threading.Lock()
 def _download_model_files(model_type: str):
     """Resolve and fetch every file load_models() would download.
 
-    Mirrors the file-resolution block at the top of wgp.load_models()
-    (wgp.py:4041-4143) — keep the two in sync.
+    The file list is ``services.engine.model_files.resolve_model_files``, the
+    mirror of the file-resolution block of ``wgp.load_models``. ``wgp.py`` is
+    vendored and is not edited. This name stays so the pre-download route
+    keeps calling it.
     """
-    if _is_legacy_h3_model(model_type):
-        minimax_h3_service.ensure_quality_assets(
-            lambda message: print(f"[H3 Legacy] {message}")
-        )
-        if not minimax_h3_service.is_model_downloaded():
-            raise RuntimeError(
-                "Legacy download finished but the exact ConvRot files are still missing."
-            )
-        return
+    from services.engine.model_files import download_model_files
 
-    model_def = wgp.get_model_def(model_type)
-    quantization = wgp.transformer_quantization
-    dtype_policy = wgp.transformer_dtype_policy
-    transformer_dtype = wgp.get_transformer_dtype(model_type, dtype_policy)
-
-    model_file_list = [wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy)]
-    source_type_list = [0]
-    submodel_no_list = [1]
-    if "URLs2" in model_def:
-        model_file_list.append(wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy, submodel_no=2))
-        source_type_list.append(0)
-        submodel_no_list.append(2)
-    modules = wgp.get_model_recursive_prop(model_type, "modules", return_list=True)
-    modules = [wgp.get_model_recursive_prop(module, "modules", sub_prop_name="_list", return_list=True) if isinstance(module, str) else module for module in modules]
-    for module_type in modules:
-        if isinstance(module_type, dict):
-            for urls_key, submodel_no in (("URLs", 1), ("URLs2", 2)):
-                urls = module_type.get(urls_key, None)
-                if urls is None:
-                    raise Exception(f"No {urls_key} defined for Module {module_type}")
-                model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, URLs=urls))
-                source_type_list.append(1)
-                submodel_no_list.append(submodel_no)
-        else:
-            model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, module_type=module_type))
-            source_type_list.append(1)
-            submodel_no_list.append(0)
-
-    fetched = False
-    for filename, source_type, submodel_no in zip(model_file_list, source_type_list, submodel_no_list):
-        if len(filename) == 0:
-            continue
-        wgp.download_models(filename, model_type, source_type, submodel_no)
-        fetched = True
-    if not fetched:
-        # No main file: the handler's own file list is the whole download (load_models does the same).
-        wgp.download_models("", model_type, 0, -1)
-
-    text_encoder_URLs = wgp.get_model_recursive_prop(model_type, "text_encoder_URLs", return_list=True)
-    if text_encoder_URLs is not None:
-        te_quant = (model_def.get("text_encoder_quantization", None) if model_def else None) or wgp.text_encoder_quantization
-        text_encoder_filename = wgp.get_model_filename(model_type=model_type, quantization=te_quant, dtype_policy=dtype_policy, URLs=text_encoder_URLs)
-        if text_encoder_filename is not None and len(text_encoder_filename):
-            text_encoder_folder = model_def.get("text_encoder_folder", None)
-            wgp.download_models(text_encoder_filename, model_type, 2, -1, force_path=text_encoder_folder)
-            if wgp.get_local_model_filename(text_encoder_filename, extra_paths=text_encoder_folder) is None:
-                raise Exception(f"Text encoder '{os.path.basename(text_encoder_filename)}' could not be located after download.")
-
-    if not _check_model_downloaded(model_type):
-        raise Exception("Download finished but the checkpoint could not be located — check disk space and earlier terminal output.")
+    download_model_files(
+        model_type,
+        is_legacy_h3_model=_is_legacy_h3_model,
+        ensure_quality_assets=minimax_h3_service.ensure_quality_assets,
+        is_h3_downloaded=minimax_h3_service.is_model_downloaded,
+        get_model_def=wgp.get_model_def,
+        transformer_quantization=wgp.transformer_quantization,
+        transformer_dtype_policy=wgp.transformer_dtype_policy,
+        get_transformer_dtype=wgp.get_transformer_dtype,
+        get_model_filename=wgp.get_model_filename,
+        get_model_recursive_prop=wgp.get_model_recursive_prop,
+        download_models=wgp.download_models,
+        get_local_model_filename=wgp.get_local_model_filename,
+        text_encoder_quantization=wgp.text_encoder_quantization,
+        check_model_downloaded=_check_model_downloaded,
+    )
 
 
 @api.post("/api/v1/models/{model_type}/download")
