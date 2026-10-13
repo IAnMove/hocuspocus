@@ -1570,7 +1570,10 @@ _MODEL_SELECTION_MODES = frozenset({
 })
 
 _PRODUCTION_PROFILE_CONFIG_KEY = "maestro_production_profile"
-_PRODUCTION_PROFILE_VERSION = 1
+from services.production_profile import (
+    _PRODUCTION_PROFILE_VERSION,
+    _normalize_production_profile,
+)
 _DEFAULT_PRODUCTION_PROFILE = {
     "version": _PRODUCTION_PROFILE_VERSION,
     "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
@@ -1593,151 +1596,6 @@ _DEFAULT_PRODUCTION_PROFILE = {
     },
     "model3d": {"provider": "local", "model": "hunyuan3d-2mini-turbo"},
 }
-
-
-def _bounded_profile_text(value, label: str, *, maximum: int = 200) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"{label} must be a string.")
-    result = value.strip()
-    if not result:
-        raise ValueError(f"{label} cannot be empty.")
-    if len(result) > maximum:
-        raise ValueError(f"{label} is too long.")
-    return result
-
-
-def _normalize_production_profile(value) -> dict:
-    """Validate the credential-free defaults shared by every production UI."""
-    from services.provider_profile import (
-        IMAGE_PROVIDERS,
-        MODEL3D_PROVIDERS,
-        MUSIC_PROVIDERS,
-        TEXT_PROVIDERS,
-        alias_model3d_provider,
-        alias_text_provider,
-        canonicalize_remote_url,
-        default_url_for_provider,
-    )
-
-    if not isinstance(value, dict):
-        raise ValueError("Production profile must be an object.")
-    text_profile = value.get("text")
-    image_profile = value.get("image")
-    music_profile = value.get("music")
-    video_profile = value.get("video")
-    model3d_profile = value.get("model3d") if isinstance(value.get("model3d"), dict) else {
-        "provider": "local",
-        "model": "hunyuan3d-2mini-turbo",
-    }
-    if not all(isinstance(item, dict) for item in (
-        text_profile, image_profile, music_profile, video_profile,
-    )):
-        raise ValueError("Production profile needs text, image, music and video sections.")
-
-    text_provider = alias_text_provider(_bounded_profile_text(
-        text_profile.get("provider"), "Text provider",
-    ).lower(), str(text_profile.get("base_url") or ""))
-    if text_provider not in TEXT_PROVIDERS:
-        raise ValueError("Unsupported production text provider.")
-    image_provider = _bounded_profile_text(
-        image_profile.get("provider"), "Image provider",
-    ).lower()
-    if image_provider not in IMAGE_PROVIDERS:
-        raise ValueError("Unsupported production image provider.")
-    music_provider = _bounded_profile_text(
-        music_profile.get("provider"), "Music provider",
-    ).lower()
-    if music_provider not in MUSIC_PROVIDERS:
-        raise ValueError("Unsupported production music provider.")
-    model3d_provider = alias_model3d_provider(_bounded_profile_text(
-        model3d_profile.get("provider"), "3D provider",
-    ).lower())
-    if model3d_provider not in MODEL3D_PROVIDERS:
-        raise ValueError("Unsupported production 3D provider.")
-    music_model = _bounded_profile_text(music_profile.get("model"), "Music model")
-    video_provider = _bounded_profile_text(
-        video_profile.get("provider"), "Video provider",
-    ).lower()
-    if video_provider not in {"maestro", "local"}:
-        raise ValueError("Unsupported production video provider.")
-
-    settings = video_profile.get("settings")
-    if not isinstance(settings, dict):
-        raise ValueError("Production video settings must be an object.")
-    try:
-        steps = int(settings.get("steps", 20))
-        flow_shift = float(settings.get("flowShift", 12.0))
-        audio_shift = float(settings.get("audioShift", 3.0))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Production video steps and shifts must be numeric.") from exc
-    if not 1 <= steps <= 50:
-        raise ValueError("Production video steps must be between 1 and 50.")
-    if not -100 <= flow_shift <= 100 or not -100 <= audio_shift <= 100:
-        raise ValueError("Production video shifts must be between -100 and 100.")
-    loras = settings.get("loras", [])
-    if not isinstance(loras, list) or len(loras) > 32:
-        raise ValueError("Production video LoRAs must be a list of at most 32 entries.")
-    normalized_loras = [
-        _bounded_profile_text(item, "Production video LoRA", maximum=500)
-        for item in loras
-    ]
-    resolution = _bounded_profile_text(
-        settings.get("resolution", "540p"), "Production video resolution",
-        maximum=40,
-    ).lower()
-    if resolution not in {"auto", "480p", "540p", "720p", "768p", "1080p"}:
-        raise ValueError("Unsupported production video resolution preset.")
-    aspect_ratio = _bounded_profile_text(
-        settings.get("aspectRatio", "16:9"), "Production video aspect ratio",
-        maximum=20,
-    ).lower()
-    if aspect_ratio not in {"auto", "21:9", "16:9", "9:16", "1:1", "4:3", "3:4"}:
-        raise ValueError("Unsupported production video aspect ratio.")
-
-    text_base_url = canonicalize_remote_url(str(text_profile.get("base_url") or ""))
-    if text_provider in {"ollama", "remote", "openai-compatible", "grok", "openai", "minimax"}:
-        text_base_url = default_url_for_provider(text_provider, text_base_url)
-
-    return {
-        "version": _PRODUCTION_PROFILE_VERSION,
-        "text": {
-            "provider": text_provider,
-            "model": _bounded_profile_text(text_profile.get("model"), "Text model"),
-            "base_url": text_base_url,
-        },
-        "image": {
-            "provider": image_provider,
-            "model": _bounded_profile_text(image_profile.get("model"), "Image model"),
-        },
-        "music": {
-            "provider": music_provider,
-            "model": music_model,
-        },
-        "model3d": {
-            "provider": model3d_provider,
-            "model": _bounded_profile_text(
-                model3d_profile.get("model") or "hunyuan3d-2mini-turbo",
-                "3D model",
-            ),
-        },
-        "video": {
-            "provider": video_provider,
-            "model": _bounded_profile_text(video_profile.get("model"), "Video model"),
-            "settings": {
-                "profile": _bounded_profile_text(
-                    settings.get("profile", "quality"), "Video profile", maximum=40,
-                ).lower(),
-                "steps": steps,
-                "flowShift": flow_shift,
-                "audioShift": audio_shift,
-                "turbo": bool(settings.get("turbo", False)),
-                "cache": bool(settings.get("cache", False)),
-                "loras": normalized_loras,
-                "resolution": resolution,
-                "aspectRatio": aspect_ratio,
-            },
-        },
-    }
 
 
 def _default_production_profile() -> dict:
@@ -1770,39 +1628,19 @@ def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]
     what prevents Director/prompt tools from downloading a local model while a
     new or migrated install already advertises MiniMax in its global profile.
     """
-    from services.provider_profile import alias_text_provider, default_url_for_provider
+    from services import llm_routing
 
-    service_values = services if isinstance(services, dict) else {}
-    text_profile = _active_production_profile().get("text", {})
-    remote_url = str(
-        text_profile.get("base_url")
-        or service_values.get("llm_remote_url")
-        or ""
-    ).strip()
-    provider = alias_text_provider(
-        str(text_profile.get("provider") or "local").strip().lower(),
-        remote_url,
+    return llm_routing._effective_llm_routing(
+        services,
+        text_profile=_active_production_profile().get("text", {}),
+        default_provider="local",
     )
-    model = str(text_profile.get("model") or "").strip()
-    remote_url = default_url_for_provider(provider, remote_url)
-    return provider, model, remote_url
 
 
 def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "") -> tuple[str, str]:
-    from services.provider_profile import default_url_for_provider, resolve_minimax_key
+    from services import llm_routing
 
-    api_key = ""
-    if provider == "openai":
-        api_key = str(services.get("openai_api_key") or "")
-    elif provider == "anthropic":
-        api_key = str(services.get("anthropic_api_key") or "")
-    elif provider == "minimax":
-        api_key = resolve_minimax_key(services, "llm")
-    elif provider == "grok":
-        api_key = str(services.get("grok_api_key") or "")
-    elif provider == "deepseek":
-        api_key = str(services.get("deepseek_api_key") or "")
-    return api_key, default_url_for_provider(provider, remote_url)
+    return llm_routing._llm_provider_credentials(provider, services, remote_url)
 
 
 def _production_profile_response() -> dict:
@@ -8313,31 +8151,18 @@ def storage_usage():
 
 def _ensure_llm_loaded():
     """Auto-load LLM if not already loaded. Reloads if configured model changed."""
-    from services import llm_service
+    from services import llm_routing
+
     services = wgp.server_config.get("services", {})
     desired_provider, profile_model, desired_remote_url = _effective_llm_routing(services)
-    desired = profile_model or _DEFAULT_LLM_REPO
-    desired_device = services.get("llm_device", _llm_default_device())
-    desired_api_key, desired_remote_url = _llm_provider_credentials(
-        desired_provider, services, desired_remote_url,
+    llm_routing._ensure_llm_loaded(
+        services=services,
+        provider=desired_provider,
+        model=profile_model,
+        remote_url=desired_remote_url,
+        device=services.get("llm_device", _llm_default_device()),
+        default_model=_DEFAULT_LLM_REPO,
     )
-
-    if llm_service.is_loaded():
-        status = llm_service.get_status()
-        remote_changed = (
-            desired_provider in ("remote", "ollama", "openai", "minimax", "grok")
-            and status.get("remote_url", "") != desired_remote_url
-        )
-        if (
-            status.get("model_id") != desired
-            or status.get("provider") != desired_provider
-            or status.get("device") != (desired_device if desired_provider == "local" else desired_provider)
-            or remote_changed
-        ):
-            llm_service.unload_model()
-            llm_service.load_model(model_id=desired, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
-    else:
-        llm_service.load_model(model_id=desired, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
 
 
 from routers.llm import (

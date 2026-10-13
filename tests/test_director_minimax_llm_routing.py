@@ -104,6 +104,232 @@ class TestMiniMaxChatRouting(unittest.TestCase):
         self.assertEqual(kwargs["json_schema"], schema)
         self.assertEqual(kwargs["max_new_tokens"], 4000)
 
+    def test_director_reloads_when_a_deepseek_url_changes_and_sends_its_key(self):
+        """Director used to ignore a DeepSeek URL change and never read its key."""
+        previous = director_pipeline._wgp
+        unloaded = []
+        loaded = {}
+
+        def fake_load(**kwargs):
+            loaded.update(kwargs)
+
+        director_pipeline._wgp = SimpleNamespace(server_config={
+            "services": {
+                "llm_provider": "deepseek",
+                "llm_model_id": "deepseek-v4-flash",
+                "llm_remote_url": "https://api.deepseek.com",
+                "deepseek_api_key": "ds-secret",
+            },
+        })
+        try:
+            with patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+                llm_service, "get_status", return_value={
+                    "model_id": "deepseek-v4-flash",
+                    "provider": "deepseek",
+                    "device": "deepseek",
+                    "remote_url": "https://old.example",
+                },
+            ), patch.object(
+                llm_service, "unload_model", side_effect=lambda: unloaded.append(True),
+            ), patch.object(llm_service, "load_model", side_effect=fake_load):
+                director_pipeline._ensure_llm_loaded({})
+        finally:
+            director_pipeline._wgp = previous
+
+        self.assertEqual(unloaded, [True])
+        self.assertEqual(loaded.get("provider"), "deepseek")
+        self.assertEqual(loaded.get("model_id"), "deepseek-v4-flash")
+        self.assertEqual(loaded.get("api_key"), "ds-secret")
+        self.assertEqual(loaded.get("remote_url"), "https://api.deepseek.com")
+
+    def test_director_reloads_a_local_model_when_the_device_changes(self):
+        previous = director_pipeline._wgp
+        unloaded = []
+        loaded = {}
+
+        def fake_load(**kwargs):
+            loaded.update(kwargs)
+
+        director_pipeline._wgp = SimpleNamespace(server_config={"services": {}})
+        try:
+            with patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+                llm_service, "get_status", return_value={
+                    "model_id": "Abhiray/gemma-4-E4B-it-heretic-GGUF",
+                    "provider": "local",
+                    "device": "cpu",
+                    "remote_url": "",
+                },
+            ), patch.object(
+                llm_service, "unload_model", side_effect=lambda: unloaded.append(True),
+            ), patch.object(llm_service, "load_model", side_effect=fake_load):
+                director_pipeline._ensure_llm_loaded({"llm_device": "cuda", "llm_provider": "local"})
+        finally:
+            director_pipeline._wgp = previous
+
+        self.assertEqual(unloaded, [True])
+        self.assertEqual(loaded.get("provider"), "local")
+        self.assertEqual(loaded.get("device"), "cuda")
+        self.assertEqual(loaded.get("model_id"), "Abhiray/gemma-4-E4B-it-heretic-GGUF")
+
+    def test_director_keeps_a_loaded_deepseek_model_when_nothing_changed(self):
+        previous = director_pipeline._wgp
+        director_pipeline._wgp = SimpleNamespace(server_config={
+            "services": {
+                "llm_provider": "deepseek",
+                "llm_model_id": "deepseek-v4-flash",
+                "llm_remote_url": "https://api.deepseek.com",
+                "deepseek_api_key": "ds-secret",
+            },
+        })
+        try:
+            with patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+                llm_service, "get_status", return_value={
+                    "model_id": "deepseek-v4-flash",
+                    "provider": "deepseek",
+                    "device": "deepseek",
+                    "remote_url": "https://api.deepseek.com",
+                },
+            ), patch.object(llm_service, "unload_model") as unload, patch.object(
+                llm_service, "load_model",
+            ) as load:
+                director_pipeline._ensure_llm_loaded({})
+        finally:
+            director_pipeline._wgp = previous
+        unload.assert_not_called()
+        load.assert_not_called()
+
+
+class TestSharedLlmReload(unittest.TestCase):
+    """The shared loader reloads when an Anthropic or DeepSeek URL changes.
+
+    Launch's copy compared only remote, ollama, openai, minimax and grok, so a
+    new Anthropic or DeepSeek URL kept talking to the previous host.
+    """
+
+    def _load(self, *, provider, model, old_url, new_url, device="cpu", status_device=None):
+        from services import llm_routing
+
+        loaded = {}
+        unloaded = []
+
+        def fake_load(**kwargs):
+            loaded.update(kwargs)
+
+        with patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+            llm_service, "get_status", return_value={
+                "model_id": model,
+                "provider": provider,
+                "device": provider if status_device is None else status_device,
+                "remote_url": old_url,
+            },
+        ), patch.object(
+            llm_service, "unload_model", side_effect=lambda: unloaded.append(True),
+        ), patch.object(llm_service, "load_model", side_effect=fake_load):
+            llm_routing._ensure_llm_loaded(
+                services={f"{provider}_api_key": "secret"},
+                provider=provider,
+                model=model,
+                remote_url=new_url,
+                device=device,
+                default_model="Abhiray/gemma-4-E4B-it-heretic-GGUF",
+            )
+        return unloaded, loaded
+
+    def test_anthropic_url_change_reloads(self):
+        unloaded, loaded = self._load(
+            provider="anthropic",
+            model="claude",
+            old_url="https://old.example",
+            new_url="https://api.anthropic.com",
+            status_device="anthropic",
+        )
+        self.assertEqual(unloaded, [True])
+        self.assertEqual(loaded.get("remote_url"), "https://api.anthropic.com")
+        self.assertEqual(loaded.get("api_key"), "secret")
+        self.assertEqual(loaded.get("provider"), "anthropic")
+
+    def test_deepseek_url_change_reloads_and_the_same_url_does_not(self):
+        unloaded, loaded = self._load(
+            provider="deepseek",
+            model="deepseek-v4-flash",
+            old_url="https://old.example",
+            new_url="https://api.deepseek.com",
+            status_device="deepseek",
+        )
+        self.assertEqual(unloaded, [True])
+        self.assertEqual(loaded.get("api_key"), "secret")
+        same_unloaded, same_loaded = self._load(
+            provider="deepseek",
+            model="deepseek-v4-flash",
+            old_url="https://api.deepseek.com",
+            new_url="https://api.deepseek.com",
+            status_device="deepseek",
+        )
+        self.assertEqual(same_unloaded, [])
+        self.assertEqual(same_loaded, {})
+
+    def test_core_reloads_when_a_deepseek_url_changes(self):
+        """Core's loader is the shared one, so a new DeepSeek URL reloads."""
+        from services import core_production
+
+        loaded = {}
+        unloaded = []
+
+        def fake_load(**kwargs):
+            loaded.update(kwargs)
+
+        with patch.object(core_production.core, "services_raw", return_value={
+            "deepseek_api_key": "ds-secret",
+            "llm_remote_url": "https://api.deepseek.com",
+        }), patch.object(
+            core_production, "production_profile_response", return_value={
+                "configured": True,
+                "profile": {"text": {
+                    "provider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "base_url": "https://api.deepseek.com",
+                }},
+            },
+        ), patch.object(llm_service, "is_loaded", return_value=True), patch.object(
+            llm_service, "get_status", return_value={
+                "model_id": "deepseek-v4-flash",
+                "provider": "deepseek",
+                "device": "deepseek",
+                "remote_url": "https://old.example",
+            },
+        ), patch.object(
+            llm_service, "unload_model", side_effect=lambda: unloaded.append(True),
+        ), patch.object(llm_service, "load_model", side_effect=fake_load):
+            core_production.ensure_llm_loaded()
+        self.assertEqual(unloaded, [True])
+        self.assertEqual(loaded.get("model_id"), "deepseek-v4-flash")
+        self.assertEqual(loaded.get("api_key"), "ds-secret")
+        self.assertEqual(loaded.get("device"), "cpu")
+        self.assertEqual(loaded.get("remote_url"), "https://api.deepseek.com")
+
+    def test_a_local_provider_runs_the_injected_gate_before_loading(self):
+        from services import llm_routing
+
+        seen = []
+
+        def require_local():
+            seen.append("gate")
+            raise RuntimeError("local llm unavailable")
+
+        with patch.object(llm_service, "load_model") as load:
+            with self.assertRaisesRegex(RuntimeError, "unavailable"):
+                llm_routing._ensure_llm_loaded(
+                    services={},
+                    provider="local",
+                    model="Abhiray/gemma-4-E4B-it-heretic-GGUF",
+                    remote_url="",
+                    device="cpu",
+                    default_model="Abhiray/gemma-4-E4B-it-heretic-GGUF",
+                    require_local=require_local,
+                )
+        self.assertEqual(seen, ["gate"])
+        load.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
