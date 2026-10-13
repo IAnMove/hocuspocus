@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from services.language_intent import normalize_language_intent
 from services.series_library import create_series_episode, create_series_project, normalize_series_project
 
 _PATH = Path(__file__).resolve().parents[1] / "shared" / "series_templates.json"
@@ -71,8 +72,18 @@ def build_series(template_id: str, workspace: str, *, title: str = "", language:
     series = create_series_project(workspace, title=title.strip() or _pick(template["title"], lang))
     content, spoken = LANGUAGES[lang]
     series.update({key: body[key] for key in _FIELDS if key in body})
-    series.update({"language": content, "spokenLanguage": spoken, "allowedProductionMethods": ["animation_2d", "generated_video"],
-                   "template": {"id": template_id, "language": lang}})
+    # create_series_project seeds one language. Stamping only the labels left
+    # languageIntent on that default, so writing / comic handoff / provider
+    # prompts followed the stale intent (English templates generated as Spanish).
+    series.update({
+        "language": content,
+        "spokenLanguage": spoken,
+        "languageIntent": normalize_language_intent(
+            None, content_language=content, spoken_language=spoken,
+        ),
+        "allowedProductionMethods": ["animation_2d", "generated_video"],
+        "template": {"id": template_id, "language": lang},
+    })
     series["canon"] = {**series["canon"], **(body.get("canon") or {})}
     series = normalize_series_project(series, series["id"], workspace)
     pilot = body.get("pilot") or {}
