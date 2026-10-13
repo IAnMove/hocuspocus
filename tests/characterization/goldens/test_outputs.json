@@ -269,5 +269,51 @@
       "detail": "Output file not found"
     },
     "status": 404
+  },
+  "scene recording": {
+    "body": {
+      "completed_at": "<TIME>",
+      "created_at": "<TIME>",
+      "mode": "video",
+      "name": "<TIME>_Plaza_3d_<ID>.mp4",
+      "size": "<MASKED>",
+      "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_Plaza_3d_<ID>.mp4",
+      "type": "video",
+      "url": "/api/v1/file/<TIME>_Plaza_3d_<ID>.mp4"
+    },
+    "status": 200
+  },
+  "scene recording metadata must be json": {
+    "body": {
+      "detail": "Invalid scene recording metadata"
+    },
+    "status": 400
+  },
+  "scene recording needs version 1": {
+    "body": {
+      "detail": "A version 1 scene is required"
+    },
+    "status": 400
+  },
+  "scene save": {
+    "body": {
+      "name": "<TIME>_Plaza_<ID>.scene.json",
+      "thumbnail_url": "/api/v1/file/<TIME>_Plaza_<ID>.scene.preview.png",
+      "type": "scene",
+      "url": "/api/v1/file/<TIME>_Plaza_<ID>.scene.json"
+    },
+    "status": 200
+  },
+  "scene save needs a preview": {
+    "body": {
+      "detail": "A PNG scene preview is required"
+    },
+    "status": 400
+  },
+  "scene save needs version 1": {
+    "body": {
+      "detail": "A version 1 scene is required"
+    },
+    "status": 400
   }
 }
