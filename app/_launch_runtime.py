@@ -728,51 +728,14 @@ def _publish_generation_sidecar_for_studio_job(
     tool: str = "studio",
 ) -> None:
     """Publish one Studio result with its initiating command and real location."""
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    payload = dict(sidecar)
-    params = dict(payload.get("params") or {})
-    model_type = str(params.get("model_type") or "")
-    params.setdefault("provider", "minimax" if model_type.startswith("minimax:") else "local")
-    payload["params"] = params
-    if not payload.get("job_id"):
-        payload["job_id"] = job.get("id")
-    if not payload.get("task_id"):
-        payload["task_id"] = job.get("task_id")
-    if not payload.get("root_task_id"):
-        payload["root_task_id"] = job.get("root_task_id") or job.get("task_id")
-    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
-    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
-    payload["started_at"] = job.get("started_at") or payload.get("started_at")
-    payload["completed_at"] = job.get("finished_at") or time.time()
-    for key in ("command_id", "workflow_id", "run_id"):
-        if command.get(key):
-            payload.setdefault(key, command[key])
-    for key in ("project_id", "production_id", "cue_id", "candidate_id", "song_version"):
-        if provenance.get(key):
-            payload.setdefault(key, provenance[key])
-    project_ref = (
-        {"kind": "story", "id": str(provenance["project_id"])}
-        if provenance.get("project_id") else None
-    )
-    production_ref = (
-        {"kind": "director_production", "id": str(provenance["production_id"])}
-        if provenance.get("production_id") else None
-    )
-    manifest_refs = {}
-    if project_ref:
-        manifest_refs["project"] = project_ref
-    if production_ref:
-        manifest_refs["production"] = production_ref
-    publish_generation_sidecar_best_effort(
+    from services.asset_manifest import publish_generation_job_sidecar
+    publish_generation_job_sidecar(
+        job,
         output_path,
-        payload,
-        workspace_id=provenance.get("workspace_id"),
+        sidecar,
+        job_id_key="id",
         output_folder=job.get("workspace"),
-        tool=provenance.get("tool") or tool,
-        actor=provenance.get("actor"),
-        capability=provenance.get("capability"),
-        **manifest_refs,
+        tool=tool,
     )
 
 
@@ -35088,14 +35051,8 @@ def _task_legacy_id(record: dict) -> str:
 
 
 def _task_status(value: object) -> str:
-    raw = str(value or "queued").lower()
-    if raw in {"completed", "failed", "cancelled", "interrupted"}:
-        return raw
-    if raw in {"created", "queued"}:
-        return raw
-    if raw in {"paused", "waiting", "waiting_resource"}:
-        return "waiting_resource"
-    return "running"
+    from services.canonical_task_helpers import task_status
+    return task_status(value)
 
 
 def _task_timestamp(record: dict, *keys: str) -> float | None:
@@ -35139,53 +35096,14 @@ def _upsert_canonical_task(
     event_exclude_fields: set[str] | frozenset[str] | None = None,
     **fields,
 ) -> dict:
-    registry = _task_registry(workspace)
-    existing = registry.get(task_id)
-    if existing is None:
-        return registry.create(
-            id=task_id,
-            workspace=workspace,
-            event_exclude_fields=event_exclude_fields,
-            **fields,
-        )
-    from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES
-    existing_status = str(existing.get("status") or "")
-    incoming_status = str(fields.get("status") or existing_status)
-    if existing_status in TERMINAL_STATUSES and incoming_status in ACTIVE_STATUSES:
-        # A lagging compatibility snapshot must never resurrect a task after
-        # cancellation/completion won. Canonical resume explicitly transitions
-        # the registry before the next active adapter snapshot arrives.
-        return existing
-    existing_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
-    incoming_metadata = fields.get("metadata") if isinstance(fields.get("metadata"), dict) else None
-    if incoming_metadata is not None:
-        merged_metadata = dict(existing_metadata)
-        for key, value in incoming_metadata.items():
-            if value is not None:
-                merged_metadata[key] = value
-        fields["metadata"] = merged_metadata
-        # Reservation owns attempt identity. Adapter snapshots must not
-        # replace workflow/title after submit_music_generation wrote them.
-        if any(
-            existing_metadata.get(key)
-            for key in ("generation_id", "candidate_id", "command_id", "idempotency_key")
-        ):
-            fields.pop("workflow", None)
-            fields.pop("title", None)
-    mutable = {
-        key: value for key, value in fields.items()
-        if key not in {"id", "created_at"}
-        and existing.get(key) != value
-    }
-    if mutable:
-        return registry.update(
-            task_id,
-            force=True,
-            event_type="adapter.synced",
-            event_exclude_fields=event_exclude_fields,
-            **mutable,
-        )
-    return existing
+    from services.canonical_task_helpers import upsert_canonical_task
+    return upsert_canonical_task(
+        _task_registry(workspace),
+        workspace,
+        task_id,
+        event_exclude_fields=event_exclude_fields,
+        **fields,
+    )
 
 
 def _generation_task_fields(job: dict) -> dict:

@@ -10,16 +10,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from services import core_generation_commands, core_remote_image
-from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES
-
-
-def task_status(value: object) -> str:
-    raw = str(value or "queued").lower()
-    if raw in {"completed", "failed", "cancelled", "interrupted", "created", "queued"}:
-        return raw
-    if raw in {"paused", "waiting", "waiting_resource"}:
-        return "waiting_resource"
-    return "running"
+from services.canonical_task_helpers import task_status, upsert_canonical_task
 
 
 def upsert_task(
@@ -30,28 +21,12 @@ def upsert_task(
     **fields: Any,
 ) -> dict[str, Any]:
     registry = core_generation_commands.registry_for(workspace)
-    existing = registry.get(task_id)
-    if existing is None:
-        return registry.create(
-            id=task_id,
-            workspace=workspace,
-            event_exclude_fields=event_exclude_fields,
-            **fields,
-        )
-    existing_status = str(existing.get("status") or "")
-    incoming_status = str(fields.get("status") or existing_status)
-    if existing_status in TERMINAL_STATUSES and incoming_status in ACTIVE_STATUSES:
-        return existing
-    mutable = {
-        key: value for key, value in fields.items()
-        if key not in {"id", "created_at"} and existing.get(key) != value
-    }
-    if not mutable:
-        return existing
-    return registry.update(
+    return upsert_canonical_task(
+        registry,
+        workspace,
         task_id,
         event_exclude_fields=event_exclude_fields,
-        **mutable,
+        **fields,
     )
 
 

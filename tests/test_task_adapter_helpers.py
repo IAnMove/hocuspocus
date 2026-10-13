@@ -307,13 +307,10 @@ def test_upsert_keeps_reserved_task_identity():
             return {**existing, **{key: value for key, value in fields.items()
                                    if key not in {"force", "event_type", "event_exclude_fields"}}}
 
-    namespace = {
-        "_task_registry": lambda _workspace: Registry(),
-    }
-    node = _function("_upsert_canonical_task")
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(LAUNCH_PATH), "exec"), namespace)
+    from services.canonical_task_helpers import upsert_canonical_task
 
-    result = namespace["_upsert_canonical_task"](
+    result = upsert_canonical_task(
+        Registry(),
         "default",
         "task-minimax-music-abc",
         workflow="minimax-music",
@@ -330,6 +327,8 @@ def test_upsert_keeps_reserved_task_identity():
         },
     )
 
+    assert updated["force"] is True
+    assert updated["event_type"] == "adapter.synced"
     assert "workflow" not in updated
     assert "title" not in updated
     assert result["workflow"] == "generate_story_song"

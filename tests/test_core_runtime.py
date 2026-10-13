@@ -992,6 +992,51 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(cancelled.status_code, 200, cancelled.text)
         self.assertEqual(events.status_code, 200, events.text)
 
+    def test_task_upsert_syncs_past_an_illegal_transition_and_keeps_reservation(self):
+        from services.core_generation_commands import registry_for
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            registry = registry_for("default")
+            registry.create(
+                id="task-client-core-sync",
+                workspace="default",
+                status="queued",
+                workflow="generate_story_song",
+                title="Story song",
+                metadata={"generation_id": "gen-1"},
+            )
+            jumped = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "core-sync",
+                "workspace": "default",
+                "status": "completed",
+                "title": "MiniMax Music",
+                "phase": "completed",
+                "message": "Ready",
+            })
+            stored = registry.get("task-client-core-sync")
+            types = [event["type"] for event in registry.events("task-client-core-sync")]
+            reopened = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "core-sync",
+                "workspace": "default",
+                "status": "queued",
+                "title": "MiniMax Music",
+                "phase": "queued",
+                "message": "Waiting again",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(jumped.status_code, 200, jumped.text)
+        self.assertEqual(jumped.json()["status"], "completed")
+        self.assertEqual(stored["workflow"], "generate_story_song")
+        self.assertEqual(stored["title"], "Story song")
+        self.assertEqual(stored["metadata"]["generation_id"], "gen-1")
+        self.assertEqual(stored["metadata"]["adapter"], "frontend")
+        self.assertIn("adapter.synced", types)
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+        self.assertEqual(reopened.json()["status"], "completed")
+        self.assertEqual(reopened.json()["message"], "Ready")
+
     def test_studio_image_command_canonicalizes_upload_references(self):
         folder, previous = self._in_temp_workspace()
         try:
