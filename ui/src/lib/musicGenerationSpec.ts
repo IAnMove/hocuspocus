@@ -88,6 +88,11 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : String(value || '').trim()
 }
 
+/** Every MiniMax API music id costs money: only a person may pick one, in Story Lab, and confirm it. */
+export function isPaidMinimaxMusicModel(model: unknown): boolean {
+  return REMOTE_IDS.has(text(model))
+}
+
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value))
 }

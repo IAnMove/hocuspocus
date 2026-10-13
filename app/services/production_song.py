@@ -6,6 +6,7 @@ from typing import Any
 
 from services import song_analysis as audio_analysis
 from services.lyrics_language import canonical_lyrics_language, detect_language, validate_lyrics_language
+from services.music_model_contract import DEFAULT_MUSIC_MODEL
 from services.music_production import ProductionError, pick_song
 from services.production_song_switch import remember_candidates
 
@@ -28,8 +29,16 @@ def require_song_language(song: dict) -> None:
         raise ProductionError("invalid_spec", "song.language must be a language code or name such as es, en or Spanish")
 
 
+def require_local_song_model(song: dict) -> None:
+    """production.* makes its song with a local model; a paid MiniMax id is refused before anything runs."""
+    from services.music_model_contract import is_paid_music_model, paid_music_disabled_message
+
+    if is_paid_music_model(song.get("model")):
+        raise ProductionError("invalid_spec", paid_music_disabled_message(song.get("model")))
+
+
 def _music_params(song: dict, seed: int, language: str) -> dict:
-    model = song.get("model", "ace_step_v1_5_xl_sft_lm_4b")
+    model = song.get("model", DEFAULT_MUSIC_MODEL)
     params = {"prompt": song["lyrics"] or "[Instrumental]", "alt_prompt": song["caption"], "model_type": model, "seed": seed,
               "generation_mode": "audio", "_audio_sub_mode": "music", "image_mode": 0, "video_length": 0,
               "lyrics_language": language, "duration_seconds": song["duration"]}

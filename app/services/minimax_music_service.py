@@ -16,7 +16,6 @@ from . import resource_scheduler
 
 
 API_URL = "https://api.minimax.io/v1/music_generation"
-MODEL = "music-3.0"
 ORIGINAL_MODELS = {"music-3.0", "music-2.6", "music-3.0-free", "music-2.6-free"}
 COVER_MODELS = {"music-cover", "music-cover-free"}
 ALLOWED_MODELS = ORIGINAL_MODELS | COVER_MODELS
@@ -49,6 +48,16 @@ def _audio_bytes(response: dict[str, Any], session: requests.Session) -> bytes:
     return audio
 
 
+def _explicit_model(model: str) -> str:
+    """Every call costs money: the caller names the model a person chose; nothing is filled in."""
+    token = str(model or "").strip()
+    if not token:
+        raise MiniMaxMusicError("Choose a MiniMax Music model explicitly; the paid API is never a default", 400)
+    if token not in ALLOWED_MODELS:
+        raise MiniMaxMusicError(f"Unsupported MiniMax Music model: {token}", 400)
+    return token
+
+
 def generate_candidates(
     *,
     api_key: str,
@@ -57,7 +66,7 @@ def generate_candidates(
     count: int,
     output_dir: str,
     instrumental: bool = False,
-    model: str = MODEL,
+    model: str = "",
     reference_audio_path: str | None = None,
     session: requests.Session | None = None,
     task_id: str | None = None,
@@ -67,9 +76,7 @@ def generate_candidates(
     """Generate and persist 1–3 independently sampled song candidates."""
     if not str(api_key).strip():
         raise MiniMaxMusicError("Configure the MiniMax API key in Settings → Services first", 400)
-    model = str(model or MODEL).strip()
-    if model not in ALLOWED_MODELS:
-        raise MiniMaxMusicError(f"Unsupported MiniMax Music model: {model}", 400)
+    model = _explicit_model(model)
     is_cover = model in COVER_MODELS
     prompt = str(prompt or "").strip()[:300]
     lyrics = str(lyrics or "").strip()[:3500]

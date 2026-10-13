@@ -1,0 +1,220 @@
+"""Music never reaches the paid MiniMax API by default or for an agent.
+
+Every fill picks the local model Studio and production.* use. A paid MiniMax id
+runs only when a person picks it in Story Lab and confirms the cost; agents,
+MCP and production specs get a clear refusal and no provider call.
+"""
+from __future__ import annotations
+
+import ast
+import asyncio
+import json
+import threading
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+
+from services import core_production, core_remote_music, media_options, minimax_music_service
+from services.music_model_contract import (
+    DEFAULT_MUSIC_MODEL,
+    MusicModelError,
+    freeze_music_spec,
+    require_confirmed_paid_music,
+)
+from services.music_production import ProductionError, validate_spec
+from services.music_submission import classify_music_route
+from services.production_song import _music_params
+from services.studio_music_spec import StudioMusicSpecError, freeze_studio_music_spec
+
+ROOT = Path(__file__).resolve().parents[1]
+LOCAL = "ace_step_v1_5_xl_sft_lm_4b"
+PAID_REFUSAL = "Paid MiniMax music is disabled (music-3.0); use a local model: ace_step_v1_5_xl_sft_lm_4b, minimax_music3"
+SONG = {"prompt": "cinematic dream pop", "lyrics": "[Verse]\nAcross the night", "count": 1}
+
+
+# -- every fill is the local model -------------------------------------------------------------
+
+def test_the_default_is_the_local_model_studio_and_production_use():
+    assert DEFAULT_MUSIC_MODEL == LOCAL
+    assert _music_params({"lyrics": "la", "caption": "pop", "duration": 30, "bpm": 100}, 1, "es")["model_type"] == LOCAL
+
+
+def test_a_request_without_a_model_freezes_and_routes_local():
+    spec = freeze_music_spec(SONG)
+    assert (spec["model"], spec["route"]) == (LOCAL, "local")
+    assert classify_music_route(None) == classify_music_route("") == "local"
+
+
+def test_the_core_profile_puts_local_music_first():
+    assert core_production.CORE_DEFAULT_PROFILE["music"] == {"provider": "local", "model": LOCAL}
+    normalized = core_production.normalize_production_profile(core_production.CORE_DEFAULT_PROFILE)
+    assert normalized["music"] == {"provider": "local", "model": LOCAL}
+
+
+def test_the_minimax_client_never_picks_a_model_by_itself(tmp_path):
+    calls = []
+    session = SimpleNamespace(post=lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(minimax_music_service.MiniMaxMusicError) as error:
+        minimax_music_service.generate_candidates(
+            api_key="secret", prompt="pop", lyrics="words", count=1, output_dir=str(tmp_path), session=session,
+        )
+    assert error.value.status_code == 400 and "explicitly" in str(error.value)
+    assert calls == []
+
+
+@pytest.mark.parametrize("relative", [
+    "app/services/music_model_contract.py",
+    "app/services/music_submission.py",
+    "app/services/core_remote_music.py",
+    "app/services/core_production.py",
+    "app/services/media_options.py",
+    "app/services/production_song.py",
+    "app/routers/story_music.py",
+])
+def test_no_music_fill_names_a_paid_model(relative):
+    source = (ROOT / relative).read_text(encoding="utf-8")
+    assert '"music-3.0"' not in source and '"music-2.6"' not in source
+
+
+def test_the_runtime_minimax_worker_has_no_paid_fallback():
+    tree = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    worker = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_run_minimax_music_job")
+    assert not [node for node in ast.walk(worker) if isinstance(node, ast.Constant) and node.value in {"music-3.0", "music-2.6"}]
+
+
+# -- the paid Story endpoints need the person's confirmation ------------------------------------
+
+def test_the_paid_contract_needs_an_explicit_confirmed_choice():
+    with pytest.raises(MusicModelError) as missing:
+        require_confirmed_paid_music(SONG)
+    assert missing.value.status_code == 400 and LOCAL in str(missing.value)
+    with pytest.raises(MusicModelError) as unconfirmed:
+        require_confirmed_paid_music({**SONG, "model": "music-3.0"})
+    assert unconfirmed.value.status_code == 403 and str(unconfirmed.value).startswith(PAID_REFUSAL)
+    with pytest.raises(MusicModelError):
+        require_confirmed_paid_music({**SONG, "model": "music-2.6", "paid_music_confirmed": "yes"})
+    assert require_confirmed_paid_music({**SONG, "model": "music-2.6", "paid_music_confirmed": True}) == "music-2.6"
+
+
+def _story_music_client(tmp_path, monkeypatch, started):
+    from routers import story_music
+
+    monkeypatch.setattr(story_music.execution_mode, "validate_remote_provider", lambda *_args: None)
+    app = FastAPI()
+    app.include_router(story_music.create_story_music_router(
+        get_active_workspace=lambda: "default",
+        workspace_dir=lambda *_args: str(tmp_path),
+        story_cover_reference_path=lambda *_args: None,
+        load_minimax_music_job=lambda _job_id: None,
+        persist_minimax_music_job=lambda _job: None,
+        publish_minimax_music_job=lambda _job: None,
+        public_minimax_music_job=lambda job: {key: value for key, value in job.items() if key != "request"},
+        run_minimax_music_job=started.append,
+        minimax_music_jobs={},
+        minimax_music_jobs_lock=threading.RLock(),
+        minimax_music_terminal={"completed", "failed", "cancelled"},
+        finish_unstarted_music_children=lambda *_args, **_kwargs: None,
+        minimax_music_job_update=lambda *_args, **_kwargs: None,
+        wgp_module=SimpleNamespace(server_config={"services": {}}),
+    ))
+    return TestClient(app)
+
+
+def test_the_story_job_endpoint_refuses_unconfirmed_or_missing_models(tmp_path, monkeypatch):
+    started = []
+    client = _story_music_client(tmp_path, monkeypatch, started)
+    body = {**SONG, "workspace": "default"}
+    missing = client.post("/api/v1/stories/music-candidates/jobs", json=body)
+    unconfirmed = client.post("/api/v1/stories/music-candidates/jobs", json={**body, "model": "music-3.0"})
+    assert missing.status_code == 400 and LOCAL in missing.json()["detail"]
+    assert unconfirmed.status_code == 403 and unconfirmed.json()["detail"].startswith(PAID_REFUSAL)
+    assert started == [] and not (tmp_path / "music-submissions").exists()
+    accepted = client.post("/api/v1/stories/music-candidates/jobs", json={
+        **body, "model": "music-3.0", "paid_music_confirmed": True,
+    })
+    assert accepted.status_code == 202 and accepted.json()["model"] == "music-3.0"
+    for _ in range(50):
+        if started:
+            break
+        threading.Event().wait(0.02)
+    assert started == [accepted.json()["jobId"]]
+
+
+def test_the_legacy_sync_endpoint_refuses_before_calling_minimax(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(minimax_music_service, "generate_candidates", lambda **kwargs: calls.append(kwargs) or [])
+    client = _story_music_client(tmp_path, monkeypatch, [])
+    refused = client.post("/api/v1/stories/music-candidates", json={**SONG, "model": "music-2.6"})
+    assert refused.status_code == 403 and "Paid MiniMax music is disabled (music-2.6)" in refused.json()["detail"]
+    assert calls == []
+
+
+def test_the_core_endpoint_refuses_an_unconfirmed_paid_model(monkeypatch):
+    from services import execution_mode
+
+    monkeypatch.setattr(execution_mode, "validate_remote_provider", lambda *_args: None)
+    with pytest.raises(HTTPException) as refused:
+        core_remote_music._validated_request({**SONG, "model": "music-3.0"}, "default")
+    assert refused.value.status_code == 403 and refused.value.detail.startswith(PAID_REFUSAL)
+    confirmed = core_remote_music._validated_request({**SONG, "model": "music-3.0", "paid_music_confirmed": True}, "default")
+    assert confirmed["model"] == "music-3.0"
+
+
+# -- agents, MCP and production.* get a clear refusal -------------------------------------------
+
+def test_mcp_generate_refuses_a_paid_music_model_without_calling_the_handler(tmp_path):
+    from routers.wangp_mcp import create_wangp_mcp_router
+
+    calls = []
+    app = FastAPI()
+    app.include_router(create_wangp_mcp_router(
+        handlers={"generate": lambda request: calls.append(request) or {"job_id": "x"}},
+        journal_path=tmp_path / "requests.db", token_getter=lambda: "test-token"))
+    with TestClient(app) as client:
+        answer = client.post("/api/v1/mcp", headers={"Authorization": "Bearer test-token"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "generate", "arguments": {
+                "request_id": "paid-1", "params": {"generation_mode": "audio", "model_type": "music-3.0", "prompt": "x"}}}}).json()
+    assert answer["result"]["isError"] is True
+    assert answer["result"]["content"][0]["text"].startswith(PAID_REFUSAL)
+    assert calls == []
+
+
+def test_the_studio_music_command_names_the_local_models():
+    command = {"version": 2, "operation": "generation.music", "intent_id": "paid-music", "input": {
+        "workspace": "music-test", "params": {
+            "model_type": "music-3.0", "prompt": "[Verse]\nA line", "alt_prompt": "warm acoustic pop",
+            "generation_mode": "audio", "image_mode": 0, "video_length": 0, "_audio_sub_mode": "music"}}}
+    with pytest.raises(StudioMusicSpecError) as refused:
+        freeze_studio_music_spec(command)
+    assert "Paid MiniMax music is disabled (music-3.0)" in str(refused.value)
+
+
+def test_a_production_spec_with_a_paid_song_model_is_refused():
+    spec = {"title": "t", "song": {"lyrics": "a\nb", "caption": "pop", "duration": 30, "bpm": 120, "model": "music-3.0"},
+            "style": {}, "shots": [{"key": "intro", "kind": "still", "t0": 0, "still": "k"}]}
+    with pytest.raises(ProductionError) as refused:
+        validate_spec(spec)
+    assert refused.value.code == "invalid_spec" and str(refused.value).startswith(PAID_REFUSAL)
+    spec["song"]["model"] = "minimax_music3"
+    assert validate_spec(spec)["song"]["model"] == "minimax_music3"
+
+
+def test_media_options_lists_local_music_and_no_paid_music():
+    models = [
+        {"model_type": LOCAL, "name": "ACE-Step 1.5 XL", "is_downloaded": True, "resource_requirements": {"vram_gb": 12}},
+        {"model_type": "minimax_music3", "name": "MiniMax Music 3", "is_downloaded": False},
+        {"model_type": "yue2", "name": "YuE 2", "is_downloaded": True},
+        {"model_type": "heartmula_oss_3b", "name": "HeartMuLa", "is_downloaded": True},
+    ]
+    result = media_options.build(models, {"minimax_music_api_key_set": True}, {"configured": False, "profile": {}})
+    assert result["local"]["music"] == [
+        {"id": LOCAL, "name": "ACE-Step 1.5 XL", "vram_gb": 12, "default": True},
+        {"id": "yue2", "name": "YuE 2"},
+    ]
+    assert "music" not in result["cloud"]
+    assert "music-3.0" not in json.dumps(result) and "Music is local only" in result["guidance"]
+    handler = media_options.command_handlers(lambda: (models, {}, {"configured": False, "profile": {}}))["media.options"]
+    assert asyncio.run(handler({"version": 1}))["result"]["local"]["music"][0]["id"] == LOCAL

@@ -290,6 +290,12 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
+      "file": "tests/test_no_paid_music_defaults.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
+    },
+    {
       "file": "tests/test_output_completion_time.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",

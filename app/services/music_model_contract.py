@@ -18,7 +18,15 @@ SCHEMA_NAME = "hocuspocus.music-generation-spec"
 ACE_DEFAULT = "ace_step_v1_5_xl_sft_lm_4b"
 MUSIC3_LOCAL = "minimax_music3"
 YUE2_LOCAL = "yue2"
-REMOTE_DEFAULT = "music-3.0"
+# Every music default is local and free: the same model Studio, Director and
+# production.* use. The paid MiniMax API is never a default.
+DEFAULT_MUSIC_MODEL = ACE_DEFAULT
+LOCAL_STORY_MUSIC_MODELS = (ACE_DEFAULT, MUSIC3_LOCAL)
+# Every MiniMax API music id costs money: the two the Story Lab offers and
+# the free-tier and cover variants the provider also accepts.
+PAID_MINIMAX_MUSIC_MODELS = frozenset(ALLOWED_MODELS)
+# A person confirms the cost in Story Lab; the browser then sends this field.
+PAID_MUSIC_CONFIRMATION = "paid_music_confirmed"
 
 ACE_PROMPT_LIMIT = 8000
 ACE_LYRICS_LIMIT = 8000
@@ -165,6 +173,48 @@ def catalog_entry(model: str | None) -> dict[str, Any] | None:
     if token.startswith("ace_step") or token == "ace-step":
         return _ace_profile(ACE_DEFAULT if token == "ace-step" else token)
     return None
+
+
+def is_paid_music_model(model: Any) -> bool:
+    return _clean(model) in PAID_MINIMAX_MUSIC_MODELS
+
+
+def paid_music_disabled_message(model: Any = None) -> str:
+    asked = _clean(model)
+    return (
+        f"Paid MiniMax music is disabled{f' ({asked})' if asked else ''}; "
+        f"use a local model: {', '.join(LOCAL_STORY_MUSIC_MODELS)}. "
+        "The MiniMax API runs only when a person picks it in Story Lab and confirms the cost."
+    )
+
+
+def reject_paid_music_model(model: Any) -> None:
+    """Agents, MCP and production.* never reach the MiniMax API: refuse before any call."""
+    if is_paid_music_model(model):
+        raise MusicModelError(
+            paid_music_disabled_message(model), 403,
+            {"model": _clean(model), "local_models": list(LOCAL_STORY_MUSIC_MODELS)},
+        )
+
+
+def require_confirmed_paid_music(request: Mapping[str, Any]) -> str:
+    """The MiniMax model a person picked and confirmed in Story Lab, else a refusal.
+
+    A request with no model is not a choice: music defaults to the local model,
+    which a MiniMax endpoint does not run.
+    """
+    model = _clean(request.get("model"))
+    if not model:
+        raise MusicModelError(
+            f"No music model was chosen. Music defaults to the local {DEFAULT_MUSIC_MODEL}; "
+            "this MiniMax API endpoint never picks a paid model by itself.",
+            details={"local_models": list(LOCAL_STORY_MUSIC_MODELS)},
+        )
+    if model not in PAID_MINIMAX_MUSIC_MODELS:
+        raise MusicModelError(f"Unsupported MiniMax Music model: {model}")
+    if request.get(PAID_MUSIC_CONFIRMATION) is not True:
+        reject_paid_music_model(model)
+    return model
 
 
 def require_catalog_entry(model: str | None) -> dict[str, Any]:
@@ -358,7 +408,7 @@ def _protected_segments(request: Mapping[str, Any]) -> Sequence[Mapping[str, Any
 def freeze_music_spec(request: Mapping[str, Any]) -> dict[str, Any]:
     """Durable spec. Local captions are not sliced to the remote 300-char cap."""
     provenance = request.get("provenance") if isinstance(request.get("provenance"), Mapping) else {}
-    model = _clean(request.get("model")) or REMOTE_DEFAULT
+    model = _clean(request.get("model")) or DEFAULT_MUSIC_MODEL
     entry = require_catalog_entry(model)
     caption = _clean(request.get("prompt") or request.get("caption"))
     lyrics = str(request.get("lyrics") or "").strip()
