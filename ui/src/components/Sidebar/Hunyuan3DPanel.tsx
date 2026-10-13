@@ -325,7 +325,7 @@ export function Hunyuan3DPanel() {
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><Box size={15} className="text-accent-blue" /> {remote3d ? (model3dProvider === 'meshy' ? t('hunyuan.titleMeshy') : t('hunyuan.titleHi3d')) : t('hunyuan.title')}</div>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><Box size={15} className="text-accent-blue" /> {remote3d ? (model3dProvider === 'meshy' ? t('hunyuan.titleMeshy') : t('hunyuan.titleHi3d')) : external3d ? selectedModel?.label : t('hunyuan.title')}</div>
           <p className="text-[10px] text-text-muted mt-1">{remote3d ? t('hunyuan.subtitleRemote') : t('hunyuan.subtitle')}</p>
         </div>
         <div className="flex items-center gap-1 text-[9px] text-accent-green bg-accent-green/10 border border-accent-green/20 rounded-full px-2 py-1 whitespace-nowrap"><Cpu size={10} /> {t('hunyuan.vramBadge')}</div>

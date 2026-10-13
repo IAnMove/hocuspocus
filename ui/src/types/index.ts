@@ -63,6 +63,9 @@ export interface ModelDef {
   supports_ref_images?: boolean
   director?: DirectorModelCompatibility
   is_downloaded?: boolean
+  official?: boolean
+  optional?: boolean
+  runtime?: { installed: boolean; compatible?: boolean; install_hint?: string | null }
   // True when this model is only available with Mature Mode enabled.
   // Backend always returns the entry; UI filters it out when
   // servicesConfig.nsfw_mode is false. When nsfw_mode flips on, the

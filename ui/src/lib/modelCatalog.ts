@@ -90,7 +90,7 @@ const VARIANT_TOKENS: Array<[ModelVariant, string[]]> = [
 ]
 
 const EXACT_REQUIREMENTS: Record<string, CatalogRequirements> = {
-  trellis2: { vram_gb: 24, ram_gb: 32 },
+  trellis2: { vram_gb: 24, ram_gb: 32, storage_gb: 40 },
   pixal3d: { vram_gb: 12, ram_gb: 16 },
   unirig: { vram_gb: 8, ram_gb: 16 },
   'hunyuan3d-2.1': { vram_gb: 10, ram_gb: 16 },

@@ -208,6 +208,7 @@ function ModelVisibilitySection() {
     model_type: string
     name: string
     is_downloaded?: boolean
+    runtime?: { installed: boolean; compatible?: boolean; install_hint?: string | null }
     architecture?: string
     family?: string
     description?: string
@@ -235,6 +236,7 @@ function ModelVisibilitySection() {
             model_type: m.model_type,
             name: m.name,
             is_downloaded: m.is_downloaded,
+            runtime: m.runtime,
             architecture: m.architecture,
             family: m.family,
             description: m.description,
@@ -398,15 +400,16 @@ function ModelVisibilitySection() {
                             <Download size={10} className="text-text-muted shrink-0" />
                           ) : (
                             <button
+                              disabled={m.model_type === 'trellis2' && (!m.runtime?.installed || m.runtime?.compatible === false)}
                               onClick={e => { e.preventDefault(); e.stopPropagation(); handleDownload(m.model_type) }}
                               className={`p-0.5 -m-0.5 rounded transition-colors shrink-0 ${
                                 downloadErrors[m.model_type]
                                   ? 'text-red-400 hover:text-red-300'
                                   : 'text-text-muted hover:text-accent-blue'
                               }`}
-                              title={downloadErrors[m.model_type]
+                              title={m.runtime?.install_hint || (downloadErrors[m.model_type]
                                 ? `Download failed: ${downloadErrors[m.model_type]} — click to retry`
-                                : 'Download model files now'}
+                                : 'Download model files now')}
                             >
                               <Download size={10} />
                             </button>

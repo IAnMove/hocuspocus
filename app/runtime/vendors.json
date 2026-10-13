@@ -49,5 +49,67 @@
       "launch/inference/generate_skin.sh",
       "launch/inference/merge.sh"
     ]
+  },
+  "trellis2": {
+    "url": "https://github.com/microsoft/TRELLIS.2",
+    "path": "app/services/model3d_runtimes/trellis2/vendor/TRELLIS.2",
+    "revision": "75fbf0183001ed9876c8dbb35de6b68552ee08bd",
+    "marker": "app/services/model3d_runtimes/trellis2/env/.trellis2-75fbf0183001ed9876c8dbb35de6b68552ee08bd.installed",
+    "requiredPaths": [
+      "trellis2/pipelines",
+      "o-voxel/setup.py"
+    ],
+    "recursive": true
+  },
+  "trellis2_cumesh": {
+    "url": "https://github.com/JeffreyXiang/CuMesh",
+    "path": "app/services/model3d_runtimes/trellis2/vendor/CuMesh",
+    "revision": "12289e1062f0603f2f0d0771b02e1395d247f26f",
+    "marker": "app/services/model3d_runtimes/trellis2/env/.trellis2_cumesh-12289e1062f0603f2f0d0771b02e1395d247f26f.installed",
+    "requiredPaths": [
+      "setup.py"
+    ],
+    "recursive": true
+  },
+  "trellis2_flexgemm": {
+    "url": "https://github.com/JeffreyXiang/FlexGEMM",
+    "path": "app/services/model3d_runtimes/trellis2/vendor/FlexGEMM",
+    "revision": "6dd94a859c26ee8246888502eada3dd8ad85532e",
+    "marker": "app/services/model3d_runtimes/trellis2/env/.trellis2_flexgemm-6dd94a859c26ee8246888502eada3dd8ad85532e.installed",
+    "requiredPaths": [
+      "setup.py"
+    ],
+    "recursive": true
+  },
+  "trellis2_nvdiffrast": {
+    "url": "https://github.com/NVlabs/nvdiffrast",
+    "path": "app/services/model3d_runtimes/trellis2/vendor/nvdiffrast",
+    "revision": "253ac4fcea7de5f396371124af597e6cc957bfae",
+    "marker": "app/services/model3d_runtimes/trellis2/env/.trellis2_nvdiffrast-253ac4fcea7de5f396371124af597e6cc957bfae.installed",
+    "requiredPaths": [
+      "setup.py"
+    ],
+    "recursive": true
+  },
+  "trellis2_nvdiffrec": {
+    "url": "https://github.com/JeffreyXiang/nvdiffrec",
+    "path": "app/services/model3d_runtimes/trellis2/vendor/nvdiffrec",
+    "revision": "b296927cc7fd01c2ac1087c8065c4d7248f72da4",
+    "marker": "app/services/model3d_runtimes/trellis2/env/.trellis2_nvdiffrec-b296927cc7fd01c2ac1087c8065c4d7248f72da4.installed",
+    "requiredPaths": [
+      "setup.py"
+    ],
+    "recursive": true
+  },
+  "trellis2_utils3d": {
+    "url": "https://github.com/EasternJournalist/utils3d",
+    "path": "app/services/model3d_runtimes/trellis2/vendor/utils3d",
+    "revision": "9a4eb15e4021b67b12c460c7057d642626897ec8",
+    "marker": "app/services/model3d_runtimes/trellis2/env/.trellis2_utils3d-9a4eb15e4021b67b12c460c7057d642626897ec8.installed",
+    "requiredPaths": [
+      "pyproject.toml",
+      "utils3d"
+    ],
+    "recursive": true
   }
 }

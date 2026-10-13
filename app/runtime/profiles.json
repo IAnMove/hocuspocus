@@ -19,6 +19,9 @@
     "13.0": {
       "linux": "580.0",
       "win32": "580.0"
+    },
+    "12.4": {
+      "linux": "550.54.14"
     }
   },
   "driverRecommended": {
@@ -29,6 +32,9 @@
     "13.0": {
       "linux": "580.65.06",
       "win32": "580.88"
+    },
+    "12.4": {
+      "linux": "550.54.14"
     }
   },
   "engines": {
@@ -110,8 +116,14 @@
           "triton-windows==3.3.1.post19",
           "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows/sageattention-2.2.0+cu128torch2.7.1-cp310-cp310-win_amd64.whl"
         ],
-        "excludedPackages": ["torchcodec", "flash-attn"],
-        "verificationImports": ["xformers.ops", "diffusers.models.transformers.pixart_transformer_2d"]
+        "excludedPackages": [
+          "torchcodec",
+          "flash-attn"
+        ],
+        "verificationImports": [
+          "xformers.ops",
+          "diffusers.models.transformers.pixart_transformer_2d"
+        ]
       },
       "defaultInstall": true,
       "acceleratorPackages": [
@@ -236,11 +248,66 @@
         "flash-attn": "2.7.4.post1",
         "bpy": "4.2.22"
       },
-      "verificationImports": ["bpy", "flash_attn", "torch_scatter", "torch_cluster", "spconv.pytorch"],
+      "verificationImports": [
+        "bpy",
+        "flash_attn",
+        "torch_scatter",
+        "torch_cluster",
+        "spconv.pytorch"
+      ],
       "vendors": [
         "unirig"
       ],
       "defaultInstall": false
+    },
+    "trellis2": {
+      "label": "TRELLIS.2 (official Microsoft 4B)",
+      "installStepsVersion": 1,
+      "env": "app/services/model3d_runtimes/trellis2/env",
+      "environment": "conda",
+      "python": "3.10",
+      "required": false,
+      "platforms": [
+        "linux"
+      ],
+      "unsupportedReason": "TRELLIS.2 is optional and supports Linux x64 with NVIDIA 24GB only.",
+      "cuda": "12.4",
+      "torch": "2.6.0",
+      "torchvision": "0.21.0",
+      "requirements": "app/services/trellis2/requirements.txt",
+      "constraints": {
+        "numpy": "1.26.4",
+        "transformers": "4.57.1",
+        "huggingface-hub": "0.36.0",
+        "pillow": "11.3.0",
+        "opencv-python-headless": "4.11.0.86",
+        "timm": "1.0.22",
+        "kornia": "0.8.2"
+      },
+      "vendors": [
+        "trellis2",
+        "trellis2_cumesh",
+        "trellis2_flexgemm",
+        "trellis2_nvdiffrast",
+        "trellis2_nvdiffrec",
+        "trellis2_utils3d"
+      ],
+      "verificationImports": [
+        "flash_attn",
+        "cumesh",
+        "flex_gemm",
+        "o_voxel",
+        "nvdiffrast.torch",
+        "nvdiffrec_render",
+        "utils3d",
+        "trellis2.pipelines"
+      ],
+      "defaultInstall": false,
+      "minimumVramMiB": 24064,
+      "computeCapabilityRange": [
+        8,
+        10
+      ]
     }
   }
 }
