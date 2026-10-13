@@ -58,6 +58,8 @@ BACKEND_SCOPE_FILES = (
     "app/_launch_runtime.py",
     "tests/fixtures/route_table.json",
 )
+# The request media resolver moved into the kernel; launch keeps its name as an alias.
+KERNEL_MEDIA_RESOLVER_FILE = "app/services/kernel/paths.py"
 LIMITATIONS = [
     "The graph is restricted to the configured Story Lab to Director audio scope.",
     "Python edges use AST names and do not resolve dynamic imports or runtime dispatch.",
@@ -179,6 +181,26 @@ def _required_paths(root: Path, paths: Iterable[str]) -> list[Path]:
     return resolved
 
 
+def _backend_paths(root: Path) -> list[Path]:
+    """The required backend sources, plus the kernel's media resolver when the tree has it."""
+    kernel = root / KERNEL_MEDIA_RESOLVER_FILE
+    return [*_required_paths(root, BACKEND_SCOPE_FILES), *([kernel] if kernel.is_file() else [])]
+
+
+def _media_resolver(root: Path, launch_path: Path, functions: dict[str, ast.AST]) -> tuple[ast.AST | None, Path]:
+    """Launch's own resolver definition, else the kernel's ``resolve_request_media_path``."""
+    if "_resolve_request_media_path" in functions:
+        return functions["_resolve_request_media_path"], launch_path
+    kernel = root / KERNEL_MEDIA_RESOLVER_FILE
+    if not kernel.is_file():
+        return None, kernel
+    try:
+        tree = ast.parse(kernel.read_text(encoding="utf-8"), filename=str(kernel))
+    except (OSError, SyntaxError) as exc:
+        raise ArchitectureGraphError(f"Cannot parse {KERNEL_MEDIA_RESOLVER_FILE}: {exc}") from exc
+    return _function_map(tree).get("resolve_request_media_path"), kernel
+
+
 def _load_routes(root: Path) -> dict[str, dict[str, Any]]:
     path = root / "tests/fixtures/route_table.json"
     try:
@@ -252,7 +274,7 @@ def _backend_detail(target: str) -> tuple[str, str]:
 
 def extract_backend_graph(root: Path) -> dict[str, Any]:
     """Extract the Python route/service fragment without invoking Node."""
-    source_paths = _required_paths(root, BACKEND_SCOPE_FILES)
+    source_paths = _backend_paths(root)
     launch_path = root / "app/_launch_runtime.py"
     try:
         tree = ast.parse(launch_path.read_text(encoding="utf-8"), filename=str(launch_path))
@@ -294,7 +316,7 @@ def extract_backend_graph(root: Path) -> dict[str, Any]:
                 evidence=[_evidence(root, launch_path, item)],
             )
 
-    wrapper = functions.get("_resolve_request_media_path")
+    wrapper, wrapper_path = _media_resolver(root, launch_path, functions)
     wrapper_is_referenced = any(
         edge["target"] == "svc.resolve_request_path"
         for edge in builder.edges.values()
@@ -311,13 +333,13 @@ def extract_backend_graph(root: Path) -> dict[str, Any]:
                     "service",
                     label,
                     detail,
-                    [_evidence(root, launch_path, item)],
+                    [_evidence(root, wrapper_path, item)],
                 )
                 builder.add_edge(
                     "svc.resolve_request_path",
                     target,
                     "call",
-                    evidence=[_evidence(root, launch_path, item)],
+                    evidence=[_evidence(root, wrapper_path, item)],
                 )
 
     nodes, edges = builder.records()
@@ -332,7 +354,7 @@ def extract_backend_graph(root: Path) -> dict[str, Any]:
 
 
 def _scoped_paths(root: Path) -> list[Path]:
-    return _required_paths(root, (*BACKEND_SCOPE_FILES, *TS_SCOPE_FILES))
+    return [*_backend_paths(root), *_required_paths(root, TS_SCOPE_FILES)]
 
 
 def _source_hash(root: Path, paths: Iterable[Path]) -> str:
@@ -450,7 +472,7 @@ def build_graph(root: Path, *, backend_only: bool = False) -> dict[str, Any]:
     root = root.resolve()
     backend = extract_backend_graph(root)
     paths = (
-        _required_paths(root, BACKEND_SCOPE_FILES)
+        _backend_paths(root)
         if backend_only
         else _scoped_paths(root)
     )
