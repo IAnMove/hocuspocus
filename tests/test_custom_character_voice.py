@@ -2,11 +2,13 @@ import ast
 import asyncio
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
 from fastapi import HTTPException
 
+from services.kernel.paths import PathPolicy
 from app.services.character_kit_library import patch_character_kit, read_character_kit_library
 from app.services.character_speech_definition import normalize_character_voice
 from app.services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
@@ -134,7 +136,7 @@ def test_audio_adopt_endpoint_uses_source_workspace_and_new_canonical_resolver(m
     launch = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
     parsed = ast.parse(launch.read_text(encoding="utf-8"))
     selected = [node for node in parsed.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name in {"_resolve_request_media_path", "adopt_audio"}]
+                and node.name in {"adopt_audio"}]
     for node in selected:
         node.decorator_list = []
     seen_workspaces = []
@@ -143,8 +145,9 @@ def test_audio_adopt_endpoint_uses_source_workspace_and_new_canonical_resolver(m
         seen_workspaces.append(name)
         return str(workspace)
 
+    paths = PathPolicy(SimpleNamespace(workspace_dir=workspace_dir, active=lambda: "destination"))
     namespace = {"os": os, "quote": quote, "Request": object, "HTTPException": HTTPException,
-                 "resolve_permitted_media_path": resolve_permitted_media_path, "MediaPathNotAllowed": MediaPathNotAllowed,
+                 "_resolve_request_media_path": paths.resolve_request_media_path,
                  "_workspace_dir": workspace_dir, "_get_active_workspace": lambda: "destination",
                  "_probe_audio_duration": lambda _: 5}
     exec(compile(ast.Module(body=selected, type_ignores=[]), str(launch), "exec"), namespace)

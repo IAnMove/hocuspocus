@@ -4,6 +4,14 @@ from __future__ import annotations
 import asyncio
 import os
 
+from fastapi import HTTPException
+
+from services.kernel.workspaces import WorkspaceService
+from services.media_paths import (
+    MediaPathNotAllowed,
+    resolve_permitted_media_path,
+    resolve_story_cover_audio,
+)
 from services.upload_stream import stream_upload_file, transcode_upload
 
 
@@ -36,7 +44,9 @@ class PathPolicy:
     semaphores is cancellable and never holds a global application lock.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, workspaces: WorkspaceService | None = None) -> None:
+        # Only the two request-media resolvers look a workspace up.
+        self._workspaces = workspaces
         self.ingest_slots = asyncio.Semaphore(4)
         self.transcode_slots = asyncio.Semaphore(2)
 
@@ -68,6 +78,39 @@ class PathPolicy:
         if not resolved or resolved == os.path.realpath(base):
             return None
         return resolved
+
+    def resolve_request_media_path(
+        self,
+        value: str,
+        *,
+        workspace: str | None = None,
+        kinds: tuple[str, ...] = ("audio", "video"),
+    ) -> str:
+        """Resolve request media without exposing host paths in API errors."""
+        try:
+            return resolve_permitted_media_path(
+                value,
+                uploads_root=os.path.join(os.getcwd(), "uploads"),
+                workspace_root=self._workspaces.workspace_dir(workspace),
+                kinds=kinds,
+                workspace_name=workspace or self._workspaces.active(),
+            )
+        except MediaPathNotAllowed:
+            raise HTTPException(status_code=400, detail="Media path is not allowed") from None
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Media file not found") from None
+
+    def story_cover_reference_path(self, filename: str, workspace: str) -> str | None:
+        """Resolve a cover reference from uploads/audio or the active workspace."""
+        try:
+            return resolve_story_cover_audio(
+                filename,
+                uploads_audio_root=os.path.join(os.getcwd(), "uploads", "audio"),
+                uploads_root=os.path.join(os.getcwd(), "uploads"),
+                workspace_root=self._workspaces.workspace_dir(workspace),
+            )
+        except (MediaPathNotAllowed, FileNotFoundError, ValueError):
+            return None
 
     async def stream_upload(self, upload, destination: str, *, max_bytes: int) -> int:
         async with self.ingest_slots:

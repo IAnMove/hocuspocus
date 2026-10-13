@@ -123,20 +123,17 @@ from services.generation import bind_wgp, get_model_def
 bind_wgp(wgp)
 from services.kernel.config import ConfigStore
 from services.kernel.paths import PathPolicy
+from services.kernel.workspaces import WorkspaceService
 _config = ConfigStore()
-_paths = PathPolicy()
+_workspaces = WorkspaceService(_config)
+_paths = PathPolicy(_workspaces)
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import tools_upscale as tools_upscale_service
 from services import debug_trace
 from routers.lan_auth import create_lan_auth_router
 from services.durable_generation_queue import DurableGenerationQueue
 from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
-from services.media_paths import (
-    MediaPathNotAllowed,
-    resolve_permitted_media_path,
-    resolve_story_cover_audio,
-    resolve_voice_ref_paths,
-)
+from services.media_paths import resolve_voice_ref_paths
 from services.upload_stream import (
     UploadTooLargeError,
     UploadTranscodeError,
@@ -960,115 +957,13 @@ def _interrupt_wan_model() -> None:
         model._interrupt = True
 
 # --- Workspace support ---
-# Base path read from wgp.server_config["save_path"] wherever needed
-
-
-def _get_active_workspace() -> str:
-    """Get current workspace name from server config."""
-    return wgp.server_config.get("services", {}).get("active_workspace", "default")
-
-
-def _workspace_dir(workspace: str = None) -> str:
-    """Return a contained output directory for one validated workspace."""
-    ws = _get_active_workspace() if workspace is None else workspace
-    if not isinstance(ws, str) or not re.fullmatch(
-        r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", ws
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Invalid workspace name. Use letters, numbers, hyphens, "
-                "underscores, without spaces or path separators."
-            ),
-        )
-
-    # Always read base from config, never from wgp.save_path (which may already include workspace)
-    base = os.path.realpath(os.path.abspath(
-        wgp.server_config.get("save_path", "outputs")
-    ))
-    ws_dir = base if ws == "default" else os.path.realpath(os.path.join(base, ws))
-    try:
-        contained = os.path.commonpath((base, ws_dir)) == base
-    except (TypeError, ValueError):
-        contained = False
-    if not contained:
-        raise HTTPException(status_code=400, detail="Invalid workspace path.")
-    if ws != "default":
-        os.makedirs(ws_dir, exist_ok=True)
-    return ws_dir
-
-
-def _resolve_request_media_path(
-    value: str,
-    *,
-    workspace: str | None = None,
-    kinds: tuple[str, ...] = ("audio", "video"),
-) -> str:
-    """Resolve request media without exposing host paths in API errors."""
-    try:
-        return resolve_permitted_media_path(
-            value,
-            uploads_root=os.path.join(os.getcwd(), "uploads"),
-            workspace_root=_workspace_dir(workspace),
-            kinds=kinds,
-            workspace_name=workspace or _get_active_workspace(),
-        )
-    except MediaPathNotAllowed:
-        raise HTTPException(status_code=400, detail="Media path is not allowed") from None
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Media file not found") from None
-
-
-def _story_cover_reference_path(filename: str, workspace: str) -> str | None:
-    """Resolve a cover reference from uploads/audio or the active workspace."""
-    try:
-        return resolve_story_cover_audio(
-            filename,
-            uploads_audio_root=os.path.join(os.getcwd(), "uploads", "audio"),
-            uploads_root=os.path.join(os.getcwd(), "uploads"),
-            workspace_root=_workspace_dir(workspace),
-        )
-    except (MediaPathNotAllowed, FileNotFoundError, ValueError):
-        return None
-
-
-def _workspace_file_count(path: str) -> int:
-    """Non-hidden files directly inside a workspace folder (for delete
-    confirms). scandir answers is_file() from the enumeration data on
-    Windows — no per-entry stat syscall."""
-    try:
-        with os.scandir(path) as entries:
-            return sum(1 for e in entries if not e.name.startswith(".") and e.is_file())
-    except OSError:
-        return 0
-
-
-def _list_workspaces() -> list[dict]:
-    """List all workspaces (subdirectories of the base output path + default)."""
-    base = wgp.server_config.get("save_path", "outputs")
-    workspaces = [{"name": "default", "path": base, "file_count": _workspace_file_count(base)}]
-    if os.path.isdir(base):
-        for name in sorted(os.listdir(base)):
-            full = os.path.join(base, name)
-            if os.path.isdir(full) and not name.startswith(("_", ".")):
-                workspaces.append({"name": name, "path": full, "file_count": _workspace_file_count(full)})
-    return workspaces
-
-
-def _persist_active_workspace(name: str, apply_save_paths: bool = True) -> str:
-    """Write services.active_workspace to config and (optionally) point
-    wgp's save paths at it. Pass apply_save_paths=False while a generation
-    is running — the in-flight job has locked wgp.save_path to its target
-    and the new value takes effect on the next job / restart."""
-    services = wgp.server_config.setdefault("services", {})
-    services["active_workspace"] = name
-    wgp.server_config["services"] = services
-    _save_server_config()
-    ws_dir = _workspace_dir(name)
-    if apply_save_paths:
-        wgp.save_path = ws_dir
-        wgp.image_save_path = ws_dir
-    return ws_dir
+# Base path read from wgp.server_config["save_path"] wherever needed (services/kernel/workspaces.py)
+_get_active_workspace = _workspaces.active
+_workspace_dir = _workspaces.workspace_dir
+_resolve_request_media_path = _paths.resolve_request_media_path
+_story_cover_reference_path = _paths.story_cover_reference_path
+_list_workspaces = _workspaces.list
+_persist_active_workspace = _workspaces.persist_active
 
 # --- Director pipeline (lazy init after _run_generation is defined) ---
 _pipeline_initialized = False

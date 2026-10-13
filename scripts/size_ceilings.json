@@ -2,7 +2,7 @@
   "version": 1,
   "note": "Line ceilings that only go down (scripts/size_ceilings.py). Nothing recomputes them: a PR that shrinks a file runs `python scripts/size_ceilings.py --lower`, and a PR behind development merges it and runs --lower again.",
   "ceilings": {
-    "app/_launch_runtime.py": 35407,
+    "app/_launch_runtime.py": 35235,
     "app/core_runtime.py": 632,
     "ui/src/stores/useStore.ts": 10099
   }
