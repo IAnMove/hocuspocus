@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from routers.image_generation_commands import create_image_generation_commands_router, image_command_handlers
-from routers.tools_upscale_commands import tools_upscale_command_catalog
+from services.tools_upscale_commands import tools_upscale_command_catalog
 from services.native_generation_operation import NativeGenerationOperation
 from services.tools_upscale import TOOL_UPSCALE_METHODS
 from services.tools_upscale_spec import freeze_tools_upscale_spec

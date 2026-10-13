@@ -57,3 +57,12 @@ def test_settings_reads(server, golden) -> None:
     server.check(golden, "mcp settings", "GET", "/api/v1/settings/mcp")
     server.check(golden, "llm status", "GET", "/api/v1/llm/status")
     server.check(golden, "lan auth status", "GET", "/api/v1/auth/lan/status")
+
+
+def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
+    """The full server's MCP routes before this step's router edit. Access is off, so POST never reaches a tool."""
+    message = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+    server.check(golden, "mcp post disabled", "POST", "/api/v1/mcp", json=message)
+    server.check(golden, "mcp alias post disabled", "POST", "/api/v1/wangp/mcp", json=message)
+    server.check(golden, "mcp get", "GET", "/api/v1/mcp")
+    server.check(golden, "mcp alias get", "GET", "/api/v1/wangp/mcp")

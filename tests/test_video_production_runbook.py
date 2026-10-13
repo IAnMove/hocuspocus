@@ -49,7 +49,7 @@ def _operation_names(group) -> set[str]:
 
 def _catalog_groups() -> list:
     from routers.image_generation_commands import image_command_catalog
-    from routers.studio_music_commands import music_command_catalog
+    from services.studio_music_commands import music_command_catalog
     from services.montage_commands import command_catalog as montages
     from services.music_production import command_catalog as production
     from services.production_work_commands import command_catalog as works

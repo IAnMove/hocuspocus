@@ -16,7 +16,7 @@ import os
 import shutil
 from typing import Any, Callable
 
-from services import core_editor, core_workspace as core
+from services import core_workspace as core
 from services.mix_concat import (
     _run_ffmpeg_command,
     build_hard_concat_filter,
@@ -45,7 +45,7 @@ def asset_local_path(workspace: str, asset: dict[str, Any]) -> str:
 
 
 def available_filename(directory: str, name: str) -> str:
-    _filename, destination = core_editor.unique_output_name(directory, name)
+    _filename, destination = core.unique_output_name(directory, name)
     return destination
 
 
