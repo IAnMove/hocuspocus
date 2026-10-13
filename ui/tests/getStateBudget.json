@@ -96,6 +96,5 @@
   "src/lib/openSavedScene.ts": 2,
   "src/lib/sceneOutput.ts": 1,
   "src/lib/sceneRecipeAssets.ts": 1,
-  "src/lib/useViggleGenerationGuard.ts": 1,
-  "src/stores/useStore.ts": 1
+  "src/lib/useViggleGenerationGuard.ts": 1
 }
