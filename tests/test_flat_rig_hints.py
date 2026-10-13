@@ -42,3 +42,11 @@ def test_exact_is_a_boolean_hint_key():
     assert rig_hints({"busto": {"mouth": [40, 20], "exact": True}}) == {"busto": {"mouth": [40.0, 20.0], "exact": True}}
     with pytest.raises(FlatRigError):
         rig_hints({"busto": {"mouth": [40, 20], "exact": "yes"}})
+
+
+def test_blink_is_a_boolean_hint_key_and_survives_a_dropped_mouth():
+    assert rig_hints({"busto": {"blink": False}}) == {"busto": {"blink": False}}
+    with pytest.raises(FlatRigError):
+        rig_hints({"busto": {"blink": "no"}})
+    kept, ignored = flat_rig_hints.trusted({**_hint(175, 245), "blink": False}, SURE, SIZE)
+    assert kept == {"blink": False} and ignored["far"]

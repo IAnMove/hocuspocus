@@ -79,7 +79,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
              "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
-                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"}}}]}},
+                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"},
+                 "blink": {"type": "boolean"}}}]}},
          "poses": {"type": "array", "items": ID, "maxItems": 32}},
         ["workspace", "character_id", "base_revision"], True,
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
@@ -106,7 +107,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "realistic proportions (small eyes in a wide head) is detected and its mouth taken lower down, past eye bags and "
         "spectacles. Closed lids cover each eye's whole white in the face colour under the eyes, or in the shadow's "
         "colour when the eye sits in a flat black shadow. "
-        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w}} in % of that pose image "
+        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w, \"blink\": false}} in % of that pose image "
         "(before cropping; mouthWidth corner to corner in % of its width) search only there; a mouth hint with no mark "
         "there places the mouth at it, nothing wiped (with warp mouths it is a point on the line between the lips). "
         "A mouth hint is followed as given only with exact: true (you looked at the image, as the Face Rig editor does); "
@@ -121,7 +122,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
         "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
-        "is saved with anchors.<pose>.blink false and never blinks.",
+        "is saved with anchors.<pose>.blink false and never blinks; so is one hinted blink: false (clear spectacles, "
+        "whose frames a closed lid would paint over), and like other hints it is kept for later rigs.",
     ),
     "characters.rig.flat.preview": (
         {"workspace": WORKSPACE, "character_id": ID, "pose": ID, "mouth": POINT, "mouthWidth": MOUTH_WIDTH,
