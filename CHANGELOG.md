@@ -29,6 +29,16 @@ sentence, and a sentence about a crowd is now left out. A scene2d shot that draw
 own background from such a look draws it again on its next run (lock the shot to
 keep it).
 
+**Music never uses paid MiniMax by default.** Every music default is now the local,
+free ACE-Step 1.5 XL model, the one Studio and `production.*` already use. The paid
+MiniMax API models (`music-3.0`, `music-2.6` and covers) run only when you pick one
+in Story Lab, where they are labelled "MiniMax API (paid)", and confirm the cost
+before each request. The Wizard, MCP tools, `production.*` specs and the core
+profile no longer offer them and refuse an explicit request with the local model
+IDs to use instead. Stories saved with `music-3.0` as their old default now read as
+the local model and Story Lab tells you so; the file on disk is not rewritten.
+`media.options` lists the installed local music models.
+
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
 that made the result (comic films keep the seed their approved PRE pinned). Every
@@ -104,6 +114,18 @@ run takes the same flag and reports the same warnings, each problem once. The MC
 schema now declares `allow_thin`, and it accepts `allow: ["title_card"]`, which
 the gate already honoured. A dry run names a shot with no key by its place
 (`shots[2]`).
+
+**Series video resolution can be chosen, 480p by default.** The H3 clips that a
+Series script asks for were always 480p. Series setup now has a *Script video clip
+resolution* (480p, 540p, 720p or 768p), and each video shot can pick its own size in
+its editor, with `series.shot.update`, or in the script (`resolution`). The
+backend's own default for the Series Lab render is now 480p too, as the setup screen
+already showed (a series that follows the global production profile still takes the
+profile's size), and H3 now keeps a 540p or 768p choice instead of rendering it at
+720p. Shots and takes made before this change keep their digests, so nothing already
+made is generated again. A series on H3 (not H3 Legacy) saved at 540p or 768p now
+renders its new takes at that size; its earlier takes stay 1280x704, and the cut
+scales every clip to the episode frame. Choose 720p to keep the old size.
 
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice

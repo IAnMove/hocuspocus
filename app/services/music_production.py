@@ -83,7 +83,8 @@ SPEC_SCHEMA: dict[str, Any] = {
             "lyrics": {"type": "string", "maxLength": 20000}, "caption": {"type": "string", "maxLength": 2000},
             "duration": {"type": "number", "minimum": 10, "maximum": 300}, "bpm": {"type": "integer", "minimum": 60, "maximum": 200},
             "key": {"type": "string"}, "seeds": {"type": "array", "items": {"type": "integer"}, "maxItems": 6},
-            "model": {"type": "string"}, "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
+            "model": {"type": "string", "description": "local music model: ace_step_v1_5_xl_sft_lm_4b (default), minimax_music3 or yue2; paid MiniMax API music is refused"},
+            "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
             "language": {"type": "string", "description": "sung language (es, en, Spanish, ...). Default: told from the lyrics, else en"}}},
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
@@ -143,8 +144,9 @@ def _require_spec_fields(spec: dict) -> None:
         raise ProductionError("invalid_spec", "spec.song needs lyrics, caption, duration and bpm")
     if not isinstance(spec.get("style"), dict):
         raise ProductionError("invalid_spec", "spec.style must be an object")
-    from services.production_song import require_song_language
+    from services.production_song import require_local_song_model, require_song_language
     require_song_language(song)
+    require_local_song_model(song)
 
 
 def _image_models(spec: dict) -> list:
