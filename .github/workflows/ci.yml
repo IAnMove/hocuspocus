@@ -229,6 +229,11 @@ jobs:
       # instead of one opaque 6-hour job (GitHub's default timeout).
       # Collect all validation results even when the ratchet or an earlier
       # check fails. A failed step still fails this job and CI required.
+      - name: Unreachable UI files
+        # Every ui/src file is reached from a Vite entry or listed with a reason.
+        if: ${{ !cancelled() && steps.ui-deps.outcome == 'success' }}
+        working-directory: ui
+        run: npm run unreachable:check
       - name: UI tests
         if: ${{ !cancelled() && steps.ui-deps.outcome == 'success' }}
         working-directory: ui

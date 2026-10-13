@@ -248,12 +248,6 @@
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
-      "file": "tests/test_media_refs.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
       "file": "tests/test_minimax_h3.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -354,6 +348,12 @@
       "target": "ui/src/stores/useStore.ts",
       "classification": "fragile_source",
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
+    },
+    {
+      "file": "tests/test_router_wiring.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
       "file": "tests/test_scail2_dedicated_model.py",

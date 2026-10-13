@@ -217,6 +217,8 @@ def test_an_unknown_camera_is_refused_before_any_gpu_work():
     assert "camera-pan-right" in problem["hint"]
     with pytest.raises(HTTPException) as refused:
         refuse_thin_plan(spec, None)
-    assert refused.value.status_code == 422 and "unknown_camera (camera-orbit, pan, slow push)" in refused.value.detail["message"]
+    message = refused.value.detail["message"]
+    assert refused.value.status_code == 422 and problem["uses"][1] == {"shot": "c", "camera": "slow push"}
+    assert 'Shot "a" asks for the camera "camera-orbit"; shot "c" asks for the camera "slow push"; shot "fill[0]" asks for the camera "pan"' in message
     fine = {**spec, "shots": spec["shots"][1:2], "fill": []}
     assert not [item for item in blocking_problems(fine) if item["code"] == "unknown_camera"]
