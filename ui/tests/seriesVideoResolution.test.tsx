@@ -40,8 +40,8 @@ test('Series setup shows 480p by default and patches the video shot size apart f
     <SeriesVideoShotResolutionField series={value} t={translate} patch={patch => patches.push(patch)} />
     <SeriesSetupVideoFields series={value} t={translate} patchProvider={() => {}} patchVideo={patch => videoPatches.push(patch)} />
   </>)
-  const shots = within(view.container).getByLabelText(/Video shot resolution/) as HTMLSelectElement
-  const lab = within(view.container).getByLabelText(/^Resolution/) as HTMLSelectElement
+  const shots = within(view.container).getByLabelText(/Script video clip resolution/) as HTMLSelectElement
+  const lab = within(view.container).getByLabelText(/^AI video generation resolution/) as HTMLSelectElement
   assert.equal(shots.value, '480p')
   assert.equal(lab.value, '480p')
   fireEvent.change(shots, { target: { value: '768p' } })

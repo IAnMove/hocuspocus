@@ -24,7 +24,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from services.series_script import CODES, METHODS, EpisodeScript, ScriptError, _cast_entry
+from services.series_render import series_resolution_preset
+from services.series_script import CODES, METHODS, VIDEO_KINDS, EpisodeScript, ScriptError, _cast_entry
 from services.series_shot_plan import language_key
 from services.series_video_foley import VIDEO_METHODS
 
@@ -184,8 +185,18 @@ def merge_changes(current: dict[str, Any], changes: dict[str, Any] | None, appen
         merged[key] = [*(merged.get(key) or []), *copy.deepcopy(items)]
     if "lines" in merged and not merged["lines"]:
         merged.pop("lines")
+    _settle_resolution(merged, changes)
     changed = [key for key in SCRIPT_KEYS if merged.get(key) != current.get(key)]
     return merged, changed
+
+
+def _settle_resolution(merged: dict[str, Any], changes: dict[str, Any]) -> None:
+    """A size names its tier (``720`` is ``720p``, so it is not a change). A shot that becomes 2D or 3D makes no H3
+    clip: its stored size goes with it, unless the edit sends one, which the script check then refuses."""
+    if merged.get("kind") not in VIDEO_KINDS and "resolution" not in changes:
+        merged.pop("resolution", None)
+    elif merged.get("resolution") is not None:
+        merged["resolution"] = series_resolution_preset(merged["resolution"]) or merged["resolution"]
 
 
 class _OneShot(EpisodeScript):

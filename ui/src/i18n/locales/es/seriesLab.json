@@ -309,7 +309,7 @@
     "h3Full": "MiniMax H3 · full",
     "h3Fused": "H3 Fused 4 pasos · experimental",
     "fusedStepsHint": "Fused admite 4–8 pasos. Cuatro es la receta rápida publicada.",
-    "resolution": "Resolución",
+    "resolution": "Resolución de la generación de vídeo con IA",
     "res480": "480p · 864×480 / 480×864",
     "res540": "540p · 960×544 / 544×960",
     "res720": "720p · 1280×704 / 704×1280",
@@ -319,8 +319,8 @@
     "portrait": "Vertical · 9:16 Shorts",
     "steps": "Pasos de inferencia H3",
     "resolutionHint": "Tamaño del render de Series Lab (planos de generación de vídeo con IA): 480p salvo que se elija aquí o lo fije el perfil global que sigue la serie. Un plano puede elegir el suyo.",
-    "videoShotResolution": "Resolución de los planos de vídeo",
-    "videoShotResolutionHint": "Tamaño de los clips H3 que pide el guion (planos de vídeo con petición de vídeo). 480p por defecto; un plano puede elegir el suyo en su editor. Un tamaño nuevo vuelve a generar esos clips la próxima vez que se produzca el episodio."
+    "videoShotResolution": "Resolución de los clips de vídeo del guion",
+    "videoShotResolutionHint": "Tamaño de los clips H3 que pide el guion (planos de vídeo con petición de vídeo), no de los planos de generación de vídeo con IA. 480p por defecto; un plano puede elegir el suyo en su editor. Un tamaño nuevo vuelve a generar esos clips la próxima vez que se produzca el episodio."
   },
   "canon": {
     "tabs": {

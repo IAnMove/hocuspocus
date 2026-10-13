@@ -286,3 +286,16 @@ def test_series_shot_update_sets_a_size_clears_only_the_take_and_null_removes_it
     with pytest.raises(ShotEditError) as raised:
         edit(library(), 2, changes={"resolution": "720p"})
     assert any("resolution is only for kind video or generated" in item for item in raised.value.problems)
+
+
+def test_a_sized_video_shot_can_become_2d_and_a_size_alias_is_no_change():
+    series = library()
+    episode, _shot, _info, _changed = edit(series, 4, changes={"resolution": "720p"})
+    series["episodesById"]["ep2"] = episode
+    _episode, _shot, info, changed = edit(series, 4, changes={"resolution": "1280x704"})
+    assert changed == [] and info["reset"] == [], "720p by another name is the same size"
+    episode, shot, _info, changed = edit(series, 4, changes={"kind": "2d"})
+    assert changed == ["kind", "resolution"] and shot["productionMethod"] == "animation_2d" and shot.get("resolution") is None
+    with pytest.raises(ShotEditError) as raised:
+        edit(series, 4, changes={"kind": "3d", "resolution": "720p"})
+    assert any("resolution is only for kind video or generated" in item for item in raised.value.problems)
