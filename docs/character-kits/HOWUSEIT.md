@@ -278,9 +278,9 @@ character. Each one is a few poses of the same figure joined into a sprite sheet
 
 | group | animations |
 |---|---|
-| Cycles | `walk` (four poses of the gait, side view, looks right), `run` |
-| Gestures | `wave`, `nod`, `shake` (head no), `point` |
-| Anime expressions | `angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`, `tired`, `love`: two poses each, from a hint to the full expression (anger vein, shock lines, sweat drop, hearts) |
+| Cycles (5) | `walk` (four poses of the gait, side view, looks right), `run`, `step` (two poses: the stride and the legs together), `idle` (breathing), `jump` |
+| Gestures (11) | `wave`, `nod`, `shake` (head no), `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm`, `think` |
+| Anime expressions (18) | `angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`, `tired`, `love`, `disgusted`, `bored`, `worried`, `nervous` (nervous laugh), `laughing`, `wink`, `pout`: two poses each, from a hint to the full expression (anger vein, shock lines, sweat drop, hearts) |
 
 How one is made (UI: **Crear**; an agent does the same with MCP):
 
@@ -290,15 +290,28 @@ How one is made (UI: **Crear**; an agent does the same with MCP):
    `POST /api/v1/character-kits/animations/prompt` builds the prompt, negative prompt, screen and resolution.
 2. Each pose is keyed (`studio.key`) as soon as it arrives. A failed pose stops the run and stays on screen; **Reintentar**
    keeps the poses already made, and **Rehacer** under a frame makes only that pose again.
-3. `POST /api/v1/character-kits/animations/sheet` (MCP `characters.animation.sheet`) crops each keyed pose, scales them
-   together (the tallest fills 86 % of a cell, so a crouch stays lower than a stand), stands them on one line (96 % of the
+3. `POST /api/v1/character-kits/animations/sheet` (MCP `characters.animation.sheet`) crops each keyed pose, scales them so
+   the figure keeps its size (`scaleBy`, below), stands them on one line (96 % of the
    cell) and centres their upper body (the mean of the top 55 % of the pose, so swinging legs and arms do not move the
    torso). It writes `<kit>-<animation>-sheet-<8hex>.png` and never overwrites one.
 4. The animation joins the kit as `reviewState: pending`. Play it (the player uses the card's own frame rule), then
    approve or reject it. **Approve** is a human decision: nothing approves itself.
 
+`scaleBy` keeps the figure one size from pose to pose, because the model draws every pose at a slightly different size and frames it a
+little differently (up to 6 % between the cells of one wave, and 30 % in the head of one pair of busts, where the second pose showed
+more of the body):
+- `height` (cycles): all poses share one scale, the tallest fills 86 % of a cell, so a crouch stays lower than a stand.
+- `base` (a whole figure making a gesture): each pose is scaled so its legs, the bottom 20 % of the picture, are as wide as in the
+  others. A raised hand only makes a figure taller, and arms hanging beside the coat make the rest of the body wider than with the
+  arms up (scaling by the whole lower body made the figure 20 % smaller in the cheer pose with its arms down), but the legs do not move.
+- `face` (a bust): each pose is scaled so its head is as big as in the others. The head is read with the face landmarks of the flat rig
+  (DWPose, on the CPU); when no face is found in some pose the sheet is joined by `height` and the reply says so (`scaleBy` is the mode
+  used, `requestedScaleBy` the one asked for, `measures` what was measured). The width of the head was tried first and failed: a
+  head turned or tipped back is narrower.
+The catalog gives each animation its own (`front` → `base`, `bust` → `face`, `side` → `height`).
+
 The Video 2D card that plays it is named in the list: `walk-cycle-sheet` for cycles (controls `frames`, `columns`, `facing`,
-`step`: two steps make a cycle) and `character-reaction` for gestures and expressions (`frames`, `columns`, `fps`, `loop`,
+`step`: two steps make a cycle), `walk-two-pose` for `step` (one step is a sheet of two poses; the figure stops on the last cell) and `character-reaction` for gestures and expressions (`frames`, `columns`, `fps`, `loop`,
 `framing`, `mark`). The panel prints the controls for the animation it shows.
 
 Limits: 24 animations per kit, 12 poses per sheet. The server drops a sheet it cannot read (`400`). Qwen cannot tell the near leg from the far one in a side view: the second contact pose and the
@@ -472,8 +485,8 @@ animation, pose or style.
 
 ### `POST /api/v1/character-kits/animations/sheet`
 
-`{workspace, sources[1..12], name?, columns?}` → `{filename, source, width, height, count, columns, rows, cell, feet,
-figure, poses}`. Sources are keyed workspace or upload images; `400` for a source with nothing opaque in it.
+`{workspace, sources[1..12], name?, columns?, scaleBy?}` → `{filename, source, width, height, count, columns, rows, cell, feet,
+figure, scaleBy, requestedScaleBy, measures, poses}`. Sources are keyed workspace or upload images; `400` for a source with nothing opaque in it.
 
 ## 8. Pitfalls
 

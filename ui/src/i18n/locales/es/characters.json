@@ -790,6 +790,26 @@
     "play": "Reproducir",
     "pause": "Pausa",
     "nextFrame": "Siguiente",
-    "frameOf": "Pose {{frame}} de {{count}}"
+    "frameOf": "Pose {{frame}} de {{count}}",
+    "view": {
+      "bust": "Busto (cabeza y hombros)",
+      "front": "Figura entera de frente",
+      "side": "Figura entera de perfil"
+    },
+    "custom": {
+      "title": "Crear una a medida",
+      "hint": "Inventa tu propia animación: ponle nombre, elige el encuadre y escribe una pose por línea (hasta {{max}}). El personaje es la referencia de cada pose, igual que en las demás. Podrás revisarla y rehacer una pose suelta.",
+      "name": "Nombre",
+      "view": "Encuadre",
+      "poses": "Poses, una por línea",
+      "placeholder": "Expresión de anime: una sonrisa torcida con una ceja levantada\nExpresión de anime: la misma sonrisa, ahora con un guiño",
+      "create_one": "Crear con {{count}} pose",
+      "create_other": "Crear con {{count}} poses",
+      "summary": "A medida · {{count}} poses · {{view}}",
+      "tooMany": "Máximo {{max}} poses por animación.",
+      "tooLong": "Cada pose admite hasta {{max}} caracteres.",
+      "full": "Este personaje ya tiene el máximo de animaciones; borra alguna para crear otra."
+    },
+    "groupCount": "{{done}} de {{total}} hechas"
   }
 }

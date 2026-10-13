@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  animationSlug, customAnimationDef, freeAnimationId, kitCustomDefs, MAX_CUSTOM_POSES,
   controlsForCard, findKitAnimationBySheet,
   ANIMATION_SHEET, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
   kitStyleId, localized, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
@@ -14,13 +15,15 @@ const made = (changes: Partial<KitAnimation> = {}): Omit<KitAnimation, 'reviewSt
 const kit = () => ({ ...createCharacterKit('Ana'), base: { id: 'ana-base', name: 'Ana', source: '/api/v1/file/ana.png', kind: 'image' as const, alphaStatus: 'transparent' as const, reviewState: 'approved' as const } })
 
 test('the catalog groups cycles, gestures and anime expressions, each with poses to make', () => {
-  assert.deepEqual(animationGroups.map(group => group.id), ['cycle', 'gesture', 'expression'])
+  assert.deepEqual(animationGroups.map(group => group.id), ['cycle', 'gesture', 'expression', 'custom'])
   assert.ok(animationsOf('expression').length >= 8 && animationsOf('cycle').map(item => item.id).includes('walk'))
   for (const def of animationDefs) {
     assert.ok(def.poses.length >= 1 && def.poses.length <= ANIMATION_SHEET.maxPoses, def.id)
     assert.ok(def.poses.every(pose => pose.prompt && pose.label.es && pose.label.en), def.id)
   }
   assert.equal(animationDef('walk')?.facing, 'right')
+  assert.ok(animationDefs.length >= 30 && animationsOf('gesture').length >= 10 && animationsOf('expression').length >= 16, 'a standard set of cycles, gestures and expressions')
+  for (const def of animationDefs) assert.equal(def.scaleBy, { side: 'height', front: 'base', bust: 'face' }[def.view], def.id)
   assert.equal(localized(animationDef('angry')!.title, 'es-ES'), 'Enfado')
   assert.equal(localized(animationDef('angry')!.title, 'en'), 'Angry')
 })
@@ -72,6 +75,8 @@ test('a made animation tells the Video 2D card that plays it which controls to u
   assert.deepEqual(templateControls(made({ fps: 4 }) as KitAnimation, 'walk-cycle-sheet'), { frames: 4, columns: 4, facing: 'right', step: .5 })
   assert.equal(templateControls(made({ facing: 'left', fps: 8 }) as KitAnimation, 'walk-cycle-sheet').facing, 'left')
   assert.equal(templateControls(made({ fps: 1 }) as KitAnimation, 'walk-cycle-sheet').step, 1, 'a step stays inside the card\'s range')
+  // A two-pose sheet is one step, so its two poses play at twice the pace of a four-pose cycle's.
+  assert.deepEqual(templateControls(made({ sheet: { ...made().sheet, count: 2, columns: 2 }, fps: 4 }) as KitAnimation, 'walk-two-pose'), { frames: 2, columns: 2, facing: 'right', step: .5 })
   assert.deepEqual(templateControls(made({ fps: 3, loop: 'once', facing: 'front' }) as KitAnimation, 'character-reaction'), { frames: 4, columns: 4, fps: 3, loop: 'once' })
 })
 
@@ -95,4 +100,33 @@ test('a card is given only the controls it has, with values it accepts', () => {
   // Two poses are out of range for the walk card (at least 3), and a card without `fps` never gets one.
   assert.equal(controlsForCard(made({ sheet: { ...made().sheet, count: 2 } }) as KitAnimation, 'walk-cycle-sheet', walk).frames, undefined)
   assert.equal('fps' in controlsForCard(made() as KitAnimation, 'character-reaction', { frames: reaction.frames }), false)
+})
+
+test('an animation the author names gets a free slug, and its poses are the lines they wrote', () => {
+  assert.equal(animationSlug('Sonrisa pícara!'), 'sonrisa-picara')
+  assert.equal(animationSlug('  ¡¡¡  '), 'animacion')
+  assert.equal(animationSlug('x'.repeat(80)).length, 40)
+  const withOwn = withKitAnimation(kit(), 'angry-2', made())
+  assert.equal(freeAnimationId(kit(), 'Mi guiño'), 'mi-guino')
+  assert.equal(freeAnimationId(kit(), 'angry'), 'angry-2', 'a catalog id is never reused')
+  assert.equal(freeAnimationId(withOwn, 'angry'), 'angry-3', 'nor one the kit already has')
+  const def = customAnimationDef('mi-guino', 'Mi guiño', 'bust', ['  Anime expression: a wink  ', '', 'Anime expression: a big wink', ...Array.from({ length: 9 }, (_, index) => `pose ${index}`)])
+  assert.equal(def.poses.length, MAX_CUSTOM_POSES)
+  assert.deepEqual([def.custom, def.group, def.view, def.scaleBy, def.resolution, def.template, def.loop], [true, 'custom', 'bust', 'face', '1024x1024', 'character-reaction', 'once'])
+  assert.deepEqual(def.poses.slice(0, 2).map(pose => [pose.id, pose.label.es, pose.prompt]), [['pose-1', 'a wink', 'Anime expression: a wink'], ['pose-2', 'a big wink', 'Anime expression: a big wink']])
+  assert.equal(customAnimationDef('x', 'x', 'side', ['a']).facing, 'right')
+  assert.equal(customAnimationDef('x', 'x', 'side', ['a']).scaleBy, 'height')
+  assert.equal(customAnimationDef('x', 'x', 'front', ['a']).scaleBy, 'base')
+  assert.equal(customAnimationDef('x', 'x', 'front', ['y'.repeat(900)]).poses[0].prompt.length, 600)
+})
+
+test('the animations of a kit that the catalog does not list come back as definitions with the words of each pose', () => {
+  const own = made({ title: 'Mi guiño', view: 'bust', loop: 'once', fps: 3, facing: 'front',
+    frames: [{ id: 'pose-1', source: '/api/v1/file/a.png', prompt: 'Anime expression: a wink', label: 'a wink' }, { id: 'pose-2', source: '/api/v1/file/b.png' }] })
+  const holder = withKitAnimation(withKitAnimation(kit(), 'walk', made()), 'mi-guino', own)
+  const found = kitCustomDefs(holder)
+  assert.deepEqual(found.map(def => def.id), ['mi-guino'], 'the catalog\'s walk is not custom')
+  assert.deepEqual([found[0].title.es, found[0].view, found[0].loop, found[0].fps, found[0].custom], ['Mi guiño', 'bust', 'once', 3, true])
+  assert.deepEqual(found[0].poses.map(pose => [pose.id, pose.label.es, pose.prompt]), [['pose-1', 'a wink', 'Anime expression: a wink'], ['pose-2', 'pose-2', '']])
+  assert.deepEqual(kitCustomDefs(kit()), [])
 })

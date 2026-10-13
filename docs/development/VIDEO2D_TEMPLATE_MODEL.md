@@ -118,7 +118,7 @@ cut-out figure that slides in with a bob shows legs that never move: each card h
 | `walk-toward-camera` | reverse tracking from the front, waist up; the camera backs away, the room recedes | `subject_1` (front), `background`, `foreground` optional |
 | `walk-behind-foreground` | a whole figure in profile crosses behind a foreground that covers its legs, walking the way it looks (`facing`) | `subject_1` (profile), `background`, `foreground` (required, alpha) |
 | `walk-shadow-first` | a huge shadow (the figure in black) crosses the wall, then the figure stands on its mark | `subject_1`, `background`, `foreground` optional |
-| `walk-two-pose` | two pictures of a figure in profile take turns (the stride on every footfall, the legs together mid-step) over a contact shadow that beats; the walk is paced by `step`, so the boots do not skate, and the figure stops legs together | `subject_1` (stride), `subject_2` (legs together), `background`, `foreground` optional |
+| `walk-two-pose` | a two-cell sheet of a figure in profile (the stride, the legs together) plays one cell per half step over a contact shadow that beats; the walk is paced by `step`, so the boots do not skate, and the figure stops held on the sheet's last cell (legs together) | `subject_1` (sheet with alpha, two cells), `background`, `foreground` optional |
 | `walk-cycle-sheet` | a sprite sheet of the gait (four poses by default: contact, passing, contact, passing) plays at `step`, and the figure crosses at the speed its feet need | `subject_1` (sheet with alpha, profile, boots at 96 % of the cell), `background`, `foreground` optional |
 | `character-reaction` | a figure stays on its mark and plays a sheet of a gesture (wave, nod, point) or an anime expression (angry, surprised, sad…): it pops in, plays once and holds its last pose (`loop: once`) or keeps playing (`loop`, `pingpong`), and breathes. `framing: bust` stands a bust on the frame's bottom edge; `full` stands a whole figure on the floor with a contact shadow | `subject_1` (sheet with alpha), `background`, `foreground` optional |
 
@@ -133,10 +133,11 @@ cut-out figure that slides in with a bob shows legs that never move: each card h
   figure around: it asks for the figure already facing the right way. The Character Kit says the same of a pose
   (`facing: left | right | front`).
 - **Paced walks** (`walk-two-pose`, `walk-cycle-sheet`): one step covers `.42` of the figure's height, so the figure's
-  speed is `.42 * height / step` and a longer shot has more empty room, not slower feet. In `walk-two-pose` the stride
-  shows on every footfall and the legs together from a quarter to three quarters of each step; both pictures share their
-  beats and the one that shows changes inside one frame (1/60 s), so there is no cross-fade. A sheet plays `frames / (2 * step)`
-  frames a second (a cycle is two steps).
+  speed is `.42 * height / step` and a longer shot has more empty room, not slower feet. In `walk-two-pose` the sheet
+  plays one cell per half step (`frames / step` frames a second) and, when the walk ends, a second layer with the same sheet
+  (`rest`, a `once` sequence at 60 fps) holds its last cell inside one frame (1/60 s): the same cells and the same scale, so
+  the figure does not change size when it stops (two separately cropped pictures did, which read as a flicker). A cycle sheet
+  plays `frames / (2 * step)` frames a second (a cycle is two steps).
 - **Making the sheets in HocusPocus**: Characters › Animaciones (`docs/character-kits/HOWUSEIT.md` §4.7; MCP `characters.animations`,
   `characters.animation.sheet`) makes the sheet of a saved character, with the controls each card needs. By hand: one Qwen picture per pose from the figure (`generation.image` with the figure as
   an image ref and the pose in the prompt), keyed with `image.remove_background` (`crop: true`, so a pose is fitted to its

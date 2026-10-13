@@ -8,8 +8,8 @@ import { asset, atmosphere, camera, groundShadow, keyframes, layer, type Beat, t
  * - walk-behind-foreground: a whole figure in profile crosses behind a foreground that covers the legs;
  * - walk-shadow-first: a big shadow crosses the wall, then the figure is there (cut on action).
  * The last two do move them, with drawings of the figure in profile (it walks the way it looks, `facing`):
- * - walk-two-pose: two pictures take turns, the stride on every footfall and the legs together in mid-step, with a
- *   contact shadow; the walk is paced so the boots do not skate and the figure stops with its legs together;
+ * - walk-two-pose: a two-cell sheet (the stride, the legs together) plays one cell per half step with a contact shadow;
+ *   the walk is paced so the boots do not skate and the figure stops on the sheet's last cell (legs together);
  * - walk-cycle-sheet: a sprite sheet of the gait (four poses: contact, passing, contact, passing) crosses the shot.
  * And one card for a figure that stays where it is (the Character Creator's animations):
  * - character-reaction: a sheet of a gesture (wave, nod, point) or an anime expression (angry, surprised...) plays on the mark. */
@@ -18,8 +18,6 @@ type Spot = { x: number; y: number; scale: number }
 type Stride = { at: number; turn: number; lean: number; lift: number }
 
 const SAMPLES_PER_STEP = 6
-/** The two-pose walk needs a sample at a quarter and at three quarters of every step: that is where the legs swap. */
-const SAMPLES_PER_FLIP = 4
 /** Builders think in these pixels: a figure's height and its ground speed. */
 const FRAME = { width: 1280, height: 720 }
 /** One step of a walk covers this share of the figure's height (two steps are about .85). */
@@ -143,37 +141,17 @@ function pacedEnd(c: BuildContext, side: Side, size: number, start: number): num
   return Math.min(.9, start + Math.max(1, Math.round(seconds / wanted)) * wanted / c.duration)
 }
 
-/** Whether the legs are together at this point of a step: from a quarter to three quarters of it, mid-step. */
-const legsTogether = (turn: number): boolean => {
-  const part = turn - Math.floor(turn + 1e-9)
-  return part > .25 - 1e-9 && part < .75 - 1e-9
-}
-
-/** The beats of two pictures that take turns on one walk: both move alike and only the one that shows changes, within a frame. */
-function flipBook(c: BuildContext, walk: Stride[], path: (at: number) => Spot, gain: number, settle: number) {
-  const stride: Beat[] = []
-  const together: Beat[] = []
+/** The figure of a walk that stops: the walker (a sheet that loops, one cell per half step) until `settle`, then the same sheet held on
+ * its last cell, which is where it stands and breathes. Both draw the same cells, so the figure does not change size at the hand-off. */
+function handOff(c: BuildContext, walk: Stride[], path: (at: number) => Spot, gain: number, settle: number) {
   const edge = 1 / (c.duration * 60)
-  const show = (at: number, pose: Pose, apart: boolean) => {
-    stride.push({ at, curve: 'linear', ...pose, opacity: apart ? 1 : 0 })
-    together.push({ at, curve: 'linear', ...pose, opacity: apart ? 0 : 1 })
-  }
-  show(0, { ...path(0), rotation: 0 }, true)
-  let apart = true
-  for (const sample of walk) {
-    const pose = figureAt(c, path(sample.at), sample, gain)
-    const now = !legsTogether(sample.turn)
-    if (now !== apart) show(sample.at - edge, pose, apart)
-    show(sample.at, pose, now)
-    apart = now
-  }
-  // It stops with its legs together, a beat after its last footfall, and breathes.
-  const last = walk[walk.length - 1].at
-  const rest = path(last)
-  show(settle - edge, { ...rest, rotation: 0 }, true)
-  show(settle, { ...rest, rotation: 0 }, false)
-  for (const { at, ...pose } of breathe(c, settle, rest)) show(at, pose, false)
-  return { stride, together }
+  const last = path(walk[walk.length - 1].at)
+  const standing: Pose = { ...last, rotation: 0 }
+  const walker: Beat[] = [{ at: 0, curve: 'linear', ...path(0), rotation: 0, opacity: 1 }, ...stepBeats(c, walk, path, gain).map(beat => ({ ...beat, opacity: 1 })),
+    { at: settle - edge, curve: 'linear', ...standing, opacity: 1 }, { at: settle, curve: 'linear', ...standing, opacity: 0 }, { at: 1, curve: 'linear', ...standing, opacity: 0 }]
+  const rest: Beat[] = [{ at: 0, curve: 'linear', ...path(0), opacity: 0 }, { at: settle - edge, curve: 'linear', ...standing, opacity: 0 },
+    { at: settle, curve: 'linear', ...standing, opacity: 1 }, ...breathe(c, settle, last).map(beat => ({ ...beat, opacity: 1 }))]
+  return { walker, rest }
 }
 
 /** The shadow under the feet: full and dark on a footfall, smaller and lighter when the foot is up. */
@@ -258,17 +236,26 @@ export const walkScenes: Record<string, (ctx: BuildContext) => SceneLayer[]> = {
     return [wallShadow(c, side, floor), keyframes(onFeet(asset(c, 'subject_1', { x: mark.x, y: floor, scale: size })), landing),
       camera(c, [{ at: 0, scale: 1 }, { at: 1, scale: 1.07 }]), atmosphere(c, 'dust')]
   },
-  // Two pictures of the figure in profile take turns: the stride on every footfall, the legs together in mid-step.
+  // A two-cell sheet of the figure in profile (the stride, the legs together) plays one cell per half step; it stops on the last cell.
   'walk-two-pose': c => {
-    const size = .72
+    const figure = .72
+    const scale = figure / SHEET_FIGURE
     const floor = 86
     const side = entering(c)
-    const start = .05
-    const end = pacedEnd(c, side, size, start)
-    const { path, walk } = route(c, { side, size, floor, start, end, eased: false }, SAMPLES_PER_FLIP)
-    const { stride, together } = flipBook(c, walk, path, 1.5, end + .12 / c.duration)
-    const figure = (slot: 'subject_1' | 'subject_2', beats: Beat[]) => keyframes(onFeet(asset(c, slot, { x: -20, y: floor, scale: size })), beats)
-    return [contactShadow(c, walk, path, size), figure('subject_1', stride), figure('subject_2', together),
+    const end = pacedEnd(c, side, figure, 0)
+    const { path, walk } = route(c, { side, size: scale, floor, start: 0, end, eased: false })
+    const count = Math.max(2, Math.round(number(c, 'frames', 2)))
+    const columns = Math.min(count, Math.round(number(c, 'columns', 2)))
+    const stepSeconds = end * c.duration / ((walk.length - 1) / SAMPLES_PER_STEP)
+    const { walker, rest } = handOff(c, walk, path, 1, end + .12 / c.duration)
+    const sheet = (id: string, beats: Beat[], loop: 'loop' | 'once', fps: number) => {
+      const item = asset(c, 'subject_1', { x: -20, y: floor, scale })
+      item.id = id
+      item.focus = { x: 50, y: SHEET_FEET }
+      item.sequence = { kind: 'sheet', source: item.source, columns, rows: Math.ceil(count / columns), count, fps, loop }
+      return keyframes(item, beats)
+    }
+    return [contactShadow(c, walk, path, figure), sheet('subject_1', walker, 'loop', Math.min(24, Math.max(1, count / stepSeconds))), sheet('rest', rest, 'once', 60),
       camera(c, [{ at: 0, x: 48, scale: 1.02 }, { at: 1, x: 53, scale: 1.02 }])]
   },
   'character-reaction': reaction,

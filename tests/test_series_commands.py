@@ -214,6 +214,7 @@ def test_character_animations_and_their_sheet_go_through_the_http_contract(tmp_p
         ("GET", "/api/v1/character-kits/animations/catalog"), ("GET", "/api/v1/character-kits/animations/catalog"),
         ("POST", "/api/v1/character-kits/animations/prompt"), ("POST", "/api/v1/character-kits/animations/sheet")]
     assert calls[2][2] == {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"}
+    assert "custom" in OPERATIONS["characters.animations"][0] and "scaleBy" in OPERATIONS["characters.animation.sheet"][0]
     assert calls[3][2] == {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"}
     from services.series_commands import _operation_schema
     assert _operation_schema("characters.animations", *OPERATIONS["characters.animations"])["mutation"] is False

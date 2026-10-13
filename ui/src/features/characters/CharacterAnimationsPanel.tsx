@@ -3,12 +3,13 @@ import { Check, Loader2, RotateCcw, Trash2, WandSparkles, X } from 'lucide-react
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import {
-  animationGroups, animationReference, animationState, animationsOf, kitAnimations, localized, templateControls,
+  animationGroups, animationReference, animationState, animationsOf, canAddAnimation, freeAnimationId, kitAnimations, kitCustomDefs, localized, templateControls,
   type AnimationDef, type AnimationState, type KitAnimation,
 } from '../../lib/characterAnimations'
 import { characterImageModels, preferredCharacterImageModel } from '../../lib/characterImageModels'
 import type { CharacterKit, CharacterKitReviewState } from '../../lib/characterKit'
 import { AnimationSheetPlayer } from './AnimationSheetPlayer'
+import { CustomAnimationForm } from './CustomAnimationForm'
 import type { AnimationRun } from './useCharacterAnimations'
 import { useCharacterAnimations } from './useCharacterAnimations'
 import { useCharacterKitLibrary } from './useCharacterKitLibrary'
@@ -73,7 +74,7 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
     <header className="flex items-start justify-between gap-2">
       <div className="min-w-0 flex-1">
         <h5 className="text-sm font-medium">{localized(def.title, i18n.language)}</h5>
-        <p className="text-[11px] text-text-muted">{localized(def.summary, i18n.language)}</p>
+        <p className="text-[11px] text-text-muted">{def.custom ? t('animations.custom.summary', { count: def.poses.length, view: t(`animations.view.${def.view}`) }) : localized(def.summary, i18n.language)}</p>
       </div>
       <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
     </header>
@@ -102,6 +103,8 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const imageModels = characterImageModels(models, false)
   const model = imageModels.some(item => item.model_type === modelId) ? modelId : preferredCharacterImageModel(imageModels, false)
   const work = useCharacterAnimations(workspace, reload)
+  // An animation the author just described is not on the kit until its first run is saved: it shows while that run is on screen.
+  const [described, setDescribed] = useState<AnimationDef>()
   const actions: Actions = {
     busy: work.busy, active: work.run, cancel: work.cancel,
     make: (def, remake) => { if (kit && model) void work.start(kit, def, model, remake) },
@@ -125,9 +128,18 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
     </div>}
     {work.error && <p role="alert" className="text-sm text-red-300">{work.error}</p>}
     {work.saved && <p role="status" className="text-sm text-emerald-200">{t('animations.saved')}</p>}
-    {kit && animationGroups.map(group => <section key={group.id} className="space-y-2">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-text-secondary">{localized(group.title, i18n.language)}</h4>
-      <div className="grid gap-3 md:grid-cols-2">{animationsOf(group.id).map(def => <AnimationCard key={def.id} def={def} kit={kit} actions={actions} />)}</div>
-    </section>)}
+    {kit && animationGroups.map(group => {
+      const kept = group.id === 'custom' ? kitCustomDefs(kit) : animationsOf(group.id)
+      const showing = group.id === 'custom' && described && work.run?.animationId === described.id && !kept.some(def => def.id === described.id) ? [...kept, described] : kept
+      const done = showing.filter(def => kitAnimations(kit)[def.id]).length
+      return <details key={group.id} open={group.id === 'cycle' || group.id === 'custom' || done > 0} className="space-y-2" data-testid={`animation-group-${group.id}`}>
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          {localized(group.title, i18n.language)} <span className="font-normal normal-case text-text-muted">· {t('animations.groupCount', { done, total: showing.length })}</span></summary>
+        <div className="mt-2 grid gap-3 md:grid-cols-2">{showing.map(def => <AnimationCard key={def.id} def={def} kit={kit} actions={actions} />)}</div>
+        {group.id === 'custom' && (canAddAnimation(kit)
+          ? <CustomAnimationForm disabled={work.busy || !model} freeId={name => freeAnimationId(kit, name)} onCreate={def => { setDescribed(def); actions.make(def) }} />
+          : <p className="text-[11px] text-text-muted">{t('animations.custom.full')}</p>)}
+      </details>
+    })}
   </div>
 }

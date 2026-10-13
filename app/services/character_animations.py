@@ -29,6 +29,12 @@ CATALOG = Path(__file__).resolve().parents[1] / "shared" / "character_animations
 LOOPS = ("loop", "pingpong", "once")
 FACINGS = ("left", "right", "front")
 REVIEW_STATES = ("pending", "approved", "rejected")
+# What keeps a figure the same size from pose to pose: its height (a cycle: the framing the model drew, so a crouch stays lower than a
+# stand), the width of its legs (a standing gesture: a raised hand makes it taller, not bigger, and arms hanging or raised change how
+# wide the rest of the body is, but the legs do not move) or the size of its head (a bust: the model frames each pose a little
+# differently, so a pose may show more of the body and a smaller head; the head is read with the face landmarks and, when they cannot
+# be read, the height is used).
+SCALE_BY = ("height", "base", "face")
 MAX_ANIMATIONS = 24
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _FRAME_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
@@ -52,11 +58,26 @@ def animation(animation_id: str) -> dict[str, Any]:
     raise KeyError(animation_id)
 
 
+CUSTOM_VIEWS = {"bust": "1024x1024", "front": "896x1152", "side": "896x1152"}
+MAX_CUSTOM_TEXT = 600
+
+
+def _custom_pose(custom: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    """An animation the author describes (a view and the words for one pose) instead of one the catalog lists."""
+    view, text = custom.get("view"), " ".join(str(custom.get("text") or "").split())
+    if view not in CUSTOM_VIEWS or not text or len(text) > MAX_CUSTOM_TEXT:
+        raise CharacterAnimationError(f"A custom pose needs a view ({', '.join(CUSTOM_VIEWS)}) and a description of up to {MAX_CUSTOM_TEXT} characters")
+    return {"view": view, "resolution": CUSTOM_VIEWS[view]}, {"prompt": text if text.endswith((".", "!", "?")) else text + "."}
+
+
 def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id: str | None = None,
-                screen: str | None = None) -> dict[str, str]:
+                screen: str | None = None, custom: dict[str, Any] | None = None) -> dict[str, str]:
     """Prompt, negative prompt, screen colour and resolution to generate one pose with the character as its reference."""
-    item = animation(animation_id)
-    pose = next((candidate for candidate in item["poses"] if candidate["id"] == pose_id), None)
+    if custom is not None:
+        item, pose = _custom_pose(custom)
+    else:
+        item = animation(animation_id)
+        pose = next((candidate for candidate in item["poses"] if candidate["id"] == pose_id), None)
     if pose is None:
         raise KeyError(pose_id)
     style = character_style(style_id) if style_id else None
@@ -114,7 +135,13 @@ def _frames(raw: Any) -> list[dict[str, str]]:
     for item in raw:
         if not isinstance(item, dict) or not _FRAME_ID.fullmatch(str(item.get("id") or "")):
             raise CharacterAnimationError("Every animation frame needs an id")
-        frames.append({"id": item["id"], "source": _source(item.get("source"), "Frame source")})
+        frame = {"id": item["id"], "source": _source(item.get("source"), "Frame source")}
+        # A pose of an animation the author described keeps its words, so it can be made again alone.
+        for key, maximum in (("prompt", MAX_CUSTOM_TEXT), ("label", 80)):
+            text = _text(item.get(key), f"Frame {key}", maximum)
+            if text:
+                frame[key] = text
+        frames.append(frame)
     return frames
 
 
@@ -130,10 +157,14 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         raise CharacterAnimationError(f"{label} loop, facing or review state is invalid")
     result: dict[str, Any] = {"sheet": _sheet(raw.get("sheet")), "frames": _frames(raw.get("frames")), "fps": fps, "loop": loop,
                               "facing": facing, "reviewState": raw.get("reviewState", "pending")}
-    for key, maximum in (("view", 40), ("prompt", 4000), ("model", 240), ("createdAt", 80)):
+    for key, maximum in (("view", 40), ("title", 80), ("prompt", 4000), ("model", 240), ("createdAt", 80)):
         text = _text(raw.get(key), f"{label} {key}", maximum)
         if text:
             result[key] = text
+    if raw.get("scaleBy") is not None:
+        if raw["scaleBy"] not in SCALE_BY:
+            raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
+        result["scaleBy"] = raw["scaleBy"]
     return result
 
 
@@ -166,29 +197,67 @@ def _open_pose(path: str, floor: int) -> Image.Image:
     return image.crop(box)
 
 
-def sheet_layout(poses: list[Image.Image], floor: int, torso: float, spec: dict[str, Any]) -> tuple[float, int, list[float]]:
-    """The scale shared by every pose (the tallest fills ``figure`` of a cell), the cell's width and each pose's torso centre.
-    A pose keeps its own height relative to the others, so a bob or a crouch is not flattened."""
-    scale = spec["cellHeight"] * spec["figure"] / max(pose.height for pose in poses)
+def _band_width(figure: Image.Image, floor: int, top: float, bottom: float) -> float:
+    """How wide the figure is in a band of its height (shares measured from the top): the 90th percentile of its rows' widths,
+    so a stray boot or a bit of coat does not decide it."""
+    mask = np.asarray(figure.getchannel("A")) > floor
+    first = int(figure.height * top)
+    widths = [int(columns[-1] - columns[0] + 1) for columns in (np.nonzero(row)[0] for row in mask[first:max(first + 1, int(figure.height * bottom))]) if len(columns)]
+    return float(np.percentile(widths, 90)) if widths else 0.0
+
+
+def body_measure(figure: Image.Image, floor: int, scale_by: str) -> float:
+    """How big the body is in a pose, by a part of it that a gesture or an expression does not move."""
+    if scale_by == "base":
+        return _band_width(figure, floor, 0.8, 1.0)
+    if scale_by == "face":
+        return _face_size(figure)
+    return float(figure.height)
+
+
+def _face_size(figure: Image.Image) -> float:
+    """The head's size in pixels from the face landmarks (the flat rig's), 0 when the model is not installed or finds no face."""
+    from services.face_landmarks import detect
+    try:
+        found = detect(figure)
+    except Exception:  # noqa: BLE001 - an optional CPU model: no face found is not an error
+        return 0.0
+    return float(found["face"]["head"]) if found else 0.0
+
+
+def sheet_layout(poses: list[Image.Image], floor: int, torso: float, spec: dict[str, Any], scale_by: str = "height") -> dict[str, Any]:
+    """The scale of each pose, the cell's width, each pose's torso centre and the mode really used. The model draws every pose at a
+    slightly different size, so by `height` all share one scale (the tallest fills ``figure`` of a cell and a bob or a crouch is not
+    flattened); by `base` or `face` each pose is scaled so its legs or its head are as big as in the others, whatever the arms and
+    hands do. A part that cannot be measured in some pose (no face found) falls back to `height`."""
+    measures = [body_measure(pose, floor, scale_by) for pose in poses]
+    usable = scale_by != "height" and min(measures) > 0
+    ratios = [float(np.median(measures)) / measure for measure in measures] if usable else [1.0] * len(poses)
+    unit = spec["cellHeight"] * spec["figure"] / max(pose.height * ratio for pose, ratio in zip(poses, ratios))
+    scales = [unit * ratio for ratio in ratios]
     centres = [_torso_centre(pose, floor, torso) for pose in poses]
-    reach = max(max(centre, pose.width - centre) for pose, centre in zip(poses, centres)) * scale
-    return scale, math.ceil(2 * reach + spec["cellHeight"] * 0.04) // 2 * 2, centres
+    reach = max(max(centre, pose.width - centre) * scale for pose, centre, scale in zip(poses, centres, scales))
+    return {"scales": scales, "cellWidth": math.ceil(2 * reach + spec["cellHeight"] * 0.04) // 2 * 2, "centres": centres,
+            "scaleBy": scale_by if usable else "height", "measures": [round(measure, 1) for measure in measures]}
 
 
 def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, workspace: str, name: str = "animation",
-                columns: int | None = None, output_dir: str | None = None) -> dict[str, Any]:
+                columns: int | None = None, output_dir: str | None = None, scale_by: str = "height") -> dict[str, Any]:
     """Join keyed pose pictures into one sprite sheet of equal cells, in the order given."""
+    if scale_by not in SCALE_BY:
+        raise CharacterAnimationError(f"scale_by is one of {', '.join(SCALE_BY)}")
     spec = catalog()["sheet"]
     if not isinstance(sources, list) or not 1 <= len(sources) <= spec["maxPoses"]:
         raise CharacterAnimationError(f"Give 1 to {spec['maxPoses']} keyed pose pictures")
     paths = [resolve_character_kit_image(source, uploads_root=uploads_root, workspace_root=workspace_root) for source in sources]
     poses = [_open_pose(path, spec["alphaFloor"]) for path in paths]
-    scale, cell_width, centres = sheet_layout(poses, spec["alphaFloor"], spec["torsoShare"], spec)
+    layout = sheet_layout(poses, spec["alphaFloor"], spec["torsoShare"], spec, scale_by)
+    scales, cell_width, centres = layout["scales"], layout["cellWidth"], layout["centres"]
     cell_height = spec["cellHeight"]
     wide = max(1, min(len(poses), columns or len(poses)))
     rows = math.ceil(len(poses) / wide)
     sheet = Image.new("RGBA", (cell_width * wide, cell_height * rows), (0, 0, 0, 0))
-    for index, (pose, centre) in enumerate(zip(poses, centres)):
+    for index, (pose, centre, scale) in enumerate(zip(poses, centres, scales)):
         fitted = pose.resize((max(1, round(pose.width * scale)), max(1, round(pose.height * scale))), Image.Resampling.LANCZOS)
         left = (index % wide) * cell_width + round(cell_width / 2 - centre * scale)
         top = (index // wide) * cell_height + round(cell_height * spec["feet"] - fitted.height)
@@ -209,9 +278,10 @@ def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, w
             os.remove(partial)
     return {"filename": filename, "source": f"/api/v1/file/{quote(filename)}?workspace={quote(workspace)}", "path": destination,
             "width": sheet.width, "height": sheet.height, "count": len(poses), "columns": wide, "rows": rows,
-            "cell": {"width": cell_width, "height": cell_height}, "feet": spec["feet"], "figure": spec["figure"],
+            "cell": {"width": cell_width, "height": cell_height}, "feet": spec["feet"], "figure": spec["figure"], "scaleBy": layout["scaleBy"],
+            "requestedScaleBy": scale_by, "measures": layout["measures"],
             "poses": [{"width": pose.width, "height": pose.height} for pose in poses]}
 
 
-__all__ = ["CharacterAnimationError", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
+__all__ = ["CUSTOM_VIEWS", "CharacterAnimationError", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
            "normalize_kit_animations", "pose_prompt", "sheet_layout"]

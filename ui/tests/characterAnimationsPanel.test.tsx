@@ -19,7 +19,8 @@ test('the Characters tab lists the animations of a saved character, plays a made
   const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
   const { useStore } = await import('../src/stores/useStore.ts')
   const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
-  const kit = { ...createCharacterKit('Ana'), id: 'ana', base, animations: { walk } }
+  const mine = { sheet: walk.sheet, frames: [{ id: 'pose-1', source: '/api/v1/file/g.png', prompt: 'Anime expression: a wink', label: 'a wink' }], fps: 3, loop: 'once' as const, facing: 'front' as const, reviewState: 'pending' as const, title: 'Mi guiño', view: 'bust' }
+  const kit = { ...createCharacterKit('Ana'), id: 'ana', base, animations: { walk, 'mi-guino': mine } }
   const library = { ...emptyCharacterKitLibrary(), revision: 3, activeId: 'ana', kits: { ana: kit } }
   const original = globalThis.fetch
   globalThis.fetch = (async () => new Response(JSON.stringify(library), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch
@@ -37,6 +38,17 @@ test('the Characters tab lists the animations of a saved character, plays a made
     assert.match(angry.textContent!, /Sin hacer|Not made/)
     assert.equal((angry.querySelector('button') as HTMLButtonElement).disabled, false, 'it can be made: the character has a picture and a model is installed')
     fireEvent.click(card.querySelectorAll('button')[0])
+    // The author's own animation: the kit keeps one, and the form to describe another is there, ready only with a name and a pose.
+    assert.match(screen.getByTestId('animation-mi-guino').textContent!, /Mi guiño/)
+    const form = screen.getByTestId('custom-animation-form')
+    const create = form.querySelector('button[type="submit"]') as HTMLButtonElement
+    assert.equal(create.disabled, true)
+    fireEvent.change(form.querySelector('input') as HTMLInputElement, { target: { value: 'Otra' } })
+    fireEvent.change(form.querySelector('textarea') as HTMLTextAreaElement, { target: { value: 'Anime expression: a yawn\n\nAnime expression: a big yawn' } })
+    assert.equal(create.disabled, false)
+    assert.match(create.textContent!, /2 poses/)
+    fireEvent.change(form.querySelector('textarea') as HTMLTextAreaElement, { target: { value: Array.from({ length: 7 }, (_, index) => `pose ${index}`).join('\n') } })
+    assert.equal(create.disabled, true, 'seven poses are too many')
   } finally {
     globalThis.fetch = original
     cleanup()

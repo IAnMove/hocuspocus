@@ -67,7 +67,9 @@ export async function makeAnimation(request: {
     request.signal.throwIfAborted()
     try {
       update(take.id, { status: 'generating' })
-      const asked = await deps.prompt({ animation: request.def.id, pose: take.id, description, ...(style ? { style } : {}), signal: request.signal })
+      const words = request.def.poses.find(pose => pose.id === take.id)?.prompt ?? ''
+      const asked = await deps.prompt({ animation: request.def.id, pose: take.id, description, ...(style ? { style } : {}),
+        ...(request.def.custom ? { custom: { view: request.def.view, text: words } } : {}), signal: request.signal })
       firstPrompt ||= asked.prompt
       const image = await deps.generate('maestro', asked.prompt, request.model, undefined, asked.negative, {
         workspace: request.workspace, signal: request.signal, cleanModelDefaults: true, comicPanel: false,
@@ -88,13 +90,20 @@ export async function makeAnimation(request: {
   }
   request.onUpdate(takes, 'sheet')
   const sources = takes.map(take => take.keyed!)
-  const sheet = await deps.sheet({ workspace: request.workspace, sources, name: `${request.kit.id}-${request.def.id}`, signal: request.signal })
+  const sheet = await deps.sheet({ workspace: request.workspace, sources, name: `${request.kit.id}-${request.def.id}`, scaleBy: request.def.scaleBy, signal: request.signal })
   return {
     sheet: { source: sheet.source, width: sheet.width, height: sheet.height, count: sheet.count, columns: sheet.columns, rows: sheet.rows, cell: sheet.cell },
-    frames: takes.map(take => ({ id: take.id, source: take.keyed! })),
-    fps: request.def.fps, loop: request.def.loop, facing: request.def.facing, view: request.def.view, model: request.model,
+    // What the author wrote for a pose stays with it, so that pose can be made again alone.
+    frames: takes.map(take => ({ id: take.id, source: take.keyed!, ...(request.def.custom ? frameWords(request.def, take.id) : {}) })),
+    fps: request.def.fps, loop: request.def.loop, facing: request.def.facing, view: request.def.view, scaleBy: request.def.scaleBy, model: request.model,
+    ...(request.def.custom ? { title: request.def.title.es } : {}),
     ...(firstPrompt ? { prompt: firstPrompt } : {}),
   }
+}
+
+function frameWords(def: AnimationDef, id: string): { prompt?: string; label?: string } {
+  const pose = def.poses.find(item => item.id === id)
+  return pose ? { prompt: pose.prompt, label: pose.label.es } : {}
 }
 
 /** What a retry can keep: the poses of a failed or partial run that were made and keyed. */

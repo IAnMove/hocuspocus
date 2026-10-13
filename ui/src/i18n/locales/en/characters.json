@@ -790,6 +790,26 @@
     "play": "Play",
     "pause": "Pause",
     "nextFrame": "Next",
-    "frameOf": "Pose {{frame}} of {{count}}"
+    "frameOf": "Pose {{frame}} of {{count}}",
+    "view": {
+      "bust": "Bust (head and shoulders)",
+      "front": "Whole figure, front",
+      "side": "Whole figure, side"
+    },
+    "custom": {
+      "title": "Make your own",
+      "hint": "Invent your own animation: name it, pick the framing and write one pose per line (up to {{max}}). The character is the reference of each pose, like the others. You can review it and make one pose again alone.",
+      "name": "Name",
+      "view": "Framing",
+      "poses": "Poses, one per line",
+      "placeholder": "Anime expression: a lopsided grin with one eyebrow raised\nAnime expression: the same grin, now with a wink",
+      "create_one": "Make with {{count}} pose",
+      "create_other": "Make with {{count}} poses",
+      "summary": "Custom · {{count}} poses · {{view}}",
+      "tooMany": "At most {{max}} poses per animation.",
+      "tooLong": "Each pose takes up to {{max}} characters.",
+      "full": "This character already has the most animations; delete one to make another."
+    },
+    "groupCount": "{{done}} of {{total}} made"
   }
 }

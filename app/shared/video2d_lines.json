@@ -462,8 +462,8 @@
     },
     "walk-two-pose": {
       "titleEs": "Paso de dos poses con sombra", "titleEn": "Two-pose walk with shadow",
-      "lineEs": "Plano general: una figura de perfil cruza andando alternando dos dibujos, piernas abiertas en cada pisada y juntas a mitad de paso, con una sombra de contacto que late. Se detiene con las piernas juntas.",
-      "lineEn": "Wide shot: a figure in profile walks across swapping two drawings, legs apart on every footfall and together mid-step, with a contact shadow that beats. It stops with its legs together."
+      "lineEs": "Plano general: una figura de perfil cruza andando con una hoja de dos poses (zancada y piernas juntas) que cambia a cada medio paso, con una sombra de contacto que late. Se detiene con las piernas juntas.",
+      "lineEn": "Wide shot: a figure in profile walks across with a two-pose sheet (stride and legs together) that changes every half step, with a contact shadow that beats. It stops with its legs together."
     },
     "walk-cycle-sheet": {
       "titleEs": "Ciclo de paso en hoja de sprites", "titleEn": "Walk cycle sprite sheet",

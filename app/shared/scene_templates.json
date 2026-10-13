@@ -3515,7 +3515,7 @@
       "id": "walk-two-pose",
       "family": "cinema",
       "reviewStatus": "candidate",
-      "visualIntent": "Plano general: una figura de perfil cruza andando alternando dos dibujos, el paso con las piernas abiertas en cada pisada y las piernas juntas a mitad de paso, con una sombra de contacto que late. Al llegar a su marca se detiene con las piernas juntas. La velocidad sigue al paso para que las botas no patinen.",
+      "visualIntent": "Plano general: una figura de perfil cruza andando con una hoja de dos poses (la zancada y las piernas juntas) que cambia de dibujo en cada medio paso, sobre una sombra de contacto que late. Al llegar a su marca se detiene en la última pose de la hoja (las piernas juntas). La velocidad sigue al paso para que las botas no patinen.",
       "title": "Paso de dos poses con sombra",
       "version": 1,
       "slots": [
@@ -3525,15 +3525,7 @@
             "image"
           ],
           "required": true,
-          "description": "Figura entera de perfil caminando, con las piernas abiertas (pose de contacto), recortada con alfa y ajustada a su contorno; camina hacia donde mira."
-        },
-        {
-          "id": "subject_2",
-          "types": [
-            "image"
-          ],
-          "required": true,
-          "description": "La misma figura de perfil con las piernas juntas (pose de paso o de reposo), del mismo tamaño y orientación que subject_1, recortada con alfa y ajustada a su contorno."
+          "description": "Hoja de sprites con alfa de dos poses de perfil en celdas iguales, de izquierda a derecha: la zancada (piernas abiertas) y las piernas juntas, con las botas tocando el suelo en la misma línea (al 96 % del alto de la celda). La figura se detiene en la última celda. Camina hacia donde mira."
         },
         {
           "id": "background",
@@ -3585,6 +3577,18 @@
           "default": 0.55,
           "exposed": true
         },
+        "frames": {
+          "min": 2,
+          "max": 12,
+          "default": 2,
+          "exposed": true
+        },
+        "columns": {
+          "min": 1,
+          "max": 12,
+          "default": 2,
+          "exposed": true
+        },
         "sway": {
           "min": 0,
           "max": 4,
@@ -3593,9 +3597,9 @@
         }
       },
       "limits": [
-        "Solo hay dos dibujos que se turnan: el paso se lee como animación limitada, no fluida.",
-        "Los dos dibujos se recortan ajustados a su contorno y se apoyan por los pies, así que se igualan en altura: conviene que midan lo mismo.",
-        "La figura va de perfil y camina hacia donde mira: mirando a la derecha entra por la izquierda y mirando a la izquierda, por la derecha. No se espeja: aporta las figuras ya orientadas.",
+        "La hoja se aporta hecha: esta plantilla no dibuja las poses, solo las reproduce. En HocusPocus se hace en Personajes › Animaciones (animación «Paso (2 poses)») o con characters.animation.sheet.",
+        "Solo hay dos dibujos que se turnan: el paso se lee como animación limitada, no fluida. Con más celdas (frames, columns) se reparten dentro de cada paso y la figura se detiene en la última.",
+        "La figura va de perfil y camina hacia donde mira: mirando a la derecha entra por la izquierda y mirando a la izquierda, por la derecha. No se espeja: aporta la hoja ya orientada.",
         "La velocidad de la figura sigue a step: un paso más corto la hace ir más despacio, y llega a su marca antes o después.",
         "Usa únicamente assets proporcionados.",
         "Sin vídeo generado por IA.",

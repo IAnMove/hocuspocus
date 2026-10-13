@@ -37,11 +37,13 @@ def test_every_animation_has_poses_prompts_and_a_template():
     ids = [item["id"] for item in data["animations"]]
     assert len(ids) == len(set(ids)) and {"walk", "run", "wave", "angry", "surprised", "sad", "happy", "embarrassed"} <= set(ids)
     groups = {group["id"] for group in data["groups"]}
+    assert groups == {"cycle", "gesture", "expression", "custom"}, "custom is the author's own: the catalog lists none"
     for item in data["animations"]:
         assert item["group"] in groups and item["view"] in data["views"] and item["loop"] in animations.LOOPS
         assert {"en", "es"} <= set(item["title"]) and {"en", "es"} <= set(item["summary"])
         assert 1 <= len(item["poses"]) <= data["sheet"]["maxPoses"]
-        assert item["template"] in {"walk-cycle-sheet", "character-reaction"}
+        assert item["template"] in {"walk-cycle-sheet", "walk-two-pose", "character-reaction"}
+        assert item["scaleBy"] in animations.SCALE_BY and item["scaleBy"] == {"front": "base", "bust": "face", "side": "height"}[item["view"]]
         pose_ids = [pose["id"] for pose in item["poses"]]
         assert len(pose_ids) == len(set(pose_ids)) and all(pose["prompt"].strip() and {"en", "es"} <= set(pose["label"]) for pose in item["poses"])
     assert next(item for item in data["animations"] if item["id"] == "walk")["facing"] == "right"
@@ -70,6 +72,19 @@ def test_a_pose_prompt_keeps_the_character_and_asks_for_one_pose_on_a_screen():
         pose_prompt("dance", "a")
 
 
+def test_an_animation_the_author_describes_is_built_like_a_catalog_one():
+    built = pose_prompt("my-grin", "pose-1", "Ana, a detective", "paper-cutout", custom={"view": "bust", "text": "Anime expression: a lopsided grin with one eyebrow up"})
+    assert built["resolution"] == "1024x1024" and built["screen"] == "green"
+    assert built["prompt"].startswith("The same character as the reference image") and "Ana, a detective." in built["prompt"]
+    assert "Close-up portrait" in built["prompt"] and "lopsided grin with one eyebrow up." in built["prompt"] and "chroma-key green" in built["prompt"]
+    assert "full body" in built["negative"], "a bust asks for no body, like a catalog bust"
+    side = pose_prompt("x", "y", custom={"view": "side", "text": "Leaning on a wall."})
+    assert side["resolution"] == "896x1152" and "Exact side view" in side["prompt"] and "full body" not in side["negative"]
+    for bad in ({"view": "top", "text": "x"}, {"view": "bust", "text": ""}, {"view": "bust", "text": "x" * 601}, {"text": "x"}):
+        with pytest.raises(CharacterAnimationError):
+            pose_prompt("x", "y", custom=bad)
+
+
 def _entry(**changes):
     sheet = {"source": "/api/v1/file/walk-sheet.png?workspace=demo", "count": 4, "columns": 4, "rows": 1, "width": 1600, "height": 640,
              "cell": {"width": 400, "height": 640}}
@@ -87,6 +102,16 @@ def test_a_kit_keeps_its_animations_and_drops_what_it_does_not_know():
             normalize_kit_animations(bad)
     with pytest.raises(CharacterAnimationError):
         normalize_kit_animations({f"a{index}": _entry() for index in range(25)})
+
+
+def test_a_custom_animation_keeps_its_title_its_scale_mode_and_the_words_of_each_pose():
+    entry = _entry(title="Sonrisa pícara", scaleBy="face", view="bust", frames=[{"id": "pose-1", "source": "/api/v1/file/c.png", "prompt": "A lopsided grin.", "label": "Sonrisa", "extra": 1}])
+    kept = normalize_kit_animations({"sonrisa-picara": entry})["sonrisa-picara"]
+    assert kept["title"] == "Sonrisa pícara" and kept["scaleBy"] == "face" and kept["frames"] == [{"id": "pose-1", "source": "/api/v1/file/c.png", "prompt": "A lopsided grin.", "label": "Sonrisa"}]
+    with pytest.raises(CharacterAnimationError):
+        normalize_kit_animations({"x": _entry(scaleBy="width")})
+    with pytest.raises(CharacterAnimationError):
+        normalize_kit_animations({"x": _entry(frames=[{"id": "p", "source": "/a.png", "prompt": "x" * 601}])})
 
 
 def test_the_kit_library_stores_animations_and_still_whitelists_the_rest():
@@ -120,6 +145,116 @@ def test_the_sheet_has_equal_cells_one_ground_line_and_a_steady_torso(folder):
     assert abs(trunks[0] - cell["width"] / 2) <= 2
     top = np.nonzero(sheet[:, :cell["width"], 3].max(axis=1) > spec["alphaFloor"])[0][0]
     assert abs((boots[0] - top) - spec["cellHeight"] * spec["figure"]) <= 2, "the figure fills `figure` of a cell"
+
+
+def _gesture(path: Path, *, factor: float, hand: int = 0) -> Path:
+    """The same standing body drawn at a size of its own, with a hand raised ``hand`` pixels above the head (before the resize)."""
+    pixels = np.zeros((300, 140, 4), dtype=np.uint8)
+    pixels[60:90, 55:85] = (200, 160, 120, 255)      # head
+    pixels[90:170, 40:100] = (230, 180, 30, 255)     # coat, 60 wide
+    pixels[170:260, 45:95] = (60, 60, 70, 255)       # legs
+    if hand:
+        pixels[60 - hand:60, 100:108] = (200, 160, 120, 255)
+    image = Image.fromarray(pixels)
+    image.crop(image.getbbox()).resize((round(image.getbbox()[2] - image.getbbox()[0]) and round((image.getbbox()[2] - image.getbbox()[0]) * factor),
+                                        round((image.getbbox()[3] - image.getbbox()[1]) * factor))).save(path)
+    return path
+
+
+def _widths(path: str, cells: int, band: tuple[float, float]) -> list[int]:
+    """Per cell, the width of the figure in a band of its own height (from its top)."""
+    alpha = np.asarray(Image.open(path).convert("RGBA"))[..., 3] > catalog()["sheet"]["alphaFloor"]
+    cell = alpha.shape[1] // cells
+    found = []
+    for index in range(cells):
+        part = alpha[:, index * cell:(index + 1) * cell]
+        rows = np.nonzero(part.any(axis=1))[0]
+        top, height = rows[0], rows[-1] - rows[0] + 1
+        columns = np.nonzero(part[top + int(height * band[0]):top + int(height * band[1])].any(axis=0))[0]
+        found.append(int(columns[-1] - columns[0] + 1))
+    return found
+
+
+def test_a_gesture_keeps_the_body_one_size_whatever_the_model_drew_and_the_hand_does(folder):
+    # Four poses of one body, drawn 8 % smaller, as is, 5 % bigger and 8 % smaller again; two have a hand raised above the head.
+    poses = [_gesture(folder / "g0.png", factor=.92), _gesture(folder / "g1.png", factor=1.0, hand=50),
+             _gesture(folder / "g2.png", factor=1.05, hand=70), _gesture(folder / "g3.png", factor=.92)]
+    by_height = _sheet_of(folder, poses)
+    heights = _widths(by_height["path"], 4, (.85, 1.0))
+    assert max(heights) - min(heights) >= 12, f"one scale for all keeps the model's own size changes: {heights}"
+    by_body = build_sheet([p.name for p in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo",
+                          name="gesture", output_dir=str(folder), scale_by="base")
+    widths = _widths(by_body["path"], 4, (.85, 1.0))
+    assert max(widths) - min(widths) <= 4, f"the legs are as wide in every cell (within 4 %): {widths}"
+    assert by_body["scaleBy"] == "base" and by_body["cell"]["height"] == catalog()["sheet"]["cellHeight"]
+    sheet = np.asarray(Image.open(by_body["path"]).convert("RGBA"))[..., 3] > catalog()["sheet"]["alphaFloor"]
+    assert int(np.nonzero(sheet.any(axis=1))[0][0]) >= 0 and int(np.nonzero(sheet.any(axis=1))[0][-1]) + 1 == round(by_body["cell"]["height"] * catalog()["sheet"]["feet"])
+
+
+def test_a_gesture_with_arms_hanging_and_raised_is_not_scaled_by_the_width_of_its_body(folder):
+    # The coat and sleeves are wider with the arms down than with them up; only the legs are the same. Scaling by the whole lower body
+    # made the figure with its arms down 20 % smaller than the one cheering (real poses), the legs do not.
+    def figure(path, *, arms_down):
+        pixels = np.zeros((300, 200, 4), dtype=np.uint8)
+        pixels[40:70, 80:110] = (200, 160, 120, 255)           # head
+        pixels[70:170, 70:120] = (230, 180, 30, 255)           # coat, 50 wide
+        if arms_down:
+            pixels[75:165, 50:70] = (230, 180, 30, 255)        # sleeves hanging beside the coat
+            pixels[75:165, 120:140] = (230, 180, 30, 255)
+        else:
+            pixels[0:70, 40:60] = (230, 180, 30, 255)          # arms up
+            pixels[0:70, 130:150] = (230, 180, 30, 255)
+        pixels[170:290, 75:115] = (60, 60, 70, 255)            # legs, 40 wide
+        Image.fromarray(pixels).save(path)
+        return path
+    poses = [figure(folder / "down.png", arms_down=True), figure(folder / "up.png", arms_down=False)]
+    built = build_sheet([p.name for p in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo",
+                        name="arms", output_dir=str(folder), scale_by="base")
+    legs = _widths(built["path"], 2, (.85, 1.0))
+    assert abs(legs[0] - legs[1]) <= 2, legs
+
+
+def test_a_bust_is_scaled_by_the_size_of_its_head_and_falls_back_to_its_height_without_a_face(folder, monkeypatch):
+    from services import face_landmarks
+
+    def bust(path, *, head, shoulders):
+        pixels = np.zeros((200, 260, 4), dtype=np.uint8)
+        pixels[10:10 + head, 130 - head // 2:130 + head // 2] = (30, 30, 40, 255)         # hair and head
+        pixels[10 + head:200, 130 - shoulders // 2:130 + shoulders // 2] = (230, 180, 30, 255)
+        Image.fromarray(pixels).save(path)
+        return path
+    # The second pose is framed wider: the same head is smaller in it (and the picture shows more of the body).
+    poses = [bust(folder / "close.png", head=120, shoulders=240), bust(folder / "wide.png", head=84, shoulders=170)]
+
+    def fake(image):
+        """The head's height: the dark run at the top of the centre column, which ends where the coat begins."""
+        pixels = np.asarray(image.convert("RGBA"))[:, image.width // 2 - 1]
+        return {"face": {"head": float(next(index for index, pixel in enumerate(pixels) if pixel[0] > 100)), "size": "normal", "pass": "whole"}}
+
+    monkeypatch.setattr(face_landmarks, "detect", fake)
+    built = build_sheet([p.name for p in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", name="bust",
+                        output_dir=str(folder), scale_by="face")
+    assert built["scaleBy"] == built["requestedScaleBy"] == "face" and built["measures"] == [120.0, 84.0]
+    sheet = np.asarray(Image.open(built["path"]).convert("RGBA"))
+    cell = built["cell"]["width"]
+    head_heights = []
+    for index in range(2):
+        part = sheet[:, index * cell:(index + 1) * cell]
+        column = part[:, cell // 2]
+        dark = [row for row, pixel in enumerate(column) if pixel[3] > 8 and pixel[0] < 100]
+        head_heights.append(len(dark))
+    assert abs(head_heights[0] - head_heights[1]) <= 3, f"the head is as big in both cells: {head_heights}"
+    # With no face to read, the sheet is joined by height, and says so.
+    monkeypatch.setattr(face_landmarks, "detect", lambda image: None)
+    fallback = build_sheet([p.name for p in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", name="bust2",
+                           output_dir=str(folder), scale_by="face")
+    assert fallback["scaleBy"] == "height" and fallback["requestedScaleBy"] == "face"
+
+
+def test_a_bad_scale_mode_is_refused(folder):
+    pose = _figure(folder / "p.png", legs=(40, 80))
+    with pytest.raises(CharacterAnimationError, match="scale_by"):
+        build_sheet([pose.name], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", scale_by="width")
 
 
 def test_poses_keep_their_height_relative_to_each_other(folder):
@@ -170,6 +305,9 @@ def test_the_http_routes_serve_the_catalog_a_prompt_and_a_sheet(folder):
     made = client.post(f"{base}/prompt", json={"animation": "wave", "pose": "raise", "description": "Ana", "style": "paper-cutout"})
     assert made.status_code == 200 and made.json()["screen"] == "green" and "Ana" in made.json()["prompt"]
     assert client.post(f"{base}/prompt", json={"animation": "dance", "pose": "a"}).status_code == 404
+    own = client.post(f"{base}/prompt", json={"animation": "my-grin", "pose": "pose-1", "custom": {"view": "bust", "text": "A lopsided grin"}})
+    assert own.status_code == 200 and "lopsided grin" in own.json()["prompt"]
+    assert client.post(f"{base}/prompt", json={"animation": "my-grin", "pose": "pose-1", "custom": {"view": "top", "text": "x"}}).status_code == 400
     poses = [_figure(folder / f"pose-{index}.png", legs=(40 + index * 5, 90)) for index in range(3)]
     reply = client.post(f"{base}/sheet", json={"workspace": "demo", "sources": [p.name for p in poses], "name": "Ana wave"})
     body = reply.json()

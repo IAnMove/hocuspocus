@@ -24,7 +24,7 @@ const SLOT_COPY = {
 /** Controls with their own fixed inputs; every other exposed control is drawn from its spec. */
 const FIXED_CONTROLS = new Set(['duration', 'bpm', 'intensity'])
 /** The cards that play a sheet from Characters › Animaciones: picking one fills the card's controls. */
-const SHEET_CARDS: ReadonlySet<string> = new Set(['walk-cycle-sheet', 'character-reaction'])
+const SHEET_CARDS: ReadonlySet<string> = new Set(['walk-cycle-sheet', 'walk-two-pose', 'character-reaction'])
 const animationTitle = (id: string): Localized => animationDef(id)?.title ?? { es: id, en: id }
 const CONTROL_NAMES = ['drift', 'camera', 'atmosphere', 'bounce', 'bouncer', 'outcome', 'mood', 'entrance', 'caption', 'yearFrom', 'yearTo', 'yearLabel', 'banner'] as const
 const OPTION_NAMES = ['push', 'sweep', 'open', 'beat', 'fireflies', 'confetti', 'bokeh', 'on', 'off', 'subject', 'prop', 'miss', 'shield', 'explode', 'calm', 'lonely', 'leaves', 'streaks', 'rise', 'left', 'right'] as const

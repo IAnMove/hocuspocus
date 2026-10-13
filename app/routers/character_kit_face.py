@@ -30,6 +30,7 @@ class AnimationPromptRequest(BaseModel):
     description: str = Field(default="", max_length=2000)
     style: str | None = Field(default=None, max_length=80)
     screen: str | None = Field(default=None, pattern="^(green|blue|magenta)$")
+    custom: dict[str, str] | None = None
 
 
 class AnimationSheetRequest(BaseModel):
@@ -37,6 +38,7 @@ class AnimationSheetRequest(BaseModel):
     sources: list[str] = Field(min_length=1, max_length=12)
     name: str = Field(default="animation", min_length=1, max_length=80)
     columns: int | None = Field(default=None, ge=1, le=12)
+    scaleBy: str = Field(default="height", pattern="^(height|base|face)$")
 
 
 def create_character_kit_face_router(
@@ -78,7 +80,9 @@ def create_character_kit_face_router(
     def build_animation_prompt(payload: AnimationPromptRequest):
         """Prompt, negative prompt, screen colour and resolution for one pose, made with the character as its reference."""
         try:
-            return pose_prompt(payload.animation, payload.pose, payload.description, payload.style, payload.screen)
+            return pose_prompt(payload.animation, payload.pose, payload.description, payload.style, payload.screen, payload.custom)
+        except CharacterAnimationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=f"Unknown animation, pose or style: {exc.args[0]}") from exc
 
@@ -88,7 +92,8 @@ def create_character_kit_face_router(
         try:
             workspace = workspace_dir(payload.workspace)
             result = build_sheet(payload.sources, uploads_root=uploads_root(), workspace_root=workspace, workspace=payload.workspace,
-                                 name=payload.name, columns=payload.columns, output_dir=workspace if os.path.isdir(workspace) else None)
+                                 name=payload.name, columns=payload.columns, scale_by=payload.scaleBy,
+                                 output_dir=workspace if os.path.isdir(workspace) else None)
         except (CharacterAnimationError, CharacterKitFaceCleanupError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except FileNotFoundError as exc:

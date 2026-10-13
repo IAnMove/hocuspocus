@@ -77,29 +77,38 @@ test('shadow-first: the shadow crosses an empty wall, then the figure appears on
   assert.equal(figure.filter(frame => frame.time < appears.time).every(frame => frame.opacity === 0), true)
 })
 
-test('two-pose: the stride and the legs together take turns, the shadow beats and the figure stops legs together', () => {
+test('two-pose: a two-cell sheet changes cell on every half step, the shadow beats and the figure stops on the last cell', () => {
   const scene = compile('walk-two-pose', { step: .5 })
-  const stride = framesOf(scene, 'subject_1')
-  const closed = framesOf(scene, 'subject_2')
+  const walker = layerOf(scene, 'subject_1')
+  const rest = layerOf(scene, 'rest')
+  const sequence = (item: SceneLayer) => item.sequence as { kind: string; source: string; count: number; columns: number; rows: number; fps: number; loop: string }
+  assert.deepEqual([sequence(walker).kind, sequence(walker).count, sequence(walker).columns, sequence(walker).rows, sequence(walker).loop], ['sheet', 2, 2, 1, 'loop'])
+  assert.equal(sequence(walker).source, sequence(rest).source, 'the same sheet is held on its last cell: the figure does not change size when it stops')
+  assert.deepEqual([sequence(rest).loop, sequence(rest).count], ['once', 2])
+  assert.ok(sequence(rest).fps >= 30, 'a held sheet reaches its last cell at once')
+  assert.ok(Math.abs(sequence(walker).fps - 2 / .5) < 1e-6, `two cells per step of .5 s play at ${sequence(walker).fps} fps`)
+  for (const item of [walker, rest]) assert.equal(item.focus?.y, 96, 'the figure stands on the sheet\'s ground line')
+  const track = framesOf(scene, 'subject_1')
+  const stays = framesOf(scene, 'rest')
+  const at = (frames: typeof track, time: number, key: 'opacity' | 'x') => {
+    const next = frames.findIndex(frame => frame.time >= time)
+    if (next <= 0) return frames[Math.max(0, next)][key]
+    const [a, b] = [frames[next - 1], frames[next]]
+    return a[key] + (b[key] - a[key]) * (time - a.time) / Math.max(1e-9, b.time - a.time)
+  }
+  // Exactly one of them shows at every moment but the frame in which they hand over (1/60 s), and the figure's place is the same in both.
+  const handOver = stays.find(frame => frame.opacity === 1)!.time
+  for (let time = 0; time < scene.duration; time += .05) {
+    if (Math.abs(time - handOver) < 1 / 30) continue
+    assert.ok(Math.abs(at(track, time, 'opacity') + at(stays, time, 'opacity') - 1) < 1e-6, `one of them shows at ${time.toFixed(2)} s`)
+  }
+  const swap = track.findIndex((frame, index) => index && frame.opacity === 0 && track[index - 1].opacity === 1)
+  assert.ok(swap > 0 && track[swap].time - track[swap - 1].time < 1 / 59 && Math.abs(track[swap].x - at(stays, track[swap].time, 'x')) < 1e-6)
+  assert.ok(track[0].x < 0 && Math.abs(stays[stays.length - 1].x - 50) < 5 && stays[stays.length - 1].opacity === 1, 'it comes in and stops on its mark')
   const ground = framesOf(scene, 'contact-shadow')
-  assert.deepEqual(stride.map(frame => frame.time), closed.map(frame => frame.time), 'both pictures share their beats')
-  assert.ok(stride.every((frame, index) => frame.opacity + closed[index].opacity === 1), 'exactly one of them shows at every beat')
-  // Opacity switches within one frame (1/60 s) while the figure's place moves on linearly.
-  const swaps = stride.flatMap((frame, index) => index && frame.opacity !== stride[index - 1].opacity ? [frame.time - stride[index - 1].time] : [])
-  assert.ok(swaps.length >= 7 && swaps.length % 2 === 1 && swaps.every(gap => gap < 1 / 59), `${swaps.length} swaps (two on every step, one to stop), each inside a frame`)
-  const hidden = (frames: typeof stride, time: number) => frames.filter(frame => frame.time <= time + 1e-9).pop()!.opacity
-  const step = .5
-  const first = stride.find(frame => frame.opacity === 1 && frame.x > 0)!.time
-  assert.equal(hidden(stride, first + step * .1), 1, 'legs apart on the footfall')
-  assert.equal(hidden(closed, first + step * .5), 1, 'legs together in mid-step')
-  const feet = stride.map(frame => frame.x)
-  assert.ok(feet[0] < 0 && Math.abs(feet[feet.length - 1] - 50) < 5, 'it comes in and stops on its mark')
-  assert.equal(closed[closed.length - 1].opacity, 1, 'it ends with its legs together')
-  const pressed = ground.filter(frame => frame.opacity >= .89).length
-  assert.ok(pressed >= 5, `the shadow is full on every footfall (${pressed})`)
+  assert.ok(ground.filter(frame => frame.opacity >= .89).length >= 5, 'the shadow is full on every footfall')
   assert.ok(ground.some(frame => frame.opacity < .6), 'and lighter when a foot is up')
-  assert.ok(layerOf(scene, 'contact-shadow').z < layerOf(scene, 'subject_1').z, 'it lies under the figure')
-  for (const id of ['subject_1', 'subject_2']) assert.equal(layerOf(scene, id).focus?.y, 99, 'both turn about their boots')
+  assert.ok(layerOf(scene, 'contact-shadow').z < walker.z, 'it lies under the figure')
 })
 
 test('two-pose paces the walk by its step: a shorter step is a slower figure that arrives later, and facing left flips the side', () => {
@@ -107,7 +116,11 @@ test('two-pose paces the walk by its step: a shorter step is a slower figure tha
   assert.ok(arrival(.7) > arrival(.4) + .5, `${arrival(.7)} later than ${arrival(.4)}`)
   const left = framesOf(compile('walk-two-pose', { facing: 'left' }), 'subject_1')
   assert.ok(left[0].x > 100 && left[left.length - 1].x < 55 && left[left.length - 1].x > 45)
-  assert.throws(() => compileCandidateScene('walk-two-pose', { subject_1: candidateDemoBindings('walk-two-pose').subject_1, background: candidateDemoBindings('walk-two-pose').background }), /subject_2/)
+  const fpsOf = (step: number) => (layerOf(compile('walk-two-pose', { step }), 'subject_1').sequence as { fps: number }).fps
+  assert.ok(fpsOf(.8) < fpsOf(.4), 'a longer step is a slower change of pose')
+  // The sheet is the figure: without it the card does not compile, and the old second picture is not a slot any more.
+  assert.throws(() => compileCandidateScene('walk-two-pose', { background: candidateDemoBindings('walk-two-pose').background }), /subject_1/)
+  assert.equal(compile('walk-two-pose').layers.some(item => item.id === 'subject_2'), false)
 })
 
 test('walk-cycle-sheet plays its sheet at the pace that keeps the boots on the floor', () => {

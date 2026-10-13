@@ -14,9 +14,9 @@ room comes toward it with parallax), `walk-toward-camera` (reverse tracking from
 the front, the camera backs away), `walk-behind-foreground` (a whole figure in
 profile crosses behind a counter or wall that covers its legs), `walk-shadow-first` (a
 huge shadow crosses the wall, then the figure is already on its mark: cut on
-action), `walk-two-pose` (a wide shot where two pictures of a
-figure in profile take turns, the stride and the legs together, over a contact
-shadow that beats, paced so the boots do not skate) and `walk-cycle-sheet` (a
+action), `walk-two-pose` (a wide shot where a two-cell sheet of a
+figure in profile, the stride and the legs together, changes cell every half step
+over a contact shadow that beats, paced so the boots do not skate) and `walk-cycle-sheet` (a
 sprite sheet of the gait, four poses by default, plays at the step's pace: with
 `walk-two-pose`, the cards whose legs move). Profile figures walk the way they
 look (`facing`). A figure held on screen takes `parallax: 0` with
@@ -31,16 +31,16 @@ grammars is a separate decision (docs/development/VIDEO2D_TEMPLATE_MODEL.md).
 
 **Small animations of a character (walk, gestures, anime expressions) and the cards that play them (candidates, for the
 owner's review).** Characters › *Animaciones del personaje* makes, for a saved character, a few poses of the same figure joined
-into a sprite sheet: `walk` and `run` in four poses of the gait (side view), `wave`, `nod`, `shake` and `point`, and eleven anime
+into a sprite sheet: `walk` and `run` in four poses of the gait (side view), `step` (two poses), `idle` and `jump`, `wave`, `nod`, `shake`, `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm` and `think`, and eighteen anime
 expressions in two poses each (`angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`,
-`tired`, `love`). Each pose is one Qwen picture made with the character's own picture as the identity reference, keyed on its
+`tired`, `love`, `disgusted`, `bored`, `worried`, `nervous`, `laughing`, `wink`, `pout`). Each pose is one Qwen picture made with the character's own picture as the identity reference, keyed on its
 screen as it arrives; a failed pose stops the run and the retry keeps the ones already made, and one pose can be made again
-alone. The sheet is built on the server (the poses cropped, scaled together, boots on one line, torso centred) and the animation
+alone. The sheet is built on the server (the poses cropped and scaled so the figure keeps its size by its height, the width of its legs (a gesture) or the size of its head (a bust, read with the face landmarks), boots on one line, torso centred) and the animation
 joins the kit as `animations.<id>`, pending until a person plays and approves it. The catalog is
 `app/shared/character_animations.json`; HTTP `GET /character-kits/animations/catalog`, `POST .../prompt` and `POST .../sheet`;
 MCP `characters.animations` and `characters.animation.sheet`. New Video 2D card `character-reaction` (a figure on its mark plays
 a sheet once or in a loop and breathes) next to `walk-cycle-sheet`; the walking cards that move the legs are `walk-two-pose`
-(two pictures take turns, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
+(a two-cell sheet, one cell per half step, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
 way they look (`facing`). New `reaction` trait and gesture/expression words in the 2D search groups.
 
 **A safety net for the coming split of the two largest files (no behaviour

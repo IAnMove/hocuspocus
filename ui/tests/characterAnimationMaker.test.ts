@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { aspectOf, keptPoses, makeAnimation, type PoseTake } from '../src/features/characters/characterAnimationMaker.ts'
-import { animationDef } from '../src/lib/characterAnimations.ts'
+import { animationDef, customAnimationDef } from '../src/lib/characterAnimations.ts'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
 
 const kit = () => ({
@@ -14,8 +14,8 @@ function deps(log: string[], options: { failOn?: string } = {}) {
   let seed = 100
   return {
     seed: () => seed++,
-    prompt: async (details: { animation: string; pose: string; description?: string; style?: string }) => {
-      log.push(`prompt ${details.animation}/${details.pose} ${details.style} ${details.description}`)
+    prompt: async (details: { animation: string; pose: string; description?: string; style?: string; custom?: { view: string; text: string } }) => {
+      log.push(`prompt ${details.animation}/${details.pose} ${details.style} ${details.description}${details.custom ? ` custom ${details.custom.view} ${details.custom.text}` : ''}`)
       return { prompt: `prompt-${details.pose}`, negative: 'neg', screen: 'green' as const, resolution: '896x1152' }
     },
     generate: async (_provider: string, prompt: string, model: string, _reference: unknown, negative: string, request?: Record<string, unknown>) => {
@@ -27,8 +27,8 @@ function deps(log: string[], options: { failOn?: string } = {}) {
       log.push(`key ${details.source} ${details.mode} ${details.intentId}`)
       return { file: 'k.png', url: `${details.source.replace('raw', 'keyed')}`, sha256: 'x' }
     },
-    sheet: async (details: { workspace: string; sources: string[]; name?: string }) => {
-      log.push(`sheet ${details.workspace} ${details.name} ${details.sources.join(',')}`)
+    sheet: async (details: { workspace: string; sources: string[]; name?: string; scaleBy?: string }) => {
+      log.push(`sheet ${details.workspace} ${details.name} ${details.scaleBy} ${details.sources.join(',')}`)
       return { filename: 's.png', source: '/api/v1/file/walk-sheet-1.png?workspace=w', width: 1480, height: 640, count: details.sources.length, columns: details.sources.length, rows: 1,
                cell: { width: 370, height: 640 }, feet: .96, figure: .86 }
     },
@@ -50,7 +50,7 @@ test('every pose is made in turn from the character\'s own picture, keyed on its
   assert.match(log[0], /^prompt walk\/contact paper-cutout a detective in a mustard coat$/, 'the style preset and the look reach the prompt')
   assert.ok(log.findIndex(line => line.startsWith('key')) < log.findIndex(line => line.startsWith('generate') && line.includes('prompt-passing ')), 'a pose is keyed before the next is made')
   assert.ok(log.filter(line => line.startsWith('key')).every(line => / green animation-key-.+-walk-/.test(line)))
-  assert.match(log.at(-1)!, /^sheet w ana-walk \/api\/v1\/file\/keyed-prompt-contact\.png/)
+  assert.match(log.at(-1)!, /^sheet w ana-walk height \/api\/v1\/file\/keyed-prompt-contact\.png/)
   assert.deepEqual(result.frames.map(frame => frame.id), ['contact', 'passing', 'contact-b', 'passing-b'])
   assert.deepEqual([result.sheet.count, result.sheet.columns, result.fps, result.loop, result.facing, result.model], [4, 4, 4, 'loop', 'right', 'qwen_image_21'])
   assert.equal(result.prompt, 'prompt-contact')
@@ -89,6 +89,30 @@ test('a character with no persistent picture cannot make poses, and a cancelled 
     { ...base, generate: async (...args: Parameters<typeof base.generate>) => { controller.abort(); return base.generate(...args) } }))
   assert.equal(log.filter(line => line.startsWith('generate')).length, 1)
   assert.equal(log.some(line => line.startsWith('sheet')), false)
+})
+
+test('a standing gesture is joined by the width of its legs and a cycle or a bust by its height, so the figure keeps its size whatever the model drew', async () => {
+  const sheetFor = async (id: string) => {
+    const log: string[] = []
+    await makeAnimation({ workspace: 'w', kit: kit(), def: animationDef(id)!, model: 'm', signal: new AbortController().signal, onUpdate: () => {} }, deps(log))
+    return log.at(-1)!.split(' ')[3]
+  }
+  assert.deepEqual([await sheetFor('wave'), await sheetFor('angry'), await sheetFor('walk')], ['base', 'face', 'height'])
+})
+
+test('an animation the author described is made from their words, and keeps them on each pose', async () => {
+  const log: string[] = []
+  const def = customAnimationDef('mi-guino', 'Mi guiño', 'bust', ['Anime expression: a wink', 'Anime expression: a big wink'])
+  const result = await makeAnimation({ workspace: 'w', kit: kit(), def, model: 'm', signal: new AbortController().signal, onUpdate: () => {} }, deps(log))
+  assert.deepEqual(log.filter(line => line.startsWith('prompt')), [
+    'prompt mi-guino/pose-1 paper-cutout a detective in a mustard coat custom bust Anime expression: a wink',
+    'prompt mi-guino/pose-2 paper-cutout a detective in a mustard coat custom bust Anime expression: a big wink'])
+  assert.deepEqual(result.frames.map(frame => [frame.id, frame.prompt, frame.label]), [['pose-1', 'Anime expression: a wink', 'a wink'], ['pose-2', 'Anime expression: a big wink', 'a big wink']])
+  assert.deepEqual([result.title, result.scaleBy, result.view, result.loop], ['Mi guiño', 'face', 'bust', 'once'])
+  // A catalog animation sends no words of its own and keeps no title.
+  const catalog = await makeAnimation({ workspace: 'w', kit: kit(), def: animationDef('wave')!, model: 'm', signal: new AbortController().signal, onUpdate: () => {} }, deps([]))
+  assert.equal(catalog.title, undefined)
+  assert.equal(catalog.frames.every(frame => frame.prompt === undefined), true)
 })
 
 test('the request names the nearest aspect of the resolution', () => {

@@ -219,7 +219,7 @@ export async function checkAccent(details: { workspace: string; file: string; te
 /** One pose of an animation, made with the character as its reference: the prompt, the screen colour to key it on and its size. */
 export type AnimationPrompt = { prompt: string; negative: string; screen: 'green' | 'blue' | 'magenta'; resolution: string }
 
-export function fetchAnimationPrompt(details: { animation: string; pose: string; description?: string; style?: string; signal?: AbortSignal }): Promise<AnimationPrompt> {
+export function fetchAnimationPrompt(details: { animation: string; pose: string; description?: string; style?: string; custom?: { view: string; text: string }; signal?: AbortSignal }): Promise<AnimationPrompt> {
   const { signal, ...body } = details
   return postJson<AnimationPrompt>('/api/v1/character-kits/animations/prompt', body, 'Could not build the pose prompt', signal)
 }
@@ -229,8 +229,9 @@ export type AnimationSheetResult = {
   cell: { width: number; height: number }; feet: number; figure: number
 }
 
-/** Join keyed pose pictures into one sprite sheet of equal cells (the server crops, scales together and stands them on one line). */
-export function buildAnimationSheet(details: { workspace: string; sources: string[]; name?: string; columns?: number; signal?: AbortSignal }): Promise<AnimationSheetResult> {
+/** Join keyed pose pictures into one sprite sheet of equal cells: the server crops them, scales them so the figure keeps its size
+ * (by its height, the width of its legs or the size of its head: `scaleBy`) and stands them on one line. */
+export function buildAnimationSheet(details: { workspace: string; sources: string[]; name?: string; columns?: number; scaleBy?: 'height' | 'base' | 'face'; signal?: AbortSignal }): Promise<AnimationSheetResult> {
   const { signal, ...body } = details
   return postJson<AnimationSheetResult>('/api/v1/character-kits/animations/sheet', body, 'Could not build the sprite sheet', signal)
 }
