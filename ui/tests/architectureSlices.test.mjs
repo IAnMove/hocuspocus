@@ -438,7 +438,7 @@ test('Studio duration setter keeps TTS auto sentinel at zero', async () => {
 test('composed slices bind without as-never casts at the useStore call site', async () => {
   const fs = await import('node:fs/promises')
   const source = await fs.readFile(new URL('../src/stores/useStore.ts', import.meta.url), 'utf8')
-  const composition = source.split('export const useStore')[1].split('directorImageSpatialUpsampling:')[0]
+  const composition = source.split('export const useStore')[1].split('setDeveloperMode:')[0]
   assert.match(composition, /bindSlice\(set, get, createSettingsSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createThemeSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createGallerySlice\)/)
@@ -463,6 +463,8 @@ test('composed slices bind without as-never casts at the useStore call site', as
   assert.match(composition, /bindSlice\(set, get, createDirectorMusicVideoSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createOutputRestoreSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createStudioFormSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createJobsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createGenerationSlice\)/)
   assert.doesNotMatch(composition, /as never/)
 })
 

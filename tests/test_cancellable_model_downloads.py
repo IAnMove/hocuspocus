@@ -76,7 +76,7 @@ class TestCancellableDownloads(unittest.TestCase):
         with open(os.path.join(APP, "_launch_runtime.py"), "r", encoding="utf-8") as handle:
             launch = handle.read()
         with open(
-            os.path.join(ROOT, "ui", "src", "stores", "useStore.ts"),
+            os.path.join(ROOT, "ui", "src", "stores", "jobsSlice.ts"),
             "r",
             encoding="utf-8",
         ) as handle:
