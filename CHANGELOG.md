@@ -21,7 +21,8 @@ carry another production's tagline or Nintendo disclaimer.
 default (opt-in in Settings › Services); the 1,450-character cut is gone (only
 MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
 user types for a rerun, changes at the review pause or approves in the
-direct-video review screen keeps the lettering it asks for. *Raw prompts* in
+direct-video review screen keeps the lettering it asks for, including an H3
+segment regenerate that does not send a new override. *Raw prompts* in
 Settings › Services sends every Director prompt exactly as planned: no
 art-style prefix, locks, motion-word removal or polish, in planning (the plan
 endpoint, the orchestrator and the legacy planner), after the review pause, in

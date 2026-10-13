@@ -4070,8 +4070,15 @@ def rerun_h3_segment(
     snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
     direct_params = {**state, **snapshot}
     direct_video, direct_video_master_prompt = _direct_video_settings(direct_params)
-    # A prompt the user typed keeps its lettering; Raw prompts adds no lock.
-    allow_segment_text = bool(prompt_override) or _clip_text_allowed(direct_params)
+    # A prompt the user typed (this call, or at the review pause) keeps its
+    # lettering; Raw prompts adds no lock. Clip rerun already honored the
+    # review mark; this path must too — Regenerate without a fresh override
+    # used to lock the saved segment and strip the lettering they approved.
+    typed = bool(prompt_override) or any(
+        _typed_at_review(state, clip_index, field)
+        for field in ("video_prompt", "window_prompts", "h3_segment_prompts")
+    )
+    allow_segment_text = typed or _clip_text_allowed(direct_params)
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs, video_refs, audio_refs = (
         ([], [], []) if direct_video else _h3_edit_references(state, clip_index)
@@ -4168,7 +4175,7 @@ def rerun_h3_segment(
                         video_params,
                     ),
                 )
-            prompt = _saved_prompt_contract(state, prompt, "video", typed=bool(prompt_override))
+            prompt = _saved_prompt_contract(state, prompt, "video", typed=typed)
             prompt = _h3_apply_portrait_composition_contract(
                 prompt,
                 str(video_params.get("resolution") or "960x544"),

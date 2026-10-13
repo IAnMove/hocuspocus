@@ -439,6 +439,93 @@ def test_h3_rejoin_rejects_stale_clip_even_when_segments_are_playable(tmp_path: 
     assert checkpoint.read_bytes() == before
 
 
+def test_rerun_h3_segment_keeps_lettering_typed_at_review(tmp_path: Path):
+    """Regenerate without a new override must not lock a review-typed prompt."""
+    state = _saved_state(tmp_path)
+    lettering = "A shop window with a sign reading 'OPEN'."
+    state["clips"][0]["video_prompt"] = lettering
+    state["clips"][0]["h3_segments"][0]["prompt"] = lettering
+    state["clip_plans"] = [{
+        "video_prompt": lettering,
+        "_director_typed_prompts": ["video_prompt"],
+    }]
+    state["_params_snapshot"]["allow_clip_text"] = False
+    _write_pipeline(tmp_path, state)
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"typed_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit):
+        director_pipeline.rerun_h3_segment(str(tmp_path), "editable", 0, 0, cascade=False)
+
+    assert submitted
+    sent = submitted[0]["prompt"]
+    assert "OPEN" in sent
+    assert "NO VISIBLE TEXT LOCK" not in sent
+
+
+def test_rerun_h3_segment_locks_lettering_when_the_plan_was_not_typed(tmp_path: Path):
+    state = _saved_state(tmp_path)
+    lettering = "A shop window with a sign reading 'OPEN'."
+    state["clips"][0]["video_prompt"] = lettering
+    state["clips"][0]["h3_segments"][0]["prompt"] = lettering
+    state["clip_plans"] = [{"video_prompt": lettering}]
+    state["_params_snapshot"]["allow_clip_text"] = False
+    _write_pipeline(tmp_path, state)
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"locked_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit):
+        director_pipeline.rerun_h3_segment(str(tmp_path), "editable", 0, 0, cascade=False)
+
+    assert submitted
+    sent = submitted[0]["prompt"]
+    assert "NO VISIBLE TEXT LOCK" in sent
+
+
+def test_rerun_h3_clip_without_override_keeps_review_lettering(tmp_path: Path):
+    """Dashboard Regenerate (no editor) forwards to H3 without prompt_override."""
+    state = _saved_state(tmp_path)
+    lettering = "A shop window with a sign reading 'OPEN'."
+    state["clips"][0]["video_prompt"] = lettering
+    for record in state["clips"][0]["h3_segments"]:
+        record["prompt"] = lettering
+    state["clip_plans"] = [{
+        "video_prompt": lettering,
+        "_director_typed_prompts": ["video_prompt"],
+    }]
+    state["_params_snapshot"]["allow_clip_text"] = False
+    _write_pipeline(tmp_path, state)
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"clip_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch("app.services.video_editor.probe_media", return_value={"duration": 5.16}), \
+            patch(
+                "app.services.video_editor.extract_frame",
+                side_effect=lambda _s, destination, _t: Path(destination).write_bytes(b"frame"),
+            ):
+        director_pipeline.rerun_clip_video(str(tmp_path), "editable", 0)
+
+    assert submitted
+    assert all("OPEN" in item["prompt"] for item in submitted)
+    assert all("NO VISIBLE TEXT LOCK" not in item["prompt"] for item in submitted)
+
+
 def test_regenerating_an_h3_segment_draws_and_records_a_new_seed(tmp_path: Path):
     state = _saved_state(tmp_path)
     _write_pipeline(tmp_path, state)
