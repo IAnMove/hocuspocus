@@ -7,7 +7,7 @@ from tests.api_client_source import api_client_source
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
-STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
+STORE = ROOT / "ui" / "src" / "stores" / "jobsSlice.ts"
 TOOLS = ROOT / "ui" / "src" / "features" / "studio" / "store" / "toolsSlice.ts"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
 ACTIVITY_FEATURE = ROOT / "ui" / "src" / "features" / "activity"
