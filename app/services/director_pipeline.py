@@ -970,11 +970,54 @@ def _approved_review_plans(provided: Any) -> Optional[list[dict]]:
     return mark_typed_prompt_edits([], copy.deepcopy(provided))
 
 
+def _typed_prompt_item(items: object, clip_index: int) -> dict | None:
+    item = items[clip_index] if isinstance(items, list) and 0 <= clip_index < len(items) else None
+    return item if isinstance(item, dict) else None
+
+
+def _mark_typed_prompt(item: dict, field: str) -> None:
+    typed = {str(value) for value in (item.get(TYPED_PROMPTS_KEY) or ()) if value}
+    typed.add(field)
+    item[TYPED_PROMPTS_KEY] = sorted(typed)
+
+
+def _write_typed_clip_prompt(
+    clips: list,
+    plans: list,
+    planned: list,
+    clip_index: int,
+    field: str,
+    text: str,
+    *,
+    extras: Mapping[str, Any] | None = None,
+) -> None:
+    """Write a workspace prompt edit and mark it typed when the wording changed."""
+    extra = dict(extras or {})
+    for container in (clips, plans, planned):
+        item = _typed_prompt_item(container, clip_index)
+        if item is None:
+            continue
+        previous = " ".join(str(item.get(field) or item.get("_director_h3_source_prompt") or "").split())
+        if container is planned and field == "video_prompt" and "video_prompt" not in item:
+            pass
+        else:
+            item[field] = text
+        for key, value in extra.items():
+            item[key] = value
+        if previous != " ".join(text.split()):
+            _mark_typed_prompt(item, field)
+
+
 def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> bool:
-    """Whether the user typed this saved prompt at the review pause (see ``continue_pipeline``)."""
-    plans = state.get("clip_plans")
-    plan = plans[clip_index] if isinstance(plans, list) and 0 <= clip_index < len(plans) else None
-    return isinstance(plan, dict) and field in (plan.get(TYPED_PROMPTS_KEY) or ())
+    """Whether the user typed this saved prompt (review pause or a later workspace edit)."""
+    return any(
+        field in (item.get(TYPED_PROMPTS_KEY) or ())
+        for item in (
+            _typed_prompt_item(state.get(key), clip_index)
+            for key in ("clip_plans", "clips", "planned_clips")
+        )
+        if item is not None
+    )
 
 
 def _h3_segment_typed_at_review(state: Mapping[str, Any], clip_index: int) -> bool:
@@ -2463,24 +2506,14 @@ def update_clip_prompts(
             raise ValueError("Clip not found")
         if video_prompt is not None:
             text = str(video_prompt)
-            if clip_index < len(clips) and isinstance(clips[clip_index], dict):
-                clips[clip_index]["video_prompt"] = text
-                clips[clip_index]["_director_h3_source_prompt"] = text
-            if clip_index < len(plans) and isinstance(plans[clip_index], dict):
-                plans[clip_index]["video_prompt"] = text
-                plans[clip_index]["_director_h3_source_prompt"] = text
-            if clip_index < len(planned) and isinstance(planned[clip_index], dict):
-                planned[clip_index]["_director_h3_source_prompt"] = text
-                if "video_prompt" in planned[clip_index]:
-                    planned[clip_index]["video_prompt"] = text
+            _write_typed_clip_prompt(
+                clips, plans, planned, clip_index, "video_prompt", text,
+                extras={"_director_h3_source_prompt": text},
+            )
         if image_prompt is not None:
-            text = str(image_prompt)
-            if clip_index < len(clips) and isinstance(clips[clip_index], dict):
-                clips[clip_index]["image_prompt"] = text
-            if clip_index < len(plans) and isinstance(plans[clip_index], dict):
-                plans[clip_index]["image_prompt"] = text
-            if clip_index < len(planned) and isinstance(planned[clip_index], dict):
-                planned[clip_index]["image_prompt"] = text
+            _write_typed_clip_prompt(
+                clips, plans, planned, clip_index, "image_prompt", str(image_prompt),
+            )
         if soundtrack_drive is not None:
             wants = bool(soundtrack_drive)
             audio = {

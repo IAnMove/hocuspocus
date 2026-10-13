@@ -20,8 +20,8 @@ carry another production's tagline or Nintendo disclaimer.
 **Prompts reach the model as written.** Director prompt polish is off by
 default (opt-in in Settings › Services); the 1,450-character cut is gone (only
 MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
-user types for a rerun, changes at the review pause or approves in the
-direct-video review screen keeps the lettering it asks for. *Raw prompts* in
+user types for a rerun, changes at the review pause, saves from Workspaces or
+approves in the direct-video review screen keeps the lettering it asks for. *Raw prompts* in
 Settings › Services sends every Director prompt exactly as planned: no
 art-style prefix, locks, motion-word removal or polish, in planning (the plan
 endpoint, the orchestrator and the legacy planner), after the review pause, in
@@ -38,7 +38,8 @@ videos, where planners used to put the song's lyrics on screen, and only on the
 prompts the LLM wrote. Stories, audio short films and comic movies send their
 prompts without it. A direct-video H3 segment the user types keeps its
 lettering too, and so does a regenerated H3 segment of a shot the user typed at
-the review pause. The project's *allow text* switch still turns the lock off. The
+the review pause or saved later from Workspaces. The project's *allow text*
+switch still turns the lock off. The
 "Maintain the same … art style." prefix, and the vision call that names the
 reference's style for it, are used only with Flux.2 Klein models, the only ones
 it was tested with, and the call is skipped with *Raw prompts*. Other image
