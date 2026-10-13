@@ -26,3 +26,30 @@ def test_favorites_toggle(server, golden) -> None:
 
 def test_unknown_route(server, golden) -> None:
     server.check(golden, "unknown api route", "GET", "/api/v1/does-not-exist")
+
+
+def test_task_upsert_keeps_a_terminal_task_terminal(server, golden) -> None:
+    """A queued task may jump to completed, and a later active snapshot does not reopen it."""
+    body = {
+        "id": "core-sync",
+        "workspace": "default",
+        "status": "queued",
+        "title": "Story song",
+        "phase": "queued",
+        "message": "Waiting",
+    }
+    server.check(golden, "task upsert queued", "POST", "/api/v1/tasks/upsert", json=body)
+    server.check(
+        golden,
+        "task upsert completed",
+        "POST",
+        "/api/v1/tasks/upsert",
+        json={**body, "status": "completed", "phase": "completed", "message": "Ready"},
+    )
+    server.check(
+        golden,
+        "task upsert stays completed",
+        "POST",
+        "/api/v1/tasks/upsert",
+        json={**body, "status": "queued", "phase": "queued", "message": "Waiting again"},
+    )

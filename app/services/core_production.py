@@ -219,5 +219,4 @@ def comic_writing_llm(body: dict) -> dict | None:
 
 
 def resolve_visual_media(value: str, workspace: str | None) -> str:
-    from services import core_editor
-    return core_editor.resolve_media(str(value or ""), workspace)
+    return core.resolve_media(str(value or ""), workspace)
