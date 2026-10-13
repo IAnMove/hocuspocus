@@ -1891,7 +1891,7 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
 
 class TestDirectorUICatalogContract(unittest.TestCase):
     def test_ui_preserves_backend_director_capabilities(self):
-        store_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "useStore.ts")
+        store_path = os.path.join(_ROOT_DIR, "ui", "src", "features", "director", "store", "directorPipelineSlice.ts")
         models_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "modelsSlice.ts")
         types_path = os.path.join(_ROOT_DIR, "ui", "src", "types", "index.ts")
         chat_path = os.path.join(
