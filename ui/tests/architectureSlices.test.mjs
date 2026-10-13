@@ -449,6 +449,10 @@ test('composed slices bind without as-never casts at the useStore call site', as
   assert.match(composition, /bindSlice\(set, get, createPresetsSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createActivitySlice\)/)
   assert.match(composition, /bindSlice\(set, get, createCivitaiSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createToolsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createRecipesSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createServicesSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createLorasSlice\)/)
   assert.doesNotMatch(composition, /as never/)
 })
 

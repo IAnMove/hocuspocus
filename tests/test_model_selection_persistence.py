@@ -12,6 +12,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
 
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
+SERVICES_PATH = os.path.join(ROOT, "ui", "src", "stores", "servicesSlice.ts")
+PERSISTENCE_PATH = os.path.join(ROOT, "ui", "src", "stores", "modeSettingsPersistence.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
 )
@@ -51,7 +53,6 @@ def _story_ui() -> str:
 class TestModelSelectionPersistence(unittest.TestCase):
     def test_global_production_profile_is_the_generic_llm_source(self):
         launch = _source(LAUNCH_PATH)
-        store = _source(STORE_PATH)
 
         self.assertIn('@api.get("/api/v1/production-profile")', launch)
         self.assertIn('@api.put("/api/v1/production-profile")', launch)
@@ -61,8 +62,9 @@ class TestModelSelectionPersistence(unittest.TestCase):
         ensure = launch[launch.index("def _ensure_llm_loaded():"):]
         ensure = ensure[:ensure.index("@api.post", 1)]
         self.assertIn("_effective_llm_routing(services)", ensure)
-        self.assertIn("loadProductionProfile", store)
-        self.assertIn("updateProductionProfile", store)
+        services = _source(SERVICES_PATH)
+        self.assertIn("loadProductionProfile", services)
+        self.assertIn("updateProductionProfile", services)
 
     def test_backend_normalizes_per_mode_preferences(self):
         source = _source(LAUNCH_PATH)
@@ -101,7 +103,7 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("fetchModelSelections", client)
         self.assertIn("updateModelSelections", client)
         self.assertIn("api.fetchModelSelections()", store)
-        self.assertIn("api.updateModelSelections(payload)", store)
+        self.assertIn("api.updateModelSelections(payload)", _source(PERSISTENCE_PATH))
         self.assertIn("durableSelections?.selected_models || {}", store)
 
     def test_story_lab_explains_the_ltx_gemma_dependency(self):
@@ -149,11 +151,10 @@ class TestModelSelectionPersistence(unittest.TestCase):
 
     def test_global_video_format_hydration_is_race_safe_and_override_aware(self):
         store = _source(STORE_PATH)
-        helper = store[store.index(
+        services = _source(SERVICES_PATH)
+        helper = services[services.index(
             "async function _syncGlobalProductionVideoFormat",
-        ):store.index("export const useStore", store.index(
-            "async function _syncGlobalProductionVideoFormat",
-        ))]
+        ):services.index("export const createServicesSlice")]
 
         self.assertIn("_globalModelSelectionModes.has('video')", helper)
         self.assertIn("before.selectedModelPerMode.video !== modelType", helper)
@@ -163,7 +164,8 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("directorResolution: format.resolution", helper)
         self.assertIn("directorAspectRatio: format.aspectRatio", helper)
         self.assertGreaterEqual(
-            store.count("_syncGlobalProductionVideoFormat("),
+            store.count("_syncGlobalProductionVideoFormat(")
+            + services.count("_syncGlobalProductionVideoFormat("),
             4,
         )
 
