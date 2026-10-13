@@ -970,7 +970,7 @@ test('parses a multi-page MiniMax comic and a confirmed all-images render', asyn
   assert.equal(reconciled.actions[0].imageProvider, 'minimax')
   assert.equal(reconciled.actions[1].imageModel, 'image-01')
   assert.equal(reconciled.actions[1].scope, 'missing')
-  assert.match(reconciled.reply, /Estimate: 2 calls MiniMax/)
+  assert.match(reconciled.reply, /Estimate: 2 MiniMax calls/)
   assert.equal(reconciled.actions[0].type === 'create_comic' && reconciled.actions[1].type === 'generate_comic', true)
   const failed = await reconcileAgentTurnWithRequest('reintenta las fallidas del comic', { reply: 'Vale.', actions: [] }, [
     { role: 'user', text: 'hazme un comic' },
@@ -1654,7 +1654,7 @@ test('track_character_kit_job inspects the canonical queue and stays running', a
     assert.equal(tracked[0].ok, true)
     assert.equal(tracked[0].report.state, 'running')
     assert.equal(tracked[0].report.target.kind, 'character_kit')
-    assert.match(tracked[0].message, /following the work of “Nora”/)
+    assert.match(tracked[0].message, /tracking the work on “Nora”/)
     assert.match(tracked[0].message, /Pose base Nora/)
     assert.match(tracked[0].message, /I opened Activity/)
     assert.ok(activityOpened >= 1)

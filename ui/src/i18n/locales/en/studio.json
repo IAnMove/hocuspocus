@@ -1218,10 +1218,13 @@
     "queueEmptyAll": "The canonical queue for this workspace is empty. I opened the Activity history.",
     "queueEmptyActive": "There are no active tasks. I opened Activity in case you want to see the history.",
     "gpuBusy": " The GPU is busy or pending: {{names}}.",
-    "resourceWait": " {{count}} task(s) are waiting for a resource.",
-    "queueSummary": "Queue {{scope}}: {{active}} active of {{visible}} visible.{{waitNote}} I opened Activity.\n{{lines}}",
+    "resourceWait_one": " {{count}} task is waiting for a resource.",
+    "resourceWait_other": " {{count}} tasks are waiting for a resource.",
+    "queueSummary": "Queue ({{scope}}): {{active}} active of {{visible}} visible.{{waitNote}} I opened Activity.\n{{lines}}",
     "cancelRequested": "I asked to cancel “{{title}}” ({{id}}); Activity shows status {{status}}.",
     "resumed": "I resumed “{{title}}” ({{id}}); the current status is {{status}}.",
-    "retried": "I retried “{{title}}” ({{id}}); Activity shows status {{status}}."
+    "retried": "I retried “{{title}}” ({{id}}); Activity shows status {{status}}.",
+    "queueScopeActive": "active",
+    "queueScopeAll": "all"
   }
 }

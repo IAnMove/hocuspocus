@@ -288,22 +288,22 @@
     "noClips": "There are no clips to export.",
     "exportNoJob": "The exporter returned success without a jobId.",
     "noExport": "There is no Video Editor export in progress.",
-    "videoclipRequired": "Specify the exact videoclip.",
+    "videoclipRequired": "Specify the exact music video.",
     "videoclipAudioRequired": "Specify the exact audio output.",
-    "videoclipMountConfirm": "Mounting an alternative song requires confirm=true.",
+    "videoclipMountConfirm": "Assembling with an alternative song requires confirm=true.",
     "videoclipSongRequired": "Specify the exact song.",
     "videoclipAttachFailed": "I could not attach the alternative song."
   },
   "defaultTransition": "A moment later…",
   "replies": {
-    "videoclipAdaptationRandom": "random extras if needed",
-    "videoclipAdaptationRepeat": "the videoclip will loop if needed",
-    "videoclipAdded": "I added “{{audio}}” as an alternative song for “{{videoclip}}” ({{adaptation}}). I have not mounted the video yet.",
-    "videoclipMounting": "I am mounting “{{videoclip}}” with “{{audio}}” (FFmpeg, without regenerating shots). The result will be “{{output}}”.",
-    "videoclipMountFinished": "The mount of “{{audio}}” finished: {{output}}.",
-    "videoclipMountStatus": "The mount of “{{audio}}” is {{status}}: {{message}}",
-    "videoclipLastMounted": "The last mounted alternative song is “{{audio}}” → “{{output}}”.",
-    "videoclipAlternativesAttached": "“{{name}}” has {{total}} alternative songs attached and none are being mounted.",
+    "videoclipAdaptationRandom": "random extra shots if needed",
+    "videoclipAdaptationRepeat": "the music video will loop if needed",
+    "videoclipAdded": "I added “{{audio}}” as an alternative song for “{{videoclip}}” ({{adaptation}}). I have not assembled the video yet.",
+    "videoclipMounting": "I am assembling “{{videoclip}}” with “{{audio}}” (FFmpeg, without regenerating shots). The result will be “{{output}}”.",
+    "videoclipMountFinished": "The assembly with “{{audio}}” finished: {{output}}.",
+    "videoclipMountStatus": "The assembly with “{{audio}}” is {{status}}: {{message}}",
+    "videoclipLastMounted": "The last alternative song assembled is “{{audio}}” → “{{output}}”.",
+    "videoclipAlternativesAttached": "“{{name}}” has {{total}} alternative song(s) attached and none is being assembled.",
     "videoclipNoAlternatives": "“{{name}}” has no alternative songs yet."
   }
 }

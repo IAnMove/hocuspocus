@@ -37,6 +37,6 @@
     "episodeMissing": "Series Lab no contiene ese episodio.",
     "unsupported": "Este tipo de proyecto todavía no tiene almacenamiento durable que abrir.",
     "discardUnsavedComic": "¿Abrir este cómic y descartar los cambios sin guardar?",
-    "loadFailed": "No se pudieron cargar las Productions"
+    "loadFailed": "No se pudieron cargar las producciones"
   }
 }

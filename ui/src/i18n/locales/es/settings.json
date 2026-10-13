@@ -39,7 +39,7 @@
     "backendWebgpu": "WebGPU en navegador",
     "noteGguf": "Cifras publicadas por la implementación comunitaria; no es compatible con nuestro backend Diffusers.",
     "noteMlx": "Requiere un adaptador MLX independiente; no funciona como checkpoint CUDA.",
-    "noteWebgpu": "12 GB para canciones de hasta un minuto; 16 GB para la capacidad completa."
+    "noteWebgpu": "12 GB para canciones de hasta un minuto; 16 GB para la duración completa."
   },
   "services": {
     "loadFailed": "No se pudieron cargar los ajustes de servicios",

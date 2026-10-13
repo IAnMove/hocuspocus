@@ -296,14 +296,14 @@
   },
   "defaultTransition": "Momentos después…",
   "replies": {
-    "videoclipAdaptationRandom": "extras aleatorios si hace falta",
+    "videoclipAdaptationRandom": "planos extra aleatorios si hace falta",
     "videoclipAdaptationRepeat": "se repetirá el videoclip si hace falta",
     "videoclipAdded": "He añadido “{{audio}}” como canción alternativa de “{{videoclip}}” ({{adaptation}}). Aún no he montado el vídeo.",
     "videoclipMounting": "Estoy montando “{{videoclip}}” con “{{audio}}” (FFmpeg, sin regenerar planos). El resultado será “{{output}}”.",
     "videoclipMountFinished": "El montaje de “{{audio}}” terminó: {{output}}.",
     "videoclipMountStatus": "El montaje de “{{audio}}” está {{status}}: {{message}}",
     "videoclipLastMounted": "La última canción alternativa montada es “{{audio}}” → “{{output}}”.",
-    "videoclipAlternativesAttached": "“{{name}}” tiene {{total}} canciones alternativas adjuntas y ninguna se está montando.",
+    "videoclipAlternativesAttached": "“{{name}}” tiene {{total}} canción(es) alternativa(s) adjunta(s) y ninguna se está montando.",
     "videoclipNoAlternatives": "“{{name}}” no tiene canciones alternativas todavía."
   }
 }

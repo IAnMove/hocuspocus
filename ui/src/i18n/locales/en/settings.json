@@ -30,7 +30,7 @@
   "communityMusic": {
     "title": "Community MiniMax Music variants",
     "experimental": "experimental",
-    "intro": "Community ports of the official model. They are shown so you can compare requirements, and they cannot be selected until a validated HocusPocus adapter exists.",
+    "intro": "Community ports of the official model. They are shown so you can compare requirements, but they cannot be selected until a validated HocusPocus adapter exists.",
     "openRepo": "Open repository",
     "disk": "disk ~{{gb}} GB",
     "backendLine": "backend: {{backend}}",

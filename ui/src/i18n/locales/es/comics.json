@@ -889,7 +889,7 @@
     "stage": "Etapa {{number}} de {{total}}",
     "caption": "Página {{page}} · Viñeta {{panel}}",
     "scene": "{{topic}}. Momento {{panel}} de la etapa {{page}}; composición distinta y continuidad visual con las demás viñetas.",
-    "topic": "una aventura inventada por el usuario",
+    "topic": "Una aventura inventada por el usuario",
     "newComic": "Nuevo cómic",
     "styleName": "Dirección visual coherente con la petición del usuario",
     "personality": "Expresivo y coherente con el tono del cómic.",
@@ -901,7 +901,7 @@
   "actionErrors": {
     "storedMismatch": "El cómic guardado tiene {{storedPages}} páginas y {{storedPanels}} viñetas; pediste {{requestedPages}} páginas y {{requestedPanels}} viñetas.",
     "noPanels": "El cómic abierto no tiene viñetas que dibujar.",
-    "noDirectorPlan": "No hay un cómic con plan de Director abierto. Pide primero un cómic de ejemplo o crea uno con tema.",
+    "noDirectorPlan": "No hay un cómic con plan de Director abierto. Pide primero un cómic de ejemplo o crea uno a partir de un tema.",
     "biographyBlocked": "Este cómic es una biografía factual. Confirma hechos, inferencias y dramatización (biography_review=true) antes de dibujar; no inventaré familiares, citas ni acontecimientos.",
     "regenerateNeedsPlan": "El cómic abierto no tiene un plan de Director. Crea primero el borrador completo antes de regenerar una viñeta.",
     "regenerateFailed": "No pude regenerar la viñeta {{panel}} de la página {{page}}.",
@@ -910,13 +910,13 @@
     "providerEmpty": "El proveedor no devolvió una ilustración."
   },
   "replies": {
-    "created": "He creado desde cero “{{title}}” con {{pages}} páginas, {{characters}} personajes y {{panels}} viñetas. Comic Director usará {{imageSource}}. No he generado imágenes todavía.",
+    "created": "He creado desde cero “{{title}}” con {{pages}} página(s), {{characters}} personaje(s) y {{panels}} viñeta(s). Comic Director usará {{imageSource}}. No he generado imágenes todavía.",
     "selectedLocalModel": "el modelo local seleccionado",
     "configuredLocalProvider": "el proveedor local configurado",
     "alreadyDrawn": "Todas las viñetas de este cómic ya tenían dibujo.",
     "cancelled": "He cancelado el lote con {{generated}} viñetas terminadas y {{failed}} fallidas; no he perdido lo ya dibujado.",
     "partial": "He dibujado {{generated}} viñetas con {{provider}} y han fallado {{failed}}. Puedo reanudar desde la primera pendiente o reintentar las fallidas.",
-    "drawn": "He dibujado {{generated}} viñetas con {{provider}}. Aparecen dentro de cada recuadro al terminar.",
+    "drawn": "He dibujado {{generated}} viñeta(s) con {{provider}}. Aparecen dentro de cada recuadro al terminar.",
     "regenerated": "He regenerado únicamente la viñeta {{panel}} de la página {{page}}; las demás imágenes permanecen intactas ({{generated}}/{{total}}).",
     "artworkProgress": "página {{page}}/{{pages}} · viñeta {{panel}}/{{panels}}",
     "artworkGenerating": "Generando {{progress}}…",

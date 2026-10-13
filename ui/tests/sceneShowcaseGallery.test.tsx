@@ -80,7 +80,7 @@ test('valida el catálogo, muestra tres vídeos completos primero y mantiene un 
   try {
     const view = await renderGallery(manifest)
     assert.deepEqual([...view.container.querySelectorAll('[data-showcase-id]')].map(node => node.getAttribute('data-showcase-id')), ['music-full', 'music-second', 'scene-one'])
-    assert.ok(view.screen.getByText('Full videoclips'))
+    assert.ok(view.screen.getByText('Full music videos'))
     assert.ok(view.screen.getByText('Saved scenes'))
     assert.ok(view.screen.getByText(/On an HTTP LAN URL you can play previews/))
     assert.ok(view.screen.getByText(/Video and poster playback does not verify SHA-256/))

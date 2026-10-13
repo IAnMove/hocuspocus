@@ -105,7 +105,7 @@
     "emptyType": "Todavía no hay elementos de este tipo."
   },
   "actionErrors": {
-    "uploadsReadOnly": "Uploads es una vista virtual de sólo lectura, no un workspace seleccionable para generar.",
+    "uploadsReadOnly": "Subidas es una vista virtual de sólo lectura, no un workspace seleccionable para generar.",
     "missing": "No existe el workspace “{{name}}”. Los disponibles son: {{available}}.",
     "none": "ninguno",
     "switchUnconfirmed": "El backend no confirmó el cambio al workspace “{{name}}”; no afirmaré que se completó.",

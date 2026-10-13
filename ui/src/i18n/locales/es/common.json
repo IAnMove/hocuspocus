@@ -329,7 +329,7 @@
     "invalidStructuredError": "Error estructurado inválido.",
     "invalidActor": "command.actor debe ser “user” o “wizard”.",
     "idempotencyMismatch": "command.idempotencyKey no coincide con workspace, capability, target e input.",
-    "invalidEnvelope": "Envelope de comando inválido.",
+    "invalidEnvelope": "Sobre de comando inválido.",
     "invalidStatus": "result.status “{{status}}” no es válido.",
     "crossWorkspaceResult": "result contiene referencias de varios workspaces.",
     "invalidResult": "Resultado de comando inválido."

@@ -38,7 +38,7 @@ test('the Wizard asks scenes.templates.suggest through the 2D card route and sho
       operation: 'scenes.templates.suggest', version: 1, input: { line: 'she bounces on the beat', speakers: 1 } } }])
     assert.match(outcome.message, /^music-pinball \| Rebote de pinball \| Pinball bounce \| one figure that bounces on the beat$/m)
     assert.match(outcome.message, /music-trampoline/)
-    assert.match(outcome.message, /No card knows: zeppelin/)
+    assert.match(outcome.message, /No card recognizes: zeppelin/)
     assert.deepEqual(outcome.target, { kind: 'video_2d_template', id: 'music-pinball', title: 'scenes.templates.suggest' })
   } finally {
     globalThis.fetch = previousFetch

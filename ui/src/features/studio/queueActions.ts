@@ -107,7 +107,7 @@ export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<Co
       ? i18n.t('studio:replies.resourceWait', { count: waiting.length })
       : ''
   return queueResult(i18n.t('studio:replies.queueSummary', {
-    scope,
+    scope: scope === 'all' ? i18n.t('studio:replies.queueScopeAll') : i18n.t('studio:replies.queueScopeActive'),
     active: active.length,
     visible: roots.length,
     waitNote,
