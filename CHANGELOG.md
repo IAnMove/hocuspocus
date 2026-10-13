@@ -18,11 +18,15 @@ when it keeps its name and its complexity does not rise. A changed body, a
 rise in complexity or a copy left behind still counts as new code. The limit of
 five new complex functions per pull request no longer counts pieces split out
 of an existing function, as long as that function gets simpler by at least as
-much. A new file over 1,200 lines still fails, moved or not. The check also
-fails when Python code is added under `app/` in a folder it does not measure
-(for example a new `app/features/`). Vendored engine folders and the eleven
-files that are already outside the measured folders are exempt. No limit
-changed.
+much and the pull request adds no logic overall. The development → main
+release check gives the same split credit at each merge. A new file over 1,200
+lines still fails, moved or not. The check also fails when Python code is added
+under `app/` in a folder it does not measure (for example a new
+`app/features/`). Vendored engine folders and the eleven files that are already
+outside the measured folders are exempt, but those eleven files can no longer
+grow by more than 75 lines or gain a complex function, and new vendored files
+are listed for reviewers. A waiver now covers only its own rule and exactly its
+file, and its expiry must be a real date. No limit changed.
 
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one

@@ -88,9 +88,11 @@ regression:
 - a file's maximum complexity rises by more than five, or a new file exceeds 25
   (unless every function over the limit is a verified move, see below);
 - an existing 1,000-line hotspot exceeds its small growth allowance;
-- a new first-party file exceeds 1,200 lines (never waivable, moves included); or
+- a new first-party file exceeds 1,200 lines (never waivable, moves included);
 - a tracked `app/**/*.py` file is outside the measured scope and is neither
-  vendored engine code nor in the unmeasured baseline.
+  vendored engine code nor in the unmeasured baseline; or
+- a file in the unmeasured baseline grows beyond the hotspot growth allowance
+  or gains a function at complexity 15+ (above its base maximum).
 
 A deliberate architectural change can refresh the snapshot, but the diff must
 be reviewed like any other budget change:
@@ -115,8 +117,13 @@ without review. A higher quality score cannot hide those local failures.
 Reports record `policy_version`, HEAD and base SHAs, and whether UI metrics
 were complete. Exceptions live in `scripts/code_health_exceptions.json` and
 must include path, rule, reason, owner, issue and expiry; there is no global
-hotspot waiver. There is no per-function cap: the complexity rules are per
-file. Function fingerprints only let the ratchet recognize moves and splits.
+hotspot waiver. `expires` must be a `YYYY-MM-DD` date. A waiver covers only
+its own rule's failure about exactly its `path`: `hotspot <path> grew …` for
+`hotspot_growth`, `new complexity hotspot <path> is …` or `complexity hotspot
+<path> increased …` for `complexity_hotspot`. A folder prefix or a fragment
+such as `LOC` matches nothing. There is no per-function cap: the complexity
+rules are per file. Function fingerprints only let the ratchet recognize moves
+and splits.
 
 ## Moves, splits and unmeasured code
 
@@ -136,12 +143,13 @@ of one. Each record has the path, the name, the line, the complexity and a
 hash:
 
 - **Python:** the qualified name and a hash of the normalized AST. The hash
-  covers the node type (sync or async), the arguments, the return annotation
-  and the body. Docstrings (of the function and of every def and class inside
-  it), comments and positions are ignored. Nothing is renamed. The function's
-  own name and its **decorators** are left out: a route moved from
-  `@app.post(...)` in launch to `@router.post(...)` in a router changes only
-  its decorator, which does not count towards complexity.
+  covers the node type (sync or async), the arguments (default values
+  included), the return annotation and the body. Docstrings (of the function
+  and of every def and class inside it), comments and positions are ignored.
+  Nothing is renamed. The function's own name and its **decorators** are left
+  out: a route moved from `@app.post(...)` in launch to `@router.post(...)` in
+  a router changes only its decorator, which does not count towards
+  complexity.
 - **UI:** the identifier from ESLint's label (`startGeneration` from
   "Async method 'startGeneration'") and the complexity. There is no hash.
   ESLint reports the function's head, not its body, so a hash would need a
@@ -177,6 +185,22 @@ copies of one base function give at most one move.
   under **Moves and splits** in the PR table, or as a `NOTE:` line in the
   terminal.
 
+The hash proves that the function's own code did not change. It does not
+cover what that code refers to: the decorators, the module's constants and
+globals, and the helpers it calls, which in the new file can be different
+objects with the same names. None of that changes the function's complexity,
+and a helper under 15 is invisible to every rule anyway. Reviewers of a move
+PR should check those by hand: compare the decorator lines, and diff the new
+module's constants and helpers against the ones in the old file.
+
+A UI move is weaker, because it has no hash. Any function with the same name
+whose complexity did not rise passes, even if its body was rewritten. The
+complexity cannot go up and the original must be gone, so the ratchet's
+numbers stay honest, but nothing proves the code is the same. Reviewers of a
+UI move PR should read the moved functions with `git diff --color-moved`
+(moved lines show in their own colour; anything else is a change) and ask for
+behaviour changes in a separate PR.
+
 Keep moves verbatim and make logic changes in a separate PR. If one PR must
 both move and change a complex function, the dated `complexity_hotspot`
 waiver is still available. A waiver applies only to the file a failure is
@@ -211,6 +235,13 @@ that budget when both of these are true:
   lowers the parent by *d* and creates a piece of complexity *d* + 1, so a
   pure extraction passes exactly. A parent that kept or gained complexity does
   not get credit.
+- **No new logic.** The change as a whole must not add decisions: the report's
+  `summary.decisions` (complexity minus one, summed over every measured
+  function) may not rise versus the base. Moving and splitting code keeps that
+  total; new logic raises it. Without this rule a parent could shed its logic
+  into helpers under 15, which no rule counts, while the "pieces" named after
+  it hold new code. A PR that splits functions and also adds logic gets no
+  split credit, so split in one PR and change behaviour in another.
 
 Credit is all or nothing per parent. The PR table lists `split: … carved out
 of P (before -> after)`, or `split not credited: …` with the numbers. Pieces
@@ -229,7 +260,24 @@ tracked `app/**/*.py` file fails as **unmeasured product code**, except:
   `app/setup.py` and the eight `app/scripts/*.py` tools).
 
 New feature code goes under `app/services/` or `app/routers/`. Developer tools
-go in the repository's `scripts/` folder. Both lists are copied into the
+go in the repository's `scripts/` folder.
+
+The baseline files stay where they are, but they cannot absorb code moved out
+of the measured scope. `app/core_runtime.py`, for example, is a 790-line
+server that imports every router. The report records each baseline file's
+lines and highest function complexity under `unmeasured.files`. A baseline
+file fails when it grows by more than the hotspot growth allowance (75 lines
+for files this size) or when it gets a function above its base maximum or 14,
+whichever is higher. Shrinking or deleting them is always free. These
+failures cannot be waived.
+
+Vendored folders are not measured, and model integrations add first-party
+files there routinely (VoxCPM2 added twenty), so a new file there cannot fail.
+Instead the report lists every tracked `.py` file under those prefixes
+(`unmeasured.vendor_files`), and the PR table warns about each new one:
+"N new Python file(s) under vendored folders are not measured". Reviewers must
+confirm that such a file is engine code and not product code moved out of the
+ratchet. Both lists are copied into the
 report, and a list that grows versus the PR base fails ("needs owner review").
 A baseline file that is deleted and later created again fails as new versus
 the base. A baseline entry whose file no longer exists prints a warning:
@@ -247,6 +295,11 @@ files also removes it from `UNMEASURED_BASELINE`.
   `scripts/code_health.py` in the release chain as a measurement change and
   fails closed. The first development → main release after an analyzer change
   needs that separate review.
+- The verifier re-checks the complex-function budget at every first-parent
+  merge with reports it builds from history. Those checkpoint reports carry
+  the same `fingerprints` and `summary.decisions` as a PR report, so a split
+  credited on its PR is credited again at its release step, and a split that
+  was not credited fails there too.
 
 ## Release integration: development → main
 

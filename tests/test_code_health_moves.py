@@ -8,7 +8,9 @@ it with the real ``collect()`` before and after the change, and runs the real
 ``compare()``. See docs/development/CODE_HEALTH.md, "Moves, splits and
 unmeasured code".
 """
+import hashlib
 import importlib.util
+import json
 import subprocess
 import sys
 import tempfile
@@ -210,6 +212,18 @@ class MoveAwareRatchetTests(unittest.TestCase):
             for item in failures
         ), failures)
 
+    def test_a_second_copy_of_a_moved_function_is_new_code(self):
+        _, failures, _, _ = run({LAUNCH: launch_with(COMIC_PLAN)}, {
+            LAUNCH: launch_with(),
+            "app/routers/comic_plan.py": COMIC_PLAN_MOVED,
+            "app/routers/comic_plan_copy.py": COMIC_PLAN_MOVED,
+        })
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn(
+            "director_comic_plan (131) is a copy: another file already took base app/launch.py (131) as its move",
+            failures[0],
+        )
+
     def test_a_move_into_an_existing_router_file_passes(self):
         router = "def existing(body):\n" + "".join(
             f"    if body.get({index}):\n        return {index}\n" for index in range(19)
@@ -292,6 +306,41 @@ class MoveAwareRatchetTests(unittest.TestCase):
         self.assertEqual(current["unmeasured"]["paths"], [])
         self.assertNoFailures(failures)
 
+    def test_a_baseline_unmeasured_file_cannot_absorb_moved_code(self):
+        # app/core_runtime.py is product code outside the measured scope. A
+        # function moved there from launch would leave the ratchet's view.
+        runtime = "import os\n\n\n" + small_helpers()
+        base = {LAUNCH: launch_with(COMIC_PLAN), "app/core_runtime.py": runtime}
+        _, failures, current, _ = run(base, {LAUNCH: launch_with(), "app/core_runtime.py": runtime + "\n\n" + COMIC_PLAN})
+        self.assertEqual(current["unmeasured"]["files"]["app/core_runtime.py"]["max_complexity"], 131)
+        self.assertEqual(len(failures), 2, failures)
+        self.assertRegex(
+            failures[0],
+            r"^unmeasured baseline file app/core_runtime.py grew \d+ lines; budget is 75; new code goes under",
+        )
+        self.assertTrue(failures[1].startswith(
+            "unmeasured baseline file app/core_runtime.py has a function at complexity 131; its ceiling is 14;"
+        ), failures)
+        # A hotspot_growth waiver for that file does not cover it.
+        waiver = {"path": "app/core_runtime.py", "rule": "hotspot_growth", "reason": "probe",
+                  "owner": "probe", "issue": "#probe", "expires": "2999-12-31"}
+        self.assertEqual(code_health.apply_exceptions(failures, [], [waiver])[1], failures)
+        # Small edits stay free: a few lines and functions under 15.
+        _, failures, _, _ = run(base, {"app/core_runtime.py": runtime + "\n\n" + branchy("ping", 13)})
+        self.assertNoFailures(failures)
+
+    def test_new_vendored_files_are_listed_for_reviewers(self):
+        warnings, failures, _, _ = run({LAUNCH: launch_with(COMIC_PLAN), "app/shared/utils/old.py": "x = 1\n"}, {
+            "app/shared/hocus/plan.py": COMIC_PLAN, "app/models/new_engine/pipeline.py": small_helpers(),
+        })
+        self.assertNoFailures(failures)
+        self.assertIn(
+            "2 new Python file(s) under vendored folders are not measured: "
+            "app/models/new_engine/pipeline.py, app/shared/hocus/plan.py; "
+            "reviewers: confirm they are engine code, not product code moved out of the ratchet",
+            warnings,
+        )
+
     def test_split_whose_parent_did_not_drop_enough_fails_the_budget(self):
         base = {LAUNCH: launch_with(branchy("_run_generation", 120))}
         children = [branchy(f"_run_generation_stage{k}", 15, start=1000 + 100 * k) for k in range(6)]
@@ -334,15 +383,38 @@ class MoveAwareRatchetTests(unittest.TestCase):
         self.assertEqual(current["summary"]["complex_functions"] - old["summary"]["complex_functions"], 6)
         self.assertNoFailures(failures)
         self.assertTrue(any("carved out of _run_generation (107 -> 2)" in item for item in warnings), warnings)
-        # Functions that are not carved out of anything still count.
+        # A split in a change that also adds logic gets no credit: the six
+        # unrelated functions add 90 decisions, so all twelve count.
         base, changed = split_case(own_before=15, own_after=15, pieces=6)
         unrelated = [branchy(f"brand_new_{k}", 15, start=5000 + 100 * k) for k in range(6)]
         changed[LAUNCH] += "\n\n" + "\n\n".join(unrelated)
-        _, failures, _, _ = run(base, changed)
-        self.assertEqual(
-            failures,
-            ["high-complexity function count grew by 12 (6 after 6 credited split pieces); budget is 5"],
+        warnings, failures, _, _ = run(base, changed)
+        self.assertEqual(failures, ["high-complexity function count grew by 12; budget is 5"])
+        self.assertTrue(any(
+            item.startswith("split not credited: _run_generation_stage0 (16)")
+            and item.endswith("but the change adds 90 decisions overall, so it is not only a split")
+            for item in warnings
+        ), warnings)
+
+    def test_split_credit_needs_a_change_that_adds_no_logic(self):
+        # Laundering: the parent sheds its 120 decisions into helpers under 15
+        # (no rule counts those), and the "pieces" named after it hold brand-new
+        # logic. The parent drop alone would credit them.
+        helpers = [branchy(f"_step{k}", 12, start=100 * k) for k in range(10)]
+        parent = "def _run_generation(body, value=0):\n" + "".join(
+            f"    value = _step{k}(body, value)\n" for k in range(10)
+        ) + "    return value\n"
+        pieces = [branchy(f"_run_generation_new{k}", 15, start=5000 + 100 * k) for k in range(7)]
+        warnings, failures, current, old = run(
+            {LAUNCH: launch_with(branchy("_run_generation", 120))},
+            {LAUNCH: launch_with(parent, *helpers, *pieces)},
         )
+        self.assertEqual(current["summary"]["decisions"] - old["summary"]["decisions"], 105)
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertTrue(any("the change adds 105 decisions overall" in item for item in warnings), warnings)
+        # A pure extraction keeps the decision total, which is why it passes.
+        current, old = measure(*split_case(own_before=15, own_after=15, pieces=6))
+        self.assertEqual(current["summary"]["decisions"], old["summary"]["decisions"])
 
 
 class RecordMatchingTests(unittest.TestCase):
@@ -400,9 +472,15 @@ class RecordMatchingTests(unittest.TestCase):
         pieces = [self.ui("ui/src/features/studio/store/submit.ts", f"startGenerationPart{k}", 20, line=k) for k in range(6)]
         split = self.report([self.ui(store, "startGeneration", 347 - 6 * 19), *pieces], {store: 233})
         split["summary"]["complex_functions"] = 7
+        base["summary"]["decisions"] = split["summary"]["decisions"] = 5_000
         warnings, failures = code_health.compare(split, base)
         self.assertEqual(failures, [])
         self.assertTrue(any(item.startswith("split: startGenerationPart0 (20)") for item in warnings))
+        # Without a decision total in the base (an older analyzer), no credit.
+        del base["summary"]["decisions"]
+        warnings, failures = code_health.compare(split, base)
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertTrue(any("the base report has no decision total" in item for item in warnings), warnings)
         self.assertFalse(code_health._carved_from("startGenerations", "startGeneration"))
         self.assertTrue(code_health._carved_from("_run_generation.prepare", "_run_generation"))
         self.assertTrue(code_health._carved_from("Runner._run_generation_finalize", "_run_generation"))
@@ -431,16 +509,56 @@ class RecordMatchingTests(unittest.TestCase):
             ],
         )
 
+    def test_a_waiver_matches_only_its_rule_wording_and_exact_path(self):
+        def waiver(path, rule):
+            return {"path": path, "rule": rule, "reason": "r", "owner": "o", "issue": "#1", "expires": "2999-12-31"}
+
+        failures = [
+            "production LOC grew 3,200; budget is 2,000",
+            "high-complexity function count grew by 9; budget is 5",
+            "new complexity hotspot app/routers/comic_plan.py is 131; limit is 25",
+            "complexity hotspot app/routers/comics.py increased by more than 5",
+            "hotspot app/services/big_service.py grew 900 lines; budget is 600",
+        ]
+        # Fragments and folder prefixes match nothing.
+        for item in (waiver("LOC", "hotspot_growth"), waiver("count", "hotspot_growth"),
+                     waiver("app/routers/", "complexity_hotspot"), waiver("app/", "hotspot_growth"),
+                     waiver("comic_plan.py", "complexity_hotspot"), waiver("app/services/big_service.py", "complexity_hotspot")):
+            with self.subTest(waiver=item["path"], rule=item["rule"]):
+                self.assertEqual(code_health.apply_exceptions(failures, [], [item]), ([], failures))
+        # The exact path with the right rule waives exactly one failure.
+        for item, waived in (
+            (waiver("app/routers/comic_plan.py", "complexity_hotspot"), failures[2]),
+            (waiver("app/routers/comics.py", "complexity_hotspot"), failures[3]),
+            (waiver("app/services/big_service.py", "hotspot_growth"), failures[4]),
+        ):
+            warnings, kept = code_health.apply_exceptions(failures, [], [item])
+            self.assertEqual(kept, [failure for failure in failures if failure != waived])
+            self.assertEqual(len(warnings), 1)
+
+    def test_a_waiver_needs_a_real_expiry_date(self):
+        entry = {"path": "app/routers/a.py", "rule": "complexity_hotspot", "reason": "r", "owner": "o", "issue": "#1"}
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "exceptions.json"
+            for expires in ("never", "2999-13-01", "31/12/2999", "29991231"):
+                with self.subTest(expires=expires):
+                    path.write_text(json.dumps([{**entry, "expires": expires}]), encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, "is not a YYYY-MM-DD date"):
+                        code_health.load_exceptions(path)
+            path.write_text(json.dumps([{**entry, "expires": "2000-01-01"}, {**entry, "expires": "2999-12-31"}]),
+                            encoding="utf-8")
+            self.assertEqual([item["expires"] for item in code_health.load_exceptions(path)], ["2999-12-31"])
+
     def test_today_tree_passes_the_unmeasured_guard(self):
         tracked = code_health._tracked_files()
         paths = code_health._unmeasured_product(tracked)
         # Exactly the baseline: nothing unlisted and no stale entries.
         self.assertEqual(paths, sorted(code_health.UNMEASURED_BASELINE))
-        scope = {
-            "paths": paths,
-            "vendor_prefixes": list(code_health.UNMEASURED_VENDOR_PREFIXES),
-            "allowed": list(code_health.UNMEASURED_BASELINE),
-        }
+        scope = code_health._unmeasured_scope(tracked)
+        self.assertEqual(scope["paths"], paths)
+        # Every baseline file is held at its size and complexity.
+        self.assertEqual(sorted(scope["files"]), paths)
+        self.assertTrue(all(path.startswith(code_health.UNMEASURED_VENDOR_PREFIXES) for path in scope["vendor_files"]))
         self.assertEqual(code_health._unmeasured_findings({"unmeasured": scope}, {"unmeasured": scope}), ([], []))
         self.assertTrue(code_health._unmeasured_findings(
             {"unmeasured": {**scope, "paths": [*paths, "app/features/comics/plan.py"]}}, {"unmeasured": scope},
@@ -459,3 +577,58 @@ class RecordMatchingTests(unittest.TestCase):
         report = self.report(records, {path: value for path, value in hotspots.items() if value >= 15})
         self.assertEqual(code_health.verified_moves(report, report), {})
         self.assertEqual(code_health.compare(report, report), ([], []))
+
+
+class ReleaseCheckpointTests(unittest.TestCase):
+    """The development -> main verifier re-checks every merge with checkpoint reports.
+
+    Those reports must carry the same split evidence as the PR check, or a
+    split credited on its PR fails the release ("high-complexity function
+    count grew") with no waiver available.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        self.addCleanup(sys.path.remove, str(ROOT / "scripts"))
+        import code_health_integration
+        self.release = code_health_integration
+        patcher = mock.patch.object(code_health_integration, "health", code_health)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def release_failures(self, base_files, changed_files):
+        current, baseline = measure(base_files, changed_files)
+        trees, sources, metrics = [], {}, {}
+        for files in (base_files, changed_files):
+            tree = {}
+            for path, source in files.items():
+                blob = hashlib.sha1(source.encode("utf-8")).hexdigest()
+                tree[path], sources[blob] = blob, source
+                collector = code_health._PythonFunctionCollector(path)
+                collector.visit(code_health.ast.parse(source))
+                metrics[(blob, ".py")] = list(collector.metrics)
+            trees.append(tree)
+        reports = [self.release.checkpoint(tree, sources, metrics) for tree in trees]
+        for full, step in ((baseline, reports[0]), (current, reports[1])):
+            self.assertEqual(step["fingerprints"], full["fingerprints"])
+            self.assertEqual(step["summary"]["decisions"], full["summary"]["decisions"])
+        _, failures, _ = self.release.compare_release(current, baseline, ["base", "merge"], reports)
+        return failures
+
+    def test_a_split_credited_on_its_pr_passes_the_release_step(self):
+        base, changed = split_case(own_before=15, own_after=15, pieces=7)
+        current, old = measure(base, changed)
+        self.assertEqual(code_health.compare(current, old)[1], [])
+        self.assertEqual(self.release_failures(base, changed), [])
+
+    def test_a_laundered_split_still_fails_the_release_step(self):
+        helpers = [branchy(f"_step{k}", 12, start=100 * k) for k in range(10)]
+        parent = "def _run_generation(body, value=0):\n" + "".join(
+            f"    value = _step{k}(body, value)\n" for k in range(10)
+        ) + "    return value\n"
+        pieces = [branchy(f"_run_generation_new{k}", 15, start=5000 + 100 * k) for k in range(7)]
+        failures = self.release_failures(
+            {LAUNCH: launch_with(branchy("_run_generation", 120))},
+            {LAUNCH: launch_with(parent, *helpers, *pieces)},
+        )
+        self.assertEqual(failures, ["Integration merge: high-complexity function count grew by 6; budget is 5"])

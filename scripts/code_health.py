@@ -54,6 +54,12 @@ POLICY = {
 }
 EXCEPTION_FIELDS = ("path", "rule", "reason", "owner", "issue", "expires")
 WAIVABLE_RULES = {"hotspot_growth", "complexity_hotspot"}
+# The failure subject (text before the first ";") each waivable rule covers;
+# group 1 is the file, which must equal the waiver's path exactly.
+WAIVER_SUBJECTS = {
+    "hotspot_growth": re.compile(r"hotspot (.+) grew [\d,]+ lines"),
+    "complexity_hotspot": re.compile(r"(?:new )?complexity hotspot (.+) (?:is \d+|increased by more than \d+)"),
+}
 # Tracked app/**/*.py outside the measured scope fails as unmeasured product
 # code, except vendored engine code and the files that were already there on
 # 2026-10-13. Neither list may grow versus the PR base (compare() checks it).
@@ -247,6 +253,31 @@ def _unmeasured_product(tracked: list[str]) -> list[str]:
         and not _is_product(path)
         and not path.startswith(UNMEASURED_VENDOR_PREFIXES)
     )
+
+
+def _unmeasured_scope(tracked: list[str]) -> dict:
+    """What the ratchet does not measure, for compare() to hold it in place.
+
+    ``files`` gives each baseline file's lines and highest function
+    complexity, so a baseline file cannot quietly absorb code moved out of
+    the measured scope. ``vendor_files`` lets compare() list new vendored
+    files for reviewers.
+    """
+    tracked_set = set(tracked)
+    files = {}
+    for path in UNMEASURED_BASELINE:
+        if path in tracked_set and (ROOT / path).is_file():
+            complexities = [item.complexity for item in _python_complexity([path])]
+            files[path] = {"lines": _line_count(ROOT / path)[0], "max_complexity": max(complexities, default=0)}
+    return {
+        "paths": _unmeasured_product(tracked),
+        "vendor_prefixes": list(UNMEASURED_VENDOR_PREFIXES),
+        "allowed": list(UNMEASURED_BASELINE),
+        "files": files,
+        "vendor_files": sorted(
+            path for path in tracked if path.endswith(".py") and path.startswith(UNMEASURED_VENDOR_PREFIXES)
+        ),
+    }
 
 
 def _ui_name(label: str) -> str:
@@ -451,6 +482,9 @@ def collect(*, require_ui: bool) -> dict:
             "functions_measured": len(functions),
             "complex_functions": sum(item.complexity >= COMPLEXITY_WARNING for item in functions),
             "max_complexity": ranked[0].complexity if ranked else 0,
+            # Decision points over every measured function (complexity - 1
+            # each). Moving or splitting code keeps it; new logic raises it.
+            "decisions": sum(item.complexity - 1 for item in functions),
         },
         "hotspots": hotspots,
         "complexity_hotspots": dict(sorted(
@@ -459,11 +493,7 @@ def collect(*, require_ui: bool) -> dict:
         )),
         "top_complexity": [item.as_dict() for item in ranked[:30]],
         "fingerprints": _fingerprint_records(functions),
-        "unmeasured": {
-            "paths": _unmeasured_product(tracked),
-            "vendor_prefixes": list(UNMEASURED_VENDOR_PREFIXES),
-            "allowed": list(UNMEASURED_BASELINE),
-        },
+        "unmeasured": _unmeasured_scope(tracked),
     }
     report["quality"] = quality_score(report)
     return report
@@ -556,7 +586,11 @@ def _move_notes(current: dict, moves: dict[int, dict]) -> list[str]:
     return notes
 
 
-def _not_moved_reason(record: dict, baseline: dict) -> str:
+def _where(records: list[dict]) -> str:
+    return ", ".join(sorted({f"{item['path']} ({item['complexity']})" for item in records})[:3])
+
+
+def _not_moved_reason(record: dict, current: dict, baseline: dict) -> str:
     """Why a function over a limit did not get move credit (for the failure text)."""
     label = f"{record['name'] or 'an anonymous function'} ({record['complexity']})"
     if not record["name"]:
@@ -564,15 +598,23 @@ def _not_moved_reason(record: dict, baseline: dict) -> str:
     old = _records(baseline)
     if old is None:
         return f"{label}: the base report has no function fingerprints"
-    same = [item for item in old if item.get("name") == record["name"] and _is_python(item) == _is_python(record)]
+    python = _is_python(record)
+    same = [item for item in old if item.get("name") == record["name"] and _is_python(item) == python]
     if not same:
         return f"{label} is not in the base"
-    where = ", ".join(sorted({f"{item['path']} ({item['complexity']})" for item in same})[:3])
-    if _is_python(record) and not any(item.get("hash") == record["hash"] for item in same):
-        return f"{label} has the name of base {where} but different code, so it counts as new"
-    if not _is_python(record) and max(item["complexity"] for item in same) < record["complexity"]:
-        return f"{label} rose above its base ceiling {where}"
-    return f"{label} is a copy: the base function is still at {where}"
+    if python:
+        matching = [item for item in same if item.get("hash") == record["hash"]]
+    else:
+        matching = [item for item in same if item["complexity"] >= record["complexity"]]
+    if not matching:
+        if python:
+            return f"{label} has the name of base {_where(same)} but different code, so it counts as new"
+        return f"{label} rose above its base ceiling {_where(same)}"
+    present = {(item["path"], item["name"], item.get("hash")) for item in _records(current) or []}
+    still = [item for item in matching if (item["path"], item["name"], item.get("hash")) in present]
+    if still:
+        return f"{label} is a copy: the base function is still at {_where(still)}"
+    return f"{label} is a copy: another file already took base {_where(matching)} as its move"
 
 
 def _complexity_rise_failure(
@@ -587,7 +629,7 @@ def _complexity_rise_failure(
     if above and not unmoved:
         return None
     if unmoved:
-        reasons = [_not_moved_reason(item, baseline) for item in unmoved[:3]]
+        reasons = [_not_moved_reason(item, current, baseline) for item in unmoved[:3]]
         more = "" if len(unmoved) <= 3 else f"; +{len(unmoved) - 3} more"
         message += "; not a verified move: " + "; ".join(reasons) + more
     return message
@@ -643,6 +685,15 @@ def _split_parent(child: dict, parents: dict[tuple[bool, str], list[dict]]) -> t
     return max(candidates, key=lambda key: len(key[1])) if candidates else None
 
 
+def _added_decisions(current: dict, baseline: dict) -> int | None:
+    """Decision points the change adds over all measured code; None if unknown."""
+    now = (current.get("summary") or {}).get("decisions")
+    old = (baseline.get("summary") or {}).get("decisions")
+    if not isinstance(now, int) or not isinstance(old, int):
+        return None
+    return now - old
+
+
 def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
     """New functions at COMPLEXITY_WARNING+ carved out of a base function.
 
@@ -656,10 +707,16 @@ def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
     every function of a parent's name at any complexity (see
     ``_related_below_warning``), so a parent that is not recorded has been
     deleted.
+
+    The change as a whole must also add no decisions (``summary.decisions``).
+    Without that check, a parent could shed its logic into helpers under
+    COMPLEXITY_WARNING (which no rule counts) while the "pieces" hold new
+    logic. A split moves logic; it does not add any.
     """
     now, old = _records(current), _records(baseline)
     if now is None or old is None:
         return 0, []
+    added = _added_decisions(current, baseline)
     known: dict[tuple[bool, str], list[dict]] = {}
     for item in old:
         if item.get("name"):
@@ -687,16 +744,22 @@ def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
         )
         needed = sum(item["complexity"] - 1 for item in items)
         names = ", ".join(f"{item['name']} ({item['complexity']})" for item in items)
-        if before - after >= needed:
+        if before - after < needed:
+            notes.append(
+                f"split not credited: {names} named after {key[1]}, but {key[1]} dropped "
+                f"{before - after} ({before} -> {after}) and their decisions sum to {needed}"
+            )
+        elif added is None or added > 0:
+            reason = (
+                "the base report has no decision total" if added is None
+                else f"the change adds {added} decisions overall, so it is not only a split"
+            )
+            notes.append(f"split not credited: {names} carved out of {key[1]} ({before} -> {after}), but {reason}")
+        else:
             credit += len(items)
             notes.append(
                 f"split: {names} carved out of {key[1]} ({before} -> {after}); "
                 "not counted against the complex-function budget"
-            )
-        else:
-            notes.append(
-                f"split not credited: {names} named after {key[1]}, but {key[1]} dropped "
-                f"{before - after} ({before} -> {after}) and their decisions sum to {needed}"
             )
     return credit, notes
 
@@ -720,6 +783,50 @@ def _complex_growth_findings(now: dict, old: dict, current: dict, baseline: dict
     return warnings, failures
 
 
+def _hotspot_allowance(old_lines: int) -> int:
+    return max(
+        int(POLICY["hotspot_growth_min"]),
+        min(int(POLICY["hotspot_growth_max"]), round(old_lines * float(POLICY["hotspot_growth_pct"]))),
+    )
+
+
+def _baseline_file_findings(scope: dict, old_scope: dict) -> list[str]:
+    """A baseline file keeps the hotspot growth allowance and gains no complex function."""
+    failures = []
+    hint = f"new code goes under {' or '.join(PYTHON_PREFIXES)}, where the ratchet measures it"
+    old_files = old_scope.get("files") if isinstance(old_scope.get("files"), dict) else {}
+    for path, now in sorted((scope.get("files") or {}).items()):
+        old = old_files.get(path)
+        if not isinstance(old, dict):
+            continue
+        growth = int(now["lines"]) - int(old["lines"])
+        allowance = _hotspot_allowance(int(old["lines"]))
+        if growth > allowance:
+            failures.append(
+                f"unmeasured baseline file {path} grew {growth:,} lines; budget is {allowance:,}; {hint}"
+            )
+        ceiling = max(int(old["max_complexity"]), COMPLEXITY_WARNING - 1)
+        if int(now["max_complexity"]) > ceiling:
+            failures.append(
+                f"unmeasured baseline file {path} has a function at complexity {now['max_complexity']}; "
+                f"its ceiling is {ceiling}; {hint}"
+            )
+    return failures
+
+
+def _new_vendor_files_warning(scope: dict, old_scope: dict) -> list[str]:
+    if not isinstance(old_scope.get("vendor_files"), list):
+        return []
+    added = sorted(set(scope.get("vendor_files") or []) - set(old_scope["vendor_files"]))
+    if not added:
+        return []
+    shown = ", ".join(added[:10]) + ("" if len(added) <= 10 else f" (+{len(added) - 10} more)")
+    return [
+        f"{len(added)} new Python file(s) under vendored folders are not measured: {shown}; "
+        "reviewers: confirm they are engine code, not product code moved out of the ratchet"
+    ]
+
+
 def _unmeasured_findings(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     """Fail on product Python outside the measured scope that is not baselined."""
     scope = current.get("unmeasured")
@@ -741,6 +848,8 @@ def _unmeasured_findings(current: dict, baseline: dict) -> tuple[list[str], list
     for path in sorted(allowed - set(paths)):
         warnings.append(f"stale unmeasured baseline entry {path}; remove it from UNMEASURED_BASELINE")
     if old_scope is not None:
+        failures.extend(_baseline_file_findings(scope, old_scope))
+        warnings.extend(_new_vendor_files_warning(scope, old_scope))
         for key in ("vendor_prefixes", "allowed"):
             added = sorted(set(scope.get(key) or []) - set(old_scope.get(key) or []))
             if added:
@@ -836,10 +945,7 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
         # need a cohesive feature-sized change. Keep the ratchet active while
         # allowing up to 600 lines in one PR; larger growth still fails and
         # should be extracted into a dedicated module.
-        allowance = max(
-            int(POLICY["hotspot_growth_min"]),
-            min(int(POLICY["hotspot_growth_max"]), round(old_lines * float(POLICY["hotspot_growth_pct"]))),
-        )
+        allowance = _hotspot_allowance(old_lines)
         if growth > 0:
             warnings.append(f"hotspot {path} increased by {growth:+,} lines")
         if growth > allowance:
@@ -1068,7 +1174,14 @@ def load_exceptions(path: Path = DEFAULT_EXCEPTIONS) -> list[dict]:
                 f"{path}[{index}] rule {rule!r} is not waivable; "
                 f"allowed: {', '.join(sorted(WAIVABLE_RULES))}"
             )
-        if str(item["expires"]) < today:
+        expires = str(item["expires"]).strip()
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", expires):
+            raise RuntimeError(f"{path}[{index}] expires {expires!r} is not a YYYY-MM-DD date")
+        try:
+            datetime.date.fromisoformat(expires)
+        except ValueError as exc:
+            raise RuntimeError(f"{path}[{index}] expires {expires!r} is not a YYYY-MM-DD date") from exc
+        if expires < today:
             continue
         exceptions.append(item)
     return exceptions
@@ -1082,19 +1195,16 @@ def apply_exceptions(
     kept: list[str] = []
     for failure in failures:
         matched = None
-        # The waived file must be the failure's subject (the text before the
-        # first ";"). A "not a verified move" reason names other files, such
-        # as the base file a function came from; it must not match a waiver.
+        # A waiver matches only its own rule's failure about exactly its file:
+        # the subject (the text before the first ";") must have the rule's
+        # wording and name that path. A "not a verified move" reason names
+        # other files, such as the base file a function came from, and a path
+        # fragment such as "app/routers/" or "LOC" must not match anything.
         subject = failure.split(";", 1)[0]
         for item in exceptions:
-            path = str(item["path"])
-            rule = str(item["rule"])
-            if path not in subject:
-                continue
-            if rule == "hotspot_growth" and "grew" in failure and "budget is" in failure:
-                matched = item
-                break
-            if rule == "complexity_hotspot" and "complexity hotspot" in failure:
+            pattern = WAIVER_SUBJECTS.get(str(item["rule"]))
+            found = pattern.fullmatch(subject) if pattern else None
+            if found and found.group(1) == str(item["path"]):
                 matched = item
                 break
         if matched:
