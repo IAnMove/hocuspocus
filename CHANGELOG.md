@@ -19,6 +19,21 @@ itself does not change: it still filters models and LoRAs and still adds the
 mature-content guides. The Director shot-length examples about sex scenes and
 the undressing examples in the Qwen image-edit guide now appear only with NSFW on.
 
+**A quality-gate refusal now says what to fix, and there is an explicit way past
+it.** When `production.run` refuses a plan before any GPU work (`quality_gate`),
+the message no longer just says "the plan would look thin". It names the shots,
+the picture, model or camera involved and the limit, and says how to fix each
+problem. The three checks that only make a video look static still refuse by
+default: one still picture in three or more shots, too much of the song on still
+pictures, and a full-frame title over a moving shot. Send `allow_thin: true` to
+run such a plan anyway; those problems come back as warnings, and
+`production.status` lists them as `allow_thin` while that spec runs. A clip a
+model will not have, or a camera that does not exist, is always refused. The dry
+run takes the same flag and reports the same warnings, each problem once. The MCP
+schema now declares `allow_thin`, and it accepts `allow: ["title_card"]`, which
+the gate already honoured. A dry run names a shot with no key by its place
+(`shots[2]`).
+
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
 Design*, and the Character Creator voice designer and new reference voices start on
