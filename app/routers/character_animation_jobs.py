@@ -10,6 +10,8 @@ these routes: one place that makes the poses, joins the sheet and saves it on th
 """
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -41,7 +43,7 @@ class JobAction(BaseModel):
     workspace: str = Field(min_length=1, max_length=120)
 
 
-def create_character_animation_jobs_router(jobs: CharacterAnimationJobs) -> APIRouter:
+def create_character_animation_jobs_router(jobs: CharacterAnimationJobs, *, bind_loop: Callable[[asyncio.AbstractEventLoop], Any] | None = None) -> APIRouter:
     router = APIRouter(prefix="/api/v1/character-kits/animations", tags=["Character kits"])
 
     async def run(function, *args: Any, **kwargs: Any) -> Any:
@@ -55,6 +57,8 @@ def create_character_animation_jobs_router(jobs: CharacterAnimationJobs) -> APIR
     @router.post("/make")
     async def make_animation(body: MakeAnimation):
         """Make an animation of a saved character (or, with ``pose``, one pose of it again). It is saved as pending review."""
+        if bind_loop is not None:
+            bind_loop(asyncio.get_running_loop())  # the job's tool calls run on the server's loop, as an MCP client's would
         custom = body.custom.model_dump() if body.custom else None
         return {"job": await run(jobs.start, body.workspace, body.kitId, body.animation, custom=custom, pose=body.pose, model=body.model)}
 

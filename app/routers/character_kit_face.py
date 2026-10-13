@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -11,6 +12,8 @@ from routers.scene3d_speech import create_scene3d_speech_router
 from routers.scene3d_profiles import create_scene3d_profiles_router
 from routers.lips_creator import create_lips_creator_router
 
+from routers.character_animation_jobs import create_character_animation_jobs_router
+from services.character_animation_job import AnimationJobDeps, CharacterAnimationJobs
 from services.character_animations import CharacterAnimationError, build_sheet, catalog as animation_catalog, pose_prompt
 from services.character_kit_face_cleanup import (
     CharacterKitFaceCleanupError,
@@ -45,11 +48,19 @@ def create_character_kit_face_router(
     *,
     workspace_dir: Callable[[str | None], str],
     uploads_root: Callable[[], str],
+    local_mcp: Callable[[], Any] | None = None,
+    model_defaults: Callable[[str], dict[str, Any]] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/character-kits", tags=["Character kits"])
     router.include_router(create_scene3d_speech_router())
     router.include_router(create_scene3d_profiles_router(workspace_dir))
     router.include_router(create_lips_creator_router(workspace_dir))
+    if local_mcp is not None:
+        # Making an animation chains the server's own generation tools, as an MCP client would (services/character_animation_job.py).
+        router.include_router(create_character_animation_jobs_router(
+            CharacterAnimationJobs(AnimationJobDeps(call=lambda tool, arguments: local_mcp().call(tool, arguments), workspace_dir=workspace_dir,
+                                                    uploads_root=uploads_root, model_defaults=model_defaults)),
+            bind_loop=lambda loop: local_mcp().bind_loop(loop)))
 
     @router.post("/face-rig/cleanup")
     def cleanup_face_rig_overlay(payload: FaceRigCleanupRequest):

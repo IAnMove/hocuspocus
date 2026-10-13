@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
+from services.kernel.paths import PathPolicy
+
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
@@ -41,8 +43,9 @@ def delete_namespace(active: Path, film: Path) -> dict:
         "_workspace_dir": lambda workspace=None: str(film if workspace == "film" else active),
         "_load_favorites": lambda: set(),
         "_save_favorites": lambda _favorites: None,
+        "_safe_join": PathPolicy().safe_join,
     }
-    load_functions(["_safe_join", "delete_output"], namespace)
+    load_functions(["delete_output"], namespace)
     return namespace
 
 

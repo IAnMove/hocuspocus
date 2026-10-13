@@ -232,3 +232,37 @@ def test_launch_binds_live_wgp_immediately_after_bootstrap_import() -> None:
         ):
             events.append("bind_wgp")
     assert events == ["import_wgp", "import_bind_wgp", "bind_wgp"]
+
+
+def test_full_root_builds_the_runtime_context_after_binding_wgp_and_core_does_not() -> None:
+    launch = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    order: list[str] = []
+    for node in launch.body:
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "bind_wgp"
+        ):
+            order.append("bind_wgp")
+        elif (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "build_context"
+        ):
+            order.append("build_context")
+            assert [keyword.arg for keyword in node.value.keywords if keyword.arg == "profile"] == ["profile"]
+            assert ast.literal_eval(
+                next(keyword.value for keyword in node.value.keywords if keyword.arg == "profile")
+            ) == "full"
+        elif (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "FastAPI"
+        ):
+            order.append("FastAPI")
+    assert order == ["bind_wgp", "build_context", "FastAPI"]
+    core = (ROOT / "app" / "core_runtime.py").read_text(encoding="utf-8")
+    assert "services.kernel" not in core and "build_context" not in core

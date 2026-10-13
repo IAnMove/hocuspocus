@@ -15,6 +15,8 @@ from fastapi import HTTPException
 from PIL import Image
 import pytest
 
+from services.kernel.config import ConfigStore
+from services.kernel.workspaces import WorkspaceService
 from services.wangp_submission import JsonRequest, prepare_viggle_recast, probe_video, resolve_wangp_media
 
 
@@ -29,13 +31,15 @@ def extract(tmp_path, monkeypatch):
     uploads.mkdir()
     workspace.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    names = {"extract_frames_endpoint", "_resolve_wangp_visual_media", "_workspace_dir"}
+    names = {"extract_frames_endpoint", "_resolve_wangp_visual_media"}
     selected = []
     for node in ast.parse(RUNTIME.read_text(encoding="utf-8")).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
             node.decorator_list = []
             selected.append(node)
     assert len(selected) == len(names)
+    engine = SimpleNamespace(server_config={"save_path": "outputs", "services": {"active_workspace": "demo"}})
+    workspaces = WorkspaceService(ConfigStore(lambda: engine))
     namespace = {
         "Request": object,
         "HTTPException": HTTPException,
@@ -43,7 +47,8 @@ def extract(tmp_path, monkeypatch):
         "re": re,
         "uuid": uuid,
         "time": time,
-        "wgp": SimpleNamespace(server_config={"save_path": "outputs"}),
+        "wgp": engine,
+        "_workspace_dir": workspaces.workspace_dir,
         "_get_active_workspace": lambda: "demo",
     }
     exec(compile(ast.Module(body=selected, type_ignores=[]), str(RUNTIME), "exec"), namespace)

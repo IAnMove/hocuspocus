@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException, Request as FastAPIRequest
 
+from services.kernel.paths import PathPolicy
+
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
@@ -42,6 +44,7 @@ class JsonRequest:
 def move_namespace(source: Path, destination: Path, active: Path | None = None) -> dict:
     folders = {"target": destination, "film": source}
     fallback = active if active is not None else source
+    paths = PathPolicy()
     namespace = {
         "os": os,
         "Request": FastAPIRequest,
@@ -52,11 +55,10 @@ def move_namespace(source: Path, destination: Path, active: Path | None = None) 
         "_workspace_dir": lambda workspace=None: str(folders.get(workspace, fallback)),
         "_load_favorites": lambda: set(),
         "_save_favorites": lambda _favorites: None,
+        "_safe_join": paths.safe_join,
+        "_resolve_output_move_path": paths.resolve_output_move_path,
     }
-    load_functions(
-        ["_safe_join", "_resolve_output_move_path", "move_output"],
-        namespace,
-    )
+    load_functions(["move_output"], namespace)
     return namespace
 
 
