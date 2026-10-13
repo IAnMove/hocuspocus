@@ -1,1 +1,1 @@
-"""Shared kernel used by both servers. Path containment lives here first."""
+"""The shared services of one server: config, workspaces, paths, jobs, tasks and the runtime context."""

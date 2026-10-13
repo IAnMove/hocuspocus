@@ -7,6 +7,7 @@ from tests.api_client_source import api_client_source
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
+JOBS = ROOT / "app" / "services" / "kernel" / "jobs.py"
 STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
 TOOLS = ROOT / "ui" / "src" / "features" / "studio" / "store" / "toolsSlice.ts"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
@@ -24,16 +25,17 @@ def activity_ui() -> str:
 
 def test_backend_status_and_reconnect_publish_frozen_generation_details():
     launch = LAUNCH.read_text(encoding="utf-8")
+    jobs = JOBS.read_text(encoding="utf-8")
     client = api_client_source()
     store = STORE.read_text(encoding="utf-8")
 
-    assert "def _public_generation_details" in launch
+    assert "def _public_generation_details" in jobs
     assert launch.count('"generation_details": _public_generation_details') >= 2
     assert "generation_details?: GenerationDetails" in client
     assert "generationDetails: j.generation_details" in store
     assert "patch.generationDetails = status.generation_details" in TOOLS.read_text(encoding="utf-8")
-    assert 'details["prompt"]' in launch
-    assert 'details["initiator"]' in launch
+    assert 'details["prompt"]' in jobs
+    assert 'details["initiator"]' in jobs
     assert 'gen_params["_initiator"]' in launch
 
 
