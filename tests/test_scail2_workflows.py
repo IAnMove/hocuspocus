@@ -52,7 +52,6 @@ _MAGIC_MASK_PATH = os.path.join(
 _LORA_MULTIPLIERS_PATH = os.path.join(
     _ROOT, "app", "shared", "utils", "loras_mutipliers.py",
 )
-_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
 _RESTYLE_SUBMISSION_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "restyleSubmission.ts",
 )
@@ -64,6 +63,9 @@ _STUDIO_EDIT_SLICE_PATH = os.path.join(
 )
 _OUTPUT_RESTORE_SLICE_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "store", "outputRestoreSlice.ts",
+)
+_STUDIO_FORM_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "studioFormSlice.ts",
 )
 _MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
 _LORAS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "lorasSlice.ts")
@@ -3943,12 +3945,12 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_default_prefers_dedicated_fast_scail2(self):
         launch = _read(_LAUNCH_PATH)
-        store = _read(_STORE_PATH)
+        form = _read(_STUDIO_FORM_SLICE_PATH)
         models = _read(_MODELS_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('body.get("model_type") or _RECAST_FAST_MODEL_TYPE', launch)
-        self.assertIn("wantsViggle ? 'viggle_animate' : 'scail2_14B_recast_fast'", store)
+        self.assertIn("wantsViggle ? 'viggle_animate' : 'scail2_14B_recast_fast'", form)
         self.assertIn("t('recast.aboutText')", controls)
         self.assertIn("Fast is recommended (8 steps)", studio["recast"]["aboutText"])
         self.assertIn("HQ uses the full 40-step schedule", studio["recast"]["aboutText"])
@@ -4095,7 +4097,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_recast_uses_native_replace_without_changing_studio_animate(self):
         launch = _read(_LAUNCH_PATH)
         scail2 = _read(_SCAIL2_PATH)
-        store = _read(_STORE_PATH)
+        form = _read(_STUDIO_FORM_SLICE_PATH)
         output_restore = _read(_OUTPUT_RESTORE_SLICE_PATH)
         self.assertIn('"scail2_recast_conditioning": "native_replace"', launch)
         self.assertIn("replace_mode = test_scail2_replace(video_prompt_type)", scail2)
@@ -4103,7 +4105,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertNotIn("animation_recast", scail2)
         self.assertNotIn("_matte_ref_image", scail2)
         self.assertIn("m.model_type === 'scail2_14B_recast_fast'", output_restore)
-        self.assertIn("m.model_type === 'scail2_14B'", store)
+        self.assertIn("m.model_type === 'scail2_14B'", form)
 
     def test_recast_postprocess_preserves_and_recovers_resolved_seed(self):
         launch = _read(_LAUNCH_PATH)

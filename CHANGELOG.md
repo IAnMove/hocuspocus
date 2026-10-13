@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Loading a finished clip's settings, and the Studio form, left the main Studio store.** Opening an output still fills in the same mode, model, prompt, and edit settings. Switching mode, changing a setting, picking a model, and resetting Image Studio still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
 **Music-video Director actions, and five Studio edit submissions, left the main Studio store.** Blend, outpaint, restyle, recast, and retake, inpaint, or edit-anything still start from the same Generate button. Adopting or uploading a track, writing a song, planning a music video, generating start images, and generating the video still work the same way. The screen still reads and writes them through the same `useStore` hook.
 
 **The Director dashboard, short-film planning, the Director pipeline, and Studio video editing left the main Studio store.** Opening the pipeline dashboard, planning a short film, and starting or continuing a Director pipeline still work the same way. Studio edit, continue, blend, and outpaint, including sending a frame to Image mode and applying it back as an anchor, still work the same way. The screen still reads and writes them through the same `useStore` hook.
