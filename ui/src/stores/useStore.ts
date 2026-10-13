@@ -17,30 +17,36 @@ import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } fr
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
-import type { GalleryView } from './gallerySlice'
 import i18n from '../i18n'
 import { contentLanguageForUi } from '../lib/contentLanguage'
-import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
-import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
-import { createActivityPublicationGate } from '../lib/activityPublication'
 import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
 import { isHttpStatus } from '../api/http'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
-import { createDeveloperModeSlice } from './developerModeSlice'
-import { createDirectorSlice } from './directorSlice'
-import { createRetakeDialogSlice } from './retakeDialogSlice'
-import { createSettingsSlice } from './settingsSlice'
-import { createSidebarSlice } from './sidebarSlice'
+import { createDeveloperModeSlice, type DeveloperModeSlice } from './developerModeSlice'
+import { createDirectorSlice, type DirectorSlice } from './directorSlice'
+import { createRetakeDialogSlice, type RetakeDialogSlice } from './retakeDialogSlice'
+import { createSettingsSlice, type SettingsSlice } from './settingsSlice'
+import { createSidebarSlice, type SidebarSlice } from './sidebarSlice'
+import { createSystemSlice, type SystemSlice } from './systemSlice'
+import { _downloadTimestampMs, createCivitaiSlice, disposeCivitaiDownloadPoll, type CivitaiSlice } from './civitaiSlice'
+import { createPresetsSlice, type PresetsSlice } from '../features/studio/store/presetsSlice'
+import {
+  beginAppActivity,
+  createActivitySlice,
+  type ActivitySlice,
+  type ForegroundActivity,
+} from '../features/activity/store'
+export type { ForegroundActivity }
 import { bindSlice } from './storeApi'
-import { createThemeSlice } from './themeSlice'
-import { createGallerySlice } from './gallerySlice'
+import { createThemeSlice, type ThemeSlice } from './themeSlice'
+import { createGallerySlice, type GallerySlice } from './gallerySlice'
 import { createLlmSlice, UNLOADED_LLM_STATUS, type LlmSlice } from './llmSlice'
 import { createStudioConfigurationSlice, type StudioConfigurationSlice } from './studioConfigurationSlice'
 import {
@@ -48,6 +54,24 @@ import {
   restoredStudioMusicForm,
   type StudioMusicSlice,
 } from './studioMusicSlice'
+import {
+  getDisplayFamily,
+  getFamiliesForMode,
+  getFamilyMode,
+  getModelMode,
+  getModelsForFamily,
+  isMusicModelType,
+  sfxModelTypes,
+} from './modelCatalog'
+export {
+  getDisplayFamily,
+  getFamiliesForMode,
+  getFamilyMode,
+  getModelMode,
+  getModelsForFamily,
+}
+import { findResolutionSelection, resolveResolution } from './resolution'
+export { findResolutionSelection, resolveResolution }
 import { applyStudioAudioSubmitParams } from './studioAudioSubmit'
 import { markJobsCancelling, prependJob, removeJob, updateJob, withJobs } from './jobReducers'
 import {
@@ -71,12 +95,6 @@ import { audioReferenceParams, restoreAudioReferences, stashAudioReferences, typ
 import { beginOutputSettingsRestore, type OutputSettingsSource } from '../features/studio/outputSettingsRestore'
 
 const DASHBOARD_PIPELINE_PAGE_SIZE = 8
-const CIVIT_DOWNLOAD_POLL_MS = 2000
-const CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS = 30_000
-let _civitDownloadPollTask: Promise<void> | null = null
-let _civitDownloadPollController: AbortController | null = null
-let _civitDownloadPollRequested = false
-const _civitRefreshedCheckpointDownloads = new Set<string>()
 const DIRECTOR_REPAIR_POLL_MS = 2000
 const DIRECTOR_REPAIR_ACTIVE = new Set(['queued', 'running', 'cancelling'])
 type DirectorRepairPoll = {
@@ -87,7 +105,6 @@ const _directorRepairPolls = new Map<string, DirectorRepairPoll>()
 const _directorRepairDiscoveries = new Map<string, object>()
 let _dashboardPipelineLoadToken = 0
 let _dashboardPipelineListLoadToken = 0
-let _systemStatsInFlight = false
 
 type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 
@@ -125,12 +142,6 @@ function _stopDirectorRepairPoll(pid: string): void {
   const poll = _directorRepairPolls.get(pid)
   if (poll?.timer != null) window.clearTimeout(poll.timer)
   _directorRepairPolls.delete(pid)
-}
-
-function _downloadTimestampMs(value: number | null | undefined): number | null {
-  const timestamp = Number(value)
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
-  return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
 }
 
 const RECONNECT_POLL_MS = 2000
@@ -250,38 +261,11 @@ function _generationDetailsFromParams(
   return details
 }
 
-function _downloadNeedsPolling(download: CivitAIDownload, now: number): boolean {
-  if (download.status === 'downloading') return true
-  if (download.status !== 'completed') return false
-  const completedAt = _downloadTimestampMs(download.completed_at)
-  return completedAt !== null && now - completedAt < CIVIT_DOWNLOAD_COMPLETED_VISIBLE_MS
-}
-
-function _waitForDownloadPoll(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise(resolve => {
-    if (signal.aborted) {
-      resolve()
-      return
-    }
-    const timer = window.setTimeout(done, ms)
-    function done() {
-      window.clearTimeout(timer)
-      signal.removeEventListener('abort', done)
-      resolve()
-    }
-    signal.addEventListener('abort', done, { once: true })
-  })
-}
-
 // Vite can replace this module without a full page unload. Abort the old
 // async loop so HMR never leaves an orphaned polling timer behind.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    _civitDownloadPollController?.abort()
-    _civitDownloadPollController = null
-    _civitDownloadPollTask = null
-    _civitDownloadPollRequested = false
-    _civitRefreshedCheckpointDownloads.clear()
+    disposeCivitaiDownloadPoll()
     for (const pid of _directorRepairPolls.keys()) {
       _stopDirectorRepairPoll(pid)
     }
@@ -754,93 +738,10 @@ export function alignFrameCount(
   return n
 }
 
-// Family → generation mode mapping
-const familyModeMap: Record<string, GenerationMode> = {
-  flux: 'image',
-  flux2: 'image',
-  qwen: 'image',
-  z_image: 'image',
-  krea2: 'image',
-  hidream: 'image',
-  minimax: 'image',
-  wan: 'video',
-  wan2_2: 'video',
-  hunyuan: 'video',
-  hunyuan_1_5: 'video',
-  ltxv: 'video',
-  ltx2: 'video',
-  minimax_h3: 'video',
-  h3_advanced: 'video',
-  sensenova: 'image',
-  kandinsky5: 'video',
-  tts: 'audio',
-  longcat: 'avatar',
-  hunyuan3d: 'model3d',
-}
-
-// Model types classified as Avatar even though their family is primarily Video
-const avatarModelTypes = new Set([
-  'multitalk',
-  'multitalk_720p',
-  'fantasy',
-  'infinitetalk',
-  'infinitetalk_multi',
-  'steadydancer',
-  'i2v_2_2_multitalk',
-  'animate',
-  'hunyuan_avatar',
-])
-
-// Model types classified as Video Edit (Kiwi Edit, Chrono Edit)
-const videoEditModelTypes = new Set([
-  'viggle_animate',
-  'kiwi_edit',
-  'kiwi_edit_instruct_only',
-  'kiwi_edit_reference_only',
-  'chrono_edit',
-  'chrono_edit_distill',
-  'lucy_edit_fastwan',
-  'lucy_edit_fastwan_1_1',
-  // Dedicated to Edit → Recast; the general SCAIL Fast profile remains in
-  // Studio Video/Animate.
-  'scail2_14B_recast_fast',
-])
-
-// Audio sub-families: split the single "tts" family into Speech, Music, SFX
-const audioSubFamilies: ModelFamily[] = [
-  { id: 'tts_speech', label: 'Text to Speech', order: 200 },
-  { id: 'tts_music', label: 'Music', order: 201 },
-  { id: 'tts_sfx', label: 'Sound Effects', order: 202 },
-]
-
-// Model types that belong to the Music sub-family (everything else in
-// tts → Speech). Membership is prefix-based for the known music model
-// lines so newly added variants (e.g. new ACE-Step checkpoints)
-// classify correctly without touching this file — the XL SFT models
-// were invisible in the Music group because an id list here missed
-// them. Keep the explicit set for one-off ids that don't share a
-// prefix with their line.
-// Keep local MiniMax Music3 in the same direct-audio family as ACE-Step. It
-// does not share the ace_step prefix, so without this explicit entry it is
-// available to Story Lab but disappears from Studio → Audio → Music.
-const musicModelTypes = new Set<string>(['minimax_music3', 'yue2'])
-const musicModelPrefixes = ['ace_step', 'heartmula']
-
-function isMusicModelType(modelType: string): boolean {
-  if (musicModelTypes.has(modelType)) return true
-  return musicModelPrefixes.some(p => modelType.startsWith(p))
-}
-
 function audioSubModeForModel(modelType: string): import('../types').AudioSubMode {
   if (sfxModelTypes.has(modelType)) return 'sfx'
   return isMusicModelType(modelType) ? 'music' : 'speech'
 }
-
-// Model types that belong to the SFX sub-family (MMAudio variants)
-const sfxModelTypes = new Set([
-  'mmaudio_v2',
-  'mmaudio_nsfw',
-])
 
 // Virtual MMAudio model entries (injected into model list alongside backend models)
 const SFX_VIRTUAL_MODELS: ModelDef[] = [
@@ -1077,88 +978,6 @@ const modeDefaultModel: Record<GenerationMode, string> = {
   tools: '',   // Tools is non-generative post-processing — owns no model
 }
 
-export function getFamilyMode(familyId: string): GenerationMode {
-  return familyModeMap[familyId] || 'video'
-}
-
-/** Get the effective generation mode for a specific model (respects per-model overrides) */
-export function getModelMode(modelType: string, familyId: string): GenerationMode {
-  if (avatarModelTypes.has(modelType)) return 'avatar'
-  if (familyId === 'longcat') return 'avatar'
-  return getFamilyMode(familyId)
-}
-
-export function getFamiliesForMode(mode: GenerationMode, allFamilies: ModelFamily[], editSubMode?: string, audioSubMode?: string): ModelFamily[] {
-  if (mode === 'tools') return []
-  if (mode === 'avatar') {
-    // Recast and Repaint run on SCAIL-2, which lives under the Wan 2.1
-    // family. The remaining edit sub-modes use LTX models.
-    if (editSubMode === 'recast' || editSubMode === 'restyle') {
-      return allFamilies.filter(f => f.id === 'wan' || (editSubMode === 'recast' && f.id === 'h3_advanced'))
-    }
-    return allFamilies.filter(f => f.id === 'ltx2' || f.id === 'ltxv')
-  }
-  if (mode === 'audio') {
-    // Filter to the active audio sub-mode family
-    if (audioSubMode === 'speech') return audioSubFamilies.filter(f => f.id === 'tts_speech')
-    if (audioSubMode === 'music') return audioSubFamilies.filter(f => f.id === 'tts_music')
-    if (audioSubMode === 'sfx') return audioSubFamilies.filter(f => f.id === 'tts_sfx')
-    if (audioSubMode === 'mixer') return []  // Mixer has no model selector
-    return audioSubFamilies
-  }
-  return allFamilies.filter(f => getFamilyMode(f.id) === mode)
-}
-
-/** Get models for a family ID, optionally filtered by generation mode */
-export function getModelsForFamily(familyId: string, allModels: ModelDef[], mode?: GenerationMode, editSubMode?: string): ModelDef[] {
-  if (familyId === 'tts_speech') {
-    return allModels.filter(m => m.family === 'tts' && !isMusicModelType(m.model_type) && !sfxModelTypes.has(m.model_type))
-  }
-  if (familyId === 'tts_music') {
-    return allModels.filter(m => m.family === 'tts' && isMusicModelType(m.model_type))
-  }
-  if (familyId === 'tts_sfx') {
-    return allModels.filter(m => m.family === 'tts' && sfxModelTypes.has(m.model_type))
-  }
-  const familyModels = allModels.filter(m => m.family === familyId)
-  // When mode is specified and the family spans multiple modes, filter to matching models
-  if (mode === 'avatar') {
-    // Recast exposes its dedicated native-replacement Fast recipe plus HQ.
-    if (editSubMode === 'recast') {
-      return familyModels.filter(m =>
-        m.model_type === 'viggle_animate'
-        || m.model_type === 'scail2_14B_recast_fast'
-        || m.model_type === 'scail2_14B'
-      )
-    }
-    // Repaint intentionally mirrors Studio Video/Frames SCAIL Animate:
-    // the edited first frame is the primary image and the source video
-    // supplies motion/camera movement.
-    if (editSubMode === 'restyle') {
-      return familyModels.filter(m =>
-        m.model_type === 'scail2_14B_fast'
-        || m.model_type === 'scail2_14B'
-      )
-    }
-    return familyModels.filter(m => !avatarModelTypes.has(m.model_type) && !videoEditModelTypes.has(m.model_type))
-  }
-  if (mode === 'video') {
-    // For video mode: exclude models that are classified as avatar or video edit
-    return familyModels.filter(m => !avatarModelTypes.has(m.model_type) && !videoEditModelTypes.has(m.model_type))
-  }
-  return familyModels
-}
-
-/** Get the display family ID for a model (handles audio sub-families) */
-export function getDisplayFamily(model: ModelDef): string {
-  if (model.family === 'tts') {
-    if (sfxModelTypes.has(model.model_type)) return 'tts_sfx'
-    if (isMusicModelType(model.model_type)) return 'tts_music'
-    return 'tts_speech'
-  }
-  return model.family
-}
-
 // Transient: the LTX model selected before entering either SCAIL-2 edit
 // workflow, so leaving Recast/Repaint restores the user's prior edit model.
 let _preScail2AvatarModel = ''
@@ -1190,33 +1009,6 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
   return ''
 }
 
-export interface ForegroundActivity {
-  id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
-  phase: string
-  message: string
-  title?: string
-  kind?: string
-  parentId?: string
-  current?: number
-  total?: number
-  progress?: number
-  detailMessage?: string
-  detailVolatile?: boolean
-  detailCurrent?: number
-  detailTotal?: number
-  tokenUsage?: {
-    promptTokens?: number
-    completionTokens?: number
-    totalTokens?: number
-    calls?: number
-  }
-  generationDetails?: GenerationDetails
-  error?: string | null
-  startedAt?: number
-  updatedAt?: number
-}
-
 /** Trailer excerpt and transcription hints, shared by every way audio can
  *  reach Director. */
 type DirectorAudioOptions = {
@@ -1245,7 +1037,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1504,33 +1296,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   setParam: <K extends keyof GenerateParams>(key: K, value: GenerateParams[K]) => void
   setParams: (partial: Partial<GenerateParams>) => void
 
-  // UI state
-  settingsOpen: boolean
-  toggleSettings: () => void
-  setSettingsOpen: (open: boolean) => void
-  sidebarOpen: boolean
-  toggleSidebar: () => void
-  setSidebarOpen: (open: boolean) => void
-
-  // Theme — see lib/theme.ts. Two-dimensional: a dark/light/auto mode
-  // plus a theme family (each family has a dark and a light variant).
-  // Persisted to localStorage; an inline script in index.html applies
-  // the resolved theme to <html> BEFORE React mounts to avoid a flash
-  // of the default theme.
-  themePrefs: ThemePrefs
-  setThemeMode: (mode: ThemeMode) => void
-  setThemeFamily: (family: FamilyId) => void
-  /** Internal tools (Auditoría interna). Off by default; persisted locally. */
-  developerMode: boolean
-  setDeveloperMode: (enabled: boolean) => void
-
-  // Retake Dialog
-  retakeDialogOpen: boolean
-  retakeSourceFile: string | null
-  openRetakeDialog: (filename: string) => void
-  closeRetakeDialog: () => void
-
-  // CivitAI LoRA Browser
   // Director Pipeline Dashboard
   dashboardOpen: boolean
   dashboardPipelineList: PipelineListItem[]
@@ -1569,23 +1334,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   deleteRecipe: (id: string) => Promise<void>
   downloadRecipeLora: (lora: import('../api/client').RecipeLora, modelType: string) => Promise<void>
 
-  loraBrowserOpen: boolean
-  loraBrowserArch: string | null
-  loraBrowserDefaultDir: string | null
-  setLoraBrowserOpen: (open: boolean, arch?: string) => void
-  setLoraBrowserDefaultDir: (dir: string | null) => void
-  civitSearchResults: CivitAIModel[]
-  civitSearchCursor: string | null
-  civitSearchLoading: boolean
-  civitSearchError: string | null
-  civitSelectedModel: CivitAIModel | null
-  civitDownloads: CivitAIDownload[]
-  searchCivitAI: (params: Record<string, unknown>, append?: boolean) => Promise<void>
-  selectCivitAIModel: (modelId: number) => Promise<void>
-  clearCivitSelection: () => void
-  startCivitAIDownload: (params: Record<string, unknown>) => Promise<void>
-  pollCivitAIDownloads: () => void
-
   // Models & families (from API)
   families: ModelFamily[]
   models: ModelDef[]
@@ -1599,10 +1347,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   setAllModelsEnabled: (enabled: boolean) => void
   /** Bulk-toggle a list of models (family-level enable/disable, issue #14). */
   setModelsEnabled: (modelTypes: string[], enabled: boolean) => void
-  // ModelSelector "+N more" hint → open Settings and expand Enabled Models.
-  modelVisibilityFocus: GenerationMode | null
-  openModelVisibility: (mode: GenerationMode) => void
-  clearModelVisibilityFocus: () => void
 
   // ── Tools area (standalone post-processing on an existing clip) ──────
   // Apply FlashVSR upscale or SeedVC revoice to any gallery output or an
@@ -1696,52 +1440,13 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   ensureEditAnythingLora: () => Promise<void>
   setLoraWeight: (filename: string, phaseIndex: number, value: number) => void
 
-  // Presets
-  presets: import('../api/client').GenerationPreset[]
-  presetsLoading: boolean
-  loadPresets: () => Promise<void>
-  savePreset: (name: string) => Promise<void>
-  loadPreset: (preset: import('../api/client').GenerationPreset) => void
-  deletePreset: (id: string) => Promise<void>
-
   // Model options
   modelOptions: ModelOptions | null
   modelOptionsLoading: boolean
   loadModelOptions: (modelType: string, preservedRecipe?: Partial<GenerateParams>) => Promise<void>
 
-  // System config
-  systemConfig: SystemConfig | null
-  systemConfigLoading: boolean
-  loadSystemConfig: () => Promise<void>
-  updateSystemConfig: (partial: Partial<SystemConfig>) => Promise<void>
-
-  // Hardware detect — populated lazily when Settings → System opens.
-  // Shared between AutoPerformanceCard (the readout) and the rest of
-  // the System panel (e.g. the VRAM coefficient subtext that needs to
-  // know the user's actual VRAM size, not a hardcoded 24GB).
-  systemDetect: SystemDetectResponse | null
-  loadSystemDetect: () => Promise<void>
-  systemStats: SystemStats | null
-  loadSystemStats: () => Promise<void>
-
-  // Settings tab
-  settingsTab: SettingsTab
-  setSettingsTab: (tab: SettingsTab) => void
-
   // Select model (triggers side effects)
   selectModel: (modelType: string, preserveAudioReferences?: boolean) => void
-
-  // Workspaces
-  workspaces: Array<{ name: string; path: string; file_count?: number }>
-  activeWorkspace: string
-  /** Gallery is showing the virtual "Uploads" view (browse-only — the
-   *  server-side active workspace, and where generations save, is
-   *  untouched). Entered via switchWorkspace('__uploads__'). */
-  browsingUploads: boolean
-  loadWorkspaces: () => Promise<void>
-  switchWorkspace: (name: string) => Promise<void>
-  createWorkspace: (name: string) => Promise<void>
-  deleteWorkspace: (name: string) => Promise<void>
 
   // Storage Manager overlay
   storageDashboardOpen: boolean
@@ -1753,46 +1458,8 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   loraPickerSort: 'name' | 'newest'
   setLoraPickerSort: (sort: 'name' | 'newest') => void
 
-  // Outputs
-  outputs: OutputFile[]
-  outputsTotal: number
-  selectedOutput: number
-  setSelectedOutput: (i: number) => void
-  mediaFilter: MediaFilter
-  /** Gallery layout preference — see gallerySlice. */
-  galleryView: GalleryView
-  setGalleryView: (view: GalleryView) => void
-  galleryGridColumns: number | null
-  setGalleryGridColumns: (columns: number | null) => void
-  galleryOrder: import('../api/outputs').GalleryOrder
-  setGalleryOrder: (order: import('../api/outputs').GalleryOrder) => void
-  mobileHistoryOpen: boolean
-  setMobileHistoryOpen: (open: boolean) => void
-  outputSearchQuery: string
-  galleryFeedAtTop: boolean
-  galleryRefreshPending: boolean
-  galleryToast: { id: number; message: string } | null
-  setMediaFilter: (f: MediaFilter) => void
-  setOutputSearchQuery: (q: string) => void
-  setGalleryFeedAtTop: (atTop: boolean) => void
-  clearGalleryToast: () => void
-  maybeRefreshGallery: (opts?: { message?: string; force?: boolean }) => Promise<void>
-  filteredOutputs: () => OutputFile[]
-  outputsLoading: boolean
-  loadOutputs: () => Promise<void>
-  loadMoreOutputs: () => Promise<void>
-  refreshOutputs: () => Promise<void>
-  toggleFavorite: (name: string) => Promise<void>
-  mergeOutputFacts: (facts: import('../api/outputs').OutputFacts) => number
-
-  // Output metadata (lazy-loaded for selected output)
-  selectedOutputMeta: OutputMetadata | null
-  metadataLoading: boolean
-  loadOutputMetadata: (name: string) => Promise<void>
   loadSettingsFromOutput: (source?: OutputSettingsSource) => Promise<boolean | void>
   rerollGeneration: (source?: OutputSettingsSource) => Promise<boolean | void>
-  deleteSelectedOutput: () => Promise<void>
-  rejoinClipGroup: (groupId: string) => Promise<void>
 
   // Services config
   servicesConfig: ServicesConfig | null
@@ -1813,71 +1480,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
 
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
-  directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
-  /** The loaded track's identity, for the UI and for the generation payload.
-   *  A name rather than the File: audio reaches Director either as an upload
-   *  or adopted by name from the server, and nothing reads the bytes back —
-   *  the server works from directorAudioPath. */
-  directorAudioName: string | null
-  directorAudioPath: string | null
-  directorAnalysis: AudioAnalysisResult | null
-  directorPlannedClips: PlannedClip[]
-  directorEnergyBias: number
-  directorPacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
-  directorMusicVideoTreatment: MusicVideoTreatment
-  setDirectorMusicVideoTreatment: (partial: Partial<MusicVideoTreatment>) => void
-  directorClipPlans: ClipPlan[]
-  directorSceneDescription: string
-  directorSpokenLanguage: string
-  directorLoading: boolean
-  /** Sub-status for the current loading phase (e.g. "Loading
-   *  transcription model (first use downloads ~300MB)..."). Set by
-   *  the analyze polling loop in directorUploadAndAnalyze; read by
-   *  the sidebar loading spinner. Falls back to a default like
-   *  "Analyzing audio..." in the UI when null. */
-  directorLoadingMessage: string | null
-  directorError: string | null
-  /** Durable partial plan shown after a provider failure. It contains no
-   * prompts, only saved/missing indexes and the resume identifier. */
-  directorPlanRecovery: DirectorV2PlanJob | null
-  directorReferenceImage: File | null
-  directorReferenceImagePath: string | null
-  directorCharacterRefs: File[]
-  directorCharacterRefPaths: string[]
-  directorCharacterRefLabels: string[]
-  directorLocationRefs: File[]
-  directorLocationRefPaths: string[]
-  directorLocationRefLabels: string[]
-  directorH3VideoRefs: File[]
-  directorH3VideoRefPaths: string[]
-  directorH3AudioRefs: File[]
-  directorH3AudioRefPaths: string[]
-  directorVoiceRef: File | null
-  directorVoiceRefPath: string | null
-  directorIdentityGuidanceScale: number
-  /** Experimental: bypass the safety check that disables ID-LoRA reference
-   *  audio concatenation on the distilled LTX-2.3 pipeline. The base
-   *  distilled model produces noise when ref tokens are prepended, but
-   *  newer ID-LoRA variants (e.g. AviadDahan CelebVHQ-3K) claim distilled
-   *  compatibility — this flag lets users test those LoRAs.
-   *
-   *  REMOVED 2026-05-26: Per WanGP v11.77 testing, the CelebVHQ ID-LoRA
-   *  works on both dev and distilled. The block-on-distilled gate and
-   *  this experimental override are both gone. The comment is preserved
-   *  for historical context only. */
-  setDirectorVoiceRef: (file: File | null) => void
-  setDirectorIdentityGuidanceScale: (v: number) => void
-  directorClipImages: DirectorClipImage[]
-  directorImageGenProgress: DirectorImageGenProgress | null
-  directorSpeakers: string[]
-  directorSpeakerMappings: SpeakerMapping[]
-  directorAutoMode: boolean
-  directorSeamless: boolean
-  directorShotImageGuidance: DirectorShotImageGuidance
-  /** Completed LLM stream outputs, kept so the thinking/output boxes stay
-   *  in the chat history after each stage finishes instead of vanishing. */
-  directorLlmLog: { stage: string; text: string }[]
-  directorAppendLlmLog: (stage: string, text: string) => void
   directorSkill: DirectorSkill | null
   /** Exact Story production currently loaded by the embedded Wizard. */
   directorStoryProductionHandoff: {
@@ -1887,25 +1489,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
     cueId?: string
     candidateId?: string
   } | null
-  directorResolution: ResolutionPreset
-  directorAspectRatio: AspectRatio
-  /** Director-owned inference-step choices, keyed by video model. Keeping
-   *  these separate from Studio prevents one surface from silently changing
-   *  the other and lets each Director model retain its own valid recipe. */
-  directorVideoInferenceStepsByModel: Record<string, number>
-  /** Optional expert override of Director's hardware-safe native-shot cap. */
-  directorVideoMaxShotFramesByModel: Record<string, number>
-  /** Director-owned H3 Turbo choices, separate from Studio's active mode. */
-  directorH3TurboModeByModel: Record<string, boolean>
-  setDirectorAutoMode: (v: boolean) => void
-  setDirectorSeamless: (v: boolean) => void
-  setDirectorShotImageGuidance: (v: DirectorShotImageGuidance) => void
   setDirectorSkill: (skill: DirectorSkill) => void
-  setDirectorResolution: (preset: ResolutionPreset) => void
-  setDirectorAspectRatio: (ratio: AspectRatio) => void
-  setDirectorVideoInferenceSteps: (modelType: string, steps: number | null) => void
-  setDirectorVideoMaxShotFrames: (modelType: string, frames: number | null) => void
-  setDirectorH3TurboMode: (modelType: string, enabled: boolean) => void
   selectDirectorImageModel: (modelType: string) => void
   selectDirectorVideoModel: (modelType: string) => Promise<void>
   setDirectorH3Profile: (profile: 'balanced' | 'quality' | 'low_memory') => void
@@ -1925,19 +1509,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
    *  the trailer excerpt, then analyze and plan. */
   directorLoadAudioSource: (source: DirectorAudioSource, opts?: DirectorAudioOptions) => Promise<void>
   // Music Video: generate-the-track source + song setup
-  directorMusicSource: 'upload' | 'generate' | null
-  directorSongDescription: string
-  directorSongInstrumental: boolean
-  directorSongStyle: string
-  directorSongLyrics: string
-  directorSongDuration: number
-  directorTrackGenerating: boolean
-  setDirectorMusicSource: (s: 'upload' | 'generate' | null) => void
-  setDirectorSongDescription: (v: string) => void
-  setDirectorSongInstrumental: (v: boolean) => void
-  setDirectorSongStyle: (v: string) => void
-  setDirectorSongLyrics: (v: string) => void
-  setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
   directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number; workspace?: string }) => Promise<void>
@@ -1969,17 +1540,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   _uploadDirectorRefs: () => Promise<{ refImagePath: string | null; charPaths: string[]; locPaths: string[] }>
 
   // Short Film Director
-  shortFilmCharacters: ShortFilmCharacter[]
-  shortFilmPath: ShortFilmPath | null
-  shortFilmTargetDuration: number
-  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok'
-  directorWritingModel: string
-  directorWritingBaseUrl: string
-  shortFilmNarrative: boolean
-  shortFilmVisualStyle: string
-  shortFilmPreserveVisualStyle: boolean
-  directorCharacterVisualStyle: string
-  directorAllowClipText: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
   shortFilmSetTargetDuration: (duration: number) => void
@@ -2000,11 +1560,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   llmStreamDone: boolean
 
   // Director Pipeline (server-side)
-  foregroundActivity: ForegroundActivity | null
-  setForegroundActivity: (activity: ForegroundActivity | null) => void
-  activities: Record<string, ForegroundActivity>
-  upsertActivity: (activity: ForegroundActivity) => void
-  removeActivity: (activityId: string) => void
   pipelineId: string | null
   pipelineStatus: import('../api/client').PipelineStatus | null
   activeDirectorPipelines: import('../api/client').ActiveDirectorPipeline[]
@@ -2013,85 +1568,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
   stopPipeline: (pipelineId?: string) => Promise<void>
   pollPipelineStatus: () => void
-}
-
-const CLIENT_ACTIVITY_TERMINAL_STATUSES = new Set<ForegroundActivity['status']>([
-  'completed',
-  'failed',
-  'cancelled',
-])
-const _canonicalClientTaskWrites = createKeyedWriteSequencer()
-const _activityPublicationGate = createActivityPublicationGate<ForegroundActivity>()
-
-function beginAppActivity(
-  get: () => AppState,
-  options: {
-    kind: string
-    title: string
-    phase: string
-    message: string
-    total?: number
-    generationDetails?: GenerationDetails
-  },
-) {
-  const id = `${options.kind}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-  const report = (
-    phase: string,
-    message: string,
-    current = 0,
-    total = options.total || 0,
-    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailVolatile' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
-  ) => get().upsertActivity({
-    id,
-    kind: options.kind,
-    title: options.title,
-    status: 'running',
-    phase,
-    message,
-    current,
-    total,
-    ...details,
-  })
-  report(options.phase, options.message, 0, options.total || 0, {
-    generationDetails: options.generationDetails,
-  })
-  return {
-    id,
-    report,
-    finish: (message = 'Complete') => {
-      const clearVolatileDetail = get().activities[id]?.detailVolatile
-        ? { detailMessage: '', detailVolatile: false }
-        : {}
-      get().upsertActivity({
-        id,
-        kind: options.kind,
-        title: options.title,
-        status: 'completed',
-        phase: 'completed',
-        message,
-        current: options.total || 1,
-        total: options.total || 1,
-        ...clearVolatileDetail,
-      })
-      window.setTimeout(() => get().removeActivity(id), 4000)
-    },
-    fail: (error: unknown, phase = options.phase) => {
-      const message = error instanceof Error ? error.message : String(error)
-      const clearVolatileDetail = get().activities[id]?.detailVolatile
-        ? { detailMessage: '', detailVolatile: false }
-        : {}
-      get().upsertActivity({
-        id,
-        kind: options.kind,
-        title: options.title,
-        status: 'failed',
-        phase,
-        message,
-        error: message,
-        ...clearVolatileDetail,
-      })
-    },
-  }
 }
 
 let directorReconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -2188,101 +1664,6 @@ const BLANK_VIDEO_INPUT_PARAMS: Partial<GenerateParams> = {
   input_video_strength: undefined,
 }
 
-const resolutionMap: Record<ResolutionPreset, Record<AspectRatio, string>> = {
-  'auto': {
-    'auto': 'auto',
-    '21:9': 'auto',
-    '16:9': 'auto',
-    '9:16': 'auto',
-    '1:1': 'auto',
-    '4:3': 'auto',
-    '3:4': 'auto',
-  },
-  '480p': {
-    'auto': 'auto_480p',
-    '21:9': '1120x480',
-    '16:9': '848x480',
-    '9:16': '480x848',
-    '1:1': '672x672',
-    '4:3': '736x544',
-    '3:4': '544x736',
-  },
-  '540p': {
-    'auto': 'auto_540p',
-    '21:9': '1280x544',
-    '16:9': '960x544',
-    '9:16': '544x960',
-    '1:1': '736x736',
-    '4:3': '832x608',
-    '3:4': '608x832',
-  },
-  '720p': {
-    'auto': 'auto_720p',
-    '21:9': '1664x704',
-    '16:9': '1280x720',
-    '9:16': '720x1280',
-    '1:1': '1024x1024',
-    '4:3': '1104x832',
-    '3:4': '832x1104',
-  },
-  '768p': {
-    'auto': 'auto_768p',
-    '21:9': '1792x768',
-    '16:9': '1344x768',
-    '9:16': '768x1344',
-    '1:1': '768x768',
-    '4:3': '1024x768',
-    '3:4': '768x1024',
-  },
-  '1080p': {
-    'auto': 'auto_1080p',
-    '21:9': '2560x1088',
-    '16:9': '1920x1088',
-    '9:16': '1088x1920',
-    '1:1': '1024x1024',
-    '4:3': '1920x1088',
-    '3:4': '1088x1920',
-  },
-}
-
-export function resolveResolution(
-  modelOptions: ModelOptions | null,
-  preset: ResolutionPreset,
-  ratio: AspectRatio,
-): string {
-  const modelValues = modelOptions?.resolution_presets?.[preset]?.values
-  return modelValues?.[ratio]
-    || modelValues?.['16:9']
-    || resolutionMap[preset]?.[ratio]
-    || resolutionMap[preset]?.['16:9']
-    || '1280x720'
-}
-
-export function findResolutionSelection(
-  resolution: string,
-  modelOptions: ModelOptions | null,
-): { preset: ResolutionPreset; ratio: AspectRatio } | null {
-  const maps: Array<Partial<Record<ResolutionPreset, { values: Partial<Record<AspectRatio, string>> }>>> = []
-  if (modelOptions?.resolution_presets) maps.push(modelOptions.resolution_presets)
-  maps.push(Object.fromEntries(
-    Object.entries(resolutionMap).map(([preset, values]) => [preset, { values }]),
-  ) as Partial<Record<ResolutionPreset, { values: Partial<Record<AspectRatio, string>> }>>)
-
-  for (const presetMap of maps) {
-    for (const [preset, config] of Object.entries(presetMap)) {
-      for (const [ratio, value] of Object.entries(config?.values || {})) {
-        if (value === resolution) {
-          return {
-            preset: preset as ResolutionPreset,
-            ratio: ratio as AspectRatio,
-          }
-        }
-      }
-    }
-  }
-  return null
-}
-
 let _productionProfileVideoFormatSeq = 0
 
 /** Keep Director/Story Lab's canvas aligned with a globally inherited model.
@@ -2362,6 +1743,10 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createLlmSlice),
   ...bindSlice(set, get, createStudioConfigurationSlice({ alignFrameCount, resolveResolution })),
   ...bindSlice(set, get, createStudioMusicSlice),
+  ...bindSlice(set, get, createSystemSlice),
+  ...bindSlice(set, get, createPresetsSlice),
+  ...bindSlice(set, get, createActivitySlice),
+  ...bindSlice(set, get, createCivitaiSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -3171,7 +2556,6 @@ export const useStore = create<AppState>((set, get) => {
     set(s => ({ params: { ...s.params, ...partial } }))
   },
 
-  // CivitAI LoRA Browser
   // Director Pipeline Dashboard
   dashboardOpen: false,
   dashboardPipelineList: [],
@@ -3679,155 +3063,6 @@ export const useStore = create<AppState>((set, get) => {
     } catch (e) {
       console.error('Failed to load Director pipeline:', e)
     }
-  },
-
-  loraBrowserOpen: false,
-  loraBrowserArch: null,
-  loraBrowserDefaultDir: null,
-  setLoraBrowserDefaultDir: (dir) => set({ loraBrowserDefaultDir: dir }),
-  setLoraBrowserOpen: (open, arch) => {
-    if (open) {
-      set({ loraBrowserOpen: true, loraBrowserArch: arch || null, civitSearchResults: [], civitSearchCursor: null, civitSelectedModel: null })
-      // Adopt downloads started by URL imports, recipes, or another browser
-      // session instead of assuming this store initiated every transfer.
-      get().pollCivitAIDownloads()
-    } else {
-      set({ loraBrowserOpen: false })
-      // Refresh LoRA list after closing (may have downloaded new ones)
-      const modelType = get().params.model_type
-      if (modelType) get().loadLoras(modelType)
-    }
-  },
-  civitSearchResults: [],
-  civitSearchCursor: null,
-  civitSearchLoading: false,
-  civitSearchError: null,
-  civitSelectedModel: null,
-  civitDownloads: [],
-
-  searchCivitAI: async (params, append = false) => {
-    set({ civitSearchLoading: true, civitSearchError: null })
-    try {
-      const result = await api.searchCivitAI(params as Parameters<typeof api.searchCivitAI>[0])
-      if (append) {
-        set(s => ({
-          civitSearchResults: [...s.civitSearchResults, ...result.items],
-          civitSearchCursor: result.metadata?.nextCursor || null,
-          civitSearchLoading: false,
-        }))
-      } else {
-        set({
-          civitSearchResults: result.items,
-          civitSearchCursor: result.metadata?.nextCursor || null,
-          civitSearchLoading: false,
-          civitSelectedModel: null,
-        })
-      }
-    } catch (e) {
-      console.error('CivitAI search failed:', e)
-      const msg = e instanceof Error ? e.message : 'CivitAI search failed'
-      set({ civitSearchLoading: false, civitSearchError: msg })
-    }
-  },
-
-  selectCivitAIModel: async (modelId) => {
-    try {
-      const model = await api.fetchCivitAIModel(modelId)
-      set({ civitSelectedModel: model })
-    } catch (e) {
-      console.error('Failed to fetch model details:', e)
-    }
-  },
-
-  clearCivitSelection: () => set({ civitSelectedModel: null }),
-
-  startCivitAIDownload: async (params) => {
-    try {
-      await api.startCivitAIDownload(params as Parameters<typeof api.startCivitAIDownload>[0])
-      get().pollCivitAIDownloads()
-    } catch (e) {
-      console.error('Download failed:', e)
-    }
-  },
-
-  pollCivitAIDownloads: () => {
-    // Mark every invocation, including calls made while the singleton loop is
-    // awaiting an older request. The active loop consumes this before exit
-    // and takes a new snapshot that was initiated after the caller arrived.
-    _civitDownloadPollRequested = true
-    if (_civitDownloadPollTask) return
-
-    const controller = new AbortController()
-    _civitDownloadPollController = controller
-    const poll = async () => {
-      let consecutiveErrors = 0
-      try {
-        while (!controller.signal.aborted) {
-          _civitDownloadPollRequested = false
-          try {
-            const { downloads } = await api.fetchCivitAIDownloads()
-            consecutiveErrors = 0
-            set({ civitDownloads: downloads })
-
-            // Checkpoint downloads are registered on the server before their
-            // terminal record is published. Refresh here, in the singleton
-            // poller, so navigating away from ModelDetail cannot skip it and
-            // a Content-Disposition filename change cannot break matching.
-            const completedCheckpoints = downloads.filter(download =>
-              download.status === 'completed'
-              && !!download.model_type
-              && !_civitRefreshedCheckpointDownloads.has(download.id)
-            )
-            if (completedCheckpoints.length > 0) {
-              try {
-                await api.reloadModels()
-                await get().loadModels()
-                completedCheckpoints.forEach(download => {
-                  _civitRefreshedCheckpointDownloads.add(download.id)
-                })
-              } catch (error) {
-                // Keep the IDs unmarked so a later poll retries the refresh.
-                console.warn('Checkpoint model refresh failed; will retry:', error)
-              }
-            }
-
-            // A caller joined while this request was in flight. Its freshness
-            // guarantee requires another request, even when this response has
-            // no active/recent downloads and would normally end the loop.
-            if (_civitDownloadPollRequested) continue
-
-            // Keep taking snapshots while work is active and through the
-            // completed row's 30-second display window. This guarantees a
-            // caller that joins late still observes the terminal record.
-            if (!downloads.some(download => _downloadNeedsPolling(download, Date.now()))) return
-            await _waitForDownloadPoll(CIVIT_DOWNLOAD_POLL_MS, controller.signal)
-          } catch (error) {
-            if (controller.signal.aborted) return
-            consecutiveErrors += 1
-            if (_civitDownloadPollRequested) continue
-            const knownWork = get().civitDownloads.some(download =>
-              _downloadNeedsPolling(download, Date.now())
-            )
-            // Retry transient failures while the browser is open or known
-            // work is active. A background adoption probe gets three retries
-            // before yielding; a later caller can safely start a fresh loop.
-            if (!get().loraBrowserOpen && !knownWork && consecutiveErrors > 3) {
-              console.warn('Download polling paused after repeated errors:', error)
-              return
-            }
-            const retryMs = Math.min(10_000, 1000 * (2 ** Math.min(consecutiveErrors - 1, 3)))
-            await _waitForDownloadPoll(retryMs, controller.signal)
-          }
-        }
-      } finally {
-        if (_civitDownloadPollController === controller) {
-          _civitDownloadPollController = null
-          _civitDownloadPollTask = null
-        }
-      }
-    }
-
-    _civitDownloadPollTask = poll()
   },
 
   // Models & families
@@ -6244,76 +5479,6 @@ export const useStore = create<AppState>((set, get) => {
     _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
   },
 
-  // Presets
-  presets: [],
-  presetsLoading: false,
-
-  loadPresets: async () => {
-    set({ presetsLoading: true })
-    try {
-      const { presets } = await api.fetchPresets()
-      set({ presets })
-    } catch (e) {
-      console.error('Failed to load presets:', e)
-    } finally {
-      set({ presetsLoading: false })
-    }
-  },
-
-  savePreset: async (name) => {
-    const { params, loraWeights, generationMode } = get()
-    try {
-      const preset = await api.createPreset({
-        name,
-        mode: generationMode,
-        model_type: params.model_type,
-        prompt: '',
-        activated_loras: params.activated_loras,
-        loras_multipliers: params.loras_multipliers,
-        lora_weights: loraWeights,
-        params: {
-          num_inference_steps: params.num_inference_steps,
-          guidance_scale: params.guidance_scale,
-          resolution: params.resolution,
-          seed: params.seed,
-          negative_prompt: params.negative_prompt,
-          flow_shift: params.flow_shift,
-          h3_audio_shift: params.h3_audio_shift,
-          h3_audio_prompt: params.h3_audio_prompt,
-          h3_ref_image_size: params.h3_ref_image_size,
-          h3_reference_mode: params.h3_reference_mode,
-          h3_model_profile: params.h3_model_profile,
-          self_refiner_setting: params.self_refiner_setting,
-          stage2_steps: params.stage2_steps,
-        },
-      })
-      set(s => ({ presets: [...s.presets, preset] }))
-    } catch (e) {
-      console.error('Failed to save preset:', e)
-    }
-  },
-
-  loadPreset: (preset) => {
-    const newParams: Partial<GenerateParams> = {
-      activated_loras: preset.activated_loras,
-      loras_multipliers: preset.loras_multipliers,
-      ...(preset.params as Partial<GenerateParams>),
-    }
-    set(s => ({
-      params: { ...s.params, ...newParams },
-      loraWeights: preset.lora_weights || {},
-    }))
-  },
-
-  deletePreset: async (id) => {
-    try {
-      await api.deletePreset(id)
-      set(s => ({ presets: s.presets.filter(p => p.id !== id) }))
-    } catch (e) {
-      console.error('Failed to delete preset:', e)
-    }
-  },
-
   // Model options
   modelOptions: null,
   modelOptionsLoading: false,
@@ -6564,62 +5729,6 @@ export const useStore = create<AppState>((set, get) => {
     }
   },
 
-  // System config
-  systemConfig: null,
-  systemConfigLoading: false,
-  loadSystemConfig: async () => {
-    set({ systemConfigLoading: true })
-    try {
-      const config = await api.fetchSystemConfig()
-      set({ systemConfig: config, systemConfigLoading: false })
-    } catch (e) {
-      console.error('Failed to load system config:', e)
-      set({ systemConfigLoading: false })
-    }
-  },
-  updateSystemConfig: async (partial) => {
-    try {
-      await api.updateSystemConfig(partial)
-      set(s => ({
-        systemConfig: s.systemConfig ? { ...s.systemConfig, ...partial } : null,
-      }))
-    } catch (e) {
-      console.error('Failed to update system config:', e)
-      get().loadSystemConfig()
-    }
-  },
-
-  // Hardware detect — see type definition above. Initial value null;
-  // populated when AutoPerformanceCard mounts (Settings → System).
-  // Refreshed when the user clicks Re-detect on the auto card.
-  systemDetect: null,
-  loadSystemDetect: async () => {
-    try {
-      const detect = await api.fetchSystemDetect()
-      set({ systemDetect: detect })
-    } catch (e) {
-      console.error('Failed to load system detect:', e)
-    }
-  },
-
-  // Live hardware telemetry (HardwareStatusBar). Polled ~2s from the
-  // component while mounted. Swallows a single failed tick (e.g. backend
-  // restarting) instead of spamming the console at 2s cadence. Skip if a
-  // tick is already in flight so a slow LAN/backend cannot stack fetches.
-  systemStats: null,
-  loadSystemStats: async () => {
-    if (_systemStatsInFlight) return
-    _systemStatsInFlight = true
-    try {
-      const stats = await api.fetchSystemStats()
-      set({ systemStats: stats })
-    } catch {
-      /* transient poll failure — ignore this tick */
-    } finally {
-      _systemStatsInFlight = false
-    }
-  },
-
   // Services config
   servicesConfig: null,
   servicesConfigLoading: false,
@@ -6790,76 +5899,10 @@ export const useStore = create<AppState>((set, get) => {
   directorStoryProductionHandoff: null,
   llmStreamText: '',
   llmStreamDone: true,
-  foregroundActivity: null,
-  activities: {},
   pipelineId: null,
   pipelineStatus: null,
   activeDirectorPipelines: [],
   pipelinePolling: false,
-  upsertActivity: (activity) => {
-    const previous = get().activities[activity.id]
-    if (
-      previous
-      && CLIENT_ACTIVITY_TERMINAL_STATUSES.has(previous.status)
-      && !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)
-    ) return
-    const now = Date.now()
-    const published = {
-      ...previous,
-      ...activity,
-      workspace: get().activeWorkspace,
-      startedAt: previous?.startedAt || activity.startedAt || now,
-      updatedAt: activity.updatedAt || now,
-    }
-    // Keep each client root's running -> terminal -> dismissal writes ordered.
-    // Different activities still publish concurrently, and observability never
-    // blocks the foreground operation.
-    _activityPublicationGate.publish(published, latest => {
-      void _canonicalClientTaskWrites.enqueue(activity.id, async () => {
-        await api.upsertCanonicalClientTask(latest as unknown as Record<string, unknown>)
-      }).catch(() => undefined)
-    })
-    set(state => ({
-      activities: { ...state.activities, [activity.id]: published },
-    }))
-  },
-  removeActivity: (activityId) => {
-    const activity = get().activities[activityId]
-    if (!activity || !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)) return
-    const workspace = get().activeWorkspace
-    void _canonicalClientTaskWrites.enqueue(activityId, async () => {
-      await api.dismissCanonicalTask(api.canonicalClientTaskId(activityId), workspace)
-    }).catch(() => undefined)
-    _activityPublicationGate.clear(activityId)
-    set(state => {
-      if (!state.activities[activityId]) return {}
-      const activities = { ...state.activities }
-      delete activities[activityId]
-      return { activities }
-    })
-  },
-  // Compatibility bridge for older feature panels. New workflows should use
-  // the registry directly so concurrent activities cannot overwrite one another.
-  setForegroundActivity: (activity) => set(state => {
-    const activities = { ...state.activities }
-    if (!activity) {
-      if (state.foregroundActivity?.id) delete activities[state.foregroundActivity.id]
-      return { foregroundActivity: null, activities }
-    }
-    if (state.foregroundActivity?.id && state.foregroundActivity.id !== activity.id) {
-      delete activities[state.foregroundActivity.id]
-    }
-    const previous = activities[activity.id]
-    const now = Date.now()
-    const normalized = {
-      ...previous,
-      ...activity,
-      startedAt: previous?.startedAt || activity.startedAt || now,
-      updatedAt: activity.updatedAt || now,
-    }
-    activities[activity.id] = normalized
-    return { foregroundActivity: normalized, activities }
-  }),
   setDirectorSkill: (skill) => {
     set({ directorSkill: skill, ...(skill === 'music_video' ? { directorPacingProfile: 'balanced' as const } : {}) })
     // Music director default for image-to-video reference strength is

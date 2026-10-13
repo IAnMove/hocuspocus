@@ -4,6 +4,6 @@
   "ceilings": {
     "app/_launch_runtime.py": 36617,
     "app/core_runtime.py": 763,
-    "ui/src/stores/useStore.ts": 10099
+    "ui/src/stores/useStore.ts": 9142
   }
 }
