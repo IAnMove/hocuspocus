@@ -7178,35 +7178,36 @@ def get_system_stats_live():
     every ~2s. Also reports the generation model currently resident in
     VRAM so the UI can show "what's loaded right now".
     """
-    from services.live_stats import get_live_stats
-
-    stats = get_live_stats(os.path.join(os.path.dirname(_app_dir), "ui", "dist"))
-
     # Currently-loaded generation model. WGP/mmgp keeps it resident
     # between jobs. `transformer_type` tracks the live load (set at the
     # end of load_models); `wan_model is not None` means it is actually
     # in memory right now vs. just the last/selected type.
-    model_name = None
-    model_type = None
-    model_loaded = False
-    try:
-        model_type = getattr(wgp, "transformer_type", None)
-        model_loaded = getattr(wgp, "wan_model", None) is not None
-        if model_type:
-            try:
-                md = wgp.get_model_def(model_type) or {}
-                model_name = md.get("name") or model_type
-            except Exception:
-                model_name = model_type
-    except Exception:
-        pass
+    def current_model():
+        model_name = None
+        model_type = None
+        model_loaded = False
+        try:
+            model_type = getattr(wgp, "transformer_type", None)
+            model_loaded = getattr(wgp, "wan_model", None) is not None
+            if model_type:
+                try:
+                    md = wgp.get_model_def(model_type) or {}
+                    model_name = md.get("name") or model_type
+                except Exception:
+                    model_name = model_type
+        except Exception:
+            pass
+        return {
+            "name": model_name,
+            "model_type": model_type,
+            "loaded": model_loaded,
+        }
 
-    stats["model"] = {
-        "name": model_name,
-        "model_type": model_type,
-        "loaded": model_loaded,
-    }
-    return stats
+    from services.live_stats import snapshot_system_stats
+    return snapshot_system_stats(
+        os.path.join(os.path.dirname(_app_dir), "ui", "dist"),
+        current_model,
+    )
 
 
 @api.post("/api/v1/system/release-model")
@@ -36297,105 +36298,23 @@ else:
 # ============================================================================
 
 def run_server():
-    port = int(os.environ.get("SERVER_PORT", "7860"))
+    def prepare(display_host, port):
+        # Confirm the polling filter immediately before Uvicorn configures logging.
+        install_quiet_access_filter()
+        from services.production_resume import resume_on_startup
+        # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
+        api.add_event_handler("startup", lambda: resume_on_startup(
+            _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
+            lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
 
-    # Bind-host resolution priority:
-    #   1. PINOKIO_SHARE_LOCAL — Pinokio's per-app + global ENVIRONMENT
-    #      var. "true" → 0.0.0.0 (LAN-accessible), anything else
-    #      → 127.0.0.1 (loopback only). This is the primary Pinokio path
-    #      and CRITICALLY: per-app ENVIRONMENT overrides global here
-    #      because os.environ reflects the merged shell env. (start.js's
-    #      kernel.envs only sees global, which is why we can't make this
-    #      decision in start.js — Pinokio doesn't merge per-app into
-    #      kernel.envs as of 2026-05-04.)
-    #   2. SERVER_NAME — manual override for direct python launches
-    #      outside Pinokio. Lets devs force a bind without going through
-    #      the env-var dance.
-    #   3. Default 127.0.0.1 (safe loopback).
-    pinokio_share = (os.environ.get("PINOKIO_SHARE_LOCAL") or "").strip().lower()
-    if pinokio_share == "true":
-        host = "0.0.0.0"
-    elif pinokio_share == "false":
-        host = "127.0.0.1"
-    else:
-        host = os.environ.get("SERVER_NAME", "127.0.0.1")
-
-    for _lan_auth_message in describe_lan_auth_startup():
-        print(_lan_auth_message)
-
-    # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
-    # stale prior instance or another app can still be holding it by the time
-    # we bind. Bind now (falling forward to the next free port) and hand the
-    # socket to Uvicorn: the URL printed below is then already ours, so the
-    # LAN proxy Pinokio starts on reading it cannot take the port first.
-    from services.server_lifecycle import bind_listener
-    try:
-        listener, resolved_port = bind_listener(host, port)
-    except OSError:
-        print(
-            f"\n[HocusPocus Lab] ERROR: could not find a free port in "
-            f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
-            f"is holding them.\n"
-            f"  • Close the other program, or stop the existing HocusPocus Lab from "
-            f"the Pinokio menu, then Start again.\n"
-            f"  • On Windows you can see what holds a port with: "
-            f"netstat -ano | findstr :{port}\n",
-            flush=True,
-        )
-        sys.exit(1)
-    if resolved_port != port:
-        print(
-            f"[HocusPocus Lab] Port {port} was busy — using {resolved_port} instead.",
-            flush=True,
-        )
-        port = resolved_port
-
-    # Browsers can't navigate to 0.0.0.0 (it's a non-routable bind
-    # address), so when binding wider we still SURFACE the loopback
-    # URL — that's what Pinokio's regex captures from this output and
-    # hands to its built-in browser. The actual bind stays 0.0.0.0 so
-    # LAN access works; only the displayed URL is loopback.
-    display_host = "127.0.0.1" if host == "0.0.0.0" else host
-
-    print(f"\n{'='*50}")
-    print(f"  {'HocusPocus Lab UI:' if _ui_ready else 'Web UI repair page (API only):'} http://{display_host}:{port}/")
-    # Trailing slash required: the Gradio submount 404s the bare path.
-    print(f"  Classic UI:    http://{display_host}:{port}/classic/")
-    print(f"  API docs:      http://{display_host}:{port}/docs")
-    if host == "0.0.0.0":
-        print(f"  (Bound to {host} — LAN-accessible via this machine's IP)")
-    print(f"{'='*50}\n")
-    try:
-        from services.server_endpoint import publish_server_endpoint
-        publish_server_endpoint(
-            os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
-            host=host, display_host=display_host, port=port,
-        )
-    except OSError as error:
-        print(f"[HocusPocus Lab] Could not publish settings/server-endpoint.json: {error}")
-
-    # Confirm the polling filter immediately before Uvicorn configures logging.
-    install_quiet_access_filter()
-    from services.production_resume import resume_on_startup
-    # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
-    api.add_event_handler("startup", lambda: resume_on_startup(
-        _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
-        lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
-
-    try:
-        from services.server_lifecycle import run_until_stopped
-        run_until_stopped(api, host=host, port=port, sockets=[listener])
-    except OSError as e:
-        # The probe above narrows this to a genuine race (port taken in the
-        # window between probe and uvicorn's own bind). Still fail loudly and
-        # actionably rather than dumping a bare traceback into the launcher.
-        print(
-            f"\n[HocusPocus Lab] ERROR: failed to bind {host}:{port} ({e}). "
-            f"The port was taken just after we checked it — Start again to "
-            f"pick a fresh port.\n",
-            flush=True,
-        )
-        sys.exit(1)
+    from services.server_entry import run
+    run(
+        api,
+        ui_ready=_ui_ready,
+        endpoint_path=os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
+        prepare=prepare,
+        lan_messages=describe_lan_auth_startup(),
+    )
 
 
 

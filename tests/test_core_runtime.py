@@ -1037,6 +1037,63 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(reopened.json()["status"], "completed")
         self.assertEqual(reopened.json()["message"], "Ready")
 
+    def test_system_stats_include_the_runtime_identity(self):
+        response = self.client.get("/api/v1/system-stats")
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["model"], {"name": None, "model_type": None, "loaded": False})
+        self.assertIn("compute_percent", body["gpu"])
+        self.assertIn("instance_id", body["runtime"])
+        self.assertIn("ui_build_id", body["runtime"])
+
+    def test_startup_binds_before_announcing_and_publishes_the_endpoint(self):
+        import io
+        import socket
+        from contextlib import redirect_stdout
+
+        from services.server_endpoint import withdraw_server_endpoint
+
+        held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        held.bind(("127.0.0.1", 0))
+        busy = held.getsockname()[1]
+        if busy in {42003, 42042, 42072} or 42080 <= busy <= 42100:
+            held.close()
+            self.skipTest("ephemeral port landed on a reserved server port")
+        endpoint = Path(core_runtime._app_dir) / "settings" / "server-endpoint.json"
+        previous = endpoint.read_text(encoding="utf-8") if endpoint.exists() else None
+        seen = {}
+
+        def fake_serve(_app, *, host, port, sockets=None):
+            seen["host"] = host
+            seen["port"] = port
+            seen["sockets"] = list(sockets or [])
+
+        stdout = io.StringIO()
+        try:
+            with patch.dict(os.environ, {"SERVER_PORT": str(busy), "SERVER_NAME": "127.0.0.1"}, clear=False):
+                os.environ.pop("PINOKIO_SHARE_LOCAL", None)
+                with patch("services.server_lifecycle.run_until_stopped", fake_serve), redirect_stdout(stdout):
+                    core_runtime.run_server()
+            self.assertNotEqual(seen.get("port"), busy)
+            self.assertTrue(seen.get("sockets"))
+            self.assertEqual(seen["host"], "127.0.0.1")
+            text = stdout.getvalue()
+            self.assertIn(f"http://127.0.0.1:{seen['port']}/", text)
+            self.assertNotIn(f"http://127.0.0.1:{busy}/", text)
+            record = json.loads(endpoint.read_text(encoding="utf-8"))
+            self.assertEqual(record["port"], seen["port"])
+            self.assertEqual(record["url"], f"http://127.0.0.1:{seen['port']}")
+        finally:
+            held.close()
+            for sock in seen.get("sockets") or []:
+                sock.close()
+            if previous is None:
+                withdraw_server_endpoint(endpoint, os.getpid())
+                if endpoint.exists():
+                    endpoint.unlink()
+            else:
+                endpoint.write_text(previous, encoding="utf-8")
+
     def test_studio_image_command_canonicalizes_upload_references(self):
         folder, previous = self._in_temp_workspace()
         try:

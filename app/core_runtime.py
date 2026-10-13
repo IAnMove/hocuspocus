@@ -376,15 +376,11 @@ def jobs_recovery():
 
 @api.get("/api/v1/system-stats")
 def system_stats():
-    import psutil
-    vm = psutil.virtual_memory()
-    return {
-        "cpu": {"percent": psutil.cpu_percent(interval=None)},
-        "ram": {"percent": vm.percent, "used_gb": round((vm.total - vm.available) / 1024 ** 3, 1),
-                "total_gb": round(vm.total / 1024 ** 3, 1)},
-        "gpu": {"available": False, "percent": 0, "vram_used_gb": 0, "vram_total_gb": 0, "vram_percent": 0},
-        "model": {"name": None, "model_type": None, "loaded": False},
-    }
+    from services.live_stats import snapshot_system_stats
+    return snapshot_system_stats(
+        os.path.join(_app_dir, "..", "ui", "dist"),
+        lambda: {"name": None, "model_type": None, "loaded": False},
+    )
 
 
 @api.get("/api/v1/system-detect")
@@ -631,18 +627,15 @@ def run_server() -> None:
     for name, entry in snapshot["capabilities"].items():
         print(f"  {name}: {entry['state']}")
     print(f"[HocusPocus] profile {snapshot['profile']}")
-    port = int(os.environ.get("SERVER_PORT", "7860"))
-    pinokio_share = (os.environ.get("PINOKIO_SHARE_LOCAL") or "").strip().lower()
-    if pinokio_share == "true":
-        host = "0.0.0.0"
-    elif pinokio_share == "false":
-        host = "127.0.0.1"
-    else:
-        host = os.environ.get("SERVER_NAME", "127.0.0.1")
-    display_host = "127.0.0.1" if host == "0.0.0.0" else host
-    print(f"HocusPocus Lab UI: http://{display_host}:{port}/")
-    from services.server_lifecycle import run_until_stopped
-    run_until_stopped(api, host=host, port=port)
+    from services.lan_auth import describe_lan_auth_startup
+    from services.server_entry import run
+    run(
+        api,
+        ui_ready=_ui_ready,
+        endpoint_path=os.path.join(_app_dir, "settings", "server-endpoint.json"),
+        prepare=lambda _display_host, _port: None,
+        lan_messages=describe_lan_auth_startup(),
+    )
 
 
 if __name__ == "__main__":
