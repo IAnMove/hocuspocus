@@ -25895,12 +25895,12 @@ async def save_scene_recording(
             transcode_slots=_UPLOAD_TRANSCODE_SLOTS,
             sidecar_error_prefix="Could not save recording metadata",
             safe_join=_safe_join,
+            strip_workspace=False,
         )
     except HTTPException:
         raise
     except Exception as error:
         raise HTTPException(status_code=http_error_status(error), detail=http_error_detail(error)) from error
-
 
 
 

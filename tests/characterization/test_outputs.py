@@ -60,6 +60,16 @@ def test_scene_recording_answers(server, golden, tmp_path) -> None:
         data={"metadata": "{"},
     )
     server.check(
+        golden, "scene recording metadata too large", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("clip.webm", b"webm", "video/webm")},
+        data={"metadata": "x" * (8 * 1024 * 1024 + 1)},
+    )
+    server.check(
+        golden, "scene recording workspace must be exact", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("clip.webm", b"webm", "video/webm")},
+        data={"metadata": json.dumps({"workspace": " client-lab ", "scene": _PLAZA})},
+    )
+    server.check(
         golden, "scene recording needs version 1", "POST", "/api/v1/scenes/recordings",
         files={"file": ("clip.webm", b"webm", "video/webm")},
         data={"metadata": json.dumps({"scene": {"name": "Plaza"}, "prompt": ""})},

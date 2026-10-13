@@ -441,6 +441,14 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(workflows.status_code, 400, workflows.text)
         self.assertNotIn("Could not read", conversation.text)
         self.assertNotIn("Could not read", workflows.text)
+        # A workspace folder that cannot be created is a 500 with the Wizard message, as before the router was shared.
+        with patch("services.core_workspace.workspace_dir", side_effect=OSError("disk full")):
+            unreadable = self.client.get("/api/v1/wizard/conversations")
+            unsaved = self.client.put("/api/v1/wizard/workflows", json={"workspace": "default", "collection": {}})
+        self.assertEqual(unreadable.status_code, 500, unreadable.text)
+        self.assertIn("Could not read the Wizard conversation: disk full", unreadable.json()["detail"])
+        self.assertEqual(unsaved.status_code, 500, unsaved.text)
+        self.assertIn("Could not save Wizard workflows: disk full", unsaved.json()["detail"])
 
     def test_wizard_put_rejects_a_json_array(self):
         conversation = self.client.put("/api/v1/wizard/conversations", json=["not", "an", "object"])
@@ -590,6 +598,10 @@ class CoreRuntimeTests(unittest.TestCase):
                 "workspace": "default",
             })
             missing = self.client.post("/api/v1/video-editor/export/does-not-exist/cancel")
+            foreign = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "workspace": "../outside",
+            })
         finally:
             self._leave_temp_workspace(folder, previous)
         self.assertEqual(rejected.status_code, 400, rejected.text)
@@ -600,6 +612,8 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("resolution", str(huge.json()["detail"]).lower())
         self.assertEqual(missing.status_code, 404, missing.text)
         self.assertIn("Video editor export job not found", str(missing.json()["detail"]))
+        self.assertEqual(foreign.status_code, 400, foreign.text)
+        self.assertIn("Invalid workspace name", str(foreign.json()["detail"]))
 
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")
@@ -868,6 +882,32 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("restarted", body["message"])
         self.assertEqual(body["children"][0]["status"], "interrupted")
 
+    def test_minimax_music_reload_skips_a_folder_that_is_not_a_workspace_name(self):
+        """An outputs folder with an invalid workspace name must not stop the checkpoint scan."""
+        job_id = "minimax-music-0123456789ab"
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs", "bad name").mkdir(parents=True)
+            checkpoint = Path("outputs", "lab", ".minimax-music-jobs")
+            checkpoint.mkdir(parents=True)
+            payload = {
+                "jobId": job_id,
+                "taskId": f"task-{job_id}",
+                "workspace": "lab",
+                "status": "running",
+                "phase": "requesting",
+                "message": "in progress",
+                "children": [],
+            }
+            (checkpoint / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+            loaded = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(loaded.status_code, 200, loaded.text)
+        self.assertEqual(loaded.json()["status"], "interrupted")
+        self.assertEqual(loaded.json()["workspace"], "lab")
+
     def test_minimax_music_replay_does_not_start_a_second_worker(self):
         from routers import story_music
 
@@ -943,6 +983,46 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(parent["metadata"]["adapter"], "minimax-music")
         child_id = body["children"][0]["taskId"]
         self.assertEqual(tasks[child_id]["metadata"]["adapter"], "minimax-music-candidate")
+
+    def test_minimax_music_null_or_empty_workspace_means_the_active_workspace(self):
+        """Core's old music route turned a null or empty workspace into the active one."""
+        from routers import story_music
+        from services import core_workspace as core
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        for value in (None, ""):
+            with self.subTest(workspace=value):
+                folder, previous = self._in_temp_workspace()
+                try:
+                    Path("outputs", "lab").mkdir(parents=True)
+                    core.save_config({"services": {"active_workspace": "lab"}})
+                    payload = {
+                        "model": "music-3.0",
+                        "prompt": "cinematic dream pop",
+                        "lyrics": "[Verse]\nAcross the night",
+                        "count": 1,
+                        "workspace": value,
+                        "paid_music_confirmed": True,
+                        "idempotencyKey": f"active-workspace-{value!r}",
+                    }
+                    with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                        story_music.threading, "Thread", QuietThread,
+                    ):
+                        started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                    checkpoint_dir = Path("outputs", "lab", ".minimax-music-jobs")
+                    checkpoints = list(checkpoint_dir.glob("*.json")) if checkpoint_dir.is_dir() else []
+                finally:
+                    self._clear_music_jobs()
+                    self._leave_temp_workspace(folder, previous)
+                self.assertEqual(started.status_code, 202, started.text)
+                self.assertEqual(started.json()["workspace"], "lab")
+                self.assertEqual(len(checkpoints), 1)
 
     def test_minimax_image_generate_starts_a_studio_job(self):
         folder, previous = self._in_temp_workspace()
@@ -1195,6 +1275,12 @@ class CoreRuntimeTests(unittest.TestCase):
             record = json.loads(endpoint.read_text(encoding="utf-8"))
             self.assertEqual(record["port"], seen["port"])
             self.assertEqual(record["url"], f"http://127.0.0.1:{seen['port']}")
+            # Core has no LanAuthMiddleware, so it must not announce a protected LAN session.
+            sharing = {"PINOKIO_SHARE_LOCAL": "true", "LOREFRAME_LAN_TOKEN": "t" * 32}
+            with patch.dict(os.environ, sharing), patch("services.server_entry.run") as entry, redirect_stdout(io.StringIO()):
+                os.environ.pop("LOREFRAME_LAN_AUTH", None)
+                core_runtime.run_server()
+            self.assertEqual(entry.call_args.kwargs["lan_messages"], [])
         finally:
             held.close()
             for sock in seen.get("sockets") or []:

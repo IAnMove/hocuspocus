@@ -18,7 +18,7 @@ from services.kernel.paths import PathPolicy
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
-_UI_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_UI_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "civitaiSlice.ts")
 _MODEL_DETAIL_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "LoraBrowser", "ModelDetail.tsx",
 )

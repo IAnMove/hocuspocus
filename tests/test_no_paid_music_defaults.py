@@ -133,6 +133,7 @@ def _story_music_client(tmp_path, monkeypatch, started, music_generation_gate=No
             "_public_minimax_music_job", "_run_minimax_music_job", "_minimax_music_jobs",
             "_minimax_music_jobs_lock", "_MINIMAX_MUSIC_TERMINAL", "_finish_unstarted_music_children",
             "_minimax_music_job_update", "wgp", "_music_generation_gate", "_music_before_reserve",
+            "_music_resolve_workspace",
         )
     }
     monkeypatch.setattr(story_music.execution_mode, "validate_remote_provider", lambda *_args: None)

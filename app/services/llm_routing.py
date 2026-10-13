@@ -73,6 +73,22 @@ def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "
     return api_key, default_url_for_provider(provider, remote_url)
 
 
+def _remote_url_changed(status: dict, provider: str, desired_url: str) -> bool:
+    """True when the loaded client points at another URL than the one wanted.
+
+    ``llm_service.get_status()`` reports ``remote_url`` as "" for Anthropic and
+    Anthropic requests ignore it, so "" there is not evidence of a change: a
+    leftover ``llm_remote_url`` would otherwise unload and load the client on
+    every call.
+    """
+    if provider not in _URL_RELOAD_PROVIDERS:
+        return False
+    loaded_url = status.get("remote_url", "")
+    if provider == "anthropic" and not loaded_url:
+        return False
+    return loaded_url != desired_url
+
+
 def _ensure_llm_loaded(
     *,
     services: dict,
@@ -97,10 +113,7 @@ def _ensure_llm_loaded(
 
     if llm_service.is_loaded():
         status = llm_service.get_status()
-        remote_changed = (
-            desired_provider in _URL_RELOAD_PROVIDERS
-            and status.get("remote_url", "") != desired_remote_url
-        )
+        remote_changed = _remote_url_changed(status, desired_provider, desired_remote_url)
         if (
             status.get("model_id") != desired
             or status.get("provider") != desired_provider

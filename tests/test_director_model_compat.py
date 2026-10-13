@@ -1891,7 +1891,8 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
 
 class TestDirectorUICatalogContract(unittest.TestCase):
     def test_ui_preserves_backend_director_capabilities(self):
-        store_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "useStore.ts")
+        store_path = os.path.join(_ROOT_DIR, "ui", "src", "features", "director", "store", "directorPipelineSlice.ts")
+        models_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "modelsSlice.ts")
         types_path = os.path.join(_ROOT_DIR, "ui", "src", "types", "index.ts")
         chat_path = os.path.join(
             _ROOT_DIR, "ui", "src", "components", "Sidebar", "DirectorChat.tsx",
@@ -1909,6 +1910,8 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         client = api_client_source()
         with open(store_path, encoding="utf-8") as handle:
             store = handle.read()
+        with open(models_path, encoding="utf-8") as handle:
+            models = handle.read()
         with open(types_path, encoding="utf-8") as handle:
             types = handle.read()
         with open(chat_path, encoding="utf-8") as handle:
@@ -1921,8 +1924,8 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             pipeline_source = handle.read()
 
         self.assertIn("director?: DirectorModelCompatibility", client)
-        self.assertIn("const backendModels: ModelDef[]", store)
-        self.assertIn("...m,", store)
+        self.assertIn("const backendModels: ModelDef[]", models)
+        self.assertIn("...m,", models)
         self.assertIn("shot_image_guidance: directorShotImageGuidance", store)
         self.assertIn("director_max_shot_frames: directorMaxShotFrames", store)
         self.assertIn("resolution: directorVideoResolution", store)

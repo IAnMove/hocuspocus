@@ -175,7 +175,7 @@ class TestQwenImage21Definitions(unittest.TestCase):
         types_source = _read(root / "ui" / "src" / "types" / "index.ts")
         sidebar = _read(root / "ui" / "src" / "components" / "Sidebar" / "Sidebar.tsx")
         image_gen = _read(root / "ui" / "src" / "lib" / "imageGeneration.ts")
-        store = _read(root / "ui" / "src" / "stores" / "useStore.ts")
+        store = _read(root / "ui" / "src" / "stores" / "modelVisibility.ts")
         self.assertIn('"inpaint_support": bool(md.get("inpaint_support", False))', launch)
         self.assertIn('"native_rgba": bool(md.get("native_rgba", False))', launch)
         from services.image_edit_workflow import image_edit_capabilities
