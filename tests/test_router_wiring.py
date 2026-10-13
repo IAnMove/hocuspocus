@@ -214,6 +214,9 @@ def test_video_editor_routers_are_mounted_once_by_the_main_server() -> None:
     assert mounted[("video_editor", "create_video_editor_router")] == 1
     assert mounted[("video_editor", "create_video_editor_jobs_router")] == 1
     assert all(count == 1 for count in mounted.values()), mounted
+    core = Counter(_mounted(CORE))
+    assert core[("video_editor", "create_video_editor_router")] == 1
+    assert core[("video_editor", "create_video_editor_jobs_router")] == 1
 
 
 def test_no_method_and_path_is_defined_twice_in_a_server() -> None:

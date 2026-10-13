@@ -93,8 +93,7 @@ def _validated_request(body: dict[str, Any], workspace: str) -> dict[str, Any]:
         raise ValueError("Lyrics are required for a vocal song")
     reference_audio_path = None
     if model in COVER_MODELS:
-        from services import core_editor
-        reference_audio_path = core_editor.resolve_media(str(body.get("reference_audio_filename") or ""), workspace)
+        reference_audio_path = core.resolve_media(str(body.get("reference_audio_filename") or ""), workspace)
     return {
         "prompt": prompt, "lyrics": lyrics, "instrumental": instrumental,
         "model": model, "reference_audio_path": reference_audio_path, "count": count,

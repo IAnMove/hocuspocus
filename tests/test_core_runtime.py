@@ -435,27 +435,37 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(conflict.json()["detail"]["code"], "wizard_conversation_revision_conflict")
 
     def test_video_editor_export_name_cannot_escape_the_workspace(self):
-        from services import core_editor, core_workspace as core
+        from services import core_workspace as core
+
+        def fake_render(_clips, destination, **_kwargs):
+            Path(destination).write_bytes(b"export")
+            return {"duration": 1}
 
         folder, previous = self._in_temp_workspace()
         try:
             workspace = core.workspace_dir("default")
-            with patch.object(core_editor, "resolve_media", return_value=os.path.join(workspace, "clip.mp4")), \
-                 patch.object(core_editor, "render_project", return_value={"duration": 1}):
-                Path(workspace, "clip.mp4").write_bytes(b"x")
-                job = core_editor.start_export({
+            Path(workspace, "clip.mp4").write_bytes(b"x")
+            with patch("routers.video_editor.render_project", side_effect=fake_render), patch(
+                "routers.video_editor.threading.Thread", ImmediateThread,
+            ):
+                started = self.client.post("/api/v1/video-editor/export", json={
                     "clips": [{"source": "clip.mp4"}],
                     "name": "../etc/passwd / cut",
                     "workspace": "default",
                 })
+                job = self.client.get(
+                    f"/api/v1/video-editor/export/{started.json()['job_id']}",
+                ).json()
         finally:
             self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertEqual(job["status"], "completed", job)
         self.assertNotIn("..", job["filename"])
         self.assertNotIn("/", job["filename"])
         self.assertTrue(job["filename"].endswith("_etc_passwd_cut.mp4"))
 
     def test_video_editor_screenshot_keeps_each_character_sheet_frame(self):
-        from services import core_editor, core_workspace as core
+        from services import core_workspace as core
 
         def fake_extract(source, dest, time_seconds):
             Path(dest).write_bytes(f"frame-{time_seconds}".encode())
@@ -465,10 +475,9 @@ class CoreRuntimeTests(unittest.TestCase):
         try:
             workspace = core.workspace_dir("default")
             Path(workspace, "orbit.mp4").write_bytes(b"clip")
-            with patch.object(core_editor, "time") as frozen, patch.object(
-                core_editor, "extract_frame", side_effect=fake_extract,
+            with patch("routers.video_editor.time.strftime", return_value="2026-09-11-13h55m00s"), patch(
+                "routers.video_editor.extract_frame", side_effect=fake_extract,
             ):
-                frozen.strftime.return_value = "2026-09-11-13h55m00s"
                 first = self.client.post("/api/v1/video-editor/screenshot", json={
                     "source": "orbit.mp4",
                     "time": 0.1,
@@ -495,7 +504,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(second_bytes, b"frame-0.8")
 
     def test_video_editor_export_keeps_a_second_same_second_cut(self):
-        from services import core_editor, core_workspace as core
+        from services import core_workspace as core
 
         def fake_render(clips, destination, **_kwargs):
             Path(destination).write_bytes(f"export-{len(clips)}".encode())
@@ -505,28 +514,78 @@ class CoreRuntimeTests(unittest.TestCase):
         try:
             workspace = core.workspace_dir("default")
             Path(workspace, "clip.mp4").write_bytes(b"clip")
-            with patch.object(core_editor, "time") as frozen, patch(
-                "services.core_editor.threading.Thread", ImmediateThread,
-            ), patch.object(core_editor, "render_project", side_effect=fake_render):
-                frozen.strftime.return_value = "2026-09-11-13h55m00s"
-                first = core_editor.start_export({
+            with patch("routers.video_editor.time.strftime", return_value="2026-09-11-13h55m00s"), patch(
+                "routers.video_editor.threading.Thread", ImmediateThread,
+            ), patch("routers.video_editor.render_project", side_effect=fake_render):
+                first_response = self.client.post("/api/v1/video-editor/export", json={
                     "clips": [{"source": "clip.mp4"}],
                     "name": "Harbour cut",
                     "workspace": "default",
                 })
-                second = core_editor.start_export({
+                second_response = self.client.post("/api/v1/video-editor/export", json={
                     "clips": [{"source": "clip.mp4"}, {"source": "clip.mp4"}],
                     "name": "Harbour cut",
                     "workspace": "default",
                 })
+                first = self.client.get(
+                    f"/api/v1/video-editor/export/{first_response.json()['job_id']}",
+                ).json()
+                second = self.client.get(
+                    f"/api/v1/video-editor/export/{second_response.json()['job_id']}",
+                ).json()
                 first_bytes = Path(workspace, first["filename"]).read_bytes()
                 second_bytes = Path(workspace, second["filename"]).read_bytes()
+                sidecar = Path(workspace, first["filename"]).with_suffix(".meta.json").read_text(encoding="utf-8")
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
         finally:
             self._leave_temp_workspace(folder, previous)
+        self.assertEqual(first_response.status_code, 202, first_response.text)
+        self.assertEqual(second_response.status_code, 202, second_response.text)
         self.assertEqual(first["filename"], "2026-09-11-13h55m00s_Harbour_cut.mp4")
         self.assertEqual(second["filename"], "2026-09-11-13h55m00s_Harbour_cut_2.mp4")
         self.assertEqual(first_bytes, b"export-1")
         self.assertEqual(second_bytes, b"export-2")
+        self.assertIn("video_editor", sidecar)
+        workflows = {item.get("workflow") for item in listed.json().get("tasks") or []}
+        self.assertIn("video-editor", workflows)
+
+    def test_video_editor_rejects_an_invalid_trim_and_has_a_cancel_route(self):
+        """The shared editor rejects a backwards trim before it looks up media,
+        and a missing export has a cancel route."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            rejected = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "soundtrack": {"source": "song.mp3", "trim_start": 5, "trim_end": 2},
+                "workspace": "default",
+            })
+            layered = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "audio_cues": [{
+                    "source": "sting.mp3",
+                    "start": 0,
+                    "trim_start": 4,
+                    "trim_end": 1,
+                }],
+                "workspace": "default",
+            })
+            huge = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "width": 8000,
+                "height": 8000,
+                "workspace": "default",
+            })
+            missing = self.client.post("/api/v1/video-editor/export/does-not-exist/cancel")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(rejected.status_code, 400, rejected.text)
+        self.assertIn("trim", str(rejected.json()["detail"]).lower())
+        self.assertEqual(layered.status_code, 400, layered.text)
+        self.assertIn("trim", str(layered.json()["detail"]).lower())
+        self.assertEqual(huge.status_code, 400, huge.text)
+        self.assertIn("resolution", str(huge.json()["detail"]).lower())
+        self.assertEqual(missing.status_code, 404, missing.text)
+        self.assertIn("Video editor export job not found", str(missing.json()["detail"]))
 
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")

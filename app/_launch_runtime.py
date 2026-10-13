@@ -7635,30 +7635,14 @@ async def record_debug_user_action(request: Request):
 
 def _resolve_model3d_input_path(value: str, workspace: str | None = None) -> str | None:
     """Resolve a UI-provided upload/output path to a local file."""
-    if not value:
-        return None
-    from services.media_refs import parse_media_ref
-
-    value, workspace = parse_media_ref(value, workspace)
-    if not value:
-        return None
-    if value.startswith("/api/v1/uploads/"):
-        value = value.rsplit("/", 1)[-1]
-        return _safe_join(os.path.join(os.getcwd(), "uploads"), value)
-    if value.startswith("/api/v1/file/"):
-        value = value.rsplit("/", 1)[-1]
-        return _safe_join(_workspace_dir(workspace), value)
-    if os.path.isabs(value):
-        uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
-        outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
-        real = os.path.realpath(value)
-        if real.startswith(uploads_root + os.sep) or real.startswith(outputs_root + os.sep):
-            return real
-        return None
-    upload_candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), value)
-    if upload_candidate and os.path.isfile(upload_candidate):
-        return upload_candidate
-    return _safe_join(_workspace_dir(workspace), value)
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=_safe_join,
+        workspace_dir=_workspace_dir,
+        save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+    )
 
 
 @api.get("/api/v1/wangp/capabilities")

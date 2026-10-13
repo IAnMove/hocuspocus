@@ -7,7 +7,6 @@ import shutil
 import sys
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from routers.assets import create_assets_router
@@ -42,7 +41,6 @@ from routers.world3d_export import create_world3d_export_router, bind_world3d_re
 from routers.workspace_collections import create_workspace_collections_router
 from services import (
     core_canonical_tasks,
-    core_editor,
     core_generation_commands,
     core_production,
     core_remote_image,
@@ -630,58 +628,31 @@ async def save_scene(request: Request):
     return {"name": name, "type": "scene", "url": f"/api/v1/file/{name}?workspace={workspace}"}
 
 
-@api.post("/api/v1/video-editor/probe")
-def probe_video(body: dict):
-    try:
-        return core_editor.probe_video(str((body or {}).get("source") or ""), (body or {}).get("workspace"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+def _resolve_editor_input(value: str, workspace: str | None = None) -> str | None:
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=core.safe_join,
+        workspace_dir=core.workspace_dir,
+        save_path=lambda: str(core.outputs_root()),
+    )
 
 
-@api.post("/api/v1/video-editor/probe-audio")
-def probe_audio_route(body: dict):
-    try:
-        return core_editor.probe_soundtrack(str((body or {}).get("source") or ""), (body or {}).get("workspace"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+from routers.video_editor import create_video_editor_jobs_router, create_video_editor_router
 
-
-@api.get("/api/v1/video-editor/thumbnail")
-def video_thumbnail(source: str):
-    try:
-        path = core_editor.thumbnail_path(source)
-    except Exception as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return FileResponse(path, media_type="image/jpeg")
-
-
-@api.post("/api/v1/video-editor/screenshot")
-def video_screenshot(body: dict):
-    try:
-        return core_editor.screenshot(
-            str((body or {}).get("source") or ""),
-            float((body or {}).get("time") or 0),
-            str((body or {}).get("name") or "frame"),
-            (body or {}).get("workspace"),
-        )
-    except (ValueError, RuntimeError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@api.post("/api/v1/video-editor/export", status_code=202)
-def video_export(body: dict):
-    try:
-        return core_editor.start_export(body or {})
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@api.get("/api/v1/video-editor/export/{job_id}")
-def video_export_status(job_id: str):
-    job = core_editor.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Export job not found")
-    return job
+api.include_router(create_video_editor_router(
+    workspace_dir=core.workspace_dir,
+    get_active_workspace=core.active_workspace,
+    resolve_input_path=_resolve_editor_input,
+    publish_legacy_task=core_canonical_tasks.publish_video_editor_activity,
+    thumbnail_cache_dir=os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "cache",
+        "media-thumbnails",
+    ),
+))
+api.include_router(create_video_editor_jobs_router())
 
 
 api.include_router(create_uploads_router(
