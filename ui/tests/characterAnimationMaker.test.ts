@@ -19,7 +19,7 @@ function deps(log: string[], options: { failOn?: string } = {}) {
       return { prompt: `prompt-${details.pose}`, negative: 'neg', screen: 'green' as const, resolution: '896x1152' }
     },
     generate: async (_provider: string, prompt: string, model: string, _reference: unknown, negative: string, request?: Record<string, unknown>) => {
-      log.push(`generate ${prompt} ${model} ${negative} ${request?.seed} ${JSON.stringify(request?.references)} ${request?.referenceMode} ${request?.resolution} ${request?.aspectRatio}`)
+      log.push(`generate ${prompt} ${model} ${negative} ${request?.seed} ${JSON.stringify(request?.references)} ${request?.referenceMode} ${request?.strictReference} ${request?.resolution} ${request?.aspectRatio}`)
       if (prompt === `prompt-${options.failOn}`) throw new Error('out of memory')
       return { source: `/api/v1/file/raw-${prompt}.png?workspace=w` } as never
     },
@@ -45,7 +45,7 @@ test('every pose is made in turn from the character\'s own picture, keyed on its
   const generated = log.filter(line => line.startsWith('generate'))
   assert.equal(generated.length, 4)
   for (const [index, pose] of def.poses.entries()) {
-    assert.match(generated[index], new RegExp(`prompt-${pose.id} qwen_image_21 neg ${100 + index} \\["/api/v1/file/ana.png\\?workspace=w"\\] identity 896x1152 3:4`))
+    assert.match(generated[index], new RegExp(`prompt-${pose.id} qwen_image_21 neg ${100 + index} \\["/api/v1/file/ana.png\\?workspace=w"\\] identity true 896x1152 3:4`))
   }
   assert.match(log[0], /^prompt walk\/contact paper-cutout a detective in a mustard coat$/, 'the style preset and the look reach the prompt')
   assert.ok(log.findIndex(line => line.startsWith('key')) < log.findIndex(line => line.startsWith('generate') && line.includes('prompt-passing ')), 'a pose is keyed before the next is made')

@@ -24,10 +24,16 @@ test('the Characters tab lists the animations of a saved character, plays a made
   const library = { ...emptyCharacterKitLibrary(), revision: 3, activeId: 'ana', kits: { ana: kit } }
   const original = globalThis.fetch
   globalThis.fetch = (async () => new Response(JSON.stringify(library), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch
-  useStore.setState({ models: [{ model_type: 'qwen_image_21', name: 'Qwen Image 2.1', family: 'qwen', architecture: 'qwen_image', is_downloaded: true }] as never })
+  useStore.setState({ models: [
+    { model_type: 'flux_dev', name: 'Flux Dev', family: 'flux', architecture: 'flux', is_downloaded: true },
+    { model_type: 'qwen_image_21', name: 'Qwen Image 2.1', family: 'qwen', architecture: 'qwen_image', is_downloaded: true, supports_ref_images: true },
+  ] as never })
   try {
     render(<CharacterAnimationsPanel workspace="w" />)
     await waitFor(() => assert.ok(screen.getByTestId('animation-walk')))
+    const modelSelect = screen.getByRole('combobox', { name: /modelo|model/i })
+    assert.match(modelSelect.textContent!, /Qwen Image 2\.1/)
+    assert.doesNotMatch(modelSelect.textContent!, /Flux Dev/, 'a text-only model cannot keep the character')
     assert.ok(screen.getByTestId('animation-angry') && screen.getByTestId('animation-wave'), 'gestures and anime expressions are listed')
     const card = screen.getByTestId('animation-walk')
     assert.match(card.textContent!, /Por revisar|To review/)

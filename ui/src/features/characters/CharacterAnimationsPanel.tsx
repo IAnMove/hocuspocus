@@ -100,7 +100,8 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const [modelId, setModelId] = useState('')
   const usable = kits.filter(kit => animationReference(kit))
   const kit = usable.find(item => item.id === kitId) ?? usable[0]
-  const imageModels = characterImageModels(models, false)
+  // Every pose uses the character as an identity reference: only models that accept one, prefer Qwen 2.1 (not Edit).
+  const imageModels = characterImageModels(models, true)
   const model = imageModels.some(item => item.model_type === modelId) ? modelId : preferredCharacterImageModel(imageModels, false)
   const work = useCharacterAnimations(workspace, reload)
   // An animation the author just described is not on the kit until its first run is saved: it shows while that run is on screen.

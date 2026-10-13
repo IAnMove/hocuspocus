@@ -74,7 +74,7 @@ export async function makeAnimation(request: {
       const image = await deps.generate('maestro', asked.prompt, request.model, undefined, asked.negative, {
         workspace: request.workspace, signal: request.signal, cleanModelDefaults: true, comicPanel: false,
         resolution: asked.resolution, aspectRatio: aspectOf(asked.resolution), seed: take.seed,
-        references: [reference], referenceMode: 'identity' as const, onJobSubmitted: request.onJobSubmitted,
+        references: [reference], referenceMode: 'identity' as const, strictReference: true, onJobSubmitted: request.onJobSubmitted,
       })
       request.signal.throwIfAborted()
       update(take.id, { status: 'keying', raw: image.source })
