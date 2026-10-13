@@ -51,7 +51,7 @@
     "nsfwMode": "NSFW Mode",
     "nsfwPublic": "NSFW is unavailable with public LLM providers ({{provider}}). Switch to a local or self-hosted model to enable.",
     "nsfwOn": "Adult content generation is enabled. LLM prompts include explicit content guidance. Use responsibly.",
-    "nsfwOff": "Content safety guardrails active. Explicit content is blocked in all LLM outputs.",
+    "nsfwOff": "Adult content mode is off. LLM prompts get no mature-content guidance. The rule against sexual content involving minors applies in both modes.",
     "nsfwTitle": "Enable Adult Content Mode",
     "nsfwRead": "Please read and accept before continuing",
     "nsfwLead": "By enabling NSFW mode, you acknowledge and agree to the following:",
