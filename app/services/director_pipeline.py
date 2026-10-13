@@ -89,6 +89,10 @@ from services.director.policies import (
     mark_typed_prompt_edits,
     no_visible_text_lock_applies,
 )
+from services.director.music_video_coverage import (
+    treatment_chorus_set,
+    treatment_coverage,
+)
 from services.director.visible_defaults import (
     RUN_OPTION_NAMES,
     resolve_run_options,
@@ -2341,7 +2345,11 @@ def hydrate_queue_clips(state: Mapping[str, Any] | None) -> dict:
     as ``generation_details`` for the Dashboard.
     """
     data = _hydrate_queue_clip_list(dict(state or {}))
-    params = _director_params_from_saved_state(data)
+    # A copy of the snapshot: reading the saved policy normalises its
+    # music-video treatment in place.
+    params = _director_params_from_saved_state(
+        {**data, "_params_snapshot": dict(data.get("_params_snapshot") or {})}
+    )
     if "generated_reference_image_filename" not in params:
         params["generated_reference_image_filename"] = data.get(
             "generated_reference_image_filename"
@@ -5700,8 +5708,9 @@ def _public_visible_defaults(params: dict) -> dict:
     }
     treatment = view.get("music_video_treatment")
     if view.get("pipeline_type", "music_video") == "music_video" and isinstance(treatment, dict):
-        details["chorus_set"] = treatment.get("chorus_set")
-        details["coverage_cycle"] = treatment.get("coverage")
+        # A default treatment does not store them; show the defaults.
+        details["chorus_set"] = treatment_chorus_set(treatment)
+        details["coverage_cycle"] = treatment_coverage(treatment)
     return details
 
 
@@ -7994,6 +8003,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                         ),
                         polish_video_prompts=polish_video_prompts,
                         polish_image_prompts=polish_image_prompts,
+                        keep_wardrobe=saved_option(params, "keep_reference_wardrobe"),
                         progress_callback=lambda current, total: _update_pipeline(
                             pid,
                             progress={

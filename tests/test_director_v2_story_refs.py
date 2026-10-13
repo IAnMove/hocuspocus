@@ -14,7 +14,9 @@ import pytest
 
 from app.services.director.guide_loader import load_guide
 from app.services.director.planners.comic_movie import ComicMoviePlanner
-from app.services.director.music_video_coverage import COVERAGE_RULE, COVERAGE_SEQUENCE, treatment_rules_for
+from app.services.director.music_video_coverage import (
+    COVERAGE_RULE, COVERAGE_SEQUENCE, treatment_chorus_set, treatment_coverage, treatment_rules_for,
+)
 from app.services.director.planners.music_video import (
     MusicVideoPlanner,
     build_music_video_cast_lock,
@@ -870,10 +872,31 @@ def _contexts(**treatment) -> list[str]:
 
 def test_missing_fields_are_filled_with_todays_defaults():
     treatment = normalize_music_video_treatment({})
-    assert treatment["coverage"] == list(COVERAGE_SEQUENCE) and treatment["chorus_set"] == "first"
-    assert normalize_music_video_treatment({"chorus_set": "bogus"})["chorus_set"] == "first"
+    assert treatment_coverage(treatment) == list(COVERAGE_SEQUENCE) and treatment_chorus_set(treatment) == "first"
+    assert treatment_chorus_set(normalize_music_video_treatment({"chorus_set": "bogus"})) == "first"
+    assert normalize_music_video_treatment({"chorus_set": "rotate"})["chorus_set"] == "rotate"
     assert normalize_music_video_treatment({"coverage": []})["coverage"] == []
     assert normalize_music_video_treatment({"coverage": " wide\n\n close-up "})["coverage"] == ["wide", "close-up"]
+
+
+def test_a_default_treatment_stays_byte_identical():
+    # The planner prints the treatment as JSON in its system prompt, and plans
+    # and saved runs store it: the default (or a default typed back in) adds
+    # no keys, so those stay exactly as before the fields existed.
+    for raw in ({}, {"coverage": list(COVERAGE_SEQUENCE), "chorus_set": "first"}, {"chorus_set": "bogus"}):
+        treatment = normalize_music_video_treatment(raw)
+        assert "coverage" not in treatment and "chorus_set" not in treatment
+    prompts: list[str] = []
+
+    def provider(**kwargs):
+        prompts.append(str(kwargs.get("system_prompt") or ""))
+        return json.dumps([])
+
+    with pytest.raises(RuntimeError):
+        MusicVideoPlanner(llm_generate=provider).plan(
+            clips=CLIPS[:2], scene_description="A singer at a harbour.", bpm=120,
+        )
+    assert '"chorus_set"' not in prompts[0] and '"coverage"' not in prompts[0]
 
 
 def test_the_defaults_plan_exactly_as_before():

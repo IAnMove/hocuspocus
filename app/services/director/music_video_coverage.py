@@ -41,6 +41,25 @@ def treatment_chorus_set(raw: dict) -> str:
     return mode if mode in CHORUS_SET_MODES else "first"
 
 
+def treatment_coverage_fields(raw: dict) -> dict[str, Any]:
+    """The ``coverage`` and ``chorus_set`` a normalized treatment carries.
+
+    Only values that differ from the defaults are kept. A default treatment
+    then stays byte-identical to the one before these fields existed: the
+    planner prints the treatment as JSON in its system prompt, and a plan
+    and a saved run store it. Readers use ``treatment_coverage`` and
+    ``treatment_chorus_set``, which fill the defaults back in.
+    """
+    fields: dict[str, Any] = {}
+    coverage = treatment_coverage(raw)
+    if coverage != list(COVERAGE_SEQUENCE):
+        fields["coverage"] = coverage
+    chorus_set = treatment_chorus_set(raw)
+    if chorus_set != "first":
+        fields["chorus_set"] = chorus_set
+    return fields
+
+
 def recurring_set_for(section: str, index: int, sets: list[str], chorus_mode: str, nth_chorus: int) -> str:
     """The recurring set of one clip. Choruses: the first set, the sets in turn, or none."""
     if section == "chorus":

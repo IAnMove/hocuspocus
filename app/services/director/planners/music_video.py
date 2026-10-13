@@ -31,8 +31,7 @@ from ..music_video_coverage import (
     COVERAGE_SEQUENCE as _COVERAGE_SEQUENCE,
     coverage_hint as coverage_hint_for,
     recurring_set_for,
-    treatment_chorus_set,
-    treatment_coverage,
+    treatment_coverage_fields,
     treatment_rules_for,
 )
 from ..prompt_cleanup import prompt_cleanup_metadata
@@ -105,8 +104,6 @@ _DEFAULT_TREATMENT = {
     "chorus_signature": "return to the main performance set with the boldest lighting and direct-to-camera delivery",
     "surrealism": 35,
     "forbidden_elements": "",
-    "coverage": list(_COVERAGE_SEQUENCE),
-    "chorus_set": "first",
 }
 
 
@@ -158,8 +155,9 @@ def normalize_music_video_treatment(value: Any) -> dict[str, Any]:
         "chorus_signature": str(raw.get("chorus_signature") or _DEFAULT_TREATMENT["chorus_signature"]).strip(),
         "surrealism": max(0, min(100, surrealism)),
         "forbidden_elements": str(raw.get("forbidden_elements") or "").strip(),
-        "coverage": treatment_coverage(raw),
-        "chorus_set": treatment_chorus_set(raw),
+        # Only a changed coverage cycle or chorus set is written, so a
+        # default treatment (and the JSON the planner sees) stays as before.
+        **treatment_coverage_fields(raw),
     }
 
 

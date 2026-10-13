@@ -35,6 +35,7 @@ from services.director.planners.base import BasePlanner
 from services.director.planners.music_video import MusicVideoPlanner
 from services.director.planners.short_film import ShortFilmPlanner
 from services.director.prompt_cleanup import sanitize_pass2_image_prompts
+from services.director.prompt_polish import polish_prompts_third_pass
 from services.director.schema import ProductionPlan
 from services.director.visible_defaults import resolve_option, resolve_run_options
 from services.video_extra_info import build_saved_clip_info
@@ -491,6 +492,19 @@ def test_keep_wardrobe_off_keeps_clothing_words():
     sanitize_pass2_image_prompts(shots, keep_wardrobe=False)
     assert "red evening gown" in shots[0]["image_prompt"]
     assert shots[0]["_prompt_cleanup"] == {"garments": 0, "motion_sentences": 1, "fillers": 1}
+
+
+@pytest.mark.parametrize("keep", [True, False])
+def test_the_pass3_image_cleanup_follows_keep_wardrobe(keep):
+    # Pass 3 polish (Settings › Services › prompt polish "3rd pass") runs the
+    # same cleanup after its LLM; with Keep clothes off it keeps them too.
+    plan = [{"video_prompt": "", "image_prompt": "The singer now in a red evening gown stands on the stage. Soft light."}]
+    with patch("services.llm_service.enhance_prompt", side_effect=lambda **kwargs: kwargs["prompt"]):
+        result = polish_prompts_third_pass(
+            plan, "ltx2_22B_distilled_1_1", "qwen_image_21",
+            polish_video_prompts=False, keep_wardrobe=keep,
+        )
+    assert ("evening gown" in result[0]["image_prompt"]) is (not keep)
 
 
 def test_raw_prompts_leave_the_pass2_prompts_as_written():

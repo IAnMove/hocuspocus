@@ -1243,6 +1243,7 @@ def polish_prompts_third_pass(
     preserve_video_character_names: bool = False,
     polish_video_prompts: Optional[bool] = None,
     polish_image_prompts: bool = True,
+    keep_wardrobe: bool = True,
 ) -> list[dict]:
     """Post-process clip plans through the enhance LLM pipeline (third pass).
 
@@ -1283,6 +1284,9 @@ def polish_prompts_third_pass(
             keyframe prompts. Prompt-only/direct-reference H3 projects retain
             the planner's visual notes for the Dashboard but do not generate
             those artifacts, so polishing them is unnecessary.
+        keep_wardrobe: Settings › Services › Keep clothes from references.
+            Off: the cleanup after image polish keeps clothing words, as the
+            Pass 2 cleanup does.
 
     Returns:
         clip_plans with polished prompts (modified in-place).
@@ -2214,9 +2218,10 @@ def polish_prompts_third_pass(
             # Layer 1 sanitization (garments / filler / descriptor dedupe).
             # Runs AFTER name normalization so the dedupe pass sees the
             # same descriptor strings the normalizer just inserted.
-            cleaned = sanitize_image_prompt(
-                cleaned, name_to_desc, log_prefix="[PromptPolish Pass3 image sanitize]"
-            )
+            cleaned = sanitize_image_prompt_with_counts(
+                cleaned, name_to_desc, strip_garments=keep_wardrobe,
+                log_prefix="[PromptPolish Pass3 image sanitize]",
+            )[0]
             return cleaned
         return out
 

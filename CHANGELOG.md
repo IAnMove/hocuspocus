@@ -13,12 +13,14 @@ above the shots, and can replace it with another image of the run or stop
 using it for repairs and reruns. Settings › Services › *Director shared
 reference* chooses Always (default), Only when there are no character
 references, or Off (each shot from its own prompt); a run can override it with
-`reference_anchor`. The shared picture's prompt no longer says "cinematic".
+`reference_anchor`, and the step-by-step Director chat follows it too. The
+shared picture's prompt no longer says "cinematic".
 "Use lighting and color temp from reference image" is gone from the guide used
 when no reference exists, and elsewhere it follows *Light from the reference*
 (default: only with your own reference image, so a story with character
 portraits alone no longer copies the anchor's light). *Keep clothes from
-references* (on by default) can be turned off to describe clothes per shot.
+references* (on by default) can be turned off to describe clothes per shot;
+the clothing words then also survive the optional third-pass polish.
 *Raw prompts* now also skips the planner's cleanup of image prompts, as its
 description promised; otherwise Extra info says how many clothing words,
 motion sentences and filler phrases that cleanup removed. The music-video
