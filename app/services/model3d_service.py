@@ -27,7 +27,7 @@ from services.runtime_profiles import managed_ready
 from typing import Any
 
 from . import execution_mode, resource_scheduler, model3d_external
-from .asset_manifest import publish_generation_sidecar_best_effort
+from .asset_manifest import publish_generation_job_sidecar
 from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
 from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
@@ -554,27 +554,13 @@ def _model3d_sidecar_identity(job: dict[str, Any], request_data: dict[str, Any])
 
 
 def _publish_model3d_result(job: dict[str, Any], output_path: str | Path, sidecar: dict[str, Any]) -> None:
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    payload = dict(sidecar)
-    payload.setdefault("job_id", job.get("job_id"))
-    payload.setdefault("task_id", job.get("task_id"))
-    payload.setdefault("root_task_id", job.get("root_task_id") or job.get("task_id"))
-    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
-    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
-    payload["started_at"] = job.get("started_at") or payload.get("started_at")
-    payload["completed_at"] = job.get("finished_at") or time.time()
-    for key in ("command_id", "workflow_id", "run_id"):
-        if command.get(key):
-            payload.setdefault(key, command[key])
-    publish_generation_sidecar_best_effort(
+    publish_generation_job_sidecar(
+        job,
         output_path,
-        payload,
-        workspace_id=provenance.get("workspace_id"),
+        sidecar,
+        job_id_key="job_id",
         output_folder=_physical_output_folder(job.get("workspace")),
-        tool=provenance.get("tool") or "model3d",
-        actor=provenance.get("actor"),
-        capability=provenance.get("capability"),
+        tool="model3d",
     )
 
 

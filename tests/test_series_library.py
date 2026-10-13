@@ -415,7 +415,7 @@ def test_bulk_attempt_approval_is_atomic_and_rejects_duplicate_shots():
 
 def test_an_episode_number_is_optional_and_unique_in_its_season():
     from fastapi import HTTPException
-    from routers.series_episode import apply_series_episode_update, create_checked_episode
+    from services.series_episode import apply_series_episode_update, create_checked_episode
     from services.series_library import EpisodeNumberTaken
 
     series = create_series_project("default")
@@ -518,7 +518,7 @@ def test_a_series_put_keeps_omitted_fields_and_replaces_a_nested_object_whole():
 
 def test_an_episode_number_is_unique_per_season_and_checked_only_when_it_changes():
     """Season 2 has its own episode 1, and the editor re-sending a number an episode already has is no change."""
-    from routers.series_episode import apply_series_episode_update
+    from services.series_episode import apply_series_episode_update
     from services.series_library import EpisodeNumberTaken
 
     series = create_series_project("default")

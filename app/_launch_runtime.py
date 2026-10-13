@@ -317,19 +317,8 @@ def _safe_join(base: str, *parts: str) -> str | None:
     stays inside `base`. Returns None on traversal attempts (`..`, absolute
     paths, symlinks escaping the base, etc.). Use for any endpoint that
     accepts a user-supplied filename."""
-    try:
-        base_real = os.path.realpath(base)
-        joined = os.path.realpath(os.path.join(base_real, *parts))
-        # commonpath compares path components rather than string prefixes.
-        # normcase preserves correct behaviour on case-insensitive Windows
-        # filesystems and ValueError handles paths on different drives.
-        base_cmp = os.path.normcase(base_real)
-        joined_cmp = os.path.normcase(joined)
-        if os.path.commonpath((base_cmp, joined_cmp)) != base_cmp:
-            return None
-        return joined
-    except (ValueError, OSError):
-        return None
+    from services.kernel.paths import safe_join
+    return safe_join(base, *parts)
 
 
 def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
@@ -739,51 +728,14 @@ def _publish_generation_sidecar_for_studio_job(
     tool: str = "studio",
 ) -> None:
     """Publish one Studio result with its initiating command and real location."""
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    payload = dict(sidecar)
-    params = dict(payload.get("params") or {})
-    model_type = str(params.get("model_type") or "")
-    params.setdefault("provider", "minimax" if model_type.startswith("minimax:") else "local")
-    payload["params"] = params
-    if not payload.get("job_id"):
-        payload["job_id"] = job.get("id")
-    if not payload.get("task_id"):
-        payload["task_id"] = job.get("task_id")
-    if not payload.get("root_task_id"):
-        payload["root_task_id"] = job.get("root_task_id") or job.get("task_id")
-    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
-    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
-    payload["started_at"] = job.get("started_at") or payload.get("started_at")
-    payload["completed_at"] = job.get("finished_at") or time.time()
-    for key in ("command_id", "workflow_id", "run_id"):
-        if command.get(key):
-            payload.setdefault(key, command[key])
-    for key in ("project_id", "production_id", "cue_id", "candidate_id", "song_version"):
-        if provenance.get(key):
-            payload.setdefault(key, provenance[key])
-    project_ref = (
-        {"kind": "story", "id": str(provenance["project_id"])}
-        if provenance.get("project_id") else None
-    )
-    production_ref = (
-        {"kind": "director_production", "id": str(provenance["production_id"])}
-        if provenance.get("production_id") else None
-    )
-    manifest_refs = {}
-    if project_ref:
-        manifest_refs["project"] = project_ref
-    if production_ref:
-        manifest_refs["production"] = production_ref
-    publish_generation_sidecar_best_effort(
+    from services.asset_manifest import publish_generation_job_sidecar
+    publish_generation_job_sidecar(
+        job,
         output_path,
-        payload,
-        workspace_id=provenance.get("workspace_id"),
+        sidecar,
+        job_id_key="id",
         output_folder=job.get("workspace"),
-        tool=provenance.get("tool") or tool,
-        actor=provenance.get("actor"),
-        capability=provenance.get("capability"),
-        **manifest_refs,
+        tool=tool,
     )
 
 
@@ -7226,35 +7178,36 @@ def get_system_stats_live():
     every ~2s. Also reports the generation model currently resident in
     VRAM so the UI can show "what's loaded right now".
     """
-    from services.live_stats import get_live_stats
-
-    stats = get_live_stats(os.path.join(os.path.dirname(_app_dir), "ui", "dist"))
-
     # Currently-loaded generation model. WGP/mmgp keeps it resident
     # between jobs. `transformer_type` tracks the live load (set at the
     # end of load_models); `wan_model is not None` means it is actually
     # in memory right now vs. just the last/selected type.
-    model_name = None
-    model_type = None
-    model_loaded = False
-    try:
-        model_type = getattr(wgp, "transformer_type", None)
-        model_loaded = getattr(wgp, "wan_model", None) is not None
-        if model_type:
-            try:
-                md = wgp.get_model_def(model_type) or {}
-                model_name = md.get("name") or model_type
-            except Exception:
-                model_name = model_type
-    except Exception:
-        pass
+    def current_model():
+        model_name = None
+        model_type = None
+        model_loaded = False
+        try:
+            model_type = getattr(wgp, "transformer_type", None)
+            model_loaded = getattr(wgp, "wan_model", None) is not None
+            if model_type:
+                try:
+                    md = wgp.get_model_def(model_type) or {}
+                    model_name = md.get("name") or model_type
+                except Exception:
+                    model_name = model_type
+        except Exception:
+            pass
+        return {
+            "name": model_name,
+            "model_type": model_type,
+            "loaded": model_loaded,
+        }
 
-    stats["model"] = {
-        "name": model_name,
-        "model_type": model_type,
-        "loaded": model_loaded,
-    }
-    return stats
+    from services.live_stats import snapshot_system_stats
+    return snapshot_system_stats(
+        os.path.join(os.path.dirname(_app_dir), "ui", "dist"),
+        current_model,
+    )
 
 
 @api.post("/api/v1/system/release-model")
@@ -7646,30 +7599,14 @@ async def record_debug_user_action(request: Request):
 
 def _resolve_model3d_input_path(value: str, workspace: str | None = None) -> str | None:
     """Resolve a UI-provided upload/output path to a local file."""
-    if not value:
-        return None
-    from services.media_refs import parse_media_ref
-
-    value, workspace = parse_media_ref(value, workspace)
-    if not value:
-        return None
-    if value.startswith("/api/v1/uploads/"):
-        value = value.rsplit("/", 1)[-1]
-        return _safe_join(os.path.join(os.getcwd(), "uploads"), value)
-    if value.startswith("/api/v1/file/"):
-        value = value.rsplit("/", 1)[-1]
-        return _safe_join(_workspace_dir(workspace), value)
-    if os.path.isabs(value):
-        uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
-        outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
-        real = os.path.realpath(value)
-        if real.startswith(uploads_root + os.sep) or real.startswith(outputs_root + os.sep):
-            return real
-        return None
-    upload_candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), value)
-    if upload_candidate and os.path.isfile(upload_candidate):
-        return upload_candidate
-    return _safe_join(_workspace_dir(workspace), value)
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=_safe_join,
+        workspace_dir=_workspace_dir,
+        save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+    )
 
 
 @api.get("/api/v1/wangp/capabilities")
@@ -28603,7 +28540,7 @@ def import_story_as_series_endpoint(body: dict):
 
 @api.post("/api/v1/series/{series_id}/episodes")
 def create_series_episode_endpoint(series_id: str, body: dict):
-    from routers.series_episode import create_checked_episode
+    from services.series_episode import create_checked_episode
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -28757,7 +28694,7 @@ def import_series_asset_endpoint(series_id: str, body: dict):
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
 def put_series_episode_endpoint(series_id: str, episode_id: str, body: dict):
-    from routers.series_episode import apply_series_episode_update
+    from services.series_episode import apply_series_episode_update
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -30900,112 +30837,11 @@ def _story_library_revision_conflict(exc) -> HTTPException:
     )
 
 
-@api.get("/api/v1/wizard/conversations")
-def get_wizard_conversation(workspace: str | None = None):
-    """Load the durable Wizard conversation for one workspace."""
-    from services.wizard_conversations import read_conversation
-
-    target_workspace = _story_library_workspace(workspace)
-    try:
-        with _story_library_lock:
-            return read_conversation(_workspace_dir(target_workspace))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not read the Wizard conversation: {exc}",
-        ) from exc
-
-
-@api.put("/api/v1/wizard/conversations")
-def put_wizard_conversation(body: dict):
-    """Atomically replace a workspace Wizard conversation."""
-    from services.wizard_conversations import (
-        WizardConversationRevisionConflict,
-        write_conversation,
-    )
-
-    target_workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            base_revision = body.get("baseRevision")
-            if type(base_revision) is not int:
-                base_revision = 0
-            return write_conversation(
-                _workspace_dir(target_workspace),
-                body.get("conversation"),
-                base_revision=base_revision,
-            )
-    except WizardConversationRevisionConflict as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_conversation_revision_conflict",
-                "message": str(exc),
-                "expectedRevision": exc.expected,
-                "currentRevision": exc.current,
-            },
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not save the Wizard conversation: {exc}",
-        ) from exc
-
-
-@api.get("/api/v1/wizard/workflows")
-def get_wizard_workflows(workspace: str | None = None):
-    """Load durable Wizard workflow checkpoints for one workspace."""
-    from services.wizard_workflows import read_workflows
-
-    target_workspace = _story_library_workspace(workspace)
-    try:
-        with _story_library_lock:
-            return read_workflows(_workspace_dir(target_workspace))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not read Wizard workflows: {exc}",
-        ) from exc
-
-
-@api.put("/api/v1/wizard/workflows")
-def put_wizard_workflows(body: dict):
-    """Atomically checkpoint all Wizard workflows in one workspace."""
-    from services.wizard_workflows import (
-        WizardWorkflowRevisionConflict,
-        write_workflows,
-    )
-
-    target_workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            base_revision = body.get("baseRevision")
-            if type(base_revision) is not int:
-                base_revision = 0
-            return write_workflows(
-                _workspace_dir(target_workspace),
-                body.get("collection"),
-                base_revision=base_revision,
-            )
-    except WizardWorkflowRevisionConflict as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_workflow_revision_conflict",
-                "message": str(exc),
-                "expectedRevision": exc.expected,
-                "currentRevision": exc.current,
-            },
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not save Wizard workflows: {exc}",
-        ) from exc
+from routers.wizard_persistence import create_wizard_persistence_router
+api.include_router(create_wizard_persistence_router(
+    workspace_dir=lambda value: _workspace_dir(_story_library_workspace(value)),
+    lock=_story_library_lock,
+))
 
 
 from routers.story_library import (
@@ -35216,14 +35052,8 @@ def _task_legacy_id(record: dict) -> str:
 
 
 def _task_status(value: object) -> str:
-    raw = str(value or "queued").lower()
-    if raw in {"completed", "failed", "cancelled", "interrupted"}:
-        return raw
-    if raw in {"created", "queued"}:
-        return raw
-    if raw in {"paused", "waiting", "waiting_resource"}:
-        return "waiting_resource"
-    return "running"
+    from services.canonical_task_helpers import task_status
+    return task_status(value)
 
 
 def _task_timestamp(record: dict, *keys: str) -> float | None:
@@ -35267,53 +35097,14 @@ def _upsert_canonical_task(
     event_exclude_fields: set[str] | frozenset[str] | None = None,
     **fields,
 ) -> dict:
-    registry = _task_registry(workspace)
-    existing = registry.get(task_id)
-    if existing is None:
-        return registry.create(
-            id=task_id,
-            workspace=workspace,
-            event_exclude_fields=event_exclude_fields,
-            **fields,
-        )
-    from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES
-    existing_status = str(existing.get("status") or "")
-    incoming_status = str(fields.get("status") or existing_status)
-    if existing_status in TERMINAL_STATUSES and incoming_status in ACTIVE_STATUSES:
-        # A lagging compatibility snapshot must never resurrect a task after
-        # cancellation/completion won. Canonical resume explicitly transitions
-        # the registry before the next active adapter snapshot arrives.
-        return existing
-    existing_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
-    incoming_metadata = fields.get("metadata") if isinstance(fields.get("metadata"), dict) else None
-    if incoming_metadata is not None:
-        merged_metadata = dict(existing_metadata)
-        for key, value in incoming_metadata.items():
-            if value is not None:
-                merged_metadata[key] = value
-        fields["metadata"] = merged_metadata
-        # Reservation owns attempt identity. Adapter snapshots must not
-        # replace workflow/title after submit_music_generation wrote them.
-        if any(
-            existing_metadata.get(key)
-            for key in ("generation_id", "candidate_id", "command_id", "idempotency_key")
-        ):
-            fields.pop("workflow", None)
-            fields.pop("title", None)
-    mutable = {
-        key: value for key, value in fields.items()
-        if key not in {"id", "created_at"}
-        and existing.get(key) != value
-    }
-    if mutable:
-        return registry.update(
-            task_id,
-            force=True,
-            event_type="adapter.synced",
-            event_exclude_fields=event_exclude_fields,
-            **mutable,
-        )
-    return existing
+    from services.canonical_task_helpers import upsert_canonical_task
+    return upsert_canonical_task(
+        _task_registry(workspace),
+        workspace,
+        task_id,
+        event_exclude_fields=event_exclude_fields,
+        **fields,
+    )
 
 
 def _generation_task_fields(job: dict) -> dict:
@@ -36261,12 +36052,12 @@ _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 # qa.people C3 duplicate-person flag: register beside the MCP router (feat/qa-people).
 from services.qa_people import command_catalog as qa_people_catalog, command_handlers as qa_people_handlers
 _qa_people_handlers = qa_people_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
-from routers.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
+from services.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
 _model3d_command_handlers = model3d_command_handlers(
     generate=generate_model3d, status=model3d_job_status,
     journal_path=os.path.join(os.getcwd(), "settings", "model3d-mcp-requests.sqlite3"),
 )
-from routers.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
+from services.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
 _model3d_rig_handlers = model3d_rig_handlers(
     generate=generate_rig, status=rig_job_status,
     journal_path=os.path.join(os.getcwd(), "settings", "model3d-rig-mcp-requests.sqlite3"),
@@ -36507,105 +36298,23 @@ else:
 # ============================================================================
 
 def run_server():
-    port = int(os.environ.get("SERVER_PORT", "7860"))
+    def prepare(display_host, port):
+        # Confirm the polling filter immediately before Uvicorn configures logging.
+        install_quiet_access_filter()
+        from services.production_resume import resume_on_startup
+        # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
+        api.add_event_handler("startup", lambda: resume_on_startup(
+            _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
+            lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
 
-    # Bind-host resolution priority:
-    #   1. PINOKIO_SHARE_LOCAL — Pinokio's per-app + global ENVIRONMENT
-    #      var. "true" → 0.0.0.0 (LAN-accessible), anything else
-    #      → 127.0.0.1 (loopback only). This is the primary Pinokio path
-    #      and CRITICALLY: per-app ENVIRONMENT overrides global here
-    #      because os.environ reflects the merged shell env. (start.js's
-    #      kernel.envs only sees global, which is why we can't make this
-    #      decision in start.js — Pinokio doesn't merge per-app into
-    #      kernel.envs as of 2026-05-04.)
-    #   2. SERVER_NAME — manual override for direct python launches
-    #      outside Pinokio. Lets devs force a bind without going through
-    #      the env-var dance.
-    #   3. Default 127.0.0.1 (safe loopback).
-    pinokio_share = (os.environ.get("PINOKIO_SHARE_LOCAL") or "").strip().lower()
-    if pinokio_share == "true":
-        host = "0.0.0.0"
-    elif pinokio_share == "false":
-        host = "127.0.0.1"
-    else:
-        host = os.environ.get("SERVER_NAME", "127.0.0.1")
-
-    for _lan_auth_message in describe_lan_auth_startup():
-        print(_lan_auth_message)
-
-    # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
-    # stale prior instance or another app can still be holding it by the time
-    # we bind. Bind now (falling forward to the next free port) and hand the
-    # socket to Uvicorn: the URL printed below is then already ours, so the
-    # LAN proxy Pinokio starts on reading it cannot take the port first.
-    from services.server_lifecycle import bind_listener
-    try:
-        listener, resolved_port = bind_listener(host, port)
-    except OSError:
-        print(
-            f"\n[HocusPocus Lab] ERROR: could not find a free port in "
-            f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
-            f"is holding them.\n"
-            f"  • Close the other program, or stop the existing HocusPocus Lab from "
-            f"the Pinokio menu, then Start again.\n"
-            f"  • On Windows you can see what holds a port with: "
-            f"netstat -ano | findstr :{port}\n",
-            flush=True,
-        )
-        sys.exit(1)
-    if resolved_port != port:
-        print(
-            f"[HocusPocus Lab] Port {port} was busy — using {resolved_port} instead.",
-            flush=True,
-        )
-        port = resolved_port
-
-    # Browsers can't navigate to 0.0.0.0 (it's a non-routable bind
-    # address), so when binding wider we still SURFACE the loopback
-    # URL — that's what Pinokio's regex captures from this output and
-    # hands to its built-in browser. The actual bind stays 0.0.0.0 so
-    # LAN access works; only the displayed URL is loopback.
-    display_host = "127.0.0.1" if host == "0.0.0.0" else host
-
-    print(f"\n{'='*50}")
-    print(f"  {'HocusPocus Lab UI:' if _ui_ready else 'Web UI repair page (API only):'} http://{display_host}:{port}/")
-    # Trailing slash required: the Gradio submount 404s the bare path.
-    print(f"  Classic UI:    http://{display_host}:{port}/classic/")
-    print(f"  API docs:      http://{display_host}:{port}/docs")
-    if host == "0.0.0.0":
-        print(f"  (Bound to {host} — LAN-accessible via this machine's IP)")
-    print(f"{'='*50}\n")
-    try:
-        from services.server_endpoint import publish_server_endpoint
-        publish_server_endpoint(
-            os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
-            host=host, display_host=display_host, port=port,
-        )
-    except OSError as error:
-        print(f"[HocusPocus Lab] Could not publish settings/server-endpoint.json: {error}")
-
-    # Confirm the polling filter immediately before Uvicorn configures logging.
-    install_quiet_access_filter()
-    from services.production_resume import resume_on_startup
-    # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
-    api.add_event_handler("startup", lambda: resume_on_startup(
-        _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
-        lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
-
-    try:
-        from services.server_lifecycle import run_until_stopped
-        run_until_stopped(api, host=host, port=port, sockets=[listener])
-    except OSError as e:
-        # The probe above narrows this to a genuine race (port taken in the
-        # window between probe and uvicorn's own bind). Still fail loudly and
-        # actionably rather than dumping a bare traceback into the launcher.
-        print(
-            f"\n[HocusPocus Lab] ERROR: failed to bind {host}:{port} ({e}). "
-            f"The port was taken just after we checked it — Start again to "
-            f"pick a fresh port.\n",
-            flush=True,
-        )
-        sys.exit(1)
+    from services.server_entry import run
+    run(
+        api,
+        ui_ready=_ui_ready,
+        endpoint_path=os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
+        prepare=prepare,
+        lan_messages=describe_lan_auth_startup(),
+    )
 
 
 

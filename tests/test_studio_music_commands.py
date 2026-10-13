@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from routers.image_generation_commands import create_image_generation_commands_router, image_command_handlers
-from routers.studio_music_commands import music_command_catalog
+from services.studio_music_commands import music_command_catalog
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_music_spec import freeze_studio_music_spec
 from services.image_generation_runtime import create_image_generation_commands
