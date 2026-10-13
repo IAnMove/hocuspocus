@@ -2775,6 +2775,9 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyBeforeNewSong') })
       return
     }
+    // Ask about the MiniMax API cost before the prompts are rewritten: declining changes nothing.
+    const paidConfirmed = generateAudio && !isLocalMusicModel(current.music.model)
+    if (paidConfirmed && !confirmPaidStoryMusic(current.music.model)) return
     const existingCue = current.music.cues.find(cue => cue.kind === 'story') || current.music.cues[0]
     const cue: StoryMusicCue = existingCue || {
       id: storyId('music-cue'),
@@ -2825,7 +2828,7 @@ export function StoryLabPanel() {
       if (generateAudio) {
         const ready = await generateMusicCueAudio(cue.id, true, jobId => activity.handoff(
           `Continuing as recoverable MiniMax Music job ${jobId}`,
-        ))
+        ), paidConfirmed)
         if (!ready) {
           activity.fail(new Error('MiniMax Music did not complete the new song.'), 'generating_music')
           return

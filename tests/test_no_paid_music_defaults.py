@@ -6,11 +6,9 @@ MCP and production specs get a clear refusal and no provider call.
 """
 from __future__ import annotations
 
-import ast
 import asyncio
 import json
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -29,7 +27,6 @@ from services.music_submission import classify_music_route
 from services.production_song import _music_params
 from services.studio_music_spec import StudioMusicSpecError, freeze_studio_music_spec
 
-ROOT = Path(__file__).resolve().parents[1]
 LOCAL = "ace_step_v1_5_xl_sft_lm_4b"
 PAID_REFUSAL = "Paid MiniMax music is disabled (music-3.0); use a local model: ace_step_v1_5_xl_sft_lm_4b, minimax_music3"
 SONG = {"prompt": "cinematic dream pop", "lyrics": "[Verse]\nAcross the night", "count": 1}
@@ -65,24 +62,42 @@ def test_the_minimax_client_never_picks_a_model_by_itself(tmp_path):
     assert calls == []
 
 
-@pytest.mark.parametrize("relative", [
-    "app/services/music_model_contract.py",
-    "app/services/music_submission.py",
-    "app/services/core_remote_music.py",
-    "app/services/core_production.py",
-    "app/services/media_options.py",
-    "app/services/production_song.py",
-    "app/routers/story_music.py",
-])
-def test_no_music_fill_names_a_paid_model(relative):
-    source = (ROOT / relative).read_text(encoding="utf-8")
-    assert '"music-3.0"' not in source and '"music-2.6"' not in source
+def test_the_runtime_minimax_worker_fills_no_model(tmp_path, monkeypatch):
+    """A queued job without a model fails at the client; nothing is posted to MiniMax."""
+    from tests.test_minimax_music_jobs import _base_namespace, _job, _load
+
+    namespace = _load(
+        "_minimax_music_job_update", "_minimax_music_child_update", "_minimax_music_claim_candidate",
+        "_finish_unstarted_music_children", "_run_minimax_music_job", namespace=_base_namespace(tmp_path),
+    )
+    job_id = "minimax-music-0123456789ab"
+    job = _job(job_id, 1)
+    del job["request"]["model"]
+    namespace["_minimax_music_jobs"][job_id] = job
+    posted = []
+    monkeypatch.setattr(minimax_music_service.requests, "Session", lambda: SimpleNamespace(
+        post=lambda *args, **kwargs: posted.append(args), close=lambda: None))
+    namespace["_run_minimax_music_job"](job_id)
+    failed = namespace["_minimax_music_jobs"][job_id]
+    assert (failed["status"], failed["statusCode"]) == ("failed", 400) and "explicitly" in failed["error"]
+    assert posted == []
 
 
-def test_the_runtime_minimax_worker_has_no_paid_fallback():
-    tree = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
-    worker = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_run_minimax_music_job")
-    assert not [node for node in ast.walk(worker) if isinstance(node, ast.Constant) and node.value in {"music-3.0", "music-2.6"}]
+def test_the_core_endpoint_never_turns_a_missing_model_into_a_paid_one(monkeypatch):
+    """With no model the core runtime asks for the local default, which it cannot run (409)."""
+    from routers import system_capabilities
+
+    def unavailable(capability):
+        raise HTTPException(status_code=409, detail={"code": "feature_unavailable", "capability": capability})
+
+    started = []
+    monkeypatch.setattr(system_capabilities, "require_capability_http", unavailable)
+    monkeypatch.setattr(core_remote_music, "_run", started.append)
+    monkeypatch.setattr(core_remote_music, "_JOBS", {})
+    with pytest.raises(HTTPException) as refused:
+        core_remote_music.start_job(dict(SONG), workspace="default")
+    assert refused.value.status_code == 409 and refused.value.detail["capability"] == "local_audio_ai"
+    assert started == [] and core_remote_music._JOBS == {}
 
 
 # -- the paid Story endpoints need the person's confirmation ------------------------------------

@@ -1,4 +1,6 @@
-import i18n from '../../i18n'
+// The i18next instance src/i18n initializes at app start. Importing src/i18n here
+// would pull its locale JSON into stories/model.ts, which E2E specs load in Node.
+import i18n from 'i18next'
 import { isPaidMinimaxMusicModel } from '../../lib/musicGenerationSpec'
 import type { StoryMusicDraft } from './types'
 
