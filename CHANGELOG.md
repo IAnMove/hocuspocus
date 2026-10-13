@@ -18,7 +18,10 @@ the four Series shot routes written as f-strings are now literals with the same
 paths. `scripts/size_ceilings.json` caps the line count of `_launch_runtime.py`,
 `core_runtime.py` and `useStore.ts`, and the caps can only go down.
 `scripts/boot_smoke.sh` boots a worktree on a free port with its own folders and
-no model, checks its routes and stops it by its process id.
+no model, checks its routes and stops it by its process id; it puts the
+worktree back even when it is interrupted. A test checks the fake engine's
+names and parameters against the real WanGP source, so the fake cannot drift
+unnoticed.
 
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one

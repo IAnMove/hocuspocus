@@ -124,5 +124,8 @@ the kernel, each slice) proves that with these four steps:
    over its ceiling or more than 100 lines under it, and
    `scripts/check_code_health_pr_base.sh` fails when a ceiling rises against
    the PR base. After shrinking a file, run
-   `python scripts/size_ceilings.py --lower` and commit the result. The merge
-   train recomputes the ceilings at merge time.
+   `python scripts/size_ceilings.py --lower` and commit the result. Nothing
+   recomputes the ceilings for you: a PR behind `development` merges it and
+   runs `--lower` again (a conflict in `size_ceilings.json` resolves the same
+   way). A ceiling may rise only in the PR that adds the file, because the
+   base has no `size_ceilings.json` to compare with.

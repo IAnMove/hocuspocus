@@ -8,9 +8,14 @@ Bodies are normalised first, so they do not depend on the machine or the clock:
   become ``<TIME>``, today's date ``<TODAY>``, UUIDs and 32-digit hex ids
   ``<ID>``;
 - numbers under clock-like keys (``created_at``, ``mtime``, ``updatedAt`` ...)
-  become ``<TIME>``;
+  become ``<TIME>`` when they read "now" (within a day of the test's clock, in
+  seconds, milliseconds, microseconds or nanoseconds). A fixed stamp the test
+  set itself (``tests/characterization/media.py`` ``BASE_MTIME``) is kept, so
+  a change to which time a route reports still fails the golden. A measured
+  duration under such a key (``elapsed_time``) is not a clock: ``mask`` it;
 - keys the caller names in ``mask`` become ``<MASKED>`` (sizes that depend on
-  an encoder version, for example).
+  an encoder version, for example), and each ``(pattern, replacement)`` in
+  ``replace`` is applied to every string (the same size inside a URL).
 
 ``HOCUS_UPDATE_GOLDENS=1`` writes the observed values instead of comparing.
 Record goldens on ``development`` before you move code, never after.
@@ -20,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -39,12 +45,17 @@ _CLOCK_KEY = re.compile(
     r"(?:^|_)(?:at|time|timestamp|mtime|ctime|created|updated|modified|started|finished)$"
     r"|(?:At|Time|Timestamp|Mtime)$",
 )
+# A clock value counts as "now" within this many seconds of the test's clock.
+_NOW_WINDOW_SECONDS = 86_400
+_CLOCK_SCALES = (1, 1_000, 1_000_000, 1_000_000_000)
 
 
-def normalise(value: Any, *, paths: dict[str, str] | None = None, mask: Iterable[str] = ()) -> Any:
+def normalise(value: Any, *, paths: dict[str, str] | None = None, mask: Iterable[str] = (),
+              replace: Iterable[tuple[str, str]] = ()) -> Any:
     """``value`` with machine- and clock-dependent parts replaced by placeholders."""
     replacements = _path_replacements(paths or {})
     masked = set(mask)
+    patterns = [(re.compile(pattern), replacement) for pattern, replacement in replace]
 
     def walk(item: Any, key: str | None = None) -> Any:
         if key is not None and key in masked:
@@ -58,12 +69,21 @@ def normalise(value: Any, *, paths: dict[str, str] | None = None, mask: Iterable
         if isinstance(item, list):
             return [walk(child) for child in item]
         if isinstance(item, str):
-            return _normalise_text(item, replacements)
+            text = _normalise_text(item, replacements)
+            for pattern, replacement in patterns:
+                text = pattern.sub(replacement, text)
+            return text
         if isinstance(item, (int, float)) and not isinstance(item, bool) and key and _CLOCK_KEY.search(key):
-            return "<TIME>"
+            return "<TIME>" if _reads_now(item) else item
         return item
 
     return walk(value)
+
+
+def _reads_now(value: float) -> bool:
+    """True for a clock reading taken while the test ran, in any common unit."""
+    now = time.time()
+    return any(abs(value / scale - now) <= _NOW_WINDOW_SECONDS for scale in _CLOCK_SCALES)
 
 
 def _path_replacements(paths: dict[str, str]) -> list[tuple[str, str]]:
@@ -110,7 +130,7 @@ class GoldenBook:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(
                 json.dumps(dict(sorted(self._cases.items())), indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-                encoding="utf-8",
+                encoding="utf-8", newline="\n",
             )
             return
         if case not in self._cases:

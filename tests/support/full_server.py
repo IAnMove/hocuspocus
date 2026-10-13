@@ -13,6 +13,17 @@ or in a script (``python -m tests.support.full_server``).
 
 ``served_route_table`` flattens the routes in the order the app matches them,
 nested routers included, with their resolved paths.
+
+Two known differences from a real boot:
+
+- the fake's ``create_ui`` raises inside the server's own try/except, so the
+  import prints a warning and a traceback, and the table has no Gradio
+  ``/classic`` mount (``scripts/boot_smoke.py`` ignores mounts too);
+- the server keeps media thumbnails in ``<repo>/cache/media-thumbnails``.
+  :func:`_keep_media_cache_in` repoints the launch module and
+  ``media_dimensions`` after the import, but the video editor router took the
+  folder when it was included, so a test that makes video editor thumbnails
+  writes them under the repo's ``cache/`` (ignored by git).
 """
 from __future__ import annotations
 
@@ -52,6 +63,9 @@ def load_full_server(state_root: Path) -> FullServer:
     if "_launch_runtime" in sys.modules:
         raise RuntimeError("The full server is already imported in this process; import it only once.")
     os.environ.update(SERVER_ENV)
+    # With PINOKIO_HOME set, these libraries default to the live install's shared cache.
+    os.environ["MAESTRO_STYLE_LIBRARY_DIR"] = str(state_root / "style-library")
+    os.environ["HOCUS_TEMPLATE_LIBRARY_DIR"] = str(state_root / "template-library")
     if str(APP_DIR) not in sys.path:
         sys.path.insert(0, str(APP_DIR))
     from tests.support.fake_wgp import make_fake_wgp
@@ -166,7 +180,7 @@ def runtime_route_payload(api: Any) -> dict:
 
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
 
 def main(argv: list[str] | None = None) -> int:

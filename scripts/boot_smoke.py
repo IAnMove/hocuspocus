@@ -7,12 +7,14 @@ Usage (normally through scripts/boot_smoke.sh):
 
 What it does, in order:
 
-1. Refuses the live checkout (the repo's main worktree), a worktree that
-   already runs a server, a busy port, and (unless ``--cpu``) less than
+1. Refuses the live checkout (the repo's main worktree, and ``--live``), a
+   worktree an earlier smoke did not put back, a worktree that already runs a
+   server, a busy port, and (unless ``--cpu``) less than
    ``--min-free-vram-mb`` of free VRAM on GPU 0.
 2. Makes a scratch folder next to the worktree (same disk, so every move is
-   a rename) for outputs, uploads, settings, caches, LoRAs and an empty
-   checkpoint folder. Nothing the server writes reaches the live install.
+   a rename) for outputs, uploads, settings, caches, LoRAs, the style and
+   template libraries and an empty checkpoint folder. Nothing the server
+   writes reaches the live install, even with ``PINOKIO_HOME`` set.
 3. Full server: sets aside whatever the worktree has at ``app/wgp_config.json``,
    ``app/settings``, ``app/uploads``, ``app/outputs``, ``app/loras`` and
    ``cache``, and puts links into the scratch folder there, plus a seeded
@@ -29,8 +31,10 @@ What it does, in order:
    duplicate operation ids and, for the full server, compares the routes with
    ``tests/fixtures/route_table_runtime.json``.
 6. Stops the server by its exact PID (SIGTERM, then SIGKILL after a wait;
-   never a pattern match), puts the worktree back as it was, and leaves the
-   log, the report and the scratch folder in place for review.
+   never a pattern match), then each process still in the server's own
+   session, by PID; puts the worktree back as it was, also after an error,
+   Ctrl+C, SIGTERM or SIGHUP; and leaves the log, the report and the scratch
+   folder in place for review.
 
 A smoke list line is ``METHOD /path [status[,status]] [json body]``; a line
 that starts with ``#`` is a comment. The status defaults to 200.
@@ -72,6 +76,8 @@ WGP_DEFAULTS: dict[str, Any] = {
     "transformer_quantization": "int8", "transformer_types": [], "vae_config": 1, "video_container": "mp4",
     "video_output_codec": "libx264_8", "video_profile": 3, "vram_safety_coefficient": 0.8,
 }
+# Never passed to the server: an import path, and the publication target of a live instance.
+DROPPED_ENV = {"PYTHONPATH", "PYTHONHOME", "HOCUS_PUBLICATION_ROOT", "HOCUS_PUBLICATION_BASE_URL"}
 # Worktree paths the full server writes to, and the scratch folder each one points to.
 REDIRECTS = {
     "app/settings": "settings",
@@ -210,17 +216,31 @@ class WorktreeState:
         self.created.append(relative)
 
     def restore(self) -> list[str]:
-        """Move what the smoke made into the scratch folder and put set-aside paths back."""
+        """Move what the smoke made into the scratch folder and put set-aside paths back.
+
+        One failed rename does not stop the others; each failure is a note that
+        starts with "NOT restored" and says where the original is.
+        """
         notes = []
         kept = self.scratch / "worktree-state"
         kept.mkdir(parents=True, exist_ok=True)
         for relative in [*self.swapped, *self.created]:
             target = self.worktree / relative
             if target.exists() or target.is_symlink():
-                os.rename(target, kept / relative.replace("/", "__"))
+                try:
+                    os.rename(target, kept / relative.replace("/", "__"))
+                except OSError as error:
+                    notes.append(f"NOT restored {relative}: could not move the smoke's copy away ({error})")
         for relative in self.swapped:
-            os.rename(self._aside(relative), self.worktree / relative)
-            notes.append(f"restored {relative}")
+            try:
+                os.rename(self._aside(relative), self.worktree / relative)
+            except OSError as error:
+                notes.append(f"NOT restored {relative}: the original is in {self._aside(relative)} ({error})")
+            else:
+                notes.append(f"restored {relative}")
+        for note in notes:
+            if note.startswith("NOT"):
+                print(f"[boot-smoke] {note}", file=sys.stderr)
         return notes
 
 
@@ -236,9 +256,12 @@ def prepare_full(state: WorktreeState, live: Path) -> None:
         state.swap(relative, lambda path, folder=folder: path.symlink_to(scratch / folder, target_is_directory=True))
 
 
-def server_env(port: int, *, cpu: bool, core: bool) -> dict[str, str]:
-    env = {key: value for key, value in os.environ.items() if key not in {"PYTHONPATH", "PYTHONHOME"}}
+def server_env(port: int, *, cpu: bool, core: bool, scratch: Path) -> dict[str, str]:
+    env = {key: value for key, value in os.environ.items() if key not in DROPPED_ENV}
     env.update({
+        # With PINOKIO_HOME set, these default to the live install's shared cache.
+        "MAESTRO_STYLE_LIBRARY_DIR": str(scratch / "style-library"),
+        "HOCUS_TEMPLATE_LIBRARY_DIR": str(scratch / "template-library"),
         "SERVER_PORT": str(port),
         "SERVER_NAME": "127.0.0.1",
         "PINOKIO_SHARE_LOCAL": "false",
@@ -380,34 +403,43 @@ def route_report(port: int, log: Path, *, profile: str, served: list[str] | None
     return report
 
 
-def _children(pid: int) -> list[int]:
-    found = []
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            fields = (entry / "stat").read_text().rsplit(")", 1)[1].split()
-        except (OSError, IndexError):
-            continue
-        if int(fields[1]) == pid:
-            found.append(int(entry.name))
-            found.extend(_children(int(entry.name)))
-    return found
-
-
-def _alive(pid: int) -> bool:
+def _running_in(pid: int, session: int) -> bool:
+    """``pid`` is a live (not zombie) process of ``session``, read from /proc/<pid>/stat."""
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return fields[0] != "Z" and int(fields[3]) == session
+    except (OSError, IndexError, ValueError):
         return False
-    except PermissionError:
-        return True
+
+
+def _signal_in_session(pid: int, session: int, signum: int) -> bool:
+    """Signal ``pid`` only while it is still in ``session``, so a reused PID is never hit."""
+    if not _running_in(pid, session):
+        return False
+    try:
+        os.kill(pid, signum)
+    except (ProcessLookupError, PermissionError):
+        return False
     return True
 
 
+def stop_session(session: int, wait: float = 10) -> list[int]:
+    """SIGTERM, then SIGKILL, each process left in the server's session (``start_new_session`` made it the leader)."""
+    if not Path("/proc").is_dir():
+        return []
+    members = [int(entry.name) for entry in Path("/proc").iterdir()
+               if entry.name.isdigit() and int(entry.name) != session and _running_in(int(entry.name), session)]
+    stopped = [pid for pid in members if _signal_in_session(pid, session, signal.SIGTERM)]
+    deadline = time.monotonic() + wait
+    while time.monotonic() < deadline and any(_running_in(pid, session) for pid in stopped):
+        time.sleep(0.2)
+    for pid in stopped:
+        _signal_in_session(pid, session, signal.SIGKILL)
+    return stopped
+
+
 def stop(process: subprocess.Popen, wait: float = 45) -> dict[str, Any]:
-    """SIGTERM the server's own PID, then SIGKILL that PID; then any child it left, by PID."""
-    children = _children(process.pid) if Path("/proc").is_dir() else []
+    """SIGTERM the server's own PID, then SIGKILL that PID; then what it left in its session, by PID."""
     result: dict[str, Any] = {"pid": process.pid, "signal": "SIGTERM"}
     if process.poll() is None:
         process.send_signal(signal.SIGTERM)
@@ -418,16 +450,29 @@ def stop(process: subprocess.Popen, wait: float = 45) -> dict[str, Any]:
             result["signal"] = "SIGKILL"
             process.wait(timeout=wait)
     result["returncode"] = process.returncode
-    leftovers = [pid for pid in children if _alive(pid)]
-    for pid in leftovers:
-        os.kill(pid, signal.SIGTERM)
-    result["children_stopped"] = leftovers
+    result["children_stopped"] = stop_session(process.pid)
     return result
 
 
-def _preflight(args, worktree: Path, live: Path) -> int:
-    if worktree == live:
+def unfinished_run(worktree: Path) -> str | None:
+    """The scratch folder of an earlier smoke whose seeded app/wgp_config.json is still in the worktree."""
+    try:
+        seeded = json.loads((worktree / "app" / "wgp_config.json").read_text(encoding="utf-8")).get(MARKER)
+    except (OSError, ValueError, AttributeError):
+        return None
+    return str(seeded.get("scratch") or "?") if isinstance(seeded, dict) else None
+
+
+def _preflight(args, worktree: Path, live: set[Path]) -> int:
+    if worktree in live:
         raise SmokeError(f"{worktree} is the live checkout; boot a separate worktree")
+    earlier = unfinished_run(worktree)
+    if earlier:
+        raise SmokeError(
+            f"an earlier boot smoke did not put {worktree} back. Put back by hand each path in "
+            f"{earlier}/set-aside (app__settings is app/settings), replacing the link or file the smoke left, "
+            "then run again"
+        )
     if not (worktree / "app" / "launch.py").is_file():
         raise SmokeError(f"{worktree} is not a HocusPocus checkout")
     instances = running_instances()
@@ -454,8 +499,9 @@ def _scratch(args, worktree: Path, port: int) -> Path:
 
 def run(args) -> dict[str, Any]:
     worktree = Path(args.worktree).resolve()
-    live = Path(args.live).resolve() if args.live else live_checkout(worktree)
-    port = _preflight(args, worktree, live)
+    main_checkout = live_checkout(worktree)
+    live = Path(args.live).resolve() if args.live else main_checkout
+    port = _preflight(args, worktree, {main_checkout, live})
     scratch = _scratch(args, worktree, port)
     checks = parse_list(SMOKE_LISTS / ("core.txt" if args.core else "default.txt"))
     for extra in args.list or []:
@@ -465,7 +511,7 @@ def run(args) -> dict[str, Any]:
     log = scratch / "server.log"
     process = None
     try:
-        env = server_env(port, cpu=args.cpu, core=args.core)
+        env = server_env(port, cpu=args.cpu, core=args.core, scratch=scratch)
         served = None
         if args.core:
             state.link_if_missing("ui/dist", live / "ui" / "dist")
@@ -488,12 +534,23 @@ def run(args) -> dict[str, Any]:
         report["checks"] = run_checks(report["port"], checks)
         report["routes"] = route_report(report["port"], log, profile=report["profile"], served=served)
     finally:
-        if process is not None:
-            report["stop"] = stop(process)
-        report["restored"] = state.restore()
-        (scratch / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    report["ok"] = all(item["ok"] for item in report["checks"]) and report["routes"]["ok"]
+        try:
+            if process is not None:
+                report["stop"] = stop(process)
+        finally:
+            report["restored"] = state.restore()
+            (scratch / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    report["ok"] = (all(item["ok"] for item in report["checks"]) and report["routes"]["ok"]
+                    and not any(note.startswith("NOT") for note in report["restored"]))
     return report
+
+
+def _leave_on_signal(signum: int, _frame) -> None:
+    """SIGTERM or SIGHUP: leave through the finally blocks, which stop the server and put the worktree back."""
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), signal.SIG_IGN)
+    raise SystemExit(128 + signum)
 
 
 def _print(report: dict[str, Any]) -> None:
@@ -531,6 +588,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=300, help="seconds to wait for the URL line")
     parser.add_argument("--min-free-vram-mb", type=int, default=3072)
     args = parser.parse_args(argv)
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), _leave_on_signal)
     try:
         report = run(args)
     except SmokeError as error:

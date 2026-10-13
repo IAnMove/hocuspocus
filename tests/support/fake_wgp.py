@@ -11,6 +11,12 @@ route, give the fake the attribute in that test (``monkeypatch.setattr(fake,
 name, value, raising=False)``), or add a helper here when several tests need
 the same state, as :func:`catalog_attributes` does for the model catalog.
 This surface is the future engine port of the refactor.
+
+Every attribute here must be a module-level name of ``app/wgp.py`` (or of
+``shared/utils/files_locator.py`` for ``fl``), and every function must take
+the real one's parameters, in the same order and with the same plain
+defaults. ``tests/test_fake_wgp.py`` checks that by reading the real source,
+so a WanGP update that renames or reshapes one of them fails there first.
 """
 from __future__ import annotations
 
@@ -36,7 +42,30 @@ class FakeWgp(types.ModuleType):
 
 
 def _no_classic_ui() -> None:
+    # The server mounts the Gradio UI at /classic inside a try/except, so this
+    # only prints a warning and a traceback: the served table has no /classic mount.
     raise RuntimeError("fake wgp: the classic Gradio UI is not mounted in tests")
+
+
+def get_available_filename(target_path, video_source, suffix="", force_extension=None):
+    """WanGP's rule: the source's base name plus ``suffix``, numbered ``(2)``, ``(3)`` ... when taken."""
+    name, extension = os.path.splitext(os.path.basename(video_source))
+    if force_extension is not None:
+        extension = force_extension
+    name += suffix
+    candidate = os.path.join(target_path, f"{name}{extension}")
+    counter = 2
+    while os.path.exists(candidate):
+        candidate = os.path.join(target_path, f"{name}({counter}){extension}")
+        counter += 1
+    return candidate
+
+
+def locate_file(file_name, create_path_if_none=False, error_if_none=True, extra_paths=None):
+    """No checkpoint is ever on disk in tests."""
+    if error_if_none:
+        raise Exception(f"fake wgp: {file_name} is not on disk in tests")
+    return None
 
 
 def make_fake_wgp(state_root: Path) -> FakeWgp:
@@ -67,7 +96,7 @@ def make_fake_wgp(state_root: Path) -> FakeWgp:
     fake.audio_save_path = str(outputs)
     fake.displayed_model_types = []
     fake.get_lora_dir = lambda *_args, **_kwargs: str(loras)
-    fake.get_available_filename = lambda folder, name, *_args, **_kwargs: os.path.join(folder, name)
+    fake.get_available_filename = get_available_filename
     fake.concatenate_multi_clip_videos = lambda *_args, **_kwargs: None
     fake.get_model_def = lambda _model_type: None
     fake.get_default_settings = lambda _model_type: {}
@@ -102,11 +131,13 @@ def catalog_attributes() -> dict[str, Any]:
         definition = FAKE_MODELS.get(model_type)
         return dict(definition) if definition is not None else None
 
-    def recursive_prop(model_type: str, prop: str, return_list: bool = False) -> Any:
-        value = (FAKE_MODELS.get(model_type) or {}).get(prop)
-        if return_list and value is None:
-            return []
-        return value
+    def recursive_prop(model_type, prop="URLs", sub_prop_name=None, return_list=True, stack=()):
+        # WanGP's rule for a known model: a missing property is []. The fake
+        # models never point at each other, so there is no reference to follow.
+        if model_type not in FAKE_MODELS:
+            raise Exception(f"Unknown model type '{model_type}'")
+        value = FAKE_MODELS[model_type].get(prop)
+        return [] if value is None else value
 
     return {
         "families_infos": {"fake": (10, "Fake family"), "unknown": (999, "Unknown")},
@@ -117,5 +148,5 @@ def catalog_attributes() -> dict[str, Any]:
         "get_model_recursive_prop": recursive_prop,
         "test_class_i2v": lambda model_type: model_type == "fake_i2v",
         "test_class_t2v": lambda model_type: model_type == "fake_t2v",
-        "fl": SimpleNamespace(locate_file=lambda _name, error_if_none=False: None),
+        "fl": SimpleNamespace(locate_file=locate_file),
     }

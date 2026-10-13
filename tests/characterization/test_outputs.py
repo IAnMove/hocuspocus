@@ -6,8 +6,9 @@ from tests.characterization import media
 IMAGE = "2026-01-02-10h00m00s_seed7_golden_image.png"
 CLIP = "2026-01-02-10h05m00s_seed9_golden_clip.mp4"
 SONG = "golden_song.wav"
-# Encoded sizes change with the ffmpeg and Pillow versions, not with the server.
-SIZES = ("size",)
+# Encoded sizes change with the ffmpeg and Pillow versions, not with the server:
+# the "size" field, and the same size in a thumbnail URL ("?v=<mtime>-<size>").
+ENCODED = {"mask": ("size",), "replace": ((r"(\?v=\d+)-\d+", r"\1-<SIZE>"),)}
 
 
 def _outputs(server) -> None:
@@ -30,16 +31,16 @@ def _outputs(server) -> None:
 
 def test_gallery_listing(server, golden) -> None:
     _outputs(server)
-    server.check(golden, "list", "GET", "/api/v1/outputs", mask=SIZES)
-    server.check(golden, "list page", "GET", "/api/v1/outputs", mask=SIZES, params={"limit": 1, "offset": 1})
-    server.check(golden, "list images", "GET", "/api/v1/outputs", mask=SIZES, params={"media_type": "image"})
-    server.check(golden, "list search", "GET", "/api/v1/outputs", mask=SIZES, params={"search": "blue"})
-    server.check(golden, "list oldest first", "GET", "/api/v1/outputs", mask=SIZES, params={"order": "oldest"})
+    server.check(golden, "list", "GET", "/api/v1/outputs", **ENCODED)
+    server.check(golden, "list page", "GET", "/api/v1/outputs", **ENCODED, params={"limit": 1, "offset": 1})
+    server.check(golden, "list images", "GET", "/api/v1/outputs", **ENCODED, params={"media_type": "image"})
+    server.check(golden, "list search", "GET", "/api/v1/outputs", **ENCODED, params={"search": "blue"})
+    server.check(golden, "list oldest first", "GET", "/api/v1/outputs", **ENCODED, params={"order": "oldest"})
     server.client.post(f"/api/v1/favorites/{CLIP}")
-    server.check(golden, "list favorites", "GET", "/api/v1/outputs", mask=SIZES, params={"favorites_only": "true"})
+    server.check(golden, "list favorites", "GET", "/api/v1/outputs", **ENCODED, params={"favorites_only": "true"})
     media.image(server.root / "uploads" / "golden_upload.png")
     media.stamp(server.root / "uploads" / "golden_upload.png", 10)
-    server.check(golden, "list uploads view", "GET", "/api/v1/outputs", mask=SIZES, params={"workspace": "__uploads__"})
+    server.check(golden, "list uploads view", "GET", "/api/v1/outputs", **ENCODED, params={"workspace": "__uploads__"})
 
 
 def test_output_files_and_metadata(server, golden) -> None:

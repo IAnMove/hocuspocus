@@ -86,4 +86,4 @@ def test_lower_writes_the_current_sizes(tmp_path) -> None:
 
 def test_the_ceilings_file_explains_itself() -> None:
     payload = json.loads(CEILINGS.read_text(encoding="utf-8"))
-    assert "merge train" in payload["note"]
+    assert "--lower" in payload["note"] and "Nothing recomputes them" in payload["note"]

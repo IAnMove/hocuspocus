@@ -51,22 +51,24 @@ class Server:
     root: Path
     outputs: Path
 
-    def normalise(self, body: Any, *, mask: tuple[str, ...] = ()) -> Any:
+    def normalise(self, body: Any, *, mask: tuple[str, ...] = (),
+                  replace: tuple[tuple[str, str], ...] = ()) -> Any:
         return normalise(
             body,
             paths={str(self.outputs): "<OUTPUTS>", str(self.root): "<STATE>", str(ROOT): "<REPO>"},
             mask=mask,
+            replace=replace,
         )
 
     def check(self, golden: GoldenBook, case: str, method: str, path: str, *,
-              mask: tuple[str, ...] = (), **request: Any) -> Any:
+              mask: tuple[str, ...] = (), replace: tuple[tuple[str, str], ...] = (), **request: Any) -> Any:
         """Call one route, compare its status and normalised JSON body with the golden, return the response."""
         response = self.client.request(method, path, **request)
         try:
             body = response.json()
         except ValueError:
             body = {"<text>": response.text}
-        golden.check(case, response.status_code, self.normalise(body, mask=mask))
+        golden.check(case, response.status_code, self.normalise(body, mask=mask, replace=replace))
         return response
 
 

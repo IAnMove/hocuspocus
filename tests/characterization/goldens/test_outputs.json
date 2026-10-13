@@ -15,9 +15,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000002.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000002.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 36,
@@ -26,15 +26,15 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-<SIZE>",
           "type": "video",
           "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
           "width": 64
         },
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000001.0,
           "completion_time_source": "metadata",
-          "created_at": "<TIME>",
+          "created_at": 1760000001.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 8,
@@ -43,15 +43,15 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-<SIZE>",
           "type": "image",
           "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
           "width": 8
         },
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000000.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000000.0,
           "edit_sub_mode": null,
           "favorite": false,
           "mode": null,
@@ -72,9 +72,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000002.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000002.0,
           "edit_sub_mode": null,
           "favorite": true,
           "height": 36,
@@ -83,7 +83,7 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-<SIZE>",
           "type": "video",
           "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
           "width": 64
@@ -97,9 +97,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000001.0,
           "completion_time_source": "metadata",
-          "created_at": "<TIME>",
+          "created_at": 1760000001.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 8,
@@ -108,7 +108,7 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-<SIZE>",
           "type": "image",
           "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
           "width": 8
@@ -122,9 +122,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000000.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000000.0,
           "edit_sub_mode": null,
           "favorite": false,
           "mode": null,
@@ -137,9 +137,9 @@
           "url": "/api/v1/file/golden_song.wav"
         },
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000001.0,
           "completion_time_source": "metadata",
-          "created_at": "<TIME>",
+          "created_at": 1760000001.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 8,
@@ -148,15 +148,15 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-<SIZE>",
           "type": "image",
           "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
           "width": 8
         },
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000002.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000002.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 36,
@@ -165,7 +165,7 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-<SIZE>",
           "type": "video",
           "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
           "width": 64
@@ -179,9 +179,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000001.0,
           "completion_time_source": "metadata",
-          "created_at": "<TIME>",
+          "created_at": 1760000001.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 8,
@@ -190,7 +190,7 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-<SIZE>",
           "type": "image",
           "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
           "width": 8
@@ -204,9 +204,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000002.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000002.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 36,
@@ -215,7 +215,7 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-<SIZE>",
           "type": "video",
           "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
           "width": 64
@@ -229,9 +229,9 @@
     "body": {
       "outputs": [
         {
-          "completed_at": "<TIME>",
+          "completed_at": 1760000010.0,
           "completion_time_source": "file",
-          "created_at": "<TIME>",
+          "created_at": 1760000010.0,
           "edit_sub_mode": null,
           "favorite": false,
           "height": 8,
@@ -240,7 +240,7 @@
           "origin": null,
           "result_kind": null,
           "size": "<MASKED>",
-          "thumbnail_url": "/api/v1/outputs/thumbnail/golden_upload.png?v=1760000010000000-77&workspace=__uploads__",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/golden_upload.png?v=1760000010000000-<SIZE>&workspace=__uploads__",
           "type": "image",
           "url": "/api/v1/file/golden_upload.png?workspace=__uploads__",
           "width": 8
@@ -252,7 +252,7 @@
   },
   "metadata": {
     "body": {
-      "created_at": "<TIME>",
+      "created_at": 1760000001,
       "generation_mode": "image",
       "params": {
         "model_type": "fake_t2v",

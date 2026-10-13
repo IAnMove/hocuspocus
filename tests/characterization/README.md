@@ -27,8 +27,13 @@ the skip reason gives the command above. CI runs them in their own step of the
   No route or OpenAPI id may be served twice.
 - The other `test_*.py` files call read-only and low-risk routes and compare
   status and body with `goldens/<module>.json`. Bodies are normalised first:
-  state folders become `<OUTPUTS>`, `<STATE>` or `<REPO>`, clocks `<TIME>`,
-  today's date `<TODAY>`, generated ids `<ID>` (`tests/support/golden.py`).
+  state folders become `<OUTPUTS>`, `<STATE>` or `<REPO>`, date-time text
+  `<TIME>`, today's date `<TODAY>`, generated ids `<ID>`
+  (`tests/support/golden.py`). A number under a clock key (`created_at`,
+  `mtime` ...) becomes `<TIME>` only when it reads "now"; a fixed stamp the
+  test set (`media.BASE_MTIME`) stays in the golden, so a route that starts
+  reporting another time fails. A measured duration under such a key
+  (`elapsed_time`) is not masked: name it in `mask`.
 
 ## The rule for move PRs: goldens first
 
@@ -60,8 +65,22 @@ description.
 - Do not golden routes whose answers depend on the machine: hardware, free
   disk, installed model weights, network services or the React build. When
   a field depends on a tool version (an encoded file size), mask it:
-  `server.check(..., mask=("size",))`.
+  `server.check(..., mask=("size",))`, and when the same value sits inside
+  a string, replace it there too: `replace=((pattern, replacement),)`
+  (`test_outputs.py` does both).
 - When a route reads WanGP state the fake lacks, the call fails with the
   attribute's name. Give the fake that attribute in the test
   (`monkeypatch.setattr(server.wgp, name, value, raising=False)`); see the
-  `catalog` fixture in `test_models_and_config.py`.
+  `catalog` fixture in `test_models_and_config.py`. A name you add to
+  `tests/support/fake_wgp.py` must exist in `app/wgp.py` with the same
+  parameters: `tests/test_fake_wgp.py` reads the real source and fails on drift.
+
+## Known differences from a real boot
+
+- The fake's `create_ui` raises inside the server's own try/except, so the
+  import prints a warning and a traceback, and there is no `/classic` mount.
+- The video editor router keeps `<repo>/cache/media-thumbnails` (it takes the
+  folder when it is included, before the harness repoints the cache). A test
+  that makes video editor thumbnails writes them there; git ignores `cache/`.
+- `/` is the repair page: the import runs as if the React build were missing,
+  so the served table is the same with or without `ui/dist`.
