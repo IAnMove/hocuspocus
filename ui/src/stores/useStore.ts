@@ -8,7 +8,7 @@ import {
   restoredH3ExtendedDuration,
 } from '../lib/h3ExtendedDuration'
 import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
-import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
+import { restoredEditingTrim, restoreWangpSettings } from '../lib/wangpUi'
 import { viggleEditingParameters } from '../lib/viggleWorkflow'
 import { beginWangpRestore, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
@@ -112,6 +112,8 @@ import {
 } from '../features/studio/startGeneration'
 import { submitBlendEdit } from '../features/studio/blendSubmission'
 import { submitOutpaintEdit } from '../features/studio/outpaintSubmission'
+import { submitRecastEdit } from '../features/studio/recastSubmission'
+import { submitRestyleEdit } from '../features/studio/restyleSubmission'
 import { audioReferenceParams, restoreAudioReferences, stashAudioReferences, type AudioReferenceStash } from '../features/studio/audioReferenceState'
 import { beginOutputSettingsRestore, type OutputSettingsSource } from '../features/studio/outputSettingsRestore'
 
@@ -1037,215 +1039,13 @@ export const useStore = create<AppState>((set, get) => {
     }
 
     // ── Edit mode: Recast (SCAIL-2 Replace) ─────────────────────
-    // Standalone branch: the prompt is OPTIONAL here (the server has a
-    // sensible default), unlike the shared edit block below which
-    // hard-requires one.
-    // Repaint is the easy front door to the proven Studio Video/Frames
-    // SCAIL-2 Animate path: an edited first frame defines the finished look
-    // while the source video supplies motion and camera movement.
     if (state.generationMode === 'avatar' && state.editSubMode === 'restyle') {
-      if (!state.editVideoPath || !state.editRepaintFramePath) return
-      const repaintMappings = state.editRepaintMappings.slice(0, 5)
-      if (repaintMappings.some(mapping => !mapping.source.trim() || !mapping.target.trim())) return
-      const promptText = ((state.params.prompt as string) || '').trim()
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting repaint...', outputFiles: [], error: null, oomInfo: null,
-      }
-      set(s => {
-        return prependJob(s.jobs, newJob)
-      })
-
-      try {
-        const repaintModel = (state.params.model_type as string) || ''
-        const repaintIsScail2 = repaintModel === 'scail2_14B_fast' || repaintModel === 'scail2_14B'
-        const result = await api.submitRepaint({
-          video_path: state.editVideoPath,
-          target_frame_path: state.editRepaintFramePath,
-          region_mappings: repaintMappings.map(mapping => ({
-            id: mapping.id,
-            source: mapping.source.trim(),
-            target: mapping.target.trim(),
-          })),
-          ...(promptText ? { prompt: promptText } : {}),
-          resolution_profile: state.editRepaintResolutionProfile,
-          ...(repaintIsScail2 ? {
-            model_type: repaintModel,
-            num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
-            ...(repaintModel === 'scail2_14B' ? {
-              guidance_scale: (state.params.guidance_scale as number) ?? undefined,
-            } : {}),
-          } : {}),
-          start_time: state.editStartTime,
-          end_time: state.editEndTime,
-          seed: (state.params.seed as number) ?? -1,
-          negative_prompt: (state.params.negative_prompt as string) || '',
-          activated_loras: (state.params.activated_loras as string[]) || [],
-          loras_multipliers: (state.params.loras_multipliers as string) || '',
-          workspace: state.activeWorkspace,
-        })
-
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob
-            ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' }
-            : j),
-        }))
-
-        const pollInterval = setInterval(async () => {
-          if (!get().jobs.find(j => j.id === result.job_id)) {
-            clearInterval(pollInterval)
-            return
-          }
-          try {
-            const status = await api.fetchJobStatus(result.job_id)
-            set(s => ({
-              jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
-                ...j,
-                status: status.status,
-                progress: status.progress / 100,
-                step: status.step ?? 0,
-                totalSteps: status.total_steps ?? 0,
-                phase: status.phase ?? '',
-                message: status.message,
-                outputFiles: status.output_files,
-                error: status.error,
-                oomInfo: status.oom_info ?? null,
-                ..._jobTimingPatch(status),
-              }),
-            }))
-            if (status.status === 'running') void get().maybeRefreshGallery()
-            if (status.status === 'completed') {
-              clearInterval(pollInterval)
-              set(s => {
-                const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return withJobs(remaining)
-              })
-              void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (isGenerationJobSettled(status.status)) {
-              clearInterval(pollInterval)
-              set(s => withJobs(s.jobs))
-            }
-          } catch { /* ignore poll errors */ }
-        }, 2000)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Repaint failed'
-        set(s => updateJob(s.jobs, j => j === newJob, j => ({
-          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
-        })))
-        console.error('Repaint failed:', msg)
-      }
+      await submitRestyleEdit(get, set, state)
       return
     }
 
     if (state.generationMode === 'avatar' && state.editSubMode === 'recast') {
-      const recastIsViggle = state.params.model_type === 'viggle_animate'
-      const recastMappings = state.editRecastMappings.slice(0, recastIsViggle ? 1 : 5)
-      if (
-        !state.editVideoPath
-        || recastMappings.length === 0
-        || recastMappings.some(mapping => (!recastIsViggle && !mapping.target.trim()) || !mapping.refPath)
-      ) return
-      const promptText = ((state.params.prompt as string) || '').trim()
-
-      const newJob: GenerationJob = {
-        id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-        phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
-      }
-      set(s => {
-        return prependJob(s.jobs, newJob)
-      })
-
-      try {
-        // Honor the selector's Recast SCAIL-2 choice (dedicated Fast vs
-        // native base). Guard on
-        // architecture so a stale LTX model_type can never reach the
-        // recast endpoint — the server then falls back to Fast.
-        const recastModel = (state.params.model_type as string) || ''
-        const recastIsScail2 = state.models.find(m => m.model_type === recastModel)?.architecture === 'scail2_14B'
-        const result = await api.submitRecast({
-          video_path: state.editVideoPath,
-          // Legacy fields remain populated for old sidecars/API clients, while
-          // the explicit cards provide deterministic target/color assignment.
-          ref_image_path: recastMappings[0].refPath,
-          target: recastMappings[0].target || 'person',
-          person_count: recastMappings.length,
-          reference_aligned_to_source: recastMappings[0].referenceAlignedToSource,
-          character_mappings: recastMappings.map(mapping => ({
-            id: mapping.id,
-            target: mapping.target.trim(),
-            ref_image_path: mapping.refPath,
-            additional_ref_image_paths: mapping.additionalRefs
-              .map(reference => reference.path)
-              .filter(Boolean),
-            reference_aligned_to_source: mapping.referenceAlignedToSource,
-          })),
-          // Simplified Recast recipe: identity preparation and native
-          // bystander preservation are automatic; prompt rewriting and the
-          // seam-prone post-composite remain off. The backend still accepts
-          // all legacy fields for saved/API callers.
-          isolate_reference: true,
-          auto_face_detail: true,
-          enhance_prompt: false,
-          protect_bystanders: false,
-          preserve_bystanders: true,
-          use_relighting: state.editRecastUseRelighting,
-          resolution_profile: state.editRecastResolutionProfile,
-          ...(promptText ? { prompt: promptText } : {}),
-          ...viggleSubmissionOptions(state.params, state.spatialUpsampling),
-          ...(recastIsScail2 ? {
-            model_type: recastModel,
-            num_inference_steps: (state.params.num_inference_steps as number) ?? undefined,
-            ...(recastModel === 'scail2_14B' ? {
-              guidance_scale: (state.params.guidance_scale as number) ?? undefined,
-            } : {}),
-          } : {}),
-          start_time: state.editStartTime,
-          end_time: state.editEndTime,
-          seed: (state.params.seed as number) ?? -1,
-          negative_prompt: (state.params.negative_prompt as string) || '',
-          activated_loras: (state.params.activated_loras as string[]) || [],
-          loras_multipliers: (state.params.loras_multipliers as string) || '',
-          workspace: state.activeWorkspace,
-        })
-
-        set(s => ({
-          jobs: s.jobs.map(j => j === newJob ? { ...j, id: result.job_id, status: 'queued', message: 'Queued...' } : j),
-        }))
-
-        const pollInterval = setInterval(async () => {
-          if (!get().jobs.find(j => j.id === result.job_id)) { clearInterval(pollInterval); return }
-          try {
-            const status = await api.fetchJobStatus(result.job_id)
-            set(s => ({
-              jobs: s.jobs.map(j => j.id !== result.job_id ? j : {
-                ...j, status: status.status, progress: status.progress / 100,
-                step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
-                phase: status.phase ?? '', message: status.message,
-                outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
-                ..._jobTimingPatch(status),
-              }),
-            }))
-            if (status.status === 'running') void get().maybeRefreshGallery()
-            if (status.status === 'completed') {
-              clearInterval(pollInterval)
-              set(s => {
-                const remaining = s.jobs.filter(j => j.id !== result.job_id)
-                return withJobs(remaining)
-              })
-              void get().maybeRefreshGallery({ message: 'New output ready' })
-            } else if (isGenerationJobSettled(status.status)) {
-              clearInterval(pollInterval)
-              set(s => withJobs(s.jobs))
-            }
-          } catch { /* ignore poll errors */ }
-        }, 2000)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Recast failed'
-        set(s => updateJob(s.jobs, j => j === newJob, j => ({
-          ...j, id: j.id || `submit-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
-        })))
-        console.error('Recast failed:', msg)
-      }
+      await submitRecastEdit(get, set, state)
       return
     }
 
