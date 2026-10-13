@@ -1,4 +1,102 @@
 {
+  "cancel a job that does not exist": {
+    "body": {
+      "detail": "Job not found"
+    },
+    "status": 404
+  },
+  "cancel helper": {
+    "body": {
+      "missing": {
+        "status": "missing",
+        "was_running": false
+      },
+      "queued": {
+        "status": "cancelled",
+        "was_running": false
+      },
+      "running": {
+        "status": "cancelling",
+        "was_running": true
+      }
+    },
+    "status": 200
+  },
+  "cancel the manual job": {
+    "body": {
+      "job_id": "golden-manual",
+      "status": "cancelled",
+      "was_running": false
+    },
+    "status": 200
+  },
+  "cancel the queued job": {
+    "body": {
+      "job_id": "golden-queued",
+      "status": "cancelled",
+      "was_running": false
+    },
+    "status": 200
+  },
+  "cancel the running job": {
+    "body": {
+      "job_id": "golden-running",
+      "status": "cancelling",
+      "was_running": true
+    },
+    "status": 200
+  },
+  "cancelled job is no longer listed": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "cancelled job status": {
+    "body": {
+      "asset_id": null,
+      "canonical_url": null,
+      "created_at": 1700000000.0,
+      "error": null,
+      "finished_at": "<TIME>",
+      "generation_details": {
+        "execution_mode": "real",
+        "generation_mode": "video",
+        "lora_count": 0,
+        "model_name": "golden_model",
+        "model_type": "golden_model",
+        "prompt": "a golden prompt",
+        "simulated": false
+      },
+      "h3_window_plan": null,
+      "job_id": "golden-queued",
+      "message": "Cancelled",
+      "oom_info": null,
+      "output_files": [],
+      "outputs": [],
+      "path": null,
+      "phase": "cancelled",
+      "processing_time_sec": null,
+      "progress": 0,
+      "queue_position": null,
+      "root_task_id": "task-generation-golden-queued",
+      "started_at": null,
+      "status": "cancelled",
+      "step": 0,
+      "task_id": "task-generation-golden-queued",
+      "task_timings": [],
+      "token_usage": null,
+      "token_usage_source": "not_measured",
+      "total_steps": 0
+    },
+    "status": 200
+  },
+  "director pipeline status missing": {
+    "body": {
+      "detail": "Pipeline not found"
+    },
+    "status": 404
+  },
   "director pipelines": {
     "body": {
       "limit": 0,
@@ -13,6 +111,30 @@
       "pipelines": []
     },
     "status": 200
+  },
+  "director plan angle prompts need a style": {
+    "body": {
+      "detail": "style_prompt is required"
+    },
+    "status": 400
+  },
+  "director plan prompts need a style": {
+    "body": {
+      "detail": "style_prompt is required"
+    },
+    "status": 400
+  },
+  "director plan prompts need clips": {
+    "body": {
+      "detail": "clips is required"
+    },
+    "status": 400
+  },
+  "director saved pipeline missing": {
+    "body": {
+      "error": "Pipeline not found"
+    },
+    "status": 404
   },
   "director v2 plan jobs": {
     "body": {
@@ -72,6 +194,348 @@
     },
     "status": 200
   },
+  "manual job is a canonical task": {
+    "body": {
+      "children": [],
+      "task": {
+        "acquired_resources": [],
+        "attempt": 1,
+        "backend_job_id": "golden-manual",
+        "cancelable": true,
+        "completed_at": null,
+        "created_at": 1700000000.0,
+        "current": 0,
+        "detail": "",
+        "detail_current": 0,
+        "detail_total": 0,
+        "entity_id": "",
+        "entity_type": "",
+        "error": null,
+        "external_request_id": "",
+        "id": "task-generation-golden-manual",
+        "kind": "video",
+        "max_attempts": 1,
+        "message": "Queued",
+        "metadata": {
+          "actor": "unknown",
+          "adapter": "generation",
+          "capability": null,
+          "command_id": null,
+          "display_prompt": "a manual prompt",
+          "generation_details": {
+            "execution_mode": "real",
+            "generation_mode": "video",
+            "lora_count": 1,
+            "loras": [
+              "golden.safetensors"
+            ],
+            "model_name": "Post-processing",
+            "model_type": "post_processing",
+            "simulated": false
+          },
+          "inference_start_step": null,
+          "inference_started_at": null,
+          "output_name_requested": null,
+          "owner_pipeline_id": "",
+          "reference_images": [],
+          "run_id": null,
+          "tool": "studio",
+          "workflow_id": null
+        },
+        "model": "Post-processing",
+        "parent_id": null,
+        "phase": "queued",
+        "pipeline_id": "",
+        "progress": 0.0,
+        "project_id": "",
+        "provider": "local",
+        "queued_at": "<TIME>",
+        "recoverable": true,
+        "resource_requirements": [
+          "local_gpu:0"
+        ],
+        "result_refs": [],
+        "resumable": false,
+        "root_id": "task-generation-golden-manual",
+        "server_origin": "local",
+        "started_at": null,
+        "status": "queued",
+        "title": "Video generation",
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        },
+        "total": 0,
+        "updated_at": "<TIME>",
+        "workflow": "generation",
+        "workspace": "default"
+      }
+    },
+    "status": 200
+  },
+  "manual job registered": {
+    "body": {
+      "acceptance": {
+        "generation_details": {
+          "execution_mode": "real",
+          "generation_mode": "video",
+          "lora_count": 1,
+          "loras": [
+            "golden.safetensors"
+          ],
+          "model_name": "Post-processing",
+          "model_type": "post_processing",
+          "prompt": "a manual prompt",
+          "simulated": false
+        },
+        "root_task_id": "task-generation-golden-manual",
+        "task_id": "task-generation-golden-manual"
+      },
+      "params": {
+        "_execution_mode": "real",
+        "activated_loras": [
+          "/private/path/golden.safetensors"
+        ],
+        "generation_mode": "video",
+        "model_type": "post_processing",
+        "prompt": "a manual prompt"
+      },
+      "root_task_id": "task-generation-golden-manual",
+      "task_id": "task-generation-golden-manual"
+    },
+    "status": 200
+  },
+  "manual job status": {
+    "body": {
+      "asset_id": null,
+      "canonical_url": null,
+      "created_at": 1700000000.0,
+      "error": null,
+      "finished_at": null,
+      "generation_details": {
+        "execution_mode": "real",
+        "generation_mode": "video",
+        "lora_count": 1,
+        "loras": [
+          "golden.safetensors"
+        ],
+        "model_name": "Post-processing",
+        "model_type": "post_processing",
+        "prompt": "a manual prompt",
+        "simulated": false
+      },
+      "h3_window_plan": null,
+      "job_id": "golden-manual",
+      "message": "Queued",
+      "oom_info": null,
+      "output_files": [],
+      "outputs": [],
+      "path": null,
+      "phase": "",
+      "processing_time_sec": null,
+      "progress": 0,
+      "queue_position": 1,
+      "root_task_id": "task-generation-golden-manual",
+      "started_at": null,
+      "status": "queued",
+      "step": 0,
+      "task_id": "task-generation-golden-manual",
+      "task_timings": [],
+      "token_usage": null,
+      "token_usage_source": "not_measured",
+      "total_steps": 0
+    },
+    "status": 200
+  },
+  "queued job is a canonical task": {
+    "body": {
+      "children": [],
+      "task": {
+        "acquired_resources": [],
+        "attempt": 1,
+        "backend_job_id": "golden-queued",
+        "cancelable": true,
+        "completed_at": null,
+        "created_at": 1700000000.0,
+        "current": 0,
+        "detail": "",
+        "detail_current": 0,
+        "detail_total": 0,
+        "entity_id": "",
+        "entity_type": "",
+        "error": null,
+        "external_request_id": "",
+        "id": "task-generation-golden-queued",
+        "kind": "video",
+        "max_attempts": 1,
+        "message": "Queued",
+        "metadata": {
+          "actor": "unknown",
+          "adapter": "generation",
+          "capability": null,
+          "command_id": null,
+          "display_prompt": "a golden prompt",
+          "generation_details": {
+            "execution_mode": "real",
+            "generation_mode": "video",
+            "lora_count": 0,
+            "model_name": "golden_model",
+            "model_type": "golden_model",
+            "simulated": false
+          },
+          "inference_start_step": null,
+          "inference_started_at": null,
+          "output_name_requested": null,
+          "owner_pipeline_id": "",
+          "reference_images": [],
+          "run_id": null,
+          "tool": "studio",
+          "workflow_id": null
+        },
+        "model": "golden_model",
+        "parent_id": null,
+        "phase": "queued",
+        "pipeline_id": "",
+        "progress": 0.0,
+        "project_id": "",
+        "provider": "local",
+        "queued_at": "<TIME>",
+        "recoverable": true,
+        "resource_requirements": [
+          "local_gpu:0"
+        ],
+        "result_refs": [],
+        "resumable": false,
+        "root_id": "task-generation-golden-queued",
+        "server_origin": "local",
+        "started_at": null,
+        "status": "queued",
+        "title": "Video generation",
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        },
+        "total": 0,
+        "updated_at": "<TIME>",
+        "workflow": "generation",
+        "workspace": "default"
+      }
+    },
+    "status": 200
+  },
+  "queued job is not a recovery leftover": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "queued job listed": {
+    "body": {
+      "jobs": [
+        {
+          "created_at": 1700000000.0,
+          "error": null,
+          "finished_at": null,
+          "generation_details": {
+            "execution_mode": "real",
+            "generation_mode": "video",
+            "lora_count": 0,
+            "model_name": "golden_model",
+            "model_type": "golden_model",
+            "prompt": "a golden prompt",
+            "simulated": false
+          },
+          "h3_window_plan": null,
+          "job_id": "golden-queued",
+          "message": "Queued",
+          "oom_info": null,
+          "output_files": [],
+          "phase": "",
+          "progress": 0,
+          "queue_position": 1,
+          "root_task_id": "task-generation-golden-queued",
+          "started_at": null,
+          "status": "queued",
+          "step": 0,
+          "task_id": "task-generation-golden-queued",
+          "task_timings": [],
+          "total_steps": 0
+        }
+      ]
+    },
+    "status": 200
+  },
+  "queued job status": {
+    "body": {
+      "asset_id": null,
+      "canonical_url": null,
+      "created_at": 1700000000.0,
+      "error": null,
+      "finished_at": null,
+      "generation_details": {
+        "execution_mode": "real",
+        "generation_mode": "video",
+        "lora_count": 0,
+        "model_name": "golden_model",
+        "model_type": "golden_model",
+        "prompt": "a golden prompt",
+        "simulated": false
+      },
+      "h3_window_plan": null,
+      "job_id": "golden-queued",
+      "message": "Queued",
+      "oom_info": null,
+      "output_files": [],
+      "outputs": [],
+      "path": null,
+      "phase": "",
+      "processing_time_sec": null,
+      "progress": 0,
+      "queue_position": 1,
+      "root_task_id": "task-generation-golden-queued",
+      "started_at": null,
+      "status": "queued",
+      "step": 0,
+      "task_id": "task-generation-golden-queued",
+      "task_timings": [],
+      "token_usage": null,
+      "token_usage_source": "not_measured",
+      "total_steps": 0
+    },
+    "status": 200
+  },
+  "recovery discard": {
+    "body": {
+      "discarded": 1
+    },
+    "status": 200
+  },
+  "recovery is empty again": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "recovery lists the leftover": {
+    "body": {
+      "jobs": [
+        {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "job_id": "golden-leftover",
+          "model_type": "golden_model",
+          "previous_status": "running",
+          "prompt_preview": "a golden prompt",
+          "workspace": "default"
+        }
+      ]
+    },
+    "status": 200
+  },
   "resources": {
     "body": {
       "lanes": [
@@ -88,11 +552,278 @@
     },
     "status": 200
   },
+  "running job cancelled": {
+    "body": {
+      "asset_id": null,
+      "canonical_url": null,
+      "created_at": 1700000000.0,
+      "error": null,
+      "finished_at": "<TIME>",
+      "generation_details": {
+        "execution_mode": "real",
+        "generation_mode": "video",
+        "lora_count": 0,
+        "model_name": "golden_model",
+        "model_type": "golden_model",
+        "prompt": "a golden prompt",
+        "simulated": false
+      },
+      "h3_window_plan": null,
+      "job_id": "golden-running",
+      "message": "Cancelled",
+      "oom_info": null,
+      "output_files": [],
+      "outputs": [],
+      "path": null,
+      "phase": "cancelled",
+      "processing_time_sec": "<MASKED>",
+      "progress": 0,
+      "queue_position": null,
+      "root_task_id": "task-generation-golden-running",
+      "started_at": "<TIME>",
+      "status": "cancelled",
+      "step": 0,
+      "task_id": "task-generation-golden-running",
+      "task_timings": [],
+      "token_usage": null,
+      "token_usage_source": "not_measured",
+      "total_steps": 0
+    },
+    "status": 200
+  },
+  "running job status": {
+    "body": {
+      "asset_id": null,
+      "canonical_url": null,
+      "created_at": 1700000000.0,
+      "error": null,
+      "finished_at": null,
+      "generation_details": {
+        "execution_mode": "real",
+        "generation_mode": "video",
+        "lora_count": 0,
+        "model_name": "golden_model",
+        "model_type": "golden_model",
+        "prompt": "a golden prompt",
+        "simulated": false
+      },
+      "h3_window_plan": null,
+      "job_id": "golden-running",
+      "message": "Queued",
+      "oom_info": null,
+      "output_files": [],
+      "outputs": [],
+      "path": null,
+      "phase": "",
+      "processing_time_sec": "<MASKED>",
+      "progress": 0,
+      "queue_position": null,
+      "root_task_id": "task-generation-golden-running",
+      "started_at": "<TIME>",
+      "status": "running",
+      "step": 0,
+      "task_id": "task-generation-golden-running",
+      "task_timings": [],
+      "token_usage": null,
+      "token_usage_source": "not_measured",
+      "total_steps": 0
+    },
+    "status": 200
+  },
+  "story music job missing": {
+    "body": {
+      "detail": "MiniMax Music job not found"
+    },
+    "status": 404
+  },
   "task missing": {
     "body": {
       "detail": "Task not found"
     },
     "status": 404
+  },
+  "task upsert completed": {
+    "body": {
+      "acquired_resources": [],
+      "attempt": 1,
+      "backend_job_id": "",
+      "cancelable": false,
+      "completed_at": "<TIME>",
+      "created_at": "<TIME>",
+      "current": 0,
+      "detail": "",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-client-core-sync",
+      "kind": "foreground",
+      "max_attempts": 1,
+      "message": "Ready",
+      "metadata": {
+        "adapter": "frontend",
+        "client_activity_id": "core-sync",
+        "generation_details": {},
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        }
+      },
+      "model": "",
+      "parent_id": null,
+      "phase": "completed",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "",
+      "queued_at": "<TIME>",
+      "recoverable": false,
+      "resource_requirements": [],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-client-core-sync",
+      "server_origin": "",
+      "started_at": null,
+      "status": "completed",
+      "title": "Story song",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "frontend",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "task upsert queued": {
+    "body": {
+      "acquired_resources": [],
+      "attempt": 1,
+      "backend_job_id": "",
+      "cancelable": false,
+      "completed_at": null,
+      "created_at": "<TIME>",
+      "current": 0,
+      "detail": "",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-client-core-sync",
+      "kind": "foreground",
+      "max_attempts": 1,
+      "message": "Waiting",
+      "metadata": {
+        "adapter": "frontend",
+        "client_activity_id": "core-sync",
+        "generation_details": {},
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        }
+      },
+      "model": "",
+      "parent_id": null,
+      "phase": "queued",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "",
+      "queued_at": "<TIME>",
+      "recoverable": false,
+      "resource_requirements": [],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-client-core-sync",
+      "server_origin": "",
+      "started_at": null,
+      "status": "queued",
+      "title": "Story song",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "frontend",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "task upsert stays completed": {
+    "body": {
+      "acquired_resources": [],
+      "attempt": 1,
+      "backend_job_id": "",
+      "cancelable": false,
+      "completed_at": "<TIME>",
+      "created_at": "<TIME>",
+      "current": 0,
+      "detail": "",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-client-core-sync",
+      "kind": "foreground",
+      "max_attempts": 1,
+      "message": "Ready",
+      "metadata": {
+        "adapter": "frontend",
+        "client_activity_id": "core-sync",
+        "generation_details": {},
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        }
+      },
+      "model": "",
+      "parent_id": null,
+      "phase": "completed",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "",
+      "queued_at": "<TIME>",
+      "recoverable": false,
+      "resource_requirements": [],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-client-core-sync",
+      "server_origin": "",
+      "started_at": null,
+      "status": "completed",
+      "title": "Story song",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "frontend",
+      "workspace": "default"
+    },
+    "status": 200
   },
   "tasks": {
     "body": {

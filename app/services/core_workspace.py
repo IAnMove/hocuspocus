@@ -8,7 +8,11 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
 from app_identity import read_app_version
+from services.kernel.paths import safe_join
+from services.media_refs import parse_media_ref
 
 _LOCK = threading.Lock()
 _WORKSPACE_NAME = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)")
@@ -103,15 +107,12 @@ def workspace_dir(workspace: str | None = None) -> str:
     return str(target)
 
 
-def safe_join(base: str, *parts: str) -> str | None:
+def workspace_dir_or_400(workspace: str | None = None) -> str:
+    """``workspace_dir`` for the shared routers that expect the full server's 400 for a bad name."""
     try:
-        candidate = Path(base).joinpath(*parts).resolve()
-        root = Path(base).resolve()
-        if os.path.commonpath((str(root), str(candidate))) != str(root):
-            return None
-        return str(candidate)
-    except (OSError, ValueError):
-        return None
+        return workspace_dir(workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 def _file_count(path: str) -> int:
@@ -242,6 +243,40 @@ def services_config() -> dict[str, Any]:
         "show_experimental": False,
         "auto_performance": False,
     }
+
+
+def resolve_media(source: str, workspace: str | None = None) -> str:
+    path, chosen = parse_media_ref(source, workspace)
+    name = os.path.basename(path)
+    folders = []
+    if chosen == "__uploads__":
+        folders.append(uploads_dir())
+    else:
+        try:
+            folders.append(workspace_dir(chosen))
+        except ValueError:
+            pass
+        folders.append(uploads_dir())
+    for folder in folders:
+        for candidate in (name, path.lstrip("/")):
+            joined = safe_join(folder, candidate)
+            if joined and os.path.isfile(joined):
+                return joined
+    raise ValueError(f"Media could not be found: {name or path}")
+
+
+def unique_output_name(folder: str, filename: str) -> tuple[str, str]:
+    dest = os.path.join(folder, filename)
+    if not os.path.exists(dest):
+        return filename, dest
+    stem, ext = os.path.splitext(filename)
+    suffix = 2
+    while True:
+        candidate = f"{stem}_{suffix}{ext}"
+        dest = os.path.join(folder, candidate)
+        if not os.path.exists(dest):
+            return candidate, dest
+        suffix += 1
 
 
 def merge_services(partial: dict[str, Any]) -> dict[str, Any]:

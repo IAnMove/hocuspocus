@@ -140,6 +140,7 @@ _wgp = None                 # reference to wgp module
 _gen_lock = None            # reference to launch._gen_lock
 _active_gen_states = None   # reference to launch._active_gen_states (abort signaling)
 _pipeline_state_observer: Optional[Callable[[dict, str], Optional[dict]]] = None
+_get_cached_hardware: Optional[Callable[[], dict]] = None  # the server's cached hardware probe
 
 
 def _workspace_output_dir(workspace: str) -> str:
@@ -205,16 +206,19 @@ def _director_hardware_snapshot() -> dict:
     """Read the same cached hardware facts used by Studio's H3 preflight."""
 
     try:
-        from launch import _get_cached_hardware
-
-        return dict(_get_cached_hardware() or {})
+        hardware = dict(_get_cached_hardware() or {})
+        # A real probe always has cuda_available; the server caches {"gpu_vram_gb": 0.0}
+        # when its first probe failed, and that must not stick: probe again below.
+        if "cuda_available" in hardware:
+            return hardware
     except Exception:
-        try:
-            from services.hardware_detect import detect_hardware
+        pass
+    try:
+        from services.hardware_detect import detect_hardware
 
-            return dict(detect_hardware() or {})
-        except Exception:
-            return {"gpu_vram_gb": 0.0}
+        return dict(detect_hardware() or {})
+    except Exception:
+        return {"gpu_vram_gb": 0.0}
 
 
 def _create_director_video_execution_profile(
@@ -4928,10 +4932,11 @@ def init(
     cancel_gen_fn=None,
     active_gen_states=None,
     state_observer=None,
+    get_cached_hardware=None,
 ):
     """Called by launch.py to wire up shared references."""
     global _jobs, _run_generation, _cancel_generation, _wgp, _gen_lock
-    global _active_gen_states, _pipeline_state_observer
+    global _active_gen_states, _pipeline_state_observer, _get_cached_hardware
     _jobs = jobs_dict
     _run_generation = run_gen_fn
     _cancel_generation = cancel_gen_fn
@@ -4939,6 +4944,7 @@ def init(
     _gen_lock = gen_lock
     _active_gen_states = active_gen_states
     _pipeline_state_observer = state_observer
+    _get_cached_hardware = get_cached_hardware
     try:
         _cleanup_stale_director_temporary_outputs(
             _wgp.server_config.get("save_path", "outputs")
@@ -8891,7 +8897,7 @@ def _ensure_llm_loaded(params: dict):
     """Load/reload LLM if needed. Shared between legacy and new planning."""
     from . import llm_service
 
-    from .provider_profile import alias_text_provider, default_url_for_provider, resolve_minimax_key
+    from .provider_profile import alias_text_provider, default_url_for_provider
 
     services_cfg = _wgp.server_config.get("services", {}) if _wgp else {}
     profile_text = {}
@@ -8911,17 +8917,6 @@ def _ensure_llm_loaded(params: dict):
     )
     desired_provider = alias_text_provider(desired_provider, desired_remote_url)
     desired_remote_url = default_url_for_provider(desired_provider, desired_remote_url)
-    desired_api_key = ""
-    if desired_provider == "openai":
-        desired_api_key = services_cfg.get("openai_api_key", "")
-    elif desired_provider == "anthropic":
-        desired_api_key = services_cfg.get("anthropic_api_key", "")
-    elif desired_provider == "minimax":
-        desired_api_key = resolve_minimax_key(services_cfg, "llm")
-        desired_remote_url = desired_remote_url or "https://api.minimax.io"
-    elif desired_provider == "grok":
-        desired_api_key = services_cfg.get("grok_api_key", "")
-        desired_remote_url = desired_remote_url or "https://api.x.ai"
 
     # Free GPU memory before running a local CUDA LLM. Director planning
     # fires right after image edits / audio analysis: memory profiles keep
@@ -8959,13 +8954,16 @@ def _ensure_llm_loaded(params: dict):
         else:
             print("[Pipeline] Generation in progress — skipping pre-LLM VRAM release")
 
-    if llm_service.is_loaded():
-        status = llm_service.get_status()
-        if status.get("model_id") != desired_model or status.get("provider") != desired_provider:
-            llm_service.unload_model()
-            llm_service.load_model(model_id=desired_model, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
-    else:
-        llm_service.load_model(model_id=desired_model, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
+    from services.llm_routing import _ensure_llm_loaded as _load_configured_llm
+
+    _load_configured_llm(
+        services=services_cfg,
+        provider=desired_provider,
+        model=desired_model,
+        remote_url=desired_remote_url,
+        device=desired_device,
+        default_model="Abhiray/gemma-4-E4B-it-heretic-GGUF",
+    )
 
 
 def _scoped_writing_llm(params: dict) -> dict | None:

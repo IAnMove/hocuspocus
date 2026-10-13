@@ -20,6 +20,14 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
+from services.kernel import jobs as kernel_jobs
+from services.kernel.config import ConfigStore
+from services.kernel.jobs import GenerationQueue
+
+# generate() imports this lazily, after the fakes below replace parts of services.*; load it first so
+# the file passes on its own, not only after another test has imported it.
+import services.generation_output_name  # noqa: E402,F401
+
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
@@ -326,8 +334,18 @@ def _harness(
         "_run_generation": lambda job_id, **_kwargs: gpu_calls.append(job_id),
         "_image_generation_commands": SimpleNamespace(native_worker=lambda _job: None),
     }
+    # The job factory is the kernel's; it takes the same fakes through its constructor and its module.
+    monkeypatch.setattr(kernel_jobs, "execution_mode", namespace["execution_mode"])
+    monkeypatch.setattr(kernel_jobs, "register_generation_job", namespace["register_generation_job"])
+    namespace["_new_generation_job"] = GenerationQueue(
+        ConfigStore(lambda: namespace["wgp"]),
+        SimpleNamespace(workspace_dir=namespace["_workspace_dir"], active=namespace["_get_active_workspace"]),
+        is_legacy_h3_model=namespace["_is_legacy_h3_model"],
+        is_minimax_h3_model=namespace["_is_minimax_h3_model"],
+        cancel_legacy_h3=lambda: None,
+        task_publisher=lambda: namespace["_publish_generation_task"],
+    ).new_job
     _load(
-        "_new_generation_job",
         "_run_generation_with_preparation",
         "generate",
         namespace=namespace,

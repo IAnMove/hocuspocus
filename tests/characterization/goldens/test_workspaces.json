@@ -1,4 +1,70 @@
 {
+  "adopt a missing file": {
+    "body": {
+      "detail": "Media file not found"
+    },
+    "status": 404
+  },
+  "adopt a picture as audio": {
+    "body": {
+      "detail": "Media path is not allowed"
+    },
+    "status": 400
+  },
+  "adopt a traversal": {
+    "body": {
+      "detail": "Media path is not allowed"
+    },
+    "status": 400
+  },
+  "adopt a workspace song": {
+    "body": {
+      "duration_seconds": 0.5,
+      "filename": "golden_song.wav",
+      "path": "<OUTPUTS>/golden_song.wav",
+      "url": "/api/v1/file/golden_song.wav?workspace=default"
+    },
+    "status": 200
+  },
+  "adopt an absolute path outside": {
+    "body": {
+      "detail": "Media path is not allowed"
+    },
+    "status": 400
+  },
+  "adopt an upload by path": {
+    "body": {
+      "duration_seconds": 0.5,
+      "filename": "golden_upload.wav",
+      "path": "<STATE>/uploads/audio/golden_upload.wav",
+      "url": "/api/v1/uploads/audio/golden_upload.wav"
+    },
+    "status": 200
+  },
+  "adopt an upload by url": {
+    "body": {
+      "duration_seconds": 0.5,
+      "filename": "golden_upload.wav",
+      "path": "<STATE>/uploads/audio/golden_upload.wav",
+      "url": "/api/v1/uploads/audio/golden_upload.wav"
+    },
+    "status": 200
+  },
+  "adopt from another workspace": {
+    "body": {
+      "duration_seconds": 0.5,
+      "filename": "golden_other.wav",
+      "path": "<OUTPUTS>/golden-w/golden_other.wav",
+      "url": "/api/v1/file/golden_other.wav?workspace=golden-w"
+    },
+    "status": 200
+  },
+  "adopt in an invalid workspace": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
+    },
+    "status": 400
+  },
   "create": {
     "body": {
       "name": "golden-a",
@@ -142,6 +208,47 @@
     },
     "status": 200
   },
+  "listing after the switch": {
+    "body": {
+      "active": "golden-saved",
+      "workspaces": [
+        {
+          "file_count": 0,
+          "name": "default",
+          "path": "<OUTPUTS>"
+        },
+        {
+          "file_count": 0,
+          "name": "golden-saved",
+          "path": "<OUTPUTS>/golden-saved"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "listing counts files": {
+    "body": {
+      "active": "default",
+      "workspaces": [
+        {
+          "file_count": 1,
+          "name": "default",
+          "path": "<OUTPUTS>"
+        },
+        {
+          "file_count": 2,
+          "name": "golden-a",
+          "path": "<OUTPUTS>/golden-a"
+        },
+        {
+          "file_count": 0,
+          "name": "golden-b",
+          "path": "<OUTPUTS>/golden-b"
+        }
+      ]
+    },
+    "status": 200
+  },
   "outputs of an invalid workspace": {
     "body": {
       "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
@@ -169,5 +276,101 @@
       "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores."
     },
     "status": 400
+  },
+  "wizard conversation empty": {
+    "body": {
+      "confirmations": [],
+      "executedActions": [],
+      "executions": [],
+      "messages": [],
+      "requestedActions": [],
+      "revision": 0,
+      "version": 1
+    },
+    "status": 200
+  },
+  "wizard conversation invalid workspace": {
+    "body": {
+      "detail": "Invalid Story Lab workspace"
+    },
+    "status": 400
+  },
+  "wizard conversation loaded": {
+    "body": {
+      "confirmations": [],
+      "executedActions": [],
+      "executions": [],
+      "messages": [
+        {
+          "cards": [],
+          "createdAt": 1,
+          "error": "",
+          "executionKey": "",
+          "id": "msg-1",
+          "jobLinks": [],
+          "lastState": "",
+          "role": "user",
+          "text": "Hola"
+        }
+      ],
+      "requestedActions": [],
+      "revision": 1,
+      "version": 1
+    },
+    "status": 200
+  },
+  "wizard conversation save": {
+    "body": {
+      "confirmations": [],
+      "executedActions": [],
+      "executions": [],
+      "messages": [
+        {
+          "cards": [],
+          "createdAt": 1,
+          "error": "",
+          "executionKey": "",
+          "id": "msg-1",
+          "jobLinks": [],
+          "lastState": "",
+          "role": "user",
+          "text": "Hola"
+        }
+      ],
+      "requestedActions": [],
+      "revision": 1,
+      "version": 1
+    },
+    "status": 200
+  },
+  "wizard workflows empty": {
+    "body": {
+      "revision": 0,
+      "version": 1,
+      "workflows": []
+    },
+    "status": 200
+  },
+  "wizard workflows invalid workspace": {
+    "body": {
+      "detail": "Invalid Story Lab workspace"
+    },
+    "status": 400
+  },
+  "wizard workflows loaded": {
+    "body": {
+      "revision": 1,
+      "version": 1,
+      "workflows": []
+    },
+    "status": 200
+  },
+  "wizard workflows save": {
+    "body": {
+      "revision": 1,
+      "version": 1,
+      "workflows": []
+    },
+    "status": 200
   }
 }

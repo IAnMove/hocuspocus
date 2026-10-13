@@ -13,6 +13,8 @@ import unittest
 import uuid
 import zipfile
 
+from services.kernel.paths import PathPolicy
+
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
@@ -60,6 +62,7 @@ def _load_helpers(tree: ast.Module, names: tuple[str, ...]) -> dict:
         "_download_target_reservations": {},
         "_lora_guide_scans": {},
         "_lora_guide_scan_lock": threading.Lock(),
+        "_safe_join": PathPolicy().safe_join,
     }
     exec(compile(module, "app/_launch_runtime.py", "exec"), namespace)
     return namespace
@@ -366,7 +369,6 @@ class TestDownloadState(unittest.TestCase):
         helpers = _load_helpers(
             self.tree,
             (
-                "_safe_join",
                 "_is_safe_path_component",
                 "_normalize_download_target",
                 "_reserve_download_target",
@@ -435,7 +437,6 @@ class TestDownloadState(unittest.TestCase):
         helpers = _load_helpers(
             self.tree,
             (
-                "_safe_join",
                 "_is_safe_path_component",
                 "_normalize_download_target",
                 "_reserve_download_target",

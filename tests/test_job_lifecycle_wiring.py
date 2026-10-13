@@ -157,9 +157,10 @@ class TestJobLifecycleWiring(unittest.TestCase):
         self.assertIn("priority_fields", _called_names(submit))
 
     def test_generation_jobs_reserve_fifo_position_before_worker_start(self):
-        new_job = _function(self.launch, "_new_generation_job")
+        queue = _parse("app/services/kernel/jobs.py")
+        new_job = _function(queue, "new_job")
         self.assertIn("register_generation_job", _called_names(new_job))
-        manual_job = _function(self.launch, "_register_manual_generation_job")
+        manual_job = _function(queue, "register_manual_job")
         self.assertIn("register_generation_job", _called_names(manual_job))
         for endpoint_name in (
             "retake_video_endpoint",

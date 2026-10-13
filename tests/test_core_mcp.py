@@ -128,6 +128,84 @@ def test_legacy_mutations_keep_capability_denial(client, body, monkeypatch):
     assert response.json()['detail']['code'] == 'feature_unavailable'
 
 
+def test_non_ascii_authorization_is_rejected_without_a_server_error(client):
+    """compare_digest on str raises for non-ASCII; the shared transport compares bytes and returns 401.
+
+    The HTTP client refuses a non-ASCII header, so the bytes are delivered the way an ASGI server does
+    (latin-1). ``café`` is the case that used to become a 500.
+    """
+    import asyncio
+
+    body = b'{"jsonrpc":"2.0","id":1,"method":"ping"}'
+    status = {}
+
+    async def receive():
+        return {'type': 'http.request', 'body': body, 'more_body': False}
+
+    async def send(message):
+        if message['type'] == 'http.response.start':
+            status['code'] = message['status']
+
+    asyncio.run(client.app({
+        'type': 'http',
+        'asgi': {'version': '3.0'},
+        'http_version': '1.1',
+        'method': 'POST',
+        'scheme': 'http',
+        'path': '/api/v1/mcp',
+        'raw_path': b'/api/v1/mcp',
+        'query_string': b'',
+        'headers': [
+            (b'authorization', 'Bearer café'.encode('latin-1')),
+            (b'content-type', b'application/json'),
+            (b'host', b'testserver'),
+        ],
+        'client': ('127.0.0.1', 50000),
+        'server': ('testserver', 80),
+        'root_path': '',
+    }, receive, send))
+    assert status['code'] in (401, 403)
+
+
+def test_core_mcp_status_returns_a_stored_remote_image_job(client):
+    from services import core_remote_image
+    core_remote_image.restore_job({
+        'backend_job_id': 'job-real',
+        'id': 'task-1',
+        'status': 'running',
+        'message': 'rendering',
+        'result_refs': [],
+    })
+    try:
+        result = rpc(client, 'tools/call', {'name': 'status', 'arguments': {'job_id': 'job-real'}}).json()['result']
+    finally:
+        with core_remote_image._LOCK:
+            core_remote_image._JOBS.pop('job-real', None)
+    assert result['isError'] is False
+    body = json.loads(result['content'][0]['text'])
+    assert body['job_id'] == 'job-real'
+    assert body['status'] == 'running'
+    assert result['structuredContent']['status'] == 'running'
+    assert result['structuredContent']['job_id'] == 'job-real'
+
+
+def test_core_mcp_attributes_the_call_to_the_external_agent(client, monkeypatch):
+    seen = {}
+
+    def get_job(job_id):
+        from services.agent_activity import current_caller, is_external_agent
+        seen['caller'] = current_caller()
+        seen['external'] = is_external_agent()
+        return None
+
+    monkeypatch.setattr('services.core_remote_image.get_job', get_job)
+    result = rpc(client, 'tools/call', {'name': 'status', 'arguments': {'job_id': 'known-job'}}).json()['result']
+    assert result['isError'] is False
+    assert seen['external'] is True
+    assert seen['caller']['surface'] == 'mcp'
+    assert seen['caller']['tool'] == 'external_agent'
+
+
 def test_versioned_tools_precede_legacy_without_changing_schemas():
     operation = {'name': 'commands.example', 'description': 'Example', 'mutation': True,
                  'inputSchema': {'type': 'object', 'properties': {'operation': {'type': 'string'}, 'intent_id': {'type': 'string'}}, 'required': ['operation', 'intent_id']}}

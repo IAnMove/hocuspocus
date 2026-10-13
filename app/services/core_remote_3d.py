@@ -6,7 +6,7 @@ import time
 import uuid
 from typing import Any
 
-from services import core_editor, core_workspace as core
+from services import core_workspace as core
 from services.provider_profile import alias_model3d_provider
 
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -59,7 +59,7 @@ def capabilities() -> dict[str, Any]:
 
 
 def _resolve_image(value: str, workspace: str | None) -> str:
-    return core_editor.resolve_media(str(value or ""), workspace)
+    return core.resolve_media(str(value or ""), workspace)
 
 
 def _front_image(body: dict[str, Any], workspace: str) -> str | None:

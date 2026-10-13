@@ -106,9 +106,9 @@ class TestWizardWorkflows(unittest.TestCase):
             self.assertEqual(question["resolvedEntityIds"], {"project": "story-42"})
 
     def test_runtime_exposes_workspace_scoped_get_and_put_endpoints(self):
-        source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
-        self.assertIn('@api.get("/api/v1/wizard/workflows")', source)
-        self.assertIn('@api.put("/api/v1/wizard/workflows")', source)
+        source = (Path(__file__).parents[1] / "app" / "routers" / "wizard_persistence.py").read_text(encoding="utf-8")
+        self.assertIn('@router.get("/api/v1/wizard/workflows")', source)
+        self.assertIn('@router.put("/api/v1/wizard/workflows")', source)
         self.assertIn('"wizard_workflow_revision_conflict"', source)
 
 

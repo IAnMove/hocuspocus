@@ -250,10 +250,31 @@ def _prepare_generate_params(params):
         params['image_mode'] = 1 if params.get('generation_mode') == 'image' else 0
 
 
+def _wants_structured_content(name, value, operation_names, enabled):
+    """Dict results of versioned operations always carry structuredContent. ``enabled`` adds the older tools."""
+    if not isinstance(value, dict):
+        return False
+    if enabled:
+        return True
+    return name in operation_names
+
+
+async def _legacy_http_response(hook, request, body):
+    """None continues into JSON-RPC. Any other return is the HTTP response for that body."""
+    if hook is None:
+        return None
+    legacy = hook(request, body)
+    if inspect.isawaitable(legacy):
+        legacy = await legacy
+    return legacy
+
+
 def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, command_operations=None, profiles=None, oauth=None,
-                            on_mutation=None, local_mcp=None):
+                            on_mutation=None, local_mcp=None, server_name='hocuspocus', instructions=None,
+                            legacy_envelope=None, structured_content=False):
     """``on_mutation(name, arguments, result)`` hears every successful mutating call from an MCP client.
-    ``local_mcp`` (``services.local_mcp.LocalMcp``) gets this router's adaptation for its in-process calls."""
+    ``local_mcp`` (``services.local_mcp.LocalMcp``) gets this router's adaptation for its in-process calls.
+    ``legacy_envelope(request, body)`` may answer a non-JSON-RPC body; None keeps the JSON-RPC path."""
     router = APIRouter()
     journal = RequestJournal(journal_path)
     token_getter = token_getter or (lambda: os.environ.get('HOCUS_MCP_TOKEN', ''))
@@ -353,6 +374,8 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
 
     default_instructions = ('One queue: keep returned job IDs and poll status. Reuse request_id on retries; never assume '
                             'generated quality from submission success.')
+    if instructions is not None:
+        default_instructions = instructions
 
     async def dispatch(message, allowed=None, instructions=default_instructions):
         if not isinstance(message, dict) or message.get('jsonrpc') != '2.0':
@@ -363,7 +386,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         try:
             if method == 'initialize':
                 result = {'protocolVersion': PROTOCOL, 'capabilities': {'tools': {}},
-                          'serverInfo': {'name': 'hocuspocus', 'version': '1'}, 'instructions': instructions}
+                          'serverInfo': {'name': server_name, 'version': '1'}, 'instructions': instructions}
             elif method == 'ping':
                 result = {}
             elif method == 'tools/list':
@@ -378,7 +401,7 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
                     'content': _tool_content(value),
                     'isError': _tool_result_is_error(value),
                 }
-                if params.get('name') in operation_names and isinstance(value, dict):
+                if _wants_structured_content(params.get('name'), value, operation_names, structured_content):
                     result['structuredContent'] = value
             else:
                 return {'jsonrpc': '2.0', 'id': request_id, 'error': {'code': -32601, 'message': 'Method not found'}}
@@ -430,6 +453,9 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
         if body is None:
             return JSONResponse({'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}}, status_code=400)
         with caller_scope(external_caller()):
+            legacy = await _legacy_http_response(legacy_envelope, request, body)
+            if legacy is not None:
+                return legacy
             return await mcp_payload_response(body, dispatch)
 
     @router.post('/api/v1/mcp/{profile_name}')

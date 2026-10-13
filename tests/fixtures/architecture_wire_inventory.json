@@ -170,6 +170,12 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
+      "file": "tests/test_import_layers.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
+    },
+    {
       "file": "tests/test_inpaint_preparation.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -483,12 +489,6 @@
     },
     {
       "file": "tests/test_wizard_workflow_executor.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
-      "file": "tests/test_wizard_workflows.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."

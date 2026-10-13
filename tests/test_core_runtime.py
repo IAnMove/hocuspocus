@@ -434,28 +434,60 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(conflict.status_code, 409)
         self.assertEqual(conflict.json()["detail"]["code"], "wizard_conversation_revision_conflict")
 
+    def test_wizard_get_rejects_an_invalid_workspace_name(self):
+        conversation = self.client.get("/api/v1/wizard/conversations", params={"workspace": "../escape"})
+        workflows = self.client.get("/api/v1/wizard/workflows", params={"workspace": "../escape"})
+        self.assertEqual(conversation.status_code, 400, conversation.text)
+        self.assertEqual(workflows.status_code, 400, workflows.text)
+        self.assertNotIn("Could not read", conversation.text)
+        self.assertNotIn("Could not read", workflows.text)
+        # A workspace folder that cannot be created is a 500 with the Wizard message, as before the router was shared.
+        with patch("services.core_workspace.workspace_dir", side_effect=OSError("disk full")):
+            unreadable = self.client.get("/api/v1/wizard/conversations")
+            unsaved = self.client.put("/api/v1/wizard/workflows", json={"workspace": "default", "collection": {}})
+        self.assertEqual(unreadable.status_code, 500, unreadable.text)
+        self.assertIn("Could not read the Wizard conversation: disk full", unreadable.json()["detail"])
+        self.assertEqual(unsaved.status_code, 500, unsaved.text)
+        self.assertIn("Could not save Wizard workflows: disk full", unsaved.json()["detail"])
+
+    def test_wizard_put_rejects_a_json_array(self):
+        conversation = self.client.put("/api/v1/wizard/conversations", json=["not", "an", "object"])
+        workflows = self.client.put("/api/v1/wizard/workflows", json=["not", "an", "object"])
+        self.assertEqual(conversation.status_code, 422, conversation.text)
+        self.assertEqual(workflows.status_code, 422, workflows.text)
+
     def test_video_editor_export_name_cannot_escape_the_workspace(self):
-        from services import core_editor, core_workspace as core
+        from services import core_workspace as core
+
+        def fake_render(_clips, destination, **_kwargs):
+            Path(destination).write_bytes(b"export")
+            return {"duration": 1}
 
         folder, previous = self._in_temp_workspace()
         try:
             workspace = core.workspace_dir("default")
-            with patch.object(core_editor, "resolve_media", return_value=os.path.join(workspace, "clip.mp4")), \
-                 patch.object(core_editor, "render_project", return_value={"duration": 1}):
-                Path(workspace, "clip.mp4").write_bytes(b"x")
-                job = core_editor.start_export({
+            Path(workspace, "clip.mp4").write_bytes(b"x")
+            with patch("routers.video_editor.render_project", side_effect=fake_render), patch(
+                "routers.video_editor.threading.Thread", ImmediateThread,
+            ):
+                started = self.client.post("/api/v1/video-editor/export", json={
                     "clips": [{"source": "clip.mp4"}],
                     "name": "../etc/passwd / cut",
                     "workspace": "default",
                 })
+                job = self.client.get(
+                    f"/api/v1/video-editor/export/{started.json()['job_id']}",
+                ).json()
         finally:
             self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertEqual(job["status"], "completed", job)
         self.assertNotIn("..", job["filename"])
         self.assertNotIn("/", job["filename"])
         self.assertTrue(job["filename"].endswith("_etc_passwd_cut.mp4"))
 
     def test_video_editor_screenshot_keeps_each_character_sheet_frame(self):
-        from services import core_editor, core_workspace as core
+        from services import core_workspace as core
 
         def fake_extract(source, dest, time_seconds):
             Path(dest).write_bytes(f"frame-{time_seconds}".encode())
@@ -465,10 +497,9 @@ class CoreRuntimeTests(unittest.TestCase):
         try:
             workspace = core.workspace_dir("default")
             Path(workspace, "orbit.mp4").write_bytes(b"clip")
-            with patch.object(core_editor, "time") as frozen, patch.object(
-                core_editor, "extract_frame", side_effect=fake_extract,
+            with patch("routers.video_editor.time.strftime", return_value="2026-09-11-13h55m00s"), patch(
+                "routers.video_editor.extract_frame", side_effect=fake_extract,
             ):
-                frozen.strftime.return_value = "2026-09-11-13h55m00s"
                 first = self.client.post("/api/v1/video-editor/screenshot", json={
                     "source": "orbit.mp4",
                     "time": 0.1,
@@ -495,7 +526,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(second_bytes, b"frame-0.8")
 
     def test_video_editor_export_keeps_a_second_same_second_cut(self):
-        from services import core_editor, core_workspace as core
+        from services import core_workspace as core
 
         def fake_render(clips, destination, **_kwargs):
             Path(destination).write_bytes(f"export-{len(clips)}".encode())
@@ -505,28 +536,84 @@ class CoreRuntimeTests(unittest.TestCase):
         try:
             workspace = core.workspace_dir("default")
             Path(workspace, "clip.mp4").write_bytes(b"clip")
-            with patch.object(core_editor, "time") as frozen, patch(
-                "services.core_editor.threading.Thread", ImmediateThread,
-            ), patch.object(core_editor, "render_project", side_effect=fake_render):
-                frozen.strftime.return_value = "2026-09-11-13h55m00s"
-                first = core_editor.start_export({
+            with patch("routers.video_editor.time.strftime", return_value="2026-09-11-13h55m00s"), patch(
+                "routers.video_editor.threading.Thread", ImmediateThread,
+            ), patch("routers.video_editor.render_project", side_effect=fake_render):
+                first_response = self.client.post("/api/v1/video-editor/export", json={
                     "clips": [{"source": "clip.mp4"}],
                     "name": "Harbour cut",
                     "workspace": "default",
                 })
-                second = core_editor.start_export({
+                second_response = self.client.post("/api/v1/video-editor/export", json={
                     "clips": [{"source": "clip.mp4"}, {"source": "clip.mp4"}],
                     "name": "Harbour cut",
                     "workspace": "default",
                 })
+                first = self.client.get(
+                    f"/api/v1/video-editor/export/{first_response.json()['job_id']}",
+                ).json()
+                second = self.client.get(
+                    f"/api/v1/video-editor/export/{second_response.json()['job_id']}",
+                ).json()
                 first_bytes = Path(workspace, first["filename"]).read_bytes()
                 second_bytes = Path(workspace, second["filename"]).read_bytes()
+                sidecar = Path(workspace, first["filename"]).with_suffix(".meta.json").read_text(encoding="utf-8")
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
         finally:
             self._leave_temp_workspace(folder, previous)
+        self.assertEqual(first_response.status_code, 202, first_response.text)
+        self.assertEqual(second_response.status_code, 202, second_response.text)
         self.assertEqual(first["filename"], "2026-09-11-13h55m00s_Harbour_cut.mp4")
         self.assertEqual(second["filename"], "2026-09-11-13h55m00s_Harbour_cut_2.mp4")
         self.assertEqual(first_bytes, b"export-1")
         self.assertEqual(second_bytes, b"export-2")
+        self.assertIn("video_editor", sidecar)
+        workflows = {item.get("workflow") for item in listed.json().get("tasks") or []}
+        self.assertIn("video-editor", workflows)
+
+    def test_video_editor_rejects_an_invalid_trim_and_has_a_cancel_route(self):
+        """The shared editor rejects a backwards trim before it looks up media,
+        and a missing export has a cancel route."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            rejected = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "soundtrack": {"source": "song.mp3", "trim_start": 5, "trim_end": 2},
+                "workspace": "default",
+            })
+            layered = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "audio_cues": [{
+                    "source": "sting.mp3",
+                    "start": 0,
+                    "trim_start": 4,
+                    "trim_end": 1,
+                }],
+                "workspace": "default",
+            })
+            huge = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "width": 8000,
+                "height": 8000,
+                "workspace": "default",
+            })
+            missing = self.client.post("/api/v1/video-editor/export/does-not-exist/cancel")
+            foreign = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "workspace": "../outside",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(rejected.status_code, 400, rejected.text)
+        self.assertIn("trim", str(rejected.json()["detail"]).lower())
+        self.assertEqual(layered.status_code, 400, layered.text)
+        self.assertIn("trim", str(layered.json()["detail"]).lower())
+        self.assertEqual(huge.status_code, 400, huge.text)
+        self.assertIn("resolution", str(huge.json()["detail"]).lower())
+        self.assertEqual(missing.status_code, 404, missing.text)
+        self.assertIn("Video editor export job not found", str(missing.json()["detail"]))
+        self.assertEqual(foreign.status_code, 400, foreign.text)
+        self.assertIn("Invalid workspace name", str(foreign.json()["detail"]))
 
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")
@@ -759,6 +846,184 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 409)
         self.assertEqual(denied.json()["detail"]["code"], FEATURE_UNAVAILABLE)
 
+    def _clear_music_jobs(self):
+        from services import story_music_jobs
+
+        with story_music_jobs._minimax_music_jobs_lock:
+            story_music_jobs._minimax_music_jobs.clear()
+
+    def test_minimax_music_reloads_an_interrupted_checkpoint(self):
+        job_id = "minimax-music-abc123def456"
+        folder, previous = self._in_temp_workspace()
+        try:
+            checkpoint = Path("outputs") / ".minimax-music-jobs"
+            checkpoint.mkdir(parents=True)
+            payload = {
+                "jobId": job_id,
+                "taskId": f"task-{job_id}",
+                "workspace": "default",
+                "status": "running",
+                "phase": "requesting",
+                "message": "in progress",
+                "children": [{
+                    "taskId": f"task-{job_id}-candidate-1",
+                    "status": "running",
+                    "phase": "requesting",
+                }],
+            }
+            (checkpoint / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+            loaded = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(loaded.status_code, 200, loaded.text)
+        body = loaded.json()
+        self.assertEqual(body["status"], "interrupted")
+        self.assertIn("restarted", body["message"])
+        self.assertEqual(body["children"][0]["status"], "interrupted")
+
+    def test_minimax_music_reload_skips_a_folder_that_is_not_a_workspace_name(self):
+        """An outputs folder with an invalid workspace name must not stop the checkpoint scan."""
+        job_id = "minimax-music-0123456789ab"
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs", "bad name").mkdir(parents=True)
+            checkpoint = Path("outputs", "lab", ".minimax-music-jobs")
+            checkpoint.mkdir(parents=True)
+            payload = {
+                "jobId": job_id,
+                "taskId": f"task-{job_id}",
+                "workspace": "lab",
+                "status": "running",
+                "phase": "requesting",
+                "message": "in progress",
+                "children": [],
+            }
+            (checkpoint / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+            loaded = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(loaded.status_code, 200, loaded.text)
+        self.assertEqual(loaded.json()["status"], "interrupted")
+        self.assertEqual(loaded.json()["workspace"], "lab")
+
+    def test_minimax_music_replay_does_not_start_a_second_worker(self):
+        from routers import story_music
+
+        started = []
+
+        class RecordingThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                self.args = args
+
+            def start(self):
+                started.append(self.args)
+
+        payload = {
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nAcross the night",
+            "count": 1,
+            "workspace": "default",
+            "paid_music_confirmed": True,
+            "idempotencyKey": "same-song-key",
+        }
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                story_music.threading, "Thread", RecordingThread,
+            ):
+                first = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                second = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(first.status_code, 202, first.text)
+        self.assertEqual(second.status_code, 202, second.text)
+        self.assertTrue(second.json().get("replay"))
+        self.assertEqual(second.json()["jobId"], first.json()["jobId"])
+        self.assertEqual(len(started), 1)
+
+    def test_minimax_music_start_publishes_activity(self):
+        from routers import story_music
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        payload = {
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nAcross the night",
+            "count": 1,
+            "workspace": "default",
+            "paid_music_confirmed": True,
+            "idempotencyKey": "activity-song-key",
+        }
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                story_music.threading, "Thread", QuietThread,
+            ):
+                started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        body = started.json()
+        tasks = {task["id"]: task for task in listed.json()["tasks"]}
+        parent = tasks[body["taskId"]]
+        self.assertEqual(parent["provider"], "minimax")
+        self.assertEqual(parent["metadata"]["adapter"], "minimax-music")
+        child_id = body["children"][0]["taskId"]
+        self.assertEqual(tasks[child_id]["metadata"]["adapter"], "minimax-music-candidate")
+
+    def test_minimax_music_null_or_empty_workspace_means_the_active_workspace(self):
+        """Core's old music route turned a null or empty workspace into the active one."""
+        from routers import story_music
+        from services import core_workspace as core
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        for value in (None, ""):
+            with self.subTest(workspace=value):
+                folder, previous = self._in_temp_workspace()
+                try:
+                    Path("outputs", "lab").mkdir(parents=True)
+                    core.save_config({"services": {"active_workspace": "lab"}})
+                    payload = {
+                        "model": "music-3.0",
+                        "prompt": "cinematic dream pop",
+                        "lyrics": "[Verse]\nAcross the night",
+                        "count": 1,
+                        "workspace": value,
+                        "paid_music_confirmed": True,
+                        "idempotencyKey": f"active-workspace-{value!r}",
+                    }
+                    with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                        story_music.threading, "Thread", QuietThread,
+                    ):
+                        started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                    checkpoint_dir = Path("outputs", "lab", ".minimax-music-jobs")
+                    checkpoints = list(checkpoint_dir.glob("*.json")) if checkpoint_dir.is_dir() else []
+                finally:
+                    self._clear_music_jobs()
+                    self._leave_temp_workspace(folder, previous)
+                self.assertEqual(started.status_code, 202, started.text)
+                self.assertEqual(started.json()["workspace"], "lab")
+                self.assertEqual(len(checkpoints), 1)
+
     def test_minimax_image_generate_starts_a_studio_job(self):
         folder, previous = self._in_temp_workspace()
         try:
@@ -918,6 +1183,114 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(fetched.json()["task"]["id"], task_id)
         self.assertEqual(cancelled.status_code, 200, cancelled.text)
         self.assertEqual(events.status_code, 200, events.text)
+
+    def test_task_upsert_syncs_past_an_illegal_transition_and_keeps_reservation(self):
+        from services.core_generation_commands import registry_for
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            registry = registry_for("default")
+            registry.create(
+                id="task-client-core-sync",
+                workspace="default",
+                status="queued",
+                workflow="generate_story_song",
+                title="Story song",
+                metadata={"generation_id": "gen-1"},
+            )
+            jumped = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "core-sync",
+                "workspace": "default",
+                "status": "completed",
+                "title": "MiniMax Music",
+                "phase": "completed",
+                "message": "Ready",
+            })
+            stored = registry.get("task-client-core-sync")
+            types = [event["type"] for event in registry.events("task-client-core-sync")]
+            reopened = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "core-sync",
+                "workspace": "default",
+                "status": "queued",
+                "title": "MiniMax Music",
+                "phase": "queued",
+                "message": "Waiting again",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(jumped.status_code, 200, jumped.text)
+        self.assertEqual(jumped.json()["status"], "completed")
+        self.assertEqual(stored["workflow"], "generate_story_song")
+        self.assertEqual(stored["title"], "Story song")
+        self.assertEqual(stored["metadata"]["generation_id"], "gen-1")
+        self.assertEqual(stored["metadata"]["adapter"], "frontend")
+        self.assertIn("adapter.synced", types)
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+        self.assertEqual(reopened.json()["status"], "completed")
+        self.assertEqual(reopened.json()["message"], "Ready")
+
+    def test_system_stats_include_the_runtime_identity(self):
+        response = self.client.get("/api/v1/system-stats")
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["model"], {"name": None, "model_type": None, "loaded": False})
+        self.assertIn("compute_percent", body["gpu"])
+        self.assertIn("instance_id", body["runtime"])
+        self.assertIn("ui_build_id", body["runtime"])
+
+    def test_startup_binds_before_announcing_and_publishes_the_endpoint(self):
+        import io
+        import socket
+        from contextlib import redirect_stdout
+
+        from services.server_endpoint import withdraw_server_endpoint
+
+        held = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        held.bind(("127.0.0.1", 0))
+        busy = held.getsockname()[1]
+        if busy in {42003, 42042, 42072} or 42080 <= busy <= 42100:
+            held.close()
+            self.skipTest("ephemeral port landed on a reserved server port")
+        endpoint = Path(core_runtime._app_dir) / "settings" / "server-endpoint.json"
+        previous = endpoint.read_text(encoding="utf-8") if endpoint.exists() else None
+        seen = {}
+
+        def fake_serve(_app, *, host, port, sockets=None):
+            seen["host"] = host
+            seen["port"] = port
+            seen["sockets"] = list(sockets or [])
+
+        stdout = io.StringIO()
+        try:
+            with patch.dict(os.environ, {"SERVER_PORT": str(busy), "SERVER_NAME": "127.0.0.1"}, clear=False):
+                os.environ.pop("PINOKIO_SHARE_LOCAL", None)
+                with patch("services.server_lifecycle.run_until_stopped", fake_serve), redirect_stdout(stdout):
+                    core_runtime.run_server()
+            self.assertNotEqual(seen.get("port"), busy)
+            self.assertTrue(seen.get("sockets"))
+            self.assertEqual(seen["host"], "127.0.0.1")
+            text = stdout.getvalue()
+            self.assertIn(f"http://127.0.0.1:{seen['port']}/", text)
+            self.assertNotIn(f"http://127.0.0.1:{busy}/", text)
+            record = json.loads(endpoint.read_text(encoding="utf-8"))
+            self.assertEqual(record["port"], seen["port"])
+            self.assertEqual(record["url"], f"http://127.0.0.1:{seen['port']}")
+            # Core has no LanAuthMiddleware, so it must not announce a protected LAN session.
+            sharing = {"PINOKIO_SHARE_LOCAL": "true", "LOREFRAME_LAN_TOKEN": "t" * 32}
+            with patch.dict(os.environ, sharing), patch("services.server_entry.run") as entry, redirect_stdout(io.StringIO()):
+                os.environ.pop("LOREFRAME_LAN_AUTH", None)
+                core_runtime.run_server()
+            self.assertEqual(entry.call_args.kwargs["lan_messages"], [])
+        finally:
+            held.close()
+            for sock in seen.get("sockets") or []:
+                sock.close()
+            if previous is None:
+                withdraw_server_endpoint(endpoint, os.getpid())
+                if endpoint.exists():
+                    endpoint.unlink()
+            else:
+                endpoint.write_text(previous, encoding="utf-8")
 
     def test_studio_image_command_canonicalizes_upload_references(self):
         folder, previous = self._in_temp_workspace()
@@ -1369,7 +1742,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(recovery.json(), {"jobs": []})
 
     def test_scene_recording_muxes_sidecar_audio_and_keeps_unique_names(self):
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         folder, previous = self._in_temp_workspace()
         try:
@@ -1401,8 +1774,8 @@ class CoreRuntimeTests(unittest.TestCase):
                 "duration": 2,
                 "layers": [],
             }
-            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
-                "services.core_scene_recording.publish_generation_sidecar",
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
             ):
                 first = core_scene_recording.finalize_scene_recording(
                     source_path=str(source),
@@ -1436,7 +1809,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertNotEqual(first["name"], "Harbour Shot.webm")
 
     def test_scene_recording_keeps_authored_24fps(self):
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         folder, previous = self._in_temp_workspace()
         try:
@@ -1458,8 +1831,8 @@ class CoreRuntimeTests(unittest.TestCase):
                 "duration": 5,
                 "layers": [],
             }
-            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
-                "services.core_scene_recording.publish_generation_sidecar",
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
             ):
                 saved = core_scene_recording.finalize_scene_recording(
                     source_path=str(source),
@@ -1478,7 +1851,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertTrue(saved["name"].endswith(".mp4"))
 
     def test_scene_recording_reads_workspace_from_metadata_not_a_form_field(self):
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         details = core_scene_recording.parse_recording_metadata(json.dumps({
             "workspace": "client-a",
@@ -1503,7 +1876,7 @@ class CoreRuntimeTests(unittest.TestCase):
     def test_scene_recording_form_keeps_the_separate_voice_mix(self):
         import asyncio
 
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         class ChunkUpload:
             def __init__(self, payload):
@@ -1544,8 +1917,8 @@ class CoreRuntimeTests(unittest.TestCase):
                     },
                 }),
             }
-            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
-                "services.core_scene_recording.publish_generation_sidecar",
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
             ):
                 saved = asyncio.run(core_scene_recording.publish_from_form(form))
             mix_path = seen[0]["audio_tracks"][0]["path"]
@@ -1555,6 +1928,187 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(len(seen[0]["audio_tracks"]), 1)
         self.assertIn("scene-audio", mix_path)
         self.assertFalse(os.path.isfile(mix_path))
+
+    def _recording_form(self, payload=b"silent-webm", *, workspace="default"):
+        class ChunkUpload:
+            def __init__(self, body):
+                self._payload = body
+                self.size = len(body)
+
+            async def read(self, size=-1):
+                data, self._payload = self._payload, b""
+                return data
+
+            async def close(self):
+                return None
+
+        return {
+            "file": ChunkUpload(payload),
+            "metadata": json.dumps({
+                "workspace": workspace,
+                "embeddedAudio": False,
+                "prompt": "",
+                "scene": {
+                    "version": 1,
+                    "name": "Harbour Shot",
+                    "width": 64,
+                    "height": 64,
+                    "fps": 30,
+                    "duration": 2,
+                    "layers": [],
+                },
+            }),
+        }
+
+    def test_scene_recording_rejects_a_declared_size_before_reading(self):
+        import asyncio
+
+        from services.upload_stream import UploadTooLargeError
+        from services import scene_save
+
+        class Huge:
+            size = 500 * 1024 * 1024 + 1
+
+            def __init__(self):
+                self.reads = 0
+                self.closed = False
+
+            async def read(self, size=-1):
+                self.reads += 1
+                return b""
+
+            async def close(self):
+                self.closed = True
+
+        upload = Huge()
+        form = self._recording_form()
+        form["file"] = upload
+        with self.assertRaises(UploadTooLargeError):
+            asyncio.run(scene_save.publish_from_form(form))
+        self.assertEqual(upload.reads, 0)
+        self.assertTrue(upload.closed)
+
+    def test_scene_recording_transcode_leaves_the_event_loop_and_uses_two_slots(self):
+        import asyncio
+        import threading
+
+        from services import scene_save
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            release = threading.Event()
+            state = {"current": 0, "peak": 0, "idents": set(), "loop": None}
+            lock = threading.Lock()
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                ident = threading.get_ident()
+                if ident == state["loop"]:
+                    raise AssertionError("transcode ran on the event loop")
+                with lock:
+                    state["current"] += 1
+                    state["peak"] = max(state["peak"], state["current"])
+                    state["idents"].add(ident)
+                if not release.wait(2):
+                    raise AssertionError("transcode was not released")
+                with lock:
+                    state["current"] -= 1
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            async def main():
+                state["loop"] = threading.get_ident()
+                tasks = [
+                    asyncio.create_task(scene_save.publish_from_form(self._recording_form()))
+                    for _ in range(3)
+                ]
+                for _ in range(50):
+                    if state["peak"] >= 2:
+                        break
+                    await asyncio.sleep(0.01)
+                self.assertEqual(state["peak"], 2)
+                self.assertLessEqual(state["current"], 2)
+                release.set()
+                await asyncio.gather(*tasks)
+
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                asyncio.run(main())
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(state["peak"], 2)
+        self.assertTrue(state["idents"])
+        self.assertNotIn(state["loop"], state["idents"])
+
+    def test_scene_recording_drops_its_folder_from_the_scan_cache(self):
+        import asyncio
+
+        from services import core_workspace as core
+        from services import scene_save
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            out_dir = core.workspace_dir("default")
+            scene_save.output_scan_cache[out_dir] = {"stale": True}
+            scene_save.output_scan_cache["other"] = {"keep": True}
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                asyncio.run(scene_save.publish_from_form(self._recording_form()))
+            self.assertNotIn(out_dir, scene_save.output_scan_cache)
+            self.assertEqual(scene_save.output_scan_cache["other"], {"keep": True})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_recording_url_workspace_query_is_optional(self):
+        from services import scene_save
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            source = Path("outputs", "capture.webm")
+            source.write_bytes(b"webm")
+            scene = {"version": 1, "name": "Harbour Shot", "fps": 30, "duration": 1, "layers": []}
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                hidden = scene_save.finalize_scene_recording(
+                    source_path=str(source),
+                    output_dir=str(Path("outputs")),
+                    scene=scene,
+                    recipe=None,
+                    prompt="",
+                    embedded_audio=False,
+                    extra_audio_path=None,
+                    workspace="client-a",
+                    include_workspace_query=False,
+                )
+                shown = scene_save.finalize_scene_recording(
+                    source_path=str(source),
+                    output_dir=str(Path("outputs")),
+                    scene=scene,
+                    recipe=None,
+                    prompt="",
+                    embedded_audio=False,
+                    extra_audio_path=None,
+                    workspace="client-a",
+                    include_workspace_query=True,
+                )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertNotIn("workspace=", hidden["url"])
+        self.assertNotIn("workspace=", hidden["thumbnail_url"])
+        self.assertIn("workspace=client-a", shown["url"])
+        self.assertIn("workspace=client-a", shown["thumbnail_url"])
 
     def _multipart_upload(self, filename: str, payload: bytes, content_type: str = "image/png"):
         boundary = "----CoreUploadBoundary"
@@ -1727,6 +2281,187 @@ class CoreRuntimeTests(unittest.TestCase):
             ("POST", "/api/v1/upload"): "app/routers/uploads.py",
             ("GET", "/api/v1/uploads/{filename}"): "app/routers/uploads.py",
         })
+
+    def test_director_plan_prompts_keep_the_validation_answers(self):
+        missing_clips = self.client.post("/api/v1/director/plan-prompts", json={})
+        self.assertEqual(missing_clips.status_code, 400)
+        self.assertEqual(missing_clips.json()["detail"], "clips is required")
+        missing_style = self.client.post("/api/v1/director/plan-prompts", json={"clips": [{}]})
+        self.assertEqual(missing_style.status_code, 400)
+        self.assertEqual(missing_style.json()["detail"], "style_prompt is required")
+        missing_angle = self.client.post("/api/v1/director/plan-angle-prompts", json={})
+        self.assertEqual(missing_angle.status_code, 400)
+        self.assertEqual(missing_angle.json()["detail"], "style_prompt is required")
+
+    def test_director_pipeline_list_marks_a_stale_run_and_keeps_summary_fields(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            out = Path("outputs")
+            out.mkdir()
+            payload = {
+                "pipeline_id": "pipe-stale",
+                "status": "running",
+                "phase": "video",
+                "comic_id": "issue-1",
+                "clips": [],
+                "output_files": [],
+                "scene_description": "A stale run",
+                "resource_schedule": {"lane": "video"},
+            }
+            (out / "_director_pipeline_pipe-stale.json").write_text(
+                json.dumps(payload), encoding="utf-8",
+            )
+            listed = self.client.get("/api/v1/director/pipelines")
+            self.assertEqual(listed.status_code, 200, listed.text)
+            rows = listed.json()["pipelines"]
+            self.assertEqual(len(rows), 1, listed.text)
+            row = rows[0]
+            self.assertEqual(row["status"], "crashed")
+            self.assertEqual(row["comic_id"], "issue-1")
+            self.assertIn("repair_status", row)
+            self.assertEqual(row["resource_schedule"], {"lane": "video"})
+            self.assertIn("preview_fingerprint", row)
+            saved = json.loads((out / "_director_pipeline_pipe-stale.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["status"], "crashed")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_active_pipelines_lists_the_in_memory_run(self):
+        from services import director_pipeline
+
+        pipeline_id = "pipe-live"
+        with director_pipeline._pipeline_lock:
+            previous_pipeline = director_pipeline._pipelines.get(pipeline_id)
+            director_pipeline._pipelines[pipeline_id] = {
+                "id": pipeline_id,
+                "status": "running",
+                "phase": "video",
+                "workspace": "default",
+                "created_at": 10,
+                "pipeline_type": "comic",
+                "params": {"pipeline_type": "comic"},
+                "clip_plans": [],
+            }
+        folder, previous = self._in_temp_workspace()
+        try:
+            listed = self.client.get("/api/v1/director/pipelines/active")
+            self.assertEqual(listed.status_code, 200, listed.text)
+            rows = listed.json()["pipelines"]
+            self.assertEqual([row["id"] for row in rows], [pipeline_id])
+            self.assertEqual(rows[0]["status"], "running")
+            self.assertNotIn("params", rows[0])
+        finally:
+            with director_pipeline._pipeline_lock:
+                if previous_pipeline is None:
+                    director_pipeline._pipelines.pop(pipeline_id, None)
+                else:
+                    director_pipeline._pipelines[pipeline_id] = previous_pipeline
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_saved_pipeline_hydrates_the_queue(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            out = Path("outputs")
+            out.mkdir()
+            payload = {
+                "pipeline_id": "pipe-queue",
+                "status": "completed",
+                "clip_plans": [{"image_prompt": "a cat", "video_prompt": "walk"}],
+                "planned_clips": [{"shot_id": "shot-1", "duration_sec": 4}],
+            }
+            (out / "_director_pipeline_pipe-queue.json").write_text(
+                json.dumps(payload), encoding="utf-8",
+            )
+            saved = self.client.get("/api/v1/director/pipelines/pipe-queue")
+            self.assertEqual(saved.status_code, 200, saved.text)
+            body = saved.json()
+            self.assertEqual(body["queue_source"], "clip_plans")
+            self.assertEqual(body["clips"][0]["image_prompt"], "a cat")
+            self.assertEqual(body["clips"][0]["shot_id"], "shot-1")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_saved_pipeline_missing_uses_the_launch_404(self):
+        missing = self.client.get("/api/v1/director/pipelines/missing-pipeline")
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(missing.json(), {"error": "Pipeline not found"})
+
+    def test_director_pipeline_status_reports_a_saved_run_with_preview_fields(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            out = Path("outputs")
+            out.mkdir()
+            payload = {
+                "pipeline_id": "pipe-done",
+                "status": "completed",
+                "auto_mode": True,
+                "clips": [{
+                    "image_prompt": "a cat",
+                    "video_prompt": "walk",
+                    "video_filename": "cat.mp4",
+                }],
+                "output_files": ["cat.mp4"],
+                "params": {"secret": "no"},
+            }
+            (out / "_director_pipeline_pipe-done.json").write_text(
+                json.dumps(payload), encoding="utf-8",
+            )
+            status = self.client.get("/api/v1/director/pipeline/pipe-done")
+            self.assertEqual(status.status_code, 200, status.text)
+            body = status.json()
+            self.assertTrue(body["recovered_from_disk"])
+            self.assertEqual(body["status"], "completed")
+            self.assertIn("preview_fingerprint", body)
+            self.assertFalse(body["preview_approved"])
+            self.assertEqual(body["quality_gate"]["status"], "pending")
+            self.assertNotIn("params", body)
+            self.assertNotIn("secret", json.dumps(body))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_pipeline_reads_come_from_the_shared_router(self):
+        shared = "app/routers/director_pipeline_reads.py"
+        paths = {
+            "/api/v1/director/plan-prompts",
+            "/api/v1/director/plan-angle-prompts",
+            "/api/v1/director/pipelines",
+            "/api/v1/director/pipelines/active",
+            "/api/v1/director/pipelines/{pid}",
+            "/api/v1/director/pipeline/{pid}",
+        }
+        owners = {
+            (row["method"], row["path"]): row["source"]
+            for row in self._served_core_routes()
+            if row["path"] in paths
+        }
+        self.assertEqual(set(owners), {
+            ("POST", "/api/v1/director/plan-prompts"),
+            ("POST", "/api/v1/director/plan-angle-prompts"),
+            ("GET", "/api/v1/director/pipelines"),
+            ("GET", "/api/v1/director/pipelines/active"),
+            ("GET", "/api/v1/director/pipelines/{pid}"),
+            ("GET", "/api/v1/director/pipeline/{pid}"),
+        })
+        self.assertEqual(set(owners.values()), {shared})
+
+
+def test_safe_join_copies_use_the_launch_containment_check():
+    """A child of ``/`` stays inside ``/``. The prefix copy rejected it."""
+    import tempfile
+
+    from services.core_workspace import safe_join as core_safe_join
+    from services.kernel.paths import safe_join
+    from services.win_safe_files import safe_join_under
+
+    expected = os.path.realpath("/tmp")
+    assert safe_join("/", "tmp") == expected
+    assert safe_join_under("/", "tmp") == expected
+    assert core_safe_join("/", "tmp") == expected
+    assert safe_join_under is safe_join
+    assert core_safe_join is safe_join
+    with tempfile.TemporaryDirectory() as base:
+        assert safe_join(base, "..", "secret.txt") is None
+        assert safe_join(base, "clip.mp4") == os.path.realpath(os.path.join(base, "clip.mp4"))
 
 
 if __name__ == "__main__":

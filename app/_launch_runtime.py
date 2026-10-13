@@ -51,7 +51,6 @@ import asyncio
 import threading
 import traceback
 import requests
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from urllib.parse import quote
@@ -121,23 +120,57 @@ print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
 from services.generation import bind_wgp, get_model_def
 bind_wgp(wgp)
+from services.kernel.context import build_context
+ctx = build_context(
+    profile="full",
+    # Late-bound: these are defined further down, and the task publisher may not exist yet.
+    is_legacy_h3_model=lambda model_type: _is_legacy_h3_model(model_type),
+    is_minimax_h3_model=lambda model_type: _is_minimax_h3_model(model_type),
+    cancel_legacy_h3=lambda: minimax_h3_service.cancel(),
+    task_publisher=lambda: globals().get("_publish_generation_task"),
+)
+
+# The kernel's services (services/kernel). These names are launch's historical handles to
+# the same objects: code that has not moved yet keeps using them, and a dictionary or a
+# lock here is the one the context holds, never a copy.
+_save_server_config = ctx.config.save
+_get_active_workspace = ctx.workspaces.active
+_workspace_dir = ctx.workspaces.workspace_dir
+_list_workspaces = ctx.workspaces.list
+_persist_active_workspace = ctx.workspaces.persist_active
+_safe_join = ctx.paths.safe_join
+_resolve_output_move_path = ctx.paths.resolve_output_move_path
+_resolve_request_media_path = ctx.paths.resolve_request_media_path
+_story_cover_reference_path = ctx.paths.story_cover_reference_path
+_UPLOAD_TRANSCODE_SLOTS = ctx.paths.transcode_slots
+_stream_upload = ctx.paths.stream_upload
+_transcode_upload = ctx.paths.transcode_upload
+_task_registry = ctx.tasks.for_workspace
+_jobs = ctx.jobs.registry
+_local_gpu_lane = ctx.jobs.local_gpu_lane
+_gen_lock = ctx.jobs.gen_lock
+_active_gen_states = ctx.jobs.active_states
+_queue_recovery_lock = ctx.jobs.recovery_lock
+_durable_generation_queue = ctx.jobs.durable_queue
+_coordinated_generation_slot = ctx.jobs.slot
+_is_durable_generation_job = ctx.jobs.is_durable_job
+_persist_generation_job = ctx.jobs.persist_job
+_remove_persisted_generation_job = ctx.jobs.remove_persisted_job
+_new_generation_job = ctx.jobs.new_job
+_register_manual_generation_job = ctx.jobs.register_manual_job
+_generation_job_acceptance = ctx.jobs.job_acceptance
+_public_generation_details = ctx.jobs.public_details
+_pending_gpu_jobs = ctx.jobs.pending_gpu_jobs
+_request_generation_cancel = ctx.jobs.cancel
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import tools_upscale as tools_upscale_service
 from services import debug_trace
 from routers.lan_auth import create_lan_auth_router
-from services.durable_generation_queue import DurableGenerationQueue
 from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
-from services.media_paths import (
-    MediaPathNotAllowed,
-    resolve_permitted_media_path,
-    resolve_story_cover_audio,
-    resolve_voice_ref_paths,
-)
+from services.media_paths import resolve_voice_ref_paths
 from services.upload_stream import (
     UploadTooLargeError,
     UploadTranscodeError,
-    stream_upload_file,
-    transcode_upload,
 )
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
@@ -170,30 +203,6 @@ try:
     _sweep_trash(wgp.server_config.get("save_path", "outputs"))
 except Exception as _sweep_err:
     print(f"[Workspace] Trash sweep skipped: {_sweep_err}")
-
-def _save_server_config() -> None:
-    """Write wgp.server_config atomically with owner-only permissions.
-
-    The file holds API keys and the workspace list. open("w") truncated it
-    before writing, so a crash or two concurrent saves could leave it empty,
-    and the next start failed to import wgp.
-    """
-    path = wgp.server_config_filename
-    folder = os.path.dirname(os.path.abspath(path)) or "."
-    temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
-    try:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(wgp.server_config, indent=4))
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        try:
-            os.remove(temporary)
-        except OSError:
-            pass
-
-
 
 # Performance auto-tune migration: pre-existing installs (config file
 # was loaded from disk, not freshly created) have no auto_performance
@@ -258,6 +267,7 @@ from services.access_log_filter import install_quiet_access_filter
 install_quiet_access_filter()
 
 api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
+api.state.runtime = ctx
 
 
 @api.exception_handler(execution_mode.ExecutionModeError)
@@ -289,73 +299,6 @@ from routers.uploads import MAX_IMAGE_UPLOAD_BYTES   # 500 MB, defined with the 
 # music video runs ~30-100 MB; longer reference clips can push
 # higher. 500 MB covers ~25-50 min of typical music-video bitrates.
 MAX_AUDIO_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (also covers video-for-audio-extract)
-
-# Uploads are deliberately bounded independently from GPU/model lanes.  A
-# handful of concurrent clients may ingest at once, while only two ffmpeg
-# workers can compete for CPU, disk and decoder resources.  Waiting on these
-# semaphores is cancellable and never holds a global application lock.
-_UPLOAD_INGEST_SLOTS = asyncio.Semaphore(4)
-_UPLOAD_TRANSCODE_SLOTS = asyncio.Semaphore(2)
-
-
-async def _stream_upload(upload, destination: str, *, max_bytes: int) -> int:
-    async with _UPLOAD_INGEST_SLOTS:
-        return await stream_upload_file(
-            upload,
-            destination,
-            max_bytes=max_bytes,
-        )
-
-
-async def _transcode_upload(source: str, destination: str, *, is_video: bool) -> None:
-    async with _UPLOAD_TRANSCODE_SLOTS:
-        await transcode_upload(source, destination, is_video=is_video)
-
-
-def _safe_join(base: str, *parts: str) -> str | None:
-    """Join `parts` under `base` and return the absolute path only if it
-    stays inside `base`. Returns None on traversal attempts (`..`, absolute
-    paths, symlinks escaping the base, etc.). Use for any endpoint that
-    accepts a user-supplied filename."""
-    try:
-        base_real = os.path.realpath(base)
-        joined = os.path.realpath(os.path.join(base_real, *parts))
-        # commonpath compares path components rather than string prefixes.
-        # normcase preserves correct behaviour on case-insensitive Windows
-        # filesystems and ValueError handles paths on different drives.
-        base_cmp = os.path.normcase(base_real)
-        joined_cmp = os.path.normcase(joined)
-        if os.path.commonpath((base_cmp, joined_cmp)) != base_cmp:
-            return None
-        return joined
-    except (ValueError, OSError):
-        return None
-
-
-def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
-    """Resolve one output path for a cross-workspace move.
-
-    The move endpoint accepts a path parameter, so it needs a stricter
-    contract than a generic join: only explicit relative components using
-    URL separators are accepted. Both source and destination are then
-    resolved through ``_safe_join`` so existing symlinks cannot escape their
-    workspace.
-    """
-    if not isinstance(relative_name, str):
-        return None
-    value = relative_name.strip()
-    if not value or "\x00" in value or "\\" in value:
-        return None
-    drive, _tail = os.path.splitdrive(value)
-    if drive or os.path.isabs(value):
-        return None
-    parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        return None
-    resolved = _safe_join(base, *parts)
-    if not resolved or resolved == os.path.realpath(base):
-        return None
-    return resolved
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
@@ -474,12 +417,10 @@ from services.job_lifecycle import (
     ensure_generation_priority,
     finish_job,
     generation_queue_position,
-    generation_slot,
     is_cancel_requested,
     new_media_files,
     record_job_outputs,
     register_abort_state,
-    register_generation_job,
     request_cancel,
     set_job_state_observer,
     snapshot_job,
@@ -491,20 +432,6 @@ from services.job_lifecycle import (
 from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
 from services import resource_scheduler
 
-_jobs: dict = {}
-_local_gpu_lane = resource_scheduler.local_gpu_lane(0)
-# This is the coordinator's physical GPU-0 primitive. The existing generation
-# FIFO keeps using its proven job-lifecycle wrapper around the same object,
-# while migrated 3D/Rig/audio/LLM workers acquire it through the coordinator.
-_gen_lock = resource_scheduler.coordinator.shared_lock(_local_gpu_lane)
-_active_gen_states: dict = {}  # job_id -> wgp gen state dict (for abort signaling)
-_queue_recovery_lock = threading.Lock()
-_durable_generation_queue = DurableGenerationQueue(
-    os.path.join(
-        os.path.realpath(wgp.server_config.get("save_path", "outputs")),
-        ".maestro_generation_queue.json",
-    )
-)
 _H3_IDLE_RELEASE_SECONDS = 10.0
 _h3_idle_release_timer: threading.Timer | None = None
 _h3_idle_release_lock = threading.RLock()
@@ -561,176 +488,6 @@ resource_scheduler.coordinator.set_prepare_hook(
 )
 
 
-@contextmanager
-def _coordinated_generation_slot(
-    job: dict,
-    *,
-    description: str | None = None,
-):
-    """Keep the legacy FIFO while exposing its acquired GPU lease centrally."""
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    model_type = str(params.get("model_type") or "").strip()
-    if not description:
-        if _is_legacy_h3_model(model_type):
-            description = resource_scheduler.gpu_engine_description(
-                resource_scheduler.GPU_ENGINE_H3_LEGACY,
-                "HocusPocus Lab H3 Legacy generation",
-            )
-        elif model_type:
-            description = resource_scheduler.gpu_engine_description(
-                resource_scheduler.GPU_ENGINE_WGP,
-                f"HocusPocus Lab WGP generation · {model_type}",
-            )
-        else:
-            description = "HocusPocus Lab GPU generation"
-    # Stand aside for a Video 3D export or another coordinator ticket that has
-    # waited longer than this job, or past HOCUS_GPU_WAITER_MAX_WAIT_SECONDS.
-    def owed_turn(waited: float) -> bool:
-        return resource_scheduler.coordinator.has_waiter_owed_turn(_local_gpu_lane, waited=waited)
-
-    with generation_slot(_gen_lock, job, yield_to=owed_turn) as acquired:
-        if not acquired:
-            yield False
-            return
-        with resource_scheduler.coordinator.adopt_acquired(
-            _local_gpu_lane,
-            task_id=str(job.get("task_id") or job.get("id") or "generation"),
-            description=description,
-        ):
-            yield True
-
-
-def _is_durable_generation_job(job: dict) -> bool:
-    """Only persist ordinary Studio generations, not Director sub-jobs."""
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    return (
-        bool(params.get("model_type"))
-        and not params.get("_director_pipeline_id")
-        and not params.get("_non_durable_tool")
-    )
-
-
-def _persist_generation_job(job: dict) -> None:
-    if not _is_durable_generation_job(job):
-        return
-    try:
-        _durable_generation_queue.upsert({
-            "id": job["id"],
-            "status": job.get("status", "queued"),
-            "created_at": job.get("created_at", time.time()),
-            "params": copy.deepcopy(job.get("params") or {}),
-            "workspace": job.get("workspace") or "default",
-            "provenance": copy.deepcopy(job.get("provenance") or {}),
-        })
-    except Exception as exc:
-        # Persistence should protect a generation, never prevent it from
-        # starting if the disk is temporarily read-only or full.
-        print(f"[Queue recovery] Could not persist job {job.get('id')}: {exc}")
-
-
-def _remove_persisted_generation_job(job: dict) -> None:
-    if not _is_durable_generation_job(job):
-        return
-    try:
-        _durable_generation_queue.remove(str(job.get("id") or ""))
-    except Exception as exc:
-        print(f"[Queue recovery] Could not remove job {job.get('id')}: {exc}")
-
-
-def _new_generation_job(
-    params: dict,
-    workspace: str,
-    *,
-    job_id: str | None = None,
-    created_at: float | None = None,
-    recovered: bool = False,
-    reserve_generation: bool = True,
-    provenance: dict | None = None,
-    publish_task: bool = True,
-) -> dict:
-    frozen_params = copy.deepcopy(params)
-    execution_mode.validate_generation(workspace)
-    frozen_params["_execution_mode"] = execution_mode.policy().mode
-    if _is_minimax_h3_model(frozen_params.get("model_type")):
-        from services.minimax_h3_duration import (
-            apply_h3_dialogue_duration,
-            apply_h3_vocal_timeline,
-            h3_dialogue_split_error,
-        )
-
-        try:
-            duration_model_def = wgp.get_model_def(frozen_params.get("model_type")) or {}
-        except Exception:
-            duration_model_def = {}
-        contract = apply_h3_dialogue_duration(frozen_params, duration_model_def)
-        if contract:
-            if contract.get("requires_split"):
-                raise ValueError(h3_dialogue_split_error(contract))
-            print(
-                "[MiniMax H3] Mandatory dialogue duration: "
-                f"{contract['syllable_count']} syllables × "
-                f"{contract['seconds_per_syllable']:.3f}s -> "
-                f"{contract['effective_seconds']:.3f}s "
-                f"({contract['effective_frames']} frames)."
-            )
-        timeline = apply_h3_vocal_timeline(frozen_params, duration_model_def)
-        if timeline:
-            print(
-                "[MiniMax H3] Vocal timeline locked: "
-                f"{timeline['segment_count']} authored line(s), "
-                f"{len(timeline['intervals'])} timed interval(s) across "
-                f"{timeline['duration_seconds']:.3f}s."
-            )
-    resolved_job_id = job_id or uuid.uuid4().hex[:8]
-    canonical_task_id = f"task-generation-{resolved_job_id}"
-    owner_id = str(frozen_params.get("_director_pipeline_id") or "")
-    if owner_id.startswith("series:"):
-        canonical_root_task_id = f"task-series-render-{owner_id.split(':', 1)[1]}"
-    elif owner_id:
-        canonical_root_task_id = f"task-director-{owner_id}"
-    else:
-        canonical_root_task_id = canonical_task_id
-    job = {
-        "id": resolved_job_id,
-        "task_id": canonical_task_id,
-        "root_task_id": canonical_root_task_id,
-        "status": "queued",
-        "progress": 0,
-        "step": 0,
-        "total_steps": 0,
-        "phase": "",
-        "message": "Recovered · queued" if recovered else "Queued",
-        "created_at": created_at or time.time(),
-        "started_at": None,
-        "finished_at": None,
-        "params": frozen_params,
-        "output_files": [],
-        "acquired_resources": [],
-        "error": None,
-        "workspace": workspace,
-        "out_dir": _workspace_dir(workspace),
-        "provenance": copy.deepcopy(provenance or {}),
-        "recovered": recovered,
-    }
-    # Reserve FIFO order synchronously. Starting one thread per request is
-    # still useful for cancellation/recovery, but thread scheduling no longer
-    # decides which submitted generation reaches the GPU first.
-    if reserve_generation:
-        register_generation_job(_gen_lock, job)
-    publisher = globals().get("_publish_generation_task")
-    if publish_task and callable(publisher):
-        try:
-            task = publisher(job)
-            if isinstance(task, dict):
-                job["task_id"] = task.get("id") or job["task_id"]
-                job["root_task_id"] = (
-                    task.get("root_id") or task.get("id") or job["root_task_id"]
-                )
-        except Exception as exc:
-            print(f"[Task registry] Could not publish generation {job['id']}: {exc}")
-    return job
-
-
 def _publish_generation_sidecar_for_studio_job(
     job: dict,
     output_path: str,
@@ -739,223 +496,15 @@ def _publish_generation_sidecar_for_studio_job(
     tool: str = "studio",
 ) -> None:
     """Publish one Studio result with its initiating command and real location."""
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    payload = dict(sidecar)
-    params = dict(payload.get("params") or {})
-    model_type = str(params.get("model_type") or "")
-    params.setdefault("provider", "minimax" if model_type.startswith("minimax:") else "local")
-    payload["params"] = params
-    if not payload.get("job_id"):
-        payload["job_id"] = job.get("id")
-    if not payload.get("task_id"):
-        payload["task_id"] = job.get("task_id")
-    if not payload.get("root_task_id"):
-        payload["root_task_id"] = job.get("root_task_id") or job.get("task_id")
-    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
-    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
-    payload["started_at"] = job.get("started_at") or payload.get("started_at")
-    payload["completed_at"] = job.get("finished_at") or time.time()
-    for key in ("command_id", "workflow_id", "run_id"):
-        if command.get(key):
-            payload.setdefault(key, command[key])
-    for key in ("project_id", "production_id", "cue_id", "candidate_id", "song_version"):
-        if provenance.get(key):
-            payload.setdefault(key, provenance[key])
-    project_ref = (
-        {"kind": "story", "id": str(provenance["project_id"])}
-        if provenance.get("project_id") else None
-    )
-    production_ref = (
-        {"kind": "director_production", "id": str(provenance["production_id"])}
-        if provenance.get("production_id") else None
-    )
-    manifest_refs = {}
-    if project_ref:
-        manifest_refs["project"] = project_ref
-    if production_ref:
-        manifest_refs["production"] = production_ref
-    publish_generation_sidecar_best_effort(
+    from services.asset_manifest import publish_generation_job_sidecar
+    publish_generation_job_sidecar(
+        job,
         output_path,
-        payload,
-        workspace_id=provenance.get("workspace_id"),
+        sidecar,
+        job_id_key="id",
         output_folder=job.get("workspace"),
-        tool=provenance.get("tool") or tool,
-        actor=provenance.get("actor"),
-        capability=provenance.get("capability"),
-        **manifest_refs,
+        tool=tool,
     )
-
-
-def _register_manual_generation_job(job: dict) -> dict:
-    """Publish older edit/tool jobs before their background thread starts."""
-    job_id = str(job.get("id") or "")
-    if not job_id:
-        raise ValueError("A manual generation job requires an id")
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    execution_mode.validate_generation(str(job.get("workspace") or _get_active_workspace()))
-    params["_execution_mode"] = execution_mode.policy().mode
-    if not str(params.get("model_type") or "").strip():
-        params["model_type"] = "post_processing"
-    params.setdefault("generation_mode", "video")
-    job["params"] = params
-    job.setdefault("acquired_resources", [])
-    job.setdefault("started_at", None)
-    job.setdefault("finished_at", None)
-    job.setdefault("task_id", f"task-generation-{job_id}")
-    job.setdefault("root_task_id", job["task_id"])
-    _jobs[job_id] = job
-    register_generation_job(_gen_lock, job)
-    publisher = globals().get("_publish_generation_task")
-    if callable(publisher):
-        try:
-            task = publisher(job)
-            if isinstance(task, dict):
-                job["task_id"] = task.get("id") or job["task_id"]
-                job["root_task_id"] = (
-                    task.get("root_id") or task.get("id") or job["root_task_id"]
-                )
-        except Exception as exc:
-            print(f"[Task registry] Could not publish manual job {job_id}: {exc}")
-    return job
-
-
-def _generation_job_acceptance(job: dict) -> dict:
-    return {
-        "task_id": job.get("task_id"),
-        "root_task_id": job.get("root_task_id") or job.get("task_id"),
-        "generation_details": _public_generation_details(job.get("params")),
-    }
-
-
-_PUBLIC_MODEL_LABELS = {
-    "minimax:image-01": "MiniMax Image-01",
-    "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
-    "post_processing": "Post-processing",
-    "rembg-u2net": "rembg U2Net",
-}
-
-
-def _public_generation_details(params: dict | None) -> dict:
-    """Return frozen settings suitable for the canonical Activity UI.
-
-    Local paths and reference media stay private.  The authored prompt is
-    intentionally retained: Activity is the user's durable audit trail and
-    must identify what a model is actually generating after the editable form
-    has changed.  It is bounded before persistence and never treated as HTML.
-    """
-    if not isinstance(params, dict):
-        return {}
-
-    model_type = str(params.get("model_type") or "").strip()
-    if not model_type:
-        return {}
-    try:
-        model_def = wgp.get_model_def(model_type) or {}
-    except Exception:
-        model_def = {}
-    details = {
-        "model_type": model_type,
-        "model_name": str(
-            model_def.get("name")
-            or _PUBLIC_MODEL_LABELS.get(model_type)
-            or model_type
-        ),
-    }
-
-    public_values = {
-        "generation_mode": params.get("generation_mode"),
-        "execution_mode": params.get("_execution_mode"),
-        "simulated": params.get("_execution_mode") == "simulate",
-        "capability": params.get("capability"),
-        "source_kind": params.get("source_kind"),
-        "source_asset_id": params.get("source_asset_id"),
-        "source_filename": params.get("source_filename"),
-        "method": params.get("method"),
-        "resolution": params.get("resolution"),
-        "seed": params.get("seed"),
-        "steps": params.get("num_inference_steps"),
-        "guidance": params.get("guidance_scale"),
-        "frames": params.get("video_length") or params.get("total_frames"),
-        "duration_seconds": params.get("duration_seconds"),
-        "dialogue_words": (
-            params.get("_h3_dialogue_duration_contract", {}).get("word_count")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_syllables": (
-            params.get("_h3_dialogue_duration_contract", {}).get("syllable_count")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_seconds_per_syllable": (
-            params.get("_h3_dialogue_duration_contract", {}).get("seconds_per_syllable")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_duration_calculated": (
-            params.get("_h3_dialogue_duration_contract", {}).get("estimated_seconds")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "dialogue_duration_minimum_limited": (
-            params.get("_h3_dialogue_duration_contract", {}).get("minimum_limited")
-            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-            else None
-        ),
-        "repeat": params.get("repeat_generation"),
-        "profile": params.get("h3_model_profile"),
-        "flow_shift": params.get("flow_shift"),
-        "audio_shift": params.get("h3_audio_shift"),
-        "turbo": params.get("minimax_h3_turbo_mode"),
-    }
-    for key, value in public_values.items():
-        if value is not None and value != "":
-            details[key] = value
-
-    prompt = str(params.get("prompt") or "").replace("\x00", "").strip()
-    style_prompt = str(params.get("alt_prompt") or "").replace("\x00", "").strip()
-    if prompt or style_prompt:
-        details["prompt"] = (
-            f"{style_prompt}\n\n{prompt}" if style_prompt and prompt else style_prompt or prompt
-        )[:32_000]
-    initiator = str(params.get("_initiator") or "").replace("\x00", "").strip()
-    if initiator:
-        details["initiator"] = initiator[:200]
-
-    cache_type = str(params.get("skip_steps_cache_type") or "").strip()
-    if cache_type or model_type.startswith("minimax_h3"):
-        details["cache"] = bool(cache_type)
-        if cache_type:
-            details["cache_type"] = cache_type
-
-    raw_loras = params.get("activated_loras")
-    selected_loras = raw_loras if isinstance(raw_loras, (list, tuple)) else []
-    public_loras = [
-        os.path.basename(str(item).replace("\\", "/"))
-        for item in selected_loras
-        if str(item or "").strip()
-    ]
-    details["lora_count"] = len(public_loras)
-    if public_loras:
-        details["loras"] = public_loras
-    return details
-
-
-def _pending_gpu_jobs(exclude_job_id: str | None = None) -> list[dict]:
-    """Return queued/running GPU-generation jobs, excluding a terminalizing job."""
-    pending: list[dict] = []
-    for candidate_id, candidate in _jobs.items():
-        if candidate_id == exclude_job_id:
-            continue
-        if candidate.get("status") not in {"queued", "running"}:
-            continue
-        # Auxiliary tasks such as audio analysis share the status dictionary
-        # but do not own the GPU generation lock or require a model runtime.
-        if not candidate.get("params", {}).get("model_type"):
-            continue
-        pending.append(candidate)
-    return pending
 
 
 def _is_legacy_h3_model(model_type: str | None) -> bool:
@@ -1074,140 +623,10 @@ def _interrupt_wan_model() -> None:
     if model is not None and hasattr(model, "_interrupt"):
         model._interrupt = True
 
-# --- Workspace support ---
-# Base path read from wgp.server_config["save_path"] wherever needed
-
-
-def _get_active_workspace() -> str:
-    """Get current workspace name from server config."""
-    return wgp.server_config.get("services", {}).get("active_workspace", "default")
-
-
-def _workspace_dir(workspace: str = None) -> str:
-    """Return a contained output directory for one validated workspace."""
-    ws = _get_active_workspace() if workspace is None else workspace
-    if not isinstance(ws, str) or not re.fullmatch(
-        r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]*)", ws
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Invalid workspace name. Use letters, numbers, hyphens, "
-                "underscores, without spaces or path separators."
-            ),
-        )
-
-    # Always read base from config, never from wgp.save_path (which may already include workspace)
-    base = os.path.realpath(os.path.abspath(
-        wgp.server_config.get("save_path", "outputs")
-    ))
-    ws_dir = base if ws == "default" else os.path.realpath(os.path.join(base, ws))
-    try:
-        contained = os.path.commonpath((base, ws_dir)) == base
-    except (TypeError, ValueError):
-        contained = False
-    if not contained:
-        raise HTTPException(status_code=400, detail="Invalid workspace path.")
-    if ws != "default":
-        os.makedirs(ws_dir, exist_ok=True)
-    return ws_dir
-
-
-def _resolve_request_media_path(
-    value: str,
-    *,
-    workspace: str | None = None,
-    kinds: tuple[str, ...] = ("audio", "video"),
-) -> str:
-    """Resolve request media without exposing host paths in API errors."""
-    try:
-        return resolve_permitted_media_path(
-            value,
-            uploads_root=os.path.join(os.getcwd(), "uploads"),
-            workspace_root=_workspace_dir(workspace),
-            kinds=kinds,
-            workspace_name=workspace or _get_active_workspace(),
-        )
-    except MediaPathNotAllowed:
-        raise HTTPException(status_code=400, detail="Media path is not allowed") from None
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Media file not found") from None
-
-
-def _story_cover_reference_path(filename: str, workspace: str) -> str | None:
-    """Resolve a cover reference from uploads/audio or the active workspace."""
-    try:
-        return resolve_story_cover_audio(
-            filename,
-            uploads_audio_root=os.path.join(os.getcwd(), "uploads", "audio"),
-            uploads_root=os.path.join(os.getcwd(), "uploads"),
-            workspace_root=_workspace_dir(workspace),
-        )
-    except (MediaPathNotAllowed, FileNotFoundError, ValueError):
-        return None
-
-
-def _workspace_file_count(path: str) -> int:
-    """Non-hidden files directly inside a workspace folder (for delete
-    confirms). scandir answers is_file() from the enumeration data on
-    Windows — no per-entry stat syscall."""
-    try:
-        with os.scandir(path) as entries:
-            return sum(1 for e in entries if not e.name.startswith(".") and e.is_file())
-    except OSError:
-        return 0
-
-
-def _list_workspaces() -> list[dict]:
-    """List all workspaces (subdirectories of the base output path + default)."""
-    base = wgp.server_config.get("save_path", "outputs")
-    workspaces = [{"name": "default", "path": base, "file_count": _workspace_file_count(base)}]
-    if os.path.isdir(base):
-        for name in sorted(os.listdir(base)):
-            full = os.path.join(base, name)
-            if os.path.isdir(full) and not name.startswith(("_", ".")):
-                workspaces.append({"name": name, "path": full, "file_count": _workspace_file_count(full)})
-    return workspaces
-
-
-def _persist_active_workspace(name: str, apply_save_paths: bool = True) -> str:
-    """Write services.active_workspace to config and (optionally) point
-    wgp's save paths at it. Pass apply_save_paths=False while a generation
-    is running — the in-flight job has locked wgp.save_path to its target
-    and the new value takes effect on the next job / restart."""
-    services = wgp.server_config.setdefault("services", {})
-    services["active_workspace"] = name
-    wgp.server_config["services"] = services
-    _save_server_config()
-    ws_dir = _workspace_dir(name)
-    if apply_save_paths:
-        wgp.save_path = ws_dir
-        wgp.image_save_path = ws_dir
-    return ws_dir
-
 # --- Director pipeline (lazy init after _run_generation is defined) ---
 _pipeline_initialized = False
 
 
-def _request_generation_cancel(job_id: str) -> dict:
-    """Atomically cancel a queued/running generation and signal its owner."""
-    job = _jobs.get(job_id)
-    if not job:
-        return {"status": "missing", "was_running": False}
-    result = request_cancel(
-        job,
-        job_id=job_id,
-        active_states=_active_gen_states,
-    )
-    if result.was_running and _is_legacy_h3_model(
-        job.get("params", {}).get("model_type")
-    ):
-        minimax_h3_service.cancel()
-    if result.abort_signalled:
-        print(f"[Cancel] Signalling abort for job {job_id}")
-    if not result.was_running and job.get("status") == "cancelled":
-        _remove_persisted_generation_job(job)
-    return {"status": job.get("status"), "was_running": result.was_running}
 
 
 def _init_pipeline():
@@ -1222,6 +641,7 @@ def _init_pipeline():
             _request_generation_cancel,
             _active_gen_states,
             state_observer=_publish_director_task,
+            get_cached_hardware=_get_cached_hardware,
         )
         _pipeline_initialized = True
 
@@ -1618,7 +1038,10 @@ _MODEL_SELECTION_MODES = frozenset({
 })
 
 _PRODUCTION_PROFILE_CONFIG_KEY = "maestro_production_profile"
-_PRODUCTION_PROFILE_VERSION = 1
+from services.production_profile import (
+    _PRODUCTION_PROFILE_VERSION,
+    _normalize_production_profile,
+)
 _DEFAULT_PRODUCTION_PROFILE = {
     "version": _PRODUCTION_PROFILE_VERSION,
     "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
@@ -1641,151 +1064,6 @@ _DEFAULT_PRODUCTION_PROFILE = {
     },
     "model3d": {"provider": "local", "model": "hunyuan3d-2mini-turbo"},
 }
-
-
-def _bounded_profile_text(value, label: str, *, maximum: int = 200) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"{label} must be a string.")
-    result = value.strip()
-    if not result:
-        raise ValueError(f"{label} cannot be empty.")
-    if len(result) > maximum:
-        raise ValueError(f"{label} is too long.")
-    return result
-
-
-def _normalize_production_profile(value) -> dict:
-    """Validate the credential-free defaults shared by every production UI."""
-    from services.provider_profile import (
-        IMAGE_PROVIDERS,
-        MODEL3D_PROVIDERS,
-        MUSIC_PROVIDERS,
-        TEXT_PROVIDERS,
-        alias_model3d_provider,
-        alias_text_provider,
-        canonicalize_remote_url,
-        default_url_for_provider,
-    )
-
-    if not isinstance(value, dict):
-        raise ValueError("Production profile must be an object.")
-    text_profile = value.get("text")
-    image_profile = value.get("image")
-    music_profile = value.get("music")
-    video_profile = value.get("video")
-    model3d_profile = value.get("model3d") if isinstance(value.get("model3d"), dict) else {
-        "provider": "local",
-        "model": "hunyuan3d-2mini-turbo",
-    }
-    if not all(isinstance(item, dict) for item in (
-        text_profile, image_profile, music_profile, video_profile,
-    )):
-        raise ValueError("Production profile needs text, image, music and video sections.")
-
-    text_provider = alias_text_provider(_bounded_profile_text(
-        text_profile.get("provider"), "Text provider",
-    ).lower(), str(text_profile.get("base_url") or ""))
-    if text_provider not in TEXT_PROVIDERS:
-        raise ValueError("Unsupported production text provider.")
-    image_provider = _bounded_profile_text(
-        image_profile.get("provider"), "Image provider",
-    ).lower()
-    if image_provider not in IMAGE_PROVIDERS:
-        raise ValueError("Unsupported production image provider.")
-    music_provider = _bounded_profile_text(
-        music_profile.get("provider"), "Music provider",
-    ).lower()
-    if music_provider not in MUSIC_PROVIDERS:
-        raise ValueError("Unsupported production music provider.")
-    model3d_provider = alias_model3d_provider(_bounded_profile_text(
-        model3d_profile.get("provider"), "3D provider",
-    ).lower())
-    if model3d_provider not in MODEL3D_PROVIDERS:
-        raise ValueError("Unsupported production 3D provider.")
-    music_model = _bounded_profile_text(music_profile.get("model"), "Music model")
-    video_provider = _bounded_profile_text(
-        video_profile.get("provider"), "Video provider",
-    ).lower()
-    if video_provider not in {"maestro", "local"}:
-        raise ValueError("Unsupported production video provider.")
-
-    settings = video_profile.get("settings")
-    if not isinstance(settings, dict):
-        raise ValueError("Production video settings must be an object.")
-    try:
-        steps = int(settings.get("steps", 20))
-        flow_shift = float(settings.get("flowShift", 12.0))
-        audio_shift = float(settings.get("audioShift", 3.0))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Production video steps and shifts must be numeric.") from exc
-    if not 1 <= steps <= 50:
-        raise ValueError("Production video steps must be between 1 and 50.")
-    if not -100 <= flow_shift <= 100 or not -100 <= audio_shift <= 100:
-        raise ValueError("Production video shifts must be between -100 and 100.")
-    loras = settings.get("loras", [])
-    if not isinstance(loras, list) or len(loras) > 32:
-        raise ValueError("Production video LoRAs must be a list of at most 32 entries.")
-    normalized_loras = [
-        _bounded_profile_text(item, "Production video LoRA", maximum=500)
-        for item in loras
-    ]
-    resolution = _bounded_profile_text(
-        settings.get("resolution", "540p"), "Production video resolution",
-        maximum=40,
-    ).lower()
-    if resolution not in {"auto", "480p", "540p", "720p", "768p", "1080p"}:
-        raise ValueError("Unsupported production video resolution preset.")
-    aspect_ratio = _bounded_profile_text(
-        settings.get("aspectRatio", "16:9"), "Production video aspect ratio",
-        maximum=20,
-    ).lower()
-    if aspect_ratio not in {"auto", "21:9", "16:9", "9:16", "1:1", "4:3", "3:4"}:
-        raise ValueError("Unsupported production video aspect ratio.")
-
-    text_base_url = canonicalize_remote_url(str(text_profile.get("base_url") or ""))
-    if text_provider in {"ollama", "remote", "openai-compatible", "grok", "openai", "minimax"}:
-        text_base_url = default_url_for_provider(text_provider, text_base_url)
-
-    return {
-        "version": _PRODUCTION_PROFILE_VERSION,
-        "text": {
-            "provider": text_provider,
-            "model": _bounded_profile_text(text_profile.get("model"), "Text model"),
-            "base_url": text_base_url,
-        },
-        "image": {
-            "provider": image_provider,
-            "model": _bounded_profile_text(image_profile.get("model"), "Image model"),
-        },
-        "music": {
-            "provider": music_provider,
-            "model": music_model,
-        },
-        "model3d": {
-            "provider": model3d_provider,
-            "model": _bounded_profile_text(
-                model3d_profile.get("model") or "hunyuan3d-2mini-turbo",
-                "3D model",
-            ),
-        },
-        "video": {
-            "provider": video_provider,
-            "model": _bounded_profile_text(video_profile.get("model"), "Video model"),
-            "settings": {
-                "profile": _bounded_profile_text(
-                    settings.get("profile", "quality"), "Video profile", maximum=40,
-                ).lower(),
-                "steps": steps,
-                "flowShift": flow_shift,
-                "audioShift": audio_shift,
-                "turbo": bool(settings.get("turbo", False)),
-                "cache": bool(settings.get("cache", False)),
-                "loras": normalized_loras,
-                "resolution": resolution,
-                "aspectRatio": aspect_ratio,
-            },
-        },
-    }
 
 
 def _default_production_profile() -> dict:
@@ -1818,39 +1096,19 @@ def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]
     what prevents Director/prompt tools from downloading a local model while a
     new or migrated install already advertises MiniMax in its global profile.
     """
-    from services.provider_profile import alias_text_provider, default_url_for_provider
+    from services import llm_routing
 
-    service_values = services if isinstance(services, dict) else {}
-    text_profile = _active_production_profile().get("text", {})
-    remote_url = str(
-        text_profile.get("base_url")
-        or service_values.get("llm_remote_url")
-        or ""
-    ).strip()
-    provider = alias_text_provider(
-        str(text_profile.get("provider") or "local").strip().lower(),
-        remote_url,
+    return llm_routing._effective_llm_routing(
+        services,
+        text_profile=_active_production_profile().get("text", {}),
+        default_provider="local",
     )
-    model = str(text_profile.get("model") or "").strip()
-    remote_url = default_url_for_provider(provider, remote_url)
-    return provider, model, remote_url
 
 
 def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "") -> tuple[str, str]:
-    from services.provider_profile import default_url_for_provider, resolve_minimax_key
+    from services import llm_routing
 
-    api_key = ""
-    if provider == "openai":
-        api_key = str(services.get("openai_api_key") or "")
-    elif provider == "anthropic":
-        api_key = str(services.get("anthropic_api_key") or "")
-    elif provider == "minimax":
-        api_key = resolve_minimax_key(services, "llm")
-    elif provider == "grok":
-        api_key = str(services.get("grok_api_key") or "")
-    elif provider == "deepseek":
-        api_key = str(services.get("deepseek_api_key") or "")
-    return api_key, default_url_for_provider(provider, remote_url)
+    return llm_routing._llm_provider_credentials(provider, services, remote_url)
 
 
 def _production_profile_response() -> dict:
@@ -7226,35 +6484,36 @@ def get_system_stats_live():
     every ~2s. Also reports the generation model currently resident in
     VRAM so the UI can show "what's loaded right now".
     """
-    from services.live_stats import get_live_stats
-
-    stats = get_live_stats(os.path.join(os.path.dirname(_app_dir), "ui", "dist"))
-
     # Currently-loaded generation model. WGP/mmgp keeps it resident
     # between jobs. `transformer_type` tracks the live load (set at the
     # end of load_models); `wan_model is not None` means it is actually
     # in memory right now vs. just the last/selected type.
-    model_name = None
-    model_type = None
-    model_loaded = False
-    try:
-        model_type = getattr(wgp, "transformer_type", None)
-        model_loaded = getattr(wgp, "wan_model", None) is not None
-        if model_type:
-            try:
-                md = wgp.get_model_def(model_type) or {}
-                model_name = md.get("name") or model_type
-            except Exception:
-                model_name = model_type
-    except Exception:
-        pass
+    def current_model():
+        model_name = None
+        model_type = None
+        model_loaded = False
+        try:
+            model_type = getattr(wgp, "transformer_type", None)
+            model_loaded = getattr(wgp, "wan_model", None) is not None
+            if model_type:
+                try:
+                    md = wgp.get_model_def(model_type) or {}
+                    model_name = md.get("name") or model_type
+                except Exception:
+                    model_name = model_type
+        except Exception:
+            pass
+        return {
+            "name": model_name,
+            "model_type": model_type,
+            "loaded": model_loaded,
+        }
 
-    stats["model"] = {
-        "name": model_name,
-        "model_type": model_type,
-        "loaded": model_loaded,
-    }
-    return stats
+    from services.live_stats import snapshot_system_stats
+    return snapshot_system_stats(
+        os.path.join(os.path.dirname(_app_dir), "ui", "dist"),
+        current_model,
+    )
 
 
 @api.post("/api/v1/system/release-model")
@@ -7646,30 +6905,14 @@ async def record_debug_user_action(request: Request):
 
 def _resolve_model3d_input_path(value: str, workspace: str | None = None) -> str | None:
     """Resolve a UI-provided upload/output path to a local file."""
-    if not value:
-        return None
-    from services.media_refs import parse_media_ref
-
-    value, workspace = parse_media_ref(value, workspace)
-    if not value:
-        return None
-    if value.startswith("/api/v1/uploads/"):
-        value = value.rsplit("/", 1)[-1]
-        return _safe_join(os.path.join(os.getcwd(), "uploads"), value)
-    if value.startswith("/api/v1/file/"):
-        value = value.rsplit("/", 1)[-1]
-        return _safe_join(_workspace_dir(workspace), value)
-    if os.path.isabs(value):
-        uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
-        outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
-        real = os.path.realpath(value)
-        if real.startswith(uploads_root + os.sep) or real.startswith(outputs_root + os.sep):
-            return real
-        return None
-    upload_candidate = _safe_join(os.path.join(os.getcwd(), "uploads"), value)
-    if upload_candidate and os.path.isfile(upload_candidate):
-        return upload_candidate
-    return _safe_join(_workspace_dir(workspace), value)
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=_safe_join,
+        workspace_dir=_workspace_dir,
+        save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+    )
 
 
 @api.get("/api/v1/wangp/capabilities")
@@ -8376,31 +7619,18 @@ def storage_usage():
 
 def _ensure_llm_loaded():
     """Auto-load LLM if not already loaded. Reloads if configured model changed."""
-    from services import llm_service
+    from services import llm_routing
+
     services = wgp.server_config.get("services", {})
     desired_provider, profile_model, desired_remote_url = _effective_llm_routing(services)
-    desired = profile_model or _DEFAULT_LLM_REPO
-    desired_device = services.get("llm_device", _llm_default_device())
-    desired_api_key, desired_remote_url = _llm_provider_credentials(
-        desired_provider, services, desired_remote_url,
+    llm_routing._ensure_llm_loaded(
+        services=services,
+        provider=desired_provider,
+        model=profile_model,
+        remote_url=desired_remote_url,
+        device=services.get("llm_device", _llm_default_device()),
+        default_model=_DEFAULT_LLM_REPO,
     )
-
-    if llm_service.is_loaded():
-        status = llm_service.get_status()
-        remote_changed = (
-            desired_provider in ("remote", "ollama", "openai", "minimax", "grok")
-            and status.get("remote_url", "") != desired_remote_url
-        )
-        if (
-            status.get("model_id") != desired
-            or status.get("provider") != desired_provider
-            or status.get("device") != (desired_device if desired_provider == "local" else desired_provider)
-            or remote_changed
-        ):
-            llm_service.unload_model()
-            llm_service.load_model(model_id=desired, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
-    else:
-        llm_service.load_model(model_id=desired, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
 
 
 from routers.llm import (
@@ -9510,55 +8740,12 @@ async def suggest_audio_clips(request: Request):
 # API Routes: Director (Shot Planner)
 # ============================================================================
 
-@api.post("/api/v1/director/plan-prompts")
-async def director_plan_prompts(request: Request):
-    """Use LLM to generate per-clip video prompts from audio analysis."""
-    from services import llm_service
-    body = await request.json()
-
-    clips = body.get("clips")
-    style_prompt = body.get("style_prompt", "")
-    if not clips:
-        raise HTTPException(status_code=400, detail="clips is required")
-    if not style_prompt:
-        raise HTTPException(status_code=400, detail="style_prompt is required")
-
-    _ensure_llm_loaded()
-
-    try:
-        prompts = llm_service.plan_clip_prompts(
-            clips=clips,
-            style_prompt=style_prompt,
-            lyrics=body.get("lyrics"),
-            bpm=body.get("bpm", 120.0),
-        )
-        return {"prompts": prompts}
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.post("/api/v1/director/plan-angle-prompts")
-async def director_plan_angle_prompts(request: Request):
-    """Use LLM to generate image-edit prompts for camera angle variations."""
-    from services import llm_service
-    body = await request.json()
-
-    style_prompt = body.get("style_prompt", "")
-    if not style_prompt:
-        raise HTTPException(status_code=400, detail="style_prompt is required")
-
-    _ensure_llm_loaded()
-
-    try:
-        prompts = llm_service.plan_angle_prompts(
-            style_prompt=style_prompt,
-            num_angles=body.get("num_angles", 4),
-        )
-        return {"prompts": prompts}
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+from routers.director_pipeline_reads import (
+    create_director_dashboard_reads_router,
+    create_director_pipeline_status_router,
+    create_director_plan_reads_router,
+)
+api.include_router(create_director_plan_reads_router(ensure_llm_loaded=_ensure_llm_loaded))
 
 
 @api.post("/api/v1/audio/plan-structure")
@@ -9879,46 +9066,9 @@ async def director_pipeline_start(request: Request):
     }
 
 
-@api.get("/api/v1/director/pipeline/{pid}")
-def director_pipeline_status(pid: str):
-    """Get current pipeline status with rich progress info."""
-    from services.director_pipeline import (
-        get_pipeline,
-        get_pipeline_status,
-        load_pipeline_state,
-        resume_pipeline,
-    )
-    base = wgp.server_config.get("save_path", "outputs")
-    p = get_pipeline_status(pid, base)
-    if not p:
-        # A comic PRE is a durable terminal checkpoint rather than a running
-        # job. Transparently rehydrate it after a backend restart so the Comic
-        # Studio can reopen its inspector by ID.
-        base = wgp.server_config.get("save_path", "outputs")
-        saved = load_pipeline_state(base, pid)
-        if saved and saved.get("status") == "preview_ready":
-            ok, _message = resume_pipeline(pid, base)
-            if ok:
-                p = get_pipeline(pid)
-    if not p:
-        raise HTTPException(status_code=404, detail="Pipeline not found")
-    # Don't leak full params back to client
-    p.pop("params", None)
-    fingerprint = p.get("_comic_preflight_fingerprint")
-    p["preview_fingerprint"] = fingerprint
-    p["preview_approved"] = bool(
-        fingerprint
-        and p.get("_preview_approved_fingerprint") == fingerprint
-    )
-    p["quality_gate"] = p.get("_quality_gate") or {
-        "status": "pending",
-        "fingerprint": fingerprint,
-        "required_test_indices": [],
-        "tested_indices": [],
-        "results": {},
-        "failures": [],
-    }
-    return p
+api.include_router(create_director_pipeline_status_router(
+    outputs_dir=lambda: wgp.server_config.get("save_path", "outputs"),
+))
 
 
 @api.post("/api/v1/director/pipeline/{pid}/continue")
@@ -10067,42 +9217,10 @@ def director_pipeline_resume(pid: str):
 
 from routers.director_review import create_director_review_router
 api.include_router(create_director_review_router(_workspace_dir))
-
-@api.get("/api/v1/director/pipelines")
-def list_saved_pipelines(limit: int = 0, offset: int = 0):
-    """List saved pipeline states for the active workspace.
-
-    Newest first. ``limit=0`` returns the full list. Workspaces passes a
-    small page so opening the tab does not parse every pipeline JSON.
-    """
-    from services.director_pipeline import count_pipeline_states, list_pipeline_states
-    base = wgp.server_config.get("save_path", "outputs")
-    workspace = _get_active_workspace()
-    pipelines = list_pipeline_states(base, workspace, limit=limit, offset=offset)
-    return {
-        "pipelines": pipelines,
-        "total": count_pipeline_states(base, workspace),
-        "limit": limit,
-        "offset": offset,
-    }
-
-
-@api.get("/api/v1/director/pipelines/active")
-def list_active_director_pipelines():
-    """List in-memory Director runs so the browser can recover after refresh."""
-    from services.director_pipeline import list_active_pipelines
-    return {"pipelines": list_active_pipelines(_get_active_workspace())}
-
-
-@api.get("/api/v1/director/pipelines/{pid}")
-def get_saved_pipeline(pid: str):
-    """Get a full saved pipeline state."""
-    from services.director_pipeline import hydrate_queue_clips, load_pipeline_state
-    base = wgp.server_config.get("save_path", "outputs")
-    state = load_pipeline_state(base, pid)
-    if not state:
-        return JSONResponse({"error": "Pipeline not found"}, status_code=404)
-    return hydrate_queue_clips(state)
+api.include_router(create_director_dashboard_reads_router(
+    outputs_dir=lambda: wgp.server_config.get("save_path", "outputs"),
+    active_workspace=_get_active_workspace,
+))
 
 
 @api.put("/api/v1/director/pipelines/{pid}/clips/{clip_index}/prompt")
@@ -26704,64 +25822,11 @@ def save_scene_output(body: dict):
     PNG is only a gallery preview. Locally imported assets are uploaded by the
     client before this endpoint is called, so no transient blob: URL is saved.
     """
-    import re as _re_scene
+    from services.scene_save import save_launch_scene
 
-    scene = body.get("scene")
-    preview = body.get("preview")
-    if not isinstance(scene, dict) or scene.get("version") != 1:
-        raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    layers = scene.get("layers")
-    if not isinstance(layers, list) or len(layers) > 500:
-        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
-    if not isinstance(preview, str) or not preview.startswith("data:image/png;base64,"):
-        raise HTTPException(status_code=400, detail="A PNG scene preview is required")
+    return save_launch_scene(body, workspace_dir=_workspace_dir)
 
-    try:
-        preview_bytes = base64.b64decode(preview.split(",", 1)[1], validate=True)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid PNG preview") from exc
-    if len(preview_bytes) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Scene preview is too large")
 
-    raw_name = str(scene.get("name") or "Untitled scene").strip()
-    safe_name = _re_scene.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "scene"
-    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    stem = f"{stamp}_{safe_name}_{uuid.uuid4().hex[:6]}.scene"
-    out_dir = _workspace_dir(body.get("workspace") or None)
-    os.makedirs(out_dir, exist_ok=True)
-    scene_name = f"{stem}.json"
-    preview_name = f"{stem}.preview.png"
-    scene_path = os.path.join(out_dir, scene_name)
-    preview_path = os.path.join(out_dir, preview_name)
-
-    scene_tmp = scene_path + ".tmp"
-    preview_tmp = preview_path + ".tmp"
-    try:
-        with open(scene_tmp, "w", encoding="utf-8") as handle:
-            json.dump(scene, handle, ensure_ascii=False, indent=2)
-        with open(preview_tmp, "wb") as handle:
-            handle.write(preview_bytes)
-        os.replace(scene_tmp, scene_path)
-        os.replace(preview_tmp, preview_path)
-    except Exception as exc:
-        for path in (scene_tmp, preview_tmp):
-            try:
-                if os.path.isfile(path):
-                    os.remove(path)
-            except OSError:
-                pass
-        raise HTTPException(status_code=500, detail=f"Failed to save scene: {exc}") from exc
-
-    from pathlib import Path
-    from services.document_origin import write_document_origin
-    write_document_origin(Path(scene_path), "scenes.save")
-
-    return {
-        "name": scene_name,
-        "type": "scene",
-        "url": f"/api/v1/file/{scene_name}",
-        "thumbnail_url": f"/api/v1/file/{preview_name}",
-    }
 
 
 def _character_kit_workspace(value) -> str:
@@ -26803,16 +25868,6 @@ api.include_router(create_character_kit_face_router(
 ))
 
 
-def _write_scene_recording_sidecar(output_path, sidecar, workspace_id):
-    from services.asset_manifest import publish_generation_sidecar
-
-    publish_generation_sidecar(
-        output_path,
-        sidecar,
-        workspace_id=workspace_id,
-        tool="scene-animator-3d",
-    )
-
 
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(
@@ -26826,178 +25881,26 @@ async def save_scene_recording(
     compiled scene, and source assets so a rendered 3D clip remains fully
     explainable and reproducible from the gallery.
     """
-    from services.scene_recording import (
-        SceneRecordingTranscodeError,
-        canonical_scene_fps,
-        transcode_scene_recording,
-    )
-
-    if file.size is not None and file.size > MAX_IMAGE_UPLOAD_BYTES:
-        await file.close()
-        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)")
-    if len(metadata.encode("utf-8")) > 8 * 1024 * 1024:
-        await file.close()
-        raise HTTPException(status_code=413, detail="Scene recording metadata is too large")
-    try:
-        details = json.loads(metadata)
-    except json.JSONDecodeError as error:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Invalid scene recording metadata") from error
-    if not isinstance(details, dict):
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene recording metadata must be an object")
-
-    scene = details.get("scene")
-    recipe = details.get("recipe")
-    prompt = details.get("prompt", "")
-    if not isinstance(scene, dict) or scene.get("version") != 1:
-        await file.close()
-        raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    if recipe is not None and not isinstance(recipe, dict):
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene recipe must be an object")
-    if not isinstance(prompt, str) or len(prompt) > 200_000:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene prompt must be text under 200,000 characters")
-    layers = scene.get("layers")
-    if not isinstance(layers, list) or len(layers) > 500:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
-
-    workspace = details.get("workspace") or None
-    out_dir = _workspace_dir(workspace)
-    os.makedirs(out_dir, exist_ok=True)
-    raw_audio_tracks = scene.get("audioTracks") or []
-    if not isinstance(raw_audio_tracks, list) or len(raw_audio_tracks) > 8:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene audio tracks must be a list of at most 8 items")
-    audio_tracks = []
-    for index, raw_track in enumerate(raw_audio_tracks):
-        if not isinstance(raw_track, dict):
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} is invalid")
-        filename = str(raw_track.get("filename") or "").strip()
-        # A filename, rather than a host path, keeps the browser metadata safe.
-        if not filename or os.path.basename(filename) != filename:
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has an invalid filename")
-        audio_path = _safe_join(out_dir, filename)
-        if not audio_path or not os.path.isfile(audio_path):
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} was not found in this workspace")
-        try:
-            start_time = max(0.0, min(3600.0, float(raw_track.get("startTime", 0))))
-            volume = max(0.0, min(2.0, float(raw_track.get("volume", 1))))
-        except (TypeError, ValueError):
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has invalid timing")
-        audio_tracks.append({"path": audio_path, "start_time": start_time, "volume": volume})
-    raw_name = str(scene.get("name") or "3D scene").strip()
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "3d-scene"
-    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    output_name = f"{stamp}_{safe_name}_3d_{uuid.uuid4().hex[:6]}.mp4"
-    output_path = os.path.join(out_dir, output_name)
-    upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
-    upload_audio_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-audio.wav")
-    fps = canonical_scene_fps(scene.get("fps"))
-    started_at = time.time()
+    from services.scene_save import http_error_detail, http_error_status, publish_from_form
 
     try:
-        await _stream_upload(file, upload_path, max_bytes=MAX_IMAGE_UPLOAD_BYTES)
-        if audio is not None:
-            await _stream_upload(audio, upload_audio_path, max_bytes=32 * 1024 * 1024)
-            audio_tracks.append({"path": upload_audio_path, "start_time": 0, "volume": 1})
-        async with _UPLOAD_TRANSCODE_SLOTS:
-            await asyncio.to_thread(
-                transcode_scene_recording,
-                upload_path,
-                output_path,
-                fps=fps,
-                audio_tracks=audio_tracks,
-                duration=float(scene.get("duration") or 0),
-                embedded_audio=details.get("embeddedAudio") is True,
-            )
-    except UploadTooLargeError as error:
-        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)") from error
-    except SceneRecordingTranscodeError as error:
-        raise HTTPException(status_code=400, detail=f"Could not convert recording to MP4: {error}") from error
+        return await publish_from_form(
+            {"file": file, "metadata": metadata, "audio": audio},
+            workspace_dir=_workspace_dir,
+            include_workspace_query=False,
+            scan_cache=_output_scan_cache,
+            scan_cache_lock=_output_scan_cache_lock,
+            stream_upload=_stream_upload,
+            transcode_slots=_UPLOAD_TRANSCODE_SLOTS,
+            sidecar_error_prefix="Could not save recording metadata",
+            safe_join=_safe_join,
+            strip_workspace=False,
+        )
+    except HTTPException:
+        raise
     except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Could not save MP4 recording: {error}") from error
-    finally:
-        try:
-            if os.path.isfile(upload_audio_path):
-                os.remove(upload_audio_path)
-        except OSError:
-            pass
-        try:
-            if os.path.isfile(upload_path):
-                os.remove(upload_path)
-        except OSError:
-            pass
+        raise HTTPException(status_code=http_error_status(error), detail=http_error_detail(error)) from error
 
-    completed_at = time.time()
-    width = int(scene.get("width") or 0)
-    height = int(scene.get("height") or 0)
-    duration = float(scene.get("duration") or 0)
-    source_assets = []
-    if isinstance(recipe, dict):
-        source_assets = recipe.get("assets") if isinstance(recipe.get("assets"), list) else []
-    if not source_assets:
-        source_assets = [
-            {
-                "id": layer.get("id"),
-                "name": layer.get("name"),
-                "kind": layer.get("type"),
-                "source": layer.get("source"),
-            }
-            for layer in layers
-            if isinstance(layer, dict) and layer.get("source")
-        ]
-    sidecar = {
-        "params": {
-            "model_type": "scene-animator-3d",
-            "generation_mode": "3d-scene-compositor",
-            "prompt": prompt,
-            "original_prompt": prompt,
-            "scene_recipe": recipe,
-            "scene": scene,
-            "source_assets": source_assets,
-            "audio_tracks": scene.get("audioTracks") or [],
-            "resolution": f"{width}x{height}" if width and height else None,
-            "width": width,
-            "height": height,
-            "fps": fps,
-            "duration_seconds": duration,
-            "video_length": round(duration * fps) if duration > 0 else None,
-        },
-        "generation_mode": "video",
-        "tool": "scene-animator-3d",
-        "generation_time": round(completed_at - started_at, 3),
-        "created_at": completed_at,
-        "completed_at": completed_at,
-        "output_filename": output_name,
-    }
-    try:
-        _write_scene_recording_sidecar(output_path, sidecar, details.get("workspace"))
-    except Exception as error:
-        try:
-            os.remove(output_path)
-        except OSError:
-            pass
-        raise HTTPException(status_code=500, detail=f"Could not save recording metadata: {error}") from error
-
-    with _output_scan_cache_lock:
-        _output_scan_cache.pop(out_dir, None)
-    return {
-        "name": output_name,
-        "type": "video",
-        "mode": "video",
-        "size": os.path.getsize(output_path),
-        "created_at": completed_at,
-        "completed_at": completed_at,
-        "url": f"/api/v1/file/{output_name}",
-        "thumbnail_url": f"/api/v1/outputs/thumbnail/{quote(output_name, safe='')}",
-    }
 
 
 # ============================================================================
@@ -28603,7 +27506,7 @@ def import_story_as_series_endpoint(body: dict):
 
 @api.post("/api/v1/series/{series_id}/episodes")
 def create_series_episode_endpoint(series_id: str, body: dict):
-    from routers.series_episode import create_checked_episode
+    from services.series_episode import create_checked_episode
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -28757,7 +27660,7 @@ def import_series_asset_endpoint(series_id: str, body: dict):
 
 @api.put("/api/v1/series/{series_id}/episodes/{episode_id}")
 def put_series_episode_endpoint(series_id: str, episode_id: str, body: dict):
-    from routers.series_episode import apply_series_episode_update
+    from services.series_episode import apply_series_episode_update
 
     workspace = _series_library_workspace(body.get("workspace"))
     with _series_library_lock:
@@ -29890,19 +28793,15 @@ def _series_render_update_item(job_id: str, item_index: int, **patch) -> dict | 
 
 
 def _series_asset_local_path(workspace: str, asset: dict) -> str:
-    uri = str(asset.get("uri") or "")
-    if uri.startswith("https://"):
-        raise ValueError(
-            f"Remote Series asset {asset.get('id')} must be imported into the workspace before local H3 rendering"
-        )
-    workspace_dir = os.path.realpath(_workspace_dir(workspace))
-    relative = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
-    candidate = os.path.realpath(os.path.join(workspace_dir, relative))
-    if candidate != workspace_dir and not candidate.startswith(workspace_dir + os.sep):
-        raise ValueError(f"Series asset {asset.get('id')} leaves its workspace")
-    if not os.path.isfile(candidate):
-        raise ValueError(f"Series reference file is missing: {uri}")
-    return candidate
+    from services.series_asset_path import series_asset_local_path
+
+    return series_asset_local_path(
+        workspace,
+        asset,
+        workspace_dir=_workspace_dir,
+        remote_purpose="local H3 rendering",
+        on_missing="raise",
+    )
 
 
 def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dict]:
@@ -30900,112 +29799,11 @@ def _story_library_revision_conflict(exc) -> HTTPException:
     )
 
 
-@api.get("/api/v1/wizard/conversations")
-def get_wizard_conversation(workspace: str | None = None):
-    """Load the durable Wizard conversation for one workspace."""
-    from services.wizard_conversations import read_conversation
-
-    target_workspace = _story_library_workspace(workspace)
-    try:
-        with _story_library_lock:
-            return read_conversation(_workspace_dir(target_workspace))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not read the Wizard conversation: {exc}",
-        ) from exc
-
-
-@api.put("/api/v1/wizard/conversations")
-def put_wizard_conversation(body: dict):
-    """Atomically replace a workspace Wizard conversation."""
-    from services.wizard_conversations import (
-        WizardConversationRevisionConflict,
-        write_conversation,
-    )
-
-    target_workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            base_revision = body.get("baseRevision")
-            if type(base_revision) is not int:
-                base_revision = 0
-            return write_conversation(
-                _workspace_dir(target_workspace),
-                body.get("conversation"),
-                base_revision=base_revision,
-            )
-    except WizardConversationRevisionConflict as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_conversation_revision_conflict",
-                "message": str(exc),
-                "expectedRevision": exc.expected,
-                "currentRevision": exc.current,
-            },
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not save the Wizard conversation: {exc}",
-        ) from exc
-
-
-@api.get("/api/v1/wizard/workflows")
-def get_wizard_workflows(workspace: str | None = None):
-    """Load durable Wizard workflow checkpoints for one workspace."""
-    from services.wizard_workflows import read_workflows
-
-    target_workspace = _story_library_workspace(workspace)
-    try:
-        with _story_library_lock:
-            return read_workflows(_workspace_dir(target_workspace))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not read Wizard workflows: {exc}",
-        ) from exc
-
-
-@api.put("/api/v1/wizard/workflows")
-def put_wizard_workflows(body: dict):
-    """Atomically checkpoint all Wizard workflows in one workspace."""
-    from services.wizard_workflows import (
-        WizardWorkflowRevisionConflict,
-        write_workflows,
-    )
-
-    target_workspace = _story_library_workspace(body.get("workspace"))
-    try:
-        with _story_library_lock:
-            base_revision = body.get("baseRevision")
-            if type(base_revision) is not int:
-                base_revision = 0
-            return write_workflows(
-                _workspace_dir(target_workspace),
-                body.get("collection"),
-                base_revision=base_revision,
-            )
-    except WizardWorkflowRevisionConflict as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_workflow_revision_conflict",
-                "message": str(exc),
-                "expectedRevision": exc.expected,
-                "currentRevision": exc.current,
-            },
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not save Wizard workflows: {exc}",
-        ) from exc
+from routers.wizard_persistence import create_wizard_persistence_router
+api.include_router(create_wizard_persistence_router(
+    workspace_dir=lambda value: _workspace_dir(_story_library_workspace(value)),
+    lock=_story_library_lock,
+))
 
 
 from routers.story_library import (
@@ -31646,422 +30444,17 @@ def generate_story_lab_section(body: dict):
     return {"result": _generate_story_lab_stage(body, scope)}
 
 
-_minimax_music_jobs: dict[str, dict] = {}
-_minimax_music_jobs_lock = threading.RLock()
-_MINIMAX_MUSIC_TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
+from services.story_music_jobs import bind_story_music_jobs
 
-
-def _minimax_music_checkpoint_dir(workspace: str | None = None) -> str:
-    path = os.path.join(_workspace_dir(workspace), ".minimax-music-jobs")
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-def _minimax_music_checkpoint_path(job_id: str, workspace: str) -> str | None:
-    if not re.fullmatch(r"minimax-music-[a-f0-9]{12}", str(job_id or "")):
-        return None
-    return os.path.join(_minimax_music_checkpoint_dir(workspace), f"{job_id}.json")
-
-
-def _persist_minimax_music_job(job: dict) -> None:
-    path = _minimax_music_checkpoint_path(
-        str(job.get("jobId") or ""), str(job.get("workspace") or "default"),
-    )
-    if not path:
-        return
-    temporary = f"{path}.{uuid.uuid4().hex}.tmp"
-    try:
-        with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(job, handle, ensure_ascii=False)
-        os.replace(temporary, path)
-    finally:
-        try:
-            if os.path.isfile(temporary):
-                os.remove(temporary)
-        except OSError:
-            pass
-
-
-def _public_minimax_music_job(job: dict) -> dict:
-    return {
-        key: copy.deepcopy(value)
-        for key, value in job.items()
-        if key not in {"request", "_cancel_requested"}
-    }
-
-
-def _publish_minimax_music_job(job: dict) -> None:
-    publisher = globals().get("_publish_generic_legacy_task")
-    if not callable(publisher):
-        return
-    try:
-        publisher(copy.deepcopy(job), "minimax-music")
-        for child in job.get("children") or []:
-            if isinstance(child, dict):
-                publisher(copy.deepcopy(child), "minimax-music-candidate")
-    except Exception as exc:
-        print(f"[Task registry] Could not publish MiniMax Music {job.get('jobId')}: {exc}")
-
-
-def _minimax_music_job_update(job_id: str, **patch) -> dict | None:
-    with _minimax_music_jobs_lock:
-        job = _minimax_music_jobs.get(job_id)
-        if job is None:
-            return None
-        requested_status = str(patch.get("status") or "")
-        if (
-            job.get("_cancel_requested")
-            and requested_status in {
-                "created", "queued", "waiting_resource", "running",
-            }
-        ):
-            return copy.deepcopy(job)
-        if (
-            str(job.get("status") or "") in _MINIMAX_MUSIC_TERMINAL
-            and requested_status
-            and requested_status not in _MINIMAX_MUSIC_TERMINAL
-        ):
-            return copy.deepcopy(job)
-        job.update(patch)
-        job["updatedAt"] = time.time()
-        snapshot = copy.deepcopy(job)
-        _persist_minimax_music_job(snapshot)
-    _publish_minimax_music_job(snapshot)
-    return snapshot
-
-
-def _minimax_music_child_update(job_id: str, child_index: int, **patch) -> dict | None:
-    with _minimax_music_jobs_lock:
-        job = _minimax_music_jobs.get(job_id)
-        children = job.get("children") if isinstance(job, dict) else None
-        if not isinstance(children, list) or not 0 <= child_index < len(children):
-            return None
-        child = children[child_index]
-        requested_status = str(patch.get("status") or "")
-        if (
-            job.get("_cancel_requested")
-            and requested_status in {
-                "created", "queued", "waiting_resource", "running",
-            }
-        ):
-            return copy.deepcopy(job)
-        if (
-            str(child.get("status") or "") in _MINIMAX_MUSIC_TERMINAL
-            and requested_status
-            and requested_status not in _MINIMAX_MUSIC_TERMINAL
-        ):
-            return copy.deepcopy(job)
-        child.update(patch)
-        child["updatedAt"] = time.time()
-        job["updatedAt"] = child["updatedAt"]
-        snapshot = copy.deepcopy(job)
-        _persist_minimax_music_job(snapshot)
-    _publish_minimax_music_job(snapshot)
-    return snapshot
-
-
-def _minimax_music_claim_candidate(
-    job_id: str,
-    child_index: int,
-    lane_key: str,
-) -> dict | None:
-    """Atomically commit one candidate before entering the provider call."""
-    with _minimax_music_jobs_lock:
-        job = _minimax_music_jobs.get(job_id)
-        children = job.get("children") if isinstance(job, dict) else None
-        if (
-            not isinstance(children, list)
-            or not 0 <= child_index < len(children)
-            or job.get("_cancel_requested")
-            or str(job.get("status") or "") in _MINIMAX_MUSIC_TERMINAL
-        ):
-            return None
-        now = time.time()
-        child = children[child_index]
-        child.update(
-            status="running",
-            phase="requesting",
-            message=(
-                f"MiniMax is generating candidate {child_index + 1}/"
-                f"{len(children)}…"
-            ),
-            startedAt=child.get("startedAt") or now,
-            acquired_resources=[lane_key],
-            updatedAt=now,
-        )
-        job.update(
-            status="running",
-            phase="requesting",
-            message=(
-                f"MiniMax is generating candidate {child_index + 1}/"
-                f"{len(children)}…"
-            ),
-            startedAt=job.get("startedAt") or now,
-            acquired_resources=[],
-            updatedAt=now,
-        )
-        snapshot = copy.deepcopy(job)
-        _persist_minimax_music_job(snapshot)
-    _publish_minimax_music_job(snapshot)
-    return snapshot
-
-
-def _load_minimax_music_job(job_id: str) -> dict | None:
-    with _minimax_music_jobs_lock:
-        cached = _minimax_music_jobs.get(job_id)
-        if cached is not None:
-            return copy.deepcopy(cached)
-    for item in _list_workspaces():
-        path = _minimax_music_checkpoint_path(job_id, item["name"])
-        if not path or not os.path.isfile(path):
-            continue
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                job = json.load(handle)
-            if not isinstance(job, dict):
-                continue
-            if str(job.get("status") or "") not in _MINIMAX_MUSIC_TERMINAL:
-                now = time.time()
-                job.update(
-                    status="interrupted",
-                    phase="interrupted",
-                    message=(
-                        "HocusPocus Lab restarted while MiniMax Music was active. "
-                        "Existing outputs were preserved; start a new request only after checking them."
-                    ),
-                    error="Provider completion is unknown after restart",
-                    finishedAt=now,
-                    updatedAt=now,
-                )
-                for child in job.get("children") or []:
-                    if str(child.get("status") or "") not in _MINIMAX_MUSIC_TERMINAL:
-                        child.update(
-                            status="interrupted", phase="interrupted",
-                            message="Provider completion is unknown after restart",
-                            finishedAt=now, updatedAt=now,
-                        )
-                _persist_minimax_music_job(job)
-            with _minimax_music_jobs_lock:
-                _minimax_music_jobs[job_id] = job
-            _publish_minimax_music_job(job)
-            return copy.deepcopy(job)
-        except Exception as exc:
-            print(f"[MiniMax Music] Could not restore {job_id}: {exc}")
-    return None
-
-
-def _finish_unstarted_music_children(job_id: str, start_index: int, message: str) -> None:
-    with _minimax_music_jobs_lock:
-        job = _minimax_music_jobs.get(job_id)
-        children = job.get("children") if isinstance(job, dict) else []
-        indices = [
-            index for index in range(start_index, len(children))
-            if str(children[index].get("status") or "") not in _MINIMAX_MUSIC_TERMINAL
-        ]
-    for index in indices:
-        _minimax_music_child_update(
-            job_id, index, status="cancelled", phase="cancelled",
-            message=message, finishedAt=time.time(), acquired_resources=[],
-        )
-
-
-def _finalize_reserved_music_attempt(
-    workspace, generation_id, filename, cancelled, duration_seconds=None,
-) -> None:
-    token = str(generation_id or "").strip()
-    audio = str(filename or "").strip()
-    if not token or not audio:
-        return
-    try:
-        from services.music_finalization import finalize_reserved_music
-        finalize_reserved_music(
-            workspace_dir=_workspace_dir(workspace),
-            generation_id=token,
-            audio_filename=audio,
-            cancel_check=cancelled,
-            reported_duration_seconds=duration_seconds,
-        )
-    except Exception:
-        traceback.print_exc()
-
-
-def _run_minimax_music_job(job_id: str) -> None:
-    from services import minimax_music_service
-
-    with _minimax_music_jobs_lock:
-        initial = copy.deepcopy(_minimax_music_jobs.get(job_id) or {})
-    if not initial:
-        return
-    request_body = initial.get("request") if isinstance(initial.get("request"), dict) else {}
-    workspace = str(initial.get("workspace") or "default")
-    count = max(1, min(3, int(initial.get("total") or 1)))
-    lane = resource_scheduler.remote_lane("minimax", minimax_music_service.API_URL)
-
-    def cancelled() -> bool:
-        with _minimax_music_jobs_lock:
-            return bool(
-                (_minimax_music_jobs.get(job_id) or {}).get("_cancel_requested")
-            )
-
-    for index in range(count):
-        if cancelled():
-            _finish_unstarted_music_children(
-                job_id, index, "Cancelled before this candidate started",
-            )
-            _minimax_music_job_update(
-                job_id, status="cancelled", phase="cancelled",
-                message="MiniMax Music generation cancelled",
-                finishedAt=time.time(), acquired_resources=[],
-            )
-            return
-        child = initial["children"][index]
-        child_task_id = str(child["taskId"])
-        _minimax_music_child_update(
-            job_id, index, status="waiting_resource", phase="waiting_resource",
-            message=f"Waiting for MiniMax API · candidate {index + 1}/{count}",
-            acquired_resources=[],
-        )
-        _minimax_music_job_update(
-            job_id, status="waiting_resource", phase="waiting_resource",
-            message=f"Waiting for MiniMax API · candidate {index + 1}/{count}",
-            acquired_resources=[],
-        )
-        try:
-            with resource_scheduler.coordinator.acquire(
-                lane,
-                task_id=child_task_id,
-                description=f"MiniMax Music candidate {index + 1}/{count}",
-                cancelled=cancelled,
-            ):
-                claimed = _minimax_music_claim_candidate(
-                    job_id, index, lane.key,
-                )
-                if claimed is None:
-                    raise resource_scheduler.ResourceAcquireCancelled(
-                        f"MiniMax Music job {job_id} was cancelled"
-                    )
-                result = minimax_music_service.generate_candidates(
-                    api_key=str(
-                        __import__("services.provider_profile", fromlist=["resolve_minimax_key"]).resolve_minimax_key(
-                            wgp.server_config.get("services") or {}, "music",
-                        )
-                    ),
-                    prompt=str(request_body.get("prompt") or ""),
-                    lyrics=str(request_body.get("lyrics") or ""),
-                    count=1,
-                    output_dir=_workspace_dir(workspace),
-                    instrumental=bool(request_body.get("instrumental")),
-                    model=str(request_body.get("model") or ""),
-                    reference_audio_path=request_body.get("reference_audio_path"),
-                    task_id=child_task_id,
-                    root_task_id=str(initial.get("rootTaskId") or initial.get("taskId")),
-                    cancelled=cancelled,
-                )[0]
-            candidate = {
-                **result,
-                "source": f"/api/v1/file/{result['filename']}",
-                "taskId": result.get("task_id") or child_task_id,
-                "rootTaskId": (
-                    result.get("root_task_id")
-                    or initial.get("rootTaskId")
-                    or initial.get("taskId")
-                ),
-            }
-            with _minimax_music_jobs_lock:
-                live = _minimax_music_jobs.get(job_id) or {}
-                results = list(live.get("candidates") or [])
-                outputs = list(live.get("output_files") or [])
-            results.append(candidate)
-            if result["filename"] not in outputs:
-                outputs.append(result["filename"])
-            try:
-                _finalize_reserved_music_attempt(
-                    workspace,
-                    initial.get("generationId"),
-                    result.get("filename"),
-                    cancelled,
-                    result.get("duration_seconds"),
-                )
-            except Exception:
-                traceback.print_exc()
-            _minimax_music_child_update(
-                job_id, index, status="completed", phase="completed",
-                message=f"Candidate {index + 1}/{count} generated",
-                current=1, total=1, progress=100,
-                output_files=[result["filename"]], result=candidate,
-                acquired_resources=[], finishedAt=time.time(),
-            )
-            _minimax_music_job_update(
-                job_id, current=index + 1, progress=((index + 1) / count) * 100,
-                candidates=results, output_files=outputs,
-            )
-            if cancelled():
-                _finish_unstarted_music_children(
-                    job_id, index + 1,
-                    "Cancelled before this candidate started",
-                )
-                _minimax_music_job_update(
-                    job_id, status="cancelled", phase="cancelled",
-                    message=(
-                        "Cancellation completed at a safe provider boundary; "
-                        f"{len(results)} generated candidate(s) were preserved"
-                    ),
-                    result={"candidates": results}, finishedAt=time.time(),
-                    acquired_resources=[],
-                )
-                return
-        except resource_scheduler.ResourceAcquireCancelled:
-            _finish_unstarted_music_children(
-                job_id, index, "Cancelled before this candidate started",
-            )
-            _minimax_music_job_update(
-                job_id, status="cancelled", phase="cancelled",
-                message="MiniMax Music generation cancelled",
-                finishedAt=time.time(), acquired_resources=[],
-            )
-            return
-        except minimax_music_service.MiniMaxMusicError as exc:
-            _minimax_music_child_update(
-                job_id, index, status="failed", phase="failed",
-                message=str(exc), error=str(exc), statusCode=exc.status_code,
-                acquired_resources=[], finishedAt=time.time(),
-            )
-            _finish_unstarted_music_children(
-                job_id, index + 1, "Not started because an earlier candidate failed",
-            )
-            _minimax_music_job_update(
-                job_id, status="failed", phase="failed", message=str(exc),
-                error=str(exc), statusCode=exc.status_code,
-                finishedAt=time.time(), acquired_resources=[],
-            )
-            return
-        except Exception as exc:
-            traceback.print_exc()
-            _minimax_music_child_update(
-                job_id, index, status="failed", phase="failed",
-                message=f"MiniMax Music failed: {exc}", error=str(exc),
-                acquired_resources=[], finishedAt=time.time(),
-            )
-            _finish_unstarted_music_children(
-                job_id, index + 1, "Not started because an earlier candidate failed",
-            )
-            _minimax_music_job_update(
-                job_id, status="failed", phase="failed",
-                message=f"MiniMax Music failed: {exc}", error=str(exc),
-                finishedAt=time.time(), acquired_resources=[],
-            )
-            return
-
-    with _minimax_music_jobs_lock:
-        results = list((_minimax_music_jobs.get(job_id) or {}).get("candidates") or [])
-    _minimax_music_job_update(
-        job_id, status="completed", phase="completed",
-        message=f"Generated {len(results)} MiniMax Music candidate(s)",
-        current=count, total=count, progress=100,
-        result={"candidates": results}, finishedAt=time.time(),
-        acquired_resources=[],
-    )
-
+_story_music_jobs = bind_story_music_jobs(
+    workspace_dir=_workspace_dir,
+    list_workspaces=_list_workspaces,
+    wgp_module=wgp,
+    publish_legacy_task=lambda record, adapter: _publish_generic_legacy_task(record, adapter),
+)
+_minimax_music_jobs = _story_music_jobs.minimax_music_jobs
+_minimax_music_jobs_lock = _story_music_jobs.minimax_music_jobs_lock
+_publish_minimax_music_job = _story_music_jobs.publish_minimax_music_job
 
 from routers.story_music import (
     cancel_story_music_candidates_job,
@@ -32069,21 +30462,13 @@ from routers.story_music import (
 )
 
 api.include_router(create_story_music_router(
+    _story_music_jobs,
     get_active_workspace=_get_active_workspace,
-    workspace_dir=_workspace_dir,
     story_cover_reference_path=_story_cover_reference_path,
-    load_minimax_music_job=_load_minimax_music_job,
-    persist_minimax_music_job=_persist_minimax_music_job,
-    publish_minimax_music_job=_publish_minimax_music_job,
-    public_minimax_music_job=_public_minimax_music_job,
-    run_minimax_music_job=_run_minimax_music_job,
-    minimax_music_jobs=_minimax_music_jobs,
-    minimax_music_jobs_lock=_minimax_music_jobs_lock,
-    minimax_music_terminal=_MINIMAX_MUSIC_TERMINAL,
-    finish_unstarted_music_children=_finish_unstarted_music_children,
-    minimax_music_job_update=_minimax_music_job_update,
     wgp_module=wgp,
 ))
+
+
 
 
 @api.post("/api/v1/stories/translate-lyrics")
@@ -35180,13 +33565,6 @@ api.include_router(create_uploads_router(
 # Canonical task registry and compatibility adapters
 # ============================================================================
 
-def _task_registry(workspace: str | None = None):
-    from services.task_manager import get_task_registry
-
-    target = _get_active_workspace() if workspace is None else workspace
-    return get_task_registry(_workspace_dir(target))
-
-
 def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
     """Explicitly reopen a terminal adapter task before its worker publishes."""
     if not task_id:
@@ -35216,14 +33594,8 @@ def _task_legacy_id(record: dict) -> str:
 
 
 def _task_status(value: object) -> str:
-    raw = str(value or "queued").lower()
-    if raw in {"completed", "failed", "cancelled", "interrupted"}:
-        return raw
-    if raw in {"created", "queued"}:
-        return raw
-    if raw in {"paused", "waiting", "waiting_resource"}:
-        return "waiting_resource"
-    return "running"
+    from services.canonical_task_helpers import task_status
+    return task_status(value)
 
 
 def _task_timestamp(record: dict, *keys: str) -> float | None:
@@ -35267,53 +33639,14 @@ def _upsert_canonical_task(
     event_exclude_fields: set[str] | frozenset[str] | None = None,
     **fields,
 ) -> dict:
-    registry = _task_registry(workspace)
-    existing = registry.get(task_id)
-    if existing is None:
-        return registry.create(
-            id=task_id,
-            workspace=workspace,
-            event_exclude_fields=event_exclude_fields,
-            **fields,
-        )
-    from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES
-    existing_status = str(existing.get("status") or "")
-    incoming_status = str(fields.get("status") or existing_status)
-    if existing_status in TERMINAL_STATUSES and incoming_status in ACTIVE_STATUSES:
-        # A lagging compatibility snapshot must never resurrect a task after
-        # cancellation/completion won. Canonical resume explicitly transitions
-        # the registry before the next active adapter snapshot arrives.
-        return existing
-    existing_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
-    incoming_metadata = fields.get("metadata") if isinstance(fields.get("metadata"), dict) else None
-    if incoming_metadata is not None:
-        merged_metadata = dict(existing_metadata)
-        for key, value in incoming_metadata.items():
-            if value is not None:
-                merged_metadata[key] = value
-        fields["metadata"] = merged_metadata
-        # Reservation owns attempt identity. Adapter snapshots must not
-        # replace workflow/title after submit_music_generation wrote them.
-        if any(
-            existing_metadata.get(key)
-            for key in ("generation_id", "candidate_id", "command_id", "idempotency_key")
-        ):
-            fields.pop("workflow", None)
-            fields.pop("title", None)
-    mutable = {
-        key: value for key, value in fields.items()
-        if key not in {"id", "created_at"}
-        and existing.get(key) != value
-    }
-    if mutable:
-        return registry.update(
-            task_id,
-            force=True,
-            event_type="adapter.synced",
-            event_exclude_fields=event_exclude_fields,
-            **mutable,
-        )
-    return existing
+    from services.canonical_task_helpers import upsert_canonical_task
+    return upsert_canonical_task(
+        _task_registry(workspace),
+        workspace,
+        task_id,
+        event_exclude_fields=event_exclude_fields,
+        **fields,
+    )
 
 
 def _generation_task_fields(job: dict) -> dict:
@@ -36261,12 +34594,12 @@ _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
 # qa.people C3 duplicate-person flag: register beside the MCP router (feat/qa-people).
 from services.qa_people import command_catalog as qa_people_catalog, command_handlers as qa_people_handlers
 _qa_people_handlers = qa_people_handlers(_workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"))
-from routers.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
+from services.model3d_commands import command_catalog as model3d_command_catalog, command_handlers as model3d_command_handlers
 _model3d_command_handlers = model3d_command_handlers(
     generate=generate_model3d, status=model3d_job_status,
     journal_path=os.path.join(os.getcwd(), "settings", "model3d-mcp-requests.sqlite3"),
 )
-from routers.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
+from services.model3d_rig_commands import command_catalog as model3d_rig_catalog, command_handlers as model3d_rig_handlers
 _model3d_rig_handlers = model3d_rig_handlers(
     generate=generate_rig, status=rig_job_status,
     journal_path=os.path.join(os.getcwd(), "settings", "model3d-rig-mcp-requests.sqlite3"),
@@ -36507,105 +34840,23 @@ else:
 # ============================================================================
 
 def run_server():
-    port = int(os.environ.get("SERVER_PORT", "7860"))
+    def prepare(display_host, port):
+        # Confirm the polling filter immediately before Uvicorn configures logging.
+        install_quiet_access_filter()
+        from services.production_resume import resume_on_startup
+        # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
+        api.add_event_handler("startup", lambda: resume_on_startup(
+            _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
+            lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
 
-    # Bind-host resolution priority:
-    #   1. PINOKIO_SHARE_LOCAL — Pinokio's per-app + global ENVIRONMENT
-    #      var. "true" → 0.0.0.0 (LAN-accessible), anything else
-    #      → 127.0.0.1 (loopback only). This is the primary Pinokio path
-    #      and CRITICALLY: per-app ENVIRONMENT overrides global here
-    #      because os.environ reflects the merged shell env. (start.js's
-    #      kernel.envs only sees global, which is why we can't make this
-    #      decision in start.js — Pinokio doesn't merge per-app into
-    #      kernel.envs as of 2026-05-04.)
-    #   2. SERVER_NAME — manual override for direct python launches
-    #      outside Pinokio. Lets devs force a bind without going through
-    #      the env-var dance.
-    #   3. Default 127.0.0.1 (safe loopback).
-    pinokio_share = (os.environ.get("PINOKIO_SHARE_LOCAL") or "").strip().lower()
-    if pinokio_share == "true":
-        host = "0.0.0.0"
-    elif pinokio_share == "false":
-        host = "127.0.0.1"
-    else:
-        host = os.environ.get("SERVER_NAME", "127.0.0.1")
-
-    for _lan_auth_message in describe_lan_auth_startup():
-        print(_lan_auth_message)
-
-    # Port resolution: Pinokio hands us a free port via SERVER_PORT, but a
-    # stale prior instance or another app can still be holding it by the time
-    # we bind. Bind now (falling forward to the next free port) and hand the
-    # socket to Uvicorn: the URL printed below is then already ours, so the
-    # LAN proxy Pinokio starts on reading it cannot take the port first.
-    from services.server_lifecycle import bind_listener
-    try:
-        listener, resolved_port = bind_listener(host, port)
-    except OSError:
-        print(
-            f"\n[HocusPocus Lab] ERROR: could not find a free port in "
-            f"{port}-{port + 20}. Another app (or a stale HocusPocus Lab instance) "
-            f"is holding them.\n"
-            f"  • Close the other program, or stop the existing HocusPocus Lab from "
-            f"the Pinokio menu, then Start again.\n"
-            f"  • On Windows you can see what holds a port with: "
-            f"netstat -ano | findstr :{port}\n",
-            flush=True,
-        )
-        sys.exit(1)
-    if resolved_port != port:
-        print(
-            f"[HocusPocus Lab] Port {port} was busy — using {resolved_port} instead.",
-            flush=True,
-        )
-        port = resolved_port
-
-    # Browsers can't navigate to 0.0.0.0 (it's a non-routable bind
-    # address), so when binding wider we still SURFACE the loopback
-    # URL — that's what Pinokio's regex captures from this output and
-    # hands to its built-in browser. The actual bind stays 0.0.0.0 so
-    # LAN access works; only the displayed URL is loopback.
-    display_host = "127.0.0.1" if host == "0.0.0.0" else host
-
-    print(f"\n{'='*50}")
-    print(f"  {'HocusPocus Lab UI:' if _ui_ready else 'Web UI repair page (API only):'} http://{display_host}:{port}/")
-    # Trailing slash required: the Gradio submount 404s the bare path.
-    print(f"  Classic UI:    http://{display_host}:{port}/classic/")
-    print(f"  API docs:      http://{display_host}:{port}/docs")
-    if host == "0.0.0.0":
-        print(f"  (Bound to {host} — LAN-accessible via this machine's IP)")
-    print(f"{'='*50}\n")
-    try:
-        from services.server_endpoint import publish_server_endpoint
-        publish_server_endpoint(
-            os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
-            host=host, display_host=display_host, port=port,
-        )
-    except OSError as error:
-        print(f"[HocusPocus Lab] Could not publish settings/server-endpoint.json: {error}")
-
-    # Confirm the polling filter immediately before Uvicorn configures logging.
-    install_quiet_access_filter()
-    from services.production_resume import resume_on_startup
-    # Local tool coroutines need the serving event loop, bound by _bind_local_mcp first.
-    api.add_event_handler("startup", lambda: resume_on_startup(
-        _list_workspaces, _workspace_dir, lambda: os.path.join(os.getcwd(), "uploads"),
-        lambda: _scene2d_export.app_url or f"http://{display_host}:{port}", _mcp_access.token, mcp=_local_mcp.call))
-
-    try:
-        from services.server_lifecycle import run_until_stopped
-        run_until_stopped(api, host=host, port=port, sockets=[listener])
-    except OSError as e:
-        # The probe above narrows this to a genuine race (port taken in the
-        # window between probe and uvicorn's own bind). Still fail loudly and
-        # actionably rather than dumping a bare traceback into the launcher.
-        print(
-            f"\n[HocusPocus Lab] ERROR: failed to bind {host}:{port} ({e}). "
-            f"The port was taken just after we checked it — Start again to "
-            f"pick a fresh port.\n",
-            flush=True,
-        )
-        sys.exit(1)
+    from services.server_entry import run
+    run(
+        api,
+        ui_ready=_ui_ready,
+        endpoint_path=os.path.join(os.path.dirname(__file__), "settings", "server-endpoint.json"),
+        prepare=prepare,
+        lan_messages=describe_lan_auth_startup(),
+    )
 
 
 

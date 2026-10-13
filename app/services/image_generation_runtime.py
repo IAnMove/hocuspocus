@@ -87,10 +87,10 @@ def create_image_generation_commands(runtime):
 
     from services.studio_speech_spec import freeze_studio_speech_spec
     from services.studio_speech_preparation import prepare_studio_speech
-    from routers.studio_speech_commands import speech_command_catalog
+    from services.studio_speech_commands import speech_command_catalog
     from services.studio_music_spec import freeze_studio_music_spec
     from services.studio_music_preparation import prepare_studio_music
-    from routers.studio_music_commands import music_command_catalog
+    from services.studio_music_commands import music_command_catalog
     from services.video_generation_commands import create_video_operation
 
     operations = {

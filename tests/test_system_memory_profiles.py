@@ -10,6 +10,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from services.kernel.config import ConfigStore
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,8 +40,11 @@ def settings_runtime(tmp_path):
         offloadobj=resident_offload, attention_mode="auto", args=SimpleNamespace(),
     )
     load_functions("app/wgp.py", ["_normalize_output_type", "get_default_profile", "compute_profile"], wgp.__dict__)
-    namespace = {"wgp": wgp, "Request": object, "HTTPException": HTTPException, "json": json, "os": os, "uuid": uuid}
-    load_functions("app/_launch_runtime.py", ["_validated_memory_profile_updates", "update_system_config", "_save_server_config"], namespace)
+    namespace = {
+        "wgp": wgp, "Request": object, "HTTPException": HTTPException, "json": json, "os": os, "uuid": uuid,
+        "_save_server_config": ConfigStore(lambda: wgp).save,
+    }
+    load_functions("app/_launch_runtime.py", ["_validated_memory_profile_updates", "update_system_config"], namespace)
 
     def update(body):
         async def read_body():
