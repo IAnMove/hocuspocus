@@ -30,6 +30,29 @@ Dashboard shows each shot's planned set and coverage. When the planner returns
 no shots and Director builds a simple plan itself, the Dashboard says so and
 that plan no longer says "cinematic" either.
 
+**The code-health check now recognizes moved code and no longer misses new
+folders.** It checks every pull request against its base, and the coming
+refactor moves functions out of `_launch_runtime.py` and `useStore.ts`. Before,
+moving a complex function word for word into a new file failed as a "new
+complexity hotspot", and nothing could waive that. Now the check records a
+fingerprint of each complex function. A Python function that moves with the
+same name and the same code is reported as `moved: X from A to B` and passes.
+Comments, docstrings and the route decorator may differ. A UI function passes
+when it keeps its name and its complexity does not rise. A changed body, a
+rise in complexity or a copy left behind still counts as new code. The limit of
+five new complex functions per pull request no longer counts pieces split out
+of an existing function, as long as that function gets simpler by at least as
+much and the pull request adds no logic overall. The development → main
+release check gives the same split credit at each merge. A new file over 1,200
+lines still fails, moved or not. The check also fails when Python code is added
+under `app/` in a folder it does not measure (for example a new
+`app/features/`). Vendored engine folders and the eleven files that are already
+outside the measured folders are exempt, but those eleven files can no longer
+grow by more than 75 lines (in a pull request, or over a development → main
+release) or gain a complex function, and new vendored files are listed for
+reviewers. A waiver now covers only its own rule and exactly its file, and its
+expiry must be a real date. No limit changed.
+
 **Music videos show their defaults, and the agent can change them.** Auto-planned
 music videos no longer turn the brief's call to action into every chorus's sung
 action, or its theme into every verse's: the theme is now only where the shots take
