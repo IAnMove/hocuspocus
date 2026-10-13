@@ -65,17 +65,35 @@ a cancel still stops it). Plan and dry-run every piece of a batch first, then
 send them all: the GPU works through them without gaps, and no two pieces
 interleave their jobs (that made each job reload a model and one piece take 7 h).
 
-**Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
-`quality_gate` (and `problems`) when one still picture fills three or more shots
-that are not marked deliberate (`allow: ["still"]`), when still pictures take
-more of the runtime than the `quality` bar, or when a `title-card` or
-`trailer-slam` title sits on a moving shot (`h3`, `clip`, `scene3d`, `screen`):
-both paint an opaque plate over the whole frame and the clip under it is never
-seen (`title_card_hides_shot`; `allow: ["title_card"]` keeps a deliberate card),
-or when a 3D shot asks a `spec.models` model for a clip its rig will not bake
-(`clip_not_baked`: add it to the model's `animations`; a humanoid with a
-`fallback` is exempt, its clips stand in).
-A resume of an unchanged spec is never refused. `dry_run` lists the same items under `blocking`, and warns about shot
+**Quality gate.** `production.run` checks a new or changed spec before any GPU
+work and refuses it with HTTP 422 `quality_gate`. Its `message` says in plain
+words what is wrong, in which shots, with which picture, model or camera, and
+what the limit is. `problems` has one item per check, each with its own
+`message`. A resume of an unchanged spec is never checked. The five checks:
+
+1. `still_reused`: one still picture fills three or more shots that are not
+   marked deliberate (`allow: ["still"]`).
+2. `too_static`: still pictures take more of the runtime than the `quality` bar
+   (35 % for `standard`, the default). Shots with `allow: ["still"]` do not count.
+3. `title_card_hides_shot`: a `title-card` or `trailer-slam` title sits on a
+   moving shot (`h3`, `clip`, `scene3d`, `scene2d`, `screen`). Both paint an
+   opaque plate over the whole frame, so the clip under it is never seen.
+   `allow: ["title_card"]` keeps a deliberate card.
+4. `clip_not_baked`: a 3D shot asks a `spec.models` model for a clip its rig will
+   not bake. Add the clip to the model's `animations` (a humanoid with a
+   `fallback` also bakes only its `animations`), or ask for a clip it has.
+5. `unknown_camera`: a shot, a fill or a shot override names a `camera` that is
+   not a camera preset.
+
+Checks 1–3 only make the video look static. They refuse by default, because a
+piece that moves is the point. To make such a plan anyway, send
+`allow_thin: true` next to the spec: the run starts and returns those problems
+as `warnings`, each marked `allowed_by: "allow_thin"`. Checks 4–5 would fail
+after the GPU work, so `allow_thin` never skips them. Fix the plan first; use
+`allow_thin` only when the person asked for that look.
+
+`dry_run` lists the same items under `blocking`. With `allow_thin: true` it lists
+checks 1–3 under `warnings` instead, as the run would return them. It also warns about shot
 fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
 puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
 H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
@@ -183,7 +201,7 @@ The four checks are code. They are not a language model looking at the contact s
 
 `review` is `{execution, technical, artistic}`. `execution` is `ok` when the named final file opens, `fail` when that name is missing or unreadable, and `unreliable` when the run never claimed a final. `technical` is `ok`, `watch`, `fail`, or `unreliable`. Its `failures` are `[{key, question}]`. A smoothness `watch` or `fail` is on `technical` and does not by itself fill `retake_keys`. `artistic` is always `pending`: it lists the contact sheet, the animatic, and up to eight start frames, and it is never an automatic `ok`. `retake_keys` is the shot keys from the technical failures, in scene order, and is passed unchanged as `production.run` `retake`.
 
-A shot may set `allow` to `still`, `dark`, or `secondary`. `still` is not `frozen_shot`. `dark` is not `black_bars`. `secondary` is not `duplicate_people` or `appearance_changed`.
+A shot may set `allow` to `still`, `dark`, `secondary` or `title_card`. `still` is not `frozen_shot` (nor counted by the quality gate's still checks). `dark` is not `black_bars`. `secondary` is not `duplicate_people` or `appearance_changed`. `title_card` keeps a full-frame title over a moving shot (quality gate).
 
 The four code questions:
 

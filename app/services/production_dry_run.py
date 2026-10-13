@@ -7,7 +7,9 @@ images, the longest hold) with warnings for a static video, a long hold, a still
 three times, ``max_takes`` 1 and fewer than three song seeds. Each window carries
 ``hold_after_clip``. A title-card on an h3 or still shot warns ``title_card_on_image``.
 Scene documents are compiled in-process so a bad style is ``scene_invalid`` here.
-``blocking`` lists what production.run refuses in a new spec (see ``production_quality_gate``).
+``blocking`` lists what production.run refuses in a new spec (see ``production_quality_gate``), each with a plain
+``message``; with ``allow_thin`` the checks that only make the video look static move to ``warnings`` (marked
+``allowed_by: "allow_thin"``), as production.run returns them.
 With ``song.file`` in the workspace, windows, ``gaps`` and ``motion`` use that file's length (the montage runs all
 of it), with ``song_duration_mismatch`` and ``held_tail`` when it outlasts the plan.
 A ``scene2d`` window shows its card (an alias resolved), where each picture comes from and the compiler's warnings
@@ -22,7 +24,7 @@ from typing import Any
 
 from services.music_production import h3_frames_for, shot_windows
 from services.production_preview import preview_extras
-from services.production_quality_gate import blocking_problems, plan_warnings
+from services.production_quality_gate import gate, plan_warnings
 from services.production_quality import expand_quality, profile_of
 from services.production_treatment import treatment_warnings
 from services.production_style_presets import expand_style_preset
@@ -42,7 +44,7 @@ HELD_TAIL_S = 2.0      # the pilot's song ran 115 s under 30 s of shots: the las
 
 
 def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str | None = None,
-            workspace: str | None = None) -> dict[str, Any]:
+            workspace: str | None = None, allow_thin: bool = False) -> dict[str, Any]:
     """Report the spec. ``mcp`` is accepted so tests can pass a spy and is never called."""
     _ = mcp
     spec = spec if isinstance(spec, dict) else {}
@@ -64,6 +66,7 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
     titles = _spec_title(spec) + _field_hits(usable, _TITLE_FIELDS, TITLE_LIMIT)
     captions = _song_caption(spec) + _field_hits(usable, _CAPTION_FIELDS, CAPTION_LIMIT) + _lyric_captions(texts)
     minutes, source = _minutes(spec, sum(1 for row in rows if row.get("kind") == "h3"), root)
+    blocking, allowed = gate(spec, root, allow_thin=allow_thin)
     return {
         "dry_run": True,
         **dry_run_images(spec),
@@ -80,8 +83,8 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
         "estimate_source": source,
         "resolution": _crop(spec),
         "motion": motion,
-        "blocking": blocking_problems(spec, root),
-        "warnings": pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
+        "blocking": blocking,
+        "warnings": allowed + pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
         + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id) + _song_warnings(spec, file_s, windows) + cards,
     }
 
