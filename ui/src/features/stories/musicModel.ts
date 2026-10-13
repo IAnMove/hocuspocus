@@ -31,6 +31,18 @@ export function isLocalMusicModel(model: string | undefined): boolean {
   return isAceStepMusicModel(model) || String(model || '') === MINIMAX_MUSIC3_LOCAL_MODEL
 }
 
+/**
+ * The Manual song "Generate" button uses a local model only for original songs.
+ * Cover always goes through MiniMax `music-cover` and the uploaded reference;
+ * a local id must not swallow that path.
+ */
+export function storyUsesLocalSongGeneration(
+  model: string | undefined,
+  mode?: string | null,
+): boolean {
+  return isLocalMusicModel(model) && mode !== 'cover'
+}
+
 export const STORY_MUSIC_DURATION_MIN = 20
 export const STORY_MUSIC_DURATION_MAX = 360
 export const MINIMAX_MUSIC3_DURATION_MAX = 300

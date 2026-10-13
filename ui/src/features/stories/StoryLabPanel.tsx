@@ -90,7 +90,7 @@ import type {
   StoryProductionRecipe, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
-import { clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
+import { clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget, storyUsesLocalSongGeneration } from './musicModel'
 import {
   commitStoryAudioChoice,
   coverPatchFromOutput,
@@ -2499,7 +2499,7 @@ export function StoryLabPanel() {
 
   const generateMinimaxSongs = async () => {
     const sourceProjectId = project.id
-    const usingLocalMusic = isLocalMusicModel(project.music.model)
+    const usingLocalMusic = storyUsesLocalSongGeneration(project.music.model, project.music.mode)
     if (usingLocalMusic) {
       const cue = project.music.cues.find(item => item.kind === 'story')
       if (!cue) {

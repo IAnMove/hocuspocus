@@ -6,9 +6,19 @@ import {
   normalizeStoryMusicModel,
   songWriteTarget,
   storyMusicReadyMessageKey,
+  storyUsesLocalSongGeneration,
 } from '../src/features/stories/musicModel.ts'
 import { LOCAL_PROMPT_LIMIT, REMOTE_PROMPT_LIMIT } from '../src/lib/musicGenerationSpec.ts'
 import { compiledMusicCuePrompt, miniMaxCuePayload, musicCueBlock, musicPromptLimit, musicRequiresLyricSections } from '../src/features/stories/storyLabMusic.ts'
+
+test('cover never uses the local Generate shortcut, even with a local model', () => {
+  assert.equal(storyUsesLocalSongGeneration(ACE_STEP_MUSIC_MODEL, 'original'), true)
+  assert.equal(storyUsesLocalSongGeneration(MINIMAX_MUSIC3_LOCAL_MODEL, 'original'), true)
+  assert.equal(storyUsesLocalSongGeneration(ACE_STEP_MUSIC_MODEL, 'cover'), false)
+  assert.equal(storyUsesLocalSongGeneration(MINIMAX_MUSIC3_LOCAL_MODEL, 'cover'), false)
+  assert.equal(storyUsesLocalSongGeneration('music-3.0', 'original'), false)
+  assert.equal(storyUsesLocalSongGeneration('music-3.0', 'cover'), false)
+})
 
 test('new stories default to ACE-Step and keep MiniMax only when chosen', () => {
   assert.equal(normalizeStoryMusicModel(''), ACE_STEP_MUSIC_MODEL)
