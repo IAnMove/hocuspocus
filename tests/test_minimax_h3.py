@@ -38,6 +38,9 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_OUTPUT_RESTORE_SLICE_PATH = (
+    _ROOT / "ui" / "src" / "features" / "studio" / "store" / "outputRestoreSlice.ts"
+)
 _MODEL_OPTIONS_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "modelOptionsSlice.ts"
 _MODEL_VISIBILITY_PATH = _ROOT / "ui" / "src" / "stores" / "modelVisibility.ts"
 _H3_DURATION_PATH = _ROOT / "ui" / "src" / "lib" / "h3ExtendedDuration.ts"
@@ -761,7 +764,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         )
         self.assertIn(
             "findResolutionSelection(res, get().modelOptions)",
-            store,
+            _read(_OUTPUT_RESTORE_SLICE_PATH),
         )
         self.assertIn("modelOptions?.resolution_preset_order", presets)
         self.assertIn("modelOptions?.supports_auto_aspect", aspects)

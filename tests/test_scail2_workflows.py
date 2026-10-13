@@ -62,6 +62,9 @@ _RECAST_SUBMISSION_PATH = os.path.join(
 _STUDIO_EDIT_SLICE_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
 )
+_OUTPUT_RESTORE_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "outputRestoreSlice.ts",
+)
 _MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
 _LORAS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "lorasSlice.ts")
 _RECAST_CONTROLS_PATH = os.path.join(
@@ -3641,7 +3644,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -3955,7 +3958,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_resolution_profile_does_not_change_model_schedule(self):
         launch = _read(_LAUNCH_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -4006,7 +4009,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_repaint_shares_resolution_profiles_and_adaptive_windows(self):
         launch = _read(_LAUNCH_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         restyle = _read(_RESTYLE_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_REPAINT_CONTROLS_PATH)
@@ -4093,12 +4096,13 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         scail2 = _read(_SCAIL2_PATH)
         store = _read(_STORE_PATH)
+        output_restore = _read(_OUTPUT_RESTORE_SLICE_PATH)
         self.assertIn('"scail2_recast_conditioning": "native_replace"', launch)
         self.assertIn("replace_mode = test_scail2_replace(video_prompt_type)", scail2)
         self.assertIn("replace_conditioning = test_scail2_replace(video_prompt_type)", scail2)
         self.assertNotIn("animation_recast", scail2)
         self.assertNotIn("_matte_ref_image", scail2)
-        self.assertIn("m.model_type === 'scail2_14B_recast_fast'", store)
+        self.assertIn("m.model_type === 'scail2_14B_recast_fast'", output_restore)
         self.assertIn("m.model_type === 'scail2_14B'", store)
 
     def test_recast_postprocess_preserves_and_recovers_resolved_seed(self):
@@ -4116,7 +4120,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("ref_mask = _load_aligned_ref_mask(", scail2)
 
     def test_recast_ui_keeps_mapping_cards_and_moves_edited_frame_to_repaint(self):
-        store = _read(_STORE_PATH)
+        store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -4148,7 +4152,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_auto_face_detail_is_previewed_saved_and_automatic(self):
         launch = _read(_LAUNCH_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -4177,7 +4181,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_prompt_guidance_is_compatible_but_off_and_hidden(self):
         launch = _read(_LAUNCH_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)

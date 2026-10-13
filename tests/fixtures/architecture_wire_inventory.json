@@ -434,12 +434,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_story_montage_clip_history_ui.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_studio_sfx_native_worker.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
