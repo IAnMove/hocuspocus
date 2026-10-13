@@ -18,6 +18,30 @@
     },
     "status": 200
   },
+  "mcp alias get": {
+    "body": {
+      "<text>": ""
+    },
+    "status": 405
+  },
+  "mcp alias post disabled": {
+    "body": {
+      "detail": "External agent access is disabled; configure HOCUS_MCP_TOKEN"
+    },
+    "status": 503
+  },
+  "mcp get": {
+    "body": {
+      "<text>": ""
+    },
+    "status": 405
+  },
+  "mcp post disabled": {
+    "body": {
+      "detail": "External agent access is disabled; configure HOCUS_MCP_TOKEN"
+    },
+    "status": 503
+  },
   "mcp settings": {
     "body": {
       "authentication": "Bearer",
