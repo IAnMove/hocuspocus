@@ -35,7 +35,9 @@ REVIEW_STATES = ("pending", "approved", "rejected")
 # differently, so a pose may show more of the body and a smaller head; the head is read with the face landmarks and, when they cannot
 # be read, the height is used).
 SCALE_BY = ("height", "base", "face")
-MAX_ANIMATIONS = 24
+# The catalog lists 34; a kit also keeps the author's own. 48 leaves room for those without
+# rejecting a 25th catalog animation after the GPU has already made its poses.
+MAX_ANIMATIONS = 48
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _FRAME_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _GENERIC_BACKGROUND = ("Isolated on a plain flat solid {screen} background filling the whole image, no floor, no cast shadow, "

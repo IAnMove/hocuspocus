@@ -82,7 +82,7 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
     {made && !running && <MadeAnimation def={def} made={made} actions={actions} />}
     {!made && !running && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
     {(!made || running) && <div className="flex gap-2">
-      <button type="button" disabled={actions.busy} className={`${small} text-cyan-200`} onClick={() => actions.make(def)}>
+      <button type="button" disabled={actions.busy || (!made && !canAddAnimation(kit))} className={`${small} text-cyan-200`} onClick={() => actions.make(def)}>
         {running && actions.busy ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
         {t(running ? (actions.busy ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
       {running && actions.busy && <button type="button" className={small} onClick={actions.cancel}>{t('animations.cancel')}</button>}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  animationSlug, customAnimationDef, freeAnimationId, kitCustomDefs, MAX_CUSTOM_POSES,
+  animationSlug, canAddAnimation, customAnimationDef, freeAnimationId, kitCustomDefs, MAX_ANIMATIONS, MAX_CUSTOM_POSES,
   controlsForCard, findKitAnimationBySheet,
   ANIMATION_SHEET, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
   kitStyleId, localized, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
@@ -22,7 +22,7 @@ test('the catalog groups cycles, gestures and anime expressions, each with poses
     assert.ok(def.poses.every(pose => pose.prompt && pose.label.es && pose.label.en), def.id)
   }
   assert.equal(animationDef('walk')?.facing, 'right')
-  assert.ok(animationDefs.length >= 30 && animationsOf('gesture').length >= 10 && animationsOf('expression').length >= 16, 'a standard set of cycles, gestures and expressions')
+  assert.ok(animationDefs.length >= 30 && animationDefs.length <= MAX_ANIMATIONS && animationsOf('gesture').length >= 10 && animationsOf('expression').length >= 16, 'a standard set of cycles, gestures and expressions, all of which fit on one kit')
   for (const def of animationDefs) assert.equal(def.scaleBy, { side: 'height', front: 'base', bust: 'face' }[def.view], def.id)
   assert.equal(localized(animationDef('angry')!.title, 'es-ES'), 'Enfado')
   assert.equal(localized(animationDef('angry')!.title, 'en'), 'Angry')
@@ -129,4 +129,12 @@ test('the animations of a kit that the catalog does not list come back as defini
   assert.deepEqual([found[0].title.es, found[0].view, found[0].loop, found[0].fps, found[0].custom], ['Mi guiño', 'bust', 'once', 3, true])
   assert.deepEqual(found[0].poses.map(pose => [pose.id, pose.label.es, pose.prompt]), [['pose-1', 'a wink', 'Anime expression: a wink'], ['pose-2', 'pose-2', '']])
   assert.deepEqual(kitCustomDefs(kit()), [])
+})
+
+test('a kit can hold every catalog animation plus some of the author\'s own', () => {
+  const entry = { ...made(), reviewState: 'pending' as const }
+  const full = { ...kit(), animations: Object.fromEntries(Array.from({ length: MAX_ANIMATIONS }, (_, index) => [`a${index}`, entry])) }
+  assert.equal(canAddAnimation(kit()), true)
+  assert.equal(canAddAnimation(full), false)
+  assert.equal(canAddAnimation({ ...kit(), animations: Object.fromEntries(animationDefs.map(def => [def.id, entry])) }), true)
 })

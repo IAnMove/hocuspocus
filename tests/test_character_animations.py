@@ -48,6 +48,7 @@ def test_every_animation_has_poses_prompts_and_a_template():
         assert len(pose_ids) == len(set(pose_ids)) and all(pose["prompt"].strip() and {"en", "es"} <= set(pose["label"]) for pose in item["poses"])
     assert next(item for item in data["animations"] if item["id"] == "walk")["facing"] == "right"
     assert len(next(item for item in data["animations"] if item["id"] == "walk")["poses"]) == 4
+    assert len(data["animations"]) <= animations.MAX_ANIMATIONS, "every catalog animation must fit on one kit"
 
 
 def test_a_pose_prompt_keeps_the_character_and_asks_for_one_pose_on_a_screen():
@@ -100,8 +101,9 @@ def test_a_kit_keeps_its_animations_and_drops_what_it_does_not_know():
                 {"walk": {**_entry(), "sheet": {**_entry()["sheet"], "count": 99}}}, {"walk": {**_entry(), "sheet": None}}, [], {"walk": 1}):
         with pytest.raises(CharacterAnimationError):
             normalize_kit_animations(bad)
+    assert normalize_kit_animations({item["id"]: _entry() for item in catalog()["animations"]})
     with pytest.raises(CharacterAnimationError):
-        normalize_kit_animations({f"a{index}": _entry() for index in range(25)})
+        normalize_kit_animations({f"a{index}": _entry() for index in range(animations.MAX_ANIMATIONS + 1)})
 
 
 def test_a_custom_animation_keeps_its_title_its_scale_mode_and_the_words_of_each_pose():

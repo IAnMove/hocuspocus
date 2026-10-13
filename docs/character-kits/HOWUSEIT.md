@@ -314,7 +314,7 @@ The Video 2D card that plays it is named in the list: `walk-cycle-sheet` for cyc
 `step`: two steps make a cycle), `walk-two-pose` for `step` (one step is a sheet of two poses; the figure stops on the last cell) and `character-reaction` for gestures and expressions (`frames`, `columns`, `fps`, `loop`,
 `framing`, `mark`). The panel prints the controls for the animation it shows.
 
-Limits: 24 animations per kit, 12 poses per sheet. The server drops a sheet it cannot read (`400`). Qwen cannot tell the near leg from the far one in a side view: the second contact pose and the
+Limits: 48 animations per kit, 12 poses per sheet. The server drops a sheet it cannot read (`400`). Qwen cannot tell the near leg from the far one in a side view: the second contact pose and the
 second passing pose of `walk` often come out like the first ones (a fourth pose may even come out as a stride, not a passing).
 The cycle then plays two drawings twice, which still reads as a walk; make a pose again until it differs, or keep it. A
 bust is asked for with an explicit crop (`views.bust` and `viewNegatives` in the catalog) because a full-length reference

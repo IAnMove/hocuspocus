@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cancelJob } from '../../api/client'
 import { fetchCharacterKitLibrary, saveCharacterKit } from '../../api/characters'
-import { reviewKitAnimation, withKitAnimation, withoutKitAnimation, type AnimationDef } from '../../lib/characterAnimations'
+import { canAddAnimation, reviewKitAnimation, withKitAnimation, withoutKitAnimation, type AnimationDef } from '../../lib/characterAnimations'
 import type { CharacterKit, CharacterKitReviewState } from '../../lib/characterKit'
 import { keptPoses, makeAnimation, type MakeStage, type MakerDependencies, type PoseTake } from './characterAnimationMaker'
 
@@ -33,6 +33,11 @@ export function useCharacterAnimations(workspace: string, reload: () => void, de
 
   const start = useCallback(async (kit: CharacterKit, def: AnimationDef, model: string, remake?: string) => {
     if (operation.current) return
+    // A new id at the cap would run Qwen and then fail the kit save. Remaking one that is already on the kit is fine.
+    if (!kit.animations?.[def.id] && !canAddAnimation(kit)) {
+      setError('This character already has the most animations.')
+      return
+    }
     const controller = new AbortController()
     operation.current = controller
     setWorking(true); setError(''); setSaved('')

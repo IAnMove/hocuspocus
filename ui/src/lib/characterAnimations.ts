@@ -150,7 +150,8 @@ export const customViews = Object.keys(CUSTOM_VIEWS) as CustomView[]
 /** The most poses of one animation the author describes, and the most words for one pose (the server's limit). */
 export const MAX_CUSTOM_POSES = 6
 export const MAX_CUSTOM_TEXT = 600
-const MAX_ANIMATIONS = 24
+/** The catalog lists 34; a kit also keeps the author's own. Must match ``character_animations.MAX_ANIMATIONS``. */
+export const MAX_ANIMATIONS = 48
 
 /** A slug for an animation the author names: lowercase letters and digits, no accents, one hyphen between words. */
 export function animationSlug(name: string): string {
