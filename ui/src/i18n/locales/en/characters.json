@@ -773,6 +773,15 @@
     "remakePose": "Redo the {{pose}} pose",
     "posesCount_one": "{{count}} pose",
     "posesCount_other": "{{count}} poses",
+    "job": {
+      "queued": "Queued: it is made when the GPU is free.",
+      "running": "Making…",
+      "cancelling": "Cancelling…",
+      "completed": "Done.",
+      "failed": "It stopped. The poses already made are kept: trying again makes only the missing ones.",
+      "cancelled": "Cancelled. The poses already made are kept.",
+      "interrupted": "The server restarted while it was being made. The poses already made are kept."
+    },
     "stage": {
       "poses": "Making the poses, one after another…",
       "sheet": "Joining the poses into the sheet…"

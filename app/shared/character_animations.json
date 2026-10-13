@@ -10,6 +10,14 @@
     "front": "Front view of the whole body, seen from head to boots, centred, the same size as in the reference picture.",
     "bust": "Close-up portrait: only the head, neck and shoulders of the character, the picture cropped at the chest so no waist, hands, legs or feet are in it, facing the viewer, centred, the face large and filling the upper half of the picture."
   },
+  "custom": {
+    "maxPoses": 6, "maxText": 600, "maxAnimations": 24, "fps": 3, "loop": "once", "template": "character-reaction",
+    "views": {
+      "bust": {"resolution": "1024x1024", "scaleBy": "face", "facing": "front"},
+      "front": {"resolution": "896x1152", "scaleBy": "base", "facing": "front"},
+      "side": {"resolution": "896x1152", "scaleBy": "height", "facing": "right"}
+    }
+  },
   "groups": [
     {"id": "cycle", "title": {"es": "Ciclos", "en": "Cycles"}},
     {"id": "gesture", "title": {"es": "Gestos", "en": "Gestures"}},

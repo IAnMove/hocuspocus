@@ -773,6 +773,15 @@
     "remakePose": "Rehacer la pose {{pose}}",
     "posesCount_one": "{{count}} pose",
     "posesCount_other": "{{count}} poses",
+    "job": {
+      "queued": "En cola: se hace cuando la GPU quede libre.",
+      "running": "Creando…",
+      "cancelling": "Cancelando…",
+      "completed": "Terminada.",
+      "failed": "Se detuvo. Las poses que ya estaban hechas se conservan: al reintentar solo se hacen las que faltan.",
+      "cancelled": "Cancelada. Las poses que ya estaban hechas se conservan.",
+      "interrupted": "El servidor se reinició mientras se hacía. Las poses que ya estaban hechas se conservan."
+    },
     "stage": {
       "poses": "Haciendo las poses, una tras otra…",
       "sheet": "Juntando las poses en la hoja…"

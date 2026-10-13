@@ -293,7 +293,9 @@
     "workflowCompleted": "Workflow “{{type}}” completado.",
     "workflowStep": "Workflow “{{type}}”: {{step}} ({{current}}/{{total}}).",
     "programmaticHowTo": "Puedes pedir: «Monta una escena con Video3D, sólo con mis assets, sin vídeo generativo». El Wizard prepara el formulario visible; desde allí revisas los recursos, montas la escena y la exportas. No se lanza ningún generador al preparar.",
-    "programmaticPrepared": "Preparo Video3D con tu petición literal y sin vídeo generativo. No crearé recursos nuevos salvo permiso explícito. Revisa los assets y la receta en el formulario antes de montar o exportar; todavía no hay un vídeo terminado."
+    "programmaticPrepared": "Preparo Video3D con tu petición literal y sin vídeo generativo. No crearé recursos nuevos salvo permiso explícito. Revisa los assets y la receta en el formulario antes de montar o exportar; todavía no hay un vídeo terminado.",
+    "characterAnimationStarted": "Empiezo la animación «{{animation}}» de {{name}} ({{poses}} poses, trabajo {{jobId}}). Se hace en el servidor, una pose tras otra, con Qwen: tarda unos minutos. La verás en Personajes › Animaciones, donde puedes revisarla y aprobarla.",
+    "characterAnimationQueued": "La animación «{{animation}}» de {{name}} queda en cola (trabajo {{jobId}}): se hace cuando la GPU quede libre. La verás en Personajes › Animaciones, donde puedes revisarla y aprobarla."
   },
   "progress": {
     "addingAlternateSong": "Añadiendo la canción alternativa al videoclip…",
@@ -334,6 +336,7 @@
     "invokingStoryLabProposal": "Invocando una propuesta revisable de Story Lab…",
     "linkingCharacterKitIdentity": "Vinculando la identidad del Character Kit…",
     "linkingVisualReferences": "Vinculando y aprobando referencias visuales…",
+    "makingCharacterAnimation": "Haciendo la animación del personaje en el servidor…",
     "mountingVideoclipAlternateSong": "Montando el videoclip con la canción alternativa…",
     "openingCharacterKit": "Abriendo el Character Kit…",
     "openingHocuspocusSection": "Abriendo una sección de HocusPocus…",

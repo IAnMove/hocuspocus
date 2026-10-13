@@ -35248,6 +35248,14 @@ api.include_router(create_series_shot_inspector_router(
                            read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}),
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)), workspace_dir=_workspace_dir,
     call=_local_mcp.call, bind_loop=_local_mcp.bind_loop))
+from services.character_animation_job import AnimationJobDeps, CharacterAnimationJobs
+from routers.character_animation_jobs import create_character_animation_jobs_router
+_character_animations = CharacterAnimationJobs(AnimationJobDeps(
+    call=_local_mcp.call, workspace_dir=lambda workspace: _workspace_dir(_character_kit_workspace(workspace)),
+    uploads_root=lambda: os.path.join(os.getcwd(), "uploads"),
+    model_defaults=lambda model: dict(wgp.get_default_settings(model) or {}) if wgp.get_model_def(model) else {},
+))
+api.include_router(create_character_animation_jobs_router(_character_animations))
 from routers.series_guide import create_series_guide_router
 api.include_router(create_series_guide_router(
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),

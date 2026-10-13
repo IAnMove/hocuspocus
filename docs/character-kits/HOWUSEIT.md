@@ -272,7 +272,7 @@ pose (*bust, head and shoulders*) for close dialogue.
 
 ### 4.7 Animations: walk, gestures and anime expressions
 
-**Characters › Animaciones del personaje** (a drawer under the speech workshop) makes small animations of a saved
+**Characters › Animaciones del personaje** (a drawer under the speech workshop; the character just saved is the one it opens on) makes small animations of a saved
 character. Each one is a few poses of the same figure joined into a sprite sheet that the Video 2D cards play. The list is
 `app/shared/character_animations.json` (MCP `characters.animations`):
 
@@ -282,20 +282,36 @@ character. Each one is a few poses of the same figure joined into a sprite sheet
 | Gestures (11) | `wave`, `nod`, `shake` (head no), `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm`, `think` |
 | Anime expressions (18) | `angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`, `tired`, `love`, `disgusted`, `bored`, `worried`, `nervous` (nervous laugh), `laughing`, `wink`, `pout`: two poses each, from a hint to the full expression (anger vein, shock lines, sweat drop, hearts) |
 
-How one is made (UI: **Crear**; an agent does the same with MCP):
+**Three doors, one job.** The Animaciones panel (**Crear**), any MCP client (`characters.animation.make`, then
+`characters.animation.status` / `.cancel`) and Ask to the Wizard (`make_character_animation`: "hazle una cara de enfado a
+Heroína") all start the same server job, `POST /api/v1/character-kits/animations/make` (`services/character_animation_job.py`). The
+panel only asks and follows it (a poll, quick while a job runs and slow otherwise), so a run survives a reload, a tab change or a
+restart, and an animation an agent started shows up in the panel (and the other way round). One animation is made at a time on the
+server (one GPU); asking for one already being made returns that job. The job is a small file under
+`.character-animation-jobs-v1` of the workspace.
+
+What the job does:
 
 1. Each pose is one Qwen picture made with the character's own picture (`identityReference`, else `base`) as
-   `image_refs`, one after another (one GPU), on a plain screen colour. The style preset the kit was made in
-   (`character-style-create` in its provenance) keeps its look through `animation.identity` in `character_styles.json`.
-   `POST /api/v1/character-kits/animations/prompt` builds the prompt, negative prompt, screen and resolution.
-2. Each pose is keyed (`studio.key`) as soon as it arrives. A failed pose stops the run and stays on screen; **Reintentar**
-   keeps the poses already made, and **Rehacer** under a frame makes only that pose again.
-3. `POST /api/v1/character-kits/animations/sheet` (MCP `characters.animation.sheet`) crops each keyed pose, scales them so
-   the figure keeps its size (`scaleBy`, below), stands them on one line (96 % of the
-   cell) and centres their upper body (the mean of the top 55 % of the pose, so swinging legs and arms do not move the
-   torso). It writes `<kit>-<animation>-sheet-<8hex>.png` and never overwrites one.
-4. The animation joins the kit as `reviewState: pending`. Play it (the player uses the card's own frame rule), then
-   approve or reject it. **Approve** is a human decision: nothing approves itself.
+   `image_refs`, one after another, on a plain screen colour (default model `qwen_image_21`; another model runs its own steps and a
+   distilled one takes no negative prompt). The style preset the kit was made in (`character-style-create` in its provenance)
+   keeps its look through `animation.identity` in `character_styles.json`. Every picture has its own file name and intent id, so a
+   pose made again never overwrites the picture the saved animation still uses.
+2. Each pose is keyed (`studio.key`) as soon as it arrives. A failed pose stops the job and stays on screen; the next job for that
+   animation (**Reintentar**, or the same request again) keeps the poses already made, also after a cancel or a restart
+   (`interrupted`), and **Rehacer** under a frame (`pose` in the request) makes only that pose again of a finished animation.
+3. The sheet is joined (`POST /api/v1/character-kits/animations/sheet` is the same step for an agent that makes the poses itself,
+   MCP `characters.animation.sheet`): each keyed pose is cropped, scaled so the figure keeps its size (`scaleBy`, below), stood on
+   one line (96 % of the cell) and its upper body centred (the mean of the top 55 % of the pose, so swinging legs and arms do not
+   move the torso). It writes `<kit>-<animation>-sheet-<8hex>.png` and never overwrites one.
+4. The animation joins the kit as `reviewState: pending`, read again from the library just before it is saved, so a character edited
+   meanwhile keeps its edits. Play it (the player uses the card's own frame rule), then approve or reject it in the panel.
+   **Approve** is a human decision: no job, tool or Wizard action approves.
+
+**An animation of your own** ("A medida" in the panel; `custom {title, view, poses}` in the request): a name, a framing (`bust`,
+`front`, `side`) and one line per pose (up to 6, 600 characters each). The words stay on the kit with each pose, so any pose can be
+made again alone, and on the job, so an animation not on the kit yet stays on screen after a reload. The defaults of one (fps, loop,
+`scaleBy` and `facing` by framing) live in `custom` of `app/shared/character_animations.json`, one place for the panel and the server.
 
 `scaleBy` keeps the figure one size from pose to pose, because the model draws every pose at a slightly different size and frames it a
 little differently (up to 6 % between the cells of one wave, and 30 % in the head of one pair of busts, where the second pose showed

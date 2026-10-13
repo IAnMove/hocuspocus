@@ -138,8 +138,8 @@ cut-out figure that slides in with a bob shows legs that never move: each card h
   (`rest`, a `once` sequence at 60 fps) holds its last cell inside one frame (1/60 s): the same cells and the same scale, so
   the figure does not change size when it stops (two separately cropped pictures did, which read as a flicker). A cycle sheet
   plays `frames / (2 * step)` frames a second (a cycle is two steps).
-- **Making the sheets in HocusPocus**: Characters › Animaciones (`docs/character-kits/HOWUSEIT.md` §4.7; MCP `characters.animations`,
-  `characters.animation.sheet`) makes the sheet of a saved character, with the controls each card needs. By hand: one Qwen picture per pose from the figure (`generation.image` with the figure as
+- **Making the sheets in HocusPocus**: Characters › Animaciones (`docs/character-kits/HOWUSEIT.md` §4.7; MCP `characters.animation.make`, `characters.animations`,
+  `characters.animation.sheet`; Wizard `make_character_animation`) makes the sheet of a saved character, with the controls each card needs. By hand: one Qwen picture per pose from the figure (`generation.image` with the figure as
   an image ref and the pose in the prompt), keyed with `image.remove_background` (`crop: true`, so a pose is fitted to its
   outline and stands on its boots), and for a sheet joined with `media.compose` (equal cells, `anchor: bottom`, same height).
   The game-assets `animation` kind (`game_actions.json`, `strip` method) makes the same kind of sheet for a game character.

@@ -101,9 +101,9 @@ character's ink.
 
 ## Small animations of a character
 
-`characters.animations` lists walk, gestures, anime expressions as poses, builds each prompt: `generation.image`
-with the character as `image_refs`, `studio.key`, `characters.animation.sheet`; `characters.save` stores `animations.<id>`
-pending: a person approves. Cards `walk-cycle-sheet`, `character-reaction` play it.
+`characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
+makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
+approves. Cards `walk-cycle-sheet`, `character-reaction` play it.
 
 ## The script
 

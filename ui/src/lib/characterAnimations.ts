@@ -144,13 +144,14 @@ export function controlsForCard(animation: KitAnimation, template: string, contr
   return Object.fromEntries(Object.entries(templateControls(animation, template)).filter(([name, value]) => controls[name] && fits(controls[name], value)))
 }
 
-const CUSTOM_VIEWS = { bust: '1024x1024', front: '896x1152', side: '896x1152' } as const
-export type CustomView = keyof typeof CUSTOM_VIEWS
-export const customViews = Object.keys(CUSTOM_VIEWS) as CustomView[]
+/** What the author's own animations are made with, one place for the panel and the server (app/shared/character_animations.json). */
+const CUSTOM = catalog.custom
+export type CustomView = keyof typeof CUSTOM.views
+export const customViews = Object.keys(CUSTOM.views) as CustomView[]
 /** The most poses of one animation the author describes, and the most words for one pose (the server's limit). */
-export const MAX_CUSTOM_POSES = 6
-export const MAX_CUSTOM_TEXT = 600
-const MAX_ANIMATIONS = 24
+export const MAX_CUSTOM_POSES = CUSTOM.maxPoses
+export const MAX_CUSTOM_TEXT = CUSTOM.maxText
+const MAX_ANIMATIONS = CUSTOM.maxAnimations
 
 /** A slug for an animation the author names: lowercase letters and digits, no accents, one hyphen between words. */
 export function animationSlug(name: string): string {
@@ -159,9 +160,9 @@ export function animationSlug(name: string): string {
 }
 
 /** A slug that no catalog animation and no animation of the kit has yet. */
-export function freeAnimationId(kit: CharacterKit, name: string): string {
+export function freeAnimationId(kit: CharacterKit, name: string, alsoTaken: string[] = []): string {
   const base = animationSlug(name)
-  const taken = (id: string) => Boolean(animationDef(id)) || Boolean(kit.animations?.[id])
+  const taken = (id: string) => Boolean(animationDef(id)) || Boolean(kit.animations?.[id]) || alsoTaken.includes(id)
   let id = base
   for (let count = 2; taken(id); count += 1) id = `${base.slice(0, 36)}-${count}`
   return id
@@ -173,8 +174,8 @@ const poseLabel = (text: string) => text.replace(/^(anime expression|expression)
 export function customAnimationDef(id: string, title: string, view: CustomView, lines: string[]): AnimationDef {
   const poses = lines.map(line => line.trim()).filter(Boolean).slice(0, MAX_CUSTOM_POSES)
   return {
-    id, group: 'custom', view, scaleBy: ({ front: 'base', bust: 'face', side: 'height' } as const)[view], facing: view === 'side' ? 'right' : 'front', loop: 'once', fps: 3,
-    template: 'character-reaction', resolution: CUSTOM_VIEWS[view], title: { es: title, en: title }, summary: { es: '', en: '' }, custom: true,
+    id, group: 'custom', view, scaleBy: CUSTOM.views[view].scaleBy as AnimationScaleBy, facing: CUSTOM.views[view].facing as AnimationFacing, loop: CUSTOM.loop as AnimationLoop, fps: CUSTOM.fps,
+    template: CUSTOM.template, resolution: CUSTOM.views[view].resolution, title: { es: title, en: title }, summary: { es: '', en: '' }, custom: true,
     poses: poses.map((prompt, index) => ({ id: `pose-${index + 1}`, label: { es: poseLabel(prompt), en: poseLabel(prompt) }, prompt: prompt.slice(0, MAX_CUSTOM_TEXT) })),
   }
 }

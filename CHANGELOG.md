@@ -35,10 +35,13 @@ into a sprite sheet: `walk` and `run` in four poses of the gait (side view), `st
 expressions in two poses each (`angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`,
 `tired`, `love`, `disgusted`, `bored`, `worried`, `nervous`, `laughing`, `wink`, `pout`). Each pose is one Qwen picture made with the character's own picture as the identity reference, keyed on its
 screen as it arrives; a failed pose stops the run and the retry keeps the ones already made, and one pose can be made again
-alone. The sheet is built on the server (the poses cropped and scaled so the figure keeps its size by its height, the width of its legs (a gesture) or the size of its head (a bust, read with the face landmarks), boots on one line, torso centred) and the animation
+alone. **One server job, three ways in:** the panel, any MCP client (`characters.animation.make`, `.status`, `.cancel`) and Ask to the
+Wizard (`make_character_animation`, with confirmation) start the same job (`POST /character-kits/animations/make`, `GET .../jobs`),
+so what an agent makes is reviewed in the app and a run survives a reload or a restart; nothing approves an animation but a person.
+The sheet is built on the server (the poses cropped and scaled so the figure keeps its size by its height, the width of its legs (a gesture) or the size of its head (a bust, read with the face landmarks), boots on one line, torso centred) and the animation
 joins the kit as `animations.<id>`, pending until a person plays and approves it. The catalog is
 `app/shared/character_animations.json`; HTTP `GET /character-kits/animations/catalog`, `POST .../prompt` and `POST .../sheet`;
-MCP `characters.animations` and `characters.animation.sheet`. New Video 2D card `character-reaction` (a figure on its mark plays
+MCP `characters.animations` and `characters.animation.sheet` for an agent that makes the poses itself. New Video 2D card `character-reaction` (a figure on its mark plays
 a sheet once or in a loop and breathes) next to `walk-cycle-sheet`; the walking cards that move the legs are `walk-two-pose`
 (a two-cell sheet, one cell per half step, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
 way they look (`facing`). New `reaction` trait and gesture/expression words in the 2D search groups.

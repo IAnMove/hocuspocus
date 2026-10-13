@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Check, Loader2, RotateCcw, Trash2, WandSparkles, X } from 'lucide-react'
+import { isActiveJob, type AnimationJob } from '../../api/characterAnimationJobs'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import {
@@ -10,8 +11,7 @@ import { characterImageModels, preferredCharacterImageModel } from '../../lib/ch
 import type { CharacterKit, CharacterKitReviewState } from '../../lib/characterKit'
 import { AnimationSheetPlayer } from './AnimationSheetPlayer'
 import { CustomAnimationForm } from './CustomAnimationForm'
-import type { AnimationRun } from './useCharacterAnimations'
-import { useCharacterAnimations } from './useCharacterAnimations'
+import { pendingCustomDefs, useCharacterAnimations } from './useCharacterAnimations'
 import { useCharacterKitLibrary } from './useCharacterKitLibrary'
 
 const control = 'min-h-9 rounded-lg border border-border bg-bg-primary px-3 text-xs disabled:opacity-40'
@@ -22,15 +22,17 @@ const BADGE: Record<AnimationState, string> = {
 }
 
 type Actions = {
-  busy: boolean; active?: AnimationRun
-  make: (def: AnimationDef, remake?: string) => void; cancel: () => void
+  busy: boolean; runs: Record<string, AnimationJob>
+  make: (def: AnimationDef, remake?: string) => void; cancel: (jobId: string) => void
   review: (id: string, state: CharacterKitReviewState) => void; remove: (id: string) => void
 }
 
-function RunProgress({ def, run }: { def: AnimationDef; run: AnimationRun }) {
+/** Where a make job is: waiting for the GPU, a pose at a time, joining the sheet, or why it stopped (the poses made stay for the next try). */
+function RunProgress({ def, run }: { def: AnimationDef; run: AnimationJob }) {
   const { t, i18n } = useUiTranslation('characters')
+  const headline = run.status === 'running' ? t(run.stage === 'sheet' ? 'animations.stage.sheet' : 'animations.stage.poses') : t(`animations.job.${run.status}`)
   return <div className="space-y-1" role="status" data-testid="animation-progress">
-    <p className="text-[11px] text-text-secondary">{t(run.stage === 'sheet' ? 'animations.stage.sheet' : 'animations.stage.poses')}</p>
+    <p className="text-[11px] text-text-secondary">{headline}{run.error ? ` — ${run.error}` : ''}</p>
     <ul className="space-y-0.5 text-[11px]">{run.takes.map(take => {
       const pose = def.poses.find(item => item.id === take.id)
       return <li key={take.id} className={take.status === 'failed' ? 'text-red-300' : 'text-text-muted'}>
@@ -69,7 +71,8 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
   const { t, i18n } = useUiTranslation('characters')
   const state = animationState(kit, def.id)
   const made = kitAnimations(kit)[def.id]
-  const running = actions.active?.kitId === kit.id && actions.active.animationId === def.id ? actions.active : undefined
+  const run = actions.runs[def.id]
+  const working = run ? isActiveJob(run) : false
   return <article data-testid={`animation-${def.id}`} className="space-y-2 rounded-lg border border-border bg-bg-secondary p-3">
     <header className="flex items-start justify-between gap-2">
       <div className="min-w-0 flex-1">
@@ -78,14 +81,14 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
       </div>
       <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
     </header>
-    {running && <RunProgress def={def} run={running} />}
-    {made && !running && <MadeAnimation def={def} made={made} actions={actions} />}
-    {!made && !running && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
-    {(!made || running) && <div className="flex gap-2">
-      <button type="button" disabled={actions.busy} className={`${small} text-cyan-200`} onClick={() => actions.make(def)}>
-        {running && actions.busy ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
-        {t(running ? (actions.busy ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
-      {running && actions.busy && <button type="button" className={small} onClick={actions.cancel}>{t('animations.cancel')}</button>}
+    {run && <RunProgress def={def} run={run} />}
+    {made && !working && <MadeAnimation def={def} made={made} actions={actions} />}
+    {!made && !run && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
+    {(!made || run) && <div className="flex gap-2">
+      <button type="button" disabled={actions.busy} className={`${small} text-cyan-200`} onClick={() => actions.make(def, run?.remake ?? undefined)}>
+        {working ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
+        {t(run ? (working ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
+      {working && run.status !== 'cancelling' && <button type="button" className={small} onClick={() => actions.cancel(run.jobId)}>{t('animations.cancel')}</button>}
     </div>}
   </article>
 }
@@ -95,18 +98,17 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
 export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const { t, i18n } = useUiTranslation('characters')
   const models = useStore(state => state.models)
-  const { kits, error: loadError, loading, reload } = useCharacterKitLibrary(workspace)
+  const { kits, activeId, error: loadError, loading, reload } = useCharacterKitLibrary(workspace)
   const [kitId, setKitId] = useState('')
   const [modelId, setModelId] = useState('')
   const usable = kits.filter(kit => animationReference(kit))
-  const kit = usable.find(item => item.id === kitId) ?? usable[0]
+  // The one just saved is the active one: it is the character the person is working on.
+  const kit = usable.find(item => item.id === kitId) ?? usable.find(item => item.id === activeId) ?? usable[0]
   const imageModels = characterImageModels(models, false)
   const model = imageModels.some(item => item.model_type === modelId) ? modelId : preferredCharacterImageModel(imageModels, false)
-  const work = useCharacterAnimations(workspace, reload)
-  // An animation the author just described is not on the kit until its first run is saved: it shows while that run is on screen.
-  const [described, setDescribed] = useState<AnimationDef>()
+  const work = useCharacterAnimations(workspace, kit?.id, reload)
   const actions: Actions = {
-    busy: work.busy, active: work.run, cancel: work.cancel,
+    busy: work.busy, runs: work.runs, cancel: id => { void work.cancel(id) },
     make: (def, remake) => { if (kit && model) void work.start(kit, def, model, remake) },
     review: (id, state) => { if (kit) void work.review(kit.id, id, state) },
     remove: id => { if (kit) void work.remove(kit.id, id) },
@@ -129,15 +131,15 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
     {work.error && <p role="alert" className="text-sm text-red-300">{work.error}</p>}
     {work.saved && <p role="status" className="text-sm text-emerald-200">{t('animations.saved')}</p>}
     {kit && animationGroups.map(group => {
-      const kept = group.id === 'custom' ? kitCustomDefs(kit) : animationsOf(group.id)
-      const showing = group.id === 'custom' && described && work.run?.animationId === described.id && !kept.some(def => def.id === described.id) ? [...kept, described] : kept
+      // An animation the author described is not on the kit until its first run is saved: it shows with that run, which keeps the words.
+      const showing = group.id === 'custom' ? [...kitCustomDefs(kit), ...pendingCustomDefs(work.runs, kit)] : animationsOf(group.id)
       const done = showing.filter(def => kitAnimations(kit)[def.id]).length
       return <details key={group.id} open={group.id === 'cycle' || group.id === 'custom' || done > 0} className="space-y-2" data-testid={`animation-group-${group.id}`}>
         <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-text-secondary">
           {localized(group.title, i18n.language)} <span className="font-normal normal-case text-text-muted">· {t('animations.groupCount', { done, total: showing.length })}</span></summary>
         <div className="mt-2 grid gap-3 md:grid-cols-2">{showing.map(def => <AnimationCard key={def.id} def={def} kit={kit} actions={actions} />)}</div>
         {group.id === 'custom' && (canAddAnimation(kit)
-          ? <CustomAnimationForm disabled={work.busy || !model} freeId={name => freeAnimationId(kit, name)} onCreate={def => { setDescribed(def); actions.make(def) }} />
+          ? <CustomAnimationForm disabled={work.busy || !model} freeId={name => freeAnimationId(kit, name, Object.keys(work.runs))} onCreate={def => actions.make(def)} />
           : <p className="text-[11px] text-text-muted">{t('animations.custom.full')}</p>)}
       </details>
     })}

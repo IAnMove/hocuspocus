@@ -130,3 +130,21 @@ test('the animations of a kit that the catalog does not list come back as defini
   assert.deepEqual(found[0].poses.map(pose => [pose.id, pose.label.es, pose.prompt]), [['pose-1', 'a wink', 'Anime expression: a wink'], ['pose-2', 'pose-2', '']])
   assert.deepEqual(kitCustomDefs(kit()), [])
 })
+
+test('the job to show per animation is its latest, unless it completed; the author\'s animation that is not on the kit yet stays from its job', async () => {
+  const { runsOf, pendingCustomDefs } = await import('../src/features/characters/useCharacterAnimations.ts')
+  const job = (jobId: string, animationId: string, status: string, createdAt: number, custom?: unknown) => ({ jobId, animationId, status, createdAt, takes: [], ...(custom ? { custom } : {}) }) as never
+  const runs = runsOf([job('a', 'wave', 'failed', 1), job('b', 'wave', 'running', 2), job('c', 'angry', 'completed', 3), job('d', 'nod', 'failed', 4), job('e', 'nod', 'completed', 5)])
+  assert.deepEqual(Object.keys(runs), ['wave'], 'completed jobs are the made animation on the kit; the latest job of an animation is the one that counts')
+  assert.equal(runs.wave.jobId, 'b')
+  const words = { title: 'Sonrisa', view: 'bust', poses: ['una', 'dos'] }
+  const kit = { ...createCharacterKit('Ana'), animations: { made: { sheet: {}, frames: [], fps: 3, loop: 'once', facing: 'front', reviewState: 'pending' } } } as never
+  const pending = pendingCustomDefs({ 'sonrisa': job('x', 'sonrisa', 'failed', 1, words), made: job('y', 'made', 'failed', 1, words), wave: job('z', 'wave', 'failed', 1) }, kit)
+  assert.deepEqual(pending.map(def => [def.id, def.view, def.scaleBy, def.poses.map(pose => pose.prompt)]), [['sonrisa', 'bust', 'face', ['una', 'dos']]])
+})
+
+test('the ids and limits of the author\'s own animations come from the catalog the server reads', () => {
+  assert.equal(MAX_CUSTOM_POSES, 6)
+  const def = customAnimationDef('x', 'X', 'side', ['a'])
+  assert.deepEqual([def.scaleBy, def.facing, def.loop, def.fps, def.template, def.resolution], ['height', 'right', 'once', 3, 'character-reaction', '896x1152'])
+})

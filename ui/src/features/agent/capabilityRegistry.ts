@@ -48,6 +48,7 @@ import type { AgentApplyCharacterKitPresetAction, AgentAttachCharacterKitReferen
 import { registerLipsCreatorCapabilities } from './lipsCreatorCapabilities'
 import { registerProductionWorkCapabilities } from './productionWorkCapabilities'
 import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities'
+import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
 import { registerVideo2DTemplateCapabilities } from './video2dTemplateCapabilities'
@@ -1211,6 +1212,7 @@ registerWorld3DTemplateCapabilities(defineCapability)
 registerVideo2DTemplateCapabilities(defineCapability)
 registerProductionWorkCapabilities(defineCapability)
 registerSeriesShotEditCapabilities(defineCapability)
+registerCharacterAnimationCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)

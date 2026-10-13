@@ -35,7 +35,6 @@ REVIEW_STATES = ("pending", "approved", "rejected")
 # differently, so a pose may show more of the body and a smaller head; the head is read with the face landmarks and, when they cannot
 # be read, the height is used).
 SCALE_BY = ("height", "base", "face")
-MAX_ANIMATIONS = 24
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _FRAME_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 _GENERIC_BACKGROUND = ("Isolated on a plain flat solid {screen} background filling the whole image, no floor, no cast shadow, "
@@ -58,8 +57,10 @@ def animation(animation_id: str) -> dict[str, Any]:
     raise KeyError(animation_id)
 
 
-CUSTOM_VIEWS = {"bust": "1024x1024", "front": "896x1152", "side": "896x1152"}
-MAX_CUSTOM_TEXT = 600
+CUSTOM_VIEWS = {view: spec["resolution"] for view, spec in catalog()["custom"]["views"].items()}
+MAX_CUSTOM_TEXT = catalog()["custom"]["maxText"]
+MAX_CUSTOM_POSES = catalog()["custom"]["maxPoses"]
+MAX_ANIMATIONS = catalog()["custom"]["maxAnimations"]
 
 
 def _custom_pose(custom: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
@@ -90,6 +91,46 @@ def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id
     prompt = " ".join((identity, catalog()["views"][item["view"]], pose["prompt"], background))
     negative = ", ".join(part for part in (fragment.get("negative") or catalog()["negative"], catalog().get("viewNegatives", {}).get(item["view"])) if part)
     return {"prompt": prompt, "negative": negative, "screen": screen, "resolution": item["resolution"]}
+
+
+def animation_def(animation_id: str, *, made: dict[str, Any] | None = None, custom: dict[str, Any] | None = None) -> dict[str, Any]:
+    """What one animation is made from: the catalog's definition, the words the author gives now (``custom``: title, view and one
+    text per pose), or the words the kit kept with the animation it already has (``made``, so one pose can be made again alone)."""
+    if not _ID.fullmatch(str(animation_id or "")):
+        raise CharacterAnimationError("An animation id is a lowercase slug")
+    try:
+        listed = animation(animation_id)
+    except KeyError:
+        listed = None
+    if listed is not None:
+        if custom is not None:
+            raise CharacterAnimationError(f"{animation_id} is in the catalog; custom is for an animation of your own")
+        return listed
+    spec = catalog()["custom"]
+    if custom is not None:
+        view, texts = custom.get("view"), [" ".join(str(text or "").split()) for text in custom.get("poses") or []]
+        title = _text(custom.get("title"), "Title", 80, required=True)
+        base: dict[str, Any] = {"loop": spec["loop"], "fps": spec["fps"]}
+    elif made is not None:
+        view = made.get("view") if made.get("view") in spec["views"] else "bust"
+        frames = [frame for frame in made.get("frames") or [] if isinstance(frame, dict)]
+        if any(not str(frame.get("prompt") or "").strip() for frame in frames):
+            raise CharacterAnimationError(f"{animation_id} was made without the words of its poses; describe it again with custom")
+        title, texts = str(made.get("title") or animation_id), [str(frame["prompt"]) for frame in frames]
+        base = {"loop": made.get("loop", spec["loop"]), "fps": made.get("fps", spec["fps"]),
+                "poseIds": [frame["id"] for frame in frames], "poseLabels": [frame.get("label") or frame["id"] for frame in frames]}
+    else:
+        raise CharacterAnimationError(f"Unknown animation {animation_id}; to make one of your own give custom (title, view, poses)")
+    if view not in spec["views"] or not 1 <= len(texts) <= MAX_CUSTOM_POSES or any(not text or len(text) > MAX_CUSTOM_TEXT for text in texts):
+        raise CharacterAnimationError(f"A custom animation needs a view ({', '.join(spec['views'])}) and 1 to {MAX_CUSTOM_POSES} poses "
+                                      f"of up to {MAX_CUSTOM_TEXT} characters each")
+    by_view = spec["views"][view]
+    ids = base.pop("poseIds", None) or [f"pose-{number}" for number in range(1, len(texts) + 1)]
+    labels = base.pop("poseLabels", None) or [text[:40] for text in texts]
+    poses = [{"id": pose_id, "label": {"es": label, "en": label}, "prompt": text} for pose_id, label, text in zip(ids, labels, texts)]
+    return {"id": animation_id, "group": "custom", "view": view, "scaleBy": by_view["scaleBy"], "facing": by_view["facing"],
+            "template": spec["template"], "resolution": by_view["resolution"], "title": {"es": title, "en": title}, "poses": poses,
+            "custom": True, **base}
 
 
 def _text(value: Any, label: str, maximum: int, *, required: bool = False) -> str:
@@ -283,5 +324,5 @@ def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, w
             "poses": [{"width": pose.width, "height": pose.height} for pose in poses]}
 
 
-__all__ = ["CUSTOM_VIEWS", "CharacterAnimationError", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
+__all__ = ["CUSTOM_VIEWS", "CharacterAnimationError", "animation_def", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
            "normalize_kit_animations", "pose_prompt", "sheet_layout"]
