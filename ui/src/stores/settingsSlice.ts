@@ -7,6 +7,7 @@ export type SettingsSlice = {
   setSettingsOpen: (open: boolean) => void
   settingsTab: SettingsTab
   setSettingsTab: (tab: SettingsTab) => void
+  // ModelSelector "+N more" hint → open Settings and expand Enabled Models.
   modelVisibilityFocus: GenerationMode | null
   openModelVisibility: (mode: GenerationMode) => void
   clearModelVisibilityFocus: () => void

@@ -1,13 +1,12 @@
 """Core/remote server (Apple Silicon and machines without a local AI recipe): editors, projects and remote APIs without Torch."""
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sys
+from contextlib import nullcontext
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from routers.assets import create_assets_router
@@ -34,21 +33,23 @@ from routers.series_assembly import create_series_assembly_router
 from routers.series_review import create_series_review_router
 from routers.style_library import create_style_library_router
 from routers.system_capabilities import create_system_capabilities_router, require_capability_http
+from routers.uploads import create_uploads_router
 from routers.user_diagnostics import create_user_diagnostics_router
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
 from routers.wizard_activity import create_wizard_activity_router
+from routers.wizard_persistence import create_wizard_persistence_router
 from routers.world3d_export import create_world3d_export_router, bind_world3d_renderer_origin
 from routers.workspace_collections import create_workspace_collections_router
 from services import (
     core_canonical_tasks,
-    core_editor,
     core_generation_commands,
     core_production,
     core_remote_image,
-    core_scene_recording,
+    scene_save,
     core_series_assembly,
-    core_upload,
     core_workspace as core,
+    upload_stream,
+    upload_video_metadata,
 )
 from services.mcp_access import McpAccess
 from services.agent_activity import ActorHeaderMiddleware, AgentActivity
@@ -58,16 +59,6 @@ from services.platform_capabilities import platform_capabilities
 from services.scene_commands import SceneCommands
 from services.style_library import StyleLibrary
 from services.ui_distribution import build_status, recovery_html, report_identity
-from services.wizard_conversations import (
-    WizardConversationRevisionConflict,
-    read_conversation,
-    write_conversation,
-)
-from services.wizard_workflows import (
-    WizardWorkflowRevisionConflict,
-    read_workflows,
-    write_workflows,
-)
 from services.wizard_workflow_executor import WizardWorkflowExecutor
 from services.world3d_export import World3DExportService
 from services.workspace_registry import WorkspaceRegistry
@@ -199,7 +190,6 @@ BLOCKED = (
     ("POST", "/api/v1/audio/analyze/jobs", "whisper_local"),
     ("POST", "/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video", "wangp_local"),
     ("POST", "/api/v1/director/pipelines/{pid}/repair", "wangp_local"),
-    ("POST", "/api/v1/llm/plan-h3-windows", "wangp_local"),
 )
 
 
@@ -373,23 +363,24 @@ async def put_services_config(request: Request):
 
 
 @api.get("/api/v1/jobs")
-@api.get("/api/v1/jobs/recovery")
 def list_jobs():
     jobs = core_remote_image.list_active()
     return {"jobs": jobs, "pipelines": [], "total": len(jobs)}
 
 
+@api.get("/api/v1/jobs/recovery")
+def jobs_recovery():
+    """The core keeps no durable generation queue, so a crash leaves nothing to offer back."""
+    return {"jobs": []}
+
+
 @api.get("/api/v1/system-stats")
 def system_stats():
-    import psutil
-    vm = psutil.virtual_memory()
-    return {
-        "cpu": {"percent": psutil.cpu_percent(interval=None)},
-        "ram": {"percent": vm.percent, "used_gb": round((vm.total - vm.available) / 1024 ** 3, 1),
-                "total_gb": round(vm.total / 1024 ** 3, 1)},
-        "gpu": {"available": False, "percent": 0, "vram_used_gb": 0, "vram_total_gb": 0, "vram_percent": 0},
-        "model": {"name": None, "model_type": None, "loaded": False},
-    }
+    from services.live_stats import snapshot_system_stats
+    return snapshot_system_stats(
+        os.path.join(_app_dir, "..", "ui", "dist"),
+        lambda: {"name": None, "model_type": None, "loaded": False},
+    )
 
 
 @api.get("/api/v1/system-detect")
@@ -425,84 +416,10 @@ def _wizard_workspace(value: object) -> str:
     return core.workspace_dir(name)
 
 
-@api.get("/api/v1/wizard/conversations")
-def get_wizard_conversation(workspace: str | None = None):
-    try:
-        return read_conversation(_wizard_workspace(workspace))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except (OSError, json.JSONDecodeError) as error:
-        raise HTTPException(status_code=500, detail=f"Could not read the Wizard conversation: {error}") from error
-
-
-@api.put("/api/v1/wizard/conversations")
-async def put_wizard_conversation(request: Request):
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Wizard conversation must be a JSON object")
-    try:
-        base_revision = body.get("baseRevision")
-        if type(base_revision) is not int:
-            base_revision = 0
-        return write_conversation(
-            _wizard_workspace(body.get("workspace")),
-            body.get("conversation"),
-            base_revision=base_revision,
-        )
-    except WizardConversationRevisionConflict as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_conversation_revision_conflict",
-                "message": str(error),
-                "expectedRevision": error.expected,
-                "currentRevision": error.current,
-            },
-        ) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except OSError as error:
-        raise HTTPException(status_code=500, detail=f"Could not save the Wizard conversation: {error}") from error
-
-
-@api.get("/api/v1/wizard/workflows")
-def get_wizard_workflows(workspace: str | None = None):
-    try:
-        return read_workflows(_wizard_workspace(workspace))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except (OSError, json.JSONDecodeError) as error:
-        raise HTTPException(status_code=500, detail=f"Could not read Wizard workflows: {error}") from error
-
-
-@api.put("/api/v1/wizard/workflows")
-async def put_wizard_workflows(request: Request):
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Wizard workflows must be a JSON object")
-    try:
-        base_revision = body.get("baseRevision")
-        if type(base_revision) is not int:
-            base_revision = 0
-        return write_workflows(
-            _wizard_workspace(body.get("workspace")),
-            body.get("collection"),
-            base_revision=base_revision,
-        )
-    except WizardWorkflowRevisionConflict as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_workflow_revision_conflict",
-                "message": str(error),
-                "expectedRevision": error.expected,
-                "currentRevision": error.current,
-            },
-        ) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except OSError as error:
-        raise HTTPException(status_code=500, detail=f"Could not save Wizard workflows: {error}") from error
+api.include_router(create_wizard_persistence_router(
+    workspace_dir=_wizard_workspace,
+    lock=nullcontext(),
+))
 
 
 @api.get("/api/v1/resolutions")
@@ -592,135 +509,61 @@ def cancel_rig_job(job_id: str):
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(request: Request):
     try:
-        return await core_scene_recording.publish_from_form(await request.form())
+        return await scene_save.publish_from_form(await request.form())
     except HTTPException:
         raise
     except Exception as error:
         raise HTTPException(
-            status_code=core_scene_recording.http_error_status(error),
-            detail=core_scene_recording.http_error_detail(error),
+            status_code=scene_save.http_error_status(error),
+            detail=scene_save.http_error_detail(error),
         ) from error
 
 
 @api.post("/api/v1/scenes")
 async def save_scene(request: Request):
     body = await request.json()
-    scene = body.get("scene") if isinstance(body, dict) else None
-    if not isinstance(scene, dict):
-        raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    workspace = body.get("workspace")
-    if workspace is None:
-        workspace = core.active_workspace()
-    folder = core.workspace_dir(workspace)
-    os.makedirs(folder, exist_ok=True)
-    import json
-    import time
-    import uuid
-    name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_scene_{uuid.uuid4().hex[:6]}.scene.json"
-    path = os.path.join(folder, name)
-    Path_write = path
-    with open(Path_write, "w", encoding="utf-8") as handle:
-        json.dump(scene, handle)
-    return {"name": name, "type": "scene", "url": f"/api/v1/file/{name}?workspace={workspace}"}
-
-
-@api.post("/api/v1/video-editor/probe")
-def probe_video(body: dict):
-    try:
-        return core_editor.probe_video(str((body or {}).get("source") or ""), (body or {}).get("workspace"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@api.post("/api/v1/video-editor/probe-audio")
-def probe_audio_route(body: dict):
-    try:
-        return core_editor.probe_soundtrack(str((body or {}).get("source") or ""), (body or {}).get("workspace"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@api.get("/api/v1/video-editor/thumbnail")
-def video_thumbnail(source: str):
-    try:
-        path = core_editor.thumbnail_path(source)
-    except Exception as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return FileResponse(path, media_type="image/jpeg")
-
-
-@api.post("/api/v1/video-editor/screenshot")
-def video_screenshot(body: dict):
-    try:
-        return core_editor.screenshot(
-            str((body or {}).get("source") or ""),
-            float((body or {}).get("time") or 0),
-            str((body or {}).get("name") or "frame"),
-            (body or {}).get("workspace"),
-        )
-    except (ValueError, RuntimeError) as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@api.post("/api/v1/video-editor/export", status_code=202)
-def video_export(body: dict):
-    try:
-        return core_editor.start_export(body or {})
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-
-@api.get("/api/v1/video-editor/export/{job_id}")
-def video_export_status(job_id: str):
-    job = core_editor.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Export job not found")
-    return job
-
-
-@api.post("/api/v1/upload")
-async def upload_file(request: Request, filename: str = "upload.bin"):
-    chunks: list[bytes] = []
-    total = 0
-    async for chunk in request.stream():
-        total += len(chunk)
-        if total > core_upload.MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
-        chunks.append(chunk)
-    try:
-        data, original = core_upload.extract_upload(
-            b"".join(chunks),
-            request.headers.get("content-type") or "",
-            filename,
-        )
-        return core_upload.save_upload(core.uploads_dir(), data, original)
-    except ValueError as error:
-        status = 413 if "too large" in str(error).lower() else 400
-        raise HTTPException(status_code=status, detail=str(error)) from error
-
-
-@api.get("/api/v1/uploads/{filename:path}")
-def serve_upload(filename: str):
-    path = core.safe_join(core.uploads_dir(), filename)
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Upload not found")
-    return FileResponse(path)
-
-
-@api.post("/api/v1/llm/load")
-async def llm_load(request: Request):
-    body = await request.json()
-    provider = str((body or {}).get("provider") or core.services_config().get("llm_provider") or "local")
-    if provider == "local":
-        require_capability_http("local_llm")
-    from services import llm_service
-    llm_service.load_model(
-        model_id=str((body or {}).get("model_id") or ""),
-        provider=provider,
-        remote_url=str((body or {}).get("remote_url") or ""),
-        api_key=str((body or {}).get("api_key") or ""),
+    return scene_save.save_core_scene(
+        body,
+        workspace_dir=core.workspace_dir,
+        active_workspace=core.active_workspace,
     )
-    return {"status": "ok", **llm_service.get_status()}
+
+
+def _resolve_editor_input(value: str, workspace: str | None = None) -> str | None:
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=core.safe_join,
+        workspace_dir=core.workspace_dir,
+        save_path=lambda: str(core.outputs_root()),
+    )
+
+
+from routers.video_editor import create_video_editor_jobs_router, create_video_editor_router
+
+api.include_router(create_video_editor_router(
+    workspace_dir=core.workspace_dir_or_400,
+    get_active_workspace=core.active_workspace,
+    resolve_input_path=_resolve_editor_input,
+    publish_legacy_task=core_canonical_tasks.publish_video_editor_activity,
+    thumbnail_cache_dir=os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "cache",
+        "media-thumbnails",
+    ),
+))
+api.include_router(create_video_editor_jobs_router())
+
+
+api.include_router(create_uploads_router(
+    uploads_dir=core.uploads_dir,
+    stream_upload=upload_stream.stream_upload_file,
+    transcode_upload=upload_stream.transcode_upload,
+    probe_video_metadata=upload_video_metadata.probe_with_ffprobe,
+    safe_join=core.safe_join,
+    output_fallback=serve_file,
+))
 
 
 api.include_router(create_llm_router(
@@ -732,6 +575,7 @@ api.include_router(create_llm_router(
     ensure_llm_loaded=core_production.ensure_llm_loaded,
     comic_writing_llm=core_production.comic_writing_llm,
     resolve_visual_media=core_production.resolve_visual_media,
+    require_local_llm=lambda: require_capability_http("local_llm"),
 ))
 api.include_router(create_llm_prompt_router(
     get_services_config=core.services_raw,
@@ -743,6 +587,7 @@ api.include_router(create_llm_prompt_router(
     get_cached_hardware=lambda: {},
     get_enhancer_enabled=lambda: 0,
     enhance_with_wangp=_hidden_wangp_enhance,
+    plan_h3_gate=lambda: require_capability_http("wangp_local"),
 ))
 
 
@@ -770,18 +615,14 @@ def run_server() -> None:
     for name, entry in snapshot["capabilities"].items():
         print(f"  {name}: {entry['state']}")
     print(f"[HocusPocus] profile {snapshot['profile']}")
-    port = int(os.environ.get("SERVER_PORT", "7860"))
-    pinokio_share = (os.environ.get("PINOKIO_SHARE_LOCAL") or "").strip().lower()
-    if pinokio_share == "true":
-        host = "0.0.0.0"
-    elif pinokio_share == "false":
-        host = "127.0.0.1"
-    else:
-        host = os.environ.get("SERVER_NAME", "127.0.0.1")
-    display_host = "127.0.0.1" if host == "0.0.0.0" else host
-    print(f"HocusPocus Lab UI: http://{display_host}:{port}/")
-    from services.server_lifecycle import run_until_stopped
-    run_until_stopped(api, host=host, port=port)
+    from services.server_entry import run
+    run(
+        api,
+        ui_ready=_ui_ready,
+        endpoint_path=os.path.join(_app_dir, "settings", "server-endpoint.json"),
+        prepare=lambda _display_host, _port: None,
+        lan_messages=[],  # core has no LanAuthMiddleware: it must not announce LAN protection
+    )
 
 
 if __name__ == "__main__":

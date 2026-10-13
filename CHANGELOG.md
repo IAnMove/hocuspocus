@@ -43,6 +43,45 @@ a sheet once or in a loop and breathes) next to `walk-cycle-sheet`; the walking 
 (a two-cell sheet, one cell per half step, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
 way they look (`facing`). New `reaction` trait and gesture/expression words in the 2D search groups.
 
+**Music-video Director actions, and five Studio edit submissions, left the main Studio store.** Blend, outpaint, restyle, recast, and retake, inpaint, or edit-anything still start from the same Generate button. Adopting or uploading a track, writing a song, planning a music video, generating start images, and generating the video still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The core server shares five more paths with the full server.** Saving a production profile still uses each server's own checker and default model. The shared model loader reloads the client when a DeepSeek URL changes, and the Director sends the DeepSeek key and reloads when the local device changes. Core keeps its local-LLM gate and its MiniMax-M3 default. A scene recording on core now transcodes off the request thread, two jobs at a time, refuses an oversized upload before reading it, and drops that folder from the output scan cache. Returned scene URLs on the full server still have no workspace query. A Series asset path that points at a missing file fails closed on both servers. Director plan prompts, angle prompts, and the pipeline list, active, get, and status routes are one router. On core, a stale running checkpoint is listed as crashed and the status carries the same summary and preview fields as the full server; starting, continuing, or rerunning a pipeline stays blocked. Story music jobs use one store and one router. Core still answers 409 when local music is unavailable. It now reserves a music attempt, replays a repeated idempotency key without a second worker, reloads an interrupted job from its checkpoint, and publishes the job and its candidates to Activity. Candidates are generated one at a time.
+
+**The Director dashboard, short-film planning, the Director pipeline, and Studio video editing left the main Studio store.** Opening the pipeline dashboard, planning a short film, and starting or continuing a Director pipeline still work the same way. Studio edit, continue, blend, and outpaint, including sending a frame to Image mode and applying it back as an anchor, still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The model catalog, which models are shown, and the selected model's options left the main Studio store.** Loading the catalog, showing or hiding a model, and filling in that model's settings still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The core server edits video, keeps Wizard work, and reports the same machine identity as the full server.** On a Mac, or any machine without a local AI recipe, the core server now mounts the same video editor as the full server. A timeline can use Video 2D layers, an export stays inside the workspace, a clip with an invalid trim is rejected, and an export can be cancelled. The core MCP endpoint uses the same router as the full server. A non-ASCII authorization header is refused instead of failing the request, a call is attributed to the external agent, tool answers can include structured content, and status reports a real remote job. Wizard conversations and workflows are saved by the same router on both servers. A workspace name that is not allowed still answers 400. Saving a conversation as a JSON array, which the core server used to reject as 400, now answers 422, the same as the full server. System stats on core include the runtime identity, so an open tab can tell that the server restarted, and they include the GPU compute percent. Memory figures use the same two-decimal rounding as the full server, and a machine with an NVIDIA GPU reports that GPU instead of a blank reading. Starting the core server binds its port before it prints the address, moves to the next free port when that port is taken, writes `settings/server-endpoint.json`, and prints the same address banner as the full server. A task update on core can complete a task the ordinary status rules would refuse, and it keeps that task's reserved title and workflow. A finished 3D model job records the same lineage references, and a provider default, as a Studio job.
+
+**Tools, recipes, services, and LoRAs left the main Studio store.** Those controls still show up in the same places, and the screen still reads and writes them through the same `useStore` hook. Saving a mode's settings, including the chosen model and the LoRAs that were on, works the same way as before.
+
+**The Studio store is starting to split.** System settings, generation presets, foreground activity, and the CivitAI browser now live in their own slices. The screen still reads and writes them through the same `useStore` hook.
+
+**Security fix: the macOS "core" server no longer serves uploaded pages and
+scripts as pages of the app.** On the core server, `POST /api/v1/upload` kept
+any extension, so an uploaded `x.html`, `x.svg` or `x.js` was stored under that
+name and `GET /api/v1/uploads/...` sent it to the browser as a page on the
+app's own address (stored cross-site scripting). Both servers now use one
+uploads router, `app/routers/uploads.py`: only the known media, model, text and
+archive extensions are kept, every other name is stored as `.bin`, and every
+file it serves back carries `X-Content-Type-Options: nosniff`. The full server already did
+this, so its answers do not change. The core server also gets what the full
+server had: files are streamed to disk instead of held in memory (500 MB cap),
+a name that is not an upload falls back to the workspace outputs, MP3, M4A and
+AAC files become WAV (with the ffmpeg program when the install has no
+ffmpeg-python package, as the core install does), and a video upload reports its `fps`, `frame_count`,
+`duration_seconds` and `has_audio`. The core server's old raw-body upload
+(`?filename=`) and a multipart upload without a `file` part now answer `422`,
+as on the full server, and `GET /api/v1/uploads/` no longer accepts a name with
+slashes in it. Core also had four wrong or hidden routes, now fixed: `POST
+/api/v1/llm/load` ignored the stored provider key and the LLM routing and loaded
+with an empty key; `GET /api/v1/series/{id}` and `POST /api/v1/llm/plan-h3-windows`
+were each defined twice, so one copy never ran; and `GET /api/v1/jobs/recovery`
+offered the jobs that were running as leftovers of a crash, which the recovery
+dialog would have offered to resume. It now answers an empty list.
+
+**The Wizard says which defaults it chose, and no longer invents a "cinematic" style.** When the Wizard creates a Story or a Series from a short request, it still does not stop to ask about style, model, duration or format, but it now says so: if the style or the tone was left unset, its reply ends with one line ("Choices I made: style not set (the model decides), tone not set. Tell me if you want something else.") and lists only what really stayed empty. Before, it filled the style with a generic sentence ("Coherent cinematic direction..."), the tone with "Cinematic" and a Series camera with a television camera language. Story Lab then turned that sentence into a "VISUAL STYLE LOCK" prefix on every image and video prompt, so every Wizard story looked like the same "cinematic TV". Now a Story or Series made by the Wizard with no style has an empty style (no lock), an empty tone and an empty camera language; new projects made by hand also start with an empty tone, and a style or tone you write is kept exactly. The Story Lab writer and the Comic planner leave the "Tone:" line out of their prompt when there is no tone. Projects already saved keep what they have. Risk: a Wizard story with no style gets no style lock from Story Lab, so its look can drift between shots until you write one; the reply line tells you. The same holds when such a story is staged for the Director: with no style of its own it is staged with no style (before, the Director's own sentence "Match the approved Story reference artwork exactly... keep it illustrated..." took its place and became a lock that forced an illustrated look), so the Director adds no style lock. A story that has a style it does not enforce keeps that sentence.
+
 **A safety net for the coming split of the two largest files (no behaviour
 change).** Tests can now import the full server with a fake WanGP engine, with
 no GPU. `tests/characterization` records what read-only routes answer

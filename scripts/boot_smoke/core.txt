@@ -10,5 +10,6 @@ GET /api/v1/models
 GET /api/v1/outputs
 GET /api/v1/series
 GET /api/v1/director/pipelines
+GET /api/v1/uploads/never-uploaded.png 404
 GET /api/v1/does-not-exist 404
 GET /

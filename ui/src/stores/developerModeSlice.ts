@@ -2,6 +2,7 @@ import { loadDeveloperMode, saveDeveloperMode } from '../lib/developerMode'
 import type { SliceCreator } from './storeApi'
 
 export type DeveloperModeSlice = {
+  /** Internal tools (Auditoría interna). Off by default; persisted locally. */
   developerMode: boolean
   setDeveloperMode: (enabled: boolean) => void
 }

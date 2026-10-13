@@ -19,7 +19,7 @@ _GGUF_PATH = _APP / "shared" / "utils" / "gguf_mapping.py"
 _TYPES_PATH = _ROOT / "ui" / "src" / "types" / "index.ts"
 _REF_UI_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "ImageRefSection.tsx"
 _INPUTS_UI_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "InputsPanel.tsx"
-_STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_VISIBILITY_PATH = _ROOT / "ui" / "src" / "stores" / "modelVisibility.ts"
 
 
 def _read(path: Path) -> str:
@@ -226,7 +226,7 @@ class TestKrea2LoraBrowser(unittest.TestCase):
         ))
 
     def test_all_four_krea_models_are_curated_image_defaults(self):
-        store = _read(_STORE_PATH)
+        store = _read(_VISIBILITY_PATH)
         default_block = store.split("const DEFAULT_ENABLED_MODELS = new Set([", 1)[1].split("])\n", 1)[0]
         for model_type in (
             "krea2_raw",

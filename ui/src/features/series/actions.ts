@@ -5,6 +5,7 @@ import {
   creativeLocations,
   normalizeName,
   outlineBeats,
+  unsetDefaultsLine,
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
@@ -165,13 +166,16 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     purpose: location.purpose,
     description: location.description,
   }))
+  // No clause for a missing visual style: the Wizard does not invent one, and a
+  // series without a style is not unfinished. Setup would re-save the approved
+  // canon as a draft on every later episode.
   const needsSetup = createdSeries
     || !series.premise.trim()
-    || !series.visualStyle.trim()
     || !series.canon.worldSummary.trim()
     || !series.characters.length
     || !series.locations.length
     || languageSetupChanged
+  let defaultsLine = ''
   if (needsSetup) {
     const patched = {
       ...series,
@@ -179,10 +183,9 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
       premise: series.premise || action.seriesPremise || action.episodePremise,
       logline: series.logline || action.seriesLogline || action.episodeLogline,
       genre: series.genre || action.genre || i18n.t('seriesLab:scaffold.genre', { lng }),
-      tone: series.tone || action.tone || i18n.t('seriesLab:scaffold.tone', { lng }),
-      visualStyle: series.visualStyle || action.visualStyle || i18n.t('seriesLab:scaffold.visualStyle', { lng }),
-      characterVisualStyle: series.characterVisualStyle || action.visualStyle || i18n.t('seriesLab:scaffold.characterVisualStyle', { lng }),
-      cameraLanguage: series.cameraLanguage || i18n.t('seriesLab:scaffold.camera', { lng }),
+      tone: series.tone || action.tone,
+      visualStyle: series.visualStyle || action.visualStyle,
+      characterVisualStyle: series.characterVisualStyle || action.visualStyle,
       language: languageIntent.contentLanguage || action.language || series.language,
       spokenLanguage: languageIntent.spokenLanguage || action.language || series.spokenLanguage,
       languageIntent,
@@ -210,6 +213,7 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
       updatedAt: new Date().toISOString(),
     }
     series = await api.saveSeriesProject(workspace, patched, series.revision)
+    defaultsLine = unsetDefaultsLine({ style: !series.visualStyle.trim(), tone: !series.tone.trim() })
   }
   let approvedCanon = false
   if (series.canon.approval !== 'approved') {
@@ -258,6 +262,7 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     savedEpisode.premise.trim()
       ? i18n.t('seriesLab:replies.episodeDraftLine', { title: savedEpisode.title, premise: savedEpisode.premise.trim() })
       : '',
+    defaultsLine,
   ].filter(Boolean).join('\n\n')
   const synopsisBlock = synopsis ? `\n\n${synopsis}` : ''
   return seriesEpisodeResult(

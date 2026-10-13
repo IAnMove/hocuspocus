@@ -20,7 +20,7 @@ from services.character_kit_library import (
     patch_character_kit,
     read_character_kit_library,
 )
-from routers.series_episode import create_checked_episode
+from services.series_episode import create_checked_episode
 from services.series_library import (
     create_series_project,
     duplicate_series_project,
@@ -212,11 +212,6 @@ def create_core_labs_router() -> APIRouter:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
-    @router.get("/api/v1/series/{series_id}")
-    def get_series(series_id: str, workspace: str | None = None):
-        with _LOCK:
-            return _series_or_404(_read_series(_series_workspace(workspace)), series_id)
-
     @router.put("/api/v1/series/{series_id}")
     def put_series(series_id: str, body: dict):
         workspace = _series_workspace(body.get("workspace"))
@@ -317,7 +312,7 @@ def create_core_labs_router() -> APIRouter:
 
     @router.put("/api/v1/series/{series_id}/episodes/{episode_id}")
     def put_episode(series_id: str, episode_id: str, body: dict):
-        from routers.series_episode import apply_series_episode_update
+        from services.series_episode import apply_series_episode_update
 
         workspace = _series_workspace(body.get("workspace"))
         with _LOCK:

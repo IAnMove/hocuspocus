@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.llm import create_llm_prompt_router, create_llm_router
@@ -167,3 +167,47 @@ def test_list_llm_models_never_points_a_public_provider_at_a_client_url():
         response = client.get("/api/v1/llm/models", params={"provider": "openai", "url": "http://attacker.example/"})
     assert response.status_code == 200
     assert "attacker" not in str(catalog.call_args.kwargs["remote_url"]), "the stored key would have travelled there"
+
+
+def test_llm_load_runs_the_local_gate_only_for_the_local_provider():
+    gated = []
+
+    def gate():
+        gated.append("local")
+        raise HTTPException(status_code=409, detail={"code": "feature_unavailable"})
+
+    app = FastAPI()
+    app.include_router(_core_router(require_local_llm=gate))
+    client = TestClient(app)
+    with patch("services.llm_service.load_model") as load, patch("services.llm_service.get_status", return_value={}):
+        blocked = client.post("/api/v1/llm/load", json={"provider": "local"})
+        assert (blocked.status_code, blocked.json()["detail"]["code"]) == (409, "feature_unavailable")
+        load.assert_not_called()
+        remote = client.post("/api/v1/llm/load", json={"provider": "openai", "model_id": "gpt-test"})
+        assert remote.status_code == 200, remote.text
+        load.assert_called_once()
+        # No provider in the body: the routing decides, and it is local here.
+        assert client.post("/api/v1/llm/load", json={}).status_code == 409
+    assert gated == ["local", "local"]
+
+
+def test_llm_load_without_a_gate_loads_the_local_provider():
+    app = FastAPI()
+    app.include_router(_core_router())
+    client = TestClient(app)
+    with patch("services.llm_service.load_model") as load, patch("services.llm_service.get_status", return_value={}):
+        response = client.post("/api/v1/llm/load", json={"provider": "local"})
+    assert response.status_code == 200, response.text
+    load.assert_called_once()
+
+
+def test_plan_h3_windows_runs_its_gate_before_reading_the_body():
+    def gate():
+        raise HTTPException(status_code=409, detail={"code": "feature_unavailable"})
+
+    app = FastAPI()
+    app.include_router(_prompt_router(plan_h3_gate=gate))
+    client = TestClient(app)
+    for request in ({"json": {"prompt": "Clark turns toward the truck"}}, {"content": b"not json"}, {}):
+        response = client.post("/api/v1/llm/plan-h3-windows", **request)
+        assert (response.status_code, response.json()["detail"]["code"]) == (409, "feature_unavailable")

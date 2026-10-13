@@ -98,12 +98,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_director_model_compat.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_director_narrow_locks.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
@@ -152,22 +146,10 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
-      "file": "tests/test_download_state.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_execution_mode.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_h3_adoption.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
       "file": "tests/test_h3_policy_language_audio_creative.py",
@@ -222,12 +204,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_krea2_features.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
       "file": "tests/test_lan_auth.py",
@@ -344,12 +320,6 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
-      "file": "tests/test_qwen_image_21.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_router_wiring.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
@@ -434,12 +404,6 @@
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
-      "file": "tests/test_story_lab_audio_ui.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_story_lab_id_repair.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -462,12 +426,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
-      "file": "tests/test_story_lab_trailer_ui.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
       "file": "tests/test_story_library_router.py",
@@ -549,12 +507,6 @@
     },
     {
       "file": "tests/test_wizard_workflow_executor.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
-      "file": "tests/test_wizard_workflows.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
@@ -1035,6 +987,12 @@
     },
     {
       "file": "ui/tests/wizardScenePrepare.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/wizardStoryDefaults.test.ts",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."

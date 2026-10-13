@@ -117,8 +117,10 @@ the kernel, each slice) proves that with these four steps:
    `route_table_runtime.json`, and stops the server by its PID. It needs at
    least 3 GB of free VRAM; `--cpu` hides the GPU from a `--core` smoke only
    (the full server cannot boot without one). Put the result (port, route count,
-   PASS) in the PR's E2E/smoke line. A PR that removes a core duplicate
-   deletes its line in `scripts/boot_smoke/core.known-duplicates.txt`.
+   PASS) in the PR's E2E/smoke line. The core has no known duplicate routes
+   left; if one must be tolerated, list it as `METHOD /path  # reason` in
+   `scripts/boot_smoke/core.known-duplicates.txt`, and delete the line in the
+   PR that removes it.
 4. **Lower the ceiling.** `scripts/size_ceilings.json` holds the most lines
    `_launch_runtime.py`, `core_runtime.py` and `useStore.ts` may have.
    Ceilings only go down: `tests/test_size_ceilings.py` fails when a file is
