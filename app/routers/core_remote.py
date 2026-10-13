@@ -145,6 +145,7 @@ def create_core_remote_router() -> APIRouter:
         wgp_module=music_wgp,
         music_generation_gate=core_music_generation_gate,
         before_reserve=_core_music_before_reserve,
+        resolve_workspace=_workspace,
     ))
 
     router.include_router(create_director_plan_reads_router(ensure_llm_loaded=ensure_llm_loaded))

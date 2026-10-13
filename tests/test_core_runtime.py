@@ -958,6 +958,46 @@ class CoreRuntimeTests(unittest.TestCase):
         child_id = body["children"][0]["taskId"]
         self.assertEqual(tasks[child_id]["metadata"]["adapter"], "minimax-music-candidate")
 
+    def test_minimax_music_null_or_empty_workspace_means_the_active_workspace(self):
+        """Core's old music route turned a null or empty workspace into the active one."""
+        from routers import story_music
+        from services import core_workspace as core
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        for value in (None, ""):
+            with self.subTest(workspace=value):
+                folder, previous = self._in_temp_workspace()
+                try:
+                    Path("outputs", "lab").mkdir(parents=True)
+                    core.save_config({"services": {"active_workspace": "lab"}})
+                    payload = {
+                        "model": "music-3.0",
+                        "prompt": "cinematic dream pop",
+                        "lyrics": "[Verse]\nAcross the night",
+                        "count": 1,
+                        "workspace": value,
+                        "paid_music_confirmed": True,
+                        "idempotencyKey": f"active-workspace-{value!r}",
+                    }
+                    with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                        story_music.threading, "Thread", QuietThread,
+                    ):
+                        started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                    checkpoint_dir = Path("outputs", "lab", ".minimax-music-jobs")
+                    checkpoints = list(checkpoint_dir.glob("*.json")) if checkpoint_dir.is_dir() else []
+                finally:
+                    self._clear_music_jobs()
+                    self._leave_temp_workspace(folder, previous)
+                self.assertEqual(started.status_code, 202, started.text)
+                self.assertEqual(started.json()["workspace"], "lab")
+                self.assertEqual(len(checkpoints), 1)
+
     def test_minimax_image_generate_starts_a_studio_job(self):
         folder, previous = self._in_temp_workspace()
         try:

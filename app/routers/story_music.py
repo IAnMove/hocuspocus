@@ -35,6 +35,7 @@ _minimax_music_job_update: Callable[..., Any]
 wgp: Any
 _music_generation_gate: Callable[[dict], None] | None = None
 _music_before_reserve: Callable[[str], None] | None = None
+_music_resolve_workspace: Callable[[Any], str] | None = None
 
 
 def _bind_story_music_runtime(
@@ -55,6 +56,7 @@ def _bind_story_music_runtime(
     wgp_module: Any,
     music_generation_gate: Callable[[dict], None] | None = None,
     before_reserve: Callable[[str], None] | None = None,
+    resolve_workspace: Callable[[Any], str] | None = None,
 ) -> None:
     """Install launcher primitives under the names the handlers already use."""
     global _get_active_workspace, _workspace_dir, _story_cover_reference_path
@@ -63,7 +65,7 @@ def _bind_story_music_runtime(
     global _run_minimax_music_job, _minimax_music_jobs, _minimax_music_jobs_lock
     global _MINIMAX_MUSIC_TERMINAL, _finish_unstarted_music_children
     global _minimax_music_job_update, wgp
-    global _music_generation_gate, _music_before_reserve
+    global _music_generation_gate, _music_before_reserve, _music_resolve_workspace
     _get_active_workspace = get_active_workspace
     _workspace_dir = workspace_dir
     _story_cover_reference_path = story_cover_reference_path
@@ -80,6 +82,7 @@ def _bind_story_music_runtime(
     wgp = wgp_module
     _music_generation_gate = music_generation_gate
     _music_before_reserve = before_reserve
+    _music_resolve_workspace = resolve_workspace
 
 
 def _reserve_story_music_submission(body: dict, workspace: str):
@@ -116,6 +119,9 @@ def start_story_music_candidates_job(body: dict):
     from services import minimax_music_service
 
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    # Absent on the full server. Core maps a null or empty workspace to the active one.
+    if _music_resolve_workspace is not None:
+        workspace = _music_resolve_workspace(workspace)
     _workspace_dir(workspace)
     # Absent on the full server. Core uses it to answer 409 before a paid-model check.
     if _music_generation_gate is not None:
@@ -342,6 +348,7 @@ def create_story_music_router(
     wgp_module: Any,
     music_generation_gate: Callable[[dict], None] | None = None,
     before_reserve: Callable[[str], None] | None = None,
+    resolve_workspace: Callable[[Any], str] | None = None,
 ) -> APIRouter:
     """Mount Story MiniMax Music jobs without importing the launch module."""
     _bind_story_music_runtime(
@@ -361,6 +368,7 @@ def create_story_music_router(
         wgp_module=wgp_module,
         music_generation_gate=music_generation_gate,
         before_reserve=before_reserve,
+        resolve_workspace=resolve_workspace,
     )
     router = APIRouter()
 

@@ -99,6 +99,7 @@ def _base_namespace(tmp_path: Path) -> dict:
         # The full server binds neither hook; core binds both (see routers/story_music.py).
         "_music_generation_gate": None,
         "_music_before_reserve": None,
+        "_music_resolve_workspace": None,
     }
 
 
