@@ -977,6 +977,18 @@ def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> b
     return isinstance(plan, dict) and field in (plan.get(TYPED_PROMPTS_KEY) or ())
 
 
+def _h3_segment_typed_at_review(state: Mapping[str, Any], clip_index: int) -> bool:
+    """Whether an H3 segment's saved prompt comes from a shot prompt the user typed at review.
+
+    A segment is cut from the shot's video prompt, its windows or its own
+    segment prompts, so a mark on any of them counts.
+    """
+    return any(
+        _typed_at_review(state, clip_index, field)
+        for field in ("video_prompt", "window_prompts", "h3_segment_prompts")
+    )
+
+
 def _regenerate_seed(state: Mapping[str, Any], stored: Any) -> int:
     """Seed for a Regenerate: a new attempt draws a new seed.
 
@@ -4108,9 +4120,11 @@ def rerun_h3_segment(
     snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
     direct_params = {**state, **snapshot}
     direct_video, direct_video_master_prompt = _direct_video_settings(direct_params)
-    # A prompt the user typed keeps its lettering; a saved one the LLM wrote
-    # gets the no-text lock only in a sung project, and never with Raw prompts.
-    allow_segment_text = bool(prompt_override) or _clip_text_allowed(direct_params)
+    # A prompt the user typed, now or at the review pause, keeps its
+    # lettering; a saved one the LLM wrote gets the no-text lock only in a
+    # sung project, and never with Raw prompts.
+    typed_segment = bool(prompt_override) or _h3_segment_typed_at_review(state, clip_index)
+    allow_segment_text = typed_segment or _clip_text_allowed(direct_params)
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs, video_refs, audio_refs = (
         ([], [], []) if direct_video else _h3_edit_references(state, clip_index)
@@ -4207,7 +4221,7 @@ def rerun_h3_segment(
                         video_params,
                     ),
                 )
-            prompt = _saved_prompt_contract(state, prompt, "video", typed=bool(prompt_override))
+            prompt = _saved_prompt_contract(state, prompt, "video", typed=typed_segment)
             prompt = _h3_apply_portrait_composition_contract(
                 prompt,
                 str(video_params.get("resolution") or "960x544"),

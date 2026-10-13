@@ -373,3 +373,55 @@ def test_a_story_edit_at_the_review_pause_gets_no_lock_and_a_music_video_edit_ke
             rechecked = director_pipeline._apply_final_prompt_locks(reviewed, params)
         assert rechecked[0]["image_prompt"] == edited
         assert (LOCK in rechecked[1]["image_prompt"]) is (pipeline_type == "music_video")
+
+
+
+@pytest.mark.parametrize("direct_video", [True, False])
+def test_a_segment_regenerate_keeps_a_prompt_typed_at_the_review_pause(tmp_path: Path, direct_video: bool):
+    # Regenerate one H3 segment without typing a new prompt: a music-video
+    # shot the user typed at the review pause never gets the no-text lock back.
+    segment = "The singer walks through the archive. Text appears: 'SOY LIBRE'."
+    (tmp_path / "old_0.mp4").write_bytes(b"video")
+    (tmp_path / "start.png").write_bytes(b"start")
+    sent: dict[str, str] = {}
+    for typed in (["video_prompt"], []):
+        state = {
+            "pipeline_id": "typed",
+            "created_at": time.time(),
+            "status": "completed",
+            "pipeline_type": "music_video",
+            "video_model": "minimax_h3_legacy" if direct_video else "minimax_h3",
+            "video_params": {"resolution": "960x544", "h3_reference_mode": "first_frame"},
+            "clips": [{
+                "index": 0,
+                "start_image_filename": "start.png",
+                "video_prompt": segment,
+                "planned_clip": {"duration_sec": 5},
+                "h3_segments": [{
+                    "index": 0, "filename": "old_0.mp4", "prompt": segment, "frames": 124,
+                    "seed": 900, "reference_mode": "first_frame", "stale": False,
+                }],
+            }],
+            "clip_plans": [{"video_prompt": segment, "_director_typed_prompts": typed}],
+            "output_files": ["old_0.mp4"],
+            "workspace": "default",
+            "_params_snapshot": {"pipeline_type": "music_video", "master_seed": 900},
+        }
+        (tmp_path / "_director_pipeline_typed.json").write_text(json.dumps(state), encoding="utf-8")
+        submitted: list[dict] = []
+
+        def submit(params, **_kwargs):
+            submitted.append(params)
+            (tmp_path / "new.mp4").write_bytes(b"new video")
+            return ["new.mp4"]
+
+        with _wgp(), patch.object(
+            director_pipeline,
+            "_direct_video_settings",
+            return_value=(True, "IMMUTABLE PAINTED WORLD.") if direct_video else (False, ""),
+        ), patch.object(director_pipeline, "_submit_and_wait", side_effect=submit):
+            director_pipeline.rerun_h3_segment(str(tmp_path), "typed", 0, 0, cascade=False)
+        assert len(submitted) == 1
+        sent["typed" if typed else "planned"] = submitted[0]["prompt"]
+    assert LOCK not in sent["typed"] and "SOY LIBRE" in sent["typed"]
+    assert LOCK in sent["planned"] and "SOY LIBRE" not in sent["planned"]

@@ -36,8 +36,9 @@ be read is reported instead of silently replaced.
 **Narrower Director layers.** The no-visible-text lock now goes only on music
 videos, where planners used to put the song's lyrics on screen, and only on the
 prompts the LLM wrote. Stories, audio short films and comic movies send their
-prompts without it, and a direct-video H3 segment the user types keeps its
-lettering too. The project's *allow text* switch still turns the lock off. The
+prompts without it. A direct-video H3 segment the user types keeps its
+lettering too, and so does a regenerated H3 segment of a shot the user typed at
+the review pause. The project's *allow text* switch still turns the lock off. The
 "Maintain the same … art style." prefix, and the vision call that names the
 reference's style for it, are used only with Flux.2 Klein models, the only ones
 it was tested with, and the call is skipped with *Raw prompts*. Other image
