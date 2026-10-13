@@ -38,6 +38,7 @@ export interface SeriesShotScript {
   scene3d?: SeriesShotScene3D
   foley?: { prompt: string; volume?: number }
   duration?: number
+  resolution?: string
   [key: string]: unknown
 }
 

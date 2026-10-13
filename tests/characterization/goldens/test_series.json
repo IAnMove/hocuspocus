@@ -90,7 +90,7 @@
           "numInferenceSteps": 20,
           "orientation": "landscape",
           "renderStrategy": "auto",
-          "resolution": "540p"
+          "resolution": "480p"
         },
         "writingBaseUrl": "",
         "writingModel": "",
@@ -220,7 +220,7 @@
           "numInferenceSteps": 20,
           "orientation": "landscape",
           "renderStrategy": "auto",
-          "resolution": "540p"
+          "resolution": "480p"
         },
         "writingBaseUrl": "",
         "writingModel": "",
@@ -345,7 +345,7 @@
               "numInferenceSteps": 20,
               "orientation": "landscape",
               "renderStrategy": "auto",
-              "resolution": "540p"
+              "resolution": "480p"
             },
             "writingBaseUrl": "",
             "writingModel": "",
@@ -486,7 +486,7 @@
               "numInferenceSteps": 20,
               "orientation": "landscape",
               "renderStrategy": "auto",
-              "resolution": "540p"
+              "resolution": "480p"
             },
             "writingBaseUrl": "",
             "writingModel": "",
@@ -633,7 +633,7 @@
           "numInferenceSteps": 20,
           "orientation": "landscape",
           "renderStrategy": "auto",
-          "resolution": "540p"
+          "resolution": "480p"
         },
         "writingBaseUrl": "",
         "writingModel": "",
