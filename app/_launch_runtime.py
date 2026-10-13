@@ -7490,7 +7490,7 @@ def get_services_config():
         # prompts bypass its creative rewriting.
         "director_prompt_polish": services.get("director_prompt_polish", "off"),
         # Raw prompts: the Director adds no style prefix, locks or polish.
-        "raw_prompts": services.get("raw_prompts") is True,
+        "raw_prompts": services.get("raw_prompts") is True, "director_reference_anchor": services.get("director_reference_anchor", "always"), "director_lighting_continuity": services.get("director_lighting_continuity", "auto"), "director_keep_reference_wardrobe": services.get("director_keep_reference_wardrobe") is not False,
         # Safe workflow overlap: every local GPU and remote server keeps
         # capacity one; only genuinely different resources run together.
         "workflow_parallelism_enabled": services.get("workflow_parallelism_enabled", True),
@@ -7568,7 +7568,7 @@ async def update_services_config(request: Request):
         "raw_prompts", "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance", "storage_allow_linked_removal",
-        "director_multishot_lora_mode",
+        "director_multishot_lora_mode", "director_reference_anchor", "director_lighting_continuity", "director_keep_reference_wardrobe",
         "flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend",
     }
 
@@ -34464,7 +34464,7 @@ def _saved_video_context_for_extra_info(name: str):
         file_modified_at = None
     clip = build_saved_clip_info(
         name,
-        metadata,
+        metadata, pipeline=pipeline,
         file_size_bytes=file_size_bytes,
         file_modified_at=file_modified_at,
     )

@@ -435,6 +435,24 @@ export async function selectPipelineClipVideo(
   return res.json()
 }
 
+/** Replace a run's shared reference with one of its images, or clear it (``null``). */
+export async function setPipelineAnchor(
+  pid: string,
+  workspace: string,
+  filename: string | null,
+): Promise<import('../types').SavedPipelineState> {
+  const res = await fetch(`${BASE}/api/v1/director/pipelines/${encodeURIComponent(pid)}/anchor`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, filename }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || err.error || 'Could not change the shared reference')
+  }
+  return res.json()
+}
+
 export async function startPipelineRepair(pid: string): Promise<{
   pipeline_id: string
   repair: import('../types').PipelineRepairState

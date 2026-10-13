@@ -8037,10 +8037,10 @@ export const useStore = create<AppState>((set, get) => {
 
     try {
       // If no reference image was provided, generate a single establishing /
-      // "anchor" image from the scene description and adopt it as the reference,
-      // so every clip's start image shares a consistent look.
+      // "anchor" image from the scene description and adopt it as the reference, so every
+      // clip's start image shares a consistent look (Settings › Services › Director shared reference).
       let anchorMade = false
-      if (!get().directorReferenceImage && !get().directorReferenceImagePath) {
+      if (!get().directorReferenceImage && !get().directorReferenceImagePath && get().servicesConfig?.director_reference_anchor !== 'off' && !(get().servicesConfig?.director_reference_anchor === 'no_cast_refs' && (get().directorCharacterRefs.length || get().directorCharacterRefPaths.length))) {
         anchorMade = true
         set({
           directorImageGenProgress: {
@@ -8050,7 +8050,7 @@ export const useStore = create<AppState>((set, get) => {
             status: 'generating',
           },
         })
-        const anchorPrompt = directorSceneDescription.trim() || directorClipPlans[0]?.image_prompt || 'cinematic establishing shot'
+        const anchorPrompt = directorSceneDescription.trim() || directorClipPlans[0]?.image_prompt || 'establishing shot'
         activity.report('generating_images', 'Generating the shared establishing image…', 0, activityTotal)
         const { file: anchorFile } = await genImage(anchorPrompt, [], 'Establishing image')
         // Adopt as the reference image (uploaded just below via _uploadDirectorRefs).

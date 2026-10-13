@@ -30,6 +30,7 @@ from .renderers import (
 )
 from .validators import validate_shot_plan, validate_prompt_for_mode, compress_prompt
 from .policies import apply_visual_style_lock
+from .visible_defaults import RUN_OPTION_NAMES, current_services, resolve_option
 
 
 # ── Feature Flags ────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ class DirectorFlags:
         # Settings › Services › Raw prompts: the planner's prompts are kept as
         # written, with no style lock, source-style anchor or compression.
         self.raw_prompts = False
+        # The run's visible defaults (director/visible_defaults.py). None:
+        # Settings › Services, then the default. A Director run sets them from
+        # its params; a v2 plan request can send them in ``director_flags``.
+        self.reference_anchor = None
+        self.lighting_continuity = None
+        self.keep_reference_wardrobe = None
 
     @staticmethod
     def from_dict(d: dict) -> "DirectorFlags":
@@ -161,6 +168,9 @@ class DirectorOrchestrator:
             llm_generate_streaming=self._generate_streaming,
         )
         planner.raw_prompts = self._raw_prompts
+        services = current_services()
+        for name in RUN_OPTION_NAMES:
+            setattr(planner, name, resolve_option(name, getattr(self.flags, name, None), services))
 
         print(f"[Director] Planning with {planner_cls.__name__}...")
         production_plan = planner.plan(**kwargs)
