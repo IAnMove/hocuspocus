@@ -50,6 +50,7 @@ _LORAS_MULTIPLIERS_PATH = os.path.join(
     "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_VISIBILITY_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelVisibility.ts")
 _INPUTS_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "Sidebar", "InputsPanel.tsx",
 )
@@ -2696,13 +2697,14 @@ class TestModelVisibilityPersistence(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         client = api_client_source()
         store = _read(_STORE_PATH)
+        visibility = _read(_VISIBILITY_PATH)
         self.assertIn('@api.get("/api/v1/model-visibility")', launch)
         self.assertIn('@api.put("/api/v1/model-visibility")', launch)
         self.assertIn("os.replace(temp_path, config_path)", launch)
         self.assertIn("fetchModelVisibility", client)
         self.assertIn("updateModelVisibility", client)
         self.assertIn("api.fetchModelVisibility()", store)
-        self.assertIn("api.updateModelVisibility(payload)", store)
+        self.assertIn("api.updateModelVisibility(payload)", visibility)
         self.assertIn("initialized_mature_models", store)
         self.assertIn("_enableUninitializedMatureModels", store)
         self.assertNotIn("for (const mt of nsfwModels)", store)

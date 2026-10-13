@@ -17,13 +17,13 @@ import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } fr
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
-import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import i18n from '../i18n'
 import { contentLanguageForUi } from '../lib/contentLanguage'
 import { splitPromptSchedule } from '../lib/promptScheduler'
-import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
+import { productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
 import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
 import { isHttpStatus } from '../api/http'
@@ -39,6 +39,20 @@ import { _downloadTimestampMs, createCivitaiSlice, disposeCivitaiDownloadPoll, t
 import { createPresetsSlice, type PresetsSlice } from '../features/studio/store/presetsSlice'
 import { _jobTimingPatch, createToolsSlice, type ToolsSlice } from '../features/studio/store/toolsSlice'
 import { _modelOptionsSeq, advanceModelOptionsSeq, createRecipesSlice, type RecipesSlice } from './recipesSlice'
+import { _globalModelSelectionModes, _syncGlobalProductionVideoFormat, createServicesSlice, type ServicesSlice } from './servicesSlice'
+import {
+  ENABLED_MODELS_KEY,
+  HUNYUAN3D_VISIBILITY_MIGRATION_KEY,
+  MINIMAX_H3_VISIBILITY_MIGRATION_KEY,
+  _enableUninitializedMatureModels,
+  _initializedMatureModels,
+  _modelVisibilityDefaultsVersion,
+  _modelVisibilityHydrated,
+  _saveEnabledModels,
+  markModelVisibilityHydrated,
+  replaceInitializedMatureModels,
+  setModelVisibilityDefaultsVersion,
+} from './modelVisibility'
 import {
   beginAppActivity,
   createActivitySlice,
@@ -257,7 +271,6 @@ if (import.meta.hot) {
 
 // --- LocalStorage persistence for per-mode settings ---
 const STORAGE_KEY = 'maestro_mode_settings'
-let _servicesConfigUpdateQueue: Promise<void> = Promise.resolve()
 
 // Persistence schema version. Bump when changing the LoRA-key strategy or
 // adding fields that need migration. Currently:
@@ -326,7 +339,6 @@ interface PersistedModeSettings {
 }
 
 let _modelSelectionSaveTask: Promise<void> = Promise.resolve()
-const _globalModelSelectionModes = new Set<GenerationMode>()
 
 function _persistModelSelections(
   selections: Partial<Record<GenerationMode, string>>,
@@ -858,34 +870,7 @@ const DEFAULTS_VERSION_KEY = 'maestro_defaults_version'
 const OLD_MUSIC_DEFAULT = 'ace_step_v1_5_xl_turbo_lm_4b'
 const NEW_MUSIC_DEFAULT = 'ace_step_v1_5_xl_sft_lm_4b'
 
-const ENABLED_MODELS_KEY = 'maestro_enabled_models'
-const HUNYUAN3D_VISIBILITY_MIGRATION_KEY = 'maestro_hunyuan3d_visibility_v2'
-const MINIMAX_H3_VISIBILITY_MIGRATION_KEY = 'maestro_minimax_h3_visibility_v1'
-let _initializedMatureModels = new Set<string>()
-let _modelVisibilityHydrated = false
-let _modelVisibilityDefaultsVersion = 1
-let _modelVisibilitySaveTask: Promise<void> = Promise.resolve()
 let _modelSelectionsHydrated = false
-
-function _saveEnabledModels(models: Set<string>) {
-  try {
-    localStorage.setItem(ENABLED_MODELS_KEY, JSON.stringify([...models]))
-  } catch { /* quota exceeded */ }
-  const payload = {
-    enabled_models: [...models],
-    initialized_mature_models: [..._initializedMatureModels],
-    defaults_version: _modelVisibilityDefaultsVersion,
-  }
-  _modelVisibilitySaveTask = _modelVisibilitySaveTask
-    .catch(() => { /* a later save should still run */ })
-    .then(async () => {
-      try {
-        await api.updateModelVisibility(payload)
-      } catch (error) {
-        console.warn('Failed to persist model visibility:', error)
-      }
-    })
-}
 
 function _loadEnabledModels(): Set<string> | null {
   try {
@@ -926,25 +911,6 @@ function _markMatureModelsInitialized(
       _initializedMatureModels.add(model.model_type)
     }
   }
-}
-
-function _enableUninitializedMatureModels(
-  models: ModelDef[],
-  enabledModels: Set<string>,
-): Set<string> | null {
-  const next = new Set(enabledModels)
-  let changed = false
-  for (const model of models) {
-    if (
-      model.nsfw_only
-      && !_initializedMatureModels.has(model.model_type)
-    ) {
-      _initializedMatureModels.add(model.model_type)
-      next.add(model.model_type)
-      changed = true
-    }
-  }
-  return changed ? next : null
 }
 
 // Default model_type per generation mode
@@ -1016,7 +982,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice, ServicesSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1397,23 +1363,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   loadSettingsFromOutput: (source?: OutputSettingsSource) => Promise<boolean | void>
   rerollGeneration: (source?: OutputSettingsSource) => Promise<boolean | void>
 
-  // Services config
-  servicesConfig: ServicesConfig | null
-  servicesConfigLoading: boolean
-  loadServicesConfig: () => Promise<void>
-  updateServicesConfig: (partial: Partial<ServicesConfig>) => Promise<void>
-
-  // Credential-free defaults shared by Studio and every Lab.
-  productionProfile: ProductionProfile
-  productionProfileConfigured: boolean
-  /** Set when the saved profile could not be read and the defaults stand in. */
-  productionProfileInvalidReason: string
-  /** True once the profile has been read from the server at least once. */
-  productionProfileLoaded: boolean
-  productionProfileLoading: boolean
-  loadProductionProfile: () => Promise<void>
-  updateProductionProfile: (profile: ProductionProfile) => Promise<void>
-
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
   directorSkill: DirectorSkill | null
@@ -1600,61 +1549,6 @@ const BLANK_VIDEO_INPUT_PARAMS: Partial<GenerateParams> = {
   input_video_strength: undefined,
 }
 
-let _productionProfileVideoFormatSeq = 0
-
-/** Keep Director/Story Lab's canvas aligned with a globally inherited model.
- *
- * Model selections and the production profile are hydrated by independent
- * requests at boot.  Resolve the format after either one settles, and reject
- * a late response if the user selected a project/model override meanwhile.
- */
-async function _syncGlobalProductionVideoFormat(
-  profile: ProductionProfile,
-  get: () => AppState,
-  set: (partial: Partial<AppState>) => void,
-): Promise<void> {
-  const requestSeq = ++_productionProfileVideoFormatSeq
-  const modelType = profile.video.model.trim()
-  const requestedResolution = profile.video.settings.resolution
-  const requestedAspect = profile.video.settings.aspectRatio
-  const before = get()
-  if (
-    !modelType
-    || !_globalModelSelectionModes.has('video')
-    || before.selectedModelPerMode.video !== modelType
-  ) return
-
-  let options: ModelOptions
-  try {
-    options = before.modelOptions?.model_type === modelType
-      ? before.modelOptions
-      : await api.fetchModelOptions(modelType)
-  } catch {
-    // The selector remains usable while the backend/model catalog reconnects.
-    return
-  }
-
-  const latest = get()
-  if (
-    requestSeq !== _productionProfileVideoFormatSeq
-    || !_globalModelSelectionModes.has('video')
-    || latest.selectedModelPerMode.video !== modelType
-    || latest.productionProfile.video.model !== modelType
-    || latest.productionProfile.video.settings.resolution !== requestedResolution
-    || latest.productionProfile.video.settings.aspectRatio !== requestedAspect
-  ) return
-
-  const format = resolveSupportedVideoFormat(
-    options,
-    requestedResolution,
-    requestedAspect,
-  )
-  set({
-    directorResolution: format.resolution,
-    directorAspectRatio: format.aspectRatio,
-  })
-}
-
 function restoreCharacterDraft(
   drafts: AppState['imageStudioDrafts'],
   target: AppState['editReturnTarget'],
@@ -1685,6 +1579,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createCivitaiSlice),
   ...bindSlice(set, get, createToolsSlice),
   ...bindSlice(set, get, createRecipesSlice),
+  ...bindSlice(set, get, createServicesSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -2984,10 +2879,10 @@ export const useStore = create<AppState>((set, get) => {
         let restoredModels: Set<string>
         if (visibility.configured) {
           restoredModels = new Set(visibility.enabled_models)
-          _initializedMatureModels = new Set(
+          replaceInitializedMatureModels(new Set(
             visibility.initialized_mature_models,
-          )
-          _modelVisibilityDefaultsVersion = (
+          ))
+          setModelVisibilityDefaultsVersion(
             visibility.defaults_version || 1
           )
         } else {
@@ -2997,21 +2892,21 @@ export const useStore = create<AppState>((set, get) => {
             localStorage.getItem(DEFAULTS_VERSION_KEY) || '',
             10,
           )
-          _modelVisibilityDefaultsVersion = legacyModels
+          setModelVisibilityDefaultsVersion(legacyModels
             ? (legacyDefaultsVersion || 1)
-            : DEFAULTS_VERSION
+            : DEFAULTS_VERSION)
           // An existing browser whitelist is an explicit snapshot. Mark the
           // current Mature entries initialized so migration cannot re-enable
           // one the user deliberately disabled.
-          _initializedMatureModels = legacyModels
+          replaceInitializedMatureModels(legacyModels
             ? new Set(
                 models
                   .filter(model => model.nsfw_only)
                   .map(model => model.model_type),
               )
-            : new Set()
+            : new Set())
         }
-        _modelVisibilityHydrated = true
+        markModelVisibilityHydrated()
         set({ enabledModels: restoredModels })
         if (!visibility.configured) _saveEnabledModels(restoredModels)
       }
@@ -3045,7 +2940,7 @@ export const useStore = create<AppState>((set, get) => {
             })
           }
           migrateMusicDefault = storedVer < 2
-          _modelVisibilityDefaultsVersion = DEFAULTS_VERSION
+          setModelVisibilityDefaultsVersion(DEFAULTS_VERSION)
           localStorage.setItem(DEFAULTS_VERSION_KEY, String(DEFAULTS_VERSION))
           _saveEnabledModels(get().enabledModels)
         }
@@ -5370,170 +5265,6 @@ export const useStore = create<AppState>((set, get) => {
       if (seq === _modelOptionsSeq) {
         set({ modelOptions: null, modelOptionsLoading: false })
       }
-    }
-  },
-
-  // Services config
-  servicesConfig: null,
-  servicesConfigLoading: false,
-  productionProfile: DEFAULT_PRODUCTION_PROFILE,
-  productionProfileConfigured: false,
-  productionProfileInvalidReason: '',
-  productionProfileLoaded: false,
-  productionProfileLoading: false,
-  loadProductionProfile: async () => {
-    set({ productionProfileLoading: true })
-    try {
-      const result = await api.fetchProductionProfile()
-      set({
-        productionProfile: result.profile,
-        productionProfileConfigured: result.configured,
-        productionProfileInvalidReason: result.invalid_reason || '',
-        productionProfileLoaded: true,
-        productionProfileLoading: false,
-      })
-      await _syncGlobalProductionVideoFormat(
-        result.profile,
-        get,
-        partial => set(partial),
-      )
-    } catch (e) {
-      console.error('Failed to load production profile:', e)
-      set({ productionProfileLoading: false })
-    }
-  },
-  updateProductionProfile: async (profile) => {
-    const previous = get().productionProfile
-    set({ productionProfile: profile, productionProfileLoading: true })
-    try {
-      const result = await api.updateProductionProfile(profile)
-      const imageModel = result.profile.image.provider === 'minimax'
-        ? `minimax:${result.profile.image.model}` : result.profile.image.model
-      _globalModelSelectionModes.add('image')
-      _globalModelSelectionModes.add('video')
-      set(state => ({
-        productionProfile: result.profile,
-        productionProfileConfigured: result.configured,
-        productionProfileInvalidReason: result.invalid_reason || '',
-        productionProfileLoading: false,
-        selectedModelPerMode: {
-          ...state.selectedModelPerMode,
-          image: imageModel,
-          video: result.profile.video.model,
-        },
-        ...(state.generationMode === 'image' || state.generationMode === 'video' ? {
-          params: {
-            ...state.params,
-            model_type: state.generationMode === 'image'
-              ? imageModel : result.profile.video.model,
-          },
-        } : {}),
-      }))
-      const activeMode = get().generationMode
-      if (activeMode === 'image' || activeMode === 'video') {
-        const activeModel = get().selectedModelPerMode[activeMode]
-        if (activeModel) await get().loadModelOptions(activeModel)
-      }
-      await _syncGlobalProductionVideoFormat(
-        result.profile,
-        get,
-        partial => set(partial),
-      )
-      // The global text profile is also the provider used by generic tools.
-      await get().loadServicesConfig()
-      await get().loadLlmModels()
-    } catch (e) {
-      console.error('Failed to update production profile:', e)
-      set({ productionProfile: previous, productionProfileLoading: false })
-      throw e
-    }
-  },
-  loadServicesConfig: async () => {
-    set({ servicesConfigLoading: true })
-    try {
-      const config = await api.fetchServicesConfig()
-      set({ servicesConfig: config, servicesConfigLoading: false })
-      if (
-        config.nsfw_mode
-        && _modelVisibilityHydrated
-        && get().models.length > 0
-      ) {
-        set(s => {
-          const next = _enableUninitializedMatureModels(
-            s.models,
-            s.enabledModels,
-          )
-          if (!next) return s
-          _saveEnabledModels(next)
-          return { enabledModels: next }
-        })
-      }
-    } catch (e) {
-      console.error('Failed to load services config:', e)
-      set({ servicesConfigLoading: false })
-    }
-  },
-  updateServicesConfig: async (partial) => {
-    // Keep controlled settings inputs stable immediately. Previously the
-    // select stayed bound to the old server value until PUT + refetch
-    // completed, so choosing another LLM visibly snapped back to Qwen.
-    // Serialize writes as well: remote URLs are edited character-by-character
-    // and out-of-order PUT completions must never restore an older value.
-    const optimistic = Object.fromEntries(
-      Object.entries(partial).filter(([key]) => !key.endsWith('_api_key')),
-    ) as Partial<ServicesConfig>
-    if (Object.keys(optimistic).length > 0) {
-      set(state => ({
-        servicesConfig: state.servicesConfig
-          ? { ...state.servicesConfig, ...optimistic }
-          : state.servicesConfig,
-      }))
-    }
-    const updateTask = _servicesConfigUpdateQueue.then(async () => {
-      const result = await api.updateServicesConfig(partial)
-      set(state => ({
-        servicesConfig: state.servicesConfig
-          ? { ...state.servicesConfig, ...(result.updated as Partial<ServicesConfig>) }
-          : state.servicesConfig,
-      }))
-    })
-    _servicesConfigUpdateQueue = updateTask.catch(() => undefined)
-    try {
-      await updateTask
-      // When Mature Mode flips ON, auto-add all nsfw_only models to
-      // enabledModels so they show up in selectors immediately. Without
-      // this the user would have to walk Settings → System → Model
-      // Visibility and individually enable each one — defeats the
-      // "auto-selected when NSFW is enabled" UX.
-      //
-      // Flipping nsfw_mode OFF doesn't remove them from enabledModels
-      // (they're filtered from view by the nsfw_only + nsfw_mode check
-      // in ModelSelector / SystemSettingsPanel anyway). That way if the
-      // user toggles mature mode back on later, their selections persist.
-      get().loadServicesConfig()
-      if (partial.nsfw_mode === true) {
-        if (_modelVisibilityHydrated) {
-          set(s => {
-            const next = _enableUninitializedMatureModels(s.models, s.enabledModels)
-            if (!next) return s
-            _saveEnabledModels(next)
-            return { enabledModels: next }
-          })
-        } else {
-          const nsfwModels = get().models.filter(m => m.nsfw_only).map(m => m.model_type)
-          if (nsfwModels.length > 0) {
-            set(s => {
-              const next = new Set(s.enabledModels)
-              nsfwModels.forEach(modelType => next.add(modelType))
-              _saveEnabledModels(next)
-              return { enabledModels: next }
-            })
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Failed to update services config:', e)
-      await get().loadServicesConfig()
     }
   },
 
