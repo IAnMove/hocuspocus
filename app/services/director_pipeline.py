@@ -792,6 +792,20 @@ def _style_prefix_for(style: str, image_model: str) -> str:
     return f"Maintain the same {style} art style. "
 
 
+def _reference_style_wanted(params: Mapping[str, Any]) -> bool:
+    """Whether a run asks the vision model to name the reference's art style.
+
+    The phrase only feeds the Klein style prefix. No call when it is already
+    known (resume), with Raw prompts (no prefix) or with an image model that
+    is not Flux.2 Klein. The model is read as ``_run_image_generation`` reads it.
+    """
+    return (
+        "_reference_style" not in params
+        and not _raw_prompts()
+        and _is_flux2_klein(params.get("image_model", "flux2_klein_9b"))
+    )
+
+
 # Motion-photography effects have no place in a START-FRAME prompt — the
 # frame must be sharp for the video model to animate from. The music-video
 # planner still writes them ("A strong motion blur effect is present on
@@ -943,6 +957,17 @@ def _apply_direct_video_contract(
         ),
         allow_clip_text=_clip_text_allowed(params),
     )
+
+
+def _approved_review_plans(provided: Any) -> Optional[list[dict]]:
+    """Prompts approved in the manual review screen (``provided_clip_plans``), marked as typed.
+
+    They are the user's: the final pass keeps their style locks but adds no
+    no-text lock. The plan endpoint already locked the ones the LLM wrote.
+    """
+    if not isinstance(provided, list) or not provided:
+        return None
+    return mark_typed_prompt_edits([], copy.deepcopy(provided))
 
 
 def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> bool:
@@ -7548,13 +7573,10 @@ def _run_pipeline(pid: str, resume: bool = False):
         # prompts enter the same durable server pipeline without asking the
         # LLM to rewrite them or falling back to Studio's generic multiclip
         # submission path.
-        provided_plans = params.get("provided_clip_plans")
         resume_plans = (
             (p.get("clip_plans") or None)
             if resume else
-            copy.deepcopy(provided_plans)
-            if isinstance(provided_plans, list) and provided_plans else
-            None
+            _approved_review_plans(params.get("provided_clip_plans"))
         )
         resume_images = (p.get("clip_images") or None) if resume else None
 
@@ -8086,14 +8108,13 @@ def _run_pipeline(pid: str, resume: bool = False):
         # One vision call naming the medium concretely; the phrase gets
         # prepended to every image prompt in _run_image_generation (see
         # the module-level "Reference art-style lock" note). Skipped when
-        # already detected (resume), when the image model is not Flux.2
-        # Klein (no prefix) or the reference is photographic.
+        # already detected (resume), with Raw prompts, when the image model is
+        # not Flux.2 Klein (no prefix) or the reference is photographic.
         from services import llm_service
         _style_ref = params.get("reference_image_path") or ""
         if (
             requires_shot_images
-            and "_reference_style" not in params
-            and _is_flux2_klein(params.get("image_model") or "flux2_klein_9b")
+            and _reference_style_wanted(params)
             and _style_ref
             and os.path.isfile(_style_ref)
         ):

@@ -313,3 +313,63 @@ def test_klein_start_images_get_the_prefix(tmp_path: Path):
 
 def test_other_models_start_images_are_sent_as_planned(tmp_path: Path):
     assert _generate_images(tmp_path, "qwen_image_edit_plus_20b") == ["A fox waits in a birch forest."]
+
+
+# ── Review follow-ups (2026-10-13) ──────────────────────────────────────
+
+def _services(**services):
+    return patch.object(
+        director_pipeline, "_wgp", SimpleNamespace(server_config={"services": services}),
+    )
+
+
+@pytest.mark.parametrize(
+    ("params", "services", "wanted"),
+    [
+        ({"image_model": "flux2_klein_9b"}, {}, True),
+        ({}, {}, True),  # the Director's default image model is Klein 9B
+        ({"image_model": "qwen_image_edit_plus_20b"}, {}, False),
+        ({"image_model": "flux2_klein_9b", "_reference_style": ""}, {}, False),  # resume
+        ({"image_model": "flux2_klein_9b"}, {"raw_prompts": True}, False),  # no prefix with raw
+    ],
+)
+def test_the_style_vision_call_runs_only_when_the_prefix_is_used(params, services, wanted):
+    with _services(**services):
+        assert director_pipeline._reference_style_wanted(params) is wanted
+
+
+def test_prompts_approved_in_the_review_screen_are_typed():
+    # The UI's direct-video review sends its approved prompts as
+    # provided_clip_plans: the LLM's keep the lock the plan endpoint gave
+    # them, and the user's edit keeps its lettering.
+    params = {"pipeline_type": "music_video"}
+    with _services():
+        planned = director_pipeline._apply_direct_video_contract(
+            [{"video_prompt": "Rain on a dark street."}], params, "Night city.",
+        )
+        approved = [planned[0], {"video_prompt": "A neon sign reads 'OPEN' in the rain."}]
+        plans = director_pipeline._approved_review_plans(approved)
+        sent = director_pipeline._apply_direct_video_contract(plans, params, "Night city.")
+    assert sent[0]["video_prompt"].count(LOCK) == 1
+    assert LOCK not in sent[1]["video_prompt"] and "'OPEN'" in sent[1]["video_prompt"]
+    assert "_director_typed_prompts" not in approved[1]
+    assert director_pipeline._approved_review_plans([]) is None
+    assert director_pipeline._approved_review_plans(None) is None
+
+
+def test_a_story_edit_at_the_review_pause_gets_no_lock_and_a_music_video_edit_keeps_its_lettering():
+    edited = "A shop window with a hand-painted sign reading 'OPEN'."
+    for pipeline_type in ("short_film_story", "music_video"):
+        params = {"pipeline_type": pipeline_type}
+        with _services():
+            shown = director_pipeline._apply_final_prompt_locks(
+                [{"image_prompt": LETTERING}, {"image_prompt": LETTERING}], params,
+            )
+            with patch.dict(director_pipeline._pipelines, {"pause": {"status": "paused", "clip_plans": shown}}):
+                director_pipeline.continue_pipeline(
+                    "pause", {"clip_plans": [{"image_prompt": edited}, dict(shown[1])]},
+                )
+                reviewed = director_pipeline._pipelines["pause"]["clip_plans"]
+            rechecked = director_pipeline._apply_final_prompt_locks(reviewed, params)
+        assert rechecked[0]["image_prompt"] == edited
+        assert (LOCK in rechecked[1]["image_prompt"]) is (pipeline_type == "music_video")

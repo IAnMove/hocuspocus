@@ -50,6 +50,7 @@ from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import ProductionPlan, ShotPlan
 
 STYLE_PARAMS = {
+    "pipeline_type": "music_video",  # sung: the only projects with the no-text lock
     "visual_style": "European comic art, ink lines",
     "preserve_visual_style": True,
     "character_visual_style": "flat cel-shaded figures",
@@ -97,7 +98,7 @@ def test_the_pipeline_locks_only_through_the_raw_aware_helpers():
 
 def test_raw_direct_video_gets_no_no_text_lock():
     plans = [{"video_prompt": "A neon sign reads 'OPEN' as rain falls."}]
-    params = {"allow_clip_text": False}
+    params = {"pipeline_type": "music_video", "allow_clip_text": False}
     with _services(raw_prompts=True):
         sent = director_pipeline._apply_direct_video_contract(copy.deepcopy(plans), params, "Night city.")
         assert director_pipeline._clip_text_allowed(params) is True
@@ -264,7 +265,7 @@ def test_a_prompt_edited_at_the_review_pause_keeps_its_lettering():
 
 
 def test_a_direct_video_prompt_edited_at_the_review_pause_keeps_its_lettering():
-    params = {"allow_clip_text": False}
+    params = {"pipeline_type": "music_video", "allow_clip_text": False}
     with _services():
         shown = director_pipeline._apply_direct_video_contract(
             [{"video_prompt": "Rain on a dark street."}], params, "Night city.",

@@ -34,11 +34,13 @@ be read is reported instead of silently replaced.
 **Narrower Director layers.** The no-visible-text lock now goes only on music
 videos, where planners used to put the song's lyrics on screen, and only on the
 prompts the LLM wrote. Stories, audio short films and comic movies send their
-prompts without it, and a direct-video H3 segment the user types keeps its
-lettering too. The project's *allow text* switch still turns the lock off. The
+prompts without it. A direct-video H3 segment the user types keeps its
+lettering too, and so do the prompts approved in the direct-video review
+screen. The project's *allow text* switch still turns the lock off. The
 "Maintain the same … art style." prefix, and the vision call that names the
 reference's style for it, are used only with Flux.2 Klein models, the only ones
-it was tested with. Other image models get the prompt as planned.
+it was tested with, and the call is skipped with *Raw prompts*. Other image
+models get the prompt as planned.
 
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
