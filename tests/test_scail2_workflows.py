@@ -53,6 +53,7 @@ _LORA_MULTIPLIERS_PATH = os.path.join(
     _ROOT, "app", "shared", "utils", "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_LORAS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "lorasSlice.ts")
 _RECAST_CONTROLS_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "Sidebar", "RecastControls.tsx",
 )
@@ -3831,7 +3832,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("single-phase LoRA settings", launch)
         self.assertIn("editRecastUseRelighting: false", store)
         self.assertIn("use_relighting: state.editRecastUseRelighting", store)
-        self.assertIn("const recastSinglePhase =", store)
+        self.assertIn("const recastSinglePhase =", _read(_LORAS_PATH))
         self.assertIn("const recastSinglePhase =", selector)
         self.assertIn("const phases = recastSinglePhase ? 1", selector)
         self.assertIn("t('recast.matchLighting')", controls)

@@ -13,6 +13,7 @@ LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
 
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 SERVICES_PATH = os.path.join(ROOT, "ui", "src", "stores", "servicesSlice.ts")
+PERSISTENCE_PATH = os.path.join(ROOT, "ui", "src", "stores", "modeSettingsPersistence.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
 )
@@ -102,7 +103,7 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("fetchModelSelections", client)
         self.assertIn("updateModelSelections", client)
         self.assertIn("api.fetchModelSelections()", store)
-        self.assertIn("api.updateModelSelections(payload)", store)
+        self.assertIn("api.updateModelSelections(payload)", _source(PERSISTENCE_PATH))
         self.assertIn("durableSelections?.selected_models || {}", store)
 
     def test_story_lab_explains_the_ltx_gemma_dependency(self):
