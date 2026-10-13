@@ -6,9 +6,12 @@ object. The full server is exercised by ``tests/characterization``.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import stat
+import subprocess
+import sys
 import threading
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -19,7 +22,8 @@ from fastapi import HTTPException
 from services import execution_mode, job_lifecycle, resource_scheduler
 from services.kernel import paths as kernel_paths
 from services.kernel.config import ConfigStore
-from services import task_manager
+from services import director_pipeline, task_manager
+from services.kernel.context import RuntimeContext, build_context
 from services.kernel.jobs import GenerationQueue
 from services.kernel.paths import PathPolicy, safe_join
 from services.kernel.tasks import CanonicalTasks
@@ -914,3 +918,125 @@ def test_the_adapter_list_is_a_copy(tasks) -> None:
     canonical.register_adapter("series", _Adapter())
     canonical.adapters().clear()
     assert list(canonical.adapters()) == ["series"]
+
+
+# --- the context -------------------------------------------------------------
+
+
+def _context(tmp_path, **config):
+    engine = _engine(tmp_path, save_path=str(tmp_path / "outputs"), **config)
+    hooks = _Hooks()
+    ctx = build_context(
+        profile="full",
+        wgp_provider=lambda: engine,
+        is_legacy_h3_model=hooks.is_legacy,
+        is_minimax_h3_model=hooks.is_minimax,
+        cancel_legacy_h3=hooks.cancel_legacy,
+        task_publisher=hooks.lookup,
+    )
+    return ctx, engine, hooks
+
+
+def test_build_context_wires_the_services_to_each_other(tmp_path, empty_fifo) -> None:
+    ctx, engine, _hooks_ = _context(tmp_path, services={"active_workspace": "film"})
+    assert isinstance(ctx, RuntimeContext) and ctx.profile == "full"
+    assert ctx.config.wgp is engine and ctx.config.server_config is engine.server_config
+    assert ctx.workspaces.active() == "film"
+    assert ctx.scheduler is resource_scheduler.coordinator
+    # One workspace service behind the others: a job built through the context lands in its folder.
+    job = ctx.jobs.new_job({"model_type": "m"}, "default", job_id="w1", reserve_generation=False)
+    assert job["out_dir"] == os.path.realpath(tmp_path / "outputs")
+    assert ctx.tasks.for_workspace() is task_manager.get_task_registry(ctx.workspaces.workspace_dir("film"))
+    assert ctx.jobs.durable_queue.path.startswith(os.path.realpath(tmp_path / "outputs"))
+    task_manager.forget_task_registry(ctx.workspaces.workspace_dir("film"))
+
+
+def test_the_context_is_frozen_but_its_shared_state_is_live(tmp_path, empty_fifo) -> None:
+    ctx, _engine_, _hooks_ = _context(tmp_path)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        ctx.jobs = None
+    registry = ctx.jobs.registry
+    registry["a"] = {"status": "queued"}
+    assert ctx.jobs.registry is registry and ctx.jobs.registry["a"]["status"] == "queued"
+
+
+def test_two_contexts_do_not_share_job_state(tmp_path, empty_fifo) -> None:
+    first, _e1, _h1 = _context(tmp_path)
+    second, _e2, _h2 = _context(tmp_path)
+    assert first.jobs.registry is not second.jobs.registry
+    assert first.jobs.active_states is not second.jobs.active_states
+    assert first.jobs.recovery_lock is not second.jobs.recovery_lock
+    assert first.jobs.durable_queue is not second.jobs.durable_queue
+    assert first.scheduler is second.scheduler
+
+
+def test_the_context_names_the_profile_it_was_built_for(tmp_path, empty_fifo) -> None:
+    engine = _engine(tmp_path, save_path=str(tmp_path / "outputs"))
+    core = build_context(
+        profile="core", wgp_provider=lambda: engine, is_legacy_h3_model=lambda _m: False,
+        is_minimax_h3_model=lambda _m: False, cancel_legacy_h3=lambda: None, task_publisher=lambda: None,
+    )
+    assert core.profile == "core"
+
+
+def test_importing_the_kernel_starts_nothing_and_does_not_touch_wgp(tmp_path) -> None:
+    """Import time creates no thread, no file and no engine: the server builds the context once WanGP is bound."""
+    app = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app")
+    probe = (
+        "import os, sys, threading\n"
+        f"sys.path.insert(0, {app!r})\n"
+        "before = threading.active_count()\n"
+        "import services.kernel.config, services.kernel.paths, services.kernel.workspaces, "
+        "services.kernel.jobs, services.kernel.tasks, services.kernel.context\n"
+        "print(threading.active_count() - before, 'wgp' in sys.modules, "
+        "'torch' in sys.modules, sorted(os.listdir('.')))\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-I", "-c", probe], cwd=tmp_path, capture_output=True, text=True, timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "0 False False []"
+
+
+# --- the Director pipeline gets its hardware probe from the server ---------------------------
+
+
+@pytest.fixture
+def pipeline_wiring(monkeypatch, tmp_path):
+    for name in ("_jobs", "_run_generation", "_cancel_generation", "_wgp", "_gen_lock", "_active_gen_states",
+                 "_pipeline_state_observer", "_get_cached_hardware"):
+        monkeypatch.setattr(director_pipeline, name, None)
+    engine = SimpleNamespace(server_config={"save_path": str(tmp_path)})
+
+    def wire(**kwargs):
+        director_pipeline.init({}, lambda _job_id: None, engine, **kwargs)
+
+    return wire
+
+
+def test_the_director_reads_the_hardware_the_server_cached(pipeline_wiring) -> None:
+    probe = {"gpu_vram_gb": 24.0, "cuda_available": True}
+    pipeline_wiring(get_cached_hardware=lambda: probe)
+    snapshot = director_pipeline._director_hardware_snapshot()
+    assert snapshot == probe and snapshot is not probe
+
+
+def test_the_director_probes_the_hardware_itself_when_none_was_wired(pipeline_wiring, monkeypatch) -> None:
+    from services import hardware_detect
+
+    monkeypatch.setattr(hardware_detect, "detect_hardware", lambda: {"gpu_vram_gb": 8.0})
+    pipeline_wiring()
+    assert director_pipeline._director_hardware_snapshot() == {"gpu_vram_gb": 8.0}
+
+
+def test_the_director_falls_back_when_the_cached_probe_fails(pipeline_wiring, monkeypatch) -> None:
+    from services import hardware_detect
+
+    def broken():
+        raise RuntimeError("probe failed")
+
+    pipeline_wiring(get_cached_hardware=broken)
+    monkeypatch.setattr(hardware_detect, "detect_hardware", lambda: {"gpu_vram_gb": 6.0})
+    assert director_pipeline._director_hardware_snapshot() == {"gpu_vram_gb": 6.0}
+    monkeypatch.setattr(hardware_detect, "detect_hardware", broken)
+    assert director_pipeline._director_hardware_snapshot() == {"gpu_vram_gb": 0.0}

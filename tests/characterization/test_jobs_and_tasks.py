@@ -218,3 +218,65 @@ def test_recovery_leftovers_are_read_from_the_durable_queue(server, golden, tmp_
     server.check(golden, "recovery lists the leftover", "GET", "/api/v1/jobs/recovery")
     server.check(golden, "recovery discard", "POST", "/api/v1/jobs/recovery/discard")
     server.check(golden, "recovery is empty again", "GET", "/api/v1/jobs/recovery")
+
+
+def test_the_full_server_builds_one_runtime_context_and_launch_names_its_objects(full_server) -> None:
+    """Every shared registry, lock and queue launch still names is the object the context holds."""
+    import launch
+
+    ctx = full_server.api.state.runtime
+    runtime = _launch()
+    assert ctx.profile == "full" and ctx.config.wgp is full_server.wgp
+    state = {
+        "_jobs": ctx.jobs.registry,
+        "_active_gen_states": ctx.jobs.active_states,
+        "_gen_lock": ctx.jobs.gen_lock,
+        "_local_gpu_lane": ctx.jobs.local_gpu_lane,
+        "_queue_recovery_lock": ctx.jobs.recovery_lock,
+        "_durable_generation_queue": ctx.jobs.durable_queue,
+        "_UPLOAD_TRANSCODE_SLOTS": ctx.paths.transcode_slots,
+    }
+    for name, shared in state.items():
+        assert getattr(runtime, name) is shared, name
+        assert getattr(launch, name) is shared, f"launch.{name}"
+    handles = {
+        "_save_server_config": ctx.config.save,
+        "_get_active_workspace": ctx.workspaces.active,
+        "_workspace_dir": ctx.workspaces.workspace_dir,
+        "_list_workspaces": ctx.workspaces.list,
+        "_persist_active_workspace": ctx.workspaces.persist_active,
+        "_safe_join": ctx.paths.safe_join,
+        "_resolve_output_move_path": ctx.paths.resolve_output_move_path,
+        "_resolve_request_media_path": ctx.paths.resolve_request_media_path,
+        "_story_cover_reference_path": ctx.paths.story_cover_reference_path,
+        "_stream_upload": ctx.paths.stream_upload,
+        "_transcode_upload": ctx.paths.transcode_upload,
+        "_task_registry": ctx.tasks.for_workspace,
+        "_coordinated_generation_slot": ctx.jobs.slot,
+        "_is_durable_generation_job": ctx.jobs.is_durable_job,
+        "_persist_generation_job": ctx.jobs.persist_job,
+        "_remove_persisted_generation_job": ctx.jobs.remove_persisted_job,
+        "_new_generation_job": ctx.jobs.new_job,
+        "_register_manual_generation_job": ctx.jobs.register_manual_job,
+        "_generation_job_acceptance": ctx.jobs.job_acceptance,
+        "_public_generation_details": ctx.jobs.public_details,
+        "_pending_gpu_jobs": ctx.jobs.pending_gpu_jobs,
+        "_request_generation_cancel": ctx.jobs.cancel,
+    }
+    for name, method in handles.items():
+        assert getattr(runtime, name) == method, name
+    assert ctx.scheduler is runtime.resource_scheduler.coordinator
+    assert runtime._gen_lock is runtime.resource_scheduler.coordinator.shared_lock(runtime._local_gpu_lane)
+
+
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_a_job_added_through_the_context_is_seen_by_the_routes(server, monkeypatch) -> None:
+    """The status route reads launch's ``_jobs``; the context's registry is that dictionary."""
+    ctx = server.client.app.state.runtime
+    job = {"id": "ctx-manual", "workspace": "default", "created_at": CREATED, "status": "queued",
+           "progress": 0, "message": "Queued", "output_files": [], "error": None, "params": {"prompt": "p"}}
+    monkeypatch.setitem(ctx.jobs.registry, "ctx-manual", job)
+    answer = server.client.get("/api/v1/status/ctx-manual")
+    assert answer.status_code == 200 and answer.json()["job_id"] == "ctx-manual"
+    assert server.client.post("/api/v1/cancel/ctx-manual").json()["status"] == "cancelled"
+    assert job["status"] == "cancelled"

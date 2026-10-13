@@ -140,6 +140,7 @@ _wgp = None                 # reference to wgp module
 _gen_lock = None            # reference to launch._gen_lock
 _active_gen_states = None   # reference to launch._active_gen_states (abort signaling)
 _pipeline_state_observer: Optional[Callable[[dict, str], Optional[dict]]] = None
+_get_cached_hardware: Optional[Callable[[], dict]] = None  # the server's cached hardware probe
 
 
 def _workspace_output_dir(workspace: str) -> str:
@@ -205,8 +206,6 @@ def _director_hardware_snapshot() -> dict:
     """Read the same cached hardware facts used by Studio's H3 preflight."""
 
     try:
-        from launch import _get_cached_hardware
-
         return dict(_get_cached_hardware() or {})
     except Exception:
         try:
@@ -4928,10 +4927,11 @@ def init(
     cancel_gen_fn=None,
     active_gen_states=None,
     state_observer=None,
+    get_cached_hardware=None,
 ):
     """Called by launch.py to wire up shared references."""
     global _jobs, _run_generation, _cancel_generation, _wgp, _gen_lock
-    global _active_gen_states, _pipeline_state_observer
+    global _active_gen_states, _pipeline_state_observer, _get_cached_hardware
     _jobs = jobs_dict
     _run_generation = run_gen_fn
     _cancel_generation = cancel_gen_fn
@@ -4939,6 +4939,7 @@ def init(
     _gen_lock = gen_lock
     _active_gen_states = active_gen_states
     _pipeline_state_observer = state_observer
+    _get_cached_hardware = get_cached_hardware
     try:
         _cleanup_stale_director_temporary_outputs(
             _wgp.server_config.get("save_path", "outputs")

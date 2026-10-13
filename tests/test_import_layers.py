@@ -36,9 +36,7 @@ SERVICES_IMPORTING_ROUTERS = {
 
 # R2. Code that imports a composition root today (the roots themselves are exempt).
 COMPOSITION_ROOTS = {"launch", "_launch_runtime", "core_runtime"}
-IMPORTING_A_COMPOSITION_ROOT = {
-    ("app/services/director_pipeline.py", "launch"),
-}
+IMPORTING_A_COMPOSITION_ROOT: set[tuple[str, str]] = set()
 
 # R4. What the kernel may import besides the standard library and third-party packages.
 KERNEL_PACKAGES = ("services.kernel", "services.generation")
@@ -260,3 +258,14 @@ def test_the_baselines_name_files_that_exist() -> None:
         assert (ROOT / relative).is_file(), relative
     for module in KERNEL_LEAF_SERVICES:
         assert _module_file(module) is not None, module
+
+
+def test_the_kernel_does_not_branch_on_the_server_profile() -> None:
+    """One kernel for both servers: a profile is data the context carries, never a condition inside the kernel."""
+    for path in sorted(KERNEL.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.If, ast.IfExp, ast.While)):
+                names = {item.id for item in ast.walk(node.test) if isinstance(item, ast.Name)}
+                names |= {item.attr for item in ast.walk(node.test) if isinstance(item, ast.Attribute)}
+                assert "profile" not in names, f"{path.name}:{node.lineno} branches on the profile"

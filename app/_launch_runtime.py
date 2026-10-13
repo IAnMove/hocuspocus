@@ -121,24 +121,48 @@ print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
 from services.generation import bind_wgp, get_model_def
 bind_wgp(wgp)
-from services.kernel.config import ConfigStore
-from services.kernel.paths import PathPolicy
-from services.kernel.workspaces import WorkspaceService
-from services.kernel.jobs import GenerationQueue
-from services.kernel.tasks import CanonicalTasks
-_config = ConfigStore()
-_workspaces = WorkspaceService(_config)
-_paths = PathPolicy(_workspaces)
-_tasks = CanonicalTasks(_workspaces)
-_generation_queue = GenerationQueue(
-    _config,
-    _workspaces,
+from services.kernel.context import build_context
+ctx = build_context(
+    profile="full",
     # Late-bound: these are defined further down, and the task publisher may not exist yet.
     is_legacy_h3_model=lambda model_type: _is_legacy_h3_model(model_type),
     is_minimax_h3_model=lambda model_type: _is_minimax_h3_model(model_type),
     cancel_legacy_h3=lambda: minimax_h3_service.cancel(),
     task_publisher=lambda: globals().get("_publish_generation_task"),
 )
+
+# The kernel's services (services/kernel). These names are launch's historical handles to
+# the same objects: code that has not moved yet keeps using them, and a dictionary or a
+# lock here is the one the context holds, never a copy.
+_save_server_config = ctx.config.save
+_get_active_workspace = ctx.workspaces.active
+_workspace_dir = ctx.workspaces.workspace_dir
+_list_workspaces = ctx.workspaces.list
+_persist_active_workspace = ctx.workspaces.persist_active
+_safe_join = ctx.paths.safe_join
+_resolve_output_move_path = ctx.paths.resolve_output_move_path
+_resolve_request_media_path = ctx.paths.resolve_request_media_path
+_story_cover_reference_path = ctx.paths.story_cover_reference_path
+_UPLOAD_TRANSCODE_SLOTS = ctx.paths.transcode_slots
+_stream_upload = ctx.paths.stream_upload
+_transcode_upload = ctx.paths.transcode_upload
+_task_registry = ctx.tasks.for_workspace
+_jobs = ctx.jobs.registry
+_local_gpu_lane = ctx.jobs.local_gpu_lane
+_gen_lock = ctx.jobs.gen_lock
+_active_gen_states = ctx.jobs.active_states
+_queue_recovery_lock = ctx.jobs.recovery_lock
+_durable_generation_queue = ctx.jobs.durable_queue
+_coordinated_generation_slot = ctx.jobs.slot
+_is_durable_generation_job = ctx.jobs.is_durable_job
+_persist_generation_job = ctx.jobs.persist_job
+_remove_persisted_generation_job = ctx.jobs.remove_persisted_job
+_new_generation_job = ctx.jobs.new_job
+_register_manual_generation_job = ctx.jobs.register_manual_job
+_generation_job_acceptance = ctx.jobs.job_acceptance
+_public_generation_details = ctx.jobs.public_details
+_pending_gpu_jobs = ctx.jobs.pending_gpu_jobs
+_request_generation_cancel = ctx.jobs.cancel
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import tools_upscale as tools_upscale_service
 from services import debug_trace
@@ -180,10 +204,6 @@ try:
     _sweep_trash(wgp.server_config.get("save_path", "outputs"))
 except Exception as _sweep_err:
     print(f"[Workspace] Trash sweep skipped: {_sweep_err}")
-
-_save_server_config = _config.save
-
-
 
 # Performance auto-tune migration: pre-existing installs (config file
 # was loaded from disk, not freshly created) have no auto_performance
@@ -248,6 +268,7 @@ from services.access_log_filter import install_quiet_access_filter
 install_quiet_access_filter()
 
 api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
+api.state.runtime = ctx
 
 
 @api.exception_handler(execution_mode.ExecutionModeError)
@@ -279,13 +300,6 @@ from routers.uploads import MAX_IMAGE_UPLOAD_BYTES   # 500 MB, defined with the 
 # music video runs ~30-100 MB; longer reference clips can push
 # higher. 500 MB covers ~25-50 min of typical music-video bitrates.
 MAX_AUDIO_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (also covers video-for-audio-extract)
-
-# Uploads are bounded independently from GPU/model lanes (services/kernel/paths.py).
-_UPLOAD_TRANSCODE_SLOTS = _paths.transcode_slots
-_stream_upload = _paths.stream_upload
-_transcode_upload = _paths.transcode_upload
-_safe_join = _paths.safe_join
-_resolve_output_move_path = _paths.resolve_output_move_path
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
@@ -419,24 +433,6 @@ from services.job_lifecycle import (
 from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
 from services import resource_scheduler
 
-# The job registry, the GPU-0 FIFO lock, the abort states and the durable queue are
-# created once by services/kernel/jobs.py; these names are the same objects.
-_jobs = _generation_queue.registry
-_local_gpu_lane = _generation_queue.local_gpu_lane
-_gen_lock = _generation_queue.gen_lock
-_active_gen_states = _generation_queue.active_states
-_queue_recovery_lock = _generation_queue.recovery_lock
-_durable_generation_queue = _generation_queue.durable_queue
-_coordinated_generation_slot = _generation_queue.slot
-_is_durable_generation_job = _generation_queue.is_durable_job
-_persist_generation_job = _generation_queue.persist_job
-_remove_persisted_generation_job = _generation_queue.remove_persisted_job
-_new_generation_job = _generation_queue.new_job
-_register_manual_generation_job = _generation_queue.register_manual_job
-_generation_job_acceptance = _generation_queue.job_acceptance
-_public_generation_details = _generation_queue.public_details
-_pending_gpu_jobs = _generation_queue.pending_gpu_jobs
-_request_generation_cancel = _generation_queue.cancel
 _H3_IDLE_RELEASE_SECONDS = 10.0
 _h3_idle_release_timer: threading.Timer | None = None
 _h3_idle_release_lock = threading.RLock()
@@ -628,15 +624,6 @@ def _interrupt_wan_model() -> None:
     if model is not None and hasattr(model, "_interrupt"):
         model._interrupt = True
 
-# --- Workspace support ---
-# Base path read from wgp.server_config["save_path"] wherever needed (services/kernel/workspaces.py)
-_get_active_workspace = _workspaces.active
-_workspace_dir = _workspaces.workspace_dir
-_resolve_request_media_path = _paths.resolve_request_media_path
-_story_cover_reference_path = _paths.story_cover_reference_path
-_list_workspaces = _workspaces.list
-_persist_active_workspace = _workspaces.persist_active
-
 # --- Director pipeline (lazy init after _run_generation is defined) ---
 _pipeline_initialized = False
 
@@ -655,6 +642,7 @@ def _init_pipeline():
             _request_generation_cancel,
             _active_gen_states,
             state_observer=_publish_director_task,
+            get_cached_hardware=_get_cached_hardware,
         )
         _pipeline_initialized = True
 
@@ -33577,9 +33565,6 @@ api.include_router(create_uploads_router(
 # ============================================================================
 # Canonical task registry and compatibility adapters
 # ============================================================================
-
-_task_registry = _tasks.for_workspace
-
 
 def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
     """Explicitly reopen a terminal adapter task before its worker publishes."""
