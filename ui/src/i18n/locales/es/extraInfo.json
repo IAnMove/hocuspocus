@@ -64,6 +64,9 @@
     "xPost": "X.com · {{length}}/280",
     "xCom": "X.com"
   },
+  "languageName": {
+    "es": "Español"
+  },
   "actions": {
     "generating": "Generando…",
     "regenerate": "Regenerar"

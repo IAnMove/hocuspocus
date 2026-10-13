@@ -739,5 +739,14 @@
     "unsure": "Los puntos de la cara no eran seguros aquí (bigote, barba, cara vista desde abajo): comprueba que la línea esté entre los labios.",
     "smallFace": "Cara pequeña (cabeza de {{head}} px): las bocas se deforman sobre la cara ampliada {{times}}×, se devuelven a la pose y se abren un poco más, para que se lean cuando la figura sale pequeña.",
     "headPass": "Sus puntos de la cara se leyeron sobre la cabeza sola."
+  },
+  "actionErrors": {
+    "kitMissing": "No existe el Character Kit “{{name}}”.",
+    "noOpenKit": "No hay un Character Kit abierto.",
+    "singleReference": "Character Kit admite una única referencia de identidad. Indica un solo output exacto.",
+    "imageMissing": "No existe el output de imagen “{{name}}” en este workspace.",
+    "noIdentity": "El kit no tiene una referencia de identidad para construir la pose base.",
+    "visemePacks": "No pude cargar los packs de visemas.",
+    "presetMissing": "No existe el preset de animación “{{name}}”."
   }
 }

@@ -10,6 +10,27 @@ from typing import Any
 
 
 VERBATIM_KINDS = {"dialogue", "lyrics", "visible_text", "subtitle", "name"}
+_SPANISH_CODES = {"es", "es-es", "spanish", "español", "espanol", "castellano"}
+_ENGLISH_CODES = {"en", "en-us", "en-gb", "english"}
+
+
+def labels_for_request_language(language: str | None) -> tuple[str, str]:
+    """Map a request language to stored content and spoken labels.
+
+    An omitted language is English. A label already saved on a project is
+    not passed through here.
+    """
+    raw = str(language or "").strip()
+    if not raw:
+        return "English", "English"
+    key = raw.lower().replace("_", "-")
+    if key in _SPANISH_CODES or raw == "Español":
+        return "Español", "Español de España"
+    if key in _ENGLISH_CODES or raw == "English":
+        return "English", "English"
+    if raw in {"Español de España", "Español latinoamericano"}:
+        return "Español", raw
+    return raw, raw
 
 
 def _text(value: Any, limit: int = 120) -> str:

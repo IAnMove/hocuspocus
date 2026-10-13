@@ -103,5 +103,20 @@
     "loadFailed": "Could not load Workspaces",
     "deleteConfirm": "Delete Workspace “{{name}}”? No project or asset will be deleted.",
     "emptyType": "There are no items of this type yet."
+  },
+  "actionErrors": {
+    "uploadsReadOnly": "Uploads is a read-only virtual view, not a workspace that can be selected for generation.",
+    "missing": "Workspace “{{name}}” does not exist. Available: {{available}}.",
+    "none": "none",
+    "switchUnconfirmed": "The backend did not confirm the switch to workspace “{{name}}”; I will not claim it completed.",
+    "invalidName": "That workspace name is not valid.",
+    "createUnconfirmed": "The backend did not confirm creating and selecting “{{name}}”."
+  },
+  "replies": {
+    "ready": "Workspace ready.",
+    "alreadyActive": "Workspace “{{name}}” was already active.",
+    "switched": "I switched to workspace “{{name}}”. Chat and the following actions continue in that context.",
+    "alreadyExisted": "Workspace “{{name}}” already existed. {{summary}}",
+    "created": "I created and selected workspace “{{name}}”. Chat continues here and new generations will be saved in it."
   }
 }

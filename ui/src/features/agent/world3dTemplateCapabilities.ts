@@ -1,4 +1,5 @@
 import type { defineCapability } from './capabilityRegistry'
+import i18n from '../../i18n'
 
 export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.templates.list',
@@ -70,11 +71,11 @@ export function world3dTemplateMessage(body: { status?: string; result?: Record<
   const lines = cards.slice(0, 8).map(card => `${card.id} | ${card.titleEs} | ${card.titleEn} | ${card.format} | ${card.duration}s`).join('\n')
   const scene = result.scene as { sceneId?: string; revision?: number } | undefined
   const chosen = typeof result.chosenId === 'string' ? result.chosenId : ''
-  if (body.status === 'needs_choice' || result.status === 'needs_choice') return `Hay varias tomas. Elige un id exacto.\n${lines}`
-  if (body.status === 'not_found' || result.status === 'not_found') return 'Ninguna toma coincide con la búsqueda.'
-  if (chosen) return `Toma ${chosen}. Escena ${scene?.sceneId || ''} revisión ${scene?.revision ?? ''}.\n${lines}`
+  if (body.status === 'needs_choice' || result.status === 'needs_choice') return i18n.t('wizard:replies.world3dChooseId', { lines })
+  if (body.status === 'not_found' || result.status === 'not_found') return i18n.t('wizard:replies.world3dNone')
+  if (chosen) return i18n.t('wizard:replies.world3dChosen', { id: chosen, scene: scene?.sceneId || '', revision: scene?.revision ?? '', lines })
   if (lines) return lines
-  return `Vídeo 3D ${scene?.sceneId || body.status || 'listo'}`
+  return i18n.t('wizard:replies.world3dReady', { label: scene?.sceneId || body.status || i18n.t('wizard:replies.world3dReadyWord') })
 }
 
 export function registerWorld3DTemplateCapabilities(register: typeof defineCapability) {
@@ -95,7 +96,7 @@ export function registerWorld3DTemplateCapabilities(register: typeof defineCapab
       },
       required: ['type', 'operation', 'input'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Buscando tomas de Vídeo 3D…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.searchingVideo3dShots',
     resolve(raw) {
       if (typeof raw.operation !== 'string' || !operations.has(raw.operation) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) return null
       return { type: 'world3d_templates', operation: raw.operation as World3DTemplateOperation, input: raw.input as Record<string, unknown> }

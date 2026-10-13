@@ -163,7 +163,7 @@ async function installReviewRoutes(page: Page, state: ReviewRouteState): Promise
 
 async function openGallery(page: Page): Promise<void> {
   await page.goto('/scene-template-review')
-  await expect(page.locator('section[aria-label="Galería de plantillas candidatas de Video3D"]')).toBeVisible()
+  await expect(page.locator('section[aria-label="Video3D candidate template gallery"]')).toBeVisible()
   await expect(page.locator('[data-template-id]')).toHaveCount(41)
 }
 
@@ -327,7 +327,7 @@ test('shows a visible error and keeps the gallery when the saved reference is mi
     const card = page.locator('[data-template-id="cinema-establishing"]')
     await card.getByTestId('open-scene-cinema-establishing').click()
     await expect(page).toHaveURL(/\/scene-template-review$/)
-    await expect(card.getByRole('alert').filter({ hasText: 'No está disponible el snapshot' })).toBeVisible()
+    await expect(card.getByRole('alert').filter({ hasText: 'snapshot is not available' })).toBeVisible()
     await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), PENDING_SCENE_KEY)).toBeNull()
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('__scene_template_test_handoff'))).toBeNull()
     expect(state.referenceRequests).toHaveLength(1)
@@ -377,7 +377,7 @@ test('keeps review decisions across reload and exports catalog/template versions
     await expect(reloadedKeep).toHaveAttribute('aria-pressed', 'true')
 
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Exportar revisión JSON', exact: true }).click()
+    await page.getByRole('button', { name: 'Export review JSON', exact: true }).click()
     const download = await downloadPromise
     expect(download.suggestedFilename()).toBe(`scene-template-review-${EXPANDED_CATALOG_VERSION}.json`)
     const downloadPath = await download.path()

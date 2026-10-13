@@ -1,3 +1,4 @@
+import i18n from '../../i18n'
 import {
   getCandidateSceneTemplate,
   templateCatalogVersion,
@@ -9,16 +10,19 @@ import {
 /**
  * Stable labels shared by the template picker and the Wizard prompt: one slot
  * vocabulary for every card. They describe roles only; they do not bind an
- * asset or authorize a generation request.
+ * asset or authorize a generation request. Read at call time so the UI language
+ * is current.
  */
-export const TEMPLATE_SLOT_LABELS: Record<TemplateSlotName, string> = Object.freeze({
-  subject_1: 'Sujeto 1',
-  subject_2: 'Sujeto 2',
-  background: 'Fondo',
-  prop_1: 'Accesorio 1',
-  prop_2: 'Accesorio 2',
-  foreground: 'Primer término',
-}) as Record<TemplateSlotName, string>
+export function templateSlotLabels(): Record<TemplateSlotName, string> {
+  return {
+    subject_1: i18n.t('scene3d:slotLabels.subject_1'),
+    subject_2: i18n.t('scene3d:slotLabels.subject_2'),
+    background: i18n.t('scene3d:slotLabels.background'),
+    prop_1: i18n.t('scene3d:slotLabels.prop_1'),
+    prop_2: i18n.t('scene3d:slotLabels.prop_2'),
+    foreground: i18n.t('scene3d:slotLabels.foreground'),
+  }
+}
 
 export type TemplateComponent = {
   readonly key: TemplateSlotName
@@ -43,6 +47,7 @@ export type TemplateComponentContract = {
 
 export function describeTemplateComponents(id: string): TemplateComponentContract {
   const template = getCandidateSceneTemplate(id)
+  const labels = templateSlotLabels()
 
   return {
     schema: 'hocuspocus.template-components',
@@ -55,7 +60,7 @@ export function describeTemplateComponents(id: string): TemplateComponentContrac
     description: template.description,
     components: template.slots.map(slot => ({
       key: slot.id,
-      label: TEMPLATE_SLOT_LABELS[slot.id],
+      label: labels[slot.id],
       description: slot.description,
       required: slot.required,
       // Copy this array so a consumer cannot mutate catalog state through a

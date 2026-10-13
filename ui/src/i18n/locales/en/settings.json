@@ -23,6 +23,24 @@
     "optionEs": "Español",
     "quickAria": "Quick interface language"
   },
+  "developerMode": {
+    "label": "Developer mode",
+    "hint": "Shows internal tools such as Internal audit. Leave off for normal use."
+  },
+  "communityMusic": {
+    "title": "Community MiniMax Music variants",
+    "experimental": "experimental",
+    "intro": "Community ports of the official model. They are shown so you can compare requirements, and they cannot be selected until a validated HocusPocus adapter exists.",
+    "openRepo": "Open repository",
+    "disk": "disk ~{{gb}} GB",
+    "backendLine": "backend: {{backend}}",
+    "formatWebgpu": "WebGPU · Chromium browser",
+    "platformGguf": "CUDA, ROCm, Vulkan or CPU",
+    "backendWebgpu": "WebGPU in the browser",
+    "noteGguf": "Figures published by the community implementation; it is not compatible with our Diffusers backend.",
+    "noteMlx": "Needs a separate MLX adapter; it does not work as a CUDA checkpoint.",
+    "noteWebgpu": "12 GB for songs up to one minute; 16 GB for the full length."
+  },
   "services": {
     "loadFailed": "Failed to load services settings",
     "notSet": "Not set",

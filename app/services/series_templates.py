@@ -45,7 +45,7 @@ def _pick(value: Any, language: str) -> Any:
 
 
 def _language(language: str | None) -> str:
-    return language if language in LANGUAGES else "es"
+    return language if language in LANGUAGES else "en"
 
 
 def list_templates(language: str | None = None) -> list[dict[str, Any]]:

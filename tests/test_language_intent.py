@@ -59,6 +59,12 @@ def test_story_library_migrates_legacy_language_fields_durably():
 
 def test_series_creation_and_normalization_always_return_language_intent():
     created = create_series_project()
+    assert created["language"] == "English"
+    assert created["spokenLanguage"] == "English"
+    assert created["languageIntent"]["contentLanguage"] == "English"
+    spanish = create_series_project(language="es")
+    assert spanish["language"] == "Español"
+    assert spanish["spokenLanguage"] == "Español de España"
     assert created["languageIntent"]["technicalPromptLanguage"] == "en"
     created["languageIntent"] = {
         "content_language": "Deutsch",
@@ -68,6 +74,19 @@ def test_series_creation_and_normalization_always_return_language_intent():
     normalized = normalize_series_project(created, created["id"], "default")
     assert normalized["languageIntent"]["contentLanguage"] == "Deutsch"
     assert normalized["languageIntent"]["verbatimSegments"][0]["text"] == "hola"
+    kept = dict(created)
+    kept["language"] = "Español"
+    kept["spokenLanguage"] = "Español de España"
+    kept_normalized = normalize_series_project(kept, kept["id"], "default")
+    assert kept_normalized["language"] == "Español"
+    assert kept_normalized["spokenLanguage"] == "Español de España"
+    missing = dict(created)
+    missing.pop("language")
+    missing.pop("spokenLanguage")
+    missing.pop("languageIntent")
+    filled = normalize_series_project(missing, missing["id"], "default")
+    assert filled["language"] == "English"
+    assert filled["spokenLanguage"] == "English"
 
 
 def test_series_canon_tracks_production_language_but_not_chat_language():

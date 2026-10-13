@@ -1,5 +1,6 @@
 import { finishTemplateLayers, TEMPLATE_FINISH_VERSION } from './templateFinish'
 import type { Scene, SceneLayer } from '../../types'
+import i18n from '../../i18n'
 import { canonicalBindings, requiredSlots, resolveSceneTemplate, templateCatalogVersion, type SceneTemplateDefinition, type TemplateSlotName } from './catalog'
 import { backdrop, foreground, type BuildContext, type TemplateAsset, type TemplateBindings } from './sceneBuilders'
 import { resolveControls, type TemplateControlInput, type TemplateControlValues } from './templateControls'
@@ -22,28 +23,28 @@ const builders = { ...cinemaScenes, ...musicScenes, ...spaceScenes, ...musicMoti
 const DISTINCT_MUSIC_SLOTS = ['subject_1', 'subject_2', 'prop_1'] as const
 
 function validateAsset(value: TemplateAsset) {
-  if (typeof value.source !== 'string' || !value.source.trim() || value.source.length > 2_000_000) throw new TemplateError('template_bad_asset', 'Cada slot necesita un recurso existente y durable (máximo 2 MB de referencia).')
-  if (!/^(?:data:(?:image\/|model\/gltf-binary;)|\/api\/v1\/|\/examples\/|https?:\/\/)/i.test(value.source)) throw new TemplateError('template_bad_asset', 'Usa un asset de Library o una referencia de imagen/vídeo/GLB durable; no blob:, scripts ni rutas del disco.')
+  if (typeof value.source !== 'string' || !value.source.trim() || value.source.length > 2_000_000) throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.durableResource'))
+  if (!/^(?:data:(?:image\/|model\/gltf-binary;)|\/api\/v1\/|\/examples\/|https?:\/\/)/i.test(value.source)) throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.libraryOrDurable'))
   // HTTP/API references are checked by the media loader; only inline MIME is known here.
   if (/^data:/i.test(value.source)) {
     const matchesKind = value.type === 'image' ? /^data:image\//i : /^data:model\/gltf-binary;/i
-    if (!matchesKind.test(value.source)) throw new TemplateError('template_bad_asset', 'El MIME del asset inline no coincide con su tipo declarado.')
+    if (!matchesKind.test(value.source)) throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.mimeMismatch'))
   }
 }
 function validateBindings(template: SceneTemplateDefinition, bindings: TemplateBindings, controls: TemplateControlValues) {
   const needed = new Set(requiredSlots(template, controls).map(slot => slot.id))
   for (const slot of template.slots) {
     const value = bindings[slot.id]
-    if (!value && needed.has(slot.id)) throw new TemplateError('template_missing_slot', `Falta el slot obligatorio ${slot.id}.`)
+    if (!value && needed.has(slot.id)) throw new TemplateError('template_missing_slot', i18n.t('scene3d:templateCompile.missingSlot', { slot: slot.id }))
     if (!value) continue
-    if (!slot.kinds.includes(value.type)) throw new TemplateError('template_bad_asset', `El slot ${slot.id} no admite ${value.type}.`)
+    if (!slot.kinds.includes(value.type)) throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.slotRejects', { slot: slot.id, type: value.type }))
     validateAsset(value)
   }
   // The choreographies repeat and swap figures, so their identity slots must be distinct assets; the original
   // grammars keep allowing the same picture twice.
   if (template.group === 'music-motion') validateDistinctMusicSlots(bindings)
   const models = Object.values(bindings).filter(value => value?.type === 'model3d').map(value => value!.source)
-  if (new Set(models).size !== models.length) throw new TemplateError('template_bad_asset', 'Los slots GLB no admiten fuentes repetidas en este compositor.')
+  if (new Set(models).size !== models.length) throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.repeatedGlb'))
 }
 
 function validateDistinctMusicSlots(bindings: TemplateBindings) {
@@ -55,7 +56,7 @@ function validateDistinctMusicSlots(bindings: TemplateBindings) {
 
     const previousSourceSlot = sources.get(binding.source)
     if (previousSourceSlot) {
-      throw new TemplateError('template_bad_asset', `Los slots musicales ${previousSourceSlot} y ${slot} no pueden reutilizar el mismo recurso: source coincide.`)
+      throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.musicSourceReuse', { left: previousSourceSlot, right: slot }))
     }
     sources.set(binding.source, slot)
 
@@ -63,7 +64,7 @@ function validateDistinctMusicSlots(bindings: TemplateBindings) {
     if (typeof assetId !== 'string' || !assetId.trim()) continue
     const previousAssetSlot = assetIds.get(assetId)
     if (previousAssetSlot) {
-      throw new TemplateError('template_bad_asset', `Los slots musicales ${previousAssetSlot} y ${slot} no pueden reutilizar el mismo recurso: assetId canónico coincide (${assetId}).`)
+      throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.musicAssetReuse', { left: previousAssetSlot, right: slot, assetId }))
     }
     assetIds.set(assetId, slot)
   }
@@ -73,7 +74,7 @@ type SceneBody = Pick<Scene, 'width' | 'height' | 'fps' | 'layers'> & Partial<Pi
 
 function layerScene(template: SceneTemplateDefinition, ctx: BuildContext): SceneBody {
   const build = builders[template.id]
-  if (!build) throw new TemplateError('template_unknown', `La plantilla ${template.id} todavía no tiene compilador.`)
+  if (!build) throw new TemplateError('template_unknown', i18n.t('scene3d:templateCompile.noCompiler', { id: template.id }))
   const background = template.group === 'music-motion' ? musicMotionBackground(template.id, ctx) : [backdrop(ctx)]
   const built = withCameraDrift([...background, ...build(ctx), ...foreground(ctx)], ctx)
   return { width: 1280, height: 720, fps: 30, layers: finishTemplateLayers(built, template.family, ctx.intensity) }
@@ -85,7 +86,7 @@ function sceneBody(template: SceneTemplateDefinition, ctx: BuildContext, frame: 
 }
 
 function checkBudget(layers: SceneLayer[]) {
-  if (layers.length > 24 || layers.filter(item => item.type === 'model3d').length > 2) throw new TemplateError('template_compile_failed', 'La escena excede el presupuesto de 24 capas / 2 GLB.')
+  if (layers.length > 24 || layers.filter(item => item.type === 'model3d').length > 2) throw new TemplateError('template_compile_failed', i18n.t('scene3d:templateCompile.overBudget'))
 }
 
 /**
@@ -104,7 +105,7 @@ export function compileCandidateScene(id: string, input: TemplateBindingsInput, 
   const body = sceneBody(template, ctx, frame)
   checkBudget(body.layers)
   return {
-    version: 1, name: `${template.title}${template.status === 'candidate' ? ' · candidata' : ''}`, generationPolicy: 'provided_only',
+    version: 1, name: `${template.title}${template.status === 'candidate' ? ` · ${i18n.t('scene3d:templateCompile.candidateSuffix')}` : ''}`, generationPolicy: 'provided_only',
     ...body, duration: ctx.duration,
     narrative: { templateId: template.id, category: template.family, visualIntent: template.description,
       controls: { ...controls, ...(alias ? { alias } : {}), finishVersion: TEMPLATE_FINISH_VERSION, catalogVersion: templateCatalogVersion(template), templateVersion: template.version, reviewStatus: template.status, renderer: 'layer-compositor-v1' },

@@ -1,4 +1,5 @@
 import { cancelCanonicalTask, fetchCanonicalTasks, resumeCanonicalTask, retryCanonicalTask, type CanonicalTask } from '../../api/client'
+import i18n from '../../i18n'
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
 import { canResumeCanonicalTask } from '../../lib/canonicalTaskEvents'
 import { useStore } from '../../stores/useStore'
@@ -28,10 +29,13 @@ function workspaceId(): string {
 
 function formatTaskLine(task: CanonicalTask): string {
   const percent = Math.round(Math.max(0, Math.min(1, Number(task.progress || 0))) * 100)
+  const required = (task.resource_requirements || []).join(', ')
   const waiting = task.status === 'waiting_resource'
-    ? ` Esperando ${((task.resource_requirements || []).join(', ') || 'recurso')}.`
+    ? i18n.t('studio:replies.taskWaiting', { resources: required || i18n.t('studio:replies.taskResource') })
     : ''
-  const using = task.acquired_resources?.length ? ` Usa ${task.acquired_resources.join(', ')}.` : ''
+  const using = task.acquired_resources?.length
+    ? i18n.t('studio:replies.taskUsing', { resources: task.acquired_resources.join(', ') })
+    : ''
   const pipeline = task.pipeline_id ? ` Pipeline ${task.pipeline_id}.` : ''
   return `• ${task.title || task.kind} [${task.status}${percent ? ` ${percent}%` : ''}] ${task.id}.${pipeline}${waiting}${using}`
 }
@@ -41,12 +45,10 @@ function resolveTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask
   const needle = requestedId.trim()
   if (!needle || needle === 'active' || needle === 'current') {
     const active = roots.filter(task => ACTIVE.has(task.status))
-    if (!active.length) throw new Error('No hay ninguna tarea activa que seleccionar.')
+    if (!active.length) throw new Error(i18n.t('studio:actionErrors.noActiveTask'))
     if (active.length > 1) {
-      throw new Error(
-        `Hay ${active.length} tareas activas; indica el id. `
-        + active.slice(0, 8).map(task => `${task.id} (${task.title || task.kind})`).join('; '),
-      )
+      const list = active.slice(0, 8).map(task => `${task.id} (${task.title || task.kind})`).join('; ')
+      throw new Error(i18n.t('studio:actionErrors.multipleActiveTasks', { count: active.length, list }))
     }
     return active[0]
   }
@@ -54,10 +56,10 @@ function resolveTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask
   if (exact) return exact
   const exactBackend = tasks.filter(task => task.pipeline_id === needle || task.backend_job_id === needle)
   if (exactBackend.length === 1) return exactBackend[0]
-  if (exactBackend.length > 1) throw new Error(`El identificador “${needle}” pertenece a varias tareas; usa el id canónico.`)
+  if (exactBackend.length > 1) throw new Error(i18n.t('studio:actionErrors.ambiguousTaskId', { id: needle }))
   const prefix = tasks.filter(task => task.id.startsWith(needle))
   if (prefix.length === 1) return prefix[0]
-  throw new Error(`No encontré la tarea “${needle}” en la cola canónica.`)
+  throw new Error(i18n.t('studio:actionErrors.taskNotFound', { id: needle }))
 }
 
 function resolveRetryTask(tasks: CanonicalTask[], requestedId: string): CanonicalTask {
@@ -65,19 +67,19 @@ function resolveRetryTask(tasks: CanonicalTask[], requestedId: string): Canonica
   const needle = requestedId.trim()
   if (needle === 'latest') {
     const latest = [...roots].sort((left, right) => right.updated_at - left.updated_at)[0]
-    if (!latest) throw new Error('No hay ninguna tarea fallida, cancelada o interrumpida que reintentar.')
+    if (!latest) throw new Error(i18n.t('studio:actionErrors.noRetryableFailure'))
     return latest
   }
   if (!needle) {
-    if (!roots.length) throw new Error('No hay ninguna tarea reintentable.')
+    if (!roots.length) throw new Error(i18n.t('studio:actionErrors.noRetryableTask'))
     if (roots.length > 1) {
-      throw new Error(`Hay ${roots.length} tareas reintentables; indica el id o pide explícitamente “el último fallo”.`)
+      throw new Error(i18n.t('studio:actionErrors.multipleRetryableTasks', { count: roots.length }))
     }
     return roots[0]
   }
   const task = resolveTask(tasks, needle)
   if (!canResumeCanonicalTask(task)) {
-    throw new Error(`La tarea ${task.id} no se puede reintentar ahora (${task.status}).`)
+    throw new Error(i18n.t('studio:actionErrors.taskNotRetryable', { id: task.id, status: task.status }))
   }
   return task
 }
@@ -88,8 +90,8 @@ export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<Co
   const active = roots.filter(task => ACTIVE.has(task.status))
   if (!roots.length) {
     return queueResult(scope === 'all'
-      ? 'La cola canónica de este workspace está vacía. He abierto el historial de Activity.'
-      : 'No hay tareas activas. He abierto Activity por si quieres ver el historial.')
+      ? i18n.t('studio:replies.queueEmptyAll')
+      : i18n.t('studio:replies.queueEmptyActive'))
   }
   const waiting = active.filter(task => task.status === 'waiting_resource')
   const gpuWait = waiting.filter(task =>
@@ -98,20 +100,27 @@ export async function inspectCanonicalQueue(scope: 'active' | 'all'): Promise<Co
     || /gpu/i.test(task.message || ''),
   )
   const lines = (scope === 'all' ? roots.slice(0, 12) : active).map(formatTaskLine)
+  const gpuNames = gpuWait.map(task => task.title || task.id).join(', ')
   const waitNote = gpuWait.length
-    ? ` La GPU está ocupada o pendiente: ${gpuWait.map(task => task.title || task.id).join(', ')}.`
+    ? i18n.t('studio:replies.gpuBusy', { names: gpuNames })
     : waiting.length
-      ? ` Hay ${waiting.length} tarea(s) esperando recurso.`
+      ? i18n.t('studio:replies.resourceWait', { count: waiting.length })
       : ''
-  return queueResult(`Cola ${scope}: ${active.length} activa(s) de ${roots.length} visibles.${waitNote} He abierto Activity.\n${lines.join('\n')}`)
+  return queueResult(i18n.t('studio:replies.queueSummary', {
+    scope,
+    active: active.length,
+    visible: roots.length,
+    waitNote,
+    lines: lines.join('\n'),
+  }))
 }
 
 export async function cancelCanonicalQueueTask(taskId: string, confirm: boolean): Promise<CommandResult> {
-  if (!confirm) throw new Error('Cancelar requiere confirm=true tras una petición explícita del usuario.')
+  if (!confirm) throw new Error(i18n.t('studio:actionErrors.cancelNeedsConfirm'))
   const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
   const task = resolveTask(snapshot.tasks, taskId)
   if (!task.cancelable || !ACTIVE.has(task.status)) {
-    throw new Error(`La tarea ${task.id} no se puede cancelar ahora (${task.status}).`)
+    throw new Error(i18n.t('studio:actionErrors.taskNotCancelable', { id: task.id, status: task.status }))
   }
   const cancelled = await cancelCanonicalTask(task.id, workspaceId())
   const backendJobId = cancelled.backend_job_id || task.backend_job_id
@@ -124,18 +133,19 @@ export async function cancelCanonicalQueueTask(taskId: string, confirm: boolean)
     }
     void useStore.getState().loadPipelineList(pipelineId || undefined)
   }
+  const title = cancelled.title || task.title
   return queueResult(
-    `He pedido cancelar “${cancelled.title || task.title}” (${cancelled.id}); Activity muestra el estado ${cancelled.status}.`,
+    i18n.t('studio:replies.cancelRequested', { title, id: cancelled.id, status: cancelled.status }),
     cancelled.id,
   )
 }
 
 export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean): Promise<CommandResult> {
-  if (!confirm) throw new Error('Reanudar requiere confirm=true tras una petición explícita del usuario.')
+  if (!confirm) throw new Error(i18n.t('studio:actionErrors.resumeNeedsConfirm'))
   const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
   const task = resolveTask(snapshot.tasks, taskId)
   if (!canResumeCanonicalTask(task)) {
-    throw new Error(`La tarea ${task.id} no es reanudable ahora (${task.status}).`)
+    throw new Error(i18n.t('studio:actionErrors.taskNotResumable', { id: task.id, status: task.status }))
   }
   const resumed = await resumeCanonicalTask(task.id, workspaceId())
   const adapter = String(resumed.metadata?.adapter || task.metadata?.adapter || '')
@@ -152,19 +162,21 @@ export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean)
     void useStore.getState().loadSavedPipeline(pipelineId)
     void useStore.getState().loadPipelineList(pipelineId)
   }
+  const title = resumed.title || task.title
   return queueResult(
-    `He reanudado “${resumed.title || task.title}” (${resumed.id}); el estado actual es ${resumed.status}.`,
+    i18n.t('studio:replies.resumed', { title, id: resumed.id, status: resumed.status }),
     resumed.id,
   )
 }
 
 export async function retryCanonicalQueueTask(taskId: string, confirm: boolean): Promise<CommandResult> {
-  if (!confirm) throw new Error('Reintentar requiere confirm=true tras una petición explícita del usuario.')
+  if (!confirm) throw new Error(i18n.t('studio:actionErrors.retryNeedsConfirm'))
   const snapshot = await fetchCanonicalTasks(workspaceId(), 'all')
   const task = resolveRetryTask(snapshot.tasks, taskId)
   const retried = await retryCanonicalTask(task.id, workspaceId())
+  const title = retried.title || task.title
   return queueResult(
-    `He reintentado “${retried.title || task.title}” (${retried.id}); Activity muestra el estado ${retried.status}.`,
+    i18n.t('studio:replies.retried', { title, id: retried.id, status: retried.status }),
     retried.id,
   )
 }

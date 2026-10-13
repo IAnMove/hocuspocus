@@ -274,5 +274,36 @@
       "upload": "Uploaded",
       "production": "Director production"
     }
+  },
+  "actionErrors": {
+    "onlyOneDraft": "There is only one Video Editor draft per workspace: “{{name}}”. Ask explicitly to create another project if you want to replace the current draft.",
+    "outputMissing": "Output “{{name}}” does not exist in this workspace.",
+    "clipNotOnTimeline": "Clip “{{name}}” is not on the timeline.",
+    "clipNotFound": "I cannot find clip “{{name}}” to trim.",
+    "audioNameRequired": "Specify the exact audio output name.",
+    "audioMissing": "Audio output “{{name}}” does not exist in this workspace.",
+    "timelineEmpty": "The timeline is empty.",
+    "timelineDuration": "The timeline has no usable duration.",
+    "exportConfirm": "Export requires confirm=true.",
+    "noClips": "There are no clips to export.",
+    "exportNoJob": "The exporter returned success without a jobId.",
+    "noExport": "There is no Video Editor export in progress.",
+    "videoclipRequired": "Specify the exact videoclip.",
+    "videoclipAudioRequired": "Specify the exact audio output.",
+    "videoclipMountConfirm": "Mounting an alternative song requires confirm=true.",
+    "videoclipSongRequired": "Specify the exact song.",
+    "videoclipAttachFailed": "I could not attach the alternative song."
+  },
+  "defaultTransition": "A moment later…",
+  "replies": {
+    "videoclipAdaptationRandom": "random extras if needed",
+    "videoclipAdaptationRepeat": "the videoclip will loop if needed",
+    "videoclipAdded": "I added “{{audio}}” as an alternative song for “{{videoclip}}” ({{adaptation}}). I have not mounted the video yet.",
+    "videoclipMounting": "I am mounting “{{videoclip}}” with “{{audio}}” (FFmpeg, without regenerating shots). The result will be “{{output}}”.",
+    "videoclipMountFinished": "The mount of “{{audio}}” finished: {{output}}.",
+    "videoclipMountStatus": "The mount of “{{audio}}” is {{status}}: {{message}}",
+    "videoclipLastMounted": "The last mounted alternative song is “{{audio}}” → “{{output}}”.",
+    "videoclipAlternativesAttached": "“{{name}}” has {{total}} alternative songs attached and none are being mounted.",
+    "videoclipNoAlternatives": "“{{name}}” has no alternative songs yet."
   }
 }

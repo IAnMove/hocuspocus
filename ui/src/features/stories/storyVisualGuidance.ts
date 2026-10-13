@@ -1,5 +1,6 @@
 import { musicVideoShouldUseDirectVideo } from './musicVideoLook'
 import type { StoryMusicVideoGenerationMode, StoryProject } from './types'
+import i18n from '../../i18n'
 
 export function storyVisualGuidanceMode(
   project: Pick<StoryProject, 'projectType' | 'musicVideoGenerationMode' | 'visualStyle' | 'characterVisualStyle'>,
@@ -37,10 +38,10 @@ export function assertStoryVisualRecipeReady(project: StoryProject): void {
     const incomplete = charactersMissingVisualIdentities(project)
     if (incomplete.length) {
       const names = incomplete.map(character => character.name || 'Unnamed').join(', ')
-      throw new Error(`La receta con imágenes iniciales necesita identidades visuales aprobadas: ${names}.`)
+      throw new Error(i18n.t('storyLab:errors.recipeNeedsIdentities', { names }))
     }
   }
   if (storyRecipeRequiresApprovedReferences(mode) && approvedAttachedReferenceCount(project) === 0) {
-    throw new Error('La receta de referencias directas necesita al menos una imagen adjunta aprobada.')
+    throw new Error(i18n.t('storyLab:errors.recipeNeedsReference'))
   }
 }

@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 from .document_origin import created_by, keep_record_author, restore_created_by
-from .language_intent import normalize_language_intent
+from .language_intent import labels_for_request_language, normalize_language_intent
 from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
 
@@ -178,18 +178,20 @@ def create_series_project(
     workspace_id: str = "default",
     *,
     title: str = "Untitled series",
+    language: str | None = None,
 ) -> dict:
     workspace_id = validate_workspace_id(workspace_id)
     now = _now()
     suffix = uuid.uuid4().hex
     series_id = f"series_{suffix}"
+    content_language, spoken_language = labels_for_request_language(language)
     value = {
         "version": 1, "id": series_id, "revision": 1,
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
-        "language": "Español", "spokenLanguage": "Español de España",
+        "language": content_language, "spokenLanguage": spoken_language,
         "languageIntent": normalize_language_intent(
-            None, content_language="Español", spoken_language="Español de España"
+            None, content_language=content_language, spoken_language=spoken_language
         ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
         "genre": "", "tone": "Cinematic", "audience": "General",
@@ -973,15 +975,15 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "defaultEpisodeDurationSeconds": max(15, min(3600, _integer(
             project.get("defaultEpisodeDurationSeconds"), 75, 15
         ))),
-        "language": _text(project.get("language"), "Español"),
+        "language": _text(project.get("language"), "English"),
         "spokenLanguage": _text(
-            project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+            project.get("spokenLanguage"), _text(project.get("language"), "English")
         ),
         "languageIntent": normalize_language_intent(
             project.get("languageIntent"),
-            content_language=_text(project.get("language"), "Español"),
+            content_language=_text(project.get("language"), "English"),
             spoken_language=_text(
-                project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
+                project.get("spokenLanguage"), _text(project.get("language"), "English")
             ),
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
@@ -1248,7 +1250,8 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             (story.get("creativeBrief") or {}).get("durationSeconds")
             if isinstance(story.get("creativeBrief"), dict) else None, 75
         ))),
-        "language": _text(story.get("language"), "Español"),
+        "language": _text(story.get("language"), "English"),
+        "spokenLanguage": _text(story.get("spokenLanguage"), _text(story.get("language"), "English")),
         "genre": _text(story.get("genre")), "tone": _text(story.get("tone")),
         "audience": _text(story.get("audience"), "General"),
         "visualStyle": _text(story.get("visualStyle")),

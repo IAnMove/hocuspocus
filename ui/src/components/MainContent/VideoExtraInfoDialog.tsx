@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next'
 import { BadgeInfo, CalendarDays, Check, Clock3, Copy, FileVideo2, Languages, Loader2, MessageSquareText, RefreshCw, SlidersHorizontal, Sparkles, X, Youtube } from 'lucide-react'
 import { fetchVideoExtraInfo, generateVideoExtraInfo } from '../../api/client'
 import { useUiTranslation } from '../../i18n'
+import { contentLanguageForUi } from '../../lib/contentLanguage'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import type { VideoClipInfo, VideoExtraInfo, VideoExtraInfoStatus } from '../../types'
 
@@ -28,7 +29,7 @@ function initialLanguage() {
     // Storage can be unavailable in hardened/private browser contexts.
   }
   const browserLanguage = navigator.language?.toLowerCase().split('-')[0]
-  return LANGUAGES.some(([code]) => code === browserLanguage) ? browserLanguage : 'es'
+  return LANGUAGES.some(([code]) => code === browserLanguage) ? browserLanguage : contentLanguageForUi().code
 }
 
 async function copyText(value: string) {
@@ -222,7 +223,9 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
             disabled={generating}
             className="rounded-lg border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none disabled:opacity-50"
           >
-            {LANGUAGES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+            {LANGUAGES.map(([code, label]) => (
+              <option key={code} value={code}>{code === 'es' ? t('languageName.es') : label}</option>
+            ))}
           </select>
           {status && (
             <span className="ml-auto text-[10px] text-text-muted">

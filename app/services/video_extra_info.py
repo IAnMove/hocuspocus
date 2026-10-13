@@ -75,7 +75,7 @@ Field requirements:
 
 def normalize_language(language: str) -> tuple[str, str]:
     """Validate a UI language code and return ``(code, English label)``."""
-    code = str(language or "es").strip().lower().replace("_", "-").split("-", 1)[0]
+    code = str(language or "en").strip().lower().replace("_", "-").split("-", 1)[0]
     if code not in SUPPORTED_LANGUAGES:
         raise ValueError(f"Unsupported language: {language}")
     return code, SUPPORTED_LANGUAGES[code]

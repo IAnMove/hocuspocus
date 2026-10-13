@@ -50,8 +50,8 @@ test('accepts the canonical active-workspace location, not a global asset URL', 
 test('blocks non-canonical metadata and unsafe, ambiguous, or incompatible locations', () => {
   for (const metadata_status of ['legacy', 'missing', 'invalid']) {
     const item = makeAsset({ metadata_status })
-    assert.throws(() => catalogAssetBinding(item, WORKSPACE, imageSlot), /metadatos canónicos/i)
-    assert.match(catalogBindingIssue(item, WORKSPACE, imageSlot), /metadatos canónicos/i)
+    assert.throws(() => catalogAssetBinding(item, WORKSPACE, imageSlot), /canonical metadata/i)
+    assert.match(catalogBindingIssue(item, WORKSPACE, imageSlot), /canonical metadata/i)
   }
 
   const cases = [
@@ -191,7 +191,7 @@ test('a background slot takes a Library video; a subject slot does not', () => {
   })
   const binding = catalogAssetBinding(clip, WORKSPACE, plateSlot)
   assert.equal(binding.type, 'video')
-  assert.match(catalogBindingIssue(clip, WORKSPACE, imageSlot), /no admite video/)
+  assert.match(catalogBindingIssue(clip, WORKSPACE, imageSlot), /does not accept video/)
   const scene = compileCandidateScene(template.id, { subject_1: catalogAssetBinding(makeAsset(), WORKSPACE, imageSlot), background: binding })
   const background = scene.layers.find(item => item.id === 'background')
   assert.equal(background.type, 'video')

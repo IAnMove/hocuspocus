@@ -1,4 +1,5 @@
 import type { defineCapability } from './capabilityRegistry'
+import i18n from '../../i18n'
 
 /**
  * "Edita el quinto plano y ponle X": one Series shot, named by its number in the
@@ -78,16 +79,16 @@ export async function postShotEdit(target: ShotTarget, body: Record<string, unkn
 }
 
 export function shotEditMessage(reply: ShotReply): string {
-  const shot = `Plano ${reply.number ?? ''} (${reply.shotId || ''})`.replace('  ', ' ')
-  if (reply.render?.jobId) return `${shot}: renderizando de nuevo en el servidor (${reply.render.jobId}).`
-  if (reply.produce?.jobId) return `${shot}: produciendo el episodio (${reply.produce.jobId}); se renderiza lo cambiado y se vuelve a montar.`
-  if (reply.note) return `${shot}: ${reply.note}`
-  const changed = reply.changed?.length ? reply.changed.join(', ') : 'nada'
+  const shot = i18n.t('wizard:replies.shotLabel', { number: reply.number ?? '', id: reply.shotId || '' }).replace('  ', ' ')
+  if (reply.render?.jobId) return i18n.t('wizard:replies.shotRerendering', { shot, jobId: reply.render.jobId })
+  if (reply.produce?.jobId) return i18n.t('wizard:replies.shotProducing', { shot, jobId: reply.produce.jobId })
+  if (reply.note) return i18n.t('wizard:replies.shotNote', { shot, note: reply.note })
+  const changed = reply.changed?.length ? reply.changed.join(', ') : i18n.t('wizard:replies.shotNothing')
   const summary = reply.instruction?.summary ? ` ${reply.instruction.summary}.` : ''
-  const approval = reply.approvalReset ? ' Su toma ya no muestra el plano: la aprobación se quitó; vuelve a renderizarlo para verlo.' : ''
+  const approval = reply.approvalReset ? i18n.t('wizard:replies.shotApprovalReset') : ''
   const missing = Object.entries(reply.missingLines || {}).filter(([, lines]) => lines.length)
-    .map(([language, lines]) => ` A la versión ${language} le faltan ${lines.length} líneas.`).join('')
-  return `${shot} editado: ${changed}.${summary}${approval}${missing}`.replace('..', '.')
+    .map(([language, lines]) => i18n.t('wizard:replies.shotMissingLines', { language, lines: lines.length })).join('')
+  return i18n.t('wizard:replies.shotEdited', { shot, changed, summary, approval, missing }).replace('..', '.')
 }
 
 export async function activeShotTarget(seriesId: string, episodeId: string, workspace?: string): Promise<ShotTarget> {
@@ -126,10 +127,11 @@ const VOICE_WAIT_MS = 90_000
 const VOICE_POLL_MS = 1500
 
 function lineVoiceMessage(action: AgentRecordSeriesLineAction, job: VoiceJob): string {
-  const line = `Línea ${action.line} del plano ${action.shot}`
-  if (job.status === 'completed') return `${line}: ${action.retake ? 'otra toma grabada' : 'voz grabada'} (${job.result?.filename || ''}). La toma del plano aún no la tiene: renderízalo para oírla.`
-  if (job.status === 'failed' || job.status === 'interrupted') return `${line}: no se pudo grabar (${job.error || job.status}).`
-  return `${line}: sigue grabándose en el servidor (${job.jobId}); aparecerá en el inspector del plano.`
+  const line = i18n.t('wizard:replies.shotLineLabel', { line: action.line, shot: action.shot })
+  const recorded = action.retake ? i18n.t('wizard:replies.shotLineRetake') : i18n.t('wizard:replies.shotLineVoice')
+  if (job.status === 'completed') return i18n.t('wizard:replies.shotLineCompleted', { line, recorded, file: job.result?.filename || '' })
+  if (job.status === 'failed' || job.status === 'interrupted') return i18n.t('wizard:replies.shotLineFailed', { line, error: job.error || job.status })
+  return i18n.t('wizard:replies.shotLineRecording', { line, jobId: job.jobId })
 }
 
 const recording = (job: VoiceJob) => Boolean(job.jobId) && (job.status === 'queued' || job.status === 'running')
@@ -174,7 +176,7 @@ export function registerSeriesShotEditCapabilities(register: typeof defineCapabi
       },
       required: ['type'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Editando el plano…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.editingShot',
     resolve(raw) {
       const shot = shotRef(raw)
       const instruction = text(raw.instruction, 2000)
@@ -205,7 +207,7 @@ export function registerSeriesShotEditCapabilities(register: typeof defineCapabi
         retake: { type: 'boolean' }, confirm: { const: true } },
       required: ['type', 'confirm'],
     },
-    risk: 'compute', confirmation: 'required', progress: 'Grabando la línea en el servidor…',
+    risk: 'compute', confirmation: 'required', progress: 'wizard:progress.recordingLineOnServer',
     resolve(raw) {
       const shot = shotRef(raw)
       const line = typeof raw.line_number === 'number' && Number.isInteger(raw.line_number) ? raw.line_number : 0
@@ -233,7 +235,7 @@ export function registerSeriesShotEditCapabilities(register: typeof defineCapabi
       properties: { type: { const: 'rerender_series_shot' }, ...SHOT_FIELDS, produce: { type: 'boolean' }, confirm: { const: true } },
       required: ['type', 'confirm'],
     },
-    risk: 'compute', confirmation: 'required', progress: 'Renderizando el plano en el servidor…',
+    risk: 'compute', confirmation: 'required', progress: 'wizard:progress.renderingShotOnServer',
     resolve(raw) {
       const shot = shotRef(raw)
       if (raw.confirm !== true || shot === null) return null

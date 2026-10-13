@@ -38,7 +38,7 @@ test('the Wizard asks scenes.templates.suggest through the 2D card route and sho
       operation: 'scenes.templates.suggest', version: 1, input: { line: 'she bounces on the beat', speakers: 1 } } }])
     assert.match(outcome.message, /^music-pinball \| Rebote de pinball \| Pinball bounce \| one figure that bounces on the beat$/m)
     assert.match(outcome.message, /music-trampoline/)
-    assert.match(outcome.message, /Ninguna carta conoce: zeppelin/)
+    assert.match(outcome.message, /No card knows: zeppelin/)
     assert.deepEqual(outcome.target, { kind: 'video_2d_template', id: 'music-pinball', title: 'scenes.templates.suggest' })
   } finally {
     globalThis.fetch = previousFetch
@@ -75,7 +75,7 @@ test('catalog pages and one card read as lines, and the Wizard knows how to writ
   assert.equal(video2dTemplateMessage({ result: { kind: 'templates', entries: [
     { id: 'music-pinball', name: 'Rebote de pinball', description: 'El foco rebota.' }] } }), 'music-pinball | Rebote de pinball | El foco rebota.')
   assert.equal(video2dTemplateMessage({ result: { entry: { id: 'music-orbit', title: 'Órbita musical' } } }), 'music-orbit | Órbita musical')
-  assert.equal(video2dTemplateMessage({ result: { templates: [] } }), 'Ninguna carta 2D coincide.')
+  assert.equal(video2dTemplateMessage({ result: { templates: [] } }), 'No 2D card matches.')
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /video2d_templates/)
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /"kind": "scene2d"/)
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /Only music-\* cards play in production/)

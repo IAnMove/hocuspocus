@@ -1,5 +1,7 @@
 import type { StoryProject } from './types'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { scaffoldLanguage } from '../../lib/contentLanguage'
+import i18n from '../../i18n'
 
 // Re-export the song-specific language contract through this already shared
 // music-video boundary. Agent reconciliation can resolve lyric language
@@ -81,17 +83,19 @@ export function parseNewMusicVideoIntent(request: string, conversationLanguage =
     /^(.{2,100}?)\s+(?:sea|es|be|is)\s+(?:(?:el|la|un|una|the|a)\s+)?protagonist[ae]?\b/i,
   )?.[1]?.trim() || ''
   const requestedDuration = Number(request.match(/\b(\d{1,4})\s*(?:segundos?|seconds?|secondes?|secondi)\b/i)?.[1] || 90)
+  const language = musicVideoLanguage(request, conversationLanguage)
   return {
-    title: (exactTitle || protagonist || topic || 'Nuevo videoclip').slice(0, 300),
+    title: (exactTitle || protagonist || topic || i18n.t('storyLab:scaffold.newMusicVideo', { lng: scaffoldLanguage(language) })).slice(0, 300),
     topic,
     protagonist,
-    language: musicVideoLanguage(request, conversationLanguage),
+    language,
     durationSeconds: Math.min(3_600, Math.max(15, requestedDuration)),
   }
 }
 
 export function newMusicVideoStoryAction(request: string, conversationLanguage = '') {
   const { title, topic, protagonist, language, durationSeconds } = parseNewMusicVideoIntent(request, conversationLanguage)
+  const lng = scaffoldLanguage(language)
   const languageIntent = language ? normalizeLanguageIntent({
     conversation_language: conversationLanguage || language,
     content_language: language,
@@ -107,17 +111,17 @@ export function newMusicVideoStoryAction(request: string, conversationLanguage =
     logline: topic,
     synopsis: request.trim().slice(0, 6_000),
     theme: topic,
-    ending: `El conflicto central de ${topic} alcanza una resolución visual y musical clara.`,
-    genre: 'Videoclip musical',
-    tone: 'Cinematográfico',
+    ending: i18n.t('storyLab:scaffold.musicVideoEnding', { topic, lng }),
+    genre: i18n.t('storyLab:scaffold.musicVideoGenre', { lng }),
+    tone: i18n.t('storyLab:scaffold.tone', { lng }),
     visualStyle: request.trim().slice(0, 2_000),
     worldSummary: topic,
     language,
     characters: protagonist ? [{
       name: protagonist,
-      role: 'Protagonista',
+      role: i18n.t('storyLab:scaffold.roleLead', { lng }),
       personality: '',
-      desire: 'Superar el conflicto central de la canción.',
+      desire: i18n.t('storyLab:scaffold.musicVideoDesire', { lng }),
       flaw: '',
       appearance: '',
       voice: '',

@@ -133,6 +133,7 @@
   "selectAsset": "Select {{id}}",
   "dependsOn": "Needs: {{ids}}",
   "listText": "Asset list",
+  "exampleList": "character hero: short knight in bronze armor and a red cape | player\nanim hero: idle, walk, jump, attack, hurt, die\ncharacter slime: green gelatinous slug | enemy\nitem coin: gold coin | anim spin | 8 frames\ntileset grass: grass ground over dirt\nbackground forest: forest at dusk | layers 3\nui button: wooden button | 9-slice\neffect explosion: small explosion with sparks | 12 frames\nsfx jump: short light jump | variants 3\nmusic level1: cheerful forest theme | loop 60 s",
   "listFormat": "Format",
   "listFormats": {
     "lines": "Lines",

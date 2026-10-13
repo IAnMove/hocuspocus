@@ -466,7 +466,18 @@ function ModelVisibilitySection() {
 }
 
 function CommunityMusicModelsSection() {
+  const { t } = useUiTranslation('settings')
   const [open, setOpen] = useState(false)
+  const formatFor = (id: string): string => {
+    if (id === 'minimax_music3_webgpu') return t('communityMusic.formatWebgpu')
+    return MINIMAX_MUSIC_COMMUNITY_MODELS.find(item => item.id === id)?.format || ''
+  }
+  const noteFor = (id: string): string => {
+    if (id === 'minimax_music3_gguf') return t('communityMusic.noteGguf')
+    if (id === 'minimax_music3_mlx') return t('communityMusic.noteMlx')
+    if (id === 'minimax_music3_webgpu') return t('communityMusic.noteWebgpu')
+    return ''
+  }
   return (
     <div>
       <button
@@ -474,35 +485,43 @@ function CommunityMusicModelsSection() {
         className="flex items-center gap-1.5 text-[11px] text-text-secondary uppercase tracking-wider font-medium hover:text-text-primary transition-colors w-full"
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span className="flex-1 text-left">Community MiniMax Music variants</span>
-        <span className="text-[10px] text-text-muted font-normal normal-case">experimental</span>
+        <span className="flex-1 text-left">{t('communityMusic.title')}</span>
+        <span className="text-[10px] text-text-muted font-normal normal-case">{t('communityMusic.experimental')}</span>
       </button>
       {open && (
         <div className="mt-3 space-y-2">
           <p className="text-[10px] text-text-muted leading-relaxed">
-            Ports comunitarios del modelo oficial. Se muestran para comparar requisitos, pero no se pueden seleccionar hasta que exista un adaptador validado para HocusPocus.
+            {t('communityMusic.intro')}
           </p>
-          {MINIMAX_MUSIC_COMMUNITY_MODELS.map(model => (
+          {MINIMAX_MUSIC_COMMUNITY_MODELS.map(model => {
+            const requirementsText = modelRequirementsText({
+              ...model.requirements,
+              platform: model.id === 'minimax_music3_gguf' ? t('communityMusic.platformGguf') : model.requirements.platform,
+              backend: model.id === 'minimax_music3_webgpu' ? t('communityMusic.backendWebgpu') : model.requirements.backend,
+              note: noteFor(model.id) || model.requirements.note,
+            })
+            return (
             <div key={model.id} className="rounded-lg border border-border bg-bg-tertiary/40 px-2.5 py-2">
               <div className="flex items-center gap-2">
                 <span className="flex-1 min-w-0 text-[11px] text-text-primary truncate">{model.name}</span>
-                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-300">experimental</span>
+                <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-300">{t('communityMusic.experimental')}</span>
                 <a
                   href={model.sourceUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="text-[10px] text-accent-blue hover:text-accent-blue-hover"
-                  title="Abrir repositorio"
+                  title={t('communityMusic.openRepo')}
                 >
                   ↗
                 </a>
               </div>
-              <div className="mt-0.5 text-[10px] text-text-muted">{model.format}</div>
-              <div className="mt-1 text-[10px] text-text-secondary" title={modelRequirementsText(model.requirements)}>
-                {modelRequirementsText(model.requirements)}
+              <div className="mt-0.5 text-[10px] text-text-muted">{formatFor(model.id)}</div>
+              <div className="mt-1 text-[10px] text-text-secondary" title={requirementsText}>
+                {requirementsText}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -793,6 +812,7 @@ function ThemeSection() {
 }
 
 function DeveloperModeSection() {
+  const { t } = useUiTranslation('settings')
   const developerMode = useStore(s => s.developerMode)
   const setDeveloperMode = useStore(s => s.setDeveloperMode)
   return (
@@ -804,8 +824,8 @@ function DeveloperModeSection() {
         className="mt-0.5"
       />
       <span>
-        <span className="block text-xs text-text-primary">Developer mode</span>
-        <span className="block text-[10px] leading-relaxed text-text-muted">Shows internal tools such as Auditoría interna. Leave off for normal use.</span>
+        <span className="block text-xs text-text-primary">{t('developerMode.label')}</span>
+        <span className="block text-[10px] leading-relaxed text-text-muted">{t('developerMode.hint')}</span>
       </span>
     </label>
   )

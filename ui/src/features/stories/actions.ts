@@ -1,4 +1,6 @@
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
+import { scaffoldLanguage } from '../../lib/contentLanguage'
+import i18n from '../../i18n'
 import {
   boundedDuration,
   creativeCharacters,
@@ -81,16 +83,16 @@ function resolveStoryProject(
   const exactId = targetStoryId.trim()
   if (exactId) {
     const project = projects[exactId]
-    if (!project) throw new Error(`No existe la historia con ID “${exactId}” en este output folder.`)
+    if (!project) throw new Error(i18n.t('storyLab:errors.storyMissingById', { id: exactId }))
     if (targetStoryTitle && normalizeName(project.title) !== normalizeName(targetStoryTitle)) {
-      throw new Error(`La historia ${exactId} ahora se llama “${project.title}”; confirma ese destino antes de continuar.`)
+      throw new Error(i18n.t('storyLab:errors.storyRenamed', { id: exactId, title: project.title }))
     }
     return project
   }
   if (!targetStoryTitle) return current
   const matches = Object.values(projects).filter(item => normalizeName(item.title) === normalizeName(targetStoryTitle))
-  if (matches.length > 1) throw new Error(`Hay varias historias llamadas “${targetStoryTitle}”. Abre una o indica su ID exacto.`)
-  if (!matches[0]) throw new Error(`No existe la historia “${targetStoryTitle}” en este output folder.`)
+  if (matches.length > 1) throw new Error(i18n.t('storyLab:errors.duplicateStories', { title: targetStoryTitle }))
+  if (!matches[0]) throw new Error(i18n.t('storyLab:errors.storyMissingInFolder', { title: targetStoryTitle }))
   return matches[0]
 }
 
@@ -111,7 +113,7 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
-  if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de editar la canción.')
+  if (current.libraryConflicts.length) throw new Error(i18n.t('storyLab:errors.conflictBeforeEditSong'))
   const found = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
   const targetBase = found.projectType === 'music_video'
     ? applyMusicVideoDirectVideoDefaults(found)
@@ -124,7 +126,7 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
     technicalPromptLanguage: 'en',
   }))
   const languageIntent = target.languageIntent
-  if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  if (current.activeProjectOperations[target.id]) throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
   const lyricsLanguage = resolveStorySongLanguage(action.lyricsLanguage, languageIntent, target.language)
   const protectedLyrics = protectedSongLyrics(languageIntent)
   const model = resolveStoryMusicModel(
@@ -162,9 +164,9 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
     // requiring every extracted word would reject good creative lyrics.
     assertStorySongFidelity(lyrics, lyricsLanguage, semanticAnchors.slice(0, 1), protectedLyrics)
   }
-  if (!action.instrumental && !lyrics) throw new Error('El compositor no devolvió una letra vocal completa para la ficha.')
+  if (!action.instrumental && !lyrics) throw new Error(i18n.t('storyLab:errors.composerNoLyrics'))
   const existing = target.music.cues.find(item => item.kind === 'story')
-  const cueTitle = action.songTitle.trim() || existing?.title || `${target.title} · canción`
+  const cueTitle = action.songTitle.trim() || existing?.title || `${target.title} · ${i18n.t('storyLab:scaffold.songSuffix', { lng: scaffoldLanguage(target.language) })}`
   const cueId = existing?.id || storyId('music-cue')
   const project = await saveActiveStoryProjectMutation(workspace, current, target.id, source => {
     const latestTarget = source.projectType === 'music_video'
@@ -225,32 +227,40 @@ export async function configureStorySong(action: ConfigureStorySongCommand): Pro
   })
   const savedCue = project.music.cues.find(item => item.id === cueId)
     || project.music.cues.find(item => item.kind === 'story')
-  if (!savedCue) throw new Error('Story Lab guardó la ficha sin devolver el cue musical.')
+  if (!savedCue) throw new Error(i18n.t('storyLab:errors.songSheetMissingCue'))
+  const songMode = savedCue.instrumental
+    ? i18n.t('storyLab:replies.modeInstrumental')
+    : i18n.t('storyLab:replies.modeVocal')
   return storyResult(
     workspace,
     project,
     'music',
-    `He rellenado y guardado la canción “${savedCue.title}” en Story Lab → Music con ${project.music.model}, modo ${savedCue.instrumental ? 'instrumental' : 'vocal'} y la letra editable en ${savedCue.lyricsLanguage}.`,
+    i18n.t('storyLab:replies.songConfigured', {
+      title: savedCue.title,
+      model: project.music.model,
+      mode: songMode,
+      language: savedCue.lyricsLanguage,
+    }),
     { projectId: project.id, cueId: savedCue.id, cueTitle: savedCue.title },
   )
 }
 
 export async function generateStorySong(action: GenerateStorySongCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Generar la canción requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmGenerateSong'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore }, { isLocalMusicModel }, { generateStoryCueSong }] = await Promise.all([
     import('./store'), import('./musicModel'), import('./storySongGeneration'),
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
-  if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de generar la canción.')
+  if (current.libraryConflicts.length) throw new Error(i18n.t('storyLab:errors.conflictBeforeGenerateSong'))
   const target = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
   const exactCue = action.cueId
     ? target.music.cues.find(item => item.id === action.cueId)
     : action.cueTitle
       ? target.music.cues.find(item => normalizeName(item.title) === normalizeName(action.cueTitle))
       : undefined
-  if (action.cueId && !exactCue) throw new Error(`No existe el cue con ID “${action.cueId}” en “${target.title}”.`)
+  if (action.cueId && !exactCue) throw new Error(i18n.t('storyLab:errors.cueMissingById', { cueId: action.cueId, title: target.title }))
   // Once a cue title is supplied it is an explicit identity, not a hint. A
   // stale title must fail instead of silently selecting the only cue. The
   // compound Wizard runtime supplies cueId after configure_story_song, while
@@ -260,11 +270,14 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       ? (target.music.cues.length === 1 ? target.music.cues[0] : undefined)
         || target.music.cues.find(item => item.kind === 'story')
       : undefined)
-  if (!cue) throw new Error(`No existe la canción “${action.cueTitle || 'principal'}” en “${target.title}”.`)
-  if (!isLocalMusicModel(target.music.model)) {
-    throw new Error('Este contrato automatizado necesita un modelo local: ACE-Step 1.5 XL o MiniMax Music 3 local.')
+  if (!cue) {
+    const cueName = action.cueTitle || i18n.t('storyLab:errors.primaryCue')
+    throw new Error(i18n.t('storyLab:errors.songMissingByName', { name: cueName, title: target.title }))
   }
-  if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  if (!isLocalMusicModel(target.music.model)) {
+    throw new Error(i18n.t('storyLab:errors.needsLocalMusicModel'))
+  }
+  if (current.activeProjectOperations[target.id]) throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
   useStoryStore.getState().beginProjectOperation(target.id)
   try {
     const generated = await generateStoryCueSong({
@@ -275,12 +288,17 @@ export async function generateStorySong(action: GenerateStorySongCommand): Promi
       capability: 'generate_story_song',
     })
     const savedCue = generated.project.music.cues.find(item => item.id === cue.id)
-    if (!savedCue) throw new Error('Story Lab guardó la canción sin devolver el cue generado.')
+    if (!savedCue) throw new Error(i18n.t('storyLab:errors.songSavedWithoutCue'))
+    const engine = target.music.model === 'minimax_music3' ? 'MiniMax Music 3 local' : 'ACE-Step'
     return storyResult(
       workspace,
       generated.project,
       'music',
-      `${target.music.model === 'minimax_music3' ? 'MiniMax Music 3 local' : 'ACE-Step'} ha generado “${savedCue.title}” y la versión v${generated.version} ha quedado seleccionada en Story Lab → Music.`,
+      i18n.t('storyLab:replies.songGenerated', {
+        engine,
+        title: savedCue.title,
+        version: generated.version,
+      }),
       {
         projectId: generated.project.id,
         cueId: savedCue.id,
@@ -308,7 +326,7 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente entre la copia local y la del workspace; resuélvelo antes de crear otra historia.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeCreate'))
   }
 
   const sameTitle = Object.values(current.projects).find(project => (
@@ -324,7 +342,7 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
       workspace,
       sameTitle,
       'overview',
-      `El videoclip “${sameTitle.title}” ya existía; lo he abierto en Story Lab → Overview.`,
+      i18n.t('storyLab:replies.musicVideoAlreadyOpen', { title: sameTitle.title }),
     )
   }
   if (duplicate && !(action.projectType === 'music_video' && duplicate.projectType !== 'music_video')) {
@@ -333,7 +351,7 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
       workspace,
       duplicate,
       'overview',
-      `La historia “${duplicate.title}” ya existía; la he abierto en Story Lab → Overview.`,
+      i18n.t('storyLab:replies.storyAlreadyOpen', { title: duplicate.title }),
     )
   }
 
@@ -344,41 +362,55 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
     action.visualStyle,
     action.creativeBrief,
   )
-  const characters = creativeCharacters(action.characters).map((character, index) => ({
+  const authoredLanguage = languageIntent.contentLanguage || action.language || base.language
+  const authoredSpoken = languageIntent.spokenLanguage || action.language || base.spokenLanguage
+  const lng = scaffoldLanguage(authoredLanguage)
+  const roleLead = i18n.t('storyLab:scaffold.roleLead', { lng })
+  const roleSupport = i18n.t('storyLab:scaffold.roleSupport', { lng })
+  const characters = creativeCharacters(action.characters, authoredLanguage).map((character, index) => ({
     id: storyId('character'),
-    name: character.name || `Personaje ${index + 1}`,
-    role: character.role || (index ? 'Secundario' : 'Protagonista'),
+    name: character.name || i18n.t('storyLab:scaffold.characterName', { lng, index: index + 1 }),
+    role: character.role || (index ? roleSupport : roleLead),
     age: '', pronouns: '',
     personality: character.personality,
     desire: character.desire,
-    need: `Aprender algo que contradice su deseo inmediato: ${character.desire || 'resolver el conflicto'}.`,
+    need: i18n.t('storyLab:scaffold.need', {
+      lng,
+      desire: character.desire || i18n.t('storyLab:scaffold.needDesire', { lng }),
+    }),
     flaw: character.flaw,
     conflict: action.premise,
-    arc: action.ending || 'La experiencia cambia su manera de afrontar el conflicto.',
+    arc: action.ending || i18n.t('storyLab:scaffold.arc', { lng }),
     voice: character.voice,
     appearance: character.appearance,
-    wardrobe: 'Vestuario coherente y reconocible durante toda la historia.',
+    wardrobe: i18n.t('storyLab:scaffold.wardrobe', { lng }),
     visualPrompt: `${character.appearance}. ${resolvedVisualStyle}`.trim(),
     negativePrompt: 'inconsistent identity, duplicate character, unreadable face',
     referenceAssetIds: [], approval: 'draft' as const,
   }))
-  const locations = creativeLocations(action.locations).map((location, index) => ({
+  const locations = creativeLocations(action.locations, authoredLanguage).map((location, index) => ({
     id: storyId('location'),
-    name: location.name || `Localización ${index + 1}`,
+    name: location.name || i18n.t('storyLab:scaffold.locationName', { lng, index: index + 1 }),
     purpose: location.purpose,
     description: location.description,
     visualPrompt: `${location.description}. ${resolvedVisualStyle}`.trim(),
     negativePrompt: 'inconsistent layout, unreadable signage, visual clutter',
     referenceAssetIds: [],
   }))
-  const beats = outlineBeats(action.outlineBeats, action.premise, action.ending).map((beat, index, all) => ({
+  const beats = outlineBeats(action.outlineBeats, action.premise, action.ending, authoredLanguage).map((beat, index, all) => ({
     id: storyId('beat'),
-    stage: index === 0 ? 'Inicio' : index === all.length - 1 ? 'Resolución' : `Desarrollo ${index}`,
+    stage: index === 0
+      ? i18n.t('storyLab:scaffold.stageOpening', { lng })
+      : index === all.length - 1
+        ? i18n.t('storyLab:scaffold.stageResolution', { lng })
+        : i18n.t('storyLab:scaffold.stageDevelopment', { lng, index }),
     title: `Beat ${index + 1}`,
     summary: beat,
-    goal: index === all.length - 1 ? 'Cerrar el arco y mostrar la consecuencia.' : 'Hacer avanzar el objetivo del protagonista.',
-    conflict: index === 0 ? action.premise : 'La situación se complica y obliga a tomar una decisión.',
-    turn: index === all.length - 1 ? action.ending || beat : 'La nueva información cambia el rumbo de la historia.',
+    goal: index === all.length - 1
+      ? i18n.t('storyLab:scaffold.beatGoalClose', { lng })
+      : i18n.t('storyLab:scaffold.beatGoalAdvance', { lng }),
+    conflict: index === 0 ? action.premise : i18n.t('storyLab:scaffold.beatConflict', { lng }),
+    turn: index === all.length - 1 ? action.ending || beat : i18n.t('storyLab:scaffold.beatTurn', { lng }),
   }))
   const reuseId = action.projectType === 'music_video' && sameTitle && sameTitle.projectType !== 'music_video'
     ? sameTitle.id
@@ -397,13 +429,13 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
       action: action.ending || action.premise,
       durationSeconds: boundedDuration(action.durationSeconds, 90),
     },
-    language: languageIntent.contentLanguage || action.language || 'Español',
-    spokenLanguage: languageIntent.spokenLanguage || action.language || 'Español de España',
+    language: authoredLanguage,
+    spokenLanguage: authoredSpoken,
     languageIntent,
-    genre: action.genre || 'Narrativa',
-    tone: action.tone || 'Cinematográfico',
-    visualStyle: resolvedVisualStyle || 'Dirección visual cinematográfica coherente, personajes legibles y continuidad entre escenas.',
-    characterVisualStyle: resolvedVisualStyle || 'Identidades consistentes, siluetas reconocibles y expresiones claras.',
+    genre: action.genre || i18n.t('storyLab:scaffold.genre', { lng }),
+    tone: action.tone || i18n.t('storyLab:scaffold.tone', { lng }),
+    visualStyle: resolvedVisualStyle || i18n.t('storyLab:scaffold.visualStyle', { lng }),
+    characterVisualStyle: resolvedVisualStyle || i18n.t('storyLab:scaffold.characterVisualStyle', { lng }),
     premise: action.premise,
     logline: action.logline,
     synopsis: action.synopsis || action.premise,
@@ -412,12 +444,12 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
     world: {
       ...base.world,
       summary: action.worldSummary || action.synopsis || action.premise,
-      period: 'Época indicada por la historia.',
+      period: i18n.t('storyLab:scaffold.period', { lng }),
       geography: locations.map(location => location.name).join(', '),
-      society: 'Las relaciones y normas sociales sostienen el conflicto dramático.',
-      technology: 'Coherente con la época y el universo narrativo.',
-      rules: ['Mantener la continuidad de personajes, espacios y consecuencias entre beats.'],
-      visualLanguage: resolvedVisualStyle || 'Lenguaje cinematográfico claro y consistente.',
+      society: i18n.t('storyLab:scaffold.society', { lng }),
+      technology: i18n.t('storyLab:scaffold.technology', { lng }),
+      rules: [i18n.t('storyLab:scaffold.ruleContinuity', { lng })],
+      visualLanguage: resolvedVisualStyle || i18n.t('storyLab:scaffold.visualLanguage', { lng }),
       visualPrompt: resolvedVisualStyle,
       negativePrompt: 'continuity errors, inconsistent characters, unreadable composition',
       locations,
@@ -427,9 +459,9 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
       id: storyId('relationship'),
       fromCharacterId: characters[0].id,
       toCharacterId: characters[1].id,
-      label: 'Conflicto principal',
-      dynamic: 'Sus objetivos chocan y hacen avanzar la historia.',
-      evolution: 'La resolución modifica su relación de forma visible.',
+      label: i18n.t('storyLab:scaffold.relationshipLabel', { lng }),
+      dynamic: i18n.t('storyLab:scaffold.relationshipDynamic', { lng }),
+      evolution: i18n.t('storyLab:scaffold.relationshipEvolution', { lng }),
     }] : [],
     beats,
     updatedAt: new Date().toISOString(),
@@ -463,7 +495,7 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
     workspace,
     project,
     'overview',
-    `He creado y guardado “${project.title}” con ${characters.length} personajes, ${locations.length} localizaciones y ${beats.length} beats; está abierto en Story Lab → Overview.`,
+    i18n.t('storyLab:replies.storyCreated', { title: project.title, characters: characters.length, locations: locations.length, beats: beats.length }),
   )
 }
 
@@ -477,16 +509,16 @@ export async function updateFilledStory(action: UpdateStoryCommand): Promise<Com
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente entre la copia local y la del workspace; resuélvelo antes de editar la historia.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeEditStory'))
   }
   const target = action.targetStoryTitle
     ? Object.values(current.projects).find(project => normalizeName(project.title) === normalizeName(action.targetStoryTitle))
     : current.project
   if (!target) {
-    throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+    throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   }
   if (current.activeProjectOperations[target.id]) {
-    throw new Error(`La historia “${target.title}” tiene una operación activa; espera a que termine antes de modificar su canon.`)
+    throw new Error(i18n.t('storyLab:errors.storyActiveOperationBeforeCanon', { title: target.title }))
   }
 
   const candidate = structuredClone(target)
@@ -507,13 +539,14 @@ export async function updateFilledStory(action: UpdateStoryCommand): Promise<Com
     Object.assign(candidate, applyStoryLanguageIntent(candidate, action.languageIntent))
   }
 
+  const lng = scaffoldLanguage(candidate.language)
   action.characters.forEach(character => {
     const index = candidate.characters.findIndex(item => normalizeName(item.name) === normalizeName(character.name))
     const existing = index >= 0 ? candidate.characters[index] : null
     const patched = {
       id: existing?.id || storyId('character'),
       name: character.name,
-      role: character.role || existing?.role || 'Personaje',
+      role: character.role || existing?.role || i18n.t('storyLab:scaffold.roleUnspecified', { lng }),
       age: existing?.age || '',
       pronouns: existing?.pronouns || '',
       personality: character.personality || existing?.personality || '',
@@ -558,18 +591,24 @@ export async function updateFilledStory(action: UpdateStoryCommand): Promise<Com
   if (action.outlineBeats.length) {
     candidate.beats = action.outlineBeats.map((summary, index, all) => ({
       id: storyId('beat'),
-      stage: index === 0 ? 'Inicio' : index === all.length - 1 ? 'Resolución' : `Desarrollo ${index}`,
+      stage: index === 0
+        ? i18n.t('storyLab:scaffold.stageOpening', { lng })
+        : index === all.length - 1
+          ? i18n.t('storyLab:scaffold.stageResolution', { lng })
+          : i18n.t('storyLab:scaffold.stageDevelopment', { index, lng }),
       title: `Beat ${index + 1}`,
       summary,
-      goal: index === all.length - 1 ? 'Cerrar el arco y mostrar la consecuencia.' : 'Hacer avanzar el objetivo dramático.',
-      conflict: index === 0 ? candidate.premise : 'Una complicación obliga a cambiar de estrategia.',
-      turn: index === all.length - 1 ? candidate.ending || summary : 'La consecuencia cambia el rumbo de la historia.',
+      goal: index === all.length - 1
+        ? i18n.t('storyLab:scaffold.beatGoalClose', { lng })
+        : i18n.t('storyLab:scaffold.beatGoalAdvance', { lng }),
+      conflict: index === 0 ? candidate.premise : i18n.t('storyLab:scaffold.beatConflict', { lng }),
+      turn: index === all.length - 1 ? candidate.ending || summary : i18n.t('storyLab:scaffold.beatTurn', { lng }),
     }))
   }
 
   const normalized = normalizeStoryProject(candidate)
   const sections = changedSections(target, normalized)
-  if (!sections.length) throw new Error(`La petición no cambia ningún campo de “${target.title}”.`)
+  if (!sections.length) throw new Error(i18n.t('storyLab:errors.requestChangesNothing', { title: target.title }))
   const approvals = { ...normalized.approvals }
   const sectionVersions = { ...target.sectionVersions }
   sections.forEach(section => {
@@ -612,7 +651,7 @@ export async function updateFilledStory(action: UpdateStoryCommand): Promise<Com
     workspace,
     project,
     section,
-    `He actualizado y guardado “${project.title}”: ${sections.join(', ')}. Está abierto en Story Lab → ${section}.`,
+    i18n.t('storyLab:replies.storyUpdated', { title: project.title, sections: sections.join(', '), section }),
   )
 }
 
@@ -620,7 +659,7 @@ export async function generateStorySectionDraft(
   action: GenerateStorySectionCommand,
   onStep?: (message: string) => void,
 ): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Generar una propuesta de Story Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmGenerateProposal'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, { resolveStoryWritingProvider }, api] = await Promise.all([
     import('./store'),
@@ -630,20 +669,20 @@ export async function generateStorySectionDraft(
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de generar otra propuesta.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeProposal'))
   }
   const storedProject = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!storedProject) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!storedProject) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   if (current.activeProjectOperations[storedProject.id]) {
-    throw new Error(`La historia “${storedProject.title}” ya tiene una operación activa.`)
+    throw new Error(i18n.t('storyLab:errors.storyAlreadyActiveOperation', { title: storedProject.title }))
   }
   const premise = storedProject.premise.trim()
     || storedProject.creativeBrief.generalIdea.trim()
     || storedProject.logline.trim()
     || storedProject.synopsis.trim()
-  if (!premise) throw new Error(`“${storedProject.title}” necesita una premisa o briefing antes de invocar al escritor.`)
+  if (!premise) throw new Error(i18n.t('storyLab:errors.needsPremiseOrBrief', { title: storedProject.title }))
   let project = storedProject
   if (action.languageIntent) {
     const intended = mergeLanguageIntent(storedProject.languageIntent, action.languageIntent, {
@@ -725,7 +764,7 @@ export async function generateStorySectionDraft(
       workspace,
       project,
       visibleSection,
-      `La propuesta de ${action.scope} para “${project.title}” está lista en Story Lab. Revísala y elige qué cambios aplicar; todavía no he modificado ni aprobado el canon.`,
+      i18n.t('storyLab:replies.proposalReady', { scope: action.scope, title: project.title }),
       { notifyDraft: true },
     )
   } finally {
@@ -734,7 +773,7 @@ export async function generateStorySectionDraft(
 }
 
 export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Aplicar una propuesta de Story Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmApplyProposal'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, { changedSections, normalizeStoryCharacter }, api] = await Promise.all([
     import('./store'),
@@ -744,14 +783,14 @@ export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de aplicar la propuesta.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeApply'))
   }
   const target = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!target) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   if (current.activeProjectOperations[target.id]) {
-    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+    throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
   }
   const resultKey = storyResultKey(workspace, target.id)
   const jobKey = storyJobKey(workspace, target.id)
@@ -759,10 +798,10 @@ export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand
   try {
     saved = JSON.parse(window.localStorage.getItem(resultKey) || 'null')
   } catch {
-    throw new Error(`La propuesta guardada de “${target.title}” está dañada; vuelve a generarla.`)
+    throw new Error(i18n.t('storyLab:errors.proposalDamaged', { title: target.title }))
   }
   if (!saved?.result || typeof saved.result !== 'object' || Array.isArray(saved.result)) {
-    throw new Error(`No hay una propuesta terminada para “${target.title}”. Genera una sección y revísala primero.`)
+    throw new Error(i18n.t('storyLab:errors.proposalMissing', { title: target.title }))
   }
   const result = saved.result as Record<string, unknown>
   const candidate = structuredClone(target)
@@ -806,7 +845,9 @@ export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand
       candidate.world.locations = generatedWorld.locations.map((value, index) => {
         const raw = value && typeof value === 'object' && !Array.isArray(value)
           ? value as Record<string, unknown> : {}
-        const name = typeof raw.name === 'string' ? raw.name : `Localización ${index + 1}`
+        const name = typeof raw.name === 'string'
+          ? raw.name
+          : i18n.t('storyLab:scaffold.locationName', { index: index + 1, lng: scaffoldLanguage(candidate.language) })
         const existing = target.world.locations.find(item => (
           item.id === raw.id || normalizeName(item.name) === normalizeName(name)
         ))
@@ -871,7 +912,7 @@ export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand
 
   const normalized = normalizeStoryProject(candidate)
   const sections = changedSections(target, normalized)
-  if (!sections.length) throw new Error(`La propuesta no cambia ningún campo de “${target.title}”.`)
+  if (!sections.length) throw new Error(i18n.t('storyLab:errors.proposalChangesNothing', { title: target.title }))
   const sectionVersions = { ...target.sectionVersions }
   const approvals = { ...normalized.approvals }
   sections.forEach(section => {
@@ -913,13 +954,13 @@ export async function applyStoredStoryProposal(action: ApplyStoryProposalCommand
     workspace,
     project,
     visibleSection,
-    `He aplicado y guardado la propuesta de “${project.title}” en: ${sections.join(', ')}. Sus aprobaciones afectadas vuelven a borrador.`,
+    i18n.t('storyLab:replies.proposalApplied', { title: project.title, sections: sections.join(', ') }),
     { notifyDraft: true },
   )
 }
 
 export async function approveStorySection(action: ApproveStorySectionCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Aprobar una sección de Story Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmApproveSection'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, { changedSections }, api] = await Promise.all([
     import('./store'),
@@ -929,39 +970,40 @@ export async function approveStorySection(action: ApproveStorySectionCommand): P
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de aprobar canon.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeApproveCanon'))
   }
   const target = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!target) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   if (current.activeProjectOperations[target.id]) {
-    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+    throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
   }
 
   if (action.section === 'overview' && (!target.premise.trim() || !target.logline.trim() || !target.synopsis.trim())) {
-    throw new Error('Overview necesita premise, logline y synopsis antes de aprobarse.')
+    throw new Error(i18n.t('storyLab:errors.overviewNeedsFields'))
   }
   if (action.section === 'world' && (!target.world.summary.trim() || !target.world.visualLanguage.trim())) {
-    throw new Error('World necesita un resumen y un lenguaje visual antes de aprobarse.')
+    throw new Error(i18n.t('storyLab:errors.worldNeedsFields'))
   }
   const { storyRecipeRequiresVisualIdentities, storyVisualGuidanceMode } = await import('./storyVisualGuidance')
   const requiresVisualIdentities = storyRecipeRequiresVisualIdentities(storyVisualGuidanceMode(target))
   if (action.section === 'characters') {
-    if (!target.characters.length) throw new Error('Añade al menos un personaje antes de aprobar el reparto.')
+    if (!target.characters.length) throw new Error(i18n.t('storyLab:errors.addCharacterBeforeCast'))
     if (requiresVisualIdentities) {
       const incomplete = target.characters.flatMap(character => {
         const reasons = [
-          character.approval !== 'approved' ? 'sigue en borrador' : '',
-          !character.primaryReferenceAssetId ? 'no tiene identidad primaria' : '',
+          character.approval !== 'approved' ? i18n.t('storyLab:errors.reasonStillDraft') : '',
+          !character.primaryReferenceAssetId ? i18n.t('storyLab:errors.reasonNoPrimary') : '',
           character.primaryReferenceAssetId
             && target.assets[character.primaryReferenceAssetId]?.approval !== 'approved'
-            ? 'su identidad primaria falta o no está aprobada' : '',
+            ? i18n.t('storyLab:errors.reasonUnapprovedPrimary') : '',
         ].filter(Boolean)
-        return reasons.length ? [`${character.name || 'Personaje sin nombre'} (${reasons.join(', ')})`] : []
+        const name = character.name || i18n.t('storyLab:errors.unnamedCharacter')
+        return reasons.length ? [`${name} (${reasons.join(', ')})`] : []
       })
       if (incomplete.length) {
-        throw new Error(`No se puede aprobar Characters: ${incomplete.join(' · ')}.`)
+        throw new Error(i18n.t('storyLab:errors.cannotApproveCharacters', { details: incomplete.join(' · ') }))
       }
     }
   }
@@ -971,13 +1013,13 @@ export async function approveStorySection(action: ApproveStorySectionCommand): P
     || relationship.fromCharacterId === relationship.toCharacterId
     || !relationship.dynamic.trim()
   ))) {
-    throw new Error('Cada relación necesita dos personajes distintos y una dinámica actual.')
+    throw new Error(i18n.t('storyLab:errors.relationshipsNeedDynamic'))
   }
   if (action.section === 'structure' && (
     target.beats.length < 3
     || target.beats.some(beat => !beat.summary.trim() || !beat.conflict.trim() || !beat.turn.trim())
   )) {
-    throw new Error('Structure necesita al menos tres beats causales con acción, conflicto y consecuencia.')
+    throw new Error(i18n.t('storyLab:errors.structureNeedsBeats'))
   }
 
   if (target.approvals[action.section]?.version === target.sectionVersions[action.section]) {
@@ -985,7 +1027,7 @@ export async function approveStorySection(action: ApproveStorySectionCommand): P
       workspace,
       target,
       action.section,
-      `Story Lab → ${action.section} ya estaba aprobado en la versión actual de “${target.title}”.`,
+      i18n.t('storyLab:replies.sectionAlreadyApproved', { section: action.section, title: target.title }),
     )
   }
   const candidate = structuredClone(target)
@@ -1031,12 +1073,12 @@ export async function approveStorySection(action: ApproveStorySectionCommand): P
     workspace,
     project,
     action.section,
-    `He validado, aprobado y guardado Story Lab → ${action.section} para “${project.title}”.`,
+    i18n.t('storyLab:replies.sectionApproved', { section: action.section, title: project.title }),
   )
 }
 
 export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Aprobar referencias visuales requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmApproveVisuals'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, { changedSections }, api] = await Promise.all([
     import('./store'),
@@ -1046,14 +1088,14 @@ export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): P
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de aprobar referencias visuales.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeApproveVisuals'))
   }
   const target = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!target) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   if (current.activeProjectOperations[target.id]) {
-    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+    throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
   }
 
   const candidate = structuredClone(target)
@@ -1061,25 +1103,25 @@ export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): P
   const labels: string[] = []
   for (const selection of action.selections) {
     const assetMatches = Object.values(candidate.assets).filter(asset => normalizeName(asset.name) === normalizeName(selection.assetName))
-    if (!assetMatches.length) throw new Error(`No existe el asset visual “${selection.assetName}” en “${target.title}”.`)
-    if (assetMatches.length > 1) throw new Error(`Hay varios assets llamados “${selection.assetName}”; renómbralos para elegir uno sin ambigüedad.`)
+    if (!assetMatches.length) throw new Error(i18n.t('storyLab:errors.assetMissing', { name: selection.assetName, title: target.title }))
+    if (assetMatches.length > 1) throw new Error(i18n.t('storyLab:errors.duplicateAssets', { name: selection.assetName }))
     const asset = assetMatches[0]
     if (asset.approval !== 'approved') { asset.approval = 'approved'; changed = true }
 
     if (selection.targetKind === 'world') {
-      if (selection.primary) throw new Error('primary sólo puede usarse con una referencia de personaje.')
+      if (selection.primary) throw new Error(i18n.t('storyLab:errors.primaryOnlyForCharacter'))
       if (!candidate.world.referenceAssetIds.includes(asset.id)) {
         candidate.world.referenceAssetIds.push(asset.id); changed = true
       }
-      labels.push(`${asset.name} → mundo`)
+      labels.push(`${asset.name} → ${i18n.t('storyLab:replies.worldLabel')}`)
       continue
     }
 
     if (selection.targetKind === 'location') {
-      if (selection.primary) throw new Error('primary sólo puede usarse con una referencia de personaje.')
+      if (selection.primary) throw new Error(i18n.t('storyLab:errors.primaryOnlyForCharacter'))
       const matches = candidate.world.locations.filter(location => normalizeName(location.name) === normalizeName(selection.targetName))
-      if (!matches.length) throw new Error(`No existe la localización “${selection.targetName}” en “${target.title}”.`)
-      if (matches.length > 1) throw new Error(`Hay varias localizaciones llamadas “${selection.targetName}”; renómbralas antes de elegir referencias.`)
+      if (!matches.length) throw new Error(i18n.t('storyLab:errors.locationMissing', { name: selection.targetName, title: target.title }))
+      if (matches.length > 1) throw new Error(i18n.t('storyLab:errors.duplicateLocations', { name: selection.targetName }))
       if (!matches[0].referenceAssetIds.includes(asset.id)) {
         matches[0].referenceAssetIds.push(asset.id); changed = true
       }
@@ -1088,8 +1130,8 @@ export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): P
     }
 
     const matches = candidate.characters.filter(character => normalizeName(character.name) === normalizeName(selection.targetName))
-    if (!matches.length) throw new Error(`No existe el personaje “${selection.targetName}” en “${target.title}”.`)
-    if (matches.length > 1) throw new Error(`Hay varios personajes llamados “${selection.targetName}”; renómbralos antes de elegir su identidad.`)
+    if (!matches.length) throw new Error(i18n.t('storyLab:errors.characterMissing', { name: selection.targetName, title: target.title }))
+    if (matches.length > 1) throw new Error(i18n.t('storyLab:errors.duplicateCharacters', { name: selection.targetName }))
     const character = matches[0]
     if (!character.referenceAssetIds.includes(asset.id)) {
       character.referenceAssetIds.push(asset.id); changed = true
@@ -1097,7 +1139,10 @@ export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): P
     if (selection.primary || !character.primaryReferenceAssetId) {
       if (character.primaryReferenceAssetId !== asset.id) { character.primaryReferenceAssetId = asset.id; changed = true }
     }
-    labels.push(`${asset.name} → ${character.name}${character.primaryReferenceAssetId === asset.id ? ' (primaria)' : ''}`)
+    const primarySuffix = character.primaryReferenceAssetId === asset.id
+      ? i18n.t('storyLab:replies.primarySuffix')
+      : ''
+    labels.push(`${asset.name} → ${character.name}${primarySuffix}`)
   }
 
   if (!changed) {
@@ -1106,7 +1151,7 @@ export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): P
       workspace,
       target,
       'assets',
-      `Las referencias solicitadas de “${target.title}” ya estaban vinculadas y aprobadas; he abierto Story Lab → Assets.`,
+      i18n.t('storyLab:replies.visualsAlreadyLinked', { title: target.title }),
     )
   }
 
@@ -1147,32 +1192,32 @@ export async function approveStoryVisuals(action: ApproveStoryVisualsCommand): P
     workspace,
     project,
     'assets',
-    `He vinculado y aprobado ${labels.length} referencia${labels.length === 1 ? '' : 's'} en “${project.title}”: ${labels.join(' · ')}.`,
+    i18n.t('storyLab:replies.referencesLinked', { count: labels.length, title: project.title, labels: labels.join(' · ') }),
   )
 }
 
 export async function generateStoryVisuals(action: GenerateStoryVisualsCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Generar referencias visuales de Story Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmGenerateVisuals'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const { useStoryStore } = await import('./store')
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de generar imágenes.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeImages'))
   }
   const target = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!target) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!target) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   if (current.activeProjectOperations[target.id]) {
-    throw new Error(`La historia “${target.title}” ya tiene una operación visual activa.`)
+    throw new Error(i18n.t('storyLab:errors.storyVisualOperationActive', { title: target.title }))
   }
   useStoryStore.setState({ project: target, dirty: false })
   return storyResult(
     workspace,
     target,
     'assets',
-    `Generaré las referencias visuales de “${target.title}”.`,
+    i18n.t('storyLab:replies.willGenerateVisuals', { title: target.title }),
     {
       visualRequest: {
         projectId: target.id,
@@ -1184,7 +1229,7 @@ export async function generateStoryVisuals(action: GenerateStoryVisualsCommand):
 }
 
 export async function stageStoryComic(action: StageStoryComicCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Preparar una adaptación de cómic requiere confirm=true porque sustituye el borrador actual de Comics.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmStageComic'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, { useComicStore }, api] = await Promise.all([
     import('./store'),
@@ -1195,20 +1240,20 @@ export async function stageStoryComic(action: StageStoryComicCommand): Promise<C
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
   if (current.libraryConflicts.length) {
-    throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar una producción.')
+    throw new Error(i18n.t('storyLab:errors.conflictBeforeProduction'))
   }
   const storedTarget = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!storedTarget) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!storedTarget) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   const target = action.languageIntent
     ? normalizeStoryProject(applyStoryLanguageIntent(storedTarget, action.languageIntent))
     : storedTarget
   if (current.activeProjectOperations[target.id]) {
-    throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+    throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
   }
   if (!target.premise.trim() && !target.logline.trim() && !target.synopsis.trim()) {
-    throw new Error(`“${target.title}” necesita una premisa, logline o synopsis antes de adaptarse.`)
+    throw new Error(i18n.t('storyLab:errors.needsPremiseLoglineSynopsis', { title: target.title }))
   }
 
   useStoryStore.getState().beginProjectOperation(target.id)
@@ -1275,7 +1320,7 @@ export async function stageStoryComic(action: StageStoryComicCommand): Promise<C
       workspace,
       target,
       'overview',
-      `He preparado “${comic.title}” como capítulo editable de ${action.pageCount} páginas × ${action.panelsPerPage} viñetas en Comic Director. No he generado imágenes.`,
+      i18n.t('storyLab:replies.comicStaged', { title: comic.title, pages: action.pageCount, panels: action.panelsPerPage }),
       { destination: 'comics', comicId: comic.id, comicTitle: comic.title },
     )
   } finally {
@@ -1284,23 +1329,23 @@ export async function stageStoryComic(action: StageStoryComicCommand): Promise<C
 }
 
 export async function stageStoryVideo(action: StageStoryVideoCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Preparar una producción de vídeo requiere confirm=true porque sustituye el borrador actual de Director.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmStageVideo'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, api] = await Promise.all([
     import('./store'), import('./adaptations'), import('../../api/client'),
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
-  if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar una producción.')
+  if (current.libraryConflicts.length) throw new Error(i18n.t('storyLab:errors.conflictBeforeProduction'))
   const storedTarget = action.targetStoryTitle
     ? Object.values(current.projects).find(item => normalizeName(item.title) === normalizeName(action.targetStoryTitle))
     : current.project
-  if (!storedTarget) throw new Error(`No existe la historia “${action.targetStoryTitle}” en este workspace.`)
+  if (!storedTarget) throw new Error(i18n.t('storyLab:errors.storyMissingInWorkspace', { title: action.targetStoryTitle }))
   const target = action.languageIntent
     ? normalizeStoryProject(applyStoryLanguageIntent(storedTarget, action.languageIntent))
     : storedTarget
-  if (current.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
-  if (!target.synopsis.trim() || !target.characters.length) throw new Error('La producción necesita una sinopsis y al menos un personaje.')
+  if (current.activeProjectOperations[target.id]) throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
+  if (!target.synopsis.trim() || !target.characters.length) throw new Error(i18n.t('storyLab:errors.productionNeedsSynopsis'))
   const { assertStoryVisualRecipeReady } = await import('./storyVisualGuidance')
   assertStoryVisualRecipeReady(target)
   const duration = boundedDuration(
@@ -1401,7 +1446,7 @@ export async function stageStoryVideo(action: StageStoryVideoCommand): Promise<C
       workspace,
       target,
       'overview',
-      `He preparado “${title}” (${duration}s) en Short Film Director con el canon y las referencias aprobadas. No he iniciado ninguna generación.`,
+      i18n.t('storyLab:replies.videoStaged', { title, duration }),
       { destination: 'director', productionId: production.id },
     )
   } finally {
@@ -1410,7 +1455,7 @@ export async function stageStoryVideo(action: StageStoryVideoCommand): Promise<C
 }
 
 export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Preparar un videoclip requiere confirm=true porque sustituye el borrador actual de Director.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmStageMusicVideo'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject, storyId }, adaptations, api, selection] = await Promise.all([
     import('./store'),
@@ -1420,12 +1465,12 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const current = useStoryStore.getState()
-  if (current.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de preparar el videoclip.')
+  if (current.libraryConflicts.length) throw new Error(i18n.t('storyLab:errors.conflictBeforeMusicVideo'))
   const stored = resolveStoryProject(current.projects, current.project, action.targetStoryId, action.targetStoryTitle)
   const found = action.languageIntent
     ? normalizeStoryProject(applyStoryLanguageIntent(stored, action.languageIntent))
     : stored
-  if (current.activeProjectOperations[found.id]) throw new Error(`La historia “${found.title}” tiene una operación activa.`)
+  if (current.activeProjectOperations[found.id]) throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: found.title }))
   const { cue, candidate } = selection.resolveStoryMusicSelection(
     found,
     action.songName,
@@ -1459,7 +1504,7 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       const latestCue = latestTarget.music.cues.find(item => item.id === resolvedCue.id)
       const latestCandidate = latestCue?.candidates.find(item => item.id === candidate.id)
       if (!latestCue || !latestCandidate) {
-        throw new Error('La canción seleccionada cambió mientras se preparaba el videoclip; vuelve a intentarlo con la versión visible en Story Lab.')
+        throw new Error(i18n.t('storyLab:errors.songChangedWhileStaging'))
       }
       const latestResolvedCue = selection.effectiveStoryMusicCue(
         latestTarget, latestCue, latestCandidate, action.cueId,
@@ -1488,7 +1533,11 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       await director.selectDirectorVideoModel(target.videoOverride.model)
       const selected = useStore.getState().selectedModelPerMode.video
       if (selected !== target.videoOverride.model) {
-        throw new Error(`Director no aplicó el modelo de vídeo ${target.videoOverride.model}; quedó ${selected || 'vacío'}.`)
+        const selectedModel = selected || i18n.t('storyLab:errors.emptyModel')
+        throw new Error(i18n.t('storyLab:errors.videoModelNotApplied', {
+          model: target.videoOverride.model,
+          selected: selectedModel,
+        }))
       }
     }
     director.setDirectorResolution(target.videoOverride.resolution)
@@ -1546,9 +1595,10 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       } catch { /* The written world bible remains available in the visual brief. */ }
     }
 
+    const songName = candidate.displayName || candidate.title || candidate.name
     const audioSource = api.getPlayableFileUrl(candidate.source, candidate.name, workspace)
     const audioResponse = await fetch(audioSource)
-    if (!audioResponse.ok) throw new Error(`No pude leer el audio de “${candidate.displayName || candidate.title || candidate.name}”.`)
+    if (!audioResponse.ok) throw new Error(i18n.t('storyLab:errors.audioUnreadable', { name: songName }))
     const audioBlob = await audioResponse.blob()
     await useStore.getState().directorUploadAndAnalyze(new File(
       [audioBlob], candidate.name, { type: audioBlob.type || 'audio/mpeg' },
@@ -1559,7 +1609,7 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
     const afterAnalyze = useStore.getState()
     if (afterAnalyze.directorError) throw new Error(afterAnalyze.directorError)
     if (afterAnalyze.directorStep !== 'structure') {
-      throw new Error('La canción no quedó analizada en el paso Structure; el videoclip no está preparado.')
+      throw new Error(i18n.t('storyLab:errors.songNotAnalyzed'))
     }
 
     useStore.setState({
@@ -1580,7 +1630,7 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
       workspace,
       project,
       'overview',
-      `He preparado “${production.title}” en Music Video Director con la canción “${candidate.displayName || candidate.title || candidate.name}” y el cue “${resolvedCue.title}”. Estado: preparado. No lo he encolado ni iniciado.`,
+      i18n.t('storyLab:replies.musicVideoStaged', { title: production.title, song: songName, cue: resolvedCue.title }),
       {
         destination: 'director',
         projectId: project.id,
@@ -1601,7 +1651,7 @@ export async function stageStoryMusicVideo(action: StageStoryMusicVideoCommand):
 export async function startDirectorProduction(
   action: StartDirectorProductionCommand,
 ): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Iniciar una producción de Director requiere confirm=true porque consume cómputo.')
+  if (!action.confirm) throw new Error(i18n.t('storyLab:errors.confirmStartProduction'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useStoryStore, normalizeStoryProject }, api] = await Promise.all([
     import('./store'),
@@ -1609,24 +1659,24 @@ export async function startDirectorProduction(
   ])
   await useStoryStore.getState().loadWorkspace(workspace)
   const stories = useStoryStore.getState()
-  if (stories.libraryConflicts.length) throw new Error('Story Lab tiene un conflicto pendiente; resuélvelo antes de iniciar la producción.')
+  if (stories.libraryConflicts.length) throw new Error(i18n.t('storyLab:errors.conflictBeforeStart'))
   const target = resolveStoryProject(stories.projects, stories.project, action.targetStoryId, action.targetStoryTitle)
-  if (stories.activeProjectOperations[target.id]) throw new Error(`La historia “${target.title}” tiene una operación activa.`)
+  if (stories.activeProjectOperations[target.id]) throw new Error(i18n.t('storyLab:errors.storyActiveOperation', { title: target.title }))
 
   const director = useStore.getState()
   const handoff = director.directorStoryProductionHandoff
   if (!handoff || handoff.workspace !== workspace || handoff.projectId !== target.id) {
-    throw new Error(`No hay una producción de “${target.title}” preparada por el Wizard en Director. Usa stage_story_video o stage_story_music_video primero.`)
+    throw new Error(i18n.t('storyLab:errors.noStagedProduction', { title: target.title }))
   }
   const production = target.productions.find(item => item.id === handoff.productionId)
   if (!production || (production.kind !== 'film' && production.kind !== 'trailer' && production.kind !== 'music_video')) {
-    throw new Error('La producción preparada ya no existe en el historial de Story Lab.')
+    throw new Error(i18n.t('storyLab:errors.stagedProductionGone'))
   }
   if (action.productionId && action.productionId !== production.id) {
-    throw new Error(`La producción preparada es ${production.id}, no ${action.productionId}. Vuelve a abrir el destino exacto.`)
+    throw new Error(i18n.t('storyLab:errors.stagedProductionIdMismatch', { actual: production.id, expected: action.productionId }))
   }
   if (action.kind && production.kind !== action.kind) {
-    throw new Error(`La producción preparada es ${production.kind}, no ${action.kind}.`)
+    throw new Error(i18n.t('storyLab:errors.stagedProductionKindMismatch', { actual: production.kind, expected: action.kind }))
   }
   const existingPipelineId = typeof production.targetSnapshot?.pipelineId === 'string'
     ? production.targetSnapshot.pipelineId.trim() : ''
@@ -1641,21 +1691,21 @@ export async function startDirectorProduction(
       workspace,
       target,
       'overview',
-      `La producción “${production.title}” ya estaba iniciada en Director (pipeline ${existingPipelineId}); no la he duplicado.`,
+      i18n.t('storyLab:replies.productionAlreadyStarted', { title: production.title, pipelineId: existingPipelineId }),
       directorResultDetails(production, workspace, target.id, existingPipelineId),
     )
   }
   if (director.pipelineId) {
-    throw new Error(`Director ya está vinculado al pipeline ${director.pipelineId}; no iniciaré otro sobre el mismo borrador.`)
+    throw new Error(i18n.t('storyLab:errors.directorAlreadyLinked', { pipelineId: director.pipelineId }))
   }
   if (production.kind === 'music_video') {
     if (director.directorSkill !== 'music_video' || director.directorStep !== 'structure' || !director.directorSceneDescription.trim()) {
-      throw new Error('El videoclip preparado ya no está listo en el paso Structure de Music Video Director. Vuelve a prepararlo antes de lanzarlo.')
+      throw new Error(i18n.t('storyLab:errors.musicVideoNotReady'))
     }
   } else if (director.directorSkill !== 'short_film' || director.directorStep !== 'style' || !director.directorSceneDescription.trim()) {
-    throw new Error('El borrador exacto de Story ya no está listo en el paso Style de Short Film Director. Vuelve a prepararlo antes de lanzarlo.')
+    throw new Error(i18n.t('storyLab:errors.filmNotReady'))
   }
-  if (director.directorLoading) throw new Error('Director ya está procesando otra operación; espera a que termine antes de iniciar.')
+  if (director.directorLoading) throw new Error(i18n.t('storyLab:errors.directorBusy'))
 
   useStoryStore.getState().beginProjectOperation(target.id)
   try {
@@ -1674,7 +1724,7 @@ export async function startDirectorProduction(
     useStore.getState().setDirectorAutoMode(true)
     await useStore.getState().startDirectorPipeline()
     const pipelineId = useStore.getState().pipelineId
-    if (!pipelineId) throw new Error('Director no devolvió un pipelineId; la producción no se inició.')
+    if (!pipelineId) throw new Error(i18n.t('storyLab:errors.directorNoPipeline'))
 
     let linkWarning = ''
     try {
@@ -1683,7 +1733,7 @@ export async function startDirectorProduction(
         const remote = await api.fetchStoryLibrary(workspace)
         const remoteProject = remote.projects[target.id]
         const remoteProduction = remoteProject?.productions.find(item => item.id === production.id)
-        if (!remoteProject || !remoteProduction) throw new Error('La producción ya no existe en la biblioteca remota.')
+        if (!remoteProject || !remoteProduction) throw new Error(i18n.t('storyLab:errors.remoteProductionGone'))
         const linkedProject = normalizeStoryProject({
           ...remoteProject,
           revision: remoteProject.revision + 1,
@@ -1725,13 +1775,13 @@ export async function startDirectorProduction(
         }
       }
     } catch (error) {
-      linkWarning = ` El pipeline sí está en marcha, pero no pude enlazarlo al historial de Story Lab: ${(error as Error).message}`
+      linkWarning = i18n.t('storyLab:replies.pipelineLinkFailed', { message: (error as Error).message })
     }
     return storyResult(
       workspace,
       target,
       'overview',
-      `He iniciado “${production.title}” en Director con el pipeline real ${pipelineId}. Está en marcha; todavía no está terminado.${linkWarning}`,
+      i18n.t('storyLab:replies.productionStarted', { title: production.title, pipelineId, linkWarning }),
       directorResultDetails(production, workspace, target.id, pipelineId),
     )
   } finally {

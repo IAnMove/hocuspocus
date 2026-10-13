@@ -50,7 +50,7 @@ class QuickVideoBatchSettings(BaseModel):
     imageModel: str = Field(default="flux2_klein_9b", max_length=200)
     resolution: str = Field(default="480p", max_length=40)
     aspectRatio: str = Field(default="9:16", max_length=20)
-    spokenLanguage: str = Field(default="Español de España", max_length=120)
+    spokenLanguage: str = Field(default="English", max_length=120)
     visualStyle: str = Field(default="", max_length=8000)
     characterVisualStyle: str = Field(default="", max_length=8000)
     directVideoMasterPrompt: str = Field(default="", max_length=12000)

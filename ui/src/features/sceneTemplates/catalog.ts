@@ -7,6 +7,7 @@
  */
 
 import sceneTemplateCatalog from '../../../../app/shared/scene_templates.json' with { type: 'json' }
+import i18n from '../../i18n'
 import { TemplateError } from './templateErrors'
 
 export const CATALOG_VERSION = '2026-09-review-1' as const
@@ -253,7 +254,7 @@ export type ResolvedSceneTemplate = { template: SceneTemplateDefinition; alias?:
 export function resolveSceneTemplate(id: string): ResolvedSceneTemplate {
   const retired = RETIRED_SCENE_TEMPLATES[id]
   if (retired) {
-    throw new TemplateError('template_retired', `La plantilla ${id} se retiró. ${retired.note}`, { use_instead: [...retired.useInstead] })
+    throw new TemplateError('template_retired', i18n.t('scene3d:templateCompile.retired', { id, note: retired.note }), { use_instead: [...retired.useInstead] })
   }
   const alias = SCENE_TEMPLATE_ALIASES[id]
   if (alias) return { template: getCandidateSceneTemplate(alias.card), alias: id, preset: alias.preset }
@@ -275,8 +276,8 @@ export function canonicalBindings<T>(template: SceneTemplateDefinition, raw: Rea
   for (const [name, value] of Object.entries(raw)) {
     if (value === undefined) continue
     const slot = canonicalSlotName(template, name)
-    if (!slot) throw new TemplateError('template_bad_asset', `El binding contiene un slot desconocido: ${name}.`)
-    if (named[slot]) throw new TemplateError('slot_alias_conflict', `${named[slot]} y ${name} nombran el mismo slot ${slot}.`)
+    if (!slot) throw new TemplateError('template_bad_asset', i18n.t('scene3d:templateCompile.unknownSlot', { name }))
+    if (named[slot]) throw new TemplateError('slot_alias_conflict', i18n.t('scene3d:templateCompile.sameSlot', { left: named[slot], right: name, slot }))
     named[slot] = name
     out[slot] = value
   }

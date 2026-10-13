@@ -11,6 +11,10 @@ from app.services.video_extra_info import (
 )
 
 
+def test_omitted_language_is_english():
+    assert normalize_language("") == ("en", "English")
+
+
 def test_clip_info_exposes_prompt_timing_date_and_complete_saved_record():
     metadata = {
         "job_id": "a802b0da",
