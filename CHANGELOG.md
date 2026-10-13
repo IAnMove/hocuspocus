@@ -104,6 +104,18 @@ schema now declares `allow_thin`, and it accepts `allow: ["title_card"]`, which
 the gate already honoured. A dry run names a shot with no key by its place
 (`shots[2]`).
 
+**Series video resolution can be chosen, 480p by default.** The H3 clips that a
+Series script asks for were always 480p. Series setup now has a *Script video clip
+resolution* (480p, 540p, 720p or 768p), and each video shot can pick its own size in
+its editor, with `series.shot.update`, or in the script (`resolution`). The
+backend's own default for the Series Lab render is now 480p too, as the setup screen
+already showed (a series that follows the global production profile still takes the
+profile's size), and H3 now keeps a 540p or 768p choice instead of rendering it at
+720p. Shots and takes made before this change keep their digests, so nothing already
+made is generated again. A series on H3 (not H3 Legacy) saved at 540p or 768p now
+renders its new takes at that size; its earlier takes stay 1280x704, and the cut
+scales every clip to the episode frame. Choose 720p to keep the old size.
+
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
 Design*, and the Character Creator voice designer and new reference voices start on

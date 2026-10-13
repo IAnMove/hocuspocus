@@ -40,7 +40,7 @@ SHOT_EDITOR_FIELDS = frozenset({
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
     "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley", "video",
-    "transitionIn",
+    "transitionIn", "resolution",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 # A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
@@ -219,7 +219,7 @@ def create_series_project(
             "writingProvider": "maestro", "writingModel": "", "writingBaseUrl": "",
             "imageProvider": "maestro", "imageModel": "", "videoModel": "minimax_h3_legacy",
             "videoSettings": {
-                "renderStrategy": "auto", "resolution": "540p",
+                "renderStrategy": "auto", "resolution": "480p",
                 "orientation": "landscape", "numInferenceSteps": 20,
                 "flowShift": 12, "audioShift": 3, "modelProfile": "quality",
             },
@@ -354,6 +354,27 @@ def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
     return attempt
 
 
+def _store_resolution(record: dict, key: str, label: str) -> None:
+    """Keep a Series tier under ``key`` by its name (``720`` and ``1280x704`` are ``720p``). An empty value is removed,
+    so a record that never chose one stays as it was; anything else is refused."""
+    from .series_render import SERIES_RESOLUTIONS, series_resolution_preset
+    raw = record.get(key)
+    if raw is None or raw == "":
+        record.pop(key, None)
+        return
+    preset = series_resolution_preset(raw)
+    if preset is None:
+        raise ValueError(f"{label} must be one of {', '.join(SERIES_RESOLUTIONS)}")
+    record[key] = preset
+
+
+def _store_shot_resolution(shot: dict) -> None:
+    """A video shot's own H3 tier. Other shots make no H3 clip, so theirs is dropped, as ``store_video`` drops ``video``."""
+    _store_resolution(shot, "resolution", "Shot resolution")
+    if shot.get("productionMethod") not in {"generated_video", "imported_video"}:
+        shot.pop("resolution", None)
+
+
 def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -> dict:
     from .series_render import normalize_series_shot_duration
     from .series_production import PRODUCTION_METHODS
@@ -403,6 +424,7 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
     # A scripted H3 request is checked the same way from the script and from the editor.
     from .series_video_shots import store_video
     store_video(shot)
+    _store_shot_resolution(shot)
     from .series_shot_plan import normalize_layout2d
     layout = normalize_layout2d(shot.get("layout2d"))
     if layout:
@@ -920,7 +942,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     provider = copy.deepcopy(project.get("provider")) if isinstance(project.get("provider"), dict) else {}
     video_settings = copy.deepcopy(provider.get("videoSettings")) \
         if isinstance(provider.get("videoSettings"), dict) else {}
-    raw_resolution = str(video_settings.get("resolution") or "540p").strip().lower()
+    raw_resolution = str(video_settings.get("resolution") or "480p").strip().lower()
     provider_was_present = isinstance(project.get("provider"), dict)
     video_settings.update({
         "renderStrategy": video_settings.get("renderStrategy")
@@ -1016,6 +1038,8 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "createdAt": _text(project.get("createdAt"), now),
         "updatedAt": _text(project.get("updatedAt"), now),
     })
+    # The H3 tier of the script's video shots (series_video_shots); absent is 480p.
+    _store_resolution(project, "videoShotResolution", "videoShotResolution")
     synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
     keep_record_author(project)
@@ -1293,7 +1317,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             "imageModel": _text((story.get("provider") or {}).get("imageModel"))
             if isinstance(story.get("provider"), dict) else "",
             "videoModel": "minimax_h3_legacy", "videoSettings": {
-                "renderStrategy": "auto", "resolution": "540p",
+                "renderStrategy": "auto", "resolution": "480p",
                 "orientation": "landscape", "numInferenceSteps": 20,
                 "flowShift": 12, "audioShift": 3, "modelProfile": "quality",
             },

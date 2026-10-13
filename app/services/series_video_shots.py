@@ -16,8 +16,13 @@ Every take's ``intent_id`` carries a digest of what it asks for (prompt, length,
 size, start and end frames) and its take number. A resumed run replays a take that is
 still running instead of paying for it twice. A take that failed or was cancelled is
 remembered in the step (``failedTakes``) and never asked for again under that intent:
-the next attempt takes the next number, up to ``maxTakes`` per run. The clip is the
-model's 480p preset in the series frame (``480x864`` for a portrait series).
+the next attempt takes the next number, up to ``maxTakes`` per run.
+
+The clip is an H3 preset in the series frame (``480x864`` for a portrait 480p series):
+the shot's own ``resolution``, else the series' ``videoShotResolution``, else 480p.
+Both take 480p, 540p, 720p or 768p. Only a size other than 480p enters the request
+digest a take keeps (``videoRequest``), so the takes made while every clip was 480p
+still match their shot and are not made again.
 """
 from __future__ import annotations
 
@@ -33,7 +38,9 @@ from urllib.parse import quote, urlencode
 from PIL import Image
 
 from services.pose_facing import pose_asset, workspace_path
-from services.series_render import H3_RESOLUTIONS
+from services.series_render import (
+    DEFAULT_SERIES_RESOLUTION, H3_RESOLUTIONS, series_resolution_preset, shot_resolution,
+)
 from services.series_review import episode_mode, shot_entry
 from services.series_script_warnings import listed_shots
 from services.series_shot_plan import frame_size
@@ -45,8 +52,6 @@ FRAMES_STEP = 17
 FRAMES_MAX = 345
 DEFAULT_FRAMES = FRAMES_MIN
 DEFAULT_MODEL = "minimax_h3"
-# The model's own 480p presets (864x480, 480x864). 1080p H3 is a separate, experimental tier.
-VIDEO_QUALITY = "480p"
 # An unchanged plate scores 0. A flat plate recolored to the opposite hue scores about 0.67.
 STYLE_DRIFT_THRESHOLD = 0.45
 _TERMINAL = frozenset({"completed", "failed", "cancelled", "discarded", "error"})
@@ -137,10 +142,25 @@ def store_video(shot: dict[str, Any]) -> None:
         shot["layout2d"] = layout
 
 
-def video_resolution(series: dict[str, Any]) -> str:
-    """The model's 480p preset in the series frame: ``480x864`` for a portrait series."""
+def video_preset(series: dict[str, Any], shot: dict[str, Any] | None = None) -> str:
+    """The clip's H3 tier: the shot's ``resolution``, else the series' ``videoShotResolution``, else 480p.
+
+    The series' Lab render setting (``provider.videoSettings.resolution``) is not read: it belongs to the
+    provider model and the global profile, and most series saved it as 540p before 480p was the default."""
+    return (shot_resolution(shot) or series_resolution_preset(series.get("videoShotResolution"))
+            or DEFAULT_SERIES_RESOLUTION)
+
+
+def video_resolution(series: dict[str, Any], shot: dict[str, Any] | None = None) -> str:
+    """The clip's H3 preset in the series frame: ``480x864`` for a portrait 480p series."""
     width, height = frame_size(series)
-    return H3_RESOLUTIONS[("portrait" if height > width else "landscape", VIDEO_QUALITY)]
+    return H3_RESOLUTIONS[("portrait" if height > width else "landscape", video_preset(series, shot))]
+
+
+def digest_request(request: dict[str, Any], preset: str) -> dict[str, Any]:
+    """The request a take's ``videoRequest`` digests: the size only when it is not 480p, so a 480p take keeps the
+    digest it had before sizes could be chosen."""
+    return request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
 
 
 def cancel_generation(deps: Any, job_id: str) -> None:
@@ -393,7 +413,7 @@ def _next_take(number: int, failed: list[int]) -> int:
 
 def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
     try:
-        digest = _request_digest(normalize_video(shot["video"]))
+        digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
     except ValueError:
         return False
     assets = series.get("assets") or {}
@@ -411,7 +431,7 @@ def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
 def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[str, Any]:
     job, deps = run.job, run.deps
     request = _stored_request(shot)
-    resolution = video_resolution(series)
+    resolution = video_resolution(series, shot)
     start_path, start_ref = _start_frame(job, shot, series, deps, resolution)
     end_ref = start_ref if request.get("end") == "same" else _end_reference(job, request.get("end"), series, deps)
     params = {"prompt": request["prompt"], "model_type": request["model"], "resolution": resolution,
@@ -435,7 +455,8 @@ def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[s
             continue
         distance = _drift(start_path, take_path, request["frames"])
         if best is None or _closer(distance, best.get("distance")):
-            best = {"distance": distance, "file": take_path, "intent": intent, "number": number, "request": request}
+            best = {"distance": distance, "file": take_path, "intent": intent, "number": number,
+                    "request": digest_request(request, video_preset(series, shot))}
         if distance is not None and distance <= STYLE_DRIFT_THRESHOLD:
             break
     if best is None:

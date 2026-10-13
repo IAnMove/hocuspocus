@@ -15,7 +15,7 @@ import {
   applySeriesGlobalProvider,
   seriesProviderFieldsFromProfile,
 } from '../../lib/productionProfile'
-import { SeriesSetupVideoFields } from './SeriesSetupVideoFields'
+import { SeriesSetupVideoFields, SeriesVideoShotResolutionField } from './SeriesSetupVideoFields'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
 import type { SeriesReferenceRoom } from './shotReferences'
 
@@ -272,6 +272,7 @@ export function SeriesSetupPanel({
           <button type="button" className={`${secondaryButton} ${!series.provider.useGlobalProfile ? 'border-violet-400 text-violet-200' : ''}`} onClick={() => patchProvider({ useGlobalProfile: false })}>{t('providers.override')}</button>
         </div>
         {series.provider.useGlobalProfile && <p className="mb-3 text-[10px] text-green-300">{t('providers.globalSummary', { text: productionProfile.text.model, image: productionProfile.image.model, video: productionProfile.video.model })}</p>}
+        <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><SeriesVideoShotResolutionField series={series} t={t} patch={patch} /></div>
         <fieldset disabled={series.provider.useGlobalProfile} className="disabled:opacity-50">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <SeriesField label={t('providers.writingProvider')}><select className={selectClass} value={series.provider.writingProvider} onChange={event => patchProvider({ writingProvider: event.target.value as SeriesProject['provider']['writingProvider'] })}>
