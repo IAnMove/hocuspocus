@@ -694,6 +694,16 @@ def _added_decisions(current: dict, baseline: dict) -> int | None:
     return now - old
 
 
+def _not_only_a_split(added: int | None) -> str:
+    if added is None:
+        return "the base report has no decision total"
+    decisions = "decision" if added == 1 else "decisions"
+    return (
+        f"the change adds {added} {decisions} overall, so the pieces count against the budget; "
+        "for split credit, keep the split in a PR of its own and add logic in another"
+    )
+
+
 def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
     """New functions at COMPLEXITY_WARNING+ carved out of a base function.
 
@@ -750,11 +760,10 @@ def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
                 f"{before - after} ({before} -> {after}) and their decisions sum to {needed}"
             )
         elif added is None or added > 0:
-            reason = (
-                "the base report has no decision total" if added is None
-                else f"the change adds {added} decisions overall, so it is not only a split"
+            notes.append(
+                f"split not credited: {names} carved out of {key[1]} ({before} -> {after}), "
+                f"but {_not_only_a_split(added)}"
             )
-            notes.append(f"split not credited: {names} carved out of {key[1]} ({before} -> {after}), but {reason}")
         else:
             credit += len(items)
             notes.append(
@@ -776,9 +785,13 @@ def _complex_growth_findings(now: dict, old: dict, current: dict, baseline: dict
     budget = int(POLICY["complex_growth_budget"])
     if counted > budget:
         after_splits = f" ({counted} after {credit} credited split pieces)" if credit else ""
+        # code_health_integration.py matches the "high-complexity function count grew " prefix.
+        uncredited = "; split pieces were not credited (see the split notes)" if any(
+            note.startswith("split not credited: ") for note in notes
+        ) else ""
         failures.append(
             f"high-complexity function count grew by {complex_growth}{after_splits}; "
-            f"budget is {budget}"
+            f"budget is {budget}{uncredited}"
         )
     return warnings, failures
 
@@ -793,7 +806,9 @@ def _hotspot_allowance(old_lines: int) -> int:
 def _baseline_file_findings(scope: dict, old_scope: dict) -> list[str]:
     """A baseline file keeps the hotspot growth allowance and gains no complex function."""
     failures = []
-    hint = f"new code goes under {' or '.join(PYTHON_PREFIXES)}, where the ratchet measures it"
+    # Splitting the change across PRs does not help: a development -> main
+    # release measures this growth over the whole release, with no waiver.
+    measured = f"a module under {' or '.join(PYTHON_PREFIXES)}, where the ratchet measures it"
     old_files = old_scope.get("files") if isinstance(old_scope.get("files"), dict) else {}
     for path, now in sorted((scope.get("files") or {}).items()):
         old = old_files.get(path)
@@ -803,13 +818,14 @@ def _baseline_file_findings(scope: dict, old_scope: dict) -> list[str]:
         allowance = _hotspot_allowance(int(old["lines"]))
         if growth > allowance:
             failures.append(
-                f"unmeasured baseline file {path} grew {growth:,} lines; budget is {allowance:,}; {hint}"
+                f"unmeasured baseline file {path} grew {growth:,} lines; budget is {allowance:,}; "
+                f"move the new code into {measured}, and call it from {path}"
             )
         ceiling = max(int(old["max_complexity"]), COMPLEXITY_WARNING - 1)
         if int(now["max_complexity"]) > ceiling:
             failures.append(
                 f"unmeasured baseline file {path} has a function at complexity {now['max_complexity']}; "
-                f"its ceiling is {ceiling}; {hint}"
+                f"its ceiling is {ceiling}; move that function into {measured}"
             )
     return failures
 

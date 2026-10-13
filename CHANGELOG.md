@@ -24,9 +24,10 @@ lines still fails, moved or not. The check also fails when Python code is added
 under `app/` in a folder it does not measure (for example a new
 `app/features/`). Vendored engine folders and the eleven files that are already
 outside the measured folders are exempt, but those eleven files can no longer
-grow by more than 75 lines or gain a complex function, and new vendored files
-are listed for reviewers. A waiver now covers only its own rule and exactly its
-file, and its expiry must be a real date. No limit changed.
+grow by more than 75 lines (in a pull request, or over a development → main
+release) or gain a complex function, and new vendored files are listed for
+reviewers. A waiver now covers only its own rule and exactly its file, and its
+expiry must be a real date. No limit changed.
 
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one

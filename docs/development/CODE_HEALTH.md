@@ -92,7 +92,8 @@ regression:
 - a tracked `app/**/*.py` file is outside the measured scope and is neither
   vendored engine code nor in the unmeasured baseline; or
 - a file in the unmeasured baseline grows beyond the hotspot growth allowance
-  or gains a function at complexity 15+ (above its base maximum).
+  (per PR, and over a whole development → main release) or gains a function
+  at complexity 15+ (above its base maximum).
 
 A deliberate architectural change can refresh the snapshot, but the diff must
 be reviewed like any other budget change:
@@ -241,11 +242,16 @@ that budget when both of these are true:
   total; new logic raises it. Without this rule a parent could shed its logic
   into helpers under 15, which no rule counts, while the "pieces" named after
   it hold new code. A PR that splits functions and also adds logic gets no
-  split credit, so split in one PR and change behaviour in another.
+  split credit, so split in one PR and change behaviour in another. The
+  ratchet cannot say where the added decisions are: one new `if` anywhere
+  in the measured code is enough. A split of up to five pieces fits the
+  plain budget and needs no credit.
 
 Credit is all or nothing per parent. The PR table lists `split: … carved out
-of P (before -> after)`, or `split not credited: …` with the numbers. Pieces
-over 25 that move to a new file still need the move rule or a waiver.
+of P (before -> after)`, or `split not credited: …` with the numbers and
+what to do. When the budget fails and some pieces were not credited, the
+failure ends with "split pieces were not credited (see the split notes)".
+Pieces over 25 that move to a new file still need the move rule or a waiver.
 
 ### Unmeasured product code
 
@@ -276,6 +282,14 @@ file fails when it grows by more than the hotspot growth allowance (75 lines
 for files this size) or when it gets a function above its base maximum or 14,
 whichever is higher. Shrinking or deleting them is always free. These
 failures cannot be waived.
+
+A development → main release compares the whole release with main (see
+below), so the 75 lines are a budget for the release as a whole, as for
+any hotspot. Two PRs that each add 50 lines to `app/core_runtime.py` pass on
+their own and fail the release, and the release check has no waivers.
+Splitting a change across PRs therefore does not help. Router wiring and
+other new code go into a module under `app/services/` or `app/routers/`,
+called from the baseline file in a line or two; the failure message says so.
 
 Vendored folders are not measured, and model integrations add first-party
 files there routinely (VoxCPM2 added twenty), so a new file there cannot fail.

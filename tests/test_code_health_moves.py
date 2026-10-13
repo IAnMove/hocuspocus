@@ -27,6 +27,8 @@ sys.modules[SPEC.name] = code_health
 SPEC.loader.exec_module(code_health)
 
 LAUNCH = "app/launch.py"
+# The budget failure points at the split notes when pieces were not credited.
+UNCREDITED = "; split pieces were not credited (see the split notes)"
 
 
 def branchy(name, decisions, *, decorator="", docstring="", start=0, body_extra="", lines_per_branch=1):
@@ -316,7 +318,9 @@ class MoveAwareRatchetTests(unittest.TestCase):
         self.assertEqual(len(failures), 2, failures)
         self.assertRegex(
             failures[0],
-            r"^unmeasured baseline file app/core_runtime.py grew \d+ lines; budget is 75; new code goes under",
+            r"^unmeasured baseline file app/core_runtime.py grew \d+ lines; budget is 75; move the new code "
+            r"into a module under app/services/ or app/routers/, where the ratchet measures it, "
+            r"and call it from app/core_runtime.py$",
         )
         self.assertTrue(failures[1].startswith(
             "unmeasured baseline file app/core_runtime.py has a function at complexity 131; its ceiling is 14;"
@@ -346,7 +350,7 @@ class MoveAwareRatchetTests(unittest.TestCase):
         children = [branchy(f"_run_generation_stage{k}", 15, start=1000 + 100 * k) for k in range(6)]
         # The parent loses 20 decisions; the six pieces hold 90.
         warnings, failures, _, _ = run(base, {LAUNCH: launch_with(branchy("_run_generation", 100), *children)})
-        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
         self.assertIn(
             "split not credited: " + ", ".join(f"_run_generation_stage{k} (16)" for k in range(6))
             + " named after _run_generation, but _run_generation dropped 20 (121 -> 101) "
@@ -355,11 +359,11 @@ class MoveAwareRatchetTests(unittest.TestCase):
         )
         # Pieces next to an untouched parent get no credit either.
         _, failures, _, _ = run(base, {LAUNCH: launch_with(branchy("_run_generation", 120), *children)})
-        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
         # A parent that falls below 15 is still measured: here it gained one
         # decision of its own during the split, so the pieces are not credited.
         warnings, failures, _, _ = run(*split_case(own_before=12, own_after=13, pieces=7))
-        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
         self.assertTrue(any("_run_generation dropped 104 (118 -> 14)" in item for item in warnings), warnings)
 
     def test_valid_split_passes(self):
@@ -389,12 +393,27 @@ class MoveAwareRatchetTests(unittest.TestCase):
         unrelated = [branchy(f"brand_new_{k}", 15, start=5000 + 100 * k) for k in range(6)]
         changed[LAUNCH] += "\n\n" + "\n\n".join(unrelated)
         warnings, failures, _, _ = run(base, changed)
-        self.assertEqual(failures, ["high-complexity function count grew by 12; budget is 5"])
+        self.assertEqual(failures, ["high-complexity function count grew by 12; budget is 5" + UNCREDITED])
         self.assertTrue(any(
             item.startswith("split not credited: _run_generation_stage0 (16)")
-            and item.endswith("but the change adds 90 decisions overall, so it is not only a split")
+            and item.endswith(
+                "but the change adds 90 decisions overall, so the pieces count against the budget; "
+                "for split credit, keep the split in a PR of its own and add logic in another"
+            )
             for item in warnings
         ), warnings)
+        # One unrelated decision is enough to lose the credit, and the note says so in the singular.
+        base, changed = split_case(own_before=15, own_after=15, pieces=6)
+        base[LAUNCH] += "\n\ndef unrelated(body):\n    return body.get('x')\n"
+        changed[LAUNCH] += "\n\ndef unrelated(body):\n    if body is None:\n        return None\n    return body.get('x')\n"
+        warnings, failures, _, _ = run(base, changed)
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
+        self.assertTrue(any("but the change adds 1 decision overall, so the pieces count" in item for item in warnings))
+        # A split that fits the budget of five passes without credit, bug fix included.
+        base, changed = split_case(own_before=15, own_after=15, pieces=3)
+        base[LAUNCH] += "\n\ndef unrelated(body):\n    return body.get('x')\n"
+        changed[LAUNCH] += "\n\ndef unrelated(body):\n    if body is None:\n        return None\n    return body.get('x')\n"
+        self.assertNoFailures(run(base, changed)[1])
 
     def test_split_credit_needs_a_change_that_adds_no_logic(self):
         # Laundering: the parent sheds its 120 decisions into helpers under 15
@@ -410,7 +429,7 @@ class MoveAwareRatchetTests(unittest.TestCase):
             {LAUNCH: launch_with(parent, *helpers, *pieces)},
         )
         self.assertEqual(current["summary"]["decisions"] - old["summary"]["decisions"], 105)
-        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
         self.assertTrue(any("the change adds 105 decisions overall" in item for item in warnings), warnings)
         # A pure extraction keeps the decision total, which is why it passes.
         current, old = measure(*split_case(own_before=15, own_after=15, pieces=6))
@@ -479,7 +498,7 @@ class RecordMatchingTests(unittest.TestCase):
         # Without a decision total in the base (an older analyzer), no credit.
         del base["summary"]["decisions"]
         warnings, failures = code_health.compare(split, base)
-        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5"])
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
         self.assertTrue(any("the base report has no decision total" in item for item in warnings), warnings)
         self.assertFalse(code_health._carved_from("startGenerations", "startGeneration"))
         self.assertTrue(code_health._carved_from("_run_generation.prepare", "_run_generation"))
@@ -631,4 +650,4 @@ class ReleaseCheckpointTests(unittest.TestCase):
             {LAUNCH: launch_with(branchy("_run_generation", 120))},
             {LAUNCH: launch_with(parent, *helpers, *pieces)},
         )
-        self.assertEqual(failures, ["Integration merge: high-complexity function count grew by 6; budget is 5"])
+        self.assertEqual(failures, ["Integration merge: high-complexity function count grew by 6; budget is 5" + UNCREDITED])
