@@ -37,6 +37,7 @@ import { createRetakeDialogSlice, type RetakeDialogSlice } from './retakeDialogS
 import { createSettingsSlice, type SettingsSlice } from './settingsSlice'
 import { createSidebarSlice, type SidebarSlice } from './sidebarSlice'
 import { createSystemSlice, type SystemSlice } from './systemSlice'
+import { createPresetsSlice, type PresetsSlice } from '../features/studio/store/presetsSlice'
 import { bindSlice } from './storeApi'
 import { createThemeSlice, type ThemeSlice } from './themeSlice'
 import { createGallerySlice, type GallerySlice } from './gallerySlice'
@@ -1096,7 +1097,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1517,14 +1518,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   ensureEditAnythingLora: () => Promise<void>
   setLoraWeight: (filename: string, phaseIndex: number, value: number) => void
 
-  // Presets
-  presets: import('../api/client').GenerationPreset[]
-  presetsLoading: boolean
-  loadPresets: () => Promise<void>
-  savePreset: (name: string) => Promise<void>
-  loadPreset: (preset: import('../api/client').GenerationPreset) => void
-  deletePreset: (id: string) => Promise<void>
-
   // Model options
   modelOptions: ModelOptions | null
   modelOptionsLoading: boolean
@@ -1913,6 +1906,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createStudioConfigurationSlice({ alignFrameCount, resolveResolution })),
   ...bindSlice(set, get, createStudioMusicSlice),
   ...bindSlice(set, get, createSystemSlice),
+  ...bindSlice(set, get, createPresetsSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -5793,76 +5787,6 @@ export const useStore = create<AppState>((set, get) => {
     }
     set({ savedLoraPerMode: updatedLoraPerMode })
     _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
-  },
-
-  // Presets
-  presets: [],
-  presetsLoading: false,
-
-  loadPresets: async () => {
-    set({ presetsLoading: true })
-    try {
-      const { presets } = await api.fetchPresets()
-      set({ presets })
-    } catch (e) {
-      console.error('Failed to load presets:', e)
-    } finally {
-      set({ presetsLoading: false })
-    }
-  },
-
-  savePreset: async (name) => {
-    const { params, loraWeights, generationMode } = get()
-    try {
-      const preset = await api.createPreset({
-        name,
-        mode: generationMode,
-        model_type: params.model_type,
-        prompt: '',
-        activated_loras: params.activated_loras,
-        loras_multipliers: params.loras_multipliers,
-        lora_weights: loraWeights,
-        params: {
-          num_inference_steps: params.num_inference_steps,
-          guidance_scale: params.guidance_scale,
-          resolution: params.resolution,
-          seed: params.seed,
-          negative_prompt: params.negative_prompt,
-          flow_shift: params.flow_shift,
-          h3_audio_shift: params.h3_audio_shift,
-          h3_audio_prompt: params.h3_audio_prompt,
-          h3_ref_image_size: params.h3_ref_image_size,
-          h3_reference_mode: params.h3_reference_mode,
-          h3_model_profile: params.h3_model_profile,
-          self_refiner_setting: params.self_refiner_setting,
-          stage2_steps: params.stage2_steps,
-        },
-      })
-      set(s => ({ presets: [...s.presets, preset] }))
-    } catch (e) {
-      console.error('Failed to save preset:', e)
-    }
-  },
-
-  loadPreset: (preset) => {
-    const newParams: Partial<GenerateParams> = {
-      activated_loras: preset.activated_loras,
-      loras_multipliers: preset.loras_multipliers,
-      ...(preset.params as Partial<GenerateParams>),
-    }
-    set(s => ({
-      params: { ...s.params, ...newParams },
-      loraWeights: preset.lora_weights || {},
-    }))
-  },
-
-  deletePreset: async (id) => {
-    try {
-      await api.deletePreset(id)
-      set(s => ({ presets: s.presets.filter(p => p.id !== id) }))
-    } catch (e) {
-      console.error('Failed to delete preset:', e)
-    }
   },
 
   // Model options
