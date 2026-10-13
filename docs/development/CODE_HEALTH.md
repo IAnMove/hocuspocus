@@ -82,11 +82,18 @@ the same run. Small increases print warnings. CI fails only for a material
 regression:
 
 - production LOC grows beyond the greater of 3% or 2,000 lines;
-- functions at complexity 15+ increase by more than five;
+- functions at complexity 15+ increase by more than five (split pieces can be
+  credited, see below);
 - maximum function complexity rises by more than three;
-- a file's maximum complexity rises by more than five, or a new file exceeds 25;
-- an existing 1,000-line hotspot exceeds its small growth allowance; or
-- a new first-party file exceeds 1,200 lines.
+- a file's maximum complexity rises by more than five, or a new file exceeds 25
+  (unless every function over the limit is a verified move, see below);
+- an existing 1,000-line hotspot exceeds its small growth allowance;
+- a new first-party file exceeds 1,200 lines (never waivable, moves included);
+- a tracked `app/**/*.py` file is outside the measured scope and is neither
+  vendored engine code nor in the unmeasured baseline; or
+- a file in the unmeasured baseline grows beyond the hotspot growth allowance
+  (per PR, and over a whole development → main release) or gains a function
+  at complexity 15+ (above its base maximum).
 
 A deliberate architectural change can refresh the snapshot, but the diff must
 be reviewed like any other budget change:
@@ -111,8 +118,203 @@ without review. A higher quality score cannot hide those local failures.
 Reports record `policy_version`, HEAD and base SHAs, and whether UI metrics
 were complete. Exceptions live in `scripts/code_health_exceptions.json` and
 must include path, rule, reason, owner, issue and expiry; there is no global
-hotspot waiver. New-function complexity caps are not enabled until current
-symbols are measured separately.
+hotspot waiver. `expires` must be a `YYYY-MM-DD` date. A waiver covers only
+its own rule's failure about exactly its `path`: `hotspot <path> grew …` for
+`hotspot_growth`, `new complexity hotspot <path> is …` or `complexity hotspot
+<path> increased …` for `complexity_hotspot`. A folder prefix or a fragment
+such as `LOC` matches nothing. There is no per-function cap: the complexity
+rules are per file. Function fingerprints only let the ratchet recognize moves
+and splits.
+
+## Moves, splits and unmeasured code
+
+The architecture refactor moves functions out of `app/_launch_runtime.py` and
+`ui/src/stores/useStore.ts` into feature modules. Without the rules in this
+section, a verbatim move of a complex function fails as a "new complexity
+hotspot", and code moved to a folder outside the scope stops being measured.
+The rules change only the logic in `compare()` and `collect()`. The `POLICY`
+dict is unchanged.
+
+### What a report records
+
+`collect()` writes `fingerprints`: one record per function at complexity 15+.
+It also writes the weaker functions that split accounting needs: those that
+share a name with a complex function, or whose name makes them a split parent
+of one. Each record has the path, the name, the line, the complexity and a
+hash:
+
+- **Python:** the qualified name and a hash of the normalized AST. The hash
+  covers the node type (sync or async), the arguments (default values
+  included), the return annotation and the body. Docstrings (of the function
+  and of every def and class inside it), comments and positions are ignored.
+  Nothing is renamed. The function's own name and its **decorators** are left
+  out: a route moved from `@app.post(...)` in launch to `@router.post(...)` in
+  a router changes only its decorator, which does not count towards
+  complexity.
+- **UI:** the identifier from ESLint's label (`startGeneration` from
+  "Async method 'startGeneration'") and the complexity. There is no hash.
+  ESLint reports the function's head, not its body, so a hash would need a
+  second parse of `ui/src`. Anonymous functions (an unnamed arrow function,
+  a constructor) have no name and never get move or split credit.
+
+### Moves
+
+A function is a **verified move** when it has left its base file for another
+file and the base report has a function with:
+
+- the same name; and
+- the same hash (Python), or the same or higher complexity (UI, which has no
+  hash).
+
+The base function must be gone from its old path. If it is still there, the
+new one is a copy, and a copy is new code. Matching counts instances, so two
+copies of one base function give at most one move.
+
+- A **new complexity hotspot** over 25 does not fail when every function over
+  25 in that file is a verified move.
+- An **existing file** whose maximum complexity rises by more than five (a
+  move into an existing router, for example) does not fail when every function
+  over the old maximum + 5 is a verified move.
+- The moved function's base complexity is its **ceiling**. Any change to a
+  Python body changes the hash. So does any rise in complexity. Either loses
+  the credit, and the normal rule applies. A UI function above its base
+  complexity loses the credit the same way.
+- The failure says why a function did not count as a move: "has the name of
+  base … but different code, so it counts as new", "rose above its base
+  ceiling", "is a copy", "has no name to match", or "is not in the base".
+- The check lists every verified move as `moved: X (complexity N) from A to B`
+  under **Moves and splits** in the PR table, or as a `NOTE:` line in the
+  terminal.
+
+The hash proves that the function's own code did not change. It does not
+cover what that code refers to: the decorators, the module's constants and
+globals, and the helpers it calls, which in the new file can be different
+objects with the same names. None of that changes the function's complexity,
+and a helper under 15 is invisible to every rule anyway. Reviewers of a move
+PR should check those by hand: compare the decorator lines, and diff the new
+module's constants and helpers against the ones in the old file.
+
+A UI move is weaker, because it has no hash. Any function with the same name
+whose complexity did not rise passes, even if its body was rewritten. The
+complexity cannot go up and the original must be gone, so the ratchet's
+numbers stay honest, but nothing proves the code is the same. Reviewers of a
+UI move PR should read the moved functions with `git diff --color-moved`
+(moved lines show in their own colour; anything else is a change) and ask for
+behaviour changes in a separate PR.
+
+Keep moves verbatim and make logic changes in a separate PR. If one PR must
+both move and change a complex function, the dated `complexity_hotspot`
+waiver is still available. A waiver applies only to the file a failure is
+about, the path before the first `;`. A waiver for the base file does not
+cover the file the function moved to. After the move merges, the new file is an
+ordinary hotspot in the next PR's base: it may rise by up to five, like any
+other file.
+
+The 1,200-line rule for new files has no move exception and cannot be waived.
+A function longer than that, such as `_run_generation`, must be split before
+it moves.
+
+### Splits
+
+At most five new functions at complexity 15+ are allowed per PR. A piece
+carved out of a function that existed in the base does not count against
+that budget when both of these are true:
+
+- **Name rule (the parent is found by name prefix; there is no `split_from`
+  annotation).** The piece is a def nested in the parent
+  (`_run_generation.prepare`), or its last name part, without leading
+  underscores, is the parent's last name part plus a suffix that starts with
+  `_`, an upper-case letter or a digit:
+  - `_run_generation` → `_run_generation_prepare`, `Runner._run_generation_finalize`;
+  - `startGeneration` → `startGenerationAudio`, but not `startGenerations`.
+
+  The parent must be at complexity 15+ in the base. The piece's name must not
+  be in the base records. The longest matching parent wins.
+- **Complexity rule.** The parent's complexity, summed over every function of
+  that name, must drop by at least the sum of the pieces' **decisions**, which
+  is their complexity minus one each. Extracting a block with *d* decisions
+  lowers the parent by *d* and creates a piece of complexity *d* + 1, so a
+  pure extraction passes exactly. A parent that kept or gained complexity does
+  not get credit.
+- **No new logic.** The change as a whole must not add decisions: the report's
+  `summary.decisions` (complexity minus one, summed over every measured
+  function) may not rise versus the base. Moving and splitting code keeps that
+  total; new logic raises it. Without this rule a parent could shed its logic
+  into helpers under 15, which no rule counts, while the "pieces" named after
+  it hold new code. A PR that splits functions and also adds logic gets no
+  split credit, so split in one PR and change behaviour in another. The
+  ratchet cannot say where the added decisions are: one new `if` anywhere
+  in the measured code is enough. A split of up to five pieces fits the
+  plain budget and needs no credit.
+
+Credit is all or nothing per parent. The PR table lists `split: … carved out
+of P (before -> after)`, or `split not credited: …` with the numbers and
+what to do. When the budget fails and some pieces were not credited, the
+failure ends with "split pieces were not credited (see the split notes)".
+Pieces over 25 that move to a new file still need the move rule or a waiver.
+
+### Unmeasured product code
+
+The ratchet measures `app/_launch_runtime.py`, `app/launch.py`, `app/wgp.py`,
+`app/services/**` and `app/routers/**` among the Python files. Any other
+tracked `app/**/*.py` file fails as **unmeasured product code**, except:
+
+- vendored engine code: `UNMEASURED_VENDOR_PREFIXES` (`app/models/`,
+  `app/plugins/`, `app/postprocessing/`, `app/preprocessing/`, `app/shared/`);
+- the files that were already outside the scope on 2026-10-13:
+  `UNMEASURED_BASELINE` (`app/app_identity.py`, `app/core_runtime.py`,
+  `app/setup.py` and the eight `app/scripts/*.py` tools).
+
+New feature code goes under `app/services/` or `app/routers/`. Developer tools
+go in the repository's `scripts/` folder. Both lists are copied into the
+report, and a list that grows versus the PR base fails ("needs owner review").
+A baseline file that is deleted and later created again fails as new versus
+the base. A baseline entry whose file no longer exists prints a warning:
+remove it from the list. `tests/test_code_health_moves.py` requires the list
+to match today's tree exactly, so a PR that deletes or moves one of those
+files also removes it from `UNMEASURED_BASELINE`.
+
+The baseline files stay where they are, but they cannot absorb code moved out
+of the measured scope. `app/core_runtime.py`, for example, is a 790-line
+server that imports every router. The report records each baseline file's
+lines and highest function complexity under `unmeasured.files`. A baseline
+file fails when it grows by more than the hotspot growth allowance (75 lines
+for files this size) or when it gets a function above its base maximum or 14,
+whichever is higher. Shrinking or deleting them is always free. These
+failures cannot be waived.
+
+A development → main release compares the whole release with main (see
+below), so the 75 lines are a budget for the release as a whole, as for
+any hotspot. Two PRs that each add 50 lines to `app/core_runtime.py` pass on
+their own and fail the release, and the release check has no waivers.
+Splitting a change across PRs therefore does not help. Router wiring and
+other new code go into a module under `app/services/` or `app/routers/`,
+called from the baseline file in a line or two; the failure message says so.
+
+Vendored folders are not measured, and model integrations add first-party
+files there routinely (VoxCPM2 added twenty), so a new file there cannot fail.
+Instead the report lists every tracked `.py` file under those prefixes
+(`unmeasured.vendor_files`), and the PR table warns about each new one:
+"N new Python file(s) under vendored folders are not measured". Reviewers must
+confirm that such a file is engine code and not product code moved out of the
+ratchet. Code added to an existing vendored file gets no warning, so reviewers
+read every diff into those folders.
+
+### Compatibility
+
+- The PR base is measured by the base's own analyzer. A base from before this
+  change has no `fingerprints`, `summary.decisions` or `unmeasured` data.
+  Against it there is no move or split credit, and the scope lists and
+  baseline files cannot be compared, so the old strict rules apply.
+- The release integration verifier (below) treats any change to
+  `scripts/code_health.py` in the release chain as a measurement change and
+  fails closed. The first development → main release after an analyzer change
+  needs that separate review.
+- The verifier re-checks the complex-function budget at every first-parent
+  merge with reports it builds from history. Those checkpoint reports carry
+  the same `fingerprints` and `summary.decisions` as a PR report, so a split
+  credited on its PR is credited again at its release step, and a split that
+  was not credited fails there too.
 
 ## Release integration: development → main
 
