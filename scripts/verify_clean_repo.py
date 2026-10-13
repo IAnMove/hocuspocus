@@ -130,8 +130,7 @@ ALLOWED_PATH_FRAGMENTS = [
     "radial_attention",
     # Upstream READMEs
     "app/README.md",
-    # Public safety-rules file — lists what NOT to do (responsible)
-    "nsfw_off_safety_rules.md",
+    # Polish-layer tests check the sanitizers against the vocabulary they catch.
     "tests/test_prompt_polish_fixes.py",
     # Polish layer's regex sanitizers and LoRA-trigger-guidance text
     # legitimately mention act / anatomy vocabulary to teach the LLM when each

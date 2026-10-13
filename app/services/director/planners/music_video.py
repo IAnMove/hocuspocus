@@ -1095,6 +1095,7 @@ class MusicVideoPlanner(BasePlanner):
                 location_ref_labels=kwargs.get("location_ref_labels"),
                 seamless=kwargs.get("seamless", True),
                 image_model=kwargs.get("image_model", ""),
+                nsfw=nsfw,
             )
 
         from ..guide_loader import load_guide
@@ -1281,7 +1282,7 @@ Return exactly one object for every clip requested in the current batch. Preserv
         if polish_block and not direct_video:
             system_prompt = f"{system_prompt}\n\n{polish_block}"
 
-        # Inject content guidance (NSFW or safety guardrails)
+        # Inject content guidance (the minors rule, plus mature guidance in NSFW mode)
         system_prompt = inject_nsfw_if_enabled(
             system_prompt,
             nsfw,

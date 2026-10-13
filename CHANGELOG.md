@@ -6,6 +6,19 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**A hard rule about minors is now in every LLM system prompt, with NSFW mode on or
+off.** It forbids sexual or sexualized content with minors or with characters who
+look like or are described as minors, whatever the fiction, claimed age or art
+style, and asks for clearly adult characters in any sexual content. The LLM service
+adds it to every request to every provider, so Director, Story, Series, Wizard,
+comics, songs, production commands and the prompts the UI sends all carry it; the
+WanGP prompt enhancer adds it too. The PG-13 rules that NSFW-off mode used to add
+are gone (`nsfw_off_safety_rules.md`, the inline PG-13 enhance text,
+`get_safe_content_guidance` and the unused `PUBLIC_PROVIDERS`). The NSFW toggle
+itself does not change: it still filters models and LoRAs and still adds the
+mature-content guides. The Director shot-length examples about sex scenes and
+the undressing examples in the Qwen image-edit guide now appear only with NSFW on.
+
 **A quality-gate refusal now says what to fix, and there is an explicit way past
 it.** When `production.run` refuses a plan before any GPU work (`quality_gate`),
 the message no longer just says "the plan would look thin". It names the shots,
