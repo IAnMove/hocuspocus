@@ -15,13 +15,14 @@
     "atmos:capture": "tsx scripts/atmos-capture.mjs",
     "test": "tsx --tsconfig tsconfig.app.json --import ./tests/setupI18n.ts --test --test-concurrency=2 tests/*.test.mjs tests/*.test.tsx tests/*.test.ts",
     "i18n:check": "node scripts/check-i18n-catalogs.mjs",
+    "unreachable:check": "node scripts/check-unreachable.mjs",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "test:e2e:production": "playwright test -c e2e/playwright.production.config.ts",
     "test:e2e:headed": "playwright test -c e2e/playwright.config.ts --headed",
     "test:e2e:wizard": "playwright test -c e2e/playwright.live.config.ts",
     "test:wizard-language-live": "tsx --tsconfig tsconfig.app.json scripts/check-wizard-language-live.ts",
     "budget": "node scripts/check-build-budget.mjs",
-    "check": "npm run i18n:check && npm run test && npm run lint -- --max-warnings=0 && npm run build && npm run budget"
+    "check": "npm run i18n:check && npm run unreachable:check && npm run test && npm run lint -- --max-warnings=0 && npm run build && npm run budget"
   },
   "dependencies": {
     "@google/model-viewer": "^4.1.0",

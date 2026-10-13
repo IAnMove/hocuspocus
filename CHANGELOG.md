@@ -16,6 +16,16 @@ IDs to use instead. Stories saved with `music-3.0` as their old default now read
 the local model and Story Lab tells you so; the file on disk is not rewritten.
 `media.options` lists the installed local music models.
 
+The Video Editor routes now come from one place. The main server mounts the
+extracted Video Editor router and the second copy inside the launch runtime is
+gone, with the same paths, answers and job list as before. Saved montages and
+the agent that asked still reach the export's metadata. A new CI test fails when
+a router is not mounted and not listed with a reason, when a server defines the
+same method and path twice, or when a route of the core server or the route table
+is missing from the main server. A new UI check (`npm run unreachable:check`, in
+CI) fails when a file in `ui/src` cannot be reached from an entry point and is not
+listed with a reason; 11 files that nothing used are deleted.
+
 **A hard rule about minors is now in every LLM system prompt, with NSFW mode on or
 off.** It forbids sexual or sexualized content with minors or with characters who
 look like or are described as minors, whatever the fiction, claimed age or art
