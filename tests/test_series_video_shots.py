@@ -17,7 +17,8 @@ from services.series_produce import ProduceDeps, SeriesProduce
 from services.series_review import content_digest
 from services.series_script import ScriptError, apply_script
 from services.series_video_shots import (
-    STYLE_DRIFT_THRESHOLD, import_generated_take, style_distance,
+    STYLE_DRIFT_THRESHOLD, _request_digest, _take_matches, digest_request, import_generated_take,
+    normalize_video, plan_start_key, style_distance, video_preset,
 )
 from tests.test_series_script_produce import FILES, KITS, Series, finished
 
@@ -361,6 +362,70 @@ def test_a_changed_prompt_is_a_new_take_not_a_conflict(tmp_path):
     # The same request again replays its take instead of paying for a second clip.
     assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
     assert _intents(tools)[2] == intents[1] and len(tools.clips) == 2
+
+
+def _attach_imported_take(series, shot, metadata):
+    """The library state a real import leaves, so the next produce can skip a matching take."""
+    shot["attempts"] = [{"id": "att-1", "status": "completed", "outputAssetIds": ["asset_1"]}]
+    shot["approvedAttemptId"] = "att-1"
+    series["assets"] = {**(series.get("assets") or {}),
+                        "asset_1": {"id": "asset_1", "kind": "video", "uri": "outputs/old.mp4", "metadata": metadata}}
+
+
+def test_a_changed_plan_plate_is_a_new_take(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    assert first["videoStart"] == plan_start_key(series, shot)
+    _attach_imported_take(series, shot, first)
+    assert _take_matches(series, shot)
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    assert not _take_matches(series, shot), "the composed start plate changed; the old clip does not fit"
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert len(_video_calls(tools, "generation.video")) == 2
+    second = tools.imports[1]["metadata"]
+    assert second["videoStart"] != first["videoStart"]
+    assert second["videoRequest"] == first["videoRequest"]
+
+
+def test_a_changed_location_plate_is_a_new_take(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["locations"] = [{"id": "garage", "layout2d": {"plateAssetId": "plate_1"}}]
+    series["assets"] = {"plate_1": {"id": "plate_1", "uri": "assets/garage.png"}}
+    shot["locationId"] = "garage"
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    _attach_imported_take(series, shot, first)
+    series["assets"]["plate_1"]["uri"] = "assets/garage-v2.png"
+    assert not _take_matches(series, shot)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert len(_video_calls(tools, "generation.video")) == 2
+    assert tools.imports[1]["metadata"]["videoStart"] != first["videoStart"]
+
+
+def test_a_take_made_before_plan_keys_is_not_made_again(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
+    _attach_imported_take(series, shot, {"videoRequest": digest})
+    assert _take_matches(series, shot), "an old take without videoStart still matches"
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == []
 
 
 def _editor_series(shot):

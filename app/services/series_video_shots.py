@@ -22,7 +22,10 @@ The clip is an H3 preset in the series frame (``480x864`` for a portrait 480p se
 the shot's own ``resolution``, else the series' ``videoShotResolution``, else 480p.
 Both take 480p, 540p, 720p or 768p. Only a size other than 480p enters the request
 digest a take keeps (``videoRequest``), so the takes made while every clip was 480p
-still match their shot and are not made again.
+still match their shot and are not made again. A ``start: plan`` take also keeps
+``videoStart`` (the 2D cast and location plate the start frame was composed from);
+changing that staging is a new clip. A take stored before ``videoStart`` existed
+still matches on ``videoRequest`` alone.
 """
 from __future__ import annotations
 
@@ -161,6 +164,37 @@ def digest_request(request: dict[str, Any], preset: str) -> dict[str, Any]:
     """The request a take's ``videoRequest`` digests: the size only when it is not 480p, so a 480p take keeps the
     digest it had before sizes could be chosen."""
     return request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
+
+
+def plan_start_key(series: dict[str, Any], shot: dict[str, Any]) -> str | None:
+    """What a ``start: plan`` plate is made from: the 2D cast and the location plate.
+
+    Named starts already live in ``video.start``. None when this shot is not a plan
+    start, so a take stored before this key existed keeps matching on ``videoRequest``.
+    """
+    try:
+        request = normalize_video(shot.get("video"))
+    except ValueError:
+        return None
+    if request["start"] != "plan":
+        return None
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    cast = []
+    for entry in layout.get("cast") or []:
+        if not isinstance(entry, dict):
+            continue
+        cast.append({
+            "characterId": entry.get("characterId"),
+            "poseId": entry.get("poseId") or "base",
+            "x": entry.get("x", 50),
+        })
+    payload: dict[str, Any] = {}
+    if cast:
+        payload["cast"] = cast
+    base = _location_file(series, shot)
+    if base:
+        payload["base"] = base
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def cancel_generation(deps: Any, job_id: str) -> None:
@@ -416,13 +450,19 @@ def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
         digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
     except ValueError:
         return False
+    start = plan_start_key(series, shot)
     assets = series.get("assets") or {}
     for attempt in reversed(shot.get("attempts") or []):
         if attempt.get("status") != "completed":
             continue
         for asset_id in attempt.get("outputAssetIds") or []:
-            if ((assets.get(asset_id) or {}).get("metadata") or {}).get("videoRequest") == digest:
-                return True
+            meta = ((assets.get(asset_id) or {}).get("metadata") or {})
+            if meta.get("videoRequest") != digest:
+                continue
+            stored = meta.get("videoStart")
+            if stored is not None and stored != start:
+                continue
+            return True
     return False
 
 
@@ -456,7 +496,8 @@ def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[s
         distance = _drift(start_path, take_path, request["frames"])
         if best is None or _closer(distance, best.get("distance")):
             best = {"distance": distance, "file": take_path, "intent": intent, "number": number,
-                    "request": digest_request(request, video_preset(series, shot))}
+                    "request": digest_request(request, video_preset(series, shot)),
+                    "startKey": plan_start_key(series, shot)}
         if distance is not None and distance <= STYLE_DRIFT_THRESHOLD:
             break
     if best is None:
@@ -490,7 +531,8 @@ def _closer(distance: float | None, best: float | None) -> bool:
 
 def _remember(deps: Any, job: dict[str, Any], shot: dict[str, Any], made: dict[str, Any], approve: bool) -> None:
     metadata = {"productionMethod": "imported_video", "automaticDraft": True, "videoRequest": _request_digest(made["request"]),
-                "intentId": made["intent"], **({} if made.get("distance") is None else {"styleDistance": made["distance"]})}
+                "intentId": made["intent"], **({} if made.get("distance") is None else {"styleDistance": made["distance"]}),
+                **({} if not made.get("startKey") else {"videoStart": made["startKey"]})}
     if not approve:
         metadata["reviewStage"] = "preview"
     if getattr(deps, "import_take", None):
