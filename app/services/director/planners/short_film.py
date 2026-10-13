@@ -3183,6 +3183,7 @@ exchange from fitting the video."""
                 location_ref_labels=getattr(self, '_location_ref_labels', None),
                 seamless=getattr(self, '_seamless', True),
                 image_model=image_model,
+                nsfw=nsfw,
             )
 
         image_planning_rules = (
@@ -3825,6 +3826,7 @@ H3 CHARACTER-AUTHENTICITY RULES:
                 location_ref_labels=getattr(self, '_location_ref_labels', None),
                 seamless=getattr(self, '_seamless', True),
                 image_model=image_model,
+                nsfw=nsfw,
             )
         location_labels = [
             str(label).strip()
@@ -5573,6 +5575,7 @@ SCREENPLAY:
                 location_ref_labels=getattr(self, "_location_ref_labels", None),
                 seamless=getattr(self, "_seamless", True),
                 image_model=getattr(self, "_image_model", "") or "",
+                nsfw=nsfw,
             )
             image_fields = '''    "image_source": "original or previous",
     "image_prompt": "Static first-frame composition before the action",

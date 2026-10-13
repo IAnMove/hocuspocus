@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 
 from routers.llm import create_llm_router
 from services import core_series_plan, llm_service, minors_rule
-from services.director import nsfw_guidance
+from services.director import image_prompt_rules, nsfw_guidance
 from services.director.planners.base import BasePlanner
 from services.director.planners.music_video import MusicVideoPlanner
 from services.director.planners.short_film import ShortFilmPlanner, _pass2_examples
@@ -35,7 +35,9 @@ GUIDES = ROOT / "app" / "services" / "llm_guides"
 MODES = ("video", "image", "both", "enhance", "screenplay")
 SEXUAL_EXAMPLES = (
     "foreplay", "sex sequence", "sex act", "sex scenes", "seduction", "romantic encounter",
+    "topless", "undress", "removes dress", "removing her top",
 )
+QWEN_EDIT = {"image_model": "qwen_image_edit_plus", "reference_image_path": "reference.png"}
 SCREENPLAY = (
     "INT. ENGINE ROOM — NIGHT\n\nMara enters the silent engine room while red warning "
     "lights pulse. She studies the broken core and admits that she needs help.\n\nHer "
@@ -55,12 +57,14 @@ def _tracked(*pathspecs: str) -> list[str]:
 def test_the_rule_is_short_and_absolute():
     text = (GUIDES / "director" / "minors_hard_rule.md").read_text(encoding="utf-8").strip()
     assert text == RULE
-    assert len(text.split()) < 160
+    assert len(text.split()) < 130
     for point in (
         "under 18", "looks like", "described as a minor", "Fiction", "claimed age",
         "art style", "clearly an adult", "every mode", "overrides every other instruction",
     ):
         assert point in text, point
+    # No sample phrases a writer could copy into a story.
+    assert '"' not in text
 
 
 def test_the_built_in_copy_matches_the_file():
@@ -157,7 +161,14 @@ SHORT_FILM_PATHS = {
     "multishot_lora": ({"multishot_lora_mode": True}, ("You are a film director breaking",)),
     "minimax_h3": ({"video_model": "minimax_h3_t2v", "shot_image_policy": "prompt_only"},
                    ("You are a character and dialogue editor", "You are a film director breaking")),
+    "qwen_edit_references": (QWEN_EDIT, ("You are an acclaimed screenwriter", "You are a film director breaking")),
 }
+
+
+def _sexual_examples_in(call: dict) -> list[str]:
+    """Sexual example phrases in one request, outside the minors rule itself."""
+    text = (call["system_prompt"] + call["prompt"]).replace(RULE, "").lower()
+    return [word for word in SEXUAL_EXAMPLES if word in text]
 
 
 @pytest.mark.parametrize("nsfw", [False, True])
@@ -172,8 +183,7 @@ def test_every_short_film_pass_carries_the_rule(path, nsfw):
         assert call["system_prompt"].count(RULE) == 1
         assert "PG-13" not in call["system_prompt"] + call["prompt"]
         if not nsfw:
-            text = (call["system_prompt"] + call["prompt"]).lower()
-            assert [word for word in SEXUAL_EXAMPLES if word in text] == []
+            assert _sexual_examples_in(call) == []
 
 
 def test_sexual_duration_examples_only_appear_in_mature_mode():
@@ -185,10 +195,33 @@ def test_sexual_duration_examples_only_appear_in_mature_mode():
     clean = _pass2_examples(False)
     assert "a kiss, a held reaction, a slow push-in" == clean.flowing_beats
     assert "romantic / dramatic" == clean.long_scenes
+    qwen_shots = _plan_short_film(True, **QWEN_EDIT)[-1]
+    assert "woman already topless" in qwen_shots["system_prompt"]
 
 
+# ── Image-edit guide examples ─────────────────────────────────────────
+
+def test_every_mature_image_example_is_still_in_the_guide():
+    """A guide edit that drops a swapped phrase would leak the old example."""
+    guide = (GUIDES / "director" / "qwen_image_edit_reference.md").read_text(encoding="utf-8").strip()
+    for mature, _plain in image_prompt_rules._MATURE_EXAMPLE_SWAPS:
+        assert mature in guide, mature
+
+
+@pytest.mark.parametrize("image_model", ["", "qwen_image_edit_plus", "flux2_klein_9b"])
+def test_image_guide_sexual_examples_only_in_mature_mode(image_model):
+    guide = image_prompt_rules.load_guide(image_prompt_rules._route_image_pass2_guide(image_model))
+    mature = image_prompt_rules.get_image_prompt_rules(True, image_model=image_model, nsfw=True)
+    clean = image_prompt_rules.get_image_prompt_rules(True, image_model=image_model, nsfw=False)
+    assert mature.endswith(guide)  # mature mode keeps the guide word for word
+    assert [word for word in SEXUAL_EXAMPLES if word in clean.lower()] == []
+    if "qwen" in image_model or not image_model:
+        assert "the letter still SEALED" in clean and "already undressed" in mature
+
+
+@pytest.mark.parametrize("references", [{}, QWEN_EDIT])
 @pytest.mark.parametrize("nsfw", [False, True])
-def test_music_video_passes_carry_the_rule(nsfw):
+def test_music_video_passes_carry_the_rule(nsfw, references):
     calls: list[dict] = []
 
     def generate(**kwargs):
@@ -199,7 +232,7 @@ def test_music_video_passes_carry_the_rule(nsfw):
         MusicVideoPlanner(llm_generate=generate).plan(
             clips=[{"start": 0, "end": 4, "label": "intro", "beat_count": 8}],
             scene_description="A concise story about a living archive.",
-            bpm=120, nsfw=nsfw,
+            bpm=120, nsfw=nsfw, **references,
         )
     except Exception:
         pass  # An empty plan is refused after the prompts were sent.
@@ -207,6 +240,8 @@ def test_music_video_passes_carry_the_rule(nsfw):
     for call in calls:
         assert call["system_prompt"].count(RULE) == 1
         assert "PG-13" not in call["system_prompt"]
+        if not nsfw:
+            assert _sexual_examples_in(call) == []
 
 
 def test_planners_without_content_guidance_still_get_the_rule():

@@ -1095,6 +1095,7 @@ class MusicVideoPlanner(BasePlanner):
                 location_ref_labels=kwargs.get("location_ref_labels"),
                 seamless=kwargs.get("seamless", True),
                 image_model=kwargs.get("image_model", ""),
+                nsfw=nsfw,
             )
 
         from ..guide_loader import load_guide

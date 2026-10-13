@@ -16,8 +16,8 @@ WanGP prompt enhancer adds it too. The PG-13 rules that NSFW-off mode used to ad
 are gone (`nsfw_off_safety_rules.md`, the inline PG-13 enhance text,
 `get_safe_content_guidance` and the unused `PUBLIC_PROVIDERS`). The NSFW toggle
 itself does not change: it still filters models and LoRAs and still adds the
-mature-content guides. The Director shot-length examples about sex scenes now
-appear only with NSFW on.
+mature-content guides. The Director shot-length examples about sex scenes and
+the undressing examples in the Qwen image-edit guide now appear only with NSFW on.
 
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
