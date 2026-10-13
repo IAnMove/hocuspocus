@@ -9833,6 +9833,7 @@ async def director_plan_short_film_script(request: Request):
             preserve_visual_style=body.get("preserve_visual_style", False),
             character_visual_style=body.get("character_visual_style", ""),
             allow_clip_text=body.get("allow_clip_text") is True,
+            raw_prompts=wgp.server_config.get("services", {}).get("raw_prompts") is True,
         )
         return result
     except Exception as e:
@@ -10478,6 +10479,10 @@ async def _director_v2_plan_body(body: dict):
         from services.director.orchestrator import DirectorOrchestrator, DirectorFlags
 
         flags = DirectorFlags.from_dict(body.get("director_flags", {}))
+        # Raw prompts: the planner's prompts get no style lock, source-style
+        # anchor, compression, no-text lock or polish.
+        raw_prompts = wgp.server_config.get("services", {}).get("raw_prompts") is True
+        flags.raw_prompts = raw_prompts
         director = DirectorOrchestrator(
             llm_generate=llm_service.generate,
             llm_generate_streaming=llm_service.generate_streaming,
@@ -10550,7 +10555,7 @@ async def _director_v2_plan_body(body: dict):
         # Off by default: the planner's prompts reach the models as written.
         # The third pass is model-aware; native H3 prompts retain their
         # deterministic compiler while applicable prompts are polished.
-        polish_mode = "off" if services.get("raw_prompts") is True else services.get("director_prompt_polish", "off")
+        polish_mode = "off" if raw_prompts else services.get("director_prompt_polish", "off")
         video_model = body.get("video_model", "")
         image_model = body.get("image_model", "")
 
@@ -10635,7 +10640,7 @@ async def _director_v2_plan_body(body: dict):
             )
 
         from services.director.policies import enforce_visual_style_on_clip_plans
-        clip_plans = enforce_visual_style_on_clip_plans(
+        clip_plans = clip_plans if raw_prompts else enforce_visual_style_on_clip_plans(
             clip_plans,
             "" if direct_video else body.get("visual_style", ""),
             preserve=(
@@ -10656,7 +10661,7 @@ async def _director_v2_plan_body(body: dict):
                 clip_plans,
                 normalized_treatment.get("direct_video_master_prompt"),
                 audio_direction=body.get("h3_audio_prompt", ""),
-                allow_clip_text=body.get("allow_clip_text") is True,
+                allow_clip_text=raw_prompts or body.get("allow_clip_text") is True,
             )
         elif _is_minimax_h3_model(video_model):
             from services.director.minimax_h3_prompting import (
@@ -10671,7 +10676,7 @@ async def _director_v2_plan_body(body: dict):
                 audio_direction=body.get("h3_audio_prompt", ""),
                 h3_audio_policy=h3_audio_policy_from_payload(body),
             )
-            clip_plans = enforce_visual_style_on_clip_plans(
+            clip_plans = clip_plans if raw_prompts else enforce_visual_style_on_clip_plans(
                 clip_plans,
                 body.get("visual_style", ""),
                 preserve=bool(body.get("preserve_visual_style", False)),

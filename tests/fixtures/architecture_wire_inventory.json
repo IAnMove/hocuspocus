@@ -104,6 +104,12 @@
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
+      "file": "tests/test_director_raw_prompts.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
+    },
+    {
       "file": "tests/test_director_resume_endpoint.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",

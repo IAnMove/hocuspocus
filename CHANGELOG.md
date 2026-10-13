@@ -20,9 +20,12 @@ carry another production's tagline or Nintendo disclaimer.
 **Prompts reach the model as written.** Director prompt polish is off by
 default (opt-in in Settings › Services); the 1,450-character cut is gone (only
 MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
-user types for a rerun keeps the lettering it asks for. *Raw prompts* in
-Settings › Services sends every Director prompt exactly as planned: no art-style
-prefix, locks, motion-word removal or polish. When a model handler rewrites a
+user types for a rerun, or changes at the review pause, keeps the lettering it
+asks for. *Raw prompts* in Settings › Services sends every Director prompt
+exactly as planned: no art-style prefix, locks, motion-word removal or polish,
+in planning (the plan endpoint, the orchestrator and the legacy planner), after
+the review pause, in the H3 validation pass and on every rerun; the planner's
+own words are not compressed either. When a model handler rewrites a
 prompt (H3 window timing, outpainting), Extra info shows *What the model
 received* for each window. Until a production profile is saved, a dismissible
 notice says which providers text and pictures use; a saved profile that cannot
