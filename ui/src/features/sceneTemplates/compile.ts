@@ -1,6 +1,8 @@
 import { finishTemplateLayers, TEMPLATE_FINISH_VERSION } from './templateFinish'
 import type { Scene, SceneLayer } from '../../types'
-import i18n from '../../i18n'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 import { canonicalBindings, requiredSlots, resolveSceneTemplate, templateCatalogVersion, type SceneTemplateDefinition, type TemplateSlotName } from './catalog'
 import { backdrop, foreground, type BuildContext, type TemplateAsset, type TemplateBindings } from './sceneBuilders'
 import { resolveControls, type TemplateControlInput, type TemplateControlValues } from './templateControls'

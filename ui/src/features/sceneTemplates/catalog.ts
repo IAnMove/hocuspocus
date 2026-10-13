@@ -7,7 +7,9 @@
  */
 
 import sceneTemplateCatalog from '../../../../app/shared/scene_templates.json' with { type: 'json' }
-import i18n from '../../i18n'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 import { TemplateError } from './templateErrors'
 
 export const CATALOG_VERSION = '2026-09-review-1' as const

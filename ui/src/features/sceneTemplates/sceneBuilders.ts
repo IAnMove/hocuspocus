@@ -1,5 +1,7 @@
 import type { SceneLayer, SceneKeyframe, SceneAtmosphereKind, SceneCatalogAssetReference } from '../../types'
-import i18n from '../../i18n'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 import type { ControlValue, TemplateAssetKind, TemplateSlotName } from './catalog'
 import { ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS } from '../../lib/scene2d/layerStyle'
 

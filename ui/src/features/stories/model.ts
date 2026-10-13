@@ -8,7 +8,9 @@ import {
 } from '../../types/index.ts'
 import { normalizeStoryMusicModel } from './musicModel'
 import { contentLanguageForUi } from '../../lib/contentLanguage'
-import i18n from '../../i18n'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 import { normalizeLanguageIntent, savedProjectLanguage } from '../../lib/languageIntent'
 import { extraDecisions, normalizeGuide } from '../writing-guide/model'
 import { defaultStoryProductionRecipe, normalizeStoryProductionRecipe } from './storyProductionRecipe'
