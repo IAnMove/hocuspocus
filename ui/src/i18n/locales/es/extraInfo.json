@@ -23,6 +23,8 @@
     "noPrompt": "No se guardó ningún prompt para este clip.",
     "audioPrompt": "Prompt de audio",
     "negativePrompt": "Prompt negativo",
+    "modelPrompt": "Lo que recibió el modelo · ventana {{window}}",
+    "modelPromptHint": "El modelo reescribió el prompt de generación antes de usarlo (por ejemplo, el reparto en el tiempo de un clip largo de H3). Este es el texto exacto con el que generó.",
     "allSavedSettings": "Todos los ajustes guardados",
     "prompt": "Prompt",
     "allSavedMetadata": "Todos los metadatos guardados"
@@ -35,6 +37,7 @@
     "generationPrompt": "prompt de generación",
     "audioPrompt": "prompt de audio",
     "negativePrompt": "prompt negativo",
+    "modelPrompt": "prompt del modelo",
     "allSavedSettings": "todos los ajustes guardados",
     "overview": "resumen",
     "youtubeTitle": "título de YouTube",

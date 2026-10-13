@@ -50,7 +50,9 @@ def generate_song(production: Any, spec: dict) -> None:
         return
     language = song_language(song)
     jobs = {}
-    for seed in song.get("seeds") or [11, 22, 33]:
+    from services.production_quality import song_seed_offsets
+    from services.production_seeds import default_seed
+    for seed in song.get("seeds") or [default_seed(production, offset) for offset in song_seed_offsets(spec)]:
         params = _music_params(song, seed, language or "en")      # English only when nothing tells
         reply = production.mcp("generation.music", {"version": 2, "intent_id": f"{production.id}-song-{seed}",
                                                     "input": {"workspace": production.ws, "params": params}})

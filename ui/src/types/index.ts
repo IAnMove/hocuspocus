@@ -1027,6 +1027,8 @@ export interface VideoClipInfo {
   prompt: string
   negative_prompt: string
   audio_prompt: string
+  /** Window number → the prompt a model handler rewrote before generating (what the model received). */
+  model_prompts?: Record<string, string>
   saved_metadata: Record<string, unknown>
 }
 
@@ -1140,6 +1142,8 @@ export interface ServicesConfig {
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
+  /** The Director sends every prompt exactly as planned: no style prefix, locks or polish. */
+  raw_prompts?: boolean
   workflow_parallelism_enabled: boolean
   debug_trace_enabled: boolean
   debug_trace_log_path: string

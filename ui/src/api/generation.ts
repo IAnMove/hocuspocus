@@ -145,6 +145,8 @@ export async function updateModelSelections(
 export interface ProductionProfileSettings {
   configured: boolean
   profile: import('../types').ProductionProfile
+  /** Why the saved profile could not be read; the defaults stand in until it is saved again. */
+  invalid_reason?: string
 }
 
 export async function fetchProductionProfile(): Promise<ProductionProfileSettings> {
