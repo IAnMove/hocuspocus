@@ -66,6 +66,38 @@
     },
     "status": 200
   },
+  "serve a missing upload": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
+  },
+  "serve a parent folder": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
+  },
+  "serve a path out of uploads": {
+    "body": {
+      "detail": "Not Found"
+    },
+    "status": 404
+  },
+  "serve a path out of uploads with a drive": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
+  },
+  "upload aac": {
+    "body": {
+      "filename": "<ID>.wav",
+      "path": "<STATE>/uploads/<ID>.wav",
+      "url": "/api/v1/uploads/<ID>.wav"
+    },
+    "status": 200
+  },
   "upload clip": {
     "body": {
       "duration_seconds": 1.0,
@@ -75,6 +107,46 @@
       "has_audio": false,
       "path": "<STATE>/uploads/<ID>.mp4",
       "url": "/api/v1/uploads/<ID>.mp4"
+    },
+    "status": 200
+  },
+  "upload evil.html": {
+    "body": {
+      "filename": "<ID>.bin",
+      "path": "<STATE>/uploads/<ID>.bin",
+      "url": "/api/v1/uploads/<ID>.bin"
+    },
+    "status": 200
+  },
+  "upload evil.js": {
+    "body": {
+      "filename": "<ID>.bin",
+      "path": "<STATE>/uploads/<ID>.bin",
+      "url": "/api/v1/uploads/<ID>.bin"
+    },
+    "status": 200
+  },
+  "upload evil.svg": {
+    "body": {
+      "filename": "<ID>.bin",
+      "path": "<STATE>/uploads/<ID>.bin",
+      "url": "/api/v1/uploads/<ID>.bin"
+    },
+    "status": 200
+  },
+  "upload no-extension": {
+    "body": {
+      "filename": "<ID>.png",
+      "path": "<STATE>/uploads/<ID>.png",
+      "url": "/api/v1/uploads/<ID>.png"
+    },
+    "status": 200
+  },
+  "upload png": {
+    "body": {
+      "filename": "<ID>.png",
+      "path": "<STATE>/uploads/<ID>.png",
+      "url": "/api/v1/uploads/<ID>.png"
     },
     "status": 200
   }
