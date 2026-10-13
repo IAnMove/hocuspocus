@@ -112,17 +112,42 @@ def _includes(scope: ast.AST, imports: dict, receiver: str | None = None) -> lis
             continue
         target = _include_target(node, imports)
         assert target is not None, f"Cannot resolve router include: {ast.unparse(node)}"
+        # The routes below are read without an include-time prefix; fail rather than misread paths.
+        assert not any(keyword.arg == "prefix" for keyword in node.keywords), (
+            f"include_router(prefix=...) is not expanded by this check: {ast.unparse(node)}"
+        )
         mounted.append(target)
     return mounted
 
 
-def _nested_includes(module: str, factory: str) -> list[tuple[str, str]]:
+def _factory_node(module: str, factory: str) -> tuple[ast.Module, ast.FunctionDef | ast.AsyncFunctionDef]:
     tree = _parse(ROUTERS / f"{module}.py")
     node = next(
         item for item in tree.body
         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == factory
     )
+    return tree, node
+
+
+def _nested_includes(module: str, factory: str) -> list[tuple[str, str]]:
+    tree, node = _factory_node(module, factory)
     return _includes(node, _router_imports(tree))
+
+
+def _router_prefix(module: str, factory: str) -> str:
+    """The prefix of ``router = APIRouter(prefix=...)`` in a factory; routers it includes inherit it."""
+    _tree, node = _factory_node(module, factory)
+    for item in ast.walk(node):
+        if (
+            isinstance(item, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "router" for target in item.targets)
+            and isinstance(item.value, ast.Call)
+            and isinstance(item.value.func, ast.Name)
+            and item.value.func.id == "APIRouter"
+        ):
+            prefix = next((keyword.value for keyword in item.value.keywords if keyword.arg == "prefix"), None)
+            return ast.literal_eval(prefix) if prefix is not None else ""
+    return ""
 
 
 def _mounted(server: Path) -> list[tuple[str, str]]:
@@ -140,10 +165,15 @@ def _mounted(server: Path) -> list[tuple[str, str]]:
     return mounted
 
 
-def _factory_routes(module: str, factory: str) -> list[dict]:
-    routes = list(_router_factory_routes(ROUTERS / f"{module}.py", factory))
+def _factory_routes(module: str, factory: str, prefix: str = "") -> list[dict]:
+    """A router's routes, and those of the routers it includes under its own prefix."""
+    routes = [
+        {**route, "path": prefix + route["path"]}
+        for route in _router_factory_routes(ROUTERS / f"{module}.py", factory)
+    ]
+    nested_prefix = prefix + _router_prefix(module, factory)
     for nested in _nested_includes(module, factory):
-        routes.extend(_factory_routes(*nested))
+        routes.extend(_factory_routes(*nested, prefix=nested_prefix))
     return routes
 
 
@@ -183,8 +213,9 @@ def _server_routes(server: Path) -> list[dict]:
 
 
 def _route_key(route: dict) -> tuple[str, str]:
-    # "{name:path}" and "{name}" name the same route; only the converter differs.
-    return route["method"], re.sub(r"\{(\w+):\w+\}", r"{\1}", route["path"])
+    # A request that reaches "/x/{id}" also reaches "/x/{job_id}" or "/x/{id:path}": compare the
+    # shape of the path, not the names or converters of its parameters.
+    return route["method"], re.sub(r"\{[^}]*\}", "{}", route["path"])
 
 
 def test_every_router_factory_is_mounted_by_the_main_server_or_listed() -> None:
@@ -212,10 +243,22 @@ def test_no_method_and_path_is_defined_twice_in_a_server() -> None:
     for server in (MAIN, CORE):
         counts = Counter(_route_key(route) for route in _server_routes(server))
         duplicates.update({(server.name, *key): count for key, count in counts.items() if count > 1})
-    assert set(duplicates) == set(KNOWN_DUPLICATES), (
-        f"Defined twice: {sorted(set(duplicates) - set(KNOWN_DUPLICATES))}; "
-        f"listed but fixed: {sorted(set(KNOWN_DUPLICATES) - set(duplicates))}"
+    known = {
+        (server, *_route_key({"method": method, "path": path}))
+        for server, method, path in KNOWN_DUPLICATES
+    }
+    assert set(duplicates) == known, (
+        f"Defined twice: {sorted(set(duplicates) - known)}; "
+        f"listed but fixed: {sorted(known - set(duplicates))}"
     )
+
+
+def test_routers_mounted_inside_routers_keep_the_parent_prefix() -> None:
+    # character_kit_face (prefix /api/v1/character-kits) includes the Lips Creator router
+    # (prefix /lips-creator); the running server answers on the joined path.
+    paths = {_route_key(route) for route in _server_routes(MAIN)}
+    assert ("GET", "/api/v1/character-kits/lips-creator/library") in paths
+    assert ("GET", "/lips-creator/library") not in paths
 
 
 def test_route_table_routes_exist_in_the_main_server() -> None:

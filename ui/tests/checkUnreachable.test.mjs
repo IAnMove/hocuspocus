@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
-import { readAllowlist, scriptReferences, unreachableReport, viteEntries } from '../scripts/check-unreachable.mjs'
+import { invokedDirectly, readAllowlist, scriptReferences, unreachableReport, viteEntries } from '../scripts/check-unreachable.mjs'
 
 const UI_ROOT = path.resolve(import.meta.dirname, '..')
 
@@ -84,6 +85,20 @@ test('non-literal dynamic imports are reported, not followed', () => {
   const found = scriptReferences('x.ts', "const name = 'a'\nawait import(`./${name}`)\nawait import('./b')")
   assert.deepEqual(found.specifiers, ['./b'])
   assert.deepEqual(found.dynamic, ['`./${name}`'])
+})
+
+test('the check runs when node is given a symlinked path to it, and not when imported', { skip: process.platform === 'win32' }, () => {
+  const script = path.join(UI_ROOT, 'scripts', 'check-unreachable.mjs')
+  const root = mkdtempSync(path.join(os.tmpdir(), 'hocus-unreachable-link-'))
+  roots.push(root)
+  const link = path.join(root, 'check-unreachable.mjs')
+  symlinkSync(script, link)
+  const moduleUrl = pathToFileURL(script).href
+  assert.equal(invokedDirectly(script, moduleUrl), true)
+  // A silent no-op would let CI pass without checking anything.
+  assert.equal(invokedDirectly(link, moduleUrl), true)
+  assert.equal(invokedDirectly(path.join(UI_ROOT, 'package.json'), moduleUrl), false)
+  assert.equal(invokedDirectly(undefined, moduleUrl), false)
 })
 
 test('the real UI has no unreachable file outside the reviewed allow-list', () => {

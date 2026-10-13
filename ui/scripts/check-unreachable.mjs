@@ -9,9 +9,9 @@
 // A file nothing reaches is either deleted or listed in
 // scripts/unreachable-allowlist.json with a reason. A listed file that is reached
 // again, or no longer exists, fails too, so the list stays honest.
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 const UI_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -218,4 +218,16 @@ function main() {
   )
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main()
+/** True when node runs this file, also through a symlinked path or another drive-letter case on Windows. */
+export function invokedDirectly(argvPath = process.argv[1], moduleUrl = import.meta.url) {
+  if (!argvPath) return false
+  try {
+    const invoked = realpathSync(resolve(argvPath))
+    const module = realpathSync(fileURLToPath(moduleUrl))
+    return process.platform === 'win32' ? invoked.toLowerCase() === module.toLowerCase() : invoked === module
+  } catch {
+    return false
+  }
+}
+
+if (invokedDirectly()) main()
