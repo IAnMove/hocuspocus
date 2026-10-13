@@ -128,6 +128,45 @@ def test_a_take_made_before_sizes_existed_is_not_made_again(tmp_path):
     assert _take_matches(series, shot), "back to 480p, the old take fits again"
 
 
+def test_produce_reapproves_the_matching_take_when_the_inspector_cleared_it(tmp_path):
+    """Changing the size away and back clears approval; the old take still matches, so produce
+    must point the shot at it again or the cut raises 'Approve shot N'."""
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, _episode_body = _episode(_request())
+    series, shot = _made_before(library)
+    shot.pop("approvedAttemptId", None)
+    assert _take_matches(series, shot)
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == []
+    assert shot["approvedAttemptId"] == "att-old"
+    assert series["episodesById"]["ep1"]["shots"][0]["approvedAttemptId"] == "att-old"
+
+
+def test_produce_points_at_the_take_of_the_size_they_asked_not_the_last_approved(tmp_path):
+    """A series that produced at 720p, then went back to 480p, still has the 720p take approved.
+    Skipping because a 480p take exists would cut the 720p clip."""
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, _episode_body = _episode(_request())
+    series, shot = _made_before(library)
+    sized = _video_digest({"videoShotResolution": "720p"}, shot)
+    shot["attempts"].append({"id": "att-720", "status": "completed", "outputAssetIds": ["asset_720"]})
+    shot["approvedAttemptId"] = "att-720"
+    series["assets"]["asset_720"] = {"id": "asset_720", "kind": "video", "uri": "outputs/new.mp4",
+                                     "metadata": {"videoRequest": sized}}
+    assert _take_matches(series, shot), "the older 480p take still matches the current request"
+    assert shot["approvedAttemptId"] == "att-720"
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == []
+    assert shot["approvedAttemptId"] == "att-old"
+    assert series["episodesById"]["ep1"]["shots"][0]["approvedAttemptId"] == "att-old"
+
+
 def test_a_480p_take_asks_for_the_same_clip_plate_and_intent_as_before(tmp_path):
     clip = _png(tmp_path / "clip.png", (196, 180, 154))
     tools = _Server(tmp_path, clip)

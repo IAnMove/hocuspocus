@@ -22,7 +22,10 @@ The clip is an H3 preset in the series frame (``480x864`` for a portrait 480p se
 the shot's own ``resolution``, else the series' ``videoShotResolution``, else 480p.
 Both take 480p, 540p, 720p or 768p. Only a size other than 480p enters the request
 digest a take keeps (``videoRequest``), so the takes made while every clip was 480p
-still match their shot and are not made again.
+still match their shot and are not made again. A matching take that is not the
+approved one is pointed at again (the inspector clears approval when the size
+changes; a series size change does not), so produce does not skip and leave a
+wrong or missing approval for the cut.
 """
 from __future__ import annotations
 
@@ -211,7 +214,7 @@ def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, canc
     done = set(step.get("doneShots") or [])
     run = _Run(job, step, deps, cancelled, save or (lambda: None))
     for shot in allowed:
-        if _already_made(series, shot, done):
+        if _already_made(run, series, episode, shot, done):
             done.add(shot.get("id"))
             continue
         if _plan_blocks(episode, shot):
@@ -236,8 +239,21 @@ def _scripted(episode: dict[str, Any]) -> list[dict[str, Any]]:
     return [shot for shot in episode.get("shots") or [] if isinstance(shot, dict) and isinstance(shot.get("video"), dict)]
 
 
-def _already_made(series: dict[str, Any], shot: dict[str, Any], done: set) -> bool:
-    return shot.get("id") in done or _take_matches(series, shot)
+def _already_made(run: "_Run", series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any],
+                  done: set) -> bool:
+    """True when this request already has a completed take. That take becomes the approved one when
+    the shot points at another (or at none): changing the size away and back must not skip generate
+    and then cut the 720p take, or fail the join with no approval."""
+    if shot.get("id") in done:
+        return True
+    attempt_id = _matching_attempt(series, shot)
+    if not attempt_id:
+        return False
+    if shot.get("approvedAttemptId") != attempt_id and (
+        episode_mode(episode) != "preview" or shot.get("approvedAttemptId")
+    ):
+        _approve_existing(run, series, shot, attempt_id)
+    return True
 
 
 class _Run:
@@ -411,19 +427,68 @@ def _next_take(number: int, failed: list[int]) -> int:
     return number
 
 
-def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
+def _matching_attempt(series: dict[str, Any], shot: dict[str, Any]) -> str | None:
+    """The latest completed attempt whose ``videoRequest`` is this shot's current size and prompt."""
     try:
         digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
-    except ValueError:
-        return False
+    except (ValueError, KeyError, TypeError):
+        return None
     assets = series.get("assets") or {}
     for attempt in reversed(shot.get("attempts") or []):
-        if attempt.get("status") != "completed":
+        if not isinstance(attempt, dict) or attempt.get("status") != "completed":
             continue
         for asset_id in attempt.get("outputAssetIds") or []:
             if ((assets.get(asset_id) or {}).get("metadata") or {}).get("videoRequest") == digest:
-                return True
-    return False
+                return attempt.get("id")
+    return None
+
+
+def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
+    return _matching_attempt(series, shot) is not None
+
+
+def _approve_existing(run: "_Run", series: dict[str, Any], shot: dict[str, Any], attempt_id: str) -> None:
+    """Point the shot (and any language version that does not already) at ``attempt_id``, and persist."""
+    _point_shot_at(series, shot, attempt_id)
+
+    def mutate(library: dict) -> None:
+        live = (library.get("seriesById") or {}).get(run.job["seriesId"])
+        if isinstance(live, dict):
+            found = _shot_index(live, str(shot.get("id")))
+            if found is not None:
+                _point_shot_at(live, found[2], attempt_id)
+
+    if _locked_write(run.job["workspace"], mutate):
+        return
+    write = getattr(run.deps, "write_library", None)
+    if write:
+        library = run.deps.read_library(run.job["workspace"])
+        mutate(library)
+        write(run.job["workspace"], library)
+
+
+def _point_shot_at(series: dict[str, Any], shot: dict[str, Any], attempt_id: str) -> None:
+    from services.series_library import approve_shot_render_attempt
+
+    found = _shot_index(series, str(shot.get("id")))
+    if found is None:
+        return
+    episode, index, stored = found
+    try:
+        updated = approve_shot_render_attempt(stored, attempt_id, "server")
+    except ValueError:
+        return
+    episode["shots"][index] = updated
+    shot.clear()
+    shot.update(updated)
+    for version in (episode.get("languageVersions") or {}).values():
+        if not isinstance(version, dict):
+            continue
+        approved = version.get("approvedAttemptIds")
+        if not isinstance(approved, dict):
+            version["approvedAttemptIds"] = {shot["id"]: attempt_id}
+        elif approved.get(shot["id"]) != attempt_id:
+            approved[shot["id"]] = attempt_id
 
 
 # One shot ------------------------------------------------------------------------------------------
