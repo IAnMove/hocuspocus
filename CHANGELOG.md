@@ -28,6 +28,78 @@ Numba cache. A test checks the fake engine's names and parameters against the
 real WanGP source, also for a function WanGP imports from another module, so
 the fake cannot drift unnoticed.
 
+**New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
+
+**Director's hidden house rules are now visible.** With no reference image,
+Director still draws one shared picture from shot 1 and draws every shot from
+it, but the Dashboard now shows that picture, its prompt and the run's options
+above the shots, and can replace it with another image of the run or stop
+using it for repairs and reruns. Settings › Services › *Director shared
+reference* chooses Always (default), Only when there are no character
+references, or Off (each shot from its own prompt); a run can override it with
+`reference_anchor`, and the step-by-step Director chat follows it too. The
+shared picture's prompt no longer says "cinematic".
+"Use lighting and color temp from reference image" is gone from the guide used
+when no reference exists, and elsewhere it follows *Light from the reference*
+(default: only with your own reference image, so a story with character
+portraits alone no longer copies the anchor's light). *Keep clothes from
+references* (on by default) can be turned off to describe clothes per shot;
+the clothing words then also survive the optional third-pass polish.
+*Raw prompts* now also skips the planner's cleanup of image prompts, as its
+description promised; otherwise Extra info says how many clothing words,
+motion sentences and filler phrases that cleanup removed. The music-video
+treatment shows its coverage cycle and what choruses do (return to the first
+set by default, rotate through the sets, or the planner chooses), and the
+Dashboard shows each shot's planned set and coverage. When the planner returns
+no shots and Director builds a simple plan itself, the Dashboard says so and
+that plan no longer says "cinematic" either.
+
+**The code-health check now recognizes moved code and no longer misses new
+folders.** It checks every pull request against its base, and the coming
+refactor moves functions out of `_launch_runtime.py` and `useStore.ts`. Before,
+moving a complex function word for word into a new file failed as a "new
+complexity hotspot", and nothing could waive that. Now the check records a
+fingerprint of each complex function. A Python function that moves with the
+same name and the same code is reported as `moved: X from A to B` and passes.
+Comments, docstrings and the route decorator may differ. A UI function passes
+when it keeps its name and its complexity does not rise. A changed body, a
+rise in complexity or a copy left behind still counts as new code. The limit of
+five new complex functions per pull request no longer counts pieces split out
+of an existing function, as long as that function gets simpler by at least as
+much and the pull request adds no logic overall. The development → main
+release check gives the same split credit at each merge. A new file over 1,200
+lines still fails, moved or not. The check also fails when Python code is added
+under `app/` in a folder it does not measure (for example a new
+`app/features/`). Vendored engine folders and the eleven files that are already
+outside the measured folders are exempt, but those eleven files can no longer
+grow by more than 75 lines (in a pull request, or over a development → main
+release) or gain a complex function, and new vendored files are listed for
+reviewers. A waiver now covers only its own rule and exactly its file, and its
+expiry must be a real date. No limit changed.
+
+**Music videos show their defaults, and the agent can change them.** Auto-planned
+music videos no longer turn the brief's call to action into every chorus's sung
+action, or its theme into every verse's: the theme is now only where the shots take
+place (`section_actions.scene`) and the call to action stays on the end cards. Content
+shots no longer share one "Wide cinematic shot… slow camera" text: they rotate four
+framings, each with its own camera move in words (H3 makes the move), and a trailer
+beat opens on a framing of its own scale. `dry_run` shows what the planner filled in
+(`auto_plan`), which windows are sung, and each trailer beat's action.
+`spec.video` picks the H3 model and steps (Fused Turbo at 4 steps stays the
+default; base, full and legacy H3 can be chosen; steps must be in the model's range,
+4-8 for Fused Turbo); `dry_run` and `production.status` show it as `video_model`, and
+a change shoots the kept clips of unlocked shots again instead of mixing models, while
+going back to the earlier model keeps the clips it shot. Painted sets keep the
+empty-floor recipe by default and can ask for a `backdrop` or no staging
+(`sets.<name>.staging`); `dry_run` shows each set's prompt and the look sentences it
+leaves out, and a look that names its medium or material ("figurine look",
+"doll-like", "cast iron") keeps it. Productions that already ran resume unchanged:
+the same spec, seeds and jobs, and no set or clip is made again. A new set, or a model
+drawn from a prompt, whose look names a figurine or doll medium now keeps that
+sentence, and a sentence about a crowd is now left out. A scene2d shot that draws its
+own background from such a look draws it again on its next run (lock the shot to
+keep it).
+
 **Music never uses paid MiniMax by default.** Every music default is now the local,
 free ACE-Step 1.5 XL model, the one Studio and `production.*` already use. The paid
 MiniMax API models (`music-3.0`, `music-2.6` and covers) run only when you pick one
@@ -125,6 +197,21 @@ profile's size), and H3 now keeps a 540p or 768p choice instead of rendering it 
 made is generated again. A series on H3 (not H3 Legacy) saved at 540p or 768p now
 renders its new takes at that size; its earlier takes stay 1280x704, and the cut
 scales every clip to the episode frame. Choose 720p to keep the old size.
+
+**Series camera, finish and episode format are now visible choices.** A 2D Series
+shot could only hold still or push in, every 2D shot got the same paper finish, and
+agents were told one fixed episode shape. The camera can now also pull out, pan left,
+pan right or drift (in the shot's *Framing and timing*, `series.shot.update` and the
+script's `camera`); a pan or drift frames the plate a little closer so its edge never
+shows. The finish is chosen for the series in Setup (`look.finish`: paper, none, any
+Video 2D finish such as film or noir, without its letterbox bars, or an agent's own
+amounts) and for one shot.
+Setup also has an *Episode format*: the episode planner and agents follow it, and
+when it is empty agents keep the default sitcom format, which Setup now shows.
+Nothing changes for a series that chooses nothing: paper stays the default, only a
+camera's own name (`pan-left`) moves it, so words such as "slow pan" stored in old
+shots still render static, and every stored shot keeps its digests, takes and
+approvals.
 
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice

@@ -85,7 +85,11 @@ def create_series_library_router() -> APIRouter:
                     series = normalize_series_project(raw_series, str(raw_series.get("id") or ""), workspace)
                     stamp_created_series(series, "series.create", episodes="series.episode.create")
                 else:
-                    series = create_series_project(workspace, title=str(body.get("title") or "Untitled series"))
+                    series = create_series_project(
+                        workspace,
+                        title=str(body.get("title") or "Untitled series"),
+                        language=body.get("language") if isinstance(body.get("language"), str) else None,
+                    )
                 if series["id"] in library["seriesById"]:
                     raise HTTPException(status_code=409, detail="A Series Lab project with this id already exists")
                 library["seriesById"][series["id"]] = series

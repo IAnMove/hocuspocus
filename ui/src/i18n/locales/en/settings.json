@@ -23,6 +23,24 @@
     "optionEs": "Español",
     "quickAria": "Quick interface language"
   },
+  "developerMode": {
+    "label": "Developer mode",
+    "hint": "Shows internal tools such as Internal audit. Leave off for normal use."
+  },
+  "communityMusic": {
+    "title": "Community MiniMax Music variants",
+    "experimental": "experimental",
+    "intro": "Community ports of the official model. They are shown so you can compare requirements, but they cannot be selected until a validated HocusPocus adapter exists.",
+    "openRepo": "Open repository",
+    "disk": "disk ~{{gb}} GB",
+    "backendLine": "backend: {{backend}}",
+    "formatWebgpu": "WebGPU · Chromium browser",
+    "platformGguf": "CUDA, ROCm, Vulkan or CPU",
+    "backendWebgpu": "WebGPU in the browser",
+    "noteGguf": "Figures published by the community implementation; it is not compatible with our Diffusers backend.",
+    "noteMlx": "Needs a separate MLX adapter; it does not work as a CUDA checkpoint.",
+    "noteWebgpu": "12 GB for songs up to one minute; 16 GB for the full length."
+  },
   "services": {
     "loadFailed": "Failed to load services settings",
     "notSet": "Not set",
@@ -130,6 +148,18 @@
     "polishThirdHint": "Rewrites each prompt with an LLM for the chosen model and removes motion and clothing words from image prompts. H3 keeps its native video prompts.",
     "rawPrompts": "Raw prompts",
     "rawPromptsHint": "Director sends every prompt exactly as planned: no art-style prefix, no style, character or no-text locks, no motion-word removal and no polish. Extra info on each output shows the prompt the model received.",
+    "referenceAnchor": "Director shared reference",
+    "referenceAnchorHint": "With no reference image, Director draws one picture from shot 1 and draws every shot from it. Faces stay alike, but shots look alike too.",
+    "referenceAnchorAlways": "Always (default)",
+    "referenceAnchorNoCast": "Only when there are no character references",
+    "referenceAnchorOff": "Off: each shot from its own prompt",
+    "lightingContinuity": "Light from the reference",
+    "lightingContinuityHint": "Image prompts end with \"Use lighting and color temp from reference image\", so every shot copies the reference's light.",
+    "lightingAuto": "Auto: only with your reference image",
+    "lightingReference": "Always",
+    "lightingPerShot": "Each shot has its own light",
+    "keepWardrobe": "Keep clothes from references",
+    "keepWardrobeHint": "Removes clothing words from image prompts so the image model copies the clothes in the reference. Turn it off to describe clothes per shot.",
     "parallelTitle": "Parallel workflows by resource",
     "parallelHint": "Overlaps work only across different servers or devices. Each local GPU and each remote host remains a sequential queue.",
     "debugTitle": "Debug trace",

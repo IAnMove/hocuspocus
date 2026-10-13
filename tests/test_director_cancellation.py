@@ -564,7 +564,9 @@ class TestDirectorCancellation(unittest.TestCase):
         self.assertEqual(len(submitted), 3)
         self.assertEqual(submitted[0]["image_refs"], [])
         self.assertEqual(submitted[0]["video_prompt_type"], "")
-        self.assertIn("definitive cinematic character anchor", submitted[0]["prompt"])
+        # The shared reference has no fixed style word (glass walls 8.4).
+        self.assertIn("Create a character reference for visual continuity", submitted[0]["prompt"])
+        self.assertNotIn("cinematic", submitted[0]["prompt"].lower())
         for request in submitted[1:]:
             self.assertEqual(request["image_refs"], [anchor_path])
             self.assertEqual(request["video_prompt_type"], "KI")

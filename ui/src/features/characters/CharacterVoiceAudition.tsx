@@ -33,7 +33,7 @@ export function CharacterVoiceAudition({ workspace, voice, language: spoken }: {
     <label className="block">{t('speech.voiceAudition.language')}
       <select className="ml-2 min-h-10 rounded border border-border bg-bg-secondary px-2" value={language} disabled={busy}
         onChange={event => { stopAudio(); setLanguage(event.target.value as 'es' | 'en'); setFilename(''); setError('') }}>
-        <option value="es">Español</option><option value="en">English</option>
+        <option value="es">{t('speech.voiceAudition.languageEs')}</option><option value="en">{t('speech.voiceAudition.languageEn')}</option>
       </select>
     </label>
     <p>{t(`speech.voiceAudition.sample.${language}`)}</p>

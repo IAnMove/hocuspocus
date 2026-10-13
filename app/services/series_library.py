@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 from .document_origin import created_by, keep_record_author, restore_created_by
-from .language_intent import normalize_language_intent
+from .language_intent import labels_for_request_language, normalize_language_intent, saved_language_labels
 from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
 
@@ -178,18 +178,20 @@ def create_series_project(
     workspace_id: str = "default",
     *,
     title: str = "Untitled series",
+    language: str | None = None,
 ) -> dict:
     workspace_id = validate_workspace_id(workspace_id)
     now = _now()
     suffix = uuid.uuid4().hex
     series_id = f"series_{suffix}"
+    content_language, spoken_language = labels_for_request_language(language)
     value = {
         "version": 1, "id": series_id, "revision": 1,
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
-        "language": "Español", "spokenLanguage": "Español de España",
+        "language": content_language, "spokenLanguage": spoken_language,
         "languageIntent": normalize_language_intent(
-            None, content_language="Español", spoken_language="Español de España"
+            None, content_language=content_language, spoken_language=spoken_language
         ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
         "genre": "", "tone": "Cinematic", "audience": "General",
@@ -373,6 +375,22 @@ def _store_shot_resolution(shot: dict) -> None:
     _store_resolution(shot, "resolution", "Shot resolution")
     if shot.get("productionMethod") not in {"generated_video", "imported_video"}:
         shot.pop("resolution", None)
+
+
+EPISODE_FORMAT_LIMIT = 2000
+
+
+def _store_episode_format(project: dict) -> None:
+    """``episodeFormat``: how the series builds each episode (parts, lengths, number of shots), in words. Empty is
+    removed, so a series that never wrote one stays as it was; agents then follow the guide's default shape."""
+    raw = project.get("episodeFormat")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        project.pop("episodeFormat", None)
+        return
+    if not isinstance(raw, str):
+        raise ValueError("episodeFormat must be text")
+    if len(raw) > EPISODE_FORMAT_LIMIT:
+        raise ValueError(f"episodeFormat is at most {EPISODE_FORMAT_LIMIT} characters")
 
 
 def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -> dict:
@@ -858,6 +876,7 @@ def series_put_payload(current: dict, sent: dict) -> dict:
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     from services.series_ambience import check_sound_design
+    from services.series_finish import store_look
     from services.series_layers import normalize_location
     from services.series_production import normalize_production_methods
     from services.series_voice_rooms import check_voice_rooms
@@ -983,6 +1002,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "historicalProductionIds": _unique_ids(import_source.get("historicalProductionIds")),
         "migrationNotes": _text(import_source.get("migrationNotes")),
     })
+    saved_language, saved_spoken_language = saved_language_labels(project)
     project.update({
         "version": 1,
         "id": series_id,
@@ -995,16 +1015,12 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "defaultEpisodeDurationSeconds": max(15, min(3600, _integer(
             project.get("defaultEpisodeDurationSeconds"), 75, 15
         ))),
-        "language": _text(project.get("language"), "Español"),
-        "spokenLanguage": _text(
-            project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
-        ),
+        "language": saved_language,
+        "spokenLanguage": saved_spoken_language,
         "languageIntent": normalize_language_intent(
             project.get("languageIntent"),
-            content_language=_text(project.get("language"), "Español"),
-            spoken_language=_text(
-                project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
-            ),
+            content_language=saved_language,
+            spoken_language=saved_spoken_language,
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
         "protagonistCharacterId": (
@@ -1040,6 +1056,9 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     })
     # The H3 tier of the script's video shots (series_video_shots); absent is 480p.
     _store_resolution(project, "videoShotResolution", "videoShotResolution")
+    # The finish over its 2D shots (series_finish; absent is paper) and its own episode shape (absent: the guide's).
+    store_look(project)
+    _store_episode_format(project)
     synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
     keep_record_author(project)
@@ -1272,7 +1291,9 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             (story.get("creativeBrief") or {}).get("durationSeconds")
             if isinstance(story.get("creativeBrief"), dict) else None, 75
         ))),
-        "language": _text(story.get("language"), "Español"),
+        # A story that kept its language only in languageIntent keeps it here too.
+        "language": saved_language_labels(story)[0],
+        "spokenLanguage": saved_language_labels(story)[1],
         "genre": _text(story.get("genre")), "tone": _text(story.get("tone")),
         "audience": _text(story.get("audience"), "General"),
         "visualStyle": _text(story.get("visualStyle")),

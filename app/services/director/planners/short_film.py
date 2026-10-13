@@ -37,6 +37,7 @@ from ..h3_dialogue import (
     h3_vocal_sound_cues as _h3_affirmative_vocal_effect_matches,
     normalize_h3_text as _normalize_h3_text,
 )
+from ..prompt_cleanup import prompt_cleanup_metadata
 from .base import BasePlanner
 
 
@@ -2645,6 +2646,8 @@ class ShortFilmPlanner(BasePlanner):
             or kwargs.get("location_ref_paths")
         )
         is_audio_mode = bool(clips)
+        self._has_user_reference = bool(reference_image_path)
+        self._planning_source = None
         # Store extra ref info for use in private methods
         self._num_character_refs = len(kwargs.get("character_ref_paths", []) or [])
         self._num_location_refs = len(kwargs.get("location_ref_paths", []) or [])
@@ -2759,6 +2762,7 @@ class ShortFilmPlanner(BasePlanner):
             reference_assets=ref_assets,
             characters=char_profiles if char_profiles else None,
             shots=shots,
+            planning_source=getattr(self, "_planning_source", None),
             continuity_notes=[
                 "Short film — maintain visual and narrative continuity across shots",
                 "Match camera complexity to emotional content",
@@ -3186,6 +3190,10 @@ exchange from fitting the video."""
                 seamless=getattr(self, '_seamless', True),
                 image_model=image_model,
                 nsfw=nsfw,
+                **self._image_rule_options(
+                    has_user_reference=bool(getattr(self, "_has_user_reference", False)),
+                    has_any_reference=has_reference,
+                ),
             )
 
         image_planning_rules = (
@@ -3829,6 +3837,10 @@ H3 CHARACTER-AUTHENTICITY RULES:
                 seamless=getattr(self, '_seamless', True),
                 image_model=image_model,
                 nsfw=nsfw,
+                **self._image_rule_options(
+                    has_user_reference=bool(getattr(self, "_has_user_reference", False)),
+                    has_any_reference=has_reference,
+                ),
             )
         location_labels = [
             str(label).strip()
@@ -4393,6 +4405,7 @@ SCREENPLAY:
                 "[ShortFilmPlanner] Pass 2 returned no structured shots; "
                 "recovering a deterministic shot list from the screenplay"
             )
+            self._planning_source = "deterministic_fallback"
             shot_dicts = self._fallback_shots_from_screenplay(
                 screenplay=screenplay,
                 story_description=story_description,
@@ -5179,34 +5192,21 @@ SCREENPLAY:
                 print(f"[ShortFilmPlanner] Duration post-process skipped a shot: {e}")
 
         # ── Image-prompt sanitization (Layer 1) ──────────────────────
-        # Strip GARMENT BAN violations and narrative-filler phrases the
-        # image model can't render. Runs on every shot's image_prompt
-        # AND each keyframe_prompt regardless of whether Pass 3 polish
-        # is enabled — Pass 2 LLM (especially Gemma 4B on NSFW) routinely
-        # writes "white sweater" / "grey shirt" and emotion fillers like
-        # "showing the heat of the moment" despite the rules. Pass 3
-        # runs the same sanitizer again with the descriptor-dedupe pass
-        # added (since it has the name_to_descriptor map). No-op when
-        # the LLM already followed the rules.
+        # Strip GARMENT BAN violations, motion sentences and narrative-filler
+        # phrases the image model can't render, on every shot's image_prompt
+        # AND each keyframe_prompt regardless of whether Pass 3 polish is
+        # enabled — Pass 2 LLMs routinely write "white sweater" and emotion
+        # fillers despite the rules. Raw prompts: nothing is removed. Keep
+        # clothes from references off: clothing words stay. The counts land
+        # in each shot's metadata (prompt_cleanup) for Extra info.
         try:
-            from ..prompt_polish import sanitize_image_prompt as _sanitize_ip
-            for sd in shot_dicts:
-                ip = sd.get("image_prompt") or ""
-                if ip.strip():
-                    sd["image_prompt"] = _sanitize_ip(
-                        ip, log_prefix=f"[ShortFilmPlanner Pass2 image sanitize '{sd.get('title', 'untitled')}']"
-                    )
-                kfs = sd.get("keyframe_prompts") or []
-                if isinstance(kfs, list) and kfs:
-                    cleaned_kfs = []
-                    for ki, kf in enumerate(kfs):
-                        if isinstance(kf, str) and kf.strip():
-                            cleaned_kfs.append(_sanitize_ip(
-                                kf, log_prefix=f"[ShortFilmPlanner Pass2 keyframe[{ki}] sanitize '{sd.get('title', 'untitled')}']"
-                            ))
-                        else:
-                            cleaned_kfs.append(kf)
-                    sd["keyframe_prompts"] = cleaned_kfs
+            from ..prompt_cleanup import sanitize_pass2_image_prompts
+            sanitize_pass2_image_prompts(
+                shot_dicts,
+                raw_prompts=self.raw_prompts,
+                keep_wardrobe=self.keep_reference_wardrobe,
+                log_label="ShortFilmPlanner Pass2",
+            )
         except Exception as e:
             print(f"[ShortFilmPlanner] Image-prompt sanitization skipped: {e}")
 
@@ -5407,12 +5407,12 @@ SCREENPLAY:
             static_subject = subjects[0]["visual_description"] if subjects else "the principal subject"
             opening = re.split(r"(?<=[.!?])\s+", chunk, maxsplit=1)[0][:500]
             image_prompt = (
-                f"Cinematic first frame before the action: {static_subject} in the established "
+                f"First frame before the action: {static_subject} in the established "
                 f"story world, composed for scene {index + 1}; {opening}. "
                 "Static initial pose, coherent environment, no captions, no speech bubbles, no written text."
             )
             video_prompt = (
-                f"Animate the supplied first frame as a continuous cinematic shot. "
+                f"Animate the supplied first frame as a continuous shot. "
                 f"Scene purpose: {role}. Preserve the characters, wardrobe, environment and composition. "
                 f"Action and dialogue to portray: {chunk}. Camera: {camera_moves[index % len(camera_moves)]}. "
                 "Natural motion, readable acting, stable identities, no new captions or on-screen text."
@@ -5463,8 +5463,8 @@ SCREENPLAY:
                 "scene_type": "dialogue" if '"' in chunk or "—" in chunk else "action",
                 "subjects_on_screen": subjects,
                 "environment": "The canonical setting described by the screenplay and master story.",
-                "visual_style": canonical_style or "Cinematic visual continuity matching the supplied story world.",
-                "lighting": "Motivated cinematic lighting consistent with the location.",
+                "visual_style": canonical_style or "Visual continuity matching the supplied story world.",
+                "lighting": "Motivated lighting consistent with the location.",
                 "mood": role.replace("_", " "),
                 "action_beats": [chunk],
                 "dialogue_beats": [],
@@ -5581,6 +5581,10 @@ SCREENPLAY:
                 seamless=getattr(self, "_seamless", True),
                 image_model=getattr(self, "_image_model", "") or "",
                 nsfw=nsfw,
+                **self._image_rule_options(
+                    has_user_reference=bool(getattr(self, "_has_user_reference", False)),
+                    has_any_reference=has_reference,
+                ),
             )
             image_fields = '''    "image_source": "original or previous",
     "image_prompt": "Static first-frame composition before the action",
@@ -6516,6 +6520,7 @@ VOCAL SEMANTIC REPAIR:
                 audio_plan=audio,
                 ending_beat=raw.get("ending_beat", ""),
                 metadata={
+                    **prompt_cleanup_metadata(raw),
                     "title": raw.get("title", ""),
                     "duration_frames": snapped,
                     "location_ref_label": raw.get("location_ref_label", ""),
@@ -6665,6 +6670,7 @@ Go:"""
                 "[ShortFilmPlanner] Single-pass structured output was empty; "
                 "building a deterministic plan from the original story"
             )
+            self._planning_source = "deterministic_fallback"
             shot_dicts = self._fallback_shots_from_screenplay(
                 screenplay=story_description,
                 story_description=story_description,

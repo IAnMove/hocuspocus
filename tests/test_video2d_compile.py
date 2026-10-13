@@ -103,6 +103,17 @@ def test_compile_calls_the_typescript_builders():
     assert [layer["id"] for layer in result["result"]["document"]["layers"]] == ["background", "subject_1", "camera", "atmosphere-dust"]
 
 
+@pytest.mark.skipif(not TSX.is_file(), reason="ui node_modules is not installed")
+def test_bridge_template_errors_keep_their_message():
+    """The compiler's messages come from the UI catalogs; the Node bridge must start them."""
+    bridged = spawn_bridge({
+        "operation": "scenes.template.compile", "input": {"templateId": "cinema-establishing", "assets": {}},
+    })
+    assert bridged["ok"] is False
+    assert bridged["code"] == "template_missing_slot"
+    assert bridged["message"] == "Required slot subject_1 is missing."
+
+
 def test_example_urls_are_durable_and_reach_the_bridge(monkeypatch):
     seen = {}
 

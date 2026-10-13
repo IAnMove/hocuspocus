@@ -380,7 +380,9 @@ export interface SeriesShotLayout2D {
   layers?: SeriesSetLayer[]
   castDepth?: number
   framing?: 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
-  camera?: 'static' | 'push'
+  camera?: import('./shotLook').SeriesCamera
+  /** The shot's own finish; without it the shot takes its series' `look.finish` (series_finish.py). */
+  finish?: import('./shotLook').SeriesFinishChoice
   cast?: SeriesShotCastEntry[]
   timing?: { intro?: number; gap?: number; tail?: number }
   [key: string]: unknown
@@ -528,6 +530,10 @@ export interface SeriesProject {
   allowedProductionMethods?: SeriesProductionMethod[]
   /** The H3 size of the script's video shots (480p when absent); a shot's own `resolution` overrides it. */
   videoShotResolution?: SeriesVideoResolution
+  /** How each episode is built (parts, lengths, number of shots), in words; absent, agents follow the guide's default. */
+  episodeFormat?: string
+  /** `finish` over every 2D shot (series_finish.py); absent is paper. */
+  look?: { finish?: import('./shotLook').SeriesFinishChoice; [key: string]: unknown }
   version: 1
   id: string
   revision: number

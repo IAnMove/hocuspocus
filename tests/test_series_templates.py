@@ -21,6 +21,8 @@ def test_every_template_builds_a_valid_series_in_both_languages():
         for language, spoken in (("es", "Español de España"), ("en", "English")):
             series = build_series(card["id"], "cast", language=language)
             assert series["spokenLanguage"] == spoken and series["template"] == {"id": card["id"], "language": language}
+            # Until the owner decides, a template series keeps the defaults: the paper finish and the guide's format.
+            assert "look" not in series and "episodeFormat" not in series
             assert "animation_2d" in series["allowedProductionMethods"]
             (episode,) = series["episodesById"].values()
             assert series["seasons"][0]["episodeOrder"] == [episode["id"]]
@@ -43,6 +45,10 @@ def test_texts_follow_the_language_and_the_title_can_be_chosen():
     assert next(item for item in english["characters"] if item["id"] == "rival")["name"] == "Mr Pike"
     assert spanish["canon"]["immutableRules"][0]["status"] == "approved"
     assert spanish["id"] != build_series("cutout-satire", "cast", language="es")["id"], "each series gets its own id"
+    omitted = build_series("cutout-satire", "cast")
+    assert omitted["spokenLanguage"] == "English"
+    assert omitted["template"]["language"] == "en"
+    assert list_templates()[0]["title"] == list_templates("en")[0]["title"]
     with pytest.raises(SeriesTemplateError) as unknown:
         build_series("nope", "cast")
     assert unknown.value.status == 404

@@ -210,6 +210,28 @@ test('a script video shot follows the series size and saves its own H3 size', { 
   assert.equal(server.posts('/native-render').length, 0)
 })
 
+test('a 2D shot picks any camera move and its own finish; a 3D shot has no finish', { concurrency: false }, async t => {
+  const { view, server } = await mount(t)
+  const { fireEvent, waitFor, within } = await import('@testing-library/react')
+  await open(view, 1)
+  const plan = within(await waitFor(() => view.getByTestId('series-inspector-s1-plan')))
+  fireEvent.click(plan.getByRole('button', { name: 'Edit' }))
+  const camera = plan.getByLabelText('Camera') as HTMLSelectElement
+  assert.deepEqual([...camera.options].map(option => option.textContent), ['Automatic', 'Static', 'Push in', 'Pull out', 'Pan left', 'Pan right', 'Drift'])
+  const finish = plan.getByLabelText('Finish') as HTMLSelectElement
+  assert.equal(finish.value, '', 'the shot follows its series')
+  assert.deepEqual([...finish.options].slice(0, 4).map(option => option.textContent), ['Series finish', 'Paper (default)', 'None', 'Warm cinema'])
+  fireEvent.change(camera, { target: { value: 'pan-left' } })
+  fireEvent.change(finish, { target: { value: 'film' } })
+  fireEvent.click(plan.getByRole('button', { name: 'Save' }))
+  await waitFor(() => assert.deepEqual(server.posts('/shots/edit')[0]?.changes, { camera: 'pan-left', finish: 'film' }))
+  await waitFor(() => assert.ok(plan.getByText(/Pan left · .* · finish: Film/)))
+  fireEvent.click(view.getByRole('button', { name: 'Next shot (→)' }))
+  const plan3d = within(await waitFor(() => view.getByTestId('series-inspector-s2-plan')))
+  fireEvent.click(plan3d.getByRole('button', { name: 'Edit' }))
+  assert.equal(plan3d.queryByLabelText('Finish'), null)
+})
+
 test('saving an inspector section keeps a newer draft typed while the reply is pending', { concurrency: false }, async t => {
   const { view, server } = await mount(t)
   const { fireEvent, waitFor, within } = await import('@testing-library/react')

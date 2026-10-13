@@ -163,8 +163,8 @@ test('section capabilities retain the visible lab navigation effect', async () =
   const seriesResult = await definitions.get('open_series_section').execute(
     { type: 'open_series_section', section: 'shots' }, context,
   )
-  assert.equal(storyResult.message, 'He abierto Story Lab → music.')
-  assert.equal(seriesResult.message, 'He abierto Series Lab → shots.')
+  assert.equal(storyResult.message, 'I opened Story Lab → music.')
+  assert.equal(seriesResult.message, 'I opened Series Lab → shots.')
   assert.deepEqual(events, [['story', 'music'], ['series', 'shots']])
 
   window.removeEventListener('hocuspocus:story-section', onStory)

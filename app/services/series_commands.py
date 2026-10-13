@@ -185,7 +185,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"},
          "number": {"type": "integer", "minimum": 1}},
         ["workspace", "series_id", "script"], True,
-        "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
+        "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera (static | "
+        "push | pull | pan-left | pan-right | drift), finish (a 2d shot's own; else the series' look.finish), cast "
         "[[character, pose, x, {edgeSnap: false, lookRoom: false}]] (a pose cut by its image border is otherwise moved so "
         "the cut never shows; an entrance: enterFrom left/right, enterAt and enterDuration seconds, enterGait walk with "
         "enterStep seconds; look room: a 2D cast member looking out of the frame is moved, one facing left stands right of "
@@ -337,7 +338,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "value (send an empty list or object to clear one). A nested object or list is replaced whole, so send the whole "
         "soundDesign, not one key inside it. Changing canon inputs returns the canon to draft. videoShotResolution "
         "480p | 540p | 720p | 768p (480p when absent) sizes the H3 clips of the script's video shots; a shot's "
-        "resolution overrides it and provider.videoSettings.resolution stays the Series Lab render's. soundDesign: stinger, "
+        "resolution overrides it and provider.videoSettings.resolution stays the Series Lab render's. episodeFormat (text, "
+        "up to 2000 characters) is how the series builds each episode: parts, lengths, number of shots; empty, agents "
+        "follow the guide's default shape. look {finish} is the finish over every 2D shot: paper (the default: paper "
+        "texture, grain and vignette), none (a clean picture), a Video 2D finish id (scenes.catalog kind finish) or "
+        "{texture {kind, amount}, grain {amount, size}, vignette {amount, softness}}; a shot's own finish overrides it, "
+        "and changing it renders the 2D shots again. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
         "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
         "lowers episode-mode beds under the lines; roomByLocation "
@@ -464,7 +470,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "instruction": {"type": "string", "minLength": 1, "maxLength": 2000}, "check": {"type": "boolean"}, "render": {"type": "boolean"}, "approve": {"type": "boolean"}, "produce": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "shot"], True,
         "Edit one shot by instruction, by id (e1s04) or number in the episode (5 = the fifth shot): changes replaces "
-        "script keys of series.episode.from_script (scene, location, variant, framing, camera, cast, lines {who, es, en, "
+        "script keys of series.episode.from_script (scene, location, variant, framing, camera static|push|pull|pan-left|"
+        "pan-right|drift, finish paper|none|a Video 2D finish id|{texture, grain, vignette} (a 2d shot's own; null "
+        "follows the series' look.finish again), cast, lines {who, es, en, "
         "pauseBefore, voiceRoom}, card, music, sfx {file, at, line, anchor, offset, volume, in, length}, fx, props, timing, "
         "voiceRoom, layers, castDepth, clipAudio keep|drop, clipVolume, clipFit cover|contain, kind 2d|3d|video|generated, "
         "scene3d, foley, duration, resolution 480p|540p|720p|768p (a video shot's H3 size; it clears only the take's "

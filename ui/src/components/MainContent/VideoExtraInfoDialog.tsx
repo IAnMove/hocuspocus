@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next'
 import { BadgeInfo, CalendarDays, Check, Clock3, Copy, FileVideo2, Languages, Loader2, MessageSquareText, RefreshCw, SlidersHorizontal, Sparkles, X, Youtube } from 'lucide-react'
 import { fetchVideoExtraInfo, generateVideoExtraInfo } from '../../api/client'
 import { useUiTranslation } from '../../i18n'
+import { contentLanguageForUi } from '../../lib/contentLanguage'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import type { VideoClipInfo, VideoExtraInfo, VideoExtraInfoStatus } from '../../types'
 
@@ -28,7 +29,7 @@ function initialLanguage() {
     // Storage can be unavailable in hardened/private browser contexts.
   }
   const browserLanguage = navigator.language?.toLowerCase().split('-')[0]
-  return LANGUAGES.some(([code]) => code === browserLanguage) ? browserLanguage : 'es'
+  return LANGUAGES.some(([code]) => code === browserLanguage) ? browserLanguage : contentLanguageForUi().code
 }
 
 async function copyText(value: string) {
@@ -68,6 +69,21 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       {copied ? <Check size={11} className="text-accent-green" /> : <Copy size={11} />}
       {copied ? t('copy.copied') : t('copy.action')}
     </button>
+  )
+}
+
+/** Director: what the planner's cleanup removed from the shot's image prompt. */
+function PromptCleanupNote({ cleanup }: { cleanup?: VideoClipInfo['prompt_cleanup'] }) {
+  const { t } = useUiTranslation('extraInfo')
+  if (!cleanup || !Object.values(cleanup).some(Boolean)) return null
+  return (
+    <div className="rounded-md bg-bg-primary/50 px-2.5 py-2 text-[10px] text-text-muted" title={t('clip.promptCleanupHint')}>
+      {t('clip.promptCleanup', {
+        garments: cleanup.garments ?? 0,
+        motion: cleanup.motion_sentences ?? 0,
+        fillers: cleanup.fillers ?? 0,
+      })}
+    </div>
   )
 }
 
@@ -222,7 +238,9 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
             disabled={generating}
             className="rounded-lg border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none disabled:opacity-50"
           >
-            {LANGUAGES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+            {LANGUAGES.map(([code, label]) => (
+              <option key={code} value={code}>{code === 'es' ? t('languageName.es') : label}</option>
+            ))}
           </select>
           {status && (
             <span className="ml-auto text-[10px] text-text-muted">
@@ -328,6 +346,8 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
                   <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-text-secondary">{text}</p>
                 </div>
               ))}
+
+              <PromptCleanupNote cleanup={clip.prompt_cleanup} />
 
               {clip.audio_prompt && (
                 <div className="rounded-md bg-bg-primary/50 p-2.5">

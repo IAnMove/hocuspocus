@@ -8,7 +8,7 @@ export function registerSpeechAnalysisCapability(register: typeof defineCapabili
     useWhen: 'The user asks whether phoneme lip sync is installed or asks to install it for singing/dialogue. Then use prepare_programmatic_video with scenes.speech.prepare, exact text, language and engine=auto or phoneme.',
     parameters: ['install'], inputSchema: { type: 'object', additionalProperties: false,
       properties: { type: { const: 'speech_analysis_engine' }, install: { type: 'boolean', default: false } }, required: ['type'] },
-    risk: 'edit', confirmation: 'none', progress: 'Comprobando el motor de sincronización labial…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.checkingLipsyncEngine',
     resolve(raw) { return raw.install === undefined || typeof raw.install === 'boolean' ? { type: 'speech_analysis_engine', install: raw.install === true } : null },
     validate() { return [] }, async prepare(action) { return action },
     async execute(action, context) { return context.adapters.video3d.setupSpeechAnalysis(action) },

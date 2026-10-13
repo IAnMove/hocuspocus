@@ -1,4 +1,5 @@
 import * as api from '../api/client'
+import { contentLanguageForUi } from './contentLanguage'
 import { useStore } from '../stores/useStore'
 import { PREFERRED_SPEECH_MODEL } from './preferredModels'
 import { generateImageAsset } from './imageGeneration'
@@ -104,7 +105,7 @@ async function resolveVideo(asset: SceneRecipeAsset, recipe: SceneRecipe, onStat
     resolution: h3ResolutionForScene(recipe.scene.width || 1280, recipe.scene.height || 720),
     video_length: h3FramesForDuration(recipeAssetDuration(recipe, asset.id)),
     generation_mode: 'video',
-    spoken_language: 'Español de España',
+    spoken_language: contentLanguageForUi().spokenLanguage,
   })
   const status = await pollUntil(
     `H3 “${asset.id}”`,

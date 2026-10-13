@@ -144,7 +144,7 @@ test('rejects traversal, symlinked files, overwrite targets, and unsupported inp
     scene: reference('scene-one.json', original.scene, 'Editable showcase scene'),
   })
   await fs.writeFile(path.join(paths.showcaseDir, 'manifest.json'), JSON.stringify(traversal))
-  await assert.rejects(() => prepareShowcase(paths), /URL relativa|relative|unsafe/i)
+  await assert.rejects(() => prepareShowcase(paths), /relative URL|unsafe/i)
 
   await fs.writeFile(path.join(paths.showcaseDir, 'manifest.json'), JSON.stringify(original.manifest))
   await fs.rm(path.join(paths.showcaseDir, 'scene-one.mp4'))

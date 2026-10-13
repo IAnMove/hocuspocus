@@ -1,7 +1,7 @@
 import type {
   SeriesCharacter, SeriesLibrary, SeriesLocation, SeriesProject, SeriesProp, SeriesVisualVariant,
 } from './types'
-import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { normalizeLanguageIntent, savedProjectLanguage } from '../../lib/languageIntent'
 import { randomUuid } from '../../lib/uuid'
 import { normalizeGuide } from '../writing-guide/model'
 
@@ -20,6 +20,7 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
   if (!value || typeof value !== 'object') return null
   const project = value as Partial<SeriesProject>
   if (!text(project.id).trim()) return null
+  const savedLanguage = savedProjectLanguage(project)
   const now = new Date().toISOString()
   const canon = project.canon && typeof project.canon === 'object' ? project.canon : {} as SeriesProject['canon']
   const provider = project.provider && typeof project.provider === 'object' ? project.provider : {} as SeriesProject['provider']
@@ -36,11 +37,11 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     logline: text(project.logline), premise: text(project.premise),
     format: project.format === 'serial' || project.format === 'hybrid' ? project.format : 'episodic',
     defaultEpisodeDurationSeconds: Math.max(15, Number(project.defaultEpisodeDurationSeconds) || 75),
-    language: text(project.language, 'Español'), genre: text(project.genre),
-    spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+    language: savedLanguage.language, genre: text(project.genre),
+    spokenLanguage: savedLanguage.spokenLanguage,
     languageIntent: normalizeLanguageIntent(project.languageIntent, {
-      contentLanguage: text(project.language, 'Español'),
-      spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+      contentLanguage: savedLanguage.language,
+      spokenLanguage: savedLanguage.spokenLanguage,
       technicalPromptLanguage: 'en',
     }),
     protagonistConsistency: project.protagonistConsistency === true,

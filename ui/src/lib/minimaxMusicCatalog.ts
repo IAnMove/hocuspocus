@@ -1,4 +1,7 @@
 import type { ModelResourceRequirements } from '../types'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 
 /**
  * Community MiniMax Music 3 ports. These are deliberately informational:
@@ -22,10 +25,10 @@ export const MINIMAX_MUSIC_COMMUNITY_MODELS: CommunityMusicModel[] = [
     requirements: {
       storage_gb: 13,
       vram_gb: 9,
-      platform: 'CUDA, ROCm, Vulkan o CPU',
+      platform: 'CUDA, ROCm, Vulkan or CPU',
       backend: 'minimaxmusic.cpp / GGML',
       tier: 'experimental',
-      note: 'Cifras publicadas por la implementación comunitaria; no es compatible con nuestro backend Diffusers.',
+      note: 'Figures published by the community implementation; it is not compatible with our Diffusers backend.',
     },
   },
   {
@@ -38,21 +41,21 @@ export const MINIMAX_MUSIC_COMMUNITY_MODELS: CommunityMusicModel[] = [
       platform: 'macOS · Apple Silicon',
       backend: 'MLX',
       tier: 'experimental',
-      note: 'Requiere un adaptador MLX independiente; no funciona como checkpoint CUDA.',
+      note: 'Needs a separate MLX adapter; it does not work as a CUDA checkpoint.',
     },
   },
   {
     id: 'minimax_music3_webgpu',
     name: 'MiniMax Music 3 · WebGPU (community)',
-    format: 'WebGPU · navegador Chromium',
+    format: 'WebGPU · Chromium browser',
     sourceUrl: 'https://huggingface.co/hyung778/minimax-music3-webgpu',
     requirements: {
       storage_gb: 8,
       vram_gb: 12,
       platform: 'Chromium 151+ · WebGPU · shader-f16',
-      backend: 'WebGPU en navegador',
+      backend: 'WebGPU in the browser',
       tier: 'experimental',
-      note: '12 GB para canciones de hasta un minuto; 16 GB para la capacidad completa.',
+      note: '12 GB for songs up to one minute; 16 GB for the full length.',
     },
   },
 ]
@@ -61,10 +64,10 @@ export function modelRequirementsText(requirements?: ModelResourceRequirements):
   if (!requirements) return ''
   const parts: string[] = []
   if (requirements.vram_gb != null) parts.push(`VRAM ~${requirements.vram_gb} GB`)
-  if (requirements.storage_gb != null) parts.push(`disco ~${requirements.storage_gb} GB`)
+  if (requirements.storage_gb != null) parts.push(i18n.t('settings:communityMusic.disk', { gb: requirements.storage_gb }))
   if (requirements.ram_gb != null) parts.push(`RAM ~${requirements.ram_gb} GB`)
   if (requirements.platform) parts.push(requirements.platform)
-  if (requirements.backend) parts.push(`backend: ${requirements.backend}`)
+  if (requirements.backend) parts.push(i18n.t('settings:communityMusic.backendLine', { backend: requirements.backend }))
   if (requirements.note) parts.push(requirements.note)
   return parts.join(' · ')
 }

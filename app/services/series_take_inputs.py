@@ -11,7 +11,8 @@ that shot again; a shot without one keeps the digest it had before foley existed
 (``series_layers``) are seen only by its 2D shots that do not bring their own, so changing them renders just those;
 a location without layers keeps the digests it had. Hearing (``series_hearing``) is laid at assembly; a take
 depends only on a ``deaf`` one, which drops its lines and sounds, and on the room a ``muffled`` one skips, so a
-``ringing`` shot or default renders nothing again.
+``ringing`` shot or default renders nothing again. A 2D shot's finish (``series_finish``) counts only when it is not
+the paper default, so a series and a shot that never chose one keep their digests.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
 """
 from __future__ import annotations
@@ -20,7 +21,7 @@ import hashlib
 import json
 from typing import Any
 
-from services import series_shot3d
+from services import series_finish, series_shot3d
 from services.series_ambience import shot_sound_design
 from services.series_hearing import hearing_of
 from services.series_layers import digest_location
@@ -89,6 +90,9 @@ def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
     timing = pauses(shot.get("dialogueBeats") or [])
     if any(timing):
         payload["pauses"] = timing
+    finish = series_finish.fingerprint(series, shot) if shot.get("productionMethod") == "animation_2d" else None
+    if finish is not None:
+        payload["finish"] = finish
     config = series_shot3d.normalize_scene3d(shot.get("scene3d")) if shot.get("productionMethod") == "animation_3d" else None
     source = scene_source_digest(config, root) if config else None
     if source is not None:

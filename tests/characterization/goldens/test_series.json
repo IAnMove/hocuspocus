@@ -48,11 +48,11 @@
         "sourceStoryId": null,
         "sourceWorkspaceId": null
       },
-      "language": "Español",
+      "language": "English",
       "languageIntent": {
-        "contentLanguage": "Español",
+        "contentLanguage": "English",
         "conversationLanguage": "",
-        "spokenLanguage": "Español de España",
+        "spokenLanguage": "English",
         "technicalPromptLanguage": "en",
         "verbatimSegments": []
       },
@@ -112,7 +112,7 @@
         }
       ],
       "sourceMode": "original",
-      "spokenLanguage": "Español de España",
+      "spokenLanguage": "English",
       "title": "Golden series",
       "tone": "Cinematic",
       "updatedAt": "<TIME>",
@@ -178,11 +178,11 @@
         "sourceStoryId": null,
         "sourceWorkspaceId": null
       },
-      "language": "Español",
+      "language": "English",
       "languageIntent": {
-        "contentLanguage": "Español",
+        "contentLanguage": "English",
         "conversationLanguage": "",
-        "spokenLanguage": "Español de España",
+        "spokenLanguage": "English",
         "technicalPromptLanguage": "en",
         "verbatimSegments": []
       },
@@ -242,7 +242,7 @@
         }
       ],
       "sourceMode": "original",
-      "spokenLanguage": "Español de España",
+      "spokenLanguage": "English",
       "title": "Golden series",
       "tone": "Cinematic",
       "updatedAt": "<TIME>",
@@ -303,11 +303,11 @@
             "sourceStoryId": null,
             "sourceWorkspaceId": null
           },
-          "language": "Español",
+          "language": "English",
           "languageIntent": {
-            "contentLanguage": "Español",
+            "contentLanguage": "English",
             "conversationLanguage": "",
-            "spokenLanguage": "Español de España",
+            "spokenLanguage": "English",
             "technicalPromptLanguage": "en",
             "verbatimSegments": []
           },
@@ -367,7 +367,7 @@
             }
           ],
           "sourceMode": "original",
-          "spokenLanguage": "Español de España",
+          "spokenLanguage": "English",
           "title": "Golden series, revised",
           "tone": "Cinematic",
           "updatedAt": "<TIME>",
@@ -444,11 +444,11 @@
             "sourceStoryId": null,
             "sourceWorkspaceId": null
           },
-          "language": "Español",
+          "language": "English",
           "languageIntent": {
-            "contentLanguage": "Español",
+            "contentLanguage": "English",
             "conversationLanguage": "",
-            "spokenLanguage": "Español de España",
+            "spokenLanguage": "English",
             "technicalPromptLanguage": "en",
             "verbatimSegments": []
           },
@@ -508,7 +508,7 @@
             }
           ],
           "sourceMode": "original",
-          "spokenLanguage": "Español de España",
+          "spokenLanguage": "English",
           "title": "Golden series, revised",
           "tone": "Cinematic",
           "updatedAt": "<TIME>",
@@ -591,11 +591,11 @@
         "sourceStoryId": null,
         "sourceWorkspaceId": null
       },
-      "language": "Español",
+      "language": "English",
       "languageIntent": {
-        "contentLanguage": "Español",
+        "contentLanguage": "English",
         "conversationLanguage": "",
-        "spokenLanguage": "Español de España",
+        "spokenLanguage": "English",
         "technicalPromptLanguage": "en",
         "verbatimSegments": []
       },
@@ -655,7 +655,7 @@
         }
       ],
       "sourceMode": "original",
-      "spokenLanguage": "Español de España",
+      "spokenLanguage": "English",
       "title": "Golden series, revised",
       "tone": "Cinematic",
       "updatedAt": "<TIME>",

@@ -42,7 +42,8 @@ def plan_brief(brief: Any, lyricist: Callable[[dict], str] | None = None) -> dic
         "quality": fields.get("quality") if fields.get("quality") in ("draft", "standard", "max") else "standard",
         **({"structure": "trailer"} if trailer else {}),
         **({"treatment": fields["treatment"]} if fields.get("treatment") else {}),
-        "section_actions": {"verse": _clip(fields["tema"], 32), "chorus": _clip(fields["cta"], 32)},
+        # The theme is where the shots take place, not what the singer does; the call to action stays on the end cards.
+        "section_actions": {"scene": _clip(fields["tema"], 32)},
     }
     from services.music_production import ProductionError
     try:

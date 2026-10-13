@@ -28,14 +28,14 @@ test('the Wizard saves the last frame of a clip through the media tools route', 
       generationContext: { actor: 'wizard', commandId: 'wizard-frame-1' } })
     assert.deepEqual(sent, [{ url: '/api/v1/media/commands', headers: { 'content-type': 'application/json', 'X-Hocus-UI-Surface': 'wizard' }, body: {
       operation: 'media.frame', version: 1, intent_id: 'wizard-frame-1', input: { source: 'h3-ship.mp4', at: 'last', workspace: 'show' } } }])
-    assert.equal(outcome.message, 'Fotograma guardado: h3-ship-frame-last.png.')
+    assert.equal(outcome.message, 'Frame saved: h3-ship-frame-last.png.')
     assert.deepEqual(wizardTrailTargets({ state: 'completed', target: outcome.target, metadata: outcome.metadata }),
       [{ kind: 'file', id: 'h3-ship-frame-last.png', file: 'h3-ship-frame-last.png', title: 'media.frame' }])
   } finally {
     globalThis.fetch = previousFetch
   }
   assert.match(mediaToolMessage('studio.key', { result: { file: 'k.png', report: { haze: true, semiTransparentShare: 0.6 } } }),
-    /velo en el 60 %/)
+    /haze remains on 60%/)
 })
 
 test('the runner uses one command identity for the media request, result and Wizard trail', async () => {
@@ -75,7 +75,7 @@ test('a media action cannot publish into a workspace different from its command 
   }) as typeof fetch
   try {
     await assert.rejects(executeMediaTool({ type: 'media_tool', operation: 'media.frame',
-      input: { workspace: 'other', source: 'clip.mp4' } }, 'show', 'c1'), /espacio activo/)
+      input: { workspace: 'other', source: 'clip.mp4' } }, 'show', 'c1'), /active workspace/)
     assert.equal(sent.length, 0)
     await executeMediaTool({ type: 'media_tool', operation: 'assets.import_from_workspace',
       input: { source_workspace: 'other', file: 'asset.glb' } }, 'show', 'c2')

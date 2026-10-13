@@ -1,3 +1,6 @@
+import i18n from '../i18n'
+import { contentLanguageForUi, scaffoldLanguage } from './contentLanguage'
+
 export interface CreativeCharacter {
   name: string
   role: string
@@ -31,35 +34,46 @@ export const explicitMusicLanguage = (value: string): string => {
     es: 'Español', en: 'English', fr: 'Français', de: 'Deutsch',
     it: 'Italiano', pt: 'Português', ja: '日本語', ko: '한국어', zh: '中文',
   }
-  return aliases[raw.toLowerCase()] || raw || 'Español'
+  return aliases[raw.toLowerCase()] || raw || contentLanguageForUi().language
 }
 
-export function creativeCharacters(values: CreativeCharacter[]): CreativeCharacter[] {
-  return values.length ? values : [{
-    name: 'Protagonista',
-    role: 'Protagonista',
-    personality: 'Ingenioso, curioso y decidido.',
-    desire: 'Resolver el conflicto central.',
-    flaw: 'Se precipita cuando cree tener razón.',
-    appearance: 'Silueta clara, vestuario reconocible y expresiones legibles.',
-    voice: 'Natural, expresiva y coherente con el tono.',
+export function creativeCharacters(values: CreativeCharacter[], language?: string): CreativeCharacter[] {
+  if (values.length) return values
+  const lng = scaffoldLanguage(language)
+  return [{
+    name: i18n.t('storyLab:scaffold.roleLead', { lng }),
+    role: i18n.t('storyLab:scaffold.roleLead', { lng }),
+    personality: i18n.t('storyLab:scaffold.personality', { lng }),
+    desire: i18n.t('storyLab:scaffold.desire', { lng }),
+    flaw: i18n.t('storyLab:scaffold.flaw', { lng }),
+    appearance: i18n.t('storyLab:scaffold.appearance', { lng }),
+    voice: i18n.t('storyLab:scaffold.voice', { lng }),
   }]
 }
 
-export function creativeLocations(values: CreativeLocation[]): CreativeLocation[] {
-  return values.length ? values : [{
-    name: 'Escenario principal',
-    purpose: 'Reunir a los personajes y hacer visible el conflicto.',
-    description: 'Un lugar reconocible, visualmente coherente y con espacio para la acción.',
+export function creativeLocations(values: CreativeLocation[], language?: string): CreativeLocation[] {
+  if (values.length) return values
+  const lng = scaffoldLanguage(language)
+  return [{
+    name: i18n.t('storyLab:scaffold.locationMain', { lng }),
+    purpose: i18n.t('storyLab:scaffold.locationPurpose', { lng }),
+    description: i18n.t('storyLab:scaffold.locationDescription', { lng }),
   }]
 }
 
-export function outlineBeats(values: string[], premise: string, ending: string): string[] {
+export function outlineBeats(values: string[], premise: string, ending: string, language?: string): string[] {
   if (values.length >= 3) return values
+  const lng = scaffoldLanguage(language)
   return [
-    `Inicio: ${premise || 'se presenta el deseo del protagonista y aparece una complicación.'}`,
-    'Desarrollo: el plan inicial empeora el conflicto y obliga a los personajes a cambiar de estrategia.',
-    `Final: ${ending || 'la decisión final resuelve el problema con una consecuencia clara y memorable.'}`,
+    i18n.t('storyLab:scaffold.beatOpening', {
+      lng,
+      premise: premise || i18n.t('storyLab:scaffold.premiseFallback', { lng }),
+    }),
+    i18n.t('storyLab:scaffold.beatMiddle', { lng }),
+    i18n.t('storyLab:scaffold.beatEnding', {
+      lng,
+      ending: ending || i18n.t('storyLab:scaffold.endingFallback', { lng }),
+    }),
   ]
 }
 

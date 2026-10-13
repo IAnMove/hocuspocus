@@ -31,6 +31,7 @@ ANCHOR CHARACTERS TO REFERENCE IMAGES:
   black") makes the image model invent a NEW character design — and hand
   the reference's look to the background characters instead.
 
+<!-- CLOTHING -->
 CLOTHING — NEVER NAME GARMENTS, EVER:
 The reference image already shows what each character wears. Naming a garment
 ("blue shirt", "khaki pants") tells Klein to generate that specific garment,
@@ -49,15 +50,13 @@ The reference image already shows what each character is wearing.
 
 The ONLY time naming a garment is acceptable is when clothing explicitly
 CHANGES in the scene: "now in workout clothes after changing", "wearing a new red dress she just put on".
+<!-- /CLOTHING -->
 
 LIGHTING — Klein responds strongly to specific lighting cues. Always describe:
 - source: window light, sunlight, neon, studio, candlelight
 - quality: soft, harsh, diffused, direct, overcast
 - direction: side-lit, backlit, overhead
 - color: warm/cool, golden, blue, amber
-
-End every image_prompt with: "Use lighting and color temp from reference image."
-This preserves visual continuity across scenes.
 
 ANCHOR CONTACT POINTS TO ANATOMY, NOT SCENERY:
 When characters lean toward, reach for, or come close to another, name the
@@ -110,13 +109,15 @@ into your prompts. Everything in your prompts must come from THIS production's s
 description and reference images.
 
 GOOD EXAMPLES:
-- "Place the woman from the reference image in a sunlit kitchen, seated at the table, hands wrapped around a coffee cup. Soft morning light through the window. Use lighting and color temp from reference image. Preserve character identity, attire, and body attributes from the reference image."
-- "Wide shot. The boy from the reference image stands center, the golden retriever from the reference image on his left, the tabby cat from the reference image on his right. Brick alleyway, overcast daylight. Use lighting and color temp from reference image. Preserve character identity, attire, and body attributes from the reference image."
+- "Place the woman from the reference image in a sunlit kitchen, seated at the table, hands wrapped around a coffee cup. Soft morning light through the window. Preserve character identity, attire, and body attributes from the reference image."
+- "Wide shot. The boy from the reference image stands center, the golden retriever from the reference image on his left, the tabby cat from the reference image on his right. Brick alleyway, overcast daylight. Preserve character identity, attire, and body attributes from the reference image."
 - (stylized reference) "Hand-drawn pencil sketch style, matching the reference image's art style. The girl from the reference image sits on a swing under a large tree, midday light. Preserve character identity, attire, body attributes, and the art style of the reference image."
 
 BAD EXAMPLES:
 - "create new scene, same environment. Blonde man playing guitar." — no reference anchoring, no lighting.
+<!-- CLOTHING -->
 - "the woman in the red dress with curly hair" — names a garment.
+<!-- /CLOTHING -->
 - "cartoon style illustration of..." (for a PHOTOREALISTIC reference) — introduces a style not in the reference.
 - "photorealistic, 8k detailed photo of..." (for a HAND-DRAWN reference) — same mistake in the other direction.
 

@@ -1,5 +1,6 @@
 import { fetchOutputs, fetchVideoEditorExport, getVideoEditorThumbnailUrl, probeVideoEditorAudio, probeVideoEditorClip, startVideoEditorExport, type ApiOutput } from '../../api/client'
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
+import i18n from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { clipId, loadEditorDraft, persistEditorDraft, RESOLUTIONS, type EditorSoundtrack } from './editorDraft'
 import { sequenceTotalDuration } from './editorTimeline'
@@ -57,10 +58,7 @@ export async function createAgentVideoEditorProject(command: CreateVideoEditorPr
 export async function openAgentVideoEditorProject(command: OpenVideoEditorProjectCommand): Promise<CommandResult> {
   const draft = loadDraft()
   if (command.projectName.trim() && draft.projectName !== command.projectName.trim()) {
-    throw new Error(
-      `Solo existe un borrador de Video Editor por workspace: “${draft.projectName}”. `
-      + 'Pide explícitamente crear otro proyecto para reemplazar el borrador actual.',
-    )
+    throw new Error(i18n.t('videoEditor:actionErrors.onlyOneDraft', { name: draft.projectName }))
   }
   return editorResult()
 }
@@ -78,7 +76,7 @@ async function clipsFromNamedOutputs(
       fallback = fallback || await fetchOutputs(80, 0, { workspace: workspaceName() })
       output = fallback.outputs.find(item => item.name === name)
     }
-    if (!output) throw new Error(`No existe el output “${name}” en este workspace.`)
+    if (!output) throw new Error(i18n.t('videoEditor:actionErrors.outputMissing', { name }))
     const probe = await probeVideoEditorClip(output.url || output.name, workspaceName())
     added.push({
       ...probe,
@@ -113,7 +111,7 @@ export async function orderAgentVideoEditorClips(command: OrderVideoEditorClipsC
   const byName = new Map(draft.clips.map(clip => [clip.name, clip]))
   const ordered = command.clipNames.map(name => {
     const clip = byName.get(name)
-    if (!clip) throw new Error(`El clip “${name}” no está en la línea de tiempo.`)
+    if (!clip) throw new Error(i18n.t('videoEditor:actionErrors.clipNotOnTimeline', { name }))
     return clip
   })
   const rest = draft.clips.filter(clip => !command.clipNames.includes(clip.name))
@@ -130,7 +128,7 @@ export async function trimAgentVideoEditorClip(command: TrimVideoEditorClipComma
     return { ...clip, trimStart: start, trimEnd: end }
   })
   if (!draft.clips.some(clip => clip.name === command.clipName || clip.id === command.clipName)) {
-    throw new Error(`No encuentro el clip “${command.clipName}” para recortar.`)
+    throw new Error(i18n.t('videoEditor:actionErrors.clipNotFound', { name: command.clipName }))
   }
   saveDraft(clips, draft.projectName, draft.resolution, draft.fps)
   return editorResult()
@@ -139,10 +137,10 @@ export async function trimAgentVideoEditorClip(command: TrimVideoEditorClipComma
 export async function addAgentVideoEditorAudio(command: AddVideoEditorAudioCommand): Promise<CommandResult> {
   const draft = loadDraft()
   const wanted = command.outputName.trim()
-  if (!wanted) throw new Error('Indica el nombre exacto del output de audio.')
+  if (!wanted) throw new Error(i18n.t('videoEditor:actionErrors.audioNameRequired'))
   const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'audio' })
   const output = outputs.outputs.find(item => item.name === wanted)
-  if (!output) throw new Error(`No existe el output de audio “${wanted}” en este workspace.`)
+  if (!output) throw new Error(i18n.t('videoEditor:actionErrors.audioMissing', { name: wanted }))
   const source = output.url || output.name
   const probe = await probeVideoEditorAudio(source, workspaceName())
   const soundtrack: EditorSoundtrack = {
@@ -160,9 +158,9 @@ export async function addAgentVideoEditorAudio(command: AddVideoEditorAudioComma
 
 export async function validateAgentVideoEditorTimeline(): Promise<CommandResult> {
   const draft = loadDraft()
-  if (!draft.clips.length) throw new Error('La línea de tiempo está vacía.')
+  if (!draft.clips.length) throw new Error(i18n.t('videoEditor:actionErrors.timelineEmpty'))
   const duration = sequenceTotalDuration(draft.clips)
-  if (duration <= 0) throw new Error('La línea de tiempo no tiene duración usable.')
+  if (duration <= 0) throw new Error(i18n.t('videoEditor:actionErrors.timelineDuration'))
   return editorResult()
 }
 
@@ -186,9 +184,9 @@ async function saveDraftMontage(workspace: string, draft: ReturnType<typeof load
 }
 
 export async function exportAgentVideoEditor(command: ExportVideoEditorCommand): Promise<CommandResult> {
-  if (!command.confirm) throw new Error('Exportar requiere confirm=true.')
+  if (!command.confirm) throw new Error(i18n.t('videoEditor:actionErrors.exportConfirm'))
   const draft = loadDraft()
-  if (!draft.clips.length) throw new Error('No hay clips para exportar.')
+  if (!draft.clips.length) throw new Error(i18n.t('videoEditor:actionErrors.noClips'))
   const { layers, link } = await saveDraftMontage(workspaceName(), draft)
   const { exportLayerFields } = await import('./montage')
   const job = await startVideoEditorExport({
@@ -210,7 +208,7 @@ export async function exportAgentVideoEditor(command: ExportVideoEditorCommand):
     ...exportLayerFields(layers),
     ...(link ? { montage: link } : {}),
   })
-  if (!job.job_id) throw new Error('El exportador devolvió éxito sin jobId.')
+  if (!job.job_id) throw new Error(i18n.t('videoEditor:actionErrors.exportNoJob'))
   try {
     window.localStorage.setItem(`${EXPORT_KEY}:${encodeURIComponent(workspaceName())}`, job.job_id)
   } catch { /* keep going */ }
@@ -227,7 +225,7 @@ export async function trackAgentVideoEditorExport(): Promise<CommandResult> {
   } catch {
     jobId = ''
   }
-  if (!jobId) throw new Error('No hay una exportación de Video Editor en curso.')
+  if (!jobId) throw new Error(i18n.t('videoEditor:actionErrors.noExport'))
   const job = await fetchVideoEditorExport(jobId)
   const status = job.status === 'completed' ? 'completed'
     : job.status === 'failed' || job.status === 'cancelled' ? 'failed'

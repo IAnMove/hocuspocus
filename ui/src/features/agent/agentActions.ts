@@ -79,6 +79,9 @@ import {
 } from './capabilityRegistry'
 import { defaultApplicationAdapters } from './applicationAdapters'
 import { runRegisteredCapability } from './capabilityRunner'
+import { contentLanguageForUi } from '../../lib/contentLanguage'
+import type { ParseKeys } from 'i18next'
+import i18n from '../../i18n'
 import {
   applySongLanguageIntent,
   extractRequestedSongLanguage,
@@ -1802,7 +1805,7 @@ export function parseAgentTurn(raw: string): AgentTurn {
   const conversationLanguage = normalizeConversationLanguageTag(object.conversation_language)
   const intent = parseWizardIntent(object.intent)
   return {
-    reply: reply || (actions.length ? 'El hechizo está trazado; voy a mover HocusPocus.' : humanReply(raw.trim())),
+    reply: reply || (actions.length ? i18n.t('wizard:replies.spellTraced') : humanReply(raw.trim())),
     actions,
     ...(intent ? { intent } : {}),
     ...(proposalIndices.some((index, position) => index !== position) ? { proposalIndices } : {}),
@@ -2199,29 +2202,36 @@ function inferComicContext(text: string, history: ExampleConversation[]): boolea
 
 function comicCreateFallback(request: string): AgentCreateComicAction | undefined {
   if (!/\b(?:hazme|hacedme|crea(?:me)?|cread|crear|make|create)\b[^.!?\n]{0,120}\b(?:c[oó]mic|tebeo)\b/i.test(request)) return undefined
+  const spanishRequest = /\b(?:espa[nñ]ol|castellano)\b/i.test(request)
+  const lng = spanishRequest ? 'es' as const : contentLanguageForUi().code
   const exactTitle = request.match(/\b(?:c[oó]mic|tebeo)\b[^.!?\n]{0,80}\btitulad[oa]\s+(?:exactamente\s+)?["“]([^"”]+)["”]/i)?.[1]?.trim()
   const topic = request.match(/\b(?:sobre|acerca\s+de)\s+([^.!?\n]+)/i)?.[1]?.trim()
     || request.match(/\b(?:c[oó]mic|tebeo)\s+de\s+([^.!?\n]+)/i)?.[1]?.trim()
-    || 'una aventura inventada por el usuario'
+    || i18n.t('comics:scaffold.topic', { lng })
   const pageCount = Math.min(24, Math.max(1, Number(request.match(/\b(\d{1,2})\s+p[aá]ginas?\b/i)?.[1] || 1)))
   const panelsPerPage = Math.min(12, Math.max(1, Number(request.match(/\b(\d{1,2})\s+vi[nñ]etas?[^.!?\n]{0,40}\bpor\s+p[aá]gina\b/i)?.[1] || 4)))
-  const title = exactTitle || topic.slice(0, 100) || 'Nuevo cómic'
+  const title = exactTitle || topic.slice(0, 100) || i18n.t('comics:scaffold.newComic', { lng })
   const pages: AgentComicPage[] = Array.from({ length: pageCount }, (_, pageIndex) => ({
-    title: `Página ${pageIndex + 1}`,
-    stage: `Etapa ${pageIndex + 1} de ${pageCount}`,
+    title: i18n.t('comics:scaffold.page', { lng, number: pageIndex + 1 }),
+    stage: i18n.t('comics:scaffold.stage', { lng, number: pageIndex + 1, total: pageCount }),
     panels: Array.from({ length: panelsPerPage }, (_, panelIndex) => ({
-      caption: `Página ${pageIndex + 1} · Viñeta ${panelIndex + 1}`,
+      caption: i18n.t('comics:scaffold.caption', { lng, page: pageIndex + 1, panel: panelIndex + 1 }),
       dialogue: '',
       sfx: '',
-      scene: `${topic}. Momento ${panelIndex + 1} de la etapa ${pageIndex + 1}; composición distinta y continuidad visual con las demás viñetas.`,
+      scene: i18n.t('comics:scaffold.scene', {
+        lng,
+        topic,
+        panel: panelIndex + 1,
+        page: pageIndex + 1,
+      }),
     })),
   }))
   return {
     type: 'create_comic',
     title,
     synopsis: topic,
-    language: /\b(?:espa[nñ]ol|castellano)\b/i.test(request) ? 'Español' : '',
-    styleName: 'Dirección visual coherente con la petición del usuario',
+    language: spanishRequest ? 'Español' : contentLanguageForUi().language,
+    styleName: i18n.t('comics:scaffold.styleName', { lng }),
     characters: [],
     panels: [],
     pages,
@@ -2262,9 +2272,9 @@ export async function reconcileAgentTurnWithRequest(
   if (isComicLaunchHowQuestion(request, history)) {
     return {
       reply: [
-        'No hay un botón llamado **Render page**.',
-        'El dibujo de las viñetas es **Generate all images** en Comic Director (barra de Comics), o dímelo aquí: **lánzalo**.',
-        'Las viñetas entran en la **misma GPU**, una detrás de otra, no en paralelo. No es un segundo motor.',
+        i18n.t('wizard:replies.comicLaunchNoButton'),
+        i18n.t('wizard:replies.comicDrawIsGenerateAll'),
+        i18n.t('wizard:replies.comicLaunchGpu'),
       ].join('\n\n'),
       actions: [{ type: 'open_tab', tab: 'comics' }],
     }
@@ -2290,7 +2300,7 @@ export async function reconcileAgentTurnWithRequest(
     const prompt = existing?.prompt.trim() || studioPrompt
     if (!prompt) {
       return {
-        reply: 'Studio no tiene un prompt preparado. Dime la escena y la encolo.',
+        reply: i18n.t('wizard:replies.studioNoPreparedPrompt'),
         actions: [{ type: 'open_tab', tab: 'studio' }],
       }
     }
@@ -2302,7 +2312,7 @@ export async function reconcileAgentTurnWithRequest(
       aspectRatio: state.generationMode === 'video' ? state.aspectRatio : undefined,
     }
     return {
-      reply: 'Lanzo a la cola el vídeo ya preparado en Studio. 🪄',
+      reply: i18n.t('wizard:replies.queuePreparedStudioVideo'),
       actions: [prepare, { type: 'start_generation', confirm: true }],
     }
   }
@@ -2313,7 +2323,7 @@ export async function reconcileAgentTurnWithRequest(
   )
   if (rhythmic3dWorkflow) {
     return {
-      reply: 'Invocaré la canción y esperaré su taskId real; después crearé la escena 3D, convertiré sus beats en keyframes editables, guardaré el proyecto y publicaré el MP4. Si un paso falla, el hechizo podrá reanudarse desde ese punto. 🪄',
+      reply: i18n.t('wizard:replies.rhythmic3dPlan'),
       actions: [rhythmic3dWorkflow],
     }
   }
@@ -2327,7 +2337,10 @@ export async function reconcileAgentTurnWithRequest(
   const targetedComicPanel = comicPanelTarget(request, history)
   if (targetedComicPanel) {
     return {
-      reply: `Regeneraré sólo la viñeta ${targetedComicPanel.panelNumber} de la página ${targetedComicPanel.pageNumber}; las demás quedan intactas. 🪄`,
+      reply: i18n.t('wizard:replies.regenerateOnePanel', {
+        panel: targetedComicPanel.panelNumber,
+        page: targetedComicPanel.pageNumber,
+      }),
       actions: [{
         type: 'generate_comic_panel',
         pageNumber: targetedComicPanel.pageNumber,
@@ -2355,6 +2368,17 @@ export async function reconcileAgentTurnWithRequest(
       biographyReview: intent.biographyReview,
       confirm: true,
     }
+    const comicDrawScope = intent.pilot
+      ? i18n.t('wizard:replies.comicPilotPage')
+      : intent.scope === 'failed'
+        ? i18n.t('wizard:replies.comicFailedPanels')
+        : i18n.t('wizard:replies.comicPendingPanels')
+    const comicProvider = requestedMiniMax
+      ? 'MiniMax image-01'
+      : requestedLocal
+        ? i18n.t('wizard:replies.localProvider')
+        : i18n.t(create ? 'wizard:replies.chosenProvider' : 'wizard:replies.configuredProvider')
+    const minimaxCalls = requestedMiniMax ? ' MiniMax' : ''
     if (create) {
       const prepared = requestedProvider === 'minimax'
         ? { ...create, imageProvider: 'minimax' as const, imageModel: 'image-01' }
@@ -2365,7 +2389,14 @@ export async function reconcileAgentTurnWithRequest(
         .reduce((sum, page) => sum + page.panels.length, 0)
       const estimate = intent.pilot ? (prepared.pages[0]?.panels.length || prepared.panels.length) : panels
       return {
-        reply: `Crearé “${prepared.title}” con ${prepared.pages.length || 1} páginas reales y después dibujaré ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} con ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'el proveedor local' : 'el proveedor elegido'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''}. 🪄`,
+        reply: i18n.t('wizard:replies.createThenDraw', {
+          title: prepared.title,
+          pages: prepared.pages.length || 1,
+          scope: comicDrawScope,
+          provider: comicProvider,
+          estimate,
+          minimax: minimaxCalls,
+        }),
         actions: [prepared, generate],
       }
     }
@@ -2374,7 +2405,14 @@ export async function reconcileAgentTurnWithRequest(
       ? Math.max(1, Math.ceil(inventory.panels / Math.max(1, inventory.pages)))
       : intent.scope === 'failed' ? inventory.failed : inventory.pending
     return {
-      reply: `Voy a dibujar ${intent.pilot ? 'la página piloto' : intent.scope === 'failed' ? 'las viñetas fallidas' : 'las viñetas pendientes'} del cómic abierto con ${requestedMiniMax ? 'MiniMax image-01' : requestedLocal ? 'el proveedor local' : 'su proveedor configurado'}. Estimación: ${estimate} llamadas${requestedMiniMax ? ' MiniMax' : ''} (${inventory.completed}/${inventory.panels} ya listas). 🪄`,
+      reply: i18n.t('wizard:replies.drawOpenComic', {
+        scope: comicDrawScope,
+        provider: comicProvider,
+        estimate,
+        minimax: minimaxCalls,
+        completed: inventory.completed,
+        panels: inventory.panels,
+      }),
       actions: [generate],
     }
   }
@@ -2402,7 +2440,7 @@ export async function reconcileAgentTurnWithRequest(
         // Keep the story's legacy ISO value when no explicit song language
         // was requested; an explicit request is canonicalised by the song
         // language resolver and takes precedence over the story language.
-        lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
+        lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || contentLanguageForUi().language,
         instrumental: false,
         durationSeconds: createdMusicVideo.durationSeconds || 90,
       }
@@ -2469,7 +2507,7 @@ export async function reconcileAgentTurnWithRequest(
           style: request.trim().slice(0, 4_000),
           lyrics: '',
           writeLyrics: true,
-          lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || 'Español',
+          lyricsLanguage: extractRequestedSongLanguage(request) || createdMusicVideo.language || contentLanguageForUi().language,
           instrumental: false,
           durationSeconds: createdMusicVideo.durationSeconds || 90,
         }
@@ -2520,19 +2558,19 @@ export async function reconcileAgentTurnWithRequest(
         : correlatedSongSetup
       return {
         reply: configuredSong
-          ? 'Guardaré la canción y su letra en Story Lab, generaré el audio real y sólo entonces prepararé e iniciaré el videoclip. En marcha no es terminado. 🪄'
-          : 'Prepararé el videoclip en Music Video Director y, si el plan queda listo, lo iniciaré. Preparado no es en cola; en marcha no es terminado. 🪄',
+          ? i18n.t('wizard:replies.saveSongThenVideo')
+          : i18n.t('wizard:replies.prepareAndStartMusicVideo'),
         actions: [...songActions, stage, { type: 'start_director_production', targetStoryTitle: stage.targetStoryTitle, kind: 'music_video', confirm: true }],
       }
     }
     if (musicVideoStart) {
       return {
-        reply: 'Iniciaré la producción de videoclip ya preparada en Director y devolveré el pipelineId real. En marcha no es terminado. 🪄',
+        reply: i18n.t('wizard:replies.startPreparedMusicVideo'),
         actions: [{ type: 'start_director_production', targetStoryTitle: '', kind: 'music_video', confirm: true }],
       }
     }
     return {
-      reply: 'Prepararé el videoclip en Music Video Director con la historia, la canción y el cue exactos. No iniciaré generación. 🪄',
+      reply: i18n.t('wizard:replies.prepareMusicVideoOnly'),
       actions: [stage],
     }
   }
@@ -2547,7 +2585,7 @@ export async function reconcileAgentTurnWithRequest(
       : !authored && GAME_SFX_HINT.test(request) ? ARCADE_HORDE_SFX_PACK : []
     if (clips.length) {
       return {
-        reply: 'Prepararé Studio → Audio → SFX y encolaré el pack de efectos. Irán detrás de lo que ya use la GPU. La galería Audios solo muestra resultados cuando terminen. 🪄',
+        reply: i18n.t('wizard:replies.prepareSfxPack'),
         actions: [{
           ...existing,
           type: 'queue_sfx_pack',
@@ -2569,7 +2607,7 @@ export async function reconcileAgentTurnWithRequest(
       (action): action is AgentCancelTaskAction => action.type === 'cancel_task',
     )
     return {
-      reply: 'Cancelaré la tarea activa en la cola canónica y dejaré Activity a la vista. 🪄',
+      reply: i18n.t('wizard:replies.cancelActiveTask'),
       actions: [{ type: 'cancel_task', taskId: existing?.taskId || '', confirm: true }],
     }
   }
@@ -2579,7 +2617,7 @@ export async function reconcileAgentTurnWithRequest(
     )
     const latest = /(?:[uú]ltim[oa]|latest|last)/i.test(request)
     return {
-      reply: 'Reintentaré la tarea canónica indicada desde su estado persistido y abriré Activity para mostrar el resultado. 🪄',
+      reply: i18n.t('wizard:replies.retryCanonicalTask'),
       actions: [{
         type: 'retry_task',
         taskId: existing?.taskId || (latest ? 'latest' : ''),
@@ -2600,7 +2638,7 @@ export async function reconcileAgentTurnWithRequest(
         durationSeconds: 15,
       } satisfies AgentPrepareAudioAction
     return {
-      reply: 'Prepararé Studio → Audio con los valores visibles y enviaré la generación a la cola. 🪄',
+      reply: i18n.t('wizard:replies.prepareStudioAudio'),
       actions: [...navigation, restoreAuthoredMusicFields(request, prepare), { type: 'start_generation', confirm: true }],
     }
   }
@@ -2621,7 +2659,7 @@ export async function reconcileAgentTurnWithRequest(
       } satisfies AgentPrepareVideoAction
 
     return {
-      reply: '¡La petición está clara! Usaré un conjuro de vídeo estándar con los ajustes disponibles, prepararé Studio → Video y lo enviaré a la cola. 🪄',
+      reply: i18n.t('wizard:replies.clearVideoRequest'),
       actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
@@ -2638,7 +2676,7 @@ export async function reconcileAgentTurnWithRequest(
         seed: -1,
       } satisfies AgentPrepare3dAction
     return {
-      reply: 'Prepararé Studio → 3D (Hunyuan3D) con un preset equilibrado y lo enviaré a generar. 🪄',
+      reply: i18n.t('wizard:replies.prepare3d'),
       actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
     }
   }
@@ -2667,7 +2705,7 @@ export async function reconcileAgentTurnWithRequest(
     } satisfies AgentPrepareImageAction
 
   return {
-    reply: '¡La petición está clara! Prepararé Studio → Image con un modelo compatible y lo enviaré a la cola. 🪄',
+    reply: i18n.t('wizard:replies.clearImageRequest'),
     actions: [...navigation, prepare, { type: 'start_generation', confirm: true }],
   }
 }
@@ -3043,6 +3081,10 @@ const TAB_LABELS: Record<AgentTab, string> = {
   settings: 'Settings',
 }
 
+function translateWizardProgress(raw = ''): string {
+  return raw.startsWith('wizard:') ? String(i18n.t(raw as ParseKeys)) : raw
+}
+
 export async function executeAgentActions(
   actions: AgentAction[],
   onStep?: (message: string) => void,
@@ -3079,10 +3121,10 @@ export async function executeAgentActions(
       results.push({
         action,
         ok: false,
-        message: `No ejecuto ${action.type}: el paso requerido ${failedPredecessor} ha fallado.`,
+        message: i18n.t('wizard:actionErrors.predecessorFailed', { action: action.type, predecessor: failedPredecessor }),
         report: executionReport({
           state: 'failed',
-          message: `Bloqueado por el fallo de ${failedPredecessor}.`,
+          message: i18n.t('wizard:actionErrors.blockedByPredecessor', { predecessor: failedPredecessor }),
           recoverable: true,
         }),
       })
@@ -3092,7 +3134,7 @@ export async function executeAgentActions(
     const changesOutputFolder = action.type === 'select_workspace' || action.type === 'create_workspace'
     const visibleWorkspace = useStore.getState().activeWorkspace || 'default'
     if (!changesOutputFolder && visibleWorkspace !== executionWorkspace) {
-      const message = `El output folder cambió de “${executionWorkspace}” a “${visibleWorkspace}” durante el hechizo. ¿Quieres que continúe en “${visibleWorkspace}” o que vuelva a “${executionWorkspace}”?`
+      const message = i18n.t('wizard:replies.outputFolderChanged', { from: executionWorkspace, to: visibleWorkspace })
       results.push({
         action,
         ok: false,
@@ -3101,126 +3143,134 @@ export async function executeAgentActions(
       })
       break
     }
-    const registeredProgress = getCapability(action.type)?.progress
+    const registeredProgress = translateWizardProgress(getCapability(action.type)?.progress)
+    const storyAdaptationKind = action.type === 'stage_story_video' && action.kind === 'trailer'
+      ? i18n.t('wizard:replies.trailer')
+      : i18n.t('wizard:replies.shortFilm')
+    const seriesAttemptProgress = action.type === 'review_series_attempts' && action.decision === 'approve'
+      ? i18n.t('wizard:replies.approvingSeriesAttempts')
+      : i18n.t('wizard:replies.rejectingSeriesAttempts')
     const working = registeredProgress || (action.type === 'open_tab'
-      ? `Abriendo ${TAB_LABELS[action.tab]}…`
+      ? i18n.t('wizard:replies.openingTab', { tab: TAB_LABELS[action.tab] })
       : action.type === 'open_story_section'
-        ? `Abriendo Story Lab → ${action.section}…`
+        ? i18n.t('wizard:replies.openingStorySection', { section: action.section })
         : action.type === 'open_series_section'
-          ? `Abriendo Series Lab → ${action.section}…`
+          ? i18n.t('wizard:replies.openingSeriesSection', { section: action.section })
       : action.type === 'prepare_video'
-        ? 'Trazando el hechizo de vídeo en Studio…'
+        ? i18n.t('wizard:replies.tracingVideo')
         : action.type === 'prepare_image'
-          ? 'Trazando el hechizo de imagen en Studio…'
+          ? i18n.t('wizard:replies.tracingImage')
         : action.type === 'prepare_audio'
-          ? 'Trazando el hechizo de audio en Studio…'
+          ? i18n.t('wizard:replies.tracingAudio')
         : action.type === 'prepare_3d'
-          ? 'Trazando el hechizo 3D en Studio…'
+          ? i18n.t('wizard:replies.tracing3d')
         : action.type === 'queue_sfx_pack'
-          ? 'Encolando el pack de efectos SFX…'
+          ? i18n.t('wizard:replies.queueingSfx')
         : action.type === 'start_generation'
-          ? 'Enviando a la cola…'
+          ? i18n.t('wizard:replies.sendingToQueue')
           : action.type === 'create_story'
-            ? 'Escribiendo y guardando la nueva historia…'
+            ? i18n.t('wizard:replies.writingStory')
             : action.type === 'update_story'
-              ? 'Actualizando y guardando la historia…'
+              ? i18n.t('wizard:replies.updatingStory')
             : action.type === 'generate_story_section'
-              ? `Invocando una propuesta de Story Lab (${action.scope})…`
+              ? i18n.t('wizard:replies.invokingStoryProposal', { scope: action.scope })
             : action.type === 'apply_story_proposal'
-              ? 'Aplicando la propuesta revisable al canon de Story Lab…'
+              ? i18n.t('wizard:replies.applyingStoryProposal')
             : action.type === 'approve_story_section'
-              ? `Validando y aprobando Story Lab → ${action.section}…`
+              ? i18n.t('wizard:replies.approvingStorySection', { section: action.section })
             : action.type === 'approve_story_visuals'
-              ? 'Vinculando y aprobando referencias visuales de Story Lab…'
+              ? i18n.t('wizard:replies.linkingStoryVisuals')
             : action.type === 'generate_story_visuals'
-              ? `Generando referencias visuales de Story Lab (${action.scope})…`
+              ? i18n.t('wizard:replies.generatingStoryVisuals', { scope: action.scope })
             : action.type === 'stage_story_comic'
-              ? 'Adaptando la historia a Comic Director…'
+              ? i18n.t('wizard:replies.adaptingStoryComic')
             : action.type === 'stage_story_video'
-              ? `Adaptando la historia como ${action.kind === 'trailer' ? 'tráiler' : 'cortometraje'}…`
+              ? i18n.t('wizard:replies.adaptingStoryAs', { kind: storyAdaptationKind })
             : action.type === 'stage_story_music_video'
-              ? 'Preparando el videoclip en Music Video Director…'
+              ? i18n.t('wizard:replies.prepareMusicVideoDirector')
             : action.type === 'start_director_production'
-              ? 'Abriendo el portal de producción en Director…'
+              ? i18n.t('wizard:replies.openingDirectorPortal')
             : action.type === 'create_series_episode'
-              ? 'Preparando la serie y el nuevo episodio…'
+              ? i18n.t('wizard:replies.preparingSeriesEpisode')
             : action.type === 'update_series_episode'
-              ? 'Actualizando y guardando el episodio…'
+              ? i18n.t('wizard:replies.updatingEpisode')
             : action.type === 'generate_series_plan'
-              ? `Invocando el plan de Series Lab (${action.scope})…`
+              ? i18n.t('wizard:replies.invokingSeriesPlan', { scope: action.scope })
             : action.type === 'apply_series_plan'
-              ? 'Aplicando la propuesta de Series Lab al episodio…'
+              ? i18n.t('wizard:replies.applyingSeriesPlan')
             : action.type === 'render_series_shots'
-              ? `Encolando render de Series Lab (${action.mode})…`
+              ? i18n.t('wizard:replies.queueingSeriesRender', { mode: action.mode })
             : action.type === 'review_series_attempts'
-              ? `${action.decision === 'approve' ? 'Aprobando' : 'Rechazando'} intentos de Series Lab…`
+              ? seriesAttemptProgress
             : action.type === 'assemble_series_episode'
-              ? 'Uniendo las tomas aprobadas del episodio…'
+              ? i18n.t('wizard:replies.assemblingEpisode')
             : action.type === 'commit_series_canon'
-              ? 'Registrando las decisiones de canon del episodio…'
+              ? i18n.t('wizard:replies.recordingCanon')
             : action.type === 'open_3d_scene'
-              ? `Abriendo la escena 3D ${action.sceneName}…`
+              ? i18n.t('wizard:replies.opening3dScene', { name: action.sceneName })
             : action.type === 'save_3d_scene'
-              ? 'Guardando la escena 3D editable…'
+              ? i18n.t('wizard:replies.saving3dScene')
             : action.type === 'export_3d_scene'
-              ? 'Renderizando y publicando el MP4 de la escena 3D…'
+              ? i18n.t('wizard:replies.rendering3dMp4')
             : action.type === 'apply_3d_rhythm'
-              ? 'Analizando la canción y creando keyframes rítmicos…'
+              ? i18n.t('wizard:replies.analyzingSongKeyframes')
               : action.type === 'create_character_kit'
-                ? `Creando el Character Kit ${action.name}…`
+                ? i18n.t('wizard:replies.creatingCharacterKit', { name: action.name })
               : action.type === 'open_character_kit'
-                ? `Abriendo Character Kit ${action.kitName}…`
+                ? i18n.t('wizard:replies.openingCharacterKit', { name: action.kitName })
               : action.type === 'update_character_kit'
-                ? 'Actualizando la identidad del Character Kit…'
+                ? i18n.t('wizard:replies.updatingCharacterKit')
               : action.type === 'attach_character_kit_references'
-                ? 'Adjuntando referencias al Character Kit…'
+                ? i18n.t('wizard:replies.attachingKitReferences')
               : action.type === 'build_character_kit'
-                ? 'Montando el kit de personaje…'
+                ? i18n.t('wizard:replies.buildingCharacterKit')
               : action.type === 'open_character_kit_rig'
-                ? 'Abriendo el Face Rig…'
+                ? i18n.t('wizard:replies.openedFaceRig')
               : action.type === 'apply_character_kit_preset'
-                ? `Aplicando el preset ${action.presetId}…`
+                ? i18n.t('wizard:replies.applyingPreset', { preset: action.presetId })
               : action.type === 'track_character_kit_job'
-                ? 'Consultando el trabajo del Character Kit…'
+                ? i18n.t('wizard:replies.checkingKitJob')
               : action.type === 'create_video_editor_project'
-                ? `Creando el proyecto de Video Editor ${action.projectName}…`
+                ? i18n.t('wizard:replies.creatingVideoEditorProject', { name: action.projectName })
               : action.type === 'open_video_editor_project'
-                ? 'Abriendo Video Editor…'
+                ? i18n.t('wizard:replies.openingVideoEditor')
               : action.type === 'add_video_editor_clips'
-                ? 'Añadiendo clips exactos a Video Editor…'
+                ? i18n.t('wizard:replies.addingExactClips')
               : action.type === 'order_video_editor_clips'
-                ? 'Reordenando la línea de tiempo…'
+                ? i18n.t('wizard:replies.reorderingTimeline')
               : action.type === 'trim_video_editor_clip'
-                ? `Recortando ${action.clipName}…`
+                ? i18n.t('wizard:replies.trimmingClip', { name: action.clipName })
               : action.type === 'add_video_editor_audio'
-                ? 'Añadiendo audio a la línea de tiempo…'
+                ? i18n.t('wizard:replies.addingTimelineAudio')
               : action.type === 'validate_video_editor_timeline'
-                ? 'Validando la línea de tiempo…'
+                ? i18n.t('wizard:replies.validatingTimeline')
               : action.type === 'export_video_editor'
-                ? 'Encolando la exportación de Video Editor…'
+                ? i18n.t('wizard:replies.queueingVideoEditorExport')
               : action.type === 'track_video_editor_export'
-                ? 'Consultando la exportación de Video Editor…'
+                ? i18n.t('wizard:replies.checkingVideoEditorExport')
               : action.type === 'create_comic'
-                ? 'Montando el cómic de ejemplo…'
+                ? i18n.t('wizard:replies.mountingSampleComic')
               : action.type === 'generate_comic'
-                ? 'Dibujando las viñetas del cómic…'
+                ? i18n.t('wizard:replies.drawingComicPanels')
               : action.type === 'generate_comic_panel'
-                ? `Regenerando la viñeta ${action.panelNumber} de la página ${action.pageNumber}…`
+                ? i18n.t('wizard:replies.regeneratingPanel', { panel: action.panelNumber, page: action.pageNumber })
               : action.type === 'attach_studio_references'
-                ? 'Adjuntando referencias verificadas a Studio…'
+                ? i18n.t('wizard:replies.attachingStudioReferences')
               : action.type === 'configure_studio_loras'
-                ? 'Configurando LoRAs compatibles en Studio…'
+                ? i18n.t('wizard:replies.configuringLoras')
               : action.type === 'inspect_queue'
-                ? 'Consultando la cola canónica…'
+                ? i18n.t('wizard:replies.consultingQueue')
                 : action.type === 'cancel_task'
-                  ? 'Cancelando la tarea en la cola…'
+                  ? i18n.t('wizard:replies.cancellingQueueTask')
                   : action.type === 'resume_task'
-                    ? 'Reanudando la tarea en la cola…'
+                    ? i18n.t('wizard:replies.resumingQueueTask')
                     : action.type === 'retry_task'
-                      ? 'Reintentando la tarea en la cola…'
+                      ? i18n.t('wizard:replies.retryingQueueTask')
                       : action.type === 'select_workspace'
-                        ? `Cambiando al workspace ${action.workspaceName}…`
-                        : `Creando el workspace ${String((action as { workspaceName?: string }).workspaceName || '')}…`)
+                        ? i18n.t('wizard:replies.switchingWorkspace', { name: action.workspaceName })
+                        : i18n.t('wizard:replies.creatingWorkspace', {
+                          name: String((action as { workspaceName?: string }).workspaceName || ''),
+                        }))
     onStep?.(working)
     if (isExpensiveAction(action.type)) {
       let targetId = createdComicId
@@ -3234,7 +3284,7 @@ export async function executeAgentActions(
         targetId = bindDirectorProductionTarget(
           stagedProductionId,
           handoff?.productionId || '',
-          handoff?.productionId || 'producción abierta',
+          handoff?.productionId || i18n.t('wizard:replies.openProduction'),
         )
       }
       const keyParams = action.type === 'start_generation' && preparedStudioAction
@@ -3264,7 +3314,7 @@ export async function executeAgentActions(
         results.push({
           action,
           ok: true,
-          message: `Reutilizo la ejecución anterior (${reused.state}). ${reused.message}`,
+          message: i18n.t('wizard:replies.reusePreviousExecution', { state: reused.state, detail: reused.message }),
           report: reused,
         })
         if (action.type === 'generate_story_song' && reused.target?.id) {
@@ -3275,7 +3325,7 @@ export async function executeAgentActions(
     }
     try {
       if (action.type === 'start_generation' && !preparedStudio) {
-        throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
+        throw new Error(i18n.t('wizard:actionErrors.studioNotPrepared'))
       }
       const registeredResult = await runRegisteredCapability(action, {
         adapters: defaultApplicationAdapters,
@@ -3298,7 +3348,7 @@ export async function executeAgentActions(
         }
         if (action.type === 'configure_story_song' && registeredResult.report?.target?.title) {
           const configuredProject = registeredResult.report.projectTarget
-          if (!configuredProject?.id) throw new Error('Story Lab no devolvió el ID exacto de la historia configurada.')
+          if (!configuredProject?.id) throw new Error(i18n.t('wizard:actionErrors.storyMissingConfiguredId'))
           configuredStorySong = {
             targetStoryId: configuredProject.id,
             targetStoryTitle: configuredProject.title,
@@ -3317,12 +3367,12 @@ export async function executeAgentActions(
         await defaultApplicationAdapters.storyLab.open()
         const { openAgentStorySection } = await import('./agentUiBus')
         openAgentStorySection(action.section)
-        results.push({ action, ok: true, message: `He abierto Story Lab → ${action.section}.` })
+        results.push({ action, ok: true, message: i18n.t('wizard:replies.openedStorySection', { section: action.section }) })
       } else if (action.type === 'open_series_section') {
         await defaultApplicationAdapters.seriesLab.open()
         const { openAgentSeriesSection } = await import('./agentUiBus')
         openAgentSeriesSection(action.section)
-        results.push({ action, ok: true, message: `He abierto Series Lab → ${action.section}.` })
+        results.push({ action, ok: true, message: i18n.t('wizard:replies.openedSeriesSection', { section: action.section }) })
       } else if (action.type === 'prepare_video') {
         const outcome = await defaultApplicationAdapters.studio.prepareVideo(action)
         preparedStudio = true
@@ -3347,7 +3397,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.studio.queueSfxPack(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'start_generation') {
-        if (!preparedStudio) throw new Error('Studio no se preparó en este turno; no lo he lanzado.')
+        if (!preparedStudio) throw new Error(i18n.t('wizard:actionErrors.studioNotPrepared'))
         const outcome = await defaultApplicationAdapters.studio.startGeneration(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'create_story') {
@@ -3484,7 +3534,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.videoEditor.validateTimeline()
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'export_video_editor') {
-        if (!action.confirm) throw new Error('Exportar Video Editor requiere confirm=true.')
+        if (!action.confirm) throw new Error(i18n.t('wizard:actionErrors.exportVideoEditorConfirm'))
         const outcome = await defaultApplicationAdapters.videoEditor.exportProject(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'track_video_editor_export') {
@@ -3494,7 +3544,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.comic.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'generate_comic') {
-        if (!action.confirm) throw new Error('Dibujar las viñetas requiere confirm=true.')
+        if (!action.confirm) throw new Error(i18n.t('wizard:actionErrors.drawPanelsConfirm'))
         const outcome = await defaultApplicationAdapters.comic.generate(action, createdComicId || undefined, onStep)
         results.push({
           action,
@@ -3514,7 +3564,7 @@ export async function executeAgentActions(
           }),
         })
       } else if (action.type === 'generate_comic_panel') {
-        if (!action.confirm) throw new Error('Regenerar una viñeta requiere confirm=true.')
+        if (!action.confirm) throw new Error(i18n.t('wizard:actionErrors.regeneratePanelConfirm'))
         const outcome = await defaultApplicationAdapters.comic.generatePanel(action.pageNumber, action.panelNumber, onStep)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else if (action.type === 'attach_studio_references') {
@@ -3535,7 +3585,7 @@ export async function executeAgentActions(
             action,
             ok: true,
             message: cancelledBatch
-              ? `${outcome.message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+              ? i18n.t('wizard:replies.alsoCancelPanelBatch', { detail: outcome.message })
               : outcome.message,
             report: outcome.report,
           })
@@ -3544,7 +3594,7 @@ export async function executeAgentActions(
           results.push({
             action,
             ok: true,
-            message: 'He pedido cancelar el lote de viñetas; las ilustraciones terminadas se conservan.',
+            message: i18n.t('wizard:replies.cancelPanelBatch'),
           })
         }
       } else if (action.type === 'resume_task') {
@@ -3560,7 +3610,7 @@ export async function executeAgentActions(
         const outcome = await defaultApplicationAdapters.workspace.create(action)
         results.push({ action, ok: true, message: outcome.message, report: outcome.report })
       } else {
-        throw new Error(`No hay ejecutor para ${action.type}.`)
+        throw new Error(i18n.t('wizard:actionErrors.noExecutor', { action: action.type }))
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

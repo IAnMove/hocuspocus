@@ -75,7 +75,7 @@ Field requirements:
 
 def normalize_language(language: str) -> tuple[str, str]:
     """Validate a UI language code and return ``(code, English label)``."""
-    code = str(language or "es").strip().lower().replace("_", "-").split("-", 1)[0]
+    code = str(language or "en").strip().lower().replace("_", "-").split("-", 1)[0]
     if code not in SUPPORTED_LANGUAGES:
         raise ValueError(f"Unsupported language: {language}")
     return code, SUPPORTED_LANGUAGES[code]
@@ -201,12 +201,57 @@ def build_saved_video_context(metadata: dict, pipeline: Optional[dict] = None) -
     }
 
 
+def _director_clip_index(pipeline: dict, name: str) -> Optional[int]:
+    """The Director shot whose start image, take or H3 segment is ``name``."""
+    for position, clip in enumerate(pipeline.get("clips") or []):
+        if not isinstance(clip, dict):
+            continue
+        names = {
+            clip.get("video_filename"),
+            clip.get("selected_video_filename"),
+            clip.get("start_image_filename"),
+        }
+        for key in ("video_attempts", "h3_segments"):
+            names.update(
+                item.get("filename") for item in clip.get(key) or []
+                if isinstance(item, dict)
+            )
+        if name in names:
+            index = clip.get("index", position)
+            return index if isinstance(index, int) else position
+    return None
+
+
+def _director_prompt_cleanup(pipeline: Optional[dict], name: str) -> dict:
+    """What the Director's Pass 2 cleanup removed from this shot's image prompts.
+
+    ``{"garments", "motion_sentences", "fillers"}`` from the shot plan's
+    ``metadata.prompt_cleanup``; empty when nothing was removed.
+    """
+    if not isinstance(pipeline, dict):
+        return {}
+    index = _director_clip_index(pipeline, name)
+    plans = pipeline.get("clip_plans") or []
+    if index is None or not 0 <= index < len(plans) or not isinstance(plans[index], dict):
+        return {}
+    metadata = plans[index].get("metadata")
+    counts = metadata.get("prompt_cleanup") if isinstance(metadata, dict) else None
+    if not isinstance(counts, dict):
+        return {}
+    cleanup = {
+        key: max(0, int(counts.get(key) or 0))
+        for key in ("garments", "motion_sentences", "fillers")
+    }
+    return cleanup if any(cleanup.values()) else {}
+
+
 def build_saved_clip_info(
     name: str,
     metadata: dict,
     *,
     file_size_bytes: int | None = None,
     file_modified_at: float | None = None,
+    pipeline: Optional[dict] = None,
 ) -> dict:
     """Return the complete saved technical record for the Extra info dialog.
 
@@ -291,6 +336,9 @@ def build_saved_clip_info(
         "negative_prompt": negative_prompt,
         "audio_prompt": audio_prompt,
         "model_prompts": model_prompts,
+        # Director only: clothing words, motion sentences and fillers the
+        # planner's cleanup removed from this shot's image prompt.
+        "prompt_cleanup": _director_prompt_cleanup(pipeline, name),
         "saved_metadata": saved_metadata,
     }
 
