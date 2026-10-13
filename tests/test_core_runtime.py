@@ -166,8 +166,9 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(episode_response.status_code, 200, episode_response.text)
             episode = episode_response.json()
             Path('uploads').mkdir(exist_ok=True)
-            Path('uploads/portrait.png').write_bytes(b'reference fixture')
-            imported = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'portrait.png',
+            portrait = Path('uploads/portrait.png')
+            portrait.write_bytes(b'reference fixture')
+            imported = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(portrait.resolve()),
                 'ownerType':'character', 'ownerId':'char_a', 'kind':'character', 'referenceRole':'primary_portrait',
                 'metadata':{'prompt':'Ada in a paper cutout style', 'jobId':'image-job'}})
             self.assertEqual(imported.status_code, 200, imported.text)
@@ -175,7 +176,7 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(result['series']['characters'][0]['referenceAssetIds'], [result['asset']['id']])
             self.assertEqual(result['asset']['metadata']['jobId'], 'image-job')
             self.assertEqual(result['series']['canon']['approval'], 'draft')
-            retry = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'portrait.png',
+            retry = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(portrait.resolve()),
                 'ownerType':'character', 'ownerId':'char_a', 'kind':'character', 'metadata':{'jobId':'image-job'}})
             self.assertEqual(retry.status_code, 200, retry.text)
             self.assertEqual(retry.json()['asset']['id'], result['asset']['id'])
@@ -198,14 +199,15 @@ class CoreRuntimeTests(unittest.TestCase):
             saved = self.client.put(path, json={'workspace':'default', 'series':series, 'baseRevision':series['revision']})
             self.assertEqual(saved.status_code, 200, saved.text)
             Path('uploads').mkdir(exist_ok=True)
-            Path('uploads/plate.png').write_bytes(b'plate fixture')
+            plate = Path('uploads/plate.png')
+            plate.write_bytes(b'plate fixture')
             scans = []
             with patch('services.series_plate_checks.detect_people', side_effect=lambda found: scans.append(found) or []):
-                clean = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'plate.png',
+                clean = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(plate.resolve()),
                     'ownerType':'location', 'ownerId':'loc_a', 'kind':'image', 'referenceRole':'environment'})
                 self.assertEqual(clean.status_code, 200, clean.text)
                 self.assertEqual(clean.json()['warnings'], [])
-                other = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'plate.png',
+                other = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(plate.resolve()),
                     'ownerType':'location', 'ownerId':'loc_a', 'kind':'image', 'referenceRole':'reference'})
                 self.assertEqual(other.status_code, 200, other.text)
                 self.assertNotIn('warnings', other.json())
@@ -2443,6 +2445,166 @@ class CoreRuntimeTests(unittest.TestCase):
             ("GET", "/api/v1/director/pipeline/{pid}"),
         })
         self.assertEqual(set(owners.values()), {shared})
+
+    def test_core_refuses_series_delete_while_a_job_is_active(self):
+        from services.core_workspace import workspace_dir
+        from services.series_jobs import SeriesJobStore
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Guarded"}).json()
+            SeriesJobStore(workspace_dir("default"), "planning").save({
+                "jobId": "plan-active",
+                "workspace": "default",
+                "seriesId": series["id"],
+                "episodeId": "",
+                "status": "running",
+            })
+            deleted = self.client.delete(f"/api/v1/series/{series['id']}", params={"workspace": "default"})
+            fetched = self.client.get(f"/api/v1/series/{series['id']}", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(deleted.status_code, 409, deleted.text)
+        self.assertEqual(deleted.json()["detail"]["code"], "series_jobs_active")
+        self.assertEqual(fetched.status_code, 200, fetched.text)
+
+    def test_core_refuses_episode_delete_while_a_job_is_active(self):
+        from services.core_workspace import workspace_dir
+        from services.series_jobs import SeriesJobStore
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Guarded episode"}).json()
+            series["canon"]["worldSummary"] = "A world"
+            series["characters"] = [{"id": "char_a", "name": "Ada"}]
+            series["locations"] = [{"id": "loc_a", "name": "Lab"}]
+            path = f"/api/v1/series/{series['id']}"
+            saved = self.client.put(path, json={"workspace": "default", "series": series, "baseRevision": series["revision"]})
+            series = saved.json()
+            approved = self.client.post(path + "/canon/approve", json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+            episode = self.client.post(path + "/episodes", json={"workspace": "default"})
+            episode_id = episode.json().get("id")
+            SeriesJobStore(workspace_dir("default"), "render").save({
+                "jobId": "render-active",
+                "workspace": "default",
+                "seriesId": series["id"],
+                "episodeId": episode_id,
+                "status": "queued",
+            })
+            deleted = self.client.delete(f"{path}/episodes/{episode_id}", params={"workspace": "default"})
+            fetched = self.client.get(f"{path}/episodes/{episode_id}", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(approved.status_code, 200, approved.text)
+        self.assertEqual(episode.status_code, 200, episode.text)
+        self.assertEqual(deleted.status_code, 409, deleted.text)
+        self.assertEqual(deleted.json()["detail"]["code"], "series_jobs_active")
+        self.assertEqual(fetched.status_code, 200, fetched.text)
+
+    def test_core_lists_an_episode_that_no_season_references(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Loose episode"}).json()
+            library = self.client.get("/api/v1/series/library", params={"workspace": "default"}).json()
+            loose = dict(series)
+            loose["episodesById"] = {"ep_orphan": {"id": "ep_orphan", "title": "Loose"}}
+            library["seriesById"][series["id"]] = loose
+            with patch("services.series_library.normalize_series_library", side_effect=lambda value, workspace_id="default": value):
+                saved = self.client.put("/api/v1/series/library", json={"workspace": "default", "library": library})
+                listed = self.client.get(f"/api/v1/series/{series['id']}/episodes", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertIn("ep_orphan", [item["id"] for item in listed.json()["episodes"]])
+
+    def test_core_canon_approval_uses_the_launch_guards(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Canon guards"}).json()
+            path = f"/api/v1/series/{series['id']}/canon/approve"
+            stale = self.client.post(path, json={"workspace": "default", "baseRevision": 99})
+            missing_world = self.client.post(path, json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+            series["canon"]["worldSummary"] = "A persistent world"
+            saved = self.client.put(f"/api/v1/series/{series['id']}", json={"workspace": "default", "series": series, "baseRevision": series["revision"]})
+            series = saved.json()
+            missing_cast = self.client.post(path, json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+            series["characters"] = [{"id": "char_a", "name": "Ada"}]
+            saved = self.client.put(f"/api/v1/series/{series['id']}", json={"workspace": "default", "series": series, "baseRevision": series["revision"]})
+            series = saved.json()
+            missing_place = self.client.post(path, json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(stale.status_code, 409, stale.text)
+        self.assertEqual(stale.json()["detail"], "Canon revision changed to 1; reload before approval")
+        self.assertEqual(missing_world.status_code, 400, missing_world.text)
+        self.assertEqual(missing_world.json()["detail"], "Complete the World summary before approving canon")
+        self.assertEqual(missing_cast.status_code, 400, missing_cast.text)
+        self.assertEqual(missing_cast.json()["detail"], "Add at least one principal character before approving canon")
+        self.assertEqual(missing_place.status_code, 400, missing_place.text)
+        self.assertEqual(missing_place.json()["detail"], "Add at least one canonical location before approving canon")
+
+    def test_core_asset_import_uses_the_launch_checks(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Import checks"}).json()
+            path = f"/api/v1/series/{series['id']}/assets/import"
+            Path("uploads").mkdir(exist_ok=True)
+            source = Path("uploads/ref.png")
+            source.write_bytes(b"png")
+            absolute = str(source.resolve())
+            long_key = "k" * 120
+            imported = self.client.post(path, json={
+                "workspace": "default", "uploadPath": absolute, "ownerType": "series", "kind": "nope",
+                "referenceRole": "reference",
+                "metadata": {"referenceRole": "hijack", "importedAt": "ancient", long_key: "kept", "name": "from-metadata"},
+            })
+            relative = self.client.post(path, json={
+                "workspace": "default", "uploadPath": "ref.png", "ownerType": "series", "kind": "image",
+            })
+            missing_owner = self.client.post(path, json={
+                "workspace": "default", "uploadPath": absolute, "ownerType": "character", "ownerId": "missing",
+                "kind": "image",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(imported.status_code, 200, imported.text)
+        asset = imported.json()["asset"]
+        self.assertEqual(asset["kind"], "other")
+        self.assertEqual(asset["metadata"]["referenceRole"], "reference")
+        self.assertNotEqual(asset["metadata"]["importedAt"], "ancient")
+        self.assertNotIn(long_key, asset["metadata"])
+        self.assertEqual(asset["metadata"]["k" * 100], "kept")
+        self.assertEqual(asset["metadata"]["name"], "from-metadata")
+        self.assertEqual(relative.status_code, 400, relative.text)
+        self.assertIn("HocusPocus Lab uploads", relative.json()["detail"])
+        self.assertEqual(missing_owner.status_code, 404, missing_owner.text)
+        self.assertEqual(missing_owner.json()["detail"], "Series character not found")
+
+    def test_core_serves_the_cpu_series_routes_the_ui_calls(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            missing = "/api/v1/series/missing-series"
+            commit = self.client.post(missing + "/episodes/ep/canon/commit", json={"workspace": "default"})
+            route = self.client.post(missing + "/episodes/ep/references/route", json={"workspace": "default"})
+            preview = self.client.post(missing + "/shots/duration/preview", json={"workspace": "default"})
+            approve = self.client.post(
+                missing + "/episodes/ep/shots/sh/attempts/at/approve", json={"workspace": "default"},
+            )
+            bulk = self.client.post(missing + "/episodes/ep/attempts/approve-bulk", json={"workspace": "default"})
+            reject = self.client.post(
+                missing + "/episodes/ep/shots/sh/attempts/at/reject", json={"workspace": "default"},
+            )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(commit.status_code, 400, commit.text)
+        self.assertEqual(commit.json()["detail"], "baseRevision is required")
+        for response in (route, approve, bulk, reject):
+            self.assertEqual(response.status_code, 404, response.text)
+            self.assertEqual(response.json()["detail"], "Series Lab project not found")
+        self.assertEqual(preview.status_code, 400, preview.text)
+        self.assertEqual(preview.json()["detail"], "Series shot is required")
 
 
 def test_safe_join_copies_use_the_launch_containment_check():
