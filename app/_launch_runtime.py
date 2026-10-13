@@ -26466,64 +26466,11 @@ def save_scene_output(body: dict):
     PNG is only a gallery preview. Locally imported assets are uploaded by the
     client before this endpoint is called, so no transient blob: URL is saved.
     """
-    import re as _re_scene
+    from services.scene_save import save_launch_scene
 
-    scene = body.get("scene")
-    preview = body.get("preview")
-    if not isinstance(scene, dict) or scene.get("version") != 1:
-        raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    layers = scene.get("layers")
-    if not isinstance(layers, list) or len(layers) > 500:
-        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
-    if not isinstance(preview, str) or not preview.startswith("data:image/png;base64,"):
-        raise HTTPException(status_code=400, detail="A PNG scene preview is required")
+    return save_launch_scene(body, workspace_dir=_workspace_dir)
 
-    try:
-        preview_bytes = base64.b64decode(preview.split(",", 1)[1], validate=True)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid PNG preview") from exc
-    if len(preview_bytes) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Scene preview is too large")
 
-    raw_name = str(scene.get("name") or "Untitled scene").strip()
-    safe_name = _re_scene.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "scene"
-    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    stem = f"{stamp}_{safe_name}_{uuid.uuid4().hex[:6]}.scene"
-    out_dir = _workspace_dir(body.get("workspace") or None)
-    os.makedirs(out_dir, exist_ok=True)
-    scene_name = f"{stem}.json"
-    preview_name = f"{stem}.preview.png"
-    scene_path = os.path.join(out_dir, scene_name)
-    preview_path = os.path.join(out_dir, preview_name)
-
-    scene_tmp = scene_path + ".tmp"
-    preview_tmp = preview_path + ".tmp"
-    try:
-        with open(scene_tmp, "w", encoding="utf-8") as handle:
-            json.dump(scene, handle, ensure_ascii=False, indent=2)
-        with open(preview_tmp, "wb") as handle:
-            handle.write(preview_bytes)
-        os.replace(scene_tmp, scene_path)
-        os.replace(preview_tmp, preview_path)
-    except Exception as exc:
-        for path in (scene_tmp, preview_tmp):
-            try:
-                if os.path.isfile(path):
-                    os.remove(path)
-            except OSError:
-                pass
-        raise HTTPException(status_code=500, detail=f"Failed to save scene: {exc}") from exc
-
-    from pathlib import Path
-    from services.document_origin import write_document_origin
-    write_document_origin(Path(scene_path), "scenes.save")
-
-    return {
-        "name": scene_name,
-        "type": "scene",
-        "url": f"/api/v1/file/{scene_name}",
-        "thumbnail_url": f"/api/v1/file/{preview_name}",
-    }
 
 
 def _character_kit_workspace(value) -> str:
@@ -26565,16 +26512,6 @@ api.include_router(create_character_kit_face_router(
 ))
 
 
-def _write_scene_recording_sidecar(output_path, sidecar, workspace_id):
-    from services.asset_manifest import publish_generation_sidecar
-
-    publish_generation_sidecar(
-        output_path,
-        sidecar,
-        workspace_id=workspace_id,
-        tool="scene-animator-3d",
-    )
-
 
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(
@@ -26588,178 +26525,26 @@ async def save_scene_recording(
     compiled scene, and source assets so a rendered 3D clip remains fully
     explainable and reproducible from the gallery.
     """
-    from services.scene_recording import (
-        SceneRecordingTranscodeError,
-        canonical_scene_fps,
-        transcode_scene_recording,
-    )
-
-    if file.size is not None and file.size > MAX_IMAGE_UPLOAD_BYTES:
-        await file.close()
-        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)")
-    if len(metadata.encode("utf-8")) > 8 * 1024 * 1024:
-        await file.close()
-        raise HTTPException(status_code=413, detail="Scene recording metadata is too large")
-    try:
-        details = json.loads(metadata)
-    except json.JSONDecodeError as error:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Invalid scene recording metadata") from error
-    if not isinstance(details, dict):
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene recording metadata must be an object")
-
-    scene = details.get("scene")
-    recipe = details.get("recipe")
-    prompt = details.get("prompt", "")
-    if not isinstance(scene, dict) or scene.get("version") != 1:
-        await file.close()
-        raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    if recipe is not None and not isinstance(recipe, dict):
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene recipe must be an object")
-    if not isinstance(prompt, str) or len(prompt) > 200_000:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene prompt must be text under 200,000 characters")
-    layers = scene.get("layers")
-    if not isinstance(layers, list) or len(layers) > 500:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene layers must be a list of at most 500 items")
-
-    workspace = details.get("workspace") or None
-    out_dir = _workspace_dir(workspace)
-    os.makedirs(out_dir, exist_ok=True)
-    raw_audio_tracks = scene.get("audioTracks") or []
-    if not isinstance(raw_audio_tracks, list) or len(raw_audio_tracks) > 8:
-        await file.close()
-        raise HTTPException(status_code=400, detail="Scene audio tracks must be a list of at most 8 items")
-    audio_tracks = []
-    for index, raw_track in enumerate(raw_audio_tracks):
-        if not isinstance(raw_track, dict):
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} is invalid")
-        filename = str(raw_track.get("filename") or "").strip()
-        # A filename, rather than a host path, keeps the browser metadata safe.
-        if not filename or os.path.basename(filename) != filename:
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has an invalid filename")
-        audio_path = _safe_join(out_dir, filename)
-        if not audio_path or not os.path.isfile(audio_path):
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} was not found in this workspace")
-        try:
-            start_time = max(0.0, min(3600.0, float(raw_track.get("startTime", 0))))
-            volume = max(0.0, min(2.0, float(raw_track.get("volume", 1))))
-        except (TypeError, ValueError):
-            await file.close()
-            raise HTTPException(status_code=400, detail=f"Scene audio track {index + 1} has invalid timing")
-        audio_tracks.append({"path": audio_path, "start_time": start_time, "volume": volume})
-    raw_name = str(scene.get("name") or "3D scene").strip()
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-._")[:80] or "3d-scene"
-    stamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    output_name = f"{stamp}_{safe_name}_3d_{uuid.uuid4().hex[:6]}.mp4"
-    output_path = os.path.join(out_dir, output_name)
-    upload_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-recording.webm")
-    upload_audio_path = os.path.join(out_dir, f".{uuid.uuid4().hex}.scene-audio.wav")
-    fps = canonical_scene_fps(scene.get("fps"))
-    started_at = time.time()
+    from services.scene_save import http_error_detail, http_error_status, publish_from_form
 
     try:
-        await _stream_upload(file, upload_path, max_bytes=MAX_IMAGE_UPLOAD_BYTES)
-        if audio is not None:
-            await _stream_upload(audio, upload_audio_path, max_bytes=32 * 1024 * 1024)
-            audio_tracks.append({"path": upload_audio_path, "start_time": 0, "volume": 1})
-        async with _UPLOAD_TRANSCODE_SLOTS:
-            await asyncio.to_thread(
-                transcode_scene_recording,
-                upload_path,
-                output_path,
-                fps=fps,
-                audio_tracks=audio_tracks,
-                duration=float(scene.get("duration") or 0),
-                embedded_audio=details.get("embeddedAudio") is True,
-            )
-    except UploadTooLargeError as error:
-        raise HTTPException(status_code=413, detail="Recording is too large (max 500 MB)") from error
-    except SceneRecordingTranscodeError as error:
-        raise HTTPException(status_code=400, detail=f"Could not convert recording to MP4: {error}") from error
+        return await publish_from_form(
+            {"file": file, "metadata": metadata, "audio": audio},
+            workspace_dir=_workspace_dir,
+            include_workspace_query=False,
+            scan_cache=_output_scan_cache,
+            scan_cache_lock=_output_scan_cache_lock,
+            stream_upload=_stream_upload,
+            transcode_slots=_UPLOAD_TRANSCODE_SLOTS,
+            sidecar_error_prefix="Could not save recording metadata",
+            safe_join=_safe_join,
+        )
+    except HTTPException:
+        raise
     except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Could not save MP4 recording: {error}") from error
-    finally:
-        try:
-            if os.path.isfile(upload_audio_path):
-                os.remove(upload_audio_path)
-        except OSError:
-            pass
-        try:
-            if os.path.isfile(upload_path):
-                os.remove(upload_path)
-        except OSError:
-            pass
+        raise HTTPException(status_code=http_error_status(error), detail=http_error_detail(error)) from error
 
-    completed_at = time.time()
-    width = int(scene.get("width") or 0)
-    height = int(scene.get("height") or 0)
-    duration = float(scene.get("duration") or 0)
-    source_assets = []
-    if isinstance(recipe, dict):
-        source_assets = recipe.get("assets") if isinstance(recipe.get("assets"), list) else []
-    if not source_assets:
-        source_assets = [
-            {
-                "id": layer.get("id"),
-                "name": layer.get("name"),
-                "kind": layer.get("type"),
-                "source": layer.get("source"),
-            }
-            for layer in layers
-            if isinstance(layer, dict) and layer.get("source")
-        ]
-    sidecar = {
-        "params": {
-            "model_type": "scene-animator-3d",
-            "generation_mode": "3d-scene-compositor",
-            "prompt": prompt,
-            "original_prompt": prompt,
-            "scene_recipe": recipe,
-            "scene": scene,
-            "source_assets": source_assets,
-            "audio_tracks": scene.get("audioTracks") or [],
-            "resolution": f"{width}x{height}" if width and height else None,
-            "width": width,
-            "height": height,
-            "fps": fps,
-            "duration_seconds": duration,
-            "video_length": round(duration * fps) if duration > 0 else None,
-        },
-        "generation_mode": "video",
-        "tool": "scene-animator-3d",
-        "generation_time": round(completed_at - started_at, 3),
-        "created_at": completed_at,
-        "completed_at": completed_at,
-        "output_filename": output_name,
-    }
-    try:
-        _write_scene_recording_sidecar(output_path, sidecar, details.get("workspace"))
-    except Exception as error:
-        try:
-            os.remove(output_path)
-        except OSError:
-            pass
-        raise HTTPException(status_code=500, detail=f"Could not save recording metadata: {error}") from error
 
-    with _output_scan_cache_lock:
-        _output_scan_cache.pop(out_dir, None)
-    return {
-        "name": output_name,
-        "type": "video",
-        "mode": "video",
-        "size": os.path.getsize(output_path),
-        "created_at": completed_at,
-        "completed_at": completed_at,
-        "url": f"/api/v1/file/{output_name}",
-        "thumbnail_url": f"/api/v1/outputs/thumbnail/{quote(output_name, safe='')}",
-    }
 
 
 # ============================================================================

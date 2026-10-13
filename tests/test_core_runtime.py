@@ -1544,7 +1544,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(recovery.json(), {"jobs": []})
 
     def test_scene_recording_muxes_sidecar_audio_and_keeps_unique_names(self):
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         folder, previous = self._in_temp_workspace()
         try:
@@ -1576,8 +1576,8 @@ class CoreRuntimeTests(unittest.TestCase):
                 "duration": 2,
                 "layers": [],
             }
-            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
-                "services.core_scene_recording.publish_generation_sidecar",
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
             ):
                 first = core_scene_recording.finalize_scene_recording(
                     source_path=str(source),
@@ -1611,7 +1611,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertNotEqual(first["name"], "Harbour Shot.webm")
 
     def test_scene_recording_keeps_authored_24fps(self):
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         folder, previous = self._in_temp_workspace()
         try:
@@ -1633,8 +1633,8 @@ class CoreRuntimeTests(unittest.TestCase):
                 "duration": 5,
                 "layers": [],
             }
-            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
-                "services.core_scene_recording.publish_generation_sidecar",
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
             ):
                 saved = core_scene_recording.finalize_scene_recording(
                     source_path=str(source),
@@ -1653,7 +1653,7 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertTrue(saved["name"].endswith(".mp4"))
 
     def test_scene_recording_reads_workspace_from_metadata_not_a_form_field(self):
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         details = core_scene_recording.parse_recording_metadata(json.dumps({
             "workspace": "client-a",
@@ -1678,7 +1678,7 @@ class CoreRuntimeTests(unittest.TestCase):
     def test_scene_recording_form_keeps_the_separate_voice_mix(self):
         import asyncio
 
-        from services import core_scene_recording
+        from services import scene_save as core_scene_recording
 
         class ChunkUpload:
             def __init__(self, payload):
@@ -1719,8 +1719,8 @@ class CoreRuntimeTests(unittest.TestCase):
                     },
                 }),
             }
-            with patch("services.core_scene_recording.transcode_scene_recording", side_effect=fake_transcode), patch(
-                "services.core_scene_recording.publish_generation_sidecar",
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
             ):
                 saved = asyncio.run(core_scene_recording.publish_from_form(form))
             mix_path = seen[0]["audio_tracks"][0]["path"]
@@ -1730,6 +1730,187 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(len(seen[0]["audio_tracks"]), 1)
         self.assertIn("scene-audio", mix_path)
         self.assertFalse(os.path.isfile(mix_path))
+
+    def _recording_form(self, payload=b"silent-webm", *, workspace="default"):
+        class ChunkUpload:
+            def __init__(self, body):
+                self._payload = body
+                self.size = len(body)
+
+            async def read(self, size=-1):
+                data, self._payload = self._payload, b""
+                return data
+
+            async def close(self):
+                return None
+
+        return {
+            "file": ChunkUpload(payload),
+            "metadata": json.dumps({
+                "workspace": workspace,
+                "embeddedAudio": False,
+                "prompt": "",
+                "scene": {
+                    "version": 1,
+                    "name": "Harbour Shot",
+                    "width": 64,
+                    "height": 64,
+                    "fps": 30,
+                    "duration": 2,
+                    "layers": [],
+                },
+            }),
+        }
+
+    def test_scene_recording_rejects_a_declared_size_before_reading(self):
+        import asyncio
+
+        from services.upload_stream import UploadTooLargeError
+        from services import scene_save
+
+        class Huge:
+            size = 500 * 1024 * 1024 + 1
+
+            def __init__(self):
+                self.reads = 0
+                self.closed = False
+
+            async def read(self, size=-1):
+                self.reads += 1
+                return b""
+
+            async def close(self):
+                self.closed = True
+
+        upload = Huge()
+        form = self._recording_form()
+        form["file"] = upload
+        with self.assertRaises(UploadTooLargeError):
+            asyncio.run(scene_save.publish_from_form(form))
+        self.assertEqual(upload.reads, 0)
+        self.assertTrue(upload.closed)
+
+    def test_scene_recording_transcode_leaves_the_event_loop_and_uses_two_slots(self):
+        import asyncio
+        import threading
+
+        from services import scene_save
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            release = threading.Event()
+            state = {"current": 0, "peak": 0, "idents": set(), "loop": None}
+            lock = threading.Lock()
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                ident = threading.get_ident()
+                if ident == state["loop"]:
+                    raise AssertionError("transcode ran on the event loop")
+                with lock:
+                    state["current"] += 1
+                    state["peak"] = max(state["peak"], state["current"])
+                    state["idents"].add(ident)
+                if not release.wait(2):
+                    raise AssertionError("transcode was not released")
+                with lock:
+                    state["current"] -= 1
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            async def main():
+                state["loop"] = threading.get_ident()
+                tasks = [
+                    asyncio.create_task(scene_save.publish_from_form(self._recording_form()))
+                    for _ in range(3)
+                ]
+                for _ in range(50):
+                    if state["peak"] >= 2:
+                        break
+                    await asyncio.sleep(0.01)
+                self.assertEqual(state["peak"], 2)
+                self.assertLessEqual(state["current"], 2)
+                release.set()
+                await asyncio.gather(*tasks)
+
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                asyncio.run(main())
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(state["peak"], 2)
+        self.assertTrue(state["idents"])
+        self.assertNotIn(state["loop"], state["idents"])
+
+    def test_scene_recording_drops_its_folder_from_the_scan_cache(self):
+        import asyncio
+
+        from services import core_workspace as core
+        from services import scene_save
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            out_dir = core.workspace_dir("default")
+            scene_save.output_scan_cache[out_dir] = {"stale": True}
+            scene_save.output_scan_cache["other"] = {"keep": True}
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                asyncio.run(scene_save.publish_from_form(self._recording_form()))
+            self.assertNotIn(out_dir, scene_save.output_scan_cache)
+            self.assertEqual(scene_save.output_scan_cache["other"], {"keep": True})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_recording_url_workspace_query_is_optional(self):
+        from services import scene_save
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            source = Path("outputs", "capture.webm")
+            source.write_bytes(b"webm")
+            scene = {"version": 1, "name": "Harbour Shot", "fps": 30, "duration": 1, "layers": []}
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                hidden = scene_save.finalize_scene_recording(
+                    source_path=str(source),
+                    output_dir=str(Path("outputs")),
+                    scene=scene,
+                    recipe=None,
+                    prompt="",
+                    embedded_audio=False,
+                    extra_audio_path=None,
+                    workspace="client-a",
+                    include_workspace_query=False,
+                )
+                shown = scene_save.finalize_scene_recording(
+                    source_path=str(source),
+                    output_dir=str(Path("outputs")),
+                    scene=scene,
+                    recipe=None,
+                    prompt="",
+                    embedded_audio=False,
+                    extra_audio_path=None,
+                    workspace="client-a",
+                    include_workspace_query=True,
+                )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertNotIn("workspace=", hidden["url"])
+        self.assertNotIn("workspace=", hidden["thumbnail_url"])
+        self.assertIn("workspace=client-a", shown["url"])
+        self.assertIn("workspace=client-a", shown["thumbnail_url"])
 
     def _multipart_upload(self, filename: str, payload: bytes, content_type: str = "image/png"):
         boundary = "----CoreUploadBoundary"
