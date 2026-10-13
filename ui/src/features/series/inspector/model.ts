@@ -10,7 +10,7 @@ import type { SectionDraft, SectionKey } from './inspectorStore'
  * series.shot.update), what changed, what the next render regenerates, and the pictures of a shot without a take.
  */
 export const SECTION_FIELDS: Record<SectionKey, readonly string[]> = {
-  plan: ['framing', 'camera', 'timing', 'duration'],
+  plan: ['framing', 'camera', 'timing', 'duration', 'finish'],
   cast: ['cast'],
   cast3d: ['scene3d'],
   lines: ['lines'],

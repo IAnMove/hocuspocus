@@ -159,7 +159,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 
 - **framing:** `wide` (everyone, full body), `two` (two characters), `medium` (one, waist up), `close` (one face),
   `insert`/`title` (no cast; cards).
-- **camera:** `static` or `push` (slow push-in; use it on punchlines and reveals).
+- **camera:** `static` (default), `push`/`pull` (slow push-in/out), `pan-left`, `pan-right` or `drift`; other words
+  are `static` (push-in words `push`). Follow the series' `cameraLanguage`, else push on punchlines.
+- **finish:** `paper` (default), `none`, a Video 2D finish id (`scenes.catalog`) or `{texture, grain, vignette}`;
+  else the series' `look.finish`.
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
   as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
@@ -475,12 +478,12 @@ ends (0.45 s after it): give a shot in a big room `timing: {"tail": 1.0}` to let
 
 - One idea per line; short lines land better and lip-sync better. Write numbers and acronyms as they are spoken.
 - Judge lip-sync on 12 frames of one long line, with the mouth enlarged. The contact sheet hides a mouth that barely opens.
-- Every scene starts on a `wide` that shows who is there, then `two`/`medium`/`close` for the exchange, and a
-  `close` + `push` on the punchline.
+- A comedy scene: a `wide` that shows who is there, then `two`/`medium`/`close` for the exchange, and a `close` +
+  `push` on the punchline.
 - Use the bible's rules (running gags, how each character speaks, how episodes end); its voice traits give each
   character's rhythm.
-- Cold open (30–60 s), title card (7 s, theme), 3–4 scenes, ending with the moral, credits card (6 s): 5–6 minutes,
-  45–55 shots.
+- Follow the series' `episodeFormat`, else this sitcom format: cold open (30–60 s), title card (7 s, theme), 3–4
+  scenes, ending with the moral, credits card (6 s): 5–6 minutes, 45–55 shots.
 - Parody of public figures: satirise their public persona only; every voice is synthetic and described by traits.
 
 ## Known pitfalls

@@ -20,6 +20,7 @@ export interface SeriesShotScript {
   variant?: string
   framing?: string
   camera?: string
+  finish?: import('../features/series/shotLook').SeriesFinishChoice
   cast?: Array<Record<string, unknown>>
   lines?: SeriesScriptLine[]
   card?: Record<string, unknown>

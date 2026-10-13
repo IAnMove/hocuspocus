@@ -16,6 +16,7 @@ import {
   seriesProviderFieldsFromProfile,
 } from '../../lib/productionProfile'
 import { SeriesSetupVideoFields, SeriesVideoShotResolutionField } from './SeriesSetupVideoFields'
+import { SeriesEpisodeFormatField, SeriesFinishField } from './SeriesSetupLookFields'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
 import type { SeriesReferenceRoom } from './shotReferences'
 
@@ -232,6 +233,7 @@ export function SeriesSetupPanel({
           <SeriesField label={t('identity.genre')}><input className={inputClass} value={series.genre} onChange={event => patch({ genre: event.target.value })} /></SeriesField>
           <SeriesField label={t('identity.tone')}><input className={inputClass} value={series.tone} onChange={event => patch({ tone: event.target.value })} /></SeriesField>
           <SeriesField label={t('identity.audience')}><input className={inputClass} value={series.audience} onChange={event => patch({ audience: event.target.value })} /></SeriesField>
+          <div className="lg:col-span-2"><SeriesEpisodeFormatField series={series} t={t} patch={patch} /></div>
         </div>
       </SectionCard>
 
@@ -240,6 +242,7 @@ export function SeriesSetupPanel({
           <SeriesField label={t('visual.visualStyle')} required><textarea className={textareaClass} value={series.visualStyle} onChange={event => patch({ visualStyle: event.target.value })} /></SeriesField>
           <SeriesField label={t('visual.characterVisualStyle')}><textarea className={textareaClass} value={series.characterVisualStyle} onChange={event => patch({ characterVisualStyle: event.target.value })} /></SeriesField>
           <SeriesField label={t('visual.cameraLanguage')}><textarea className={textareaClass} value={series.cameraLanguage} onChange={event => patch({ cameraLanguage: event.target.value })} /></SeriesField>
+          <SeriesFinishField series={series} t={t} patch={patch} />
           <SeriesField label={t('visual.textPolicy')} hint={t('visual.textPolicyHint')}>
             <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={series.allowClipText} onChange={event => patch({ allowClipText: event.target.checked })} />{t('visual.allowText')}</label>
           </SeriesField>
