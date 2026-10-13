@@ -93,6 +93,16 @@ test('create_story lists only what was really left unset', async () => {
   assert.doesNotMatch(toneOnly.message, /tone not set/)
 })
 
+test('create_story counts a style recovered from the brief as set', async () => {
+  const brief = 'Videoclip heavy metal con estética visual de animación adulta fantástica de la película Heavy Metal 1981.'
+  const { project, message } = await createStoryReply(
+    { project_type: 'music_video', creative_brief: brief }, 'wizard-defaults-story-brief',
+  )
+  assert.equal(project.visualStyle, brief)
+  assert.ok(message.includes('Choices I made: tone not set. Tell me if you want something else.'), message)
+  assert.doesNotMatch(message, /style not set/)
+})
+
 test('the line follows the interface language', async () => {
   const { setUiLanguage } = await import('../src/i18n/index')
   await setUiLanguage('es')
@@ -240,6 +250,28 @@ test('create_series_episode lists only what was really left unset', async () => 
   try {
     const result = await createEpisodeReply({ episode_title: 'La demo', visual_style: 'Flat paper cut-out' })
     assert.equal(result.ok, true, result.message)
+    assert.ok(result.message.includes('Choices I made: tone not set. Tell me if you want something else.'), result.message)
+    assert.doesNotMatch(result.message, /style not set/)
+  } finally {
+    harness.restore()
+  }
+})
+
+test('create_series_episode on an existing series keeps its style and lists only what is still unset', async () => {
+  const harness = await seriesHarness('wizard-defaults-series-existing')
+  try {
+    const { normalizeSeriesProject } = await import('../src/features/series/model')
+    // A hand-made series: it has a style but no cast, so the Wizard runs the setup once.
+    harness.library.seriesById['series-saved'] = normalizeSeriesProject({
+      id: 'series-saved', title: SERIES_BASE.series_title, visualStyle: 'Ink wash on rice paper',
+      seasons: [{ id: 'season-saved', number: 1, title: 'Season 1', episodeOrder: [] }],
+    })!
+    harness.library.seriesOrder.push('series-saved')
+    const result = await createEpisodeReply({ episode_title: 'La demo', visual_style: 'Neon noir' })
+    assert.equal(result.ok, true, result.message)
+    const series = harness.library.seriesById['series-saved']
+    assert.equal(series.visualStyle, 'Ink wash on rice paper', 'the series keeps its own style')
+    assert.equal(series.tone, '')
     assert.ok(result.message.includes('Choices I made: tone not set. Tell me if you want something else.'), result.message)
     assert.doesNotMatch(result.message, /style not set/)
   } finally {
