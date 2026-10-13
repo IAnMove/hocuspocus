@@ -53,6 +53,8 @@ _LORA_MULTIPLIERS_PATH = os.path.join(
     _ROOT, "app", "shared", "utils", "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
+_LORAS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "lorasSlice.ts")
 _RECAST_CONTROLS_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "Sidebar", "RecastControls.tsx",
 )
@@ -3831,7 +3833,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("single-phase LoRA settings", launch)
         self.assertIn("editRecastUseRelighting: false", store)
         self.assertIn("use_relighting: state.editRecastUseRelighting", store)
-        self.assertIn("const recastSinglePhase =", store)
+        self.assertIn("const recastSinglePhase =", _read(_LORAS_PATH))
         self.assertIn("const recastSinglePhase =", selector)
         self.assertIn("const phases = recastSinglePhase ? 1", selector)
         self.assertIn("t('recast.matchLighting')", controls)
@@ -3925,6 +3927,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_recast_default_prefers_dedicated_fast_scail2(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        models = _read(_MODELS_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('body.get("model_type") or _RECAST_FAST_MODEL_TYPE', launch)
@@ -3932,9 +3935,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("t('recast.aboutText')", controls)
         self.assertIn("Fast is recommended (8 steps)", studio["recast"]["aboutText"])
         self.assertIn("HQ uses the full 40-step schedule", studio["recast"]["aboutText"])
-        self.assertIn("initialModelType === 'scail2_14B_fast'", store)
-        self.assertIn("editSubMode: 'restyle' as const", store)
-        self.assertIn("editSubMode: 'recast' as const", store)
+        self.assertIn("initialModelType === 'scail2_14B_fast'", models)
+        self.assertIn("editSubMode: 'restyle' as const", models)
+        self.assertIn("editSubMode: 'recast' as const", models)
 
     def test_recast_resolution_profile_does_not_change_model_schedule(self):
         launch = _read(_LAUNCH_PATH)

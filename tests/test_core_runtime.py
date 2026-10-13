@@ -441,6 +441,14 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(workflows.status_code, 400, workflows.text)
         self.assertNotIn("Could not read", conversation.text)
         self.assertNotIn("Could not read", workflows.text)
+        # A workspace folder that cannot be created is a 500 with the Wizard message, as before the router was shared.
+        with patch("services.core_workspace.workspace_dir", side_effect=OSError("disk full")):
+            unreadable = self.client.get("/api/v1/wizard/conversations")
+            unsaved = self.client.put("/api/v1/wizard/workflows", json={"workspace": "default", "collection": {}})
+        self.assertEqual(unreadable.status_code, 500, unreadable.text)
+        self.assertIn("Could not read the Wizard conversation: disk full", unreadable.json()["detail"])
+        self.assertEqual(unsaved.status_code, 500, unsaved.text)
+        self.assertIn("Could not save Wizard workflows: disk full", unsaved.json()["detail"])
 
     def test_wizard_put_rejects_a_json_array(self):
         conversation = self.client.put("/api/v1/wizard/conversations", json=["not", "an", "object"])
@@ -590,6 +598,10 @@ class CoreRuntimeTests(unittest.TestCase):
                 "workspace": "default",
             })
             missing = self.client.post("/api/v1/video-editor/export/does-not-exist/cancel")
+            foreign = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "workspace": "../outside",
+            })
         finally:
             self._leave_temp_workspace(folder, previous)
         self.assertEqual(rejected.status_code, 400, rejected.text)
@@ -600,6 +612,8 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("resolution", str(huge.json()["detail"]).lower())
         self.assertEqual(missing.status_code, 404, missing.text)
         self.assertIn("Video editor export job not found", str(missing.json()["detail"]))
+        self.assertEqual(foreign.status_code, 400, foreign.text)
+        self.assertIn("Invalid workspace name", str(foreign.json()["detail"]))
 
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")
@@ -1195,6 +1209,12 @@ class CoreRuntimeTests(unittest.TestCase):
             record = json.loads(endpoint.read_text(encoding="utf-8"))
             self.assertEqual(record["port"], seen["port"])
             self.assertEqual(record["url"], f"http://127.0.0.1:{seen['port']}")
+            # Core has no LanAuthMiddleware, so it must not announce a protected LAN session.
+            sharing = {"PINOKIO_SHARE_LOCAL": "true", "LOREFRAME_LAN_TOKEN": "t" * 32}
+            with patch.dict(os.environ, sharing), patch("services.server_entry.run") as entry, redirect_stdout(io.StringIO()):
+                os.environ.pop("LOREFRAME_LAN_AUTH", None)
+                core_runtime.run_server()
+            self.assertEqual(entry.call_args.kwargs["lan_messages"], [])
         finally:
             held.close()
             for sock in seen.get("sockets") or []:

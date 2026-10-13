@@ -35,7 +35,7 @@ STORY_MODEL = ROOT / "ui" / "src" / "features" / "stories" / "model.ts"
 STORY_ADAPTATIONS = ROOT / "ui" / "src" / "features" / "stories" / "adaptations.ts"
 STORY_ACTIVITY = ROOT / "ui" / "src" / "features" / "stories" / "activityLifecycle.ts"
 IMAGE_GENERATION = ROOT / "ui" / "src" / "lib" / "imageGeneration.ts"
-STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
+STORE = ROOT / "ui" / "src" / "features" / "activity" / "store.ts"
 
 
 
