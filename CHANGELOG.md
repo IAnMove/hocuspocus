@@ -6,6 +6,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+The Video Editor routes now come from one place. The main server mounts the
+extracted Video Editor router and the second copy inside the launch runtime is
+gone, with the same paths, answers and job list as before. Saved montages and
+the agent that asked still reach the export's metadata. A new CI test fails when
+a router is not mounted and not listed with a reason, when a server defines the
+same method and path twice, or when a route of the core server or the route table
+is missing from the main server. A new UI check (`npm run unreachable:check`, in
+CI) fails when a file in `ui/src` cannot be reached from an entry point and is not
+listed with a reason; 11 files that nothing used are deleted.
+
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
 Design*, and the Character Creator voice designer and new reference voices start on
