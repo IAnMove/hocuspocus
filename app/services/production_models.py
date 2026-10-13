@@ -14,9 +14,12 @@
 ``height`` (metres) is the model's real size in a scene; without it every model stands 1.7 m tall. It does not
 remake the model.
 
-``spec.sets`` maps a name to ``{prompt, seed}``: a painted set for a scene3d ``background``, drawn with a fixed
-recipe (eye-level, an open floor across the lower third, a clear horizon, nobody in it) so the projected floor
-has ground to stand on. ``{kind: "diorama", ...}`` is a set built in 3D instead (``production_diorama``).
+``spec.sets`` maps a name to ``{prompt, seed, staging}``: a painted set for a scene3d ``background``. ``staging``
+``floor`` (the default) draws it with a fixed recipe (eye-level, an open floor across the lower third, a clear
+horizon, nobody in it) so the projected floor has ground to stand on; ``backdrop`` asks only for a far view with a
+clear horizon and nobody in it; ``none`` sends the prompt and the look as written. ``floor`` and ``backdrop`` leave
+out the look's sentences that put people in the picture; dry_run lists them (``set_report``).
+``{kind: "diorama", ...}`` is a set built in 3D instead (``production_diorama``).
 
 Every picture (sets included), then every Hunyuan3D mesh, then every rig is submitted together, so each model
 loads once. A scene3d ``cast`` entry names a model, and a ``background`` a set, by its name
@@ -68,8 +71,19 @@ PICTURE_SIZE = "1024x1024"
 SET_LEAD = "An EMPTY set with nobody in it, ready for actors to step in:"
 SET_STAGING = ("wide eye-level view, a large open EMPTY floor across the foreground and lower third where actors can stand, "
                "the scenery behind it, clear horizon, no people, no figurines, no dolls, no characters, no animals, no text")
+# A far plate (sets.<name>.staging "backdrop"): no floor for the cast is asked for, still nobody in it.
+BACKDROP_STAGING = "wide view of the scenery, clear horizon, nobody in it, no text"
+STAGINGS = ("floor", "backdrop", "none")
 RECIPE = 2                      # the picture recipes above; a change remakes pictures, meshes and sets
-_PEOPLE = re.compile(r"\b(characters?|figurines?|figures?|people|persons?|actors?|dolls?|toys? figures?|cast)\b", re.IGNORECASE)
+# A sentence that puts people in the picture. The same words naming a medium or a material ("a figurine look",
+# "doll-like faces", "toy-like", "cast shadows", "cast iron", "crowd-pleasing") are masked first, so the look keeps them.
+# A medium is a hyphenated word or a singular noun before the word: "the dolls look out" and "characters feel" are
+# people doing something, and "character style" names no medium, so those sentences still go.
+_PEOPLE = re.compile(r"\b(characters?|figurines?|figures?|people|persons?|actors?|dolls?|toys? figures?|cast|crowds?)\b", re.IGNORECASE)
+_MEDIUM = re.compile(r"\b(?:figurine|figure|doll|toy|puppet)s?-(?:like|look|style|aesthetic|textures?|finish|feel)\b"
+                     r"|\b(?:figurine|figure|doll|toy|puppet) (?:look|style|aesthetic|textures?|finish|feel)\b"
+                     r"|\bcasts?[- ](?:shadows?|light|glow|reflections?|iron|bronze|steel|metal|concrete|stone|resin|plaster)\b"
+                     r"|\bcrowd[- ]pleas\w*", re.IGNORECASE)
 SET_SIZE = "1664x928"         # 16:9 on the 32-pixel grid the image models need
 MESH_PRESET = "balanced"        # Hunyuan3D 2 Turbo geometry with Paint 2.0 Turbo texture
 WAVE = 4                        # model3d_service._MAX_ACTIVE_JOBS
@@ -94,9 +108,11 @@ def check_sets(spec: dict) -> None:
             if why:
                 raise ModelError(why)
         elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
-                or set(entry) - {"prompt", "seed"} or not _text(entry.get("prompt")):
-            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed}}, a diorama {{kind: \"diorama\", ...}} "
+                or set(entry) - {"prompt", "seed", "staging"} or not _text(entry.get("prompt")):
+            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed, staging}}, a diorama {{kind: \"diorama\", ...}} "
                              f"or a parallax set {{kind: \"parallax\", ...}}")
+        elif entry.get("staging", "floor") not in STAGINGS:
+            raise ModelError(f"sets.{name}.staging must be one of {', '.join(STAGINGS)}")
 
 
 def check_models(spec: dict) -> None:
@@ -168,10 +184,52 @@ def _fingerprint(entry: dict, source: str | None, spec: dict) -> str:
     return hashlib.sha256(json.dumps([made_from, source, look, bpm, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
 
 
-def scenery_look(look: str) -> str:
-    """The style without its sentences about people, which make an image model populate an empty picture."""
+def scenery_parts(look: str) -> tuple[str, list[str]]:
+    """(the style without its sentences that put people in the picture, those sentences). People named in a set's
+    look make an image model populate an empty picture; a word naming the medium does not count."""
     sentences = re.split(r"(?<=[.;:])\s+", look or "")
-    return " ".join(sentence for sentence in sentences if not _PEOPLE.search(sentence)).strip()
+    dropped = [sentence for sentence in sentences if _PEOPLE.search(_MEDIUM.sub(" ", sentence))]
+    return " ".join(sentence for sentence in sentences if sentence not in dropped).strip(), dropped
+
+
+def scenery_look(look: str) -> str:
+    return scenery_parts(look)[0]
+
+
+def set_prompt(entry: dict, look: str) -> str:
+    """The picture prompt of a painted set for its ``staging``. ``floor`` is the recipe every set had before staging."""
+    staging = entry.get("staging", "floor")
+    if staging == "none":
+        return " ".join(part for part in (f"{entry['prompt']}.", (look or "").strip()) if part)
+    if staging == "backdrop":
+        return " ".join(part for part in (f"{entry['prompt']}.", scenery_look(look), BACKDROP_STAGING) if part)
+    return f"{SET_LEAD} {entry['prompt']}. {scenery_look(look)} {SET_STAGING}"
+
+
+def set_report(spec: dict) -> dict[str, dict]:
+    """dry_run's ``sets``: per set its staging, the prompt a painted set sends, and the look sentences left out."""
+    style = spec.get("style") if isinstance(spec.get("style"), dict) else {}
+    look = style.get("image") or ""
+    dropped = scenery_parts(look)[1]
+    sets = spec.get("sets") if isinstance(spec.get("sets"), dict) else {}
+    report = {}
+    for name, entry in sets.items():
+        kind = _set_kind(entry)
+        if kind or not isinstance(entry, dict) or not _text(entry.get("prompt")):
+            report[name] = {"staging": kind["name"] if kind else None, "look_sentences_dropped": dropped}
+            continue
+        staging = entry.get("staging", "floor")
+        if staging not in STAGINGS:         # dry_run does not validate: say so instead of showing the floor prompt
+            report[name] = {"staging": staging, "error": f"sets.{name}.staging must be one of {', '.join(STAGINGS)}"}
+            continue
+        report[name] = {"staging": staging, "prompt_sent": set_prompt(entry, look),
+                        "look_sentences_dropped": [] if staging == "none" else dropped}
+    return report
+
+
+def _painted(entry: dict) -> dict:
+    """What a painted set's fingerprint covers: ``staging`` only when it is not the default, so sets made before it keep theirs."""
+    return {key: value for key, value in entry.items() if not (key == "staging" and value == "floor")}
 
 
 def _digest(value: str) -> str:
@@ -240,7 +298,7 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     jobs = {}
     for name, entry in (spec.get("sets") or {}).items():
         kind = _set_kind(entry)
-        fingerprint = _fingerprint(kind["recipe"](entry) if kind else entry, None, spec)
+        fingerprint = _fingerprint(kind["recipe"](entry) if kind else _painted(entry), None, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and (kept.get("url") or (kind and kind["built"](kept))):
             continue
@@ -249,7 +307,8 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
             made[name]["kind"] = kind["name"]
             jobs.update(kind["jobs"](production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
             continue
-        prompt = f"{SET_LEAD} {entry['prompt']}. {scenery_look(style.get('image', ''))} {SET_STAGING}"
+        made[name]["staging"] = entry.get("staging", "floor")
+        prompt = set_prompt(entry, style.get("image", ""))
         jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", default_seed(production, 11)),
                                                *image_choice(entry, style), production._attempt("set_attempts", name))
     return jobs
