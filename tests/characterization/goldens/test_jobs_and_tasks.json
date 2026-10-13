@@ -1,0 +1,119 @@
+{
+  "director pipelines": {
+    "body": {
+      "limit": 0,
+      "offset": 0,
+      "pipelines": [],
+      "total": 0
+    },
+    "status": 200
+  },
+  "director pipelines active": {
+    "body": {
+      "pipelines": []
+    },
+    "status": 200
+  },
+  "director v2 plan jobs": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "favorite off": {
+    "body": {
+      "favorite": false,
+      "name": "golden_clip.mp4"
+    },
+    "status": 200
+  },
+  "favorite on": {
+    "body": {
+      "favorite": true,
+      "name": "golden_clip.mp4"
+    },
+    "status": 200
+  },
+  "favorites empty": {
+    "body": {
+      "favorites": []
+    },
+    "status": 200
+  },
+  "favorites empty again": {
+    "body": {
+      "favorites": []
+    },
+    "status": 200
+  },
+  "favorites one": {
+    "body": {
+      "favorites": [
+        "golden_clip.mp4"
+      ]
+    },
+    "status": 200
+  },
+  "job status missing": {
+    "body": {
+      "detail": "Job not found"
+    },
+    "status": 404
+  },
+  "jobs": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "jobs recovery": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "resources": {
+    "body": {
+      "lanes": [
+        {
+          "active": 0,
+          "key": "local_gpu:0",
+          "label": "Local GPU 0",
+          "location": "local",
+          "tasks": [],
+          "waiters": [],
+          "waiting": 0
+        }
+      ]
+    },
+    "status": 200
+  },
+  "task missing": {
+    "body": {
+      "detail": "Task not found"
+    },
+    "status": 404
+  },
+  "tasks": {
+    "body": {
+      "latest_event_id": 0,
+      "tasks": [],
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "tasks all": {
+    "body": {
+      "latest_event_id": 0,
+      "tasks": [],
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "unknown api route": {
+    "body": {
+      "detail": "Not Found"
+    },
+    "status": 404
+  }
+}

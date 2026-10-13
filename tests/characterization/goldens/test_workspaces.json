@@ -1,0 +1,173 @@
+{
+  "create": {
+    "body": {
+      "name": "golden-a",
+      "path": "<OUTPUTS>/golden-a",
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "create again": {
+    "body": {
+      "name": "golden-a",
+      "path": "<OUTPUTS>/golden-a",
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "create second": {
+    "body": {
+      "name": "golden_b",
+      "path": "<OUTPUTS>/golden_b",
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "create with a path": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores."
+    },
+    "status": 400
+  },
+  "create with a space": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores."
+    },
+    "status": 400
+  },
+  "create without name": {
+    "body": {
+      "detail": "Workspace name is required"
+    },
+    "status": 400
+  },
+  "delete": {
+    "body": {
+      "dir_removed": true,
+      "errors": [],
+      "files_deferred": 0,
+      "files_deleted": 0,
+      "name": "golden_b",
+      "status": "ok",
+      "switched_to_default": false
+    },
+    "status": 200
+  },
+  "delete default": {
+    "body": {
+      "detail": "The default workspace is the outputs folder itself and cannot be deleted."
+    },
+    "status": 400
+  },
+  "delete missing": {
+    "body": {
+      "detail": "Workspace not found: never-made"
+    },
+    "status": 404
+  },
+  "list after create": {
+    "body": {
+      "active": "default",
+      "workspaces": [
+        {
+          "file_count": 0,
+          "name": "default",
+          "path": "<OUTPUTS>"
+        },
+        {
+          "file_count": 0,
+          "name": "golden-a",
+          "path": "<OUTPUTS>/golden-a"
+        },
+        {
+          "file_count": 0,
+          "name": "golden_b",
+          "path": "<OUTPUTS>/golden_b"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "list after delete": {
+    "body": {
+      "active": "default",
+      "workspaces": [
+        {
+          "file_count": 0,
+          "name": "default",
+          "path": "<OUTPUTS>"
+        },
+        {
+          "file_count": 0,
+          "name": "golden-a",
+          "path": "<OUTPUTS>/golden-a"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "list after set active": {
+    "body": {
+      "active": "golden-a",
+      "workspaces": [
+        {
+          "file_count": 0,
+          "name": "default",
+          "path": "<OUTPUTS>"
+        },
+        {
+          "file_count": 0,
+          "name": "golden-a",
+          "path": "<OUTPUTS>/golden-a"
+        },
+        {
+          "file_count": 0,
+          "name": "golden_b",
+          "path": "<OUTPUTS>/golden_b"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "list fresh": {
+    "body": {
+      "active": "default",
+      "workspaces": [
+        {
+          "file_count": 0,
+          "name": "default",
+          "path": "<OUTPUTS>"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "outputs of an invalid workspace": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
+    },
+    "status": 400
+  },
+  "set active": {
+    "body": {
+      "active": "golden-a",
+      "path": "<OUTPUTS>/golden-a",
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "set active back": {
+    "body": {
+      "active": "default",
+      "path": "<OUTPUTS>",
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "set active invalid": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores."
+    },
+    "status": 400
+  }
+}

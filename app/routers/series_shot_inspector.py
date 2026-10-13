@@ -24,7 +24,6 @@ from services.series_native_render import NativeRenderError
 from services.series_shot3d_editor import Scene3DEditorError, editor_scene, from_editor
 from services.series_shot_edit import ShotEditError, find_shot
 
-_SHOTS = "/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}"
 # What a shot can name, by kind; recordings, render intermediates and hidden files are left out.
 FILE_KINDS = {"audio": (".wav", ".mp3", ".flac", ".ogg", ".m4a"), "image": (".png", ".webp", ".jpg", ".jpeg"),
               "video": (".mp4", ".webm", ".mov"), "model": (".glb", ".gltf")}
@@ -89,12 +88,12 @@ def create_series_shot_inspector_router(*, voices: SeriesLineVoice, read_library
         """Workspace files a shot can name in the inspector's pickers (sounds, props, layers, 3D models)."""
         return {"kind": kind, "files": await run_in_threadpool(shot_files, workspace_dir(workspace), kind)}
 
-    @router.get(f"{_SHOTS}/voices")
+    @router.get("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}/voices")
     async def shot_voices(series_id: str, episode_id: str, shot: str, workspace: str, language: str | None = None):
         """Each line of the shot with the recording the next render reuses (file, length, newer than the take)."""
         return await run(voices.voices, workspace, series_id, episode_id, shot, language)
 
-    @router.post(f"{_SHOTS}/voices")
+    @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}/voices")
     async def record_shot_voice(series_id: str, episode_id: str, shot: str, body: VoiceStart):
         """Record one line now (or another take of it) with the render's speech path; returns the job."""
         return await run(voices.start, body.workspace, series_id, episode_id, shot, body.line, retake=body.retake,
@@ -104,7 +103,7 @@ def create_series_shot_inspector_router(*, voices: SeriesLineVoice, read_library
     async def shot_voice_job(job_id: str, workspace: str):
         return await run(voices.status, workspace, job_id)
 
-    @router.post(f"{_SHOTS}/scene3d/editor")
+    @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}/scene3d/editor")
     async def open_shot_scene3d(series_id: str, episode_id: str, shot: str, body: Scene3DOpen):
         """The 3D shot's scene before anyone talks, to edit in the Video 3D editor."""
         def build() -> dict[str, Any]:
@@ -112,7 +111,7 @@ def create_series_shot_inspector_router(*, voices: SeriesLineVoice, read_library
             return {"shotId": found["id"], **editor_scene(call, body.workspace, workspace_dir(body.workspace), series, episode, found)}
         return await run(build)
 
-    @router.post(f"{_SHOTS}/scene3d/from-editor")
+    @router.post("/api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}/scene3d/from-editor")
     async def save_shot_scene3d(series_id: str, episode_id: str, shot: str, body: Scene3DSave):
         """Save the edited scene as a Video 3D scene file; returns the shot's new scene3d to write with the shot edit."""
         def save() -> dict[str, Any]:

@@ -1,0 +1,273 @@
+{
+  "file missing": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
+  },
+  "file outside outputs": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
+  },
+  "list": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "<TIME>_seed9_golden_clip.mp4",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "type": "video",
+          "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
+          "width": 64
+        },
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "metadata",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 8,
+          "mode": "image",
+          "name": "<TIME>_seed7_golden_image.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "type": "image",
+          "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
+          "width": 8
+        },
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "mode": null,
+          "name": "golden_song.wav",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": null,
+          "type": "audio",
+          "url": "/api/v1/file/golden_song.wav"
+        }
+      ],
+      "total": 3
+    },
+    "status": 200
+  },
+  "list favorites": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": true,
+          "height": 36,
+          "mode": "video",
+          "name": "<TIME>_seed9_golden_clip.mp4",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "type": "video",
+          "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
+  "list images": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "metadata",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 8,
+          "mode": "image",
+          "name": "<TIME>_seed7_golden_image.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "type": "image",
+          "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
+          "width": 8
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
+  "list oldest first": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "mode": null,
+          "name": "golden_song.wav",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": null,
+          "type": "audio",
+          "url": "/api/v1/file/golden_song.wav"
+        },
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "metadata",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 8,
+          "mode": "image",
+          "name": "<TIME>_seed7_golden_image.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "type": "image",
+          "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
+          "width": 8
+        },
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "<TIME>_seed9_golden_clip.mp4",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "type": "video",
+          "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 3
+    },
+    "status": 200
+  },
+  "list page": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "metadata",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 8,
+          "mode": "image",
+          "name": "<TIME>_seed7_golden_image.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed7_golden_image.png?v=1760000001000000-77",
+          "type": "image",
+          "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
+          "width": 8
+        }
+      ],
+      "total": 3
+    },
+    "status": 200
+  },
+  "list search": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "<TIME>_seed9_golden_clip.mp4",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/<TIME>_seed9_golden_clip.mp4?v=1760000002000000-1107",
+          "type": "video",
+          "url": "/api/v1/file/<TIME>_seed9_golden_clip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
+  "list uploads view": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": "<TIME>",
+          "completion_time_source": "file",
+          "created_at": "<TIME>",
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 8,
+          "mode": null,
+          "name": "golden_upload.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/golden_upload.png?v=1760000010000000-77&workspace=__uploads__",
+          "type": "image",
+          "url": "/api/v1/file/golden_upload.png?workspace=__uploads__",
+          "width": 8
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
+  "metadata": {
+    "body": {
+      "created_at": "<TIME>",
+      "generation_mode": "image",
+      "params": {
+        "model_type": "fake_t2v",
+        "prompt": "a red square",
+        "resolution": "8x8",
+        "seed": 7
+      },
+      "source": "sidecar"
+    },
+    "status": 200
+  },
+  "metadata missing": {
+    "body": {
+      "detail": "Output file not found"
+    },
+    "status": 404
+  }
+}

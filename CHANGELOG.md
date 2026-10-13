@@ -6,6 +6,20 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**A safety net for the coming split of the two largest files (no behaviour
+change).** Tests can now import the full server with a fake WanGP engine, with
+no GPU. `tests/characterization` records what read-only routes answer
+(workspaces, Series, jobs and tasks, the model catalog, the gallery, the video
+editor probes and settings) and which routes the server serves, so each PR that
+moves code out of `_launch_runtime.py` or `useStore.ts` can prove it changed
+nothing. CI runs these tests in their own step. The static route table now
+follows routers that include other routers and requires literal route paths;
+the four Series shot routes written as f-strings are now literals with the same
+paths. `scripts/size_ceilings.json` caps the line count of `_launch_runtime.py`,
+`core_runtime.py` and `useStore.ts`, and the caps can only go down.
+`scripts/boot_smoke.sh` boots a worktree on a free port with its own folders and
+no model, checks its routes and stops it by its process id.
+
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
 that made the result (comic films keep the seed their approved PRE pinned). Every
