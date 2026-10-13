@@ -1,9 +1,13 @@
 """Model catalog over a fake WanGP catalog, and the configuration reads the Settings screen makes."""
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 
 from tests.support.fake_wgp import catalog_attributes
+from tests.support.full_server import APP_DIR
 
 
 @pytest.fixture
@@ -28,6 +32,21 @@ def test_model_settings_defaults(server, golden) -> None:
     server.check(golden, "model visibility", "GET", "/api/v1/model-visibility")
     server.check(golden, "model selections", "GET", "/api/v1/model-selections")
     server.check(golden, "production profile", "GET", "/api/v1/production-profile")
+
+
+def test_the_server_keeps_temp_files_and_libraries_in_its_state_folder(full_server) -> None:
+    """The import sweeps the temp folder; Numba and the libraries default to the live install's folders."""
+    import tempfile
+
+    from services.style_library import resolve_style_library_root
+    from services.template_library import resolve_template_library_root
+
+    state = full_server.state_root.resolve()
+    assert Path(tempfile.gettempdir()).resolve().is_relative_to(state)
+    assert Path(os.environ["TMPDIR"]).resolve().is_relative_to(state)
+    assert Path(os.environ["NUMBA_CACHE_DIR"]).resolve().is_relative_to(state)
+    assert resolve_style_library_root(APP_DIR).is_relative_to(state)
+    assert resolve_template_library_root(APP_DIR).is_relative_to(state)
 
 
 def test_settings_reads(server, golden) -> None:

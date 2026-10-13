@@ -3,7 +3,8 @@
 Importing wgp needs the GPU stack, so these tests read its source instead:
 
 - every attribute the fake gives is a module-level name of ``app/wgp.py``
-  (``fl`` is the files locator module, so its functions are read from there);
+  (``fl`` is the files locator module, so its functions are read from there;
+  a function wgp.py imports from another app module is read from that module);
 - a fake function stands for a real function, takes its parameters in the same
   order (a leading ``_`` marks one the fake ignores), needs no more arguments,
   and has the same plain default values. A fake with ``*args, **kwargs``
@@ -97,10 +98,27 @@ def _fake_attributes(tmp_path: Path) -> dict[str, object]:
     return attributes
 
 
+def _imported_from(node: ast.ImportFrom, name: str) -> tuple[Path, str] | None:
+    """The app file and the original name behind ``from <app module> import ... as name``; None for a library."""
+    if node.level or not node.module:
+        return None
+    base = APP_DIR.joinpath(*node.module.split("."))
+    source = next((path for path in (base.with_suffix(".py"), base / "__init__.py") if path.is_file()), None)
+    original = next((alias.name for alias in node.names if (alias.asname or alias.name) == name), None)
+    return (source, original) if source is not None and original is not None else None
+
+
 def _drift(name: str, value: object, real_names: dict[str, ast.AST], where: str) -> list[str]:
     if name not in real_names:
         return [f"{name} is not a module-level name of {where}"]
     real = real_names[name]
+    if isinstance(real, ast.ImportFrom) and inspect.isfunction(value):
+        # WanGP moved the function to another module and imports it: check it there.
+        found = _imported_from(real, name)
+        if found is None:  # A library function: wgp.py has the name, its signature is not WanGP's.
+            return []
+        source, original = found
+        return _drift(original, value, _module_names(source), source.relative_to(APP_DIR).as_posix())
     if isinstance(value, SimpleNamespace) and name in NAMESPACES:
         inner = _module_names(NAMESPACES[name])
         source = NAMESPACES[name].relative_to(APP_DIR).as_posix()
@@ -144,3 +162,21 @@ def test_the_drift_check_sees_a_renamed_or_reshaped_function() -> None:
     assert _drift("get_model_recursive_prop", same, names, "wgp") == []
     assert _drift("get_model_recursive_prop", lambda *args, **kwargs: None, names, "wgp") == []
     assert _drift("renamed_in_wgp", same, names, "wgp") == ["renamed_in_wgp is not a module-level name of wgp"]
+
+
+def test_the_drift_check_follows_a_function_wgp_imports_from_another_module() -> None:
+    names = {
+        "locate_file": ast.parse("from shared.utils.files_locator import locate_file").body[0],
+        "renamed": ast.parse("from shared.utils.files_locator import locate_file as renamed").body[0],
+        "library": ast.parse("from os.path import join as library").body[0],
+    }
+    fake = catalog_attributes()["fl"].locate_file
+
+    def reshaped(name, error_if_none=True):
+        return None
+
+    assert _drift("locate_file", fake, names, "wgp") == []
+    assert _drift("renamed", fake, names, "wgp") == []
+    problems = _drift("renamed", reshaped, names, "wgp")
+    assert any("parameter 0 is 'name', wgp names it 'file_name'" in item for item in problems)
+    assert _drift("library", reshaped, names, "wgp") == []

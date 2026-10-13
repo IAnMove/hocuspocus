@@ -12,7 +12,12 @@ python -m pytest tests/characterization -p no:cacheprovider
 ```
 
 The import changes process-wide state (it binds `wgp` once, patches `requests`
-and `tqdm`, and sets a scheduler hook). So in a run that also collects other
+and `tqdm`, and sets a scheduler hook). The harness also moves the temp folder,
+the Numba cache and the style and template libraries into its state folder
+before the import: the import sweeps old `hocuspocus-*` folders out of the temp
+folder, and the others default to the live install's folders (with
+`PINOKIO_HOME` set, in a checkout under `<pinokio>/api`, or through a linked
+`app/env`). So in a run that also collects other
 tests, such as `pytest` at the repo root or a CI shard, these tests skip and
 the skip reason gives the command above. CI runs them in their own step of the
 `Python tests A` job. `bash scripts/validate_local.sh --full` runs them too.

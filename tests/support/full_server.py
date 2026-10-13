@@ -7,8 +7,11 @@ about 4 seconds, most of it the torch import.
 
 The import changes process-wide state that cannot be undone: ``wgp`` is bound
 once (``services.generation.bind_wgp``), ``services.safe_download`` patches
-``requests`` and ``tqdm``, and the resource scheduler gets a prepare hook. So
-it runs once per process, in a pytest run of ``tests/characterization`` alone
+``requests`` and ``tqdm``, the resource scheduler gets a prepare hook, and the
+temp folder (``TMPDIR`` and ``tempfile.tempdir``) and the Numba cache move into
+the state folder, because the import sweeps old ``hocuspocus-*`` folders out of
+the temp folder. So it runs
+once per process, in a pytest run of ``tests/characterization`` alone
 or in a script (``python -m tests.support.full_server``).
 
 ``served_route_table`` flattens the routes in the order the app matches them,
@@ -63,9 +66,11 @@ def load_full_server(state_root: Path) -> FullServer:
     if "_launch_runtime" in sys.modules:
         raise RuntimeError("The full server is already imported in this process; import it only once.")
     os.environ.update(SERVER_ENV)
-    # With PINOKIO_HOME set, these libraries default to the live install's shared cache.
+    # With PINOKIO_HOME set, or in a checkout under <pinokio>/api, these
+    # libraries default to the live install's shared cache.
     os.environ["MAESTRO_STYLE_LIBRARY_DIR"] = str(state_root / "style-library")
     os.environ["HOCUS_TEMPLATE_LIBRARY_DIR"] = str(state_root / "template-library")
+    _keep_temp_files_in(state_root / "tmp")
     if str(APP_DIR) not in sys.path:
         sys.path.insert(0, str(APP_DIR))
     from tests.support.fake_wgp import make_fake_wgp
@@ -87,6 +92,19 @@ def load_full_server(state_root: Path) -> FullServer:
         ui_distribution.build_status = real_build_status
     _keep_media_cache_in(state_root / "cache" / "media-thumbnails")
     return FullServer(api=api, wgp=fake, state_root=state_root)
+
+
+def _keep_temp_files_in(folder: Path) -> None:
+    """The import starts a sweep of old hocuspocus-* folders in the temp folder, which the live install shares.
+
+    pytest has already chosen its own base folder, so ``tmp_path`` is unaffected.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        os.environ[name] = str(folder)
+    tempfile.tempdir = str(folder)
+    # Numba caches compiled functions next to their package, in app/env, which may link to the live install's.
+    os.environ["NUMBA_CACHE_DIR"] = str(folder / "numba-cache")
 
 
 def _keep_media_cache_in(folder: Path) -> None:

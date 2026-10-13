@@ -115,7 +115,8 @@ the kernel, each slice) proves that with these four steps:
    live install, loads no model, calls `scripts/boot_smoke/default.txt` (or
    `core.txt`) plus the slice's list, compares the OpenAPI routes with
    `route_table_runtime.json`, and stops the server by its PID. It needs at
-   least 3 GB of free VRAM unless `--cpu`. Put the result (port, route count,
+   least 3 GB of free VRAM; `--cpu` hides the GPU from a `--core` smoke only
+   (the full server cannot boot without one). Put the result (port, route count,
    PASS) in the PR's E2E/smoke line. A PR that removes a core duplicate
    deletes its line in `scripts/boot_smoke/core.known-duplicates.txt`.
 4. **Lower the ceiling.** `scripts/size_ceilings.json` holds the most lines

@@ -8,13 +8,17 @@ Usage (normally through scripts/boot_smoke.sh):
 What it does, in order:
 
 1. Refuses the live checkout (the repo's main worktree, and ``--live``), a
-   worktree an earlier smoke did not put back, a worktree that already runs a
-   server, a busy port, and (unless ``--cpu``) less than
-   ``--min-free-vram-mb`` of free VRAM on GPU 0.
+   worktree an earlier smoke did not put back, a worktree whose
+   ``launch.py`` or ``core_runtime.py`` a process runs (from any folder), a
+   busy port, ``--cpu`` without ``--core`` (WanGP reads the GPU at import), and
+   (unless ``--cpu``) less than ``--min-free-vram-mb`` of free VRAM on GPU 0.
 2. Makes a scratch folder next to the worktree (same disk, so every move is
    a rename) for outputs, uploads, settings, caches, LoRAs, the style and
-   template libraries and an empty checkpoint folder. Nothing the server
-   writes reaches the live install, even with ``PINOKIO_HOME`` set.
+   template libraries, the temp folder (``TMPDIR``: the server sweeps old
+   ``hocuspocus-*`` folders out of it at start), the Numba cache (by default
+   inside ``app/env``, the live one when linked) and an empty checkpoint
+   folder. Nothing the server writes reaches the live install, even with
+   ``PINOKIO_HOME`` set.
 3. Full server: sets aside whatever the worktree has at ``app/wgp_config.json``,
    ``app/settings``, ``app/uploads``, ``app/outputs``, ``app/loras`` and
    ``cache``, and puts links into the scratch folder there, plus a seeded
@@ -34,7 +38,9 @@ What it does, in order:
    never a pattern match), then each process still in the server's own
    session, by PID; puts the worktree back as it was, also after an error,
    Ctrl+C, SIGTERM or SIGHUP; and leaves the log, the report and the scratch
-   folder in place for review.
+   folder in place for review. A signal never lands inside a rename and its
+   record, the server start or the cleanup: it waits for their end, and once
+   the smoke is leaving, later signals are ignored.
 
 A smoke list line is ``METHOD /path [status[,status]] [json body]``; a line
 that starts with ``#`` is a comment. The status defaults to 200.
@@ -52,6 +58,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -86,6 +93,10 @@ REDIRECTS = {
     "app/loras": "loras",
     "cache": "cache",
 }
+# The signals that end a smoke early; each one leaves through the cleanup.
+EXIT_SIGNALS = ("SIGINT", "SIGTERM", "SIGHUP")
+# The server scripts of a checkout: a process that runs one of a worktree's is that worktree's server.
+SERVER_SCRIPTS = ("launch.py", "core_runtime.py")
 
 
 class SmokeError(RuntimeError):
@@ -129,9 +140,34 @@ def running_instances() -> list[dict[str, str]]:
     sys.path.insert(0, str(ROOT / "scripts"))
     try:
         from hocus_instances import collect_instances
-    except Exception:  # The table is a courtesy; the port probe below still refuses a busy port.
+    except Exception:  # Only for ports: the port probe still refuses a busy one, servers_from() the worktree.
         return []
     return collect_instances(vram={})
+
+
+def servers_from(worktree: Path, proc: Path = Path("/proc")) -> list[int]:
+    """PIDs of the Python processes that run one of ``worktree``'s server scripts, full or core, from any folder.
+
+    Read from each process's command line, resolved against its own working
+    folder: ``python launch.py`` in ``<worktree>/app``, ``python
+    <worktree>/app/core_runtime.py`` elsewhere, or an earlier smoke's server.
+    An editor or a pager with the file open is not a server.
+    """
+    found = []
+    for entry in proc.iterdir() if proc.is_dir() else []:
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            if not (entry / "comm").read_text(encoding="utf-8", errors="replace").startswith("python"):
+                continue
+            words = (entry / "cmdline").read_bytes().decode("utf-8", "replace").split("\0")
+            cwd = os.readlink(entry / "cwd")
+            scripts = [Path(cwd, word).resolve() for word in words if Path(word).name in SERVER_SCRIPTS]
+        except (OSError, RuntimeError):  # Gone, another user's process, or a link loop.
+            continue
+        if any(script.is_relative_to(worktree) for script in scripts):
+            found.append(int(entry.name))
+    return found
 
 
 def port_is_free(port: int) -> bool:
@@ -258,7 +294,18 @@ def prepare_full(state: WorktreeState, live: Path) -> None:
 
 def server_env(port: int, *, cpu: bool, core: bool, scratch: Path) -> dict[str, str]:
     env = {key: value for key, value in os.environ.items() if key not in DROPPED_ENV}
+    # The server sweeps old hocuspocus-* folders out of the temp folder at start,
+    # and the live install shares the system one. Python falls back to /tmp when
+    # TMPDIR does not exist, so it is made here.
+    temp = scratch / "tmp"
+    temp.mkdir(parents=True, exist_ok=True)
     env.update({
+        "TMPDIR": str(temp),
+        "TEMP": str(temp),
+        "TMP": str(temp),
+        # Numba caches compiled functions (librosa's) next to their package,
+        # inside app/env, which is the live install's when linked.
+        "NUMBA_CACHE_DIR": str(scratch / "numba-cache"),
         # With PINOKIO_HOME set, these default to the live install's shared cache.
         "MAESTRO_STYLE_LIBRARY_DIR": str(scratch / "style-library"),
         "HOCUS_TEMPLATE_LIBRARY_DIR": str(scratch / "template-library"),
@@ -466,6 +513,9 @@ def unfinished_run(worktree: Path) -> str | None:
 def _preflight(args, worktree: Path, live: set[Path]) -> int:
     if worktree in live:
         raise SmokeError(f"{worktree} is the live checkout; boot a separate worktree")
+    if args.cpu and not args.core:
+        raise SmokeError("--cpu works with --core only: WanGP reads the GPU's capability when it is imported, "
+                         "so the full server exits at once without a GPU")
     earlier = unfinished_run(worktree)
     if earlier:
         raise SmokeError(
@@ -475,11 +525,10 @@ def _preflight(args, worktree: Path, live: set[Path]) -> int:
         )
     if not (worktree / "app" / "launch.py").is_file():
         raise SmokeError(f"{worktree} is not a HocusPocus checkout")
-    instances = running_instances()
-    same = [row for row in instances if Path(row.get("folder", "")).resolve() == worktree]
-    if same:
-        raise SmokeError(f"a server already runs from {worktree} (pid {same[0]['pid']})")
-    port = choose_port(args.port, {row.get("port", "") for row in instances})
+    servers = servers_from(worktree)
+    if servers:
+        raise SmokeError(f"a server already runs from {worktree} (pid {servers[0]})")
+    port = choose_port(args.port, {row.get("port", "") for row in running_instances()})
     if not args.cpu:
         free = free_vram_mib()
         if free is not None and free < args.min_free_vram_mb:
@@ -512,45 +561,100 @@ def run(args) -> dict[str, Any]:
     process = None
     try:
         env = server_env(port, cpu=args.cpu, core=args.core, scratch=scratch)
-        served = None
-        if args.core:
-            state.link_if_missing("ui/dist", live / "ui" / "dist")
-            cwd = scratch / "core-root"
-            cwd.mkdir()
-            python = str(live / "app" / "env" / "bin" / "python")
-            command = [python, str(worktree / "app" / "core_runtime.py")]
-            served = core_served_routes(python, worktree, cwd, env)
-        else:
-            prepare_full(state, live)
-            cwd = worktree / "app"
-            command = [str(worktree / "app" / "env" / "bin" / "python"), "launch.py"]
+        command, cwd, served = _prepare(args, state, live, env)
         started = time.monotonic()
-        with log.open("wb") as handle:
-            process = subprocess.Popen(command, cwd=cwd, env=env,
-                                       stdout=handle, stderr=subprocess.STDOUT, start_new_session=True)
+        with held_signals():
+            with log.open("wb") as handle:
+                process = subprocess.Popen(command, cwd=cwd, env=env,
+                                           stdout=handle, stderr=subprocess.STDOUT, start_new_session=True)
         report["pid"] = process.pid
         report["port"] = wait_ready(process, log, args.timeout)
         report["boot_seconds"] = round(time.monotonic() - started, 1)
         report["checks"] = run_checks(report["port"], checks)
         report["routes"] = route_report(report["port"], log, profile=report["profile"], served=served)
     finally:
-        try:
-            if process is not None:
-                report["stop"] = stop(process)
-        finally:
-            report["restored"] = state.restore()
-            (scratch / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        with held_signals():
+            finish(state, process, report)
     report["ok"] = (all(item["ok"] for item in report["checks"]) and report["routes"]["ok"]
                     and not any(note.startswith("NOT") for note in report["restored"]))
     return report
 
 
+def _prepare(args, state: WorktreeState, live: Path, env: dict[str, str]) -> tuple[list[str], Path, list[str] | None]:
+    """Swap or link the worktree's paths (held, so no signal splits a rename from its record).
+
+    Returns the server's command, its working folder and, for the core server, its served routes.
+    """
+    worktree, scratch = state.worktree, state.scratch
+    with held_signals():
+        if args.core:
+            state.link_if_missing("ui/dist", live / "ui" / "dist")
+        else:
+            prepare_full(state, live)
+    if not args.core:
+        return [str(worktree / "app" / "env" / "bin" / "python"), "launch.py"], worktree / "app", None
+    cwd = scratch / "core-root"
+    cwd.mkdir()
+    python = str(live / "app" / "env" / "bin" / "python")
+    return [python, str(worktree / "app" / "core_runtime.py")], cwd, core_served_routes(python, worktree, cwd, env)
+
+
+def finish(state: WorktreeState, process: subprocess.Popen | None, report: dict[str, Any]) -> None:
+    """Stop the server, put the worktree back and write the report, even when stopping fails."""
+    try:
+        if process is not None:
+            report["stop"] = stop(process)
+    finally:
+        report["restored"] = state.restore()
+        (state.scratch / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+
+class _Signals:
+    """Whether a signal may end the smoke now, and the one waiting for a held block to end."""
+
+    held = 0
+    pending: int | None = None
+    leaving = False
+
+
 def _leave_on_signal(signum: int, _frame) -> None:
-    """SIGTERM or SIGHUP: leave through the finally blocks, which stop the server and put the worktree back."""
-    for name in ("SIGTERM", "SIGHUP"):
-        if hasattr(signal, name):
-            signal.signal(getattr(signal, name), signal.SIG_IGN)
+    """SIGINT, SIGTERM or SIGHUP: leave through the finally blocks, which stop the server and put the worktree back.
+
+    Inside :func:`held_signals` the exit waits for the end of the block. Once
+    the smoke is leaving, later signals are ignored: they cannot cut the cleanup short.
+    """
+    if _Signals.leaving:
+        return
+    if _Signals.held:
+        _Signals.pending = _Signals.pending or signum
+        return
+    _Signals.leaving = True
     raise SystemExit(128 + signum)
+
+
+@contextmanager
+def held_signals():
+    """Run the block whole; a signal that arrives meanwhile ends the smoke right after it.
+
+    Around the renames and their records, the server start and its PID, and the
+    cleanup, so a signal never leaves a path set aside unrecorded, a server
+    without a PID to stop, or a restore half done.
+    """
+    _Signals.held += 1
+    try:
+        yield
+    finally:
+        _Signals.held -= 1
+    if not _Signals.held and _Signals.pending and not _Signals.leaving:
+        signum, _Signals.pending = _Signals.pending, None
+        _Signals.leaving = True
+        raise SystemExit(128 + signum)
+
+
+def install_signal_handlers() -> None:
+    for name in EXIT_SIGNALS:
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), _leave_on_signal)
 
 
 def _print(report: dict[str, Any]) -> None:
@@ -582,15 +686,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, help=f"default: the first free port in {PORTS.start}-{PORTS.stop - 1}")
     parser.add_argument("--list", action="append", help="an extra smoke list, e.g. scripts/boot_smoke/series.txt")
     parser.add_argument("--core", action="store_true", help="boot app/core_runtime.py (the no-local-AI server)")
-    parser.add_argument("--cpu", action="store_true", help="hide the GPU from the server (CUDA_VISIBLE_DEVICES='')")
+    parser.add_argument("--cpu", action="store_true",
+                        help="with --core: hide the GPU from the server (CUDA_VISIBLE_DEVICES=''); the full server needs one")
     parser.add_argument("--live", help="the live checkout to link app/env and ui/dist from (default: main worktree)")
     parser.add_argument("--scratch", help="where to keep the run (default: <worktree>.boot-smoke next to it)")
     parser.add_argument("--timeout", type=float, default=300, help="seconds to wait for the URL line")
     parser.add_argument("--min-free-vram-mb", type=int, default=3072)
     args = parser.parse_args(argv)
-    for name in ("SIGTERM", "SIGHUP"):
-        if hasattr(signal, name):
-            signal.signal(getattr(signal, name), _leave_on_signal)
+    install_signal_handlers()
     try:
         report = run(args)
     except SmokeError as error:
