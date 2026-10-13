@@ -107,6 +107,16 @@ def recording_output_name(scene: dict[str, Any]) -> str:
     return f"{stamp}_{safe_name}_3d_{uuid.uuid4().hex[:6]}.mp4"
 
 
+def _write_scene_recording_sidecar(output_path, sidecar, workspace_id):
+    """Publish the gallery manifest for one scene recording. No raw JSON dump."""
+    publish_generation_sidecar(
+        output_path,
+        sidecar,
+        workspace_id=workspace_id,
+        tool="scene-animator-3d",
+    )
+
+
 def finalize_scene_recording(
     *,
     source_path: str,
@@ -181,12 +191,7 @@ def finalize_scene_recording(
         "output_filename": output_name,
     }
     try:
-        publish_generation_sidecar(
-            output_path,
-            sidecar,
-            workspace_id=workspace,
-            tool="scene-animator-3d",
-        )
+        _write_scene_recording_sidecar(output_path, sidecar, workspace)
     except Exception as error:
         try:
             os.remove(output_path)
