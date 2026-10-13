@@ -37,6 +37,22 @@ def _text(value: Any, limit: int = 120) -> str:
     return str(value or "").strip()[:limit]
 
 
+def saved_language_labels(project: dict, default: str = "English") -> tuple[str, str]:
+    """Labels of a saved story or series. A saved label wins; a missing one comes
+    from the saved language intent, and only then is ``default``. The UI
+    language is never used for saved work."""
+    raw_intent = project.get("languageIntent")
+    intent = raw_intent if isinstance(raw_intent, dict) else {}
+    intent_content = _text(intent.get("contentLanguage") or intent.get("content_language"))
+    intent_spoken = _text(intent.get("spokenLanguage") or intent.get("spoken_language"))
+    saved = project.get("language")
+    language = saved if isinstance(saved, str) else intent_content or default
+    spoken = project.get("spokenLanguage")
+    if not isinstance(spoken, str):
+        spoken = saved if isinstance(saved, str) else intent_spoken or intent_content or default
+    return language, spoken
+
+
 def normalize_language_intent(
     value: Any,
     *,

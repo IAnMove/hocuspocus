@@ -5,6 +5,7 @@ import copy
 from services.language_intent import normalize_language_intent
 from services.series_library import (
     create_series_project,
+    import_story_project,
     normalize_series_project,
     series_canon_inputs_changed,
 )
@@ -55,6 +56,21 @@ def test_story_library_migrates_legacy_language_fields_durably():
     assert intent["contentLanguage"] == "Italiano"
     assert intent["spokenLanguage"] == "Italiano"
     assert intent["technicalPromptLanguage"] == "en"
+
+
+def test_a_story_with_only_a_saved_intent_keeps_its_language_when_imported():
+    intent = {"contentLanguage": "Español", "spokenLanguage": "Español latinoamericano"}
+    library = normalize_story_library({
+        "revision": 0, "activeId": "story-1",
+        "projects": {"story-1": {"id": "story-1", "title": "Solo intención", "languageIntent": intent}},
+    })
+    stored = library["projects"]["story-1"]
+    assert stored["languageIntent"]["contentLanguage"] == "Español", "the saved intent is kept on read"
+    assert "language" not in stored, "the read path does not add labels"
+    series = import_story_project(stored)
+    assert series["language"] == "Español"
+    assert series["spokenLanguage"] == "Español latinoamericano"
+    assert import_story_project({"title": "Sin nada"})["language"] == "English"
 
 
 def test_series_creation_and_normalization_always_return_language_intent():

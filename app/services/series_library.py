@@ -16,7 +16,7 @@ import uuid
 from typing import Any
 
 from .document_origin import created_by, keep_record_author, restore_created_by
-from .language_intent import labels_for_request_language, normalize_language_intent
+from .language_intent import labels_for_request_language, normalize_language_intent, saved_language_labels
 from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
 
@@ -70,21 +70,6 @@ def _new_uid(prefix: str) -> str:
 
 def _text(value: Any, fallback: str = "") -> str:
     return value if isinstance(value, str) else fallback
-
-
-def _saved_language_labels(project: dict) -> tuple[str, str]:
-    """Labels for a saved series. A saved label wins; a missing one comes from
-    the saved language intent, and only then is English."""
-    raw_intent = project.get("languageIntent")
-    intent = raw_intent if isinstance(raw_intent, dict) else {}
-    intent_content = _text(intent.get("contentLanguage") or intent.get("content_language")).strip()
-    intent_spoken = _text(intent.get("spokenLanguage") or intent.get("spoken_language")).strip()
-    language = _text(project.get("language"), intent_content or "English")
-    spoken = _text(
-        project.get("spokenLanguage"),
-        _text(project.get("language"), intent_spoken or intent_content or "English"),
-    )
-    return language, spoken
 
 
 def _id(value: Any, fallback: str = "") -> str:
@@ -1000,7 +985,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "historicalProductionIds": _unique_ids(import_source.get("historicalProductionIds")),
         "migrationNotes": _text(import_source.get("migrationNotes")),
     })
-    saved_language, saved_spoken_language = _saved_language_labels(project)
+    saved_language, saved_spoken_language = saved_language_labels(project)
     project.update({
         "version": 1,
         "id": series_id,
@@ -1286,8 +1271,9 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             (story.get("creativeBrief") or {}).get("durationSeconds")
             if isinstance(story.get("creativeBrief"), dict) else None, 75
         ))),
-        "language": _text(story.get("language"), "English"),
-        "spokenLanguage": _text(story.get("spokenLanguage"), _text(story.get("language"), "English")),
+        # A story that kept its language only in languageIntent keeps it here too.
+        "language": saved_language_labels(story)[0],
+        "spokenLanguage": saved_language_labels(story)[1],
         "genre": _text(story.get("genre")), "tone": _text(story.get("tone")),
         "audience": _text(story.get("audience"), "General"),
         "visualStyle": _text(story.get("visualStyle")),
