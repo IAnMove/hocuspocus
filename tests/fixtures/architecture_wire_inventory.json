@@ -158,12 +158,6 @@
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
-      "file": "tests/test_h3_adoption.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_h3_policy_language_audio_creative.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
@@ -216,12 +210,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_krea2_features.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
       "file": "tests/test_lan_auth.py",
@@ -336,12 +324,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_qwen_image_21.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
       "file": "tests/test_router_wiring.py",

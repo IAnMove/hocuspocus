@@ -1,30 +1,25 @@
-import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
+import { concreteImageResolution } from '../lib/imageResolution'
 import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft, type ImageStudioDraft } from '../features/studio/imageStudioIntent'
 import { imageSettingsMode, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
-  H3_EXPERIMENTAL_MAX_FRAMES,
-  h3AlignmentOptions,
-  h3MaximumFrames,
   h3WindowMaximumFrames,
   requestedVideoFrames,
   restoredH3ExtendedDuration,
-  supportsH3ExtendedDuration,
 } from '../lib/h3ExtendedDuration'
-import { isInstructionSpeechModel } from '../lib/instructionSpeech'
 import { h3ModelSwitchSettings, projectStudioH3RequestParams, restoreSemanticBridgeSettings } from '../lib/h3OptionalSettings'
 import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } from '../lib/wangpUi'
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
-import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelDef, GenerationMode, MultiClip, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import i18n from '../i18n'
 import { contentLanguageForUi } from '../lib/contentLanguage'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
-import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
+import { defaultSpeechModel } from '../lib/preferredModels'
 import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
 import { isHttpStatus } from '../api/http'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
@@ -38,30 +33,26 @@ import { createSystemSlice, type SystemSlice } from './systemSlice'
 import { _downloadTimestampMs, createCivitaiSlice, disposeCivitaiDownloadPoll, type CivitaiSlice } from './civitaiSlice'
 import { createPresetsSlice, type PresetsSlice } from '../features/studio/store/presetsSlice'
 import { _jobTimingPatch, createToolsSlice, type ToolsSlice } from '../features/studio/store/toolsSlice'
-import { _modelOptionsSeq, advanceModelOptionsSeq, createRecipesSlice, type RecipesSlice } from './recipesSlice'
-import { _globalModelSelectionModes, _syncGlobalProductionVideoFormat, createServicesSlice, type ServicesSlice } from './servicesSlice'
-import { createLorasSlice, type LorasSlice } from './lorasSlice'
+import { createRecipesSlice, type RecipesSlice } from './recipesSlice'
 import {
-  _loadSettings,
-  _persistModelSelections,
+  _applyModelDefaults,
+  _PRIMARY_MODEL_DEFAULT_FIELDS,
+  advanceModelOptionsSeq,
+  alignFrameCount,
+  createModelOptionsSlice,
+  invalidateModelOptionsLoad,
+  type ModelOptionsSlice,
+} from './modelOptionsSlice'
+export { alignFrameCount, invalidateModelOptionsLoad }
+import { _globalModelSelectionModes, createServicesSlice, type ServicesSlice } from './servicesSlice'
+import { createLorasSlice, type LorasSlice } from './lorasSlice'
+import { createModelsSlice, getDefaultModelForMode, type ModelsSlice } from './modelsSlice'
+import {
   _saveSettings,
   restoreModeParams,
   snapshotModeParams,
   type SavedModeParams,
 } from './modeSettingsPersistence'
-import {
-  ENABLED_MODELS_KEY,
-  HUNYUAN3D_VISIBILITY_MIGRATION_KEY,
-  MINIMAX_H3_VISIBILITY_MIGRATION_KEY,
-  _enableUninitializedMatureModels,
-  _initializedMatureModels,
-  _modelVisibilityDefaultsVersion,
-  _modelVisibilityHydrated,
-  _saveEnabledModels,
-  markModelVisibilityHydrated,
-  replaceInitializedMatureModels,
-  setModelVisibilityDefaultsVersion,
-} from './modelVisibility'
 import {
   beginAppActivity,
   createActivitySlice,
@@ -278,359 +269,9 @@ if (import.meta.hot) {
   })
 }
 
-/** Fetch a model's defaults from the backend and merge primary fields
- *  into params. Shared between `selectModel` (explicit model pick) and
- *  `setGenerationMode` (mode switch where the per-mode active model
- *  may change). Without this, switching from LTX-2 (8 steps) to Flux 2
- *  Klein 9B (4 steps) or HiDream Dev (28 steps) would silently keep
- *  the slider at the previous model's value.
- *
- *  Only overrides "primary" model-tuned numeric fields. Leaves
- *  user-intent fields (prompt, seed, negative_prompt, resolution,
- *  repeat_generation, activated_loras) alone — those should survive
- *  model switches.
- *
- *  Race-safe: applies only if the same model is still active when
- *  the fetchDefaults promise resolves. Guards against rapid model
- *  switching from leaving a stale model's defaults applied.
- */
-// String list — some of these (sample_solver, embedded_guidance_scale,
-// audio_guidance_scale) aren't declared on GenerateParams but the
-// params object is loose enough to carry them through to the backend.
-const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
-  'num_inference_steps',
-  'guidance_scale',
-  'flow_shift',
-  'h3_audio_shift',
-  'h3_audio_prompt',
-  'h3_ref_image_size',
-  'h3_reference_mode',
-  'h3_model_profile',
-  'sample_solver',
-  'embedded_guidance_scale',
-  'audio_guidance_scale',
-  // Perturbation config for the STG slider. These are inert unless
-  // perturbation_switch === 2, which startGeneration derives from the
-  // STG slider — the server-side fallback layers ([9]) are wrong for
-  // LTX-2 22B (needs [28] from the model's settings file), so the
-  // model-correct values must ride along with the request.
-  // Deliberately NOT copied: perturbation_switch and stg_scale — older
-  // generated settings files carry perturbation_switch: 2 / stg_scale: 1.0
-  // from the settings-file era, and copying them would silently re-enable
-  // STG on every generation.
-  'perturbation_layers',
-  'perturbation_start_perc',
-  'perturbation_end_perc',
-  // Default state of the Reference Pipeline toggle (10Eros defs set it to
-  // true). Only copied when the model's settings carry the key, so models
-  // without it keep whatever the user last chose — and startGeneration
-  // strips it for models that lack the capability anyway. Unchecking the
-  // toggle holds until the model is re-selected, same as steps/guidance.
-  'reference_pipeline',
-  // LM sampling knobs for the ACE-Step 1.5 family (and other LM-staged
-  // audio models). Their handlers seed tuned values (temperature 0.85,
-  // top_p 0.9, top_k off, LM CFG 2.5); without hydration the UI showed
-  // and SENT its generic temperature 1.0. Only models whose defaults
-  // carry these keys are affected — video model settings don't include
-  // them, so nothing changes there.
-  'temperature',
-  'top_p',
-  'top_k',
-  'alt_guidance_scale',
-  // Sliding-window geometry. The UI only writes sliding_window_size when
-  // the user touches the Advanced slider, so without hydration a request
-  // carries NO window size and the backend inherits one from unrelated
-  // primary settings — SCAIL-2 (window default 81) then ran a 10s
-  // generation as a single 160-frame window and overflowed VRAM at
-  // resolutions that fit fine per-window. LTX-2's defaults carry 481
-  // (~19s), so typical LTX generations stay single-window as before.
-  'sliding_window_size',
-  'sliding_window_overlap',
-  // Control-video coupling for the SCAIL-2 / Wan-Animate class:
-  // force_fps "control" makes the output follow the guide video's frame
-  // rate (user-reported: 25fps source came out 16fps without it), and
-  // audio_prompt_type "R" remuxes the guide's audio track into the
-  // output (user-reported: outputs were silent). Only the scail2 model
-  // settings carry force_fps; every other model's audio_prompt_type
-  // defaults to "" which matches the UI default, so nothing changes
-  // elsewhere.
-  'force_fps',
-  'audio_prompt_type',
-]
-
-let _modelDefaultsSeq = 0
-export function invalidateModelOptionsLoad() { advanceModelOptionsSeq(); _modelDefaultsSeq += 1 }
-
-function currentModelDefaults(sequence: number, state: Pick<AppState, 'selectedModelPerMode' | 'generationMode'>, model: string) {
-  return sequence === _modelDefaultsSeq && state.selectedModelPerMode[state.generationMode] === model
-}
-
-function _applyModelDefaults(
-  storeGet: () => { selectedModelPerMode: Partial<Record<GenerationMode, string>>; generationMode: GenerationMode; params: GenerateParams },
-  storeSet: (fn: (s: { params: GenerateParams }) => { params: GenerateParams }) => void,
-  modelType: string,
-  preservedRecipe?: Partial<GenerateParams>,
-): void {
-  const sequence = ++_modelDefaultsSeq
-  api.fetchDefaults(modelType).then((d) => {
-    if (!d || typeof d !== 'object') return
-    // Race guard: model may have been switched again while this fetch
-    // was in flight. Apply only if still the active model in current mode.
-    const state = storeGet()
-    if (!currentModelDefaults(sequence, state, modelType)) return
-    const overrides: Record<string, unknown> = {}
-    for (const field of _PRIMARY_MODEL_DEFAULT_FIELDS) {
-      // Audio references belong to the selected tab. A late defaults response
-      // must not disable a restored voice/music reference by resetting its selector.
-      if (state.generationMode === 'audio' && field === 'audio_prompt_type') continue
-      // A tab/mode return already restored the native YuE2/AuK recipe.
-      // fetchDefaults would otherwise put planning/sampling back to stock.
-      if (preservedRecipe && field in preservedRecipe) continue
-      // A one-click Full -> Pruned Turbo recommendation switches models and
-      // then restores the managed 6-step preset. Do not let the asynchronous
-      // base-model defaults response race in afterward and put it back at
-      // 20 steps. loadModelOptions applies the same Turbo contract.
-      if (
-        field === 'num_inference_steps'
-        && modelType.startsWith('minimax_h3')
-        && state.params.minimax_h3_turbo_mode === true
-      ) {
-        continue
-      }
-      if ((d as Record<string, unknown>)[field] !== undefined) {
-        overrides[field] = (d as Record<string, unknown>)[field]
-      }
-    }
-    if (Object.keys(overrides).length > 0) {
-      storeSet(s => ({ params: { ...s.params, ...overrides } as GenerateParams }))
-    }
-  }).catch(() => { /* fetch failure shouldn't break model switch */ })
-}
-
-/** Mirror of the backend's align_model_frame_count.
- *
- *  Only models that declare a temporal grid (frame_alignment_modulus > 0) are
- *  aligned here; every other model keeps the plain round(seconds * fps) it has
- *  always used. Without this the slider can promise a duration the model
- *  cannot produce: MiniMax H3 accepts 17n + 5 frames, so a 5s request (120)
- *  becomes 124 and the clip is 5.17s, not 5.00s.
- */
-export function alignFrameCount(
-  frames: number,
-  o: { frame_alignment_modulus?: number; frame_alignment_remainder?: number;
-       frame_alignment_mode?: string; frames_minimum?: number | null; frames_maximum?: number | null } | null | undefined,
-): number {
-  const modulus = o?.frame_alignment_modulus ?? 0
-  if (!modulus || modulus <= 0) return frames
-  const remainder = (o?.frame_alignment_remainder ?? 1) % modulus
-  const minimum = o?.frames_minimum ?? 1
-  const maximum = o?.frames_maximum ?? null
-  let n = Math.max(minimum, Math.round(frames))
-  if (maximum != null) n = Math.min(maximum, n)
-  const delta = ((n - remainder) % modulus + modulus) % modulus
-  if (delta) {
-    const mode = (o?.frame_alignment_mode ?? 'floor').toLowerCase()
-    if (mode === 'ceil') n += modulus - delta
-    else if (mode === 'nearest') n += delta >= modulus / 2 ? modulus - delta : -delta
-    else n -= delta
-  }
-  if (maximum != null && n > maximum) n -= modulus
-  while (n < minimum) n += modulus
-  return n
-}
-
 function audioSubModeForModel(modelType: string): import('../types').AudioSubMode {
   if (sfxModelTypes.has(modelType)) return 'sfx'
   return isMusicModelType(modelType) ? 'music' : 'speech'
-}
-
-// Virtual MMAudio model entries (injected into model list alongside backend models)
-const SFX_VIRTUAL_MODELS: ModelDef[] = [
-  { model_type: 'mmaudio_v2', name: 'MMAudio v2', family: 'tts', architecture: 'mmaudio', is_i2v: false, is_t2v: false, guidance_max_phases: 1, fps: 0, is_downloaded: true },
-  { model_type: 'mmaudio_nsfw', name: 'MMAudio NSFW', family: 'tts', architecture: 'mmaudio', is_i2v: false, is_t2v: false, guidance_max_phases: 1, fps: 0, is_downloaded: false },
-]
-
-const HUNYUAN3D_MODEL_TYPES = [
-  'hunyuan3d-2mini-turbo',
-  'hunyuan3d-2mini-fast',
-  'hunyuan3d-2mini',
-  'hunyuan3d-2-turbo',
-  'hunyuan3d-2-fast',
-  'hunyuan3d-2',
-  'hunyuan3d-2mv-turbo',
-  'hunyuan3d-2mv-fast',
-  'hunyuan3d-2mv',
-  'hunyuan3d-2.1',
-] as const
-
-// Default enabled models (shown by default in selectors)
-const DEFAULT_ENABLED_MODELS = new Set([
-  'viggle_animate',
-  'h3_advanced_fl2va_pruned',
-  'h3_advanced_ref2va_pruned',
-  'h3_advanced_vdn_pruned',
-  'sensenova_u1_5_8b_mot',
-
-  // Image
-  // Keep the general-purpose Flux default plus the complete Krea 2 family:
-  // base RAW/Turbo generation and their identity-preserving Edit variants.
-  // Other image models remain opt-in through Model Visibility.
-  'flux2_klein_9b',
-  'krea2_raw',
-  'krea2_turbo',
-  'krea2_raw_edit',
-  'krea2_turbo_edit',
-  'qwen_image_21',
-  'qwen_image_21_viggle_turbo',
-  'qwen_image_21_turbo',
-  'qwen_image_21_bf16',
-  'qwen_image_21_gguf_q8_0',
-  'qwen_image_21_gguf_q5_0',
-  'qwen_image_21_gguf_q4_k',
-  'qwen_image_21_uncensored_gguf_q4_k_m',
-  'qwen_image_21_uncensored_gguf_q5_k_m',
-  'qwen_image_21_uncensored_gguf_q6_k',
-  // Video
-  // Default to just the LTX-2.3 Distilled 1.1 22B checkpoint (newer /
-  // better quality). The FP8 build and every other video model
-  // (Wan 2.2 t2v/i2v, GGUF quants, dev variants) stay available via
-  // Settings → System → Model Visibility but off by default so the
-  // first-launch picker isn't overwhelming.
-  'ltx2_22B_distilled_1_1',
-  // SCAIL-2 character animation (Animate a character with a control
-  // video). Fast = lightx2v distill bundled (6 steps, no CFG, ~13x).
-  'scail2_14B',
-  'scail2_14B_fast',
-  'scail2_14B_recast_fast',
-  // MiniMax H3 Base: text, first/last-frame video, and native stereo audio.
-  'minimax_h3',
-  'minimax_h3_full',
-  'minimax_h3_legacy',
-  // MiniMax H3 Ref2VA: ordered image, video, and audio references.
-  'minimax_h3_ref2va',
-  'minimax_h3_ref2va_full',
-  'minimax_h3_fused_turbo',
-  'minimax_h3_ref2va_fused_turbo',
-  'yue2',
-  'auk',
-  'auk_flash',
-  // Audio — Speech
-  'kugelaudio_0_open',
-  'qwen3_tts_base',
-  'qwen3_tts_customvoice',
-  'qwen3_tts_voicedesign',
-  'voxcpm2_base',
-  'voxcpm2_voicedesign',
-  // Audio — Music
-  'ace_step_v1_5_turbo_lm_4b',
-  'ace_step_v1_5_xl',
-  'ace_step_v1_5_xl_turbo_lm_4b',
-  'ace_step_v1_5_xl_sft',
-  'ace_step_v1_5_xl_sft_lm_4b',
-  // Audio — SFX
-  'mmaudio_v2',
-  'mmaudio_nsfw',
-  // Avatar
-  'animate',
-])
-
-/* Version of the curated defaults list above. enabledModels is a stored
- * whitelist, so existing installs never re-read DEFAULT_ENABLED_MODELS —
- * without this, entries added to the curated list in an update stay
- * invisible for everyone who ever opened the app before. Bump the
- * version when adding entries and list them under that version below:
- * they get merged into existing installs' whitelists exactly ONCE, so
- * a user who then disables them stays disabled forever. (This is
- * deliberately narrower than auto-enabling every unknown model — only
- * the curated list's own additions are pushed.) */
-const DEFAULTS_VERSION = 17
-const DEFAULTS_ADDED_IN: Record<number, string[]> = {
-  17: ['voxcpm2_base', 'voxcpm2_voicedesign'],
-  16: ['qwen_image_21_turbo'],
-  15: ['qwen_image_21_viggle_turbo'],
-  14: ['qwen_image_21_uncensored_gguf_q4_k_m', 'qwen_image_21_uncensored_gguf_q5_k_m', 'qwen_image_21_uncensored_gguf_q6_k'],
-  13: ['qwen_image_21', 'qwen_image_21_bf16', 'qwen_image_21_gguf_q8_0', 'qwen_image_21_gguf_q5_0', 'qwen_image_21_gguf_q4_k'],
-  12: ['yue2', 'auk', 'auk_flash'],
-  11: ["viggle_animate", "h3_advanced_fl2va_pruned", "h3_advanced_ref2va_pruned", "h3_advanced_vdn_pruned", "sensenova_u1_5_8b_mot"],
-  // v1.2.0: the ACE-Step XL SFT pair; LM_4B becomes the music default.
-  2: ['ace_step_v1_5_xl_sft', 'ace_step_v1_5_xl_sft_lm_4b'],
-  // v1.3.0: SCAIL-2 character animation, base + lightx2v-distilled Fast.
-  3: ['scail2_14B', 'scail2_14B_fast'],
-  // Dedicated Recast recipe: native replacement + official I2V LightX point.
-  4: ['scail2_14B_recast_fast'],
-  // Krea 2 image generation + identity-preserving image editing.
-  5: ['krea2_raw', 'krea2_turbo', 'krea2_raw_edit', 'krea2_turbo_edit'],
-  // MiniMax H3 Base native audio-video generation.
-  6: ['minimax_h3'],
-  // MiniMax H3 Base Omni Reference (Ref2VA).
-  7: ['minimax_h3_ref2va'],
-  // Full 33B H3 variants alongside the recommended Pruned 20B entries.
-  8: ['minimax_h3_full', 'minimax_h3_ref2va_full'],
-  // Proven previous-Maestro INT8 ConvRot quality route.
-  9: ['minimax_h3_legacy'],
-  10: ['minimax_h3_fused_turbo', 'minimax_h3_ref2va_fused_turbo'],
-}
-const DEFAULTS_VERSION_KEY = 'maestro_defaults_version'
-
-/* The music default changed in v1.2.0 (Turbo LM_4B -> SFT LM_4B).
- * A saved selection equal to the OLD default means the user was riding
- * the default rather than expressing a preference — follow them to the
- * new one, once, at the same version transition. Users who picked any
- * other model keep their choice. */
-const OLD_MUSIC_DEFAULT = 'ace_step_v1_5_xl_turbo_lm_4b'
-const NEW_MUSIC_DEFAULT = 'ace_step_v1_5_xl_sft_lm_4b'
-
-let _modelSelectionsHydrated = false
-
-function _loadEnabledModels(): Set<string> | null {
-  try {
-    const raw = localStorage.getItem(ENABLED_MODELS_KEY)
-    if (raw) {
-      const models = new Set<string>(JSON.parse(raw))
-      if (localStorage.getItem(HUNYUAN3D_VISIBILITY_MIGRATION_KEY) !== '1') {
-        // Hunyuan3D weights are downloaded on first use. Keep the optional
-        // models hidden until the user enables one, rather than presenting
-        // every variant as already chosen on an existing installation.
-        HUNYUAN3D_MODEL_TYPES.forEach(modelType => models.delete(modelType))
-        _saveEnabledModels(models)
-        localStorage.setItem(HUNYUAN3D_VISIBILITY_MIGRATION_KEY, '1')
-      }
-      if (localStorage.getItem(MINIMAX_H3_VISIBILITY_MIGRATION_KEY) !== '1') {
-        // H3 did not exist when this persisted set was written, so enable the
-        // new model once for existing users. They can still hide it normally.
-        models.add('minimax_h3')
-        _saveEnabledModels(models)
-        localStorage.setItem(MINIMAX_H3_VISIBILITY_MIGRATION_KEY, '1')
-      }
-      return models
-    }
-  } catch { /* ignore */ }
-  return null
-}
-
-function _markMatureModelsInitialized(
-  models: ModelDef[],
-  modelTypes?: Iterable<string>,
-) {
-  const requested = modelTypes ? new Set(modelTypes) : null
-  for (const model of models) {
-    if (
-      model.nsfw_only
-      && (requested == null || requested.has(model.model_type))
-    ) {
-      _initializedMatureModels.add(model.model_type)
-    }
-  }
-}
-
-// Default model_type per generation mode
-const modeDefaultModel: Record<GenerationMode, string> = {
-  image: 'flux2_klein_9b',
-  video: 'ltx2_22B_distilled_1_1',
-  audio: 'kugelaudio_0_open',
-  model3d: 'hunyuan3d-2-turbo',
-  avatar: '',  // will fallback to first available
-  tools: '',   // Tools is non-generative post-processing — owns no model
 }
 
 // Transient: the LTX model selected before entering either SCAIL-2 edit
@@ -645,23 +286,6 @@ const DEFAULT_RECAST_MAPPING: RecastCharacterMapping = {
   refUrl: '',
   additionalRefs: [],
   referenceAlignedToSource: false,
-}
-
-function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], models: ModelDef[]): string {
-  const installedFirst = installedPreferredModel(mode, models)
-  if (installedFirst) return installedFirst
-  // Try the preferred default first
-  const preferred = modeDefaultModel[mode]
-  if (preferred && models.some(m => m.model_type === preferred)) {
-    return preferred
-  }
-  // Fallback: first model in first family of this mode
-  const modeFamilies = getFamiliesForMode(mode, families)
-  if (modeFamilies.length > 0) {
-    const firstModel = getModelsForFamily(modeFamilies[0].id, models, mode).filter(m => !m.tool_only)[0]
-    if (firstModel) return firstModel.model_type
-  }
-  return ''
 }
 
 /** Trailer excerpt and transcription hints, shared by every way audio can
@@ -692,7 +316,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice, ServicesSlice, LorasSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice, ServicesSlice, LorasSlice, ModelOptionsSlice, ModelsSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -978,20 +602,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   deletePipeline: (pid: string) => Promise<void>
   loadDirectorFromPipeline: (pid: string) => Promise<void>
 
-  // Models & families (from API)
-  families: ModelFamily[]
-  models: ModelDef[]
-  loadModels: () => Promise<void>
-  modelsLoaded: boolean
-
-  // Model visibility (favorites)
-  enabledModels: Set<string>
-  toggleModelEnabled: (modelType: string) => void
-  resetEnabledModels: () => void
-  setAllModelsEnabled: (enabled: boolean) => void
-  /** Bulk-toggle a list of models (family-level enable/disable, issue #14). */
-  setModelsEnabled: (modelTypes: string[], enabled: boolean) => void
-
   // Director-mode post-processing (separate image/video)
   directorImageSpatialUpsampling: string
   setDirectorImageSpatialUpsampling: (v: string) => void
@@ -1021,11 +631,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   dismissJob: (jobId: string) => void
   reconnectJobs: () => Promise<void>
   reconnectDirectorPipelines: () => Promise<void>
-
-  // Model options
-  modelOptions: ModelOptions | null
-  modelOptionsLoading: boolean
-  loadModelOptions: (modelType: string, preservedRecipe?: Partial<GenerateParams>) => Promise<void>
 
   // Select model (triggers side effects)
   selectModel: (modelType: string, preserveAudioReferences?: boolean) => void
@@ -1261,6 +866,8 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createRecipesSlice),
   ...bindSlice(set, get, createServicesSlice),
   ...bindSlice(set, get, createLorasSlice),
+  ...bindSlice(set, get, createModelOptionsSlice),
+  ...bindSlice(set, get, createModelsSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -2457,327 +2064,6 @@ export const useStore = create<AppState>((set, get) => {
       })
     } catch (e) {
       console.error('Failed to load Director pipeline:', e)
-    }
-  },
-
-  // Models & families
-  families: [],
-  models: [],
-  modelsLoaded: false,
-  enabledModels: _loadEnabledModels() ?? new Set(DEFAULT_ENABLED_MODELS),
-  toggleModelEnabled: (modelType) => {
-    _markMatureModelsInitialized(get().models, [modelType])
-    set(s => {
-      const next = new Set(s.enabledModels)
-      if (next.has(modelType)) next.delete(modelType)
-      else next.add(modelType)
-      _saveEnabledModels(next)
-      return { enabledModels: next }
-    })
-  },
-  resetEnabledModels: () => {
-    _markMatureModelsInitialized(get().models)
-    const next = new Set(DEFAULT_ENABLED_MODELS)
-    _saveEnabledModels(next)
-    set({ enabledModels: next })
-  },
-  setAllModelsEnabled: (enabled) => {
-    _markMatureModelsInitialized(get().models)
-    if (enabled) {
-      const all = new Set(get().models.map(m => m.model_type))
-      _saveEnabledModels(all)
-      set({ enabledModels: all })
-    } else {
-      const empty = new Set<string>()
-      _saveEnabledModels(empty)
-      set({ enabledModels: empty })
-    }
-  },
-  setModelsEnabled: (modelTypes, enabled) => {
-    _markMatureModelsInitialized(get().models, modelTypes)
-    set(s => {
-      const next = new Set(s.enabledModels)
-      for (const mt of modelTypes) {
-        if (enabled) next.add(mt)
-        else next.delete(mt)
-      }
-      _saveEnabledModels(next)
-      return { enabledModels: next }
-    })
-  },
-  loadModels: async () => {
-    try {
-      // A download/catalog refresh is not a new Studio session. Keep the
-      // live draft, selected model and options, even for a now-hidden model.
-      if (get().modelsLoaded) {
-        const catalog = await api.fetchModels()
-        set({ families: catalog.families, models: [...catalog.models, ...SFX_VIRTUAL_MODELS] })
-        return
-      }
-      // The backend catalog is the single source for Hunyuan3D models too:
-      // /api/v1/models already lists them (family included) with real
-      // download state, so re-adding them from the capabilities endpoint
-      // would duplicate every variant in the selectors.
-      const shouldHydrateVisibility = !_modelVisibilityHydrated
-      const shouldHydrateSelections = !_modelSelectionsHydrated
-      const [data, visibility, durableSelections] = await Promise.all([
-        api.fetchModels(),
-        shouldHydrateVisibility
-          ? api.fetchModelVisibility().catch(error => {
-              console.warn('Failed to load model visibility:', error)
-              return null
-            })
-          : Promise.resolve(null),
-        shouldHydrateSelections
-          ? api.fetchModelSelections().catch(error => {
-              console.warn('Failed to load model selections:', error)
-              return null
-            })
-          : Promise.resolve(null),
-      ])
-      const families = data.families
-      // Keep the complete backend capability record. Director publishes a
-      // stricter per-workflow contract than Studio; rebuilding model objects
-      // field-by-field used to discard that metadata and leave both Director
-      // selectors empty even though compatible models were enabled.
-      const backendModels: ModelDef[] = data.models.map(m => ({
-        ...m,
-        guidance_max_phases: m.guidance_max_phases ?? 1,
-        fps: m.fps ?? 16,
-        is_downloaded: m.is_downloaded ?? false,
-        nsfw_only: m.nsfw_only ?? false,
-        shared_cache_group: m.shared_cache_group,
-        tool_only: m.tool_only ?? false,
-      }))
-      // Inject models maintained by Maestro services alongside backend models.
-      const models = [...backendModels, ...SFX_VIRTUAL_MODELS]
-
-      // Pinokio can assign a different web-server port on every launch.
-      // Browser localStorage is origin-bound, so hydrate durable visibility
-      // once from the server config and keep localStorage only as a
-      // migration/cache layer.
-      if (shouldHydrateVisibility && visibility) {
-        let restoredModels: Set<string>
-        if (visibility.configured) {
-          restoredModels = new Set(visibility.enabled_models)
-          replaceInitializedMatureModels(new Set(
-            visibility.initialized_mature_models,
-          ))
-          setModelVisibilityDefaultsVersion(
-            visibility.defaults_version || 1
-          )
-        } else {
-          const legacyModels = _loadEnabledModels()
-          restoredModels = legacyModels ?? new Set(DEFAULT_ENABLED_MODELS)
-          const legacyDefaultsVersion = parseInt(
-            localStorage.getItem(DEFAULTS_VERSION_KEY) || '',
-            10,
-          )
-          setModelVisibilityDefaultsVersion(legacyModels
-            ? (legacyDefaultsVersion || 1)
-            : DEFAULTS_VERSION)
-          // An existing browser whitelist is an explicit snapshot. Mark the
-          // current Mature entries initialized so migration cannot re-enable
-          // one the user deliberately disabled.
-          replaceInitializedMatureModels(legacyModels
-            ? new Set(
-                models
-                  .filter(model => model.nsfw_only)
-                  .map(model => model.model_type),
-              )
-            : new Set())
-        }
-        markModelVisibilityHydrated()
-        set({ enabledModels: restoredModels })
-        if (!visibility.configured) _saveEnabledModels(restoredModels)
-      }
-
-      // One-time curated-defaults upgrade for existing installs (see
-      // DEFAULTS_VERSION). Fresh installs already start from the full
-      // DEFAULT_ENABLED_MODELS list; for them this only stamps the
-      // version key.
-      let migrateMusicDefault = false
-      try {
-        const storedVer = _modelVisibilityHydrated
-          ? _modelVisibilityDefaultsVersion
-          : (
-              parseInt(
-                localStorage.getItem(DEFAULTS_VERSION_KEY) || '1',
-                10,
-              ) || 1
-            )
-        if (storedVer < DEFAULTS_VERSION) {
-          const additions: string[] = []
-          for (let v = storedVer + 1; v <= DEFAULTS_VERSION; v++) {
-            additions.push(...(DEFAULTS_ADDED_IN[v] || []))
-          }
-          const present = additions.filter(id => models.some(m => m.model_type === id))
-          if (present.length > 0) {
-            set(s => {
-              const next = new Set(s.enabledModels)
-              present.forEach(id => next.add(id))
-              _saveEnabledModels(next)
-              return { enabledModels: next }
-            })
-          }
-          migrateMusicDefault = storedVer < 2
-          setModelVisibilityDefaultsVersion(DEFAULTS_VERSION)
-          localStorage.setItem(DEFAULTS_VERSION_KEY, String(DEFAULTS_VERSION))
-          _saveEnabledModels(get().enabledModels)
-        }
-      } catch { /* localStorage blocked — defaults only apply this session */ }
-
-      // Hydrate persisted per-mode settings from localStorage.
-      //
-      // Deliberately PARTIAL: only the last generation mode and the
-      // per-mode model selections survive a page refresh. The working
-      // state — prompt text and Advanced settings (seed, steps, LoRA
-      // selection, …) — starts fresh from the model's defaults on every
-      // load. The per-mode snapshots (savedParamsPerMode /
-      // savedLoraPerMode / savedPromptPerMode) still carry edits across
-      // MODE SWITCHES within a session, in-memory only. v1.2.0 restored
-      // them here on refresh; stale text/seeds/LoRAs re-appearing after
-      // a reload felt wrong, so a refresh is a clean slate again.
-      const saved = _loadSettings()
-      const persistedSelections: Partial<Record<GenerationMode, string>> = {
-        ...(saved?.selectedModelPerMode || {}),
-        ...((durableSelections?.selected_models || {}) as Partial<Record<GenerationMode, string>>),
-      }
-      if (durableSelections?.sources) {
-        Object.entries(durableSelections.sources).forEach(([mode, source]) => {
-          if (source === 'global') _globalModelSelectionModes.add(mode as GenerationMode)
-          else _globalModelSelectionModes.delete(mode as GenerationMode)
-        })
-      }
-      if (shouldHydrateSelections) _modelSelectionsHydrated = true
-      // v2 migration: users whose saved audio model IS the old music
-      // default follow it to the new default (see NEW_MUSIC_DEFAULT).
-      // (The old-model-params concern the migration used to handle is
-      // gone: saved params no longer rehydrate, and the defaults
-      // hydration below runs on every boot.)
-      if (migrateMusicDefault && saved?.selectedModelPerMode?.audio === OLD_MUSIC_DEFAULT
-          && models.some(m => m.model_type === NEW_MUSIC_DEFAULT)) {
-        saved.selectedModelPerMode = { ...saved.selectedModelPerMode, audio: NEW_MUSIC_DEFAULT }
-        persistedSelections.audio = NEW_MUSIC_DEFAULT
-      }
-      let mode = get().generationMode
-      let initialModelType: string
-
-      if (saved) {
-        // Restore saved generation mode
-        mode = saved.generationMode || mode
-        // Validate saved model for this mode still exists
-        const savedModel = persistedSelections[mode]
-        initialModelType = savedModel && models.some(m => m.model_type === savedModel)
-          ? savedModel
-          : getDefaultModelForMode(mode, families, models)
-        const bootedIntoRecast = mode === 'avatar'
-          && (initialModelType === 'scail2_14B_recast_fast' || initialModelType === 'scail2_14B')
-        const bootedIntoRepaint = mode === 'avatar'
-          && initialModelType === 'scail2_14B_fast'
-
-        set(s => ({
-          families,
-          models,
-          modelsLoaded: true,
-          generationMode: mode,
-          ...(bootedIntoRecast
-            ? { editSubMode: 'recast' as const }
-            : bootedIntoRepaint
-              ? { editSubMode: 'restyle' as const }
-              : {}),
-          // Seed the VALIDATED boot model into the map (the saved entry
-          // may point at a removed model) — _applyModelDefaults' race
-          // guard compares against selectedModelPerMode[mode].
-          selectedModelPerMode: { ...persistedSelections, [mode]: initialModelType },
-          // Mode-shaping mirrored from setGenerationMode: booting into
-          // image mode needs image_mode 1 + Auto resolution. These used
-          // to arrive via the restored params snapshot.
-          ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
-          params: {
-            ...s.params,
-            model_type: initialModelType || s.params.model_type,
-            ...(mode === 'image' ? { image_mode: 1 } : {}),
-          },
-        }))
-      } else {
-        const durableModel = persistedSelections[mode]
-        initialModelType = durableModel && models.some(m => m.model_type === durableModel)
-          ? durableModel
-          : getDefaultModelForMode(mode, families, models)
-        set(s => ({
-          families,
-          models,
-          modelsLoaded: true,
-          selectedModelPerMode: { ...persistedSelections, [mode]: initialModelType },
-          ...(mode === 'image' ? { resolutionPreset: 'auto' as ResolutionPreset, aspectRatio: 'auto' as AspectRatio } : {}),
-          params: {
-            ...s.params,
-            model_type: initialModelType || s.params.model_type,
-            ...(mode === 'image' ? { image_mode: 1 } : {}),
-          },
-        }))
-      }
-
-      // Load LoRAs, model options, and tuned defaults for the initial
-      // model. The defaults hydration (steps, guidance, LM sampling…)
-      // must run on every boot now that saved params don't rehydrate —
-      // without it the sliders would show INITIAL_PARAMS' generic values
-      // instead of the model's.
-      const mt = initialModelType || get().params.model_type
-      _persistModelSelections(get().selectedModelPerMode)
-      // Profile and model-selection hydration are intentionally parallel.
-      // Whichever request settles second re-applies the inherited Story /
-      // Director canvas, without touching an explicit video override.
-      void _syncGlobalProductionVideoFormat(
-        get().productionProfile,
-        get,
-        partial => set(partial),
-      )
-      if (mt) {
-        // Restore saved LoRA state for this mode if the model matches
-        const savedLora = saved?.savedLoraPerMode?.[mode]
-        const savedModelForMode = persistedSelections[mode]
-        if (savedLora && savedModelForMode === mt) {
-          set(s => ({
-            params: {
-              ...s.params,
-              activated_loras: savedLora.activated_loras || [],
-              loras_multipliers: savedLora.loras_multipliers || '',
-            },
-            loraWeights: savedLora.loraWeights || {},
-            availableLoras: savedLora.availableLoras || [],
-          }))
-        }
-        if (mode !== 'model3d') get().loadModelOptions(mt)
-        if (!sfxModelTypes.has(mt) && mode !== 'model3d') {
-          get().loadLoras(mt)
-          _applyModelDefaults(get, set, mt)
-        }
-      }
-      // Refresh the lora_id ↔ filename map from /installed and reconcile
-      // any filename renames since save (LoRA version updates land here
-      // transparently — saved weights/activations carry over to the new
-      // filename without user intervention).
-      get().refreshLoraIdMap()
-
-      // Auto-enable each Mature model once, then preserve an explicit
-      // disable. The initialized IDs live in the same server-side visibility
-      // record, so a changing Pinokio port cannot reset this decision.
-      const cfg = get().servicesConfig
-      if (cfg?.nsfw_mode && _modelVisibilityHydrated) {
-        set(s => {
-          const next = _enableUninitializedMatureModels(
-            models,
-            s.enabledModels,
-          )
-          if (!next) return s
-          _saveEnabledModels(next)
-          return { enabledModels: next }
-        })
-      }
-    } catch (e) {
-      console.error('Failed to load models:', e)
     }
   },
 
@@ -4357,256 +3643,6 @@ export const useStore = create<AppState>((set, get) => {
       }
     }
     await refresh()
-  },
-
-  // Model options
-  modelOptions: null,
-  modelOptionsLoading: false,
-
-  loadModelOptions: async (modelType, preservedRecipe) => {
-    const seq = advanceModelOptionsSeq()
-    // Virtual SFX has no options endpoint. Still invalidate pending responses
-    // and clear the previous model's constraints and Advanced controls.
-    if (sfxModelTypes.has(modelType)) {
-      set({ modelOptions: null, modelOptionsLoading: false })
-      return
-    }
-    set({ modelOptionsLoading: true })
-    try {
-      const options = await api.fetchModelOptions(modelType)
-      // Staleness guard: a newer loadModelOptions call was issued while this
-      // fetch was in flight (rapid model switching, or a settings restore
-      // that jumped models). Applying a superseded response would clobber
-      // params (default steps/guidance) and modelOptions with the WRONG
-      // model's values — last requested wins.
-      if (seq !== _modelOptionsSeq) return
-      const activeState = get()
-      const { durationSeconds, slidingWindowSeconds } = activeState
-      const fps = options.fps || 16
-      const isH3 = modelType.startsWith('minimax_h3')
-      // Set overlap from model defaults
-      const swDefaults = (options as unknown as Record<string, unknown>).sliding_window_defaults as Record<string, number> | undefined
-      const overlapDefault = swDefaults?.overlap_default ?? 5
-      const discardDefault = swDefaults?.discard_last_frames ?? 0
-      const minimumDuration = Math.max(1, (options.frames_minimum || fps) / fps)
-      const extendedDuration = activeState.params.minimax_h3_extended_duration === true
-      const maximumFrames = h3MaximumFrames(options, extendedDuration)
-      const nativeMaximumDuration = maximumFrames != null
-        ? maximumFrames / fps
-        : null
-      const maximumDuration = !options.sliding_window && nativeMaximumDuration
-        ? nativeMaximumDuration
-        : Number.POSITIVE_INFINITY
-      let nextDurationSeconds = Math.min(
-        maximumDuration,
-        Math.max(minimumDuration, durationSeconds),
-      )
-      if (
-        options.sliding_window
-        && nativeMaximumDuration
-        && nextDurationSeconds <= Math.round(nativeMaximumDuration * 10) / 10
-      ) {
-        // H3's native ceiling is 14.375s but the UI displays one decimal.
-        // Treat displayed 14.4s as that same one-window endpoint instead of
-        // scheduling a second minimum-size pass for one rounded frame.
-        nextDurationSeconds = Math.min(
-          nextDurationSeconds,
-          nativeMaximumDuration,
-        )
-      }
-      let nextWindowFrames = Math.round(slidingWindowSeconds * fps)
-      if (extendedDuration && supportsH3ExtendedDuration(options)) {
-        nextWindowFrames = H3_EXPERIMENTAL_MAX_FRAMES
-      } else if (options.sliding_window && swDefaults?.window_default != null) {
-        nextWindowFrames = swDefaults.window_default
-      }
-      if (options.sliding_window && swDefaults) {
-        const windowMaximum = h3WindowMaximumFrames(options, extendedDuration)
-          ?? nextWindowFrames
-        nextWindowFrames = Math.max(
-          swDefaults.window_min ?? 1,
-          Math.min(windowMaximum, nextWindowFrames),
-        )
-      } else if (!options.sliding_window) {
-        nextWindowFrames = Math.round(nextDurationSeconds * fps)
-      }
-      const nextWindowSeconds = nextWindowFrames / fps
-      const paramUpdates: Record<string, unknown> = {
-        guidance_phases: options.guidance_max_phases,
-        video_length: alignFrameCount(
-          Math.round(nextDurationSeconds * fps),
-          h3AlignmentOptions(options, extendedDuration) ?? options,
-        ),
-        sliding_window_size: nextWindowFrames,
-        sliding_window_overlap: overlapDefault,
-        sliding_window_discard_last_frames: discardDefault,
-      }
-      let nextResolutionPreset = activeState.resolutionPreset
-      let nextAspectRatio = activeState.aspectRatio
-      const modelPresetOrder = options.resolution_preset_order || []
-      if (modelPresetOrder.length > 0) {
-        if (!modelPresetOrder.includes(nextResolutionPreset)) {
-          // A model-specific list can contain an expensive experimental tier
-          // at the end. Select its ordinary 720p tier when the previous
-          // model's preset is unavailable instead of silently jumping to the
-          // largest canvas.
-          nextResolutionPreset = modelPresetOrder.includes('720p')
-            ? '720p'
-            : modelPresetOrder[0]
-        }
-        if (nextAspectRatio === 'auto' && !options.supports_auto_aspect) {
-          nextAspectRatio = '16:9'
-        }
-        paramUpdates.resolution = resolveResolution(
-          options,
-          nextResolutionPreset,
-          nextAspectRatio,
-        )
-        const sourceSize = activeState.imageSourceSize
-        if (modelType.startsWith('qwen_image_21') && nextAspectRatio === 'auto'
-          && sourceSize && sourceSize.source === activeState.params.image_guide) {
-          paramUpdates.resolution = referenceImageResolution(sourceSize.width, sourceSize.height, nextResolutionPreset, modelType)
-        }
-      } else if (
-        nextAspectRatio === 'auto'
-        && activeState.generationMode !== 'image'
-        && !options.supports_auto_aspect
-      ) {
-        nextAspectRatio = '16:9'
-        paramUpdates.resolution = resolveResolution(
-          options,
-          nextResolutionPreset,
-          nextAspectRatio,
-        )
-      }
-      if (isH3) {
-        const requested = activeState.productionProfile.video.model === modelType
-          ? activeState.productionProfile.video.settings
-          : { resolution: '540p' as ResolutionPreset, aspectRatio: nextAspectRatio }
-        const format = resolveSupportedVideoFormat(
-          options,
-          requested.resolution,
-          requested.aspectRatio,
-        )
-        nextResolutionPreset = format.resolution
-        nextAspectRatio = format.aspectRatio
-        paramUpdates.resolution = resolveResolution(options, nextResolutionPreset, nextAspectRatio)
-        if (modelType === 'minimax_h3_legacy') {
-          paramUpdates.num_inference_steps = 20
-          paramUpdates.flow_shift = 12
-          paramUpdates.h3_audio_shift = 3
-          paramUpdates.minimax_h3_turbo_mode = false
-          paramUpdates.activated_loras = []
-          paramUpdates.loras_multipliers = ''
-          paramUpdates.h3_model_profile = 'quality'
-        }
-      }
-      if (modelType === 'yue2' || isInstructionSpeechModel(modelType)) {
-        Object.assign(paramUpdates, {
-          negative_prompt: '', prompt_enhancer: '', activated_loras: [], loras_multipliers: '',
-          custom_settings: undefined, model_mode: modelType === 'yue2' ? 0 : undefined,
-          sample_solver: '', audio_scale: undefined, alt_guidance_scale: undefined,
-          temperature: modelType === 'yue2' ? 1 : undefined,
-          top_k: modelType === 'yue2' ? 100 : undefined,
-          top_p: modelType === 'yue2' ? 0.95 : undefined,
-          guidance_phases: modelType === 'auk_flash' ? 0 : 1,
-        })
-      }
-      // Apply model defaults for inference steps and guidance scale
-      if (options.default_num_inference_steps != null) {
-        paramUpdates.num_inference_steps = options.default_num_inference_steps
-      }
-      if (options.default_guidance_scale != null) {
-        paramUpdates.guidance_scale = options.default_guidance_scale
-      }
-      if (get().generationMode === 'image') {
-        paramUpdates.model_mode = options.image_edit_modes?.default ?? 0
-        paramUpdates.batch_size = options.image_layer_count?.default ?? 1
-      }
-      // Flow shift is model-specific but was never applied on model switch,
-      // so it carried over from whichever model was selected before.
-      if (options.default_flow_shift != null) {
-        paramUpdates.flow_shift = options.default_flow_shift
-      }
-      // Tab/mode return and pencil-adjacent restores pass the native recipe
-      // so leftover cleanup cannot silently switch YuE2 planning or AuK CFG.
-      if (preservedRecipe) Object.assign(paramUpdates, preservedRecipe)
-      if (options.minimax_h3_text_encoder_choices?.length) {
-        const currentEncoder = get().params.minimax_h3_text_encoder
-        const valid = options.minimax_h3_text_encoder_choices.some(
-          choice => choice.value === currentEncoder
-        )
-        if (!valid) {
-          paramUpdates.minimax_h3_text_encoder = (
-            options.minimax_h3_text_encoder_default
-            || options.minimax_h3_text_encoder_choices[0].value
-          )
-        }
-      }
-      if (options.minimax_h3_turbo) {
-        // A restored Turbo preset always displays the same step count the
-        // backend will enforce. This also closes a race where model defaults
-        // (20 steps) arrive after the user checks Turbo (6 steps).
-        if (get().params.minimax_h3_turbo_mode === true) {
-          paramUpdates.num_inference_steps = options.minimax_h3_turbo.presets?.find(preset => preset.id === get().params.minimax_h3_turbo_preset)?.steps ?? options.minimax_h3_turbo.steps
-        }
-      } else {
-        // Model switches preserve most Studio params. Never carry the Full-H3
-        // Turbo flag invisibly into a Pruned H3 or unrelated model.
-        paramUpdates.minimax_h3_turbo_mode = false
-      }
-      // TTS default duration. Prefer the model's declared `default` (DramaBox
-      // uses 0 = auto-derive from prompt); fall back to `max` (legacy behavior
-      // for older TTS models that didn't declare a default), then 600.
-      const ttsDefaults: Record<string, unknown> = {}
-      if (options.audio_only && options.duration_slider) {
-        const ds = options.duration_slider
-        ttsDefaults.durationSeconds = ds.default ?? ds.max ?? 600
-      }
-      // Clamp current voice count to the new model's max_voice_count (e.g.
-      // user had 5 voices on Kugel, switches to Scenema which caps at 2 —
-      // trim slots 3-5 so the UI doesn't show ghost voices that the backend
-      // would silently ignore).
-      const newMaxVoiceCount = ((options as { max_voice_count?: number }).max_voice_count) ?? 6
-      const currentVoiceCount = get().ttsVoiceCount
-      if (activeState.generationMode === 'audio' && activeState.audioSubMode === 'speech'
-          && currentVoiceCount > newMaxVoiceCount) {
-        const trimmedVoices = get().ttsVoices.slice(0, newMaxVoiceCount)
-        ttsDefaults.ttsVoiceCount = newMaxVoiceCount
-        ttsDefaults.ttsVoices = trimmedVoices
-        // Re-derive audio_prompt_type from the clamped count using the new
-        // model's selection list.
-        const selection = (options.audio_prompt_type_sources?.selection as string[] | undefined) || ['', 'A', 'AB']
-        const audioType = selection[Math.min(newMaxVoiceCount, selection.length - 1)]
-        paramUpdates.audio_prompt_type = audioType
-      }
-      set(s => ({
-        ...ttsDefaults,
-        ...(isH3 ? { durationSeconds: 124 / fps } : {}),
-        modelOptions: options,
-        modelOptionsLoading: false,
-        durationSeconds: (
-          typeof ttsDefaults.durationSeconds === 'number'
-            ? ttsDefaults.durationSeconds
-            : nextDurationSeconds
-        ),
-        slidingWindowSeconds: nextWindowSeconds,
-        slidingWindowOverlap: overlapDefault,
-        slidingWindowLocked: false,
-        resolutionPreset: nextResolutionPreset,
-        aspectRatio: nextAspectRatio,
-        params: {
-          ...s.params,
-          ...paramUpdates,
-        },
-      }))
-    } catch {
-      // Same staleness rule as the success path — a superseded request's
-      // failure must not null out the newer request's options.
-      if (seq === _modelOptionsSeq) {
-        set({ modelOptions: null, modelOptionsLoading: false })
-      }
-    }
   },
 
   // Director (Music Video Director)

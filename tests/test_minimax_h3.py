@@ -38,6 +38,8 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_MODEL_OPTIONS_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "modelOptionsSlice.ts"
+_MODEL_VISIBILITY_PATH = _ROOT / "ui" / "src" / "stores" / "modelVisibility.ts"
 _H3_DURATION_PATH = _ROOT / "ui" / "src" / "lib" / "h3ExtendedDuration.ts"
 _STUDIO_CONFIGURATION_SLICE_PATH = (
     _ROOT / "ui" / "src" / "stores" / "studioConfigurationSlice.ts"
@@ -929,7 +931,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn('h3_window_adjustment.get("unsupported")', launch)
 
     def test_h3_is_enabled_for_existing_and_fresh_installs(self):
-        store = _read(_STORE_PATH)
+        store = _read(_MODEL_VISIBILITY_PATH)
         default_block = store.split("const DEFAULT_ENABLED_MODELS = new Set([", 1)[1].split("])\n", 1)[0]
         self.assertIn("'minimax_h3'", default_block)
         self.assertIn("'minimax_h3_legacy'", default_block)
@@ -1201,7 +1203,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
         store = _read(_STORE_PATH)
         self.assertIn("params.video_length = requestedVideoFrames(", store)
-        self.assertIn("h3AlignmentOptions", store)
+        self.assertIn("h3AlignmentOptions", _read(_MODEL_OPTIONS_SLICE_PATH))
         helper = _read(_H3_DURATION_PATH)
         submit_block = helper[helper.index("let requestedFrames = Math.max("):]
         submit_block = submit_block[:submit_block.index("if (!supportsSlidingWindows")]
