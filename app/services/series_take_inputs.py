@@ -13,6 +13,9 @@ a location without layers keeps the digests it had. Hearing (``series_hearing``)
 depends only on a ``deaf`` one, which drops its lines and sounds, and on the room a ``muffled`` one skips, so a
 ``ringing`` shot or default renders nothing again. A 2D shot's finish (``series_finish``) counts only when it is not
 the paper default, so a series and a shot that never chose one keep their digests.
+The series frame (``provider.videoSettings.orientation``) counts only when it is
+portrait, so a landscape series keeps the digest it had before vertical episodes
+existed; turning the series to portrait is a new picture.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
 """
 from __future__ import annotations
@@ -27,7 +30,7 @@ from services.series_hearing import hearing_of
 from services.series_layers import digest_location
 from services.series_shot_extras import pauses, timing_args
 from services.series_scene_inputs import scene_source_digest
-from services.series_shot_plan import FPS, kit_ref, plan_timing
+from services.series_shot_plan import FPS, frame_size, kit_ref, plan_timing
 from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
 
 # What a shot's picture and sound depend on, besides the render code itself.
@@ -93,6 +96,9 @@ def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
     finish = series_finish.fingerprint(series, shot) if shot.get("productionMethod") == "animation_2d" else None
     if finish is not None:
         payload["finish"] = finish
+    width, height = frame_size(series)
+    if height > width:
+        payload["orientation"] = "portrait"
     config = series_shot3d.normalize_scene3d(shot.get("scene3d")) if shot.get("productionMethod") == "animation_3d" else None
     source = scene_source_digest(config, root) if config else None
     if source is not None:

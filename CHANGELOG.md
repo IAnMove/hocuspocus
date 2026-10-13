@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**A Series that turns portrait remakes its 2D takes.** Native 2D produce skipped when you switched Orientation to portrait: the take fingerprint hashed layout and lines but not the series frame, so a 1920×1080 approved take stayed current and the cut covered it into 1080×1920 (wrong blocking and title cards). Portrait is now part of that fingerprint; landscape takes keep the digest they already had.
+
 **The Studio store is starting to split.** System settings, generation presets, foreground activity, and the CivitAI browser now live in their own slices. The screen still reads and writes them through the same `useStore` hook.
 
 **Security fix: the macOS "core" server no longer serves uploaded pages and

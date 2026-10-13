@@ -23,7 +23,7 @@ from services.series_script import EpisodeScript, ScriptError
 from services.series_shot_edit import ShotEditError
 from services.series_shot_instruction import SYSTEM
 from services.series_shot_plan import CAMERA_CONTINUES, CAMERA_POSES, CAMERAS, build_shot_spec, normalize_layout2d
-from services.series_take_inputs import render_inputs
+from services.series_take_inputs import stale_shot_ids, render_inputs
 from services.video2d_preset_catalog import finish_presets
 from tests.test_series_script_produce import FILES, KITS as SCRIPT_KITS, SCRIPT, project
 from tests.test_series_shot_edit import edit, library
@@ -79,10 +79,11 @@ SHOTS = {
     "card": _shot("s5", 5, durationSeconds=6, dialogueBeats=[], layout2d={"card": {"kind": "title", "title": "VALLE", "body": "1x01"}}),
 }
 # name: (render_inputs, content_digest, spec digest, compiled document digest, planned camera) at bc518b86.
+# push-portrait.render_inputs changed when the series frame joined the fingerprint; landscape stays.
 OLD = {
     "static": ("240630d8fd4203e5", "01354e48a848b4e3", "6f9ebeca6b98a6f8", "6ef9b8070517fd1e", "static"),
     "push": ("bb4e0f9b8a22ae73", "95613184b1840b8b", "f8c3ffaba41f9185", "0094ed8c88af36b7", "push"),
-    "push-portrait": ("bb4e0f9b8a22ae73", "95613184b1840b8b", "d73d379f78d3459d", "829fd9104e4e5351", "push"),
+    "push-portrait": ("52b5703596318ff4", "95613184b1840b8b", "d73d379f78d3459d", "829fd9104e4e5351", "push"),
     "words": ("e46596d01f8f33e2", "3d711bc688dc3b14", "44e562e20edaf759", "ec4613ab74620b14", "static"),
     "layered": ("74295f2f0d841a8a", "fdd4c2a9b533af08", "5d74edfbdc48be2d", "65d0e913cc8cc07f", "push"),
     "card": ("fec57c2caf78f28a", "e92061d0571e8615", "efc74264af885c22", "cb77c674b30759d4", "static"),
@@ -145,6 +146,21 @@ def test_a_shot_finish_wins_over_the_series_and_null_follows_it_again():
     assert normalize_layout2d({"framing": "two", "finish": None}) == {"framing": "two"}
     paper_shot = {**SHOTS["static"], "layout2d": {"framing": "two", "camera": "static", "finish": "paper"}}
     assert shot_finish(film, paper_shot) == PAPER and fingerprint(film, paper_shot) is None
+
+
+def test_turning_the_series_portrait_renders_2d_takes_again():
+    """Landscape 2D takes stay current; the same approved take is stale once the series is vertical."""
+    shot = SHOTS["push"]
+    landscape = series()
+    kept = render_inputs(landscape, shot, KITS)
+    assert kept == OLD["push"][0]
+    landscape["assets"] = {"take": {"metadata": {"renderInputs": kept, "renderInputsVersion": 2}}}
+    episode = {"shots": [{**shot, "approvedAttemptId": "att", "attempts": [{"id": "att", "outputAssetIds": ["take"]}]}]}
+    assert stale_shot_ids(landscape, episode, KITS) == []
+    portrait = series(**PORTRAIT)
+    portrait["assets"] = landscape["assets"]
+    assert render_inputs(portrait, shot, KITS) == OLD["push-portrait"][0] != kept
+    assert stale_shot_ids(portrait, episode, KITS) == ["s2"]
 
 
 def test_only_2d_takes_see_the_series_finish():
