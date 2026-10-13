@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**The Studio store is starting to split.** System settings, generation presets, foreground activity, and the CivitAI browser now live in their own slices. The screen still reads and writes them through the same `useStore` hook.
+
 **A safety net for the coming split of the two largest files (no behaviour
 change).** Tests can now import the full server with a fake WanGP engine, with
 no GPU. `tests/characterization` records what read-only routes answer
