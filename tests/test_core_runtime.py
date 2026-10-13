@@ -434,6 +434,20 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(conflict.status_code, 409)
         self.assertEqual(conflict.json()["detail"]["code"], "wizard_conversation_revision_conflict")
 
+    def test_wizard_get_rejects_an_invalid_workspace_name(self):
+        conversation = self.client.get("/api/v1/wizard/conversations", params={"workspace": "../escape"})
+        workflows = self.client.get("/api/v1/wizard/workflows", params={"workspace": "../escape"})
+        self.assertEqual(conversation.status_code, 400, conversation.text)
+        self.assertEqual(workflows.status_code, 400, workflows.text)
+        self.assertNotIn("Could not read", conversation.text)
+        self.assertNotIn("Could not read", workflows.text)
+
+    def test_wizard_put_rejects_a_json_array(self):
+        conversation = self.client.put("/api/v1/wizard/conversations", json=["not", "an", "object"])
+        workflows = self.client.put("/api/v1/wizard/workflows", json=["not", "an", "object"])
+        self.assertEqual(conversation.status_code, 422, conversation.text)
+        self.assertEqual(workflows.status_code, 422, workflows.text)
+
     def test_video_editor_export_name_cannot_escape_the_workspace(self):
         from services import core_workspace as core
 

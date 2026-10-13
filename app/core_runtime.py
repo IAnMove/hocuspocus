@@ -1,10 +1,10 @@
 """Core/remote server (Apple Silicon and machines without a local AI recipe): editors, projects and remote APIs without Torch."""
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sys
+from contextlib import nullcontext
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +37,7 @@ from routers.uploads import create_uploads_router
 from routers.user_diagnostics import create_user_diagnostics_router
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
 from routers.wizard_activity import create_wizard_activity_router
+from routers.wizard_persistence import create_wizard_persistence_router
 from routers.world3d_export import create_world3d_export_router, bind_world3d_renderer_origin
 from routers.workspace_collections import create_workspace_collections_router
 from services import (
@@ -58,16 +59,6 @@ from services.platform_capabilities import platform_capabilities
 from services.scene_commands import SceneCommands
 from services.style_library import StyleLibrary
 from services.ui_distribution import build_status, recovery_html, report_identity
-from services.wizard_conversations import (
-    WizardConversationRevisionConflict,
-    read_conversation,
-    write_conversation,
-)
-from services.wizard_workflows import (
-    WizardWorkflowRevisionConflict,
-    read_workflows,
-    write_workflows,
-)
 from services.wizard_workflow_executor import WizardWorkflowExecutor
 from services.world3d_export import World3DExportService
 from services.workspace_registry import WorkspaceRegistry
@@ -429,84 +420,10 @@ def _wizard_workspace(value: object) -> str:
     return core.workspace_dir(name)
 
 
-@api.get("/api/v1/wizard/conversations")
-def get_wizard_conversation(workspace: str | None = None):
-    try:
-        return read_conversation(_wizard_workspace(workspace))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except (OSError, json.JSONDecodeError) as error:
-        raise HTTPException(status_code=500, detail=f"Could not read the Wizard conversation: {error}") from error
-
-
-@api.put("/api/v1/wizard/conversations")
-async def put_wizard_conversation(request: Request):
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Wizard conversation must be a JSON object")
-    try:
-        base_revision = body.get("baseRevision")
-        if type(base_revision) is not int:
-            base_revision = 0
-        return write_conversation(
-            _wizard_workspace(body.get("workspace")),
-            body.get("conversation"),
-            base_revision=base_revision,
-        )
-    except WizardConversationRevisionConflict as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_conversation_revision_conflict",
-                "message": str(error),
-                "expectedRevision": error.expected,
-                "currentRevision": error.current,
-            },
-        ) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except OSError as error:
-        raise HTTPException(status_code=500, detail=f"Could not save the Wizard conversation: {error}") from error
-
-
-@api.get("/api/v1/wizard/workflows")
-def get_wizard_workflows(workspace: str | None = None):
-    try:
-        return read_workflows(_wizard_workspace(workspace))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except (OSError, json.JSONDecodeError) as error:
-        raise HTTPException(status_code=500, detail=f"Could not read Wizard workflows: {error}") from error
-
-
-@api.put("/api/v1/wizard/workflows")
-async def put_wizard_workflows(request: Request):
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Wizard workflows must be a JSON object")
-    try:
-        base_revision = body.get("baseRevision")
-        if type(base_revision) is not int:
-            base_revision = 0
-        return write_workflows(
-            _wizard_workspace(body.get("workspace")),
-            body.get("collection"),
-            base_revision=base_revision,
-        )
-    except WizardWorkflowRevisionConflict as error:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "wizard_workflow_revision_conflict",
-                "message": str(error),
-                "expectedRevision": error.expected,
-                "currentRevision": error.current,
-            },
-        ) from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except OSError as error:
-        raise HTTPException(status_code=500, detail=f"Could not save Wizard workflows: {error}") from error
+api.include_router(create_wizard_persistence_router(
+    workspace_dir=_wizard_workspace,
+    lock=nullcontext(),
+))
 
 
 @api.get("/api/v1/resolutions")

@@ -15,6 +15,35 @@ def test_workspaces_lifecycle(server, golden) -> None:
     server.check(golden, "list after delete", "GET", "/api/v1/workspaces")
 
 
+def test_wizard_persistence_round_trip(server, golden) -> None:
+    server.check(golden, "wizard conversation empty", "GET", "/api/v1/wizard/conversations")
+    server.check(golden, "wizard workflows empty", "GET", "/api/v1/wizard/workflows")
+    server.check(
+        golden, "wizard conversation invalid workspace", "GET", "/api/v1/wizard/conversations",
+        params={"workspace": "../escape"},
+    )
+    server.check(
+        golden, "wizard workflows invalid workspace", "GET", "/api/v1/wizard/workflows",
+        params={"workspace": "../escape"},
+    )
+    server.check(golden, "wizard conversation save", "PUT", "/api/v1/wizard/conversations", json={
+        "workspace": "default",
+        "baseRevision": 0,
+        "conversation": {
+            "version": 1,
+            "revision": 0,
+            "messages": [{"id": "msg-1", "role": "user", "text": "Hola", "createdAt": 1}],
+        },
+    })
+    server.check(golden, "wizard conversation loaded", "GET", "/api/v1/wizard/conversations")
+    server.check(golden, "wizard workflows save", "PUT", "/api/v1/wizard/workflows", json={
+        "workspace": "default",
+        "baseRevision": 0,
+        "collection": {"version": 1, "revision": 0, "workflows": []},
+    })
+    server.check(golden, "wizard workflows loaded", "GET", "/api/v1/wizard/workflows")
+
+
 def test_workspace_names_are_validated(server, golden) -> None:
     server.check(golden, "create without name", "POST", "/api/v1/workspaces", json={})
     server.check(golden, "create with a path", "POST", "/api/v1/workspaces", json={"name": "../escape"})
