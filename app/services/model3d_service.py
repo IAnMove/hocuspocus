@@ -18,6 +18,7 @@ import signal
 import subprocess
 import threading
 import time
+import secrets
 import uuid
 from pathlib import Path
 
@@ -410,6 +411,15 @@ def _safe_decode_chunks(num_chunks: int, octree_resolution: int) -> int:
     return max(1000, min(cap, int(num_chunks)))
 
 
+def _requested_seed(value: Any) -> int:
+    """The seed asked for; none or -1 draws a new one, recorded with the job like any other setting."""
+    try:
+        seed = int(value)
+    except (TypeError, ValueError):
+        seed = -1
+    return min(seed, 2**32 - 1) if seed >= 0 else secrets.randbelow(2**32)
+
+
 def _bounded_int(value: Any, default: int, low: int, high: int) -> int:
     try:
         return max(low, min(high, int(value)))
@@ -475,7 +485,7 @@ def _prepare_request(
 
     settings = {
         "prompt": prompt,
-        "seed": _bounded_int(body.get("seed"), 1234, 0, 2**32 - 1),
+        "seed": _requested_seed(body.get("seed")),
         "num_inference_steps": _bounded_int(body.get("num_inference_steps", preset["num_inference_steps"]), preset["num_inference_steps"], 1, 100),
         "guidance_scale": _bounded_float(body.get("guidance_scale", preset["guidance_scale"]), preset["guidance_scale"], 0.0, 30.0),
         "octree_resolution": _bounded_int(body.get("octree_resolution", preset["octree_resolution"]), preset["octree_resolution"], 64, 512),

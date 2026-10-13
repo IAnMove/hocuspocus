@@ -8385,6 +8385,8 @@ def generate_video(
         requested_frames_to_generate = default_requested_frames_to_generate # num  of num frames to create (if any source window this num includes also the overlapped source window frames)
         cached_video_guide_processed = cached_video_mask_processed = cached_video_guide_processed2 = cached_video_mask_processed2 = None
         cached_video_video_start_frame = cached_video_video_end_frame = -1
+        handler_prompts = {}  # window -> prompt a model handler rewrote; saved so the metadata shows what the model got
+        gen.pop("model_prompts", None)
         start_time = time.time()
         if prompt_enhancer_image_caption_model != None and prompt_enhancer !=None and len(prompt_enhancer)>0 and enhancer_mode == 0:
             send_cmd("progress", [0, get_latest_status(state, "Enhancing Prompt")])
@@ -8448,7 +8450,10 @@ def generate_video(
             refresh_preview  = {"image_guide" : image_guide, "image_mask" : image_mask} if image_mode >= 1 else {}
 
             if hasattr(model_handler, "custom_prompt_preprocess"):
+                requested_prompt = prompt
                 prompt = model_handler.custom_prompt_preprocess(**locals())
+                if prompt != requested_prompt:
+                    handler_prompts[window_no] = prompt
             image_start_tensor = image_end_tensor = None
             if window_no == 1 and (video_source is not None or image_start is not None):
                 if image_start is not None:
@@ -9538,6 +9543,9 @@ def generate_video(
                 configs["prompt"] = "\n".join(original_prompts)
                 if prompt_enhancer_image_caption_model != None and prompt_enhancer !=None and len(prompt_enhancer)>0 and enhancer_mode != 1:
                     configs["enhanced_prompt"] = "\n".join(prompts)
+                if handler_prompts:
+                    configs["model_prompts"] = {str(key): value for key, value in sorted(handler_prompts.items())}
+                    gen["model_prompts"] = configs["model_prompts"]      # the app's own sidecar shows them too
                 configs["generation_time"] = round(end_time-start_time)
                 configs["creation_date"] = datetime.fromtimestamp(end_time).isoformat(timespec="seconds")
                 configs["creation_timestamp"] = int(end_time)

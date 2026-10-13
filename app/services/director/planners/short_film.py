@@ -2801,6 +2801,8 @@ class ShortFilmPlanner(BasePlanner):
                 "canonical_visual_style": self._visual_style,
                 "preserve_visual_style": True,
             }
+            if self.raw_prompts:
+                continue  # Raw prompts: the shot keeps its style, the prompts get no lock.
             if str(shot.image_prompt or "").strip():
                 shot.image_prompt = apply_visual_style_lock(
                     shot.image_prompt,
@@ -4398,7 +4400,10 @@ SCREENPLAY:
                 target_duration=target_duration,
                 target_scenes=max(shot_count_low, min(shot_count_high, target_scenes or shot_count_low)),
                 visual_style=getattr(self, "_visual_style", ""),
-                preserve_visual_style=getattr(self, "_preserve_visual_style", False),
+                # Raw prompts: no style lock on these shots either.
+                preserve_visual_style=(
+                    getattr(self, "_preserve_visual_style", False) and not self.raw_prompts
+                ),
                 has_reference=has_reference,
             )
         if not uses_generated_images:

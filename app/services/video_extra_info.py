@@ -256,6 +256,12 @@ def build_saved_clip_info(
         limit=10000,
     )
     negative_prompt = _first_text([params], "negative_prompt", limit=10000)
+    raw_model_prompts = metadata.get("model_prompts") if isinstance(metadata.get("model_prompts"), dict) else {}
+    model_prompts = {
+        str(window): str(text)[:30000]
+        for window, text in raw_model_prompts.items()
+        if isinstance(text, str) and text.strip()
+    }
     saved_metadata = {
         key: value
         for key, value in metadata.items()
@@ -284,6 +290,7 @@ def build_saved_clip_info(
         "prompt": prompt,
         "negative_prompt": negative_prompt,
         "audio_prompt": audio_prompt,
+        "model_prompts": model_prompts,
         "saved_metadata": saved_metadata,
     }
 

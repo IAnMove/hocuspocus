@@ -225,3 +225,14 @@ def test_language_allowlist_rejects_unknown_codes():
     assert normalize_language("pt-BR") == ("pt", "Portuguese")
     with pytest.raises(ValueError, match="Unsupported language"):
         normalize_language("xx")
+
+
+def test_clip_info_shows_the_prompt_each_window_of_the_model_received():
+    from services.video_extra_info import build_saved_clip_info
+    info = build_saved_clip_info("clip.mp4", {
+        "params": {"prompt": "A woman walks."},
+        "model_prompts": {"1": "Window 1 of 2 (0-14 s). A woman walks.", "2": "  ", "3": 7},
+    })
+    assert info["prompt"] == "A woman walks."
+    assert info["model_prompts"] == {"1": "Window 1 of 2 (0-14 s). A woman walks."}
+    assert build_saved_clip_info("clip.mp4", {"params": {}})["model_prompts"] == {}

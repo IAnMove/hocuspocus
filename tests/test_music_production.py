@@ -545,12 +545,14 @@ def test_the_frame_prompt_says_how_many_subjects_the_references_stand_for(tmp_pa
     assert production.frame_prompt(spec, {"frame": "no cast"}) == "look no cast"
 
 
-def test_a_quality_profile_fills_seeds_and_takes_but_never_overrides_the_spec():
+def test_a_quality_profile_fills_takes_and_song_candidates_but_never_overrides_the_spec():
+    from services.production_quality import song_seed_offsets
     base = {"title": "t", "song": {"lyrics": "a", "caption": "b", "duration": 20, "bpm": 100}, "style": {}, "shots": [{"key": "s", "kind": "screen"}]}
     standard = validate_spec({**base, "quality": "standard"})
-    assert len(standard["song"]["seeds"]) == 3 and standard["max_takes"] == 2
+    assert "seeds" not in standard["song"] and standard["max_takes"] == 2 and len(song_seed_offsets(standard)) == 3
     maximal = validate_spec({**base, "quality": "max"})
-    assert len(maximal["song"]["seeds"]) == 4 and maximal["max_takes"] == 3
+    assert "seeds" not in maximal["song"] and maximal["max_takes"] == 3 and len(song_seed_offsets(maximal)) == 4
+    assert song_seed_offsets(validate_spec(base)) == [11, 22, 33]
     kept = validate_spec({**base, "quality": "max", "max_takes": 1, "song": {**base["song"], "seeds": [9]}})
     assert kept["max_takes"] == 1 and kept["song"]["seeds"] == [9]
     assert "seeds" not in validate_spec(base)["song"] and "max_takes" not in validate_spec(base)
@@ -611,3 +613,27 @@ def test_a_line_that_runs_across_a_cut_keeps_one_caption():
     doc = {"version": 1, "name": "t", "width": 1920, "height": 1080, "fps": 24, "duration": 4, "layers": [], "texts": []}
     cue = edit({"version": 1, "input": {"document": doc, "operations": ops, "full": True}})["result"]["document"]["texts"][0]
     assert cue["enter"]["preset"] == "none"
+
+
+def test_each_new_production_draws_its_own_seed_base_and_old_runs_keep_theirs():
+    from services.production_seeds import default_seed, ensure_seed_base
+    fresh, other, resumed = {}, {}, {"started": 1.0}
+    ensure_seed_base(fresh), ensure_seed_base(other), ensure_seed_base(resumed)
+    assert fresh["seed_base"] != other["seed_base"] and resumed["seed_base"] == 0
+    assert ensure_seed_base(fresh) == fresh["seed_base"]      # drawn once, kept for the resume
+
+    class Stub:
+        state = {"seed_base": 1000}
+    assert default_seed(Stub(), 3) == 1003 and default_seed(object(), 3) == 3
+
+
+def test_start_frames_of_a_new_production_each_get_their_own_seed():
+    from services.production_seeds import window_seed
+
+    class New:
+        state = {"seed_base": 500}
+
+    class Old:
+        state = {"seed_base": 0}
+    assert window_seed(New(), 3, 0) != window_seed(New(), 3, 1)
+    assert window_seed(Old(), 3, 0) == window_seed(Old(), 3, 1) == 3      # a record from before keeps its seeds
