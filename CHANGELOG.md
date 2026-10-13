@@ -13,7 +13,7 @@ name and `GET /api/v1/uploads/...` sent it to the browser as a page on the
 app's own address (stored cross-site scripting). Both servers now use one
 uploads router, `app/routers/uploads.py`: only the known media, model, text and
 archive extensions are kept, every other name is stored as `.bin`, and every
-answer carries `X-Content-Type-Options: nosniff`. The full server already did
+file it serves back carries `X-Content-Type-Options: nosniff`. The full server already did
 this, so its answers do not change. The core server also gets what the full
 server had: files are streamed to disk instead of held in memory (500 MB cap),
 a name that is not an upload falls back to the workspace outputs, MP3, M4A and
