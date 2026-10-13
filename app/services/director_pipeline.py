@@ -5687,8 +5687,11 @@ def _public_reference_anchor(params: Mapping[str, Any]) -> dict:
 def _public_visible_defaults(params: dict) -> dict:
     """The run options that used to be hidden house rules (see visible_defaults)."""
     # A copy: resolving the policy normalises the music-video treatment.
+    # Comic films draw their start images from the comic's panels instead.
     view = dict(params)
-    if not shot_images_required(_director_effective_shot_image_policy(view)):
+    if _comic_movie_request(view) or not shot_images_required(
+        _director_effective_shot_image_policy(view)
+    ):
         return {}
     details: dict[str, Any] = {
         "reference_anchor": _public_reference_anchor(view),

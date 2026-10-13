@@ -197,12 +197,14 @@ def test_generation_details_show_the_shared_reference():
     assert legacy["reference_anchor"] == {"mode": "always", "source": "none"}  # saved before the option
 
 
-def test_direct_video_runs_have_no_shared_reference_details():
+def test_direct_video_and_comic_runs_have_no_shared_reference_details():
     details = director_pipeline._public_pipeline_generation_details({
         "pipeline_type": "music_video",
         "music_video_treatment": {"generation_mode": "direct_video"},
     })
     assert "reference_anchor" not in details
+    comic = director_pipeline._public_pipeline_generation_details({"pipeline_type": "comic_movie"})
+    assert "reference_anchor" not in comic and "lighting_continuity" not in comic
 
 
 # ── Replace and clear from the Dashboard, then repair ─────────────────────
