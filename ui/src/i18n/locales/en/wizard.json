@@ -1,4 +1,5 @@
 {
+  "paidMusicDisabled": "Paid MiniMax music is disabled ({{model}}); use a local model: {{local}}. The MiniMax API runs only when you pick it in Story Lab and confirm the cost.",
   "title": "Ask to the Wizard",
   "open": "Ask to the Wizard about the app or current task queue",
   "placeholder": "Ask HocusPocus for a spell…",

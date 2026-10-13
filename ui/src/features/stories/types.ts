@@ -233,6 +233,10 @@ export interface StoryMusicCue {
 export interface StoryMusicDraft {
   mode: 'original' | 'cover'
   model: 'music-3.0' | 'music-2.6' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
+  /** A person picked the paid MiniMax API model in the Story Lab selector. Without it a saved paid id reads as local. */
+  paidModelChosen?: boolean
+  /** The paid id an older save carried; it now reads as the local default, and Story Lab says so until dismissed. */
+  replacedPaidModel?: 'music-3.0' | 'music-2.6'
   brief: string
   style: string
   sourceLyrics: string

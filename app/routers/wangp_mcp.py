@@ -223,9 +223,13 @@ def _request_arguments(name, arguments):
 
 
 def _validate_generate_params(params):
+    from services.music_model_contract import is_paid_music_model, paid_music_disabled_message
+
     mode = params.get('generation_mode')
     if not isinstance(mode, str) or not mode:
         raise ValueError('MCP generate requires a non-empty generation_mode')
+    if is_paid_music_model(params.get('model_type')):
+        raise ValueError(paid_music_disabled_message(params.get('model_type')))
     if mode not in GENERATION_MODES:
         modes = ', '.join(GENERATION_MODES)
         raise ValueError(f'MCP generate generation_mode must be one of: {modes}')

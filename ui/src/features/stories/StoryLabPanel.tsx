@@ -92,6 +92,7 @@ import type {
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
+import { confirmPaidStoryMusic } from './paidMusicConfirm'
 import {
   commitStoryAudioChoice,
   coverPatchFromOutput,
@@ -2541,6 +2542,8 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.uploadCoverFirst') })
       return
     }
+    const paidModel = project.music.mode === 'cover' ? 'music-cover' : project.music.model
+    if (!confirmPaidStoryMusic(paidModel, project.music.candidateCount)) return
     const activity = beginStoryActivity(
       'generating_music',
       `Preparing ${project.music.candidateCount} MiniMax Music candidates…`,
@@ -2579,7 +2582,8 @@ export function StoryLabPanel() {
         prompt: style,
         lyrics,
         count: project.music.candidateCount,
-        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        model: paidModel,
+        paid_music_confirmed: true,
         reference_audio_filename: project.music.mode === 'cover'
           ? project.music.coverReferenceFilename : undefined,
         workspace: activeWorkspace,
@@ -2780,6 +2784,9 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyBeforeNewSong') })
       return
     }
+    // Ask about the MiniMax API cost before the prompts are rewritten: declining changes nothing.
+    const paidConfirmed = generateAudio && !isLocalMusicModel(current.music.model)
+    if (paidConfirmed && !confirmPaidStoryMusic(current.music.model)) return
     const existingCue = current.music.cues.find(cue => cue.kind === 'story') || current.music.cues[0]
     const cue: StoryMusicCue = existingCue || {
       id: storyId('music-cue'),
@@ -2832,7 +2839,7 @@ export function StoryLabPanel() {
       if (generateAudio) {
         const ready = await generateMusicCueAudio(cue.id, true, jobId => activity.handoff(
           `Continuing as recoverable MiniMax Music job ${jobId}`,
-        ))
+        ), paidConfirmed)
         if (!ready) {
           activity.fail(new Error('MiniMax Music did not complete the new song.'), 'generating_music')
           return
@@ -3096,6 +3103,7 @@ export function StoryLabPanel() {
     cueId: string,
     queued = false,
     onJobSubmitted?: (jobId: string) => void,
+    paidConfirmed = false,
   ): Promise<boolean> => {
     const selectedModel = useStoryStore.getState().projects[project.id]?.music.model
     if (!isLocalMusicModel(selectedModel) && !servicesConfig?.minimax_api_key_set) {
@@ -3112,6 +3120,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t(blocked.key, blocked.params) })
       return false
     }
+    if (!paidConfirmed && !confirmPaidStoryMusic(current.music.model)) return false
     const usingAceStep = isAceStepMusicModel(current.music.model)
     const usingLocalMusic = isLocalMusicModel(current.music.model)
     const activity = queued
@@ -3126,6 +3135,7 @@ export function StoryLabPanel() {
         cueId,
         actor: 'user',
         capability: 'generate_story_song',
+        paidMusicConfirmed: !usingLocalMusic,
         onJobSubmitted: job => {
           activeMusicJobId.current = job.jobId
           activity?.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)
@@ -3168,13 +3178,16 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.reviewIncompleteProposals', { count: incomplete.length }) })
       return
     }
-    if (!servicesConfig?.minimax_api_key_set) {
+    const queueModel = useStoryStore.getState().project.music.model
+    if (!isLocalMusicModel(queueModel) && !servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyFirst') })
       return
     }
-    if (!window.confirm(
-      t('notice.generateTracksConfirm', { count: cues.length }),
-    )) return
+    // A paid model gets the MiniMax API cost question instead of the generic one.
+    const confirmed = isLocalMusicModel(queueModel)
+      ? window.confirm(t('notice.generateTracksConfirm', { count: cues.length }))
+      : confirmPaidStoryMusic(queueModel, cues.length)
+    if (!confirmed) return
     const ids = cues.map(cue => cue.id)
     const activity = beginStoryActivity(
       'music_queue',
@@ -3197,7 +3210,7 @@ export function StoryLabPanel() {
         )
         const ready = await generateMusicCueAudio(ids[index], true, jobId => activity.handoff(
           `Continuing as recoverable MiniMax Music job ${jobId}`,
-        ))
+        ), !isLocalMusicModel(queueModel))
         if (!ready) break
         completed += 1
         activity.update(

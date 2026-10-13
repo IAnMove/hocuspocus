@@ -363,7 +363,9 @@ export interface AgentConfigureStorySongAction extends AgentLanguageAwareAction 
   writeLyrics: boolean
   lyricsLanguage: string
   instrumental: boolean
-  model?: 'music-3.0' | 'music-2.6' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
+  model?: 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
+  /** A paid MiniMax API id the agent asked for; the capability refuses it before anything runs. */
+  refusedPaidModel?: string
   durationSeconds?: number
 }
 

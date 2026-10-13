@@ -63,7 +63,9 @@ def _portable_folder(value: Any) -> str | None:
 
 
 def classify_music_route(model: str | None) -> str:
-    token = _clean(model) or "music-3.0"
+    from .music_model_contract import DEFAULT_MUSIC_MODEL
+
+    token = _clean(model) or DEFAULT_MUSIC_MODEL
     if token in LOCAL_MODELS or token.startswith("ace_step"):
         return "local"
     if token in REMOTE_MODELS:

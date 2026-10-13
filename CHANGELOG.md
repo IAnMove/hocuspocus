@@ -8,6 +8,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
 
+**Music never uses paid MiniMax by default.** Every music default is now the local,
+free ACE-Step 1.5 XL model, the one Studio and `production.*` already use. The paid
+MiniMax API models (`music-3.0`, `music-2.6` and covers) run only when you pick one
+in Story Lab, where they are labelled "MiniMax API (paid)", and confirm the cost
+before each request. The Wizard, MCP tools, `production.*` specs and the core
+profile no longer offer them and refuse an explicit request with the local model
+IDs to use instead. Stories saved with `music-3.0` as their old default now read as
+the local model and Story Lab tells you so; the file on disk is not rewritten.
+`media.options` lists the installed local music models.
+
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
 that made the result (comic films keep the seed their approved PRE pinned). Every

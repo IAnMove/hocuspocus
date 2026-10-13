@@ -6,7 +6,7 @@ import {
   DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
   LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
 } from '../../types/index.ts'
-import { normalizeStoryMusicModel } from './musicModel'
+import { normalizeStoryMusicChoice } from './musicModel'
 import { contentLanguageForUi } from '../../lib/contentLanguage'
 // The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
 // where src/i18n's locale JSON cannot load, so it is not imported here.
@@ -680,7 +680,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       : {},
     music: {
       mode: project.music?.mode === 'cover' ? 'cover' : 'original',
-      model: normalizeStoryMusicModel(project.music?.model),
+      ...normalizeStoryMusicChoice(project.music),
       brief: text(project.music?.brief),
       style: text(project.music?.style),
       sourceLyrics: text(project.music?.sourceLyrics),
