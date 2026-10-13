@@ -25,6 +25,16 @@ from ..policies import (
     build_character_visual_style_contract,
     build_visible_text_contract,
 )
+from ..music_video_coverage import (
+    CHORUS_CONTINUITY_NOTE,
+    CHORUS_RECURRENCE_LINE,
+    COVERAGE_SEQUENCE as _COVERAGE_SEQUENCE,
+    coverage_hint as coverage_hint_for,
+    recurring_set_for,
+    treatment_coverage_fields,
+    treatment_rules_for,
+)
+from ..prompt_cleanup import prompt_cleanup_metadata
 from .base import BasePlanner
 
 
@@ -96,15 +106,6 @@ _DEFAULT_TREATMENT = {
     "forbidden_elements": "",
 }
 
-_COVERAGE_SEQUENCE = (
-    "hero wide performance",
-    "direct-to-camera medium performance",
-    "beauty close-up",
-    "moving profile coverage",
-    "low-angle performance",
-    "detail insert",
-)
-
 
 def _treatment_list(value: Any) -> list[str]:
     if isinstance(value, list):
@@ -154,6 +155,9 @@ def normalize_music_video_treatment(value: Any) -> dict[str, Any]:
         "chorus_signature": str(raw.get("chorus_signature") or _DEFAULT_TREATMENT["chorus_signature"]).strip(),
         "surrealism": max(0, min(100, surrealism)),
         "forbidden_elements": str(raw.get("forbidden_elements") or "").strip(),
+        # Only a changed coverage cycle or chorus set is written, so a
+        # default treatment (and the JSON the planner sees) stays as before.
+        **treatment_coverage_fields(raw),
     }
 
 
@@ -183,6 +187,9 @@ def build_music_video_coverage(clips: list[dict], treatment: dict[str, Any]) -> 
         index for _score, index in sorted(priorities, reverse=True)[:desired]
     }
     sets = treatment["recurring_sets"]
+    cycle = list(treatment.get("coverage", _COVERAGE_SEQUENCE))
+    chorus_mode = treatment.get("chorus_set", "first")
+    choruses_seen = 0
     coverage: list[dict[str, Any]] = []
     for index, clip in enumerate(clips):
         section = str(clip.get("label") or "verse").lower()
@@ -195,21 +202,17 @@ def build_music_video_coverage(clips: list[dict], treatment: dict[str, Any]) -> 
             scene_type = "atmospheric"
         else:
             scene_type = "narrative"
-        if section == "chorus":
-            recurring_set = sets[0]
-        elif section == "bridge":
-            recurring_set = sets[-1]
-        else:
-            recurring_set = sets[min(1 + (index % max(1, len(sets) - 1)), len(sets) - 1)] if len(sets) > 1 else sets[0]
         coverage.append({
             "scene_type": scene_type,
             "performer_present": performer,
-            "recurring_set": recurring_set,
-            "coverage": _COVERAGE_SEQUENCE[index % len(_COVERAGE_SEQUENCE)],
+            "recurring_set": recurring_set_for(section, index, sets, chorus_mode, choruses_seen),
+            "coverage": cycle[index % len(cycle)] if cycle else "",
             "section_rule": _SECTION_VISUAL_STRATEGY.get(section, _SECTION_VISUAL_STRATEGY["verse"])["hints"],
-            "reuse_chorus_signature": section == "chorus",
+            "reuse_chorus_signature": section == "chorus" and chorus_mode == "first",
         })
+        choruses_seen += section == "chorus"
     return coverage
+
 
 _MUSIC_IMAGE_FIELDS = frozenset({
     "image_source",
@@ -494,30 +497,18 @@ class MusicVideoPlanner(BasePlanner):
         )
 
         # ── Image-prompt sanitization (Layer 1) ──────────────────────
-        # Strip GARMENT BAN violations and narrative-filler phrases the
-        # image model can't render. Mirrors the same hook in short_film.py
-        # so music-video shots also benefit from the deterministic cleanup
-        # regardless of whether Pass 3 polish is enabled. See
-        # prompt_polish.sanitize_image_prompt for the full ruleset.
+        # The same Pass 2 cleanup as short_film.py: garments, motion
+        # sentences and fillers, whatever the polish setting. Raw prompts:
+        # nothing is removed. Keep clothes from references off: clothing
+        # words stay. Counts go to each shot's metadata (prompt_cleanup).
         try:
-            from ..prompt_polish import sanitize_image_prompt as _sanitize_ip
-            for sd in shot_dicts:
-                ip = sd.get("image_prompt") or ""
-                if ip.strip():
-                    sd["image_prompt"] = _sanitize_ip(
-                        ip, log_prefix=f"[MusicVideoPlanner Pass2 image sanitize '{sd.get('scene_goal', 'untitled')[:40]}']"
-                    )
-                kfs = sd.get("keyframe_prompts") or []
-                if isinstance(kfs, list) and kfs:
-                    cleaned_kfs = []
-                    for ki, kf in enumerate(kfs):
-                        if isinstance(kf, str) and kf.strip():
-                            cleaned_kfs.append(_sanitize_ip(
-                                kf, log_prefix=f"[MusicVideoPlanner Pass2 keyframe[{ki}] sanitize]"
-                            ))
-                        else:
-                            cleaned_kfs.append(kf)
-                    sd["keyframe_prompts"] = cleaned_kfs
+            from ..prompt_cleanup import sanitize_pass2_image_prompts
+            sanitize_pass2_image_prompts(
+                shot_dicts,
+                raw_prompts=self.raw_prompts,
+                keep_wardrobe=self.keep_reference_wardrobe,
+                log_label="MusicVideoPlanner Pass2",
+            )
         except Exception as e:
             print(f"[MusicVideoPlanner] Image-prompt sanitization skipped: {e}")
 
@@ -615,7 +606,7 @@ class MusicVideoPlanner(BasePlanner):
             characters=char_profiles if char_profiles else None,
             shots=shots,
             continuity_notes=[
-                "Controlled recurrence is intentional: choruses return to the signature setup",
+                CHORUS_CONTINUITY_NOTE[treatment.get("chorus_set", "first")],
                 "Verses vary coverage inside the same authored visual world",
                 "Performer visibility follows the editable treatment instead of every lyric literally",
             ],
@@ -1009,12 +1000,7 @@ class MusicVideoPlanner(BasePlanner):
                 timing_hint += " Mandatory visual action anchors: " + "; ".join(timed_events) + "."
 
             coverage = coverage_plan[i] if coverage_plan and i < len(coverage_plan) else {}
-            coverage_hint = (
-                f" Planned role: {coverage.get('scene_type', 'narrative')}; "
-                f"recurring set: {coverage.get('recurring_set', 'main set')}; "
-                f"coverage: {coverage.get('coverage', 'medium shot')}; "
-                f"section direction: {coverage.get('section_rule', '')}."
-            )
+            coverage_hint = coverage_hint_for(coverage)
             if coverage.get("performer_present"):
                 coverage_hint += (
                     " Show the Scene Concept's named in-world characters in this "
@@ -1085,6 +1071,10 @@ class MusicVideoPlanner(BasePlanner):
         treatment = normalize_music_video_treatment(kwargs.get("music_video_treatment"))
         direct_video = treatment["generation_mode"] == "direct_video"
         image_prompt_rules = ""
+        image_rule_options = self._image_rule_options(
+            has_user_reference=has_reference,
+            has_any_reference=has_asset_references,
+        )
         if uses_generated_images:
             from ..image_prompt_rules import get_image_prompt_rules
             image_prompt_rules = get_image_prompt_rules(
@@ -1096,6 +1086,7 @@ class MusicVideoPlanner(BasePlanner):
                 seamless=kwargs.get("seamless", True),
                 image_model=kwargs.get("image_model", ""),
                 nsfw=nsfw,
+                **image_rule_options,
             )
 
         from ..guide_loader import load_guide
@@ -1106,10 +1097,8 @@ class MusicVideoPlanner(BasePlanner):
             load_guide("minimax_h3_shot_breakdown.md")
             if video_model_lower.startswith("minimax_h3")
             else "" if direct_video
-            else load_guide(
-                "ltx2_music_video_rules.md"
-                if is_ltx else "music_video_treatment_rules.md"
-            )
+            else load_guide("ltx2_music_video_rules.md") if is_ltx
+            else treatment_rules_for(load_guide("music_video_treatment_rules.md"), treatment)
         )
         character_style_contract = "" if direct_video else build_character_visual_style_contract(
             kwargs.get("character_visual_style", ""),
@@ -1149,7 +1138,8 @@ class MusicVideoPlanner(BasePlanner):
 Match its aesthetic (color grading, film texture, era, tone) in every image_prompt unless the
 scene concept explicitly calls for a style change. End each image_prompt with
 "Use lighting and color temp from reference image." to preserve the look."""
-            if uses_generated_images and has_reference else ""
+            if uses_generated_images and has_reference
+            and image_rule_options["lighting_from_reference"] else ""
         )
         image_output_fields = (
             '''    "image_source": "original or previous",
@@ -1197,6 +1187,7 @@ The immutable master prompt is the only visual-world authority. Create situation
 inside that world and the user's Scene Concept. Keep recurring subjects descriptively stable,
 but never mention a source image, reference frame or alternate visual style."""
 
+        chorus_recurrence_line = CHORUS_RECURRENCE_LINE[treatment.get("chorus_set", "first")]
         system_prompt = f"""You are a music video director. Plan each clip AND write its prompts. Output ONLY the JSON array.
 
 {f"You are given a REFERENCE PHOTO. Use it to identify appearance, clothing, and setting." if has_reference else ""}
@@ -1216,7 +1207,7 @@ but never mention a source image, reference frame or alternate visual style."""
 MUSIC VIDEO RULES:
 - Chorus = high energy, bold framing. Verse = intimate, character focus.
 - Instrumental = environment, textures. Bridge = contrasting, unexpected.
-- Use controlled recurrence. Revisit the same chorus set, wardrobe and visual motif.
+{chorus_recurrence_line}
 - Vary framing and camera coverage inside recurring sets; do not invent a new world for every lyric.
 - Unless the Scene Concept explicitly requests a single-location video, distribute the clips across at least three visually distinct settings. A setting or prop mentioned in the global brief is an available anchor, not a requirement for every clip.
 - Never repeat the same location-plus-action combination (for example, sitting at a computer in a cafe) across most clips. Keep visual style global, but vary situation, action, scale, time of day, and environment across verses and bridge.
@@ -1618,6 +1609,7 @@ Return exactly this one missing shot plan."""
                 audio_plan=audio,
                 ending_beat=raw.get("ending_beat", ""),
                 metadata={
+                    **prompt_cleanup_metadata(raw),
                     "section": section,
                     "beat_count": clip.get("beat_count", 0),
                     "bpm": clip.get("bpm", 120),

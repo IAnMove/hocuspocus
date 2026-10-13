@@ -42,6 +42,7 @@ def test_a_prompt_the_user_typed_keeps_the_text_it_asks_for():
 import ast
 import copy
 import inspect
+import json
 import re
 from pathlib import Path
 
@@ -308,3 +309,52 @@ def test_prompts_approved_in_the_review_screen_keep_their_lettering():
     assert "NO VISIBLE TEXT LOCK" not in sent[0]["video_prompt"] and "'OPEN'" in sent[0]["video_prompt"]
     assert plans[0]["_director_typed_prompts"] == ["video_prompt"]
     assert director_pipeline._approved_review_plans([]) is None
+
+
+# ── The Pass 2 cleanup filter (the #1019 gap, 2026-10-13) ─────────────────
+
+GOWN = (
+    "The woman now in a red evening gown stands on the pier. She is running toward "
+    "the ferry, lost in the moment. Soft dawn light."
+)
+
+
+def _story_shot(**fields) -> dict:
+    return {
+        "title": "Pier", "duration_sec": 20, "scene_goal": "Mara waits", "narrative_role": "setup",
+        "scene_type": "action", "subjects_on_screen": [], "environment": "A pier", "visual_style": "anime",
+        "lighting": "dawn", "mood": "calm", "action_beats": ["Mara waits"], "dialogue_beats": [],
+        "camera_plan": {"framing": "wide", "movement": "slow push in", "movement_intensity": "subtle"},
+        "audio_plan": {"mode": "ambient_only"}, "ending_beat": "The ferry arrives", "image_source": "original",
+        "image_prompt": GOWN, "visual_changes": [], "multishot": False, "window_prompts": [],
+        "video_prompt": "Mara turns toward the arriving ferry while gulls circle above the pier.",
+        "keyframe_prompts": [GOWN], **fields,
+    }
+
+
+def _story_plan(raw: bool):
+    responses = iter([
+        "INT. HARBOUR - DAWN\n\nMara waits on the pier.\n\nThe ferry arrives.",
+        json.dumps([_story_shot()]),
+    ])
+
+    def provider(**_kwargs):
+        return next(responses)
+
+    planner = ShortFilmPlanner(llm_generate=provider, llm_generate_streaming=provider)
+    planner.raw_prompts = raw
+    return planner.plan(
+        story_description="Mara leaves the island.", target_duration=40, target_scenes=2,
+        fps=24, frames_steps=8, frames_minimum=41,
+    )
+
+
+def test_raw_prompts_skip_the_pass2_cleanup_filter():
+    # Raw prompts promises "no motion-word removal": clothing words, motion
+    # sentences and fillers reach the model as the planner wrote them.
+    raw = _story_plan(raw=True).shots[0]
+    assert raw.image_prompt == GOWN and raw.keyframe_prompts == [GOWN]
+    assert "prompt_cleanup" not in raw.metadata
+    cleaned = _story_plan(raw=False).shots[0]
+    assert "evening gown" not in cleaned.image_prompt and "running" not in cleaned.image_prompt
+    assert cleaned.metadata["prompt_cleanup"] == {"garments": 2, "motion_sentences": 2, "fillers": 2}

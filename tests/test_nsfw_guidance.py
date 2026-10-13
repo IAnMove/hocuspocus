@@ -213,7 +213,9 @@ def test_image_guide_sexual_examples_only_in_mature_mode(image_model):
     guide = image_prompt_rules.load_guide(image_prompt_rules._route_image_pass2_guide(image_model))
     mature = image_prompt_rules.get_image_prompt_rules(True, image_model=image_model, nsfw=True)
     clean = image_prompt_rules.get_image_prompt_rules(True, image_model=image_model, nsfw=False)
-    assert mature.endswith(guide)  # mature mode keeps the guide word for word
+    # Mature mode keeps the guide word for word (its section markers removed;
+    # the reference-lighting rule follows it).
+    assert image_prompt_rules.prepare_guide(guide) in mature
     assert [word for word in SEXUAL_EXAMPLES if word in clean.lower()] == []
     if "qwen" in image_model or not image_model:
         assert "the letter still SEALED" in clean and "already undressed" in mature

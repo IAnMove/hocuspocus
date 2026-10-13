@@ -2,10 +2,13 @@
 from pathlib import Path
 import time
 
+from services import director_pipeline
 from services.director_pipeline import (
     _exclusive_pipeline_operation, _find_pipeline_file, _load_pipeline_state_locked,
     _pipeline_file_lock, _write_pipeline_json_unlocked, hydrate_queue_clips,
 )
+
+_ANCHOR_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 
 
 def _select_take(clip: dict, name: str, workspace: Path, state: dict) -> None:
@@ -85,3 +88,67 @@ def save_review(workspace: str, pid: str, commands: list) -> dict:
         _apply_review(state, commands, Path(workspace), pid)
         _write_pipeline_json_unlocked(path, state)
     return hydrate_queue_clips(state)
+
+
+def _run_images(state: dict) -> set:
+    """Image files this production made: start images, keyframes and outputs."""
+    names = {state.get("generated_reference_image_filename")}
+    names.update(state.get("output_files") or [])
+    for clip in state.get("clips") or []:
+        if isinstance(clip, dict):
+            names.add(clip.get("start_image_filename"))
+            names.update(clip.get("keyframe_filenames") or [])
+    return {
+        name for name in names
+        if isinstance(name, str) and name and Path(name).name == name
+        and Path(name).suffix.lower() in _ANCHOR_IMAGE_SUFFIXES
+    }
+
+
+def _apply_anchor(params: dict, filename) -> None:
+    """A picked image is the shared reference (``always``); none turns it ``off``."""
+    params["generated_reference_image_filename"] = filename or None
+    params["reference_anchor"] = "always" if filename else "off"
+    params.pop("generated_reference_image_prompt", None)
+
+
+@_exclusive_pipeline_operation
+def set_reference_anchor(workspace: str, pid: str, filename) -> dict:
+    """Replace the shared reference with an image of the run, or clear it.
+
+    Repairs and reruns draw from the new picture; after a clear they draw each
+    shot from its own prompt (the run's ``reference_anchor`` becomes ``off``).
+    The user's own reference image is not changed here.
+    """
+    if filename is not None and (not isinstance(filename, str) or not filename):
+        raise ValueError("Pick an image from this production, or none")
+    path = _find_pipeline_file(workspace, pid)
+    if not path or Path(path).resolve().parent != Path(workspace).resolve():
+        raise ValueError("Production not found in this workspace")
+    with _pipeline_file_lock:
+        state = _load_pipeline_state_locked(workspace, pid)
+        _check_anchor_change(state, pid, Path(workspace), filename)
+        _apply_anchor(state["_params_snapshot"], filename)
+        state["generated_reference_image_filename"] = filename or None
+        _write_pipeline_json_unlocked(path, state)
+    with director_pipeline._pipeline_lock:
+        live = director_pipeline._pipelines.get(pid)
+        if isinstance(live, dict) and isinstance(live.get("params"), dict):
+            _apply_anchor(live["params"], filename)
+            live["generated_reference_image_filename"] = filename or None
+    return hydrate_queue_clips(state)
+
+
+def _check_anchor_change(state, pid: str, workspace: Path, filename) -> None:
+    """Refuse a change this saved run cannot take; ValueError says why."""
+    if not state or str(state.get("pipeline_id") or "") != pid:
+        raise ValueError("Production not found in this workspace")
+    if str(state.get("reference_image_path") or "").strip():
+        raise ValueError("This production uses your own reference image")
+    if not isinstance(state.get("_params_snapshot"), dict):
+        raise ValueError("This production was saved before its shared reference could be changed")
+    if filename is None:
+        return
+    file = workspace / filename
+    if filename not in _run_images(state) or not file.is_file() or file.resolve().parent != workspace.resolve():
+        raise ValueError("Pick an image from this production")
