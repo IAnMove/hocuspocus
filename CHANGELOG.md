@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Music Video Director Generate now switches Studio to video mode.** If Studio was left on Edit (Retake) or Audio Mixer, clicking Generate after planning used to run a retake, do nothing, or throw "audio is not generative" instead of starting the music video. Apply to clips does the same switch so the Studio Generate button stays on the video path.
+
 **Loading a finished clip's settings, and the Studio form, left the main Studio store.** Opening an output still fills in the same mode, model, prompt, and edit settings. Switching mode, changing a setting, picking a model, and resetting Image Studio still work the same way. The screen still reads and writes them through the same `useStore` hook.
 
 **The full server's shared state now lives in a kernel package (no behaviour change).** The workspace helpers, the generation job registry with its GPU queue, abort states and durable queue, the atomic save of the server configuration, the path and upload rules and the canonical task accessor moved out of `app/_launch_runtime.py` into `app/services/kernel/`. The full server builds one runtime context right after it binds WanGP and keeps its old names as aliases to the same objects, so every route and worker still shares one job dictionary, one GPU lock and one durable queue. `tests/test_import_layers.py` now enforces the import rules: a service does not import a router, nothing but the two servers imports a server file, and the kernel imports only its allowed neighbours. The Director pipeline no longer imports the server file: it is handed the server's cached hardware probe, and when that probe failed it measures the hardware again itself, as it did before.
