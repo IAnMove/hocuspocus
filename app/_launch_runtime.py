@@ -1795,11 +1795,19 @@ def _default_production_profile() -> dict:
     return production_profile_defaults.default_profile(_DEFAULT_PRODUCTION_PROFILE, _check_model_downloaded)
 
 
+_warned_invalid_profiles: set[str] = set()
+
+
 def _active_production_profile() -> dict:
     raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
     try:
         return _normalize_production_profile(raw)
-    except ValueError:
+    except ValueError as error:
+        # The defaults stand in, but never silently: say so once per reason,
+        # and /production-profile reports it so the UI can show it.
+        if raw is not None and str(error) not in _warned_invalid_profiles:
+            _warned_invalid_profiles.add(str(error))
+            print(f"[Production profile] The saved profile is invalid ({error}); using the defaults until it is saved again.")
         return _default_production_profile()
 
 
@@ -1847,13 +1855,15 @@ def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "
 
 def _production_profile_response() -> dict:
     raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
+    invalid_reason = ""
     try:
         profile = _normalize_production_profile(raw)
         configured = True
-    except ValueError:
+    except ValueError as error:
         profile = _default_production_profile()
         configured = False
-    return {"configured": configured, "profile": profile}
+        invalid_reason = str(error) if raw is not None else ""
+    return {"configured": configured, "profile": profile, "invalid_reason": invalid_reason}
 
 
 def _profile_image_model_type(profile: dict | None = None) -> str:
@@ -7475,10 +7485,12 @@ def get_services_config():
         "use_director_v2": services.get("use_director_v2", True),
         "nsfw_mode": nsfw,
         "nsfw_accepted_at": services.get("nsfw_accepted_at", None),
-        # v1.6 defaults to model-aware third-pass polish. Native H3 video
-        # prompts bypass creative rewriting while applicable image/other-model
-        # prompts retain their dialect-specific enhancement.
-        "director_prompt_polish": services.get("director_prompt_polish", "third_pass"),
+        # Off by default: Director prompts reach the models as the planner
+        # wrote them. The model-aware third pass is opt-in; native H3 video
+        # prompts bypass its creative rewriting.
+        "director_prompt_polish": services.get("director_prompt_polish", "off"),
+        # Raw prompts: the Director adds no style prefix, locks or polish.
+        "raw_prompts": services.get("raw_prompts") is True,
         # Safe workflow overlap: every local GPU and remote server keeps
         # capacity one; only genuinely different resources run together.
         "workflow_parallelism_enabled": services.get("workflow_parallelism_enabled", True),
@@ -7553,7 +7565,7 @@ async def update_services_config(request: Request):
         "minimax_llm_api_key", "minimax_image_api_key", "minimax_music_api_key",
         "grok_api_key", "meshy_api_key", "hi3d_api_key",
         "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
-        "debug_trace_enabled", "workflow_parallelism_enabled",
+        "raw_prompts", "debug_trace_enabled", "workflow_parallelism_enabled",
         "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
         "show_experimental", "auto_performance", "storage_allow_linked_removal",
         "director_multishot_lora_mode",
@@ -9821,6 +9833,7 @@ async def director_plan_short_film_script(request: Request):
             preserve_visual_style=body.get("preserve_visual_style", False),
             character_visual_style=body.get("character_visual_style", ""),
             allow_clip_text=body.get("allow_clip_text") is True,
+            raw_prompts=wgp.server_config.get("services", {}).get("raw_prompts") is True,
         )
         return result
     except Exception as e:
@@ -10466,6 +10479,10 @@ async def _director_v2_plan_body(body: dict):
         from services.director.orchestrator import DirectorOrchestrator, DirectorFlags
 
         flags = DirectorFlags.from_dict(body.get("director_flags", {}))
+        # Raw prompts: the planner's prompts get no style lock, source-style
+        # anchor, compression, no-text lock or polish.
+        raw_prompts = wgp.server_config.get("services", {}).get("raw_prompts") is True
+        flags.raw_prompts = raw_prompts
         director = DirectorOrchestrator(
             llm_generate=llm_service.generate,
             llm_generate_streaming=llm_service.generate_streaming,
@@ -10535,9 +10552,10 @@ async def _director_v2_plan_body(body: dict):
             planner_kwargs["batch_checkpoint"] = _checkpoint_music_plan_batch
 
         # Prompt polish mode: off | full_guide | light_guide | third_pass.
-        # The default third pass is model-aware; native H3 prompts retain
-        # their deterministic compiler while applicable prompts are polished.
-        polish_mode = services.get("director_prompt_polish", "third_pass")
+        # Off by default: the planner's prompts reach the models as written.
+        # The third pass is model-aware; native H3 prompts retain their
+        # deterministic compiler while applicable prompts are polished.
+        polish_mode = "off" if raw_prompts else services.get("director_prompt_polish", "off")
         video_model = body.get("video_model", "")
         image_model = body.get("image_model", "")
 
@@ -10621,8 +10639,16 @@ async def _director_v2_plan_body(body: dict):
                 ),
             )
 
-        from services.director.policies import enforce_visual_style_on_clip_plans
-        clip_plans = enforce_visual_style_on_clip_plans(
+        from services.director.policies import (
+            enforce_visual_style_on_clip_plans,
+            no_visible_text_lock_applies,
+        )
+        # The no-visible-text lock is for sung projects (music videos) only.
+        clip_text_allowed = not no_visible_text_lock_applies({
+            "pipeline_type": skill_type,
+            "allow_clip_text": body.get("allow_clip_text"),
+        })
+        clip_plans = clip_plans if raw_prompts else enforce_visual_style_on_clip_plans(
             clip_plans,
             "" if direct_video else body.get("visual_style", ""),
             preserve=(
@@ -10633,9 +10659,7 @@ async def _director_v2_plan_body(body: dict):
             character_visual_style=(
                 "" if direct_video else body.get("character_visual_style", "")
             ),
-            allow_clip_text=(
-                True if direct_video else body.get("allow_clip_text") is True
-            ),
+            allow_clip_text=True if direct_video else clip_text_allowed,
         )
         if direct_video:
             from services.director.policies import enforce_direct_video_on_clip_plans
@@ -10643,7 +10667,7 @@ async def _director_v2_plan_body(body: dict):
                 clip_plans,
                 normalized_treatment.get("direct_video_master_prompt"),
                 audio_direction=body.get("h3_audio_prompt", ""),
-                allow_clip_text=body.get("allow_clip_text") is True,
+                allow_clip_text=raw_prompts or clip_text_allowed,
             )
         elif _is_minimax_h3_model(video_model):
             from services.director.minimax_h3_prompting import (
@@ -10658,13 +10682,13 @@ async def _director_v2_plan_body(body: dict):
                 audio_direction=body.get("h3_audio_prompt", ""),
                 h3_audio_policy=h3_audio_policy_from_payload(body),
             )
-            clip_plans = enforce_visual_style_on_clip_plans(
+            clip_plans = clip_plans if raw_prompts else enforce_visual_style_on_clip_plans(
                 clip_plans,
                 body.get("visual_style", ""),
                 preserve=bool(body.get("preserve_visual_style", False)),
                 has_reference=has_reference,
                 character_visual_style=body.get("character_visual_style", ""),
-                allow_clip_text=body.get("allow_clip_text") is True,
+                allow_clip_text=clip_text_allowed,
             )
         llm_service.update_activity_tracking(
             tracking_id,
@@ -24592,6 +24616,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 dpid = job["params"].get("_director_pipeline_id")
                 if dpid:
                     sidecar["director_pipeline_id"] = dpid
+                if isinstance(gen.get("model_prompts"), dict):
+                    # The prompt a model handler rewrote (an H3 window's
+                    # timing contract): what the model really received.
+                    sidecar["model_prompts"] = dict(gen["model_prompts"])
                 clip_index_by_filename = {
                     filename: index
                     for index, filename in clip_output_files.items()
@@ -34671,188 +34699,30 @@ def get_group_clips(group_id: str):
 # API Routes: lightweight video editor
 # ============================================================================
 
-_video_editor_jobs: dict[str, dict] = {}
-_video_editor_jobs_lock = threading.RLock()
-_VIDEO_EDITOR_TERMINAL = frozenset({"completed", "failed", "cancelled"})
-_VIDEO_EDITOR_FFMPEG_LANE = resource_scheduler.cpu_lane("ffmpeg")
-_VIDEO_EDITOR_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v"}
-_VIDEO_EDITOR_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
+# The editor router (routers/video_editor.py) owns the only job registry; the
+# comic animatic, alternative songs, Activity sync and canonical cancel below
+# share it through these names.
+from routers.video_editor import (
+    _VIDEO_EDITOR_FFMPEG_LANE,
+    _VIDEO_EDITOR_TERMINAL,
+    _finish_video_editor_cancelled,
+    _public_video_editor_job,
+    _register_video_editor_job,
+    _remove_video_editor_output_bundle,
+    _resolve_video_editor_audio_source,
+    _resolve_video_editor_source,
+    _start_video_editor_export as start_video_editor_export,
+    _video_editor_cancel_requested,
+    _video_editor_job_snapshot,
+    _video_editor_job_update,
+    _video_editor_task_identity,
+    cancel_video_editor_export,
+    create_video_editor_jobs_router,
+    create_video_editor_router,
+    get_video_editor_export,
+    list_video_editor_jobs,
+)
 _COMIC_ANIMATIC_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
-
-
-def _public_video_editor_job(job: dict) -> dict:
-    """Return a stable API snapshot without worker-only coordination flags."""
-    return {
-        key: copy.deepcopy(value)
-        for key, value in job.items()
-        if not key.startswith("_")
-    }
-
-
-def _publish_video_editor_job(snapshot: dict) -> dict | None:
-    """Publish every editor/animatic mutation immediately to task SSE."""
-    return _publish_generic_legacy_task(snapshot, "video-editor")
-
-
-def _video_editor_job_snapshot(job_id: str) -> dict | None:
-    with _video_editor_jobs_lock:
-        job = _video_editor_jobs.get(job_id)
-        return copy.deepcopy(job) if job is not None else None
-
-
-def _video_editor_job_update(job_id: str, **changes) -> dict:
-    """Atomically mutate a job while making cancellation terminally absorbing."""
-    should_publish = False
-    with _video_editor_jobs_lock:
-        job = _video_editor_jobs.get(job_id)
-        if job is None:
-            raise KeyError(job_id)
-        if str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
-            snapshot = copy.deepcopy(job)
-        else:
-            requested_status = str(changes.get("status") or "")
-            if job.get("_cancel_requested"):
-                if requested_status in {"completed", "failed"}:
-                    changes.update({
-                        "status": "cancelled",
-                        "phase": "cancelled",
-                        "message": "Cancelled at the FFmpeg safe boundary",
-                        "error": None,
-                        "result": None,
-                        "filename": None,
-                        "url": None,
-                        "output_files": [],
-                        "acquired_resources": [],
-                        "cancel_mode": job.get("cancel_mode") or "deferred",
-                        "safe_boundary": (
-                            job.get("safe_boundary")
-                            or "after_current_ffmpeg_render"
-                        ),
-                        "finished_at": time.time(),
-                    })
-                elif requested_status not in {"cancelled", "cancelling"}:
-                    owns_lane = bool(
-                        changes.get(
-                            "acquired_resources",
-                            job.get("acquired_resources") or [],
-                        )
-                    )
-                    changes.update({
-                        "status": "cancelling",
-                        "phase": "cancelling",
-                        "message": (
-                            "Cancellation deferred to a safe boundary; "
-                            "waiting for FFmpeg to finish…"
-                            if owns_lane else
-                            "FFmpeg safe boundary reached; cleaning up cancellation…"
-                        ),
-                        "cancel_mode": "deferred",
-                        "safe_boundary": "after_current_ffmpeg_render",
-                    })
-            job.update(changes)
-            job["updated_at"] = time.time()
-            snapshot = copy.deepcopy(job)
-            should_publish = True
-        # Keep mutation and publication ordered relative to cancel/progress
-        # calls from other threads. The registry write is local SQLite only.
-        if should_publish:
-            _publish_video_editor_job(snapshot)
-    return snapshot
-
-
-def _register_video_editor_job(job: dict) -> dict:
-    """Reserve legacy and canonical identities before starting any worker."""
-    job_id = str(job["job_id"])
-    with _video_editor_jobs_lock:
-        _video_editor_jobs[job_id] = job
-        snapshot = copy.deepcopy(job)
-        try:
-            _publish_video_editor_job(snapshot)
-        except Exception:
-            if _video_editor_jobs.get(job_id) is job:
-                _video_editor_jobs.pop(job_id, None)
-            raise
-    return snapshot
-
-
-def _video_editor_cancel_requested(job_id: str) -> bool:
-    with _video_editor_jobs_lock:
-        job = _video_editor_jobs.get(job_id)
-        return job is None or bool(job.get("_cancel_requested"))
-
-
-def _remove_video_editor_output_bundle(output_path: str) -> None:
-    """Remove an incomplete/cancelled MP4 and its metadata sidecar."""
-    for candidate in (
-        output_path,
-        os.path.splitext(output_path)[0] + ".meta.json",
-    ):
-        try:
-            if os.path.isfile(candidate):
-                os.remove(candidate)
-        except OSError:
-            pass
-
-
-def _finish_video_editor_cancelled(
-    job_id: str,
-    output_path: str,
-    *,
-    message: str = "Cancelled before FFmpeg started",
-    cancel_mode: str = "immediate",
-    safe_boundary: str = "before_ffmpeg",
-) -> dict:
-    """Finish cancellation only after the worker no longer owns its lane."""
-    _remove_video_editor_output_bundle(output_path)
-    changes = {
-        "status": "cancelled",
-        "phase": "cancelled",
-        "message": message,
-        "cancel_mode": cancel_mode,
-        "safe_boundary": safe_boundary,
-        "error": None,
-        "result": None,
-        "filename": None,
-        "url": None,
-        "output_files": [],
-        "acquired_resources": [],
-        "finished_at": time.time(),
-        "_worker_active": False,
-    }
-    if cancel_mode == "immediate":
-        changes["progress"] = 0
-        changes["current"] = 0
-    return _video_editor_job_update(job_id, **changes)
-
-
-def _resolve_video_editor_source(source: str, workspace: str | None = None) -> str:
-    """Resolve an editor reference without allowing access outside Maestro."""
-    from services.media_refs import parse_media_ref
-
-    if not isinstance(source, str) or not source.strip():
-        raise ValueError("Video source is missing")
-    path, workspace = parse_media_ref(source, workspace)
-    resolved = _resolve_model3d_input_path(path, workspace)
-    if not resolved or not os.path.isfile(resolved):
-        raise ValueError(f"Video source could not be found: {os.path.basename(path) or path}")
-    if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_EXTENSIONS:
-        raise ValueError(f"Unsupported video format: {os.path.splitext(resolved)[1] or 'unknown'}")
-    return resolved
-
-
-def _resolve_video_editor_audio_source(source: str, workspace: str | None = None) -> str:
-    """Resolve a soundtrack reference using the same workspace boundary."""
-    from services.media_refs import parse_media_ref
-
-    if not isinstance(source, str) or not source.strip():
-        raise ValueError("Audio source is missing")
-    path, workspace = parse_media_ref(source, workspace)
-    resolved = _resolve_model3d_input_path(path, workspace)
-    if not resolved or not os.path.isfile(resolved):
-        raise ValueError(f"Audio source could not be found: {os.path.basename(path) or path}")
-    if os.path.splitext(resolved)[1].lower() not in _VIDEO_EDITOR_AUDIO_EXTENSIONS:
-        raise ValueError(f"Unsupported audio format: {os.path.splitext(resolved)[1] or 'unknown'}")
-    return resolved
 
 
 def _resolve_comic_animatic_image(source: str, workspace: str | None = None) -> str:
@@ -34868,629 +34738,15 @@ def _resolve_comic_animatic_image(source: str, workspace: str | None = None) -> 
     return resolved
 
 
-@api.post("/api/v1/video-editor/probe")
-def probe_video_editor_source(body: dict):
-    """Read duration, dimensions, frame rate and audio presence for one clip."""
-    from services.video_editor import probe_media
-
-    try:
-        resolved = _resolve_video_editor_source(
-            body.get("source", ""),
-            body.get("workspace"),
-        )
-        return probe_media(resolved)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not inspect video: {exc}") from exc
-
-
-@api.post("/api/v1/video-editor/probe-audio")
-def probe_video_editor_audio_source(body: dict):
-    """Read duration for one workspace soundtrack without requiring video."""
-    from services.video_editor import probe_audio
-
-    try:
-        resolved = _resolve_video_editor_audio_source(
-            body.get("source", ""), body.get("workspace"),
-        )
-        return probe_audio(resolved)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not inspect audio: {exc}") from exc
-
-
-@api.get("/api/v1/video-editor/thumbnail")
-def serve_video_editor_thumbnail(source: str):
-    """Return a static preview for an uploaded or workspace editor source."""
-    from services.media_thumbnails import ensure_media_thumbnail
-
-    try:
-        resolved = _resolve_video_editor_source(source)
-        thumbnail = ensure_media_thumbnail(
-            resolved,
-            _MEDIA_THUMBNAIL_CACHE_DIR,
-            is_video=True,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not create thumbnail: {exc}") from exc
-    return FileResponse(
-        thumbnail,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
-    )
-
-
-def _write_video_editor_screenshot_sidecar(output_path, sidecar, workspace_id):
-    from services.asset_manifest import publish_generation_sidecar
-
-    publish_generation_sidecar(
-        output_path,
-        sidecar,
-        workspace_id=workspace_id,
-        tool="video-editor-screenshot",
-    )
-
-
-@api.post("/api/v1/video-editor/screenshot")
-def capture_video_editor_frame(body: dict):
-    """Save the current source-video frame as a reusable Maestro image output."""
-    from services.video_editor import extract_frame
-
-    try:
-        resolved = _resolve_video_editor_source(
-            body.get("source", ""),
-            body.get("workspace"),
-        )
-        requested_time = float(body.get("time") or 0)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    safe_name = re.sub(
-        r"[^A-Za-z0-9_-]+",
-        "_",
-        str(body.get("name") or "video_frame"),
-    ).strip("_")
-    safe_name = safe_name[:60] or "video_frame"
-    timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    # Save beside the source workspace, not whichever one is active now.
-    workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
-    out_dir = _workspace_dir(workspace)
-    os.makedirs(out_dir, exist_ok=True)
-    output_name = f"{timestamp}_{safe_name}_frame.png"
-    output_path = os.path.join(out_dir, output_name)
-    suffix = 2
-    while os.path.exists(output_path):
-        output_name = f"{timestamp}_{safe_name}_frame_{suffix}.png"
-        output_path = os.path.join(out_dir, output_name)
-        suffix += 1
-
-    try:
-        result = extract_frame(resolved, output_path, requested_time)
-        sidecar = {
-            "params": {
-                "video_editor_screenshot": {
-                    "version": 1,
-                    "source": str(body.get("source") or ""),
-                    "source_name": os.path.basename(resolved),
-                    "time": result["time"],
-                    "width": result["width"],
-                    "height": result["height"],
-                },
-                "source": "video_editor_screenshot",
-            },
-            "generation_mode": "image",
-            "created_at": time.time(),
-        }
-        _write_video_editor_screenshot_sidecar(
-            output_path, sidecar, workspace,
-        )
-        return {
-            "filename": output_name,
-            "url": f"/api/v1/file/{output_name}?workspace={quote(workspace, safe='')}",
-            "workspace": workspace,
-            **result,
-        }
-    except Exception as exc:
-        try:
-            if os.path.isfile(output_path):
-                os.remove(output_path)
-        except OSError:
-            pass
-        raise HTTPException(
-            status_code=500,
-            detail=f"Could not capture video frame: {exc}",
-        ) from exc
-
-
-def _video_editor_task_identity(body: dict, job_id: str) -> tuple[str, str, str | None]:
-    """Accept an optional caller hierarchy without allowing malformed task IDs."""
-    supplied_task_id = str(body.get("task_id") or "").strip()
-    supplied_root_id = str(body.get("root_task_id") or "").strip()
-    supplied_parent_id = str(body.get("parent_task_id") or "").strip()
-    for label, value in (
-        ("task_id", supplied_task_id),
-        ("root_task_id", supplied_root_id),
-        ("parent_task_id", supplied_parent_id),
-    ):
-        if value and not re.fullmatch(r"task-[A-Za-z0-9_-]{1,180}", value):
-            raise HTTPException(status_code=400, detail=f"Invalid {label}")
-    task_id = supplied_task_id or f"task-video-editor-{job_id}"
-    root_task_id = supplied_root_id or supplied_parent_id or task_id
-    return task_id, root_task_id, supplied_parent_id or None
-
-
-def _write_video_editor_export_sidecar(output_path, sidecar, workspace_id):
-    from services.asset_manifest import publish_generation_sidecar
-
-    publish_generation_sidecar(
-        output_path,
-        sidecar,
-        workspace_id=workspace_id,
-        tool="video-editor",
-    )
-
-
-def _run_video_editor_export(job_id: str, body: dict, out_dir: str, output_path: str) -> None:
-    from services.agent_activity import requested_by as export_requested_by
-    from services.montage_documents import montage_link
-    from services.video_editor import build_source_provenance_manifest, render_project
-
-    job = _video_editor_job_snapshot(job_id)
-    if job is None or str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
-        return
-    workspace = str(job["workspace"])
-    task_id = str(job["task_id"])
-
-    def report(progress: int, message: str) -> None:
-        bounded = max(0, min(int(progress), 100))
-        if _video_editor_cancel_requested(job_id):
-            _video_editor_job_update(
-                job_id,
-                status="cancelling",
-                phase="cancelling",
-                progress=bounded,
-                current=bounded,
-                message=(
-                    "Cancellation deferred to a safe boundary; "
-                    f"FFmpeg is finishing: {message}"
-                ),
-                cancel_mode="deferred",
-                safe_boundary="after_current_ffmpeg_render",
-            )
-            # render_project calls progress only between blocking FFmpeg
-            # subprocesses. Raising here stops before the next subprocess,
-            # after the current one has reached a safe boundary.
-            raise resource_scheduler.ResourceAcquireCancelled(
-                f"Video editor export {job_id} reached an FFmpeg safe boundary"
-            )
-        else:
-            _video_editor_job_update(
-                job_id,
-                status="running",
-                phase="rendering",
-                progress=bounded,
-                current=bounded,
-                message=message,
-            )
-
-    try:
-        _video_editor_job_update(
-            job_id,
-            status="queued",
-            phase="validating_sources",
-            progress=1,
-            current=1,
-            message="Validating source clips…",
-        )
-        resolved_clips = []
-        for clip in body["clips"]:
-            if _video_editor_cancel_requested(job_id):
-                _finish_video_editor_cancelled(job_id, output_path)
-                return
-            if not isinstance(clip, dict):
-                raise ValueError("Every timeline entry must be a clip object")
-            resolved = dict(clip)
-            resolved["resolved_path"] = _resolve_video_editor_source(
-                str(clip.get("source") or ""), workspace,
-            )
-            resolved_clips.append(resolved)
-
-        resolved_soundtrack = None
-        if body.get("soundtrack") is not None:
-            if not isinstance(body["soundtrack"], dict):
-                raise ValueError("The soundtrack must be an object")
-            resolved_soundtrack = dict(body["soundtrack"])
-            resolved_soundtrack["resolved_path"] = _resolve_video_editor_audio_source(
-                str(body["soundtrack"].get("source") or ""), workspace,
-            )
-        resolved_layers = None
-        if body.get("layers"):
-            from services.video_editor_layers import resolve_export_layers, workspace_media_resolver
-            resolved_layers = resolve_export_layers(
-                body["layers"], workspace, resolve_path=workspace_media_resolver(_resolve_model3d_input_path),
-            )
-
-        if _video_editor_cancel_requested(job_id):
-            _finish_video_editor_cancelled(job_id, output_path)
-            return
-        _video_editor_job_update(
-            job_id,
-            status="waiting_resource",
-            phase="waiting_resource",
-            message="Waiting for the local FFmpeg lane…",
-            acquired_resources=[],
-        )
-        try:
-            with resource_scheduler.coordinator.acquire(
-                _VIDEO_EDITOR_FFMPEG_LANE,
-                task_id=task_id,
-                description="Video editor export",
-                cancelled=lambda: _video_editor_cancel_requested(job_id),
-            ):
-                started = _video_editor_job_update(
-                    job_id,
-                    status="running",
-                    phase="rendering",
-                    message="Preparing video export with FFmpeg…",
-                    started_at=time.time(),
-                    acquired_resources=[_VIDEO_EDITOR_FFMPEG_LANE.key],
-                    _resource_acquired=True,
-                )
-                if (
-                    _video_editor_cancel_requested(job_id)
-                    or str(started.get("status") or "") in _VIDEO_EDITOR_TERMINAL
-                ):
-                    raise resource_scheduler.ResourceAcquireCancelled(
-                        f"Video editor export {job_id} was cancelled before FFmpeg started"
-                    )
-                result = render_project(
-                    resolved_clips,
-                    output_path,
-                    width=int(body["width"]),
-                    height=int(body["height"]),
-                    fps=int(body["fps"]),
-                    soundtrack=resolved_soundtrack,
-                    progress=report,
-                    layers=resolved_layers,
-                )
-        except resource_scheduler.ResourceAcquireCancelled:
-            current = _video_editor_job_snapshot(job_id) or {}
-            deferred = bool(current.get("started_at"))
-            _finish_video_editor_cancelled(
-                job_id,
-                output_path,
-                message=(
-                    "Cancelled after FFmpeg reached a safe boundary"
-                    if deferred else "Cancelled before FFmpeg started"
-                ),
-                cancel_mode="deferred" if deferred else "immediate",
-                safe_boundary=(
-                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
-                ),
-            )
-            return
-
-        if _video_editor_cancel_requested(job_id):
-            _finish_video_editor_cancelled(
-                job_id,
-                output_path,
-                message="Cancelled after FFmpeg reached a safe boundary",
-                cancel_mode="deferred",
-                safe_boundary="after_current_ffmpeg_render",
-            )
-            return
-        saving = _video_editor_job_update(
-            job_id,
-            status="running",
-            phase="saving",
-            message="Saving video metadata…",
-            acquired_resources=[],
-            _resource_acquired=False,
-        )
-        if (
-            _video_editor_cancel_requested(job_id)
-            or str(saving.get("status") or "") == "cancelling"
-        ):
-            _finish_video_editor_cancelled(
-                job_id,
-                output_path,
-                message="Cancelled after FFmpeg reached a safe boundary",
-                cancel_mode="deferred",
-                safe_boundary="after_current_ffmpeg_render",
-            )
-            return
-
-        output_name = os.path.basename(output_path)
-        sidecar = {
-            "params": {
-                "video_editor": {
-                    "version": 2,
-                    "width": int(body["width"]),
-                    "height": int(body["height"]),
-                    "fps": int(body["fps"]),
-                    "clips": [
-                        {
-                            key: value
-                            for key, value in clip.items()
-                            if key in {
-                                "name",
-                                "source",
-                                "trim_start",
-                                "trim_end",
-                                "volume",
-                                "muted",
-                                "fit",
-                                "focus_x",
-                                "focus_y",
-                                "blur_amount",
-                                "background_dim",
-                                "transition",
-                                "transition_duration",
-                                "transition_text",
-                                "transition_text_size",
-                            }
-                        }
-                        for clip in body["clips"]
-                    ],
-                    "source_manifest": build_source_provenance_manifest(resolved_clips),
-                    "layers": body.get("layers"),
-                    "soundtrack": {
-                        key: value
-                        for key, value in (body.get("soundtrack") or {}).items()
-                        if key in {"name", "source", "trim_start", "trim_end", "volume", "loop"}
-                    } or None,
-                    # The saved montage it was made from: the video's "Edit montage" opens it again.
-                    **({"montage": montage} if (montage := montage_link(body.get("montage"))) else {}),
-                },
-                "source": "video_editor",
-            },
-            "generation_mode": "video",
-            "job_id": job_id,
-            "task_id": task_id,
-            "root_task_id": str(job["root_task_id"]),
-            "workspace": workspace,
-            "created_at": time.time(),
-            **export_requested_by(body.get("requested_by")),
-        }
-        _write_video_editor_export_sidecar(output_path, sidecar, workspace)
-
-        completed = _video_editor_job_update(
-            job_id,
-            status="completed",
-            phase="completed",
-            progress=100,
-            current=100,
-            message="Video export complete",
-            filename=output_name,
-            url=f"/api/v1/file/{output_name}",
-            output_files=[output_name],
-            result=result,
-            error=None,
-            acquired_resources=[],
-            finished_at=time.time(),
-            _worker_active=False,
-        )
-        if str(completed.get("status") or "") == "cancelled":
-            _remove_video_editor_output_bundle(output_path)
-    except Exception as exc:
-        if _video_editor_cancel_requested(job_id):
-            current = _video_editor_job_snapshot(job_id) or {}
-            deferred = bool(current.get("started_at"))
-            _finish_video_editor_cancelled(
-                job_id,
-                output_path,
-                message=(
-                    "Cancelled after FFmpeg reached a safe boundary"
-                    if deferred else "Cancelled before FFmpeg started"
-                ),
-                cancel_mode="deferred" if deferred else "immediate",
-                safe_boundary=(
-                    "after_current_ffmpeg_render" if deferred else "before_ffmpeg"
-                ),
-            )
-            return
-        traceback.print_exception(type(exc), exc, exc.__traceback__)
-        _remove_video_editor_output_bundle(output_path)
-        _video_editor_job_update(
-            job_id,
-            status="failed",
-            phase="failed",
-            error=str(exc),
-            message=f"Export failed: {exc}",
-            output_files=[],
-            acquired_resources=[],
-            finished_at=time.time(),
-            _resource_acquired=False,
-            _worker_active=False,
-        )
-
-
-@api.post("/api/v1/video-editor/export", status_code=202)
-def start_video_editor_export(body: dict):
-    """Queue a non-blocking FFmpeg export for uploaded and/or Maestro clips."""
-    from services.video_editor import normalise_time_card_text
-
-    clips = body.get("clips")
-    if not isinstance(clips, list) or not clips:
-        raise HTTPException(status_code=400, detail="Add at least one video clip")
-    if len(clips) > 100:
-        raise HTTPException(status_code=400, detail="A project can contain at most 100 clips")
-
-    try:
-        width = int(body.get("width") or 1280)
-        height = int(body.get("height") or 720)
-        fps = int(body.get("fps") or 30)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="Invalid export settings") from exc
-    if width < 240 or height < 240 or width > 3840 or height > 3840 or width % 2 or height % 2:
-        raise HTTPException(status_code=400, detail="Invalid output resolution")
-    if fps not in (24, 25, 30, 50, 60):
-        raise HTTPException(status_code=400, detail="Unsupported frame rate")
-
-    supported_transitions = {
-        "none",
-        "crossfade",
-        "fade-black",
-        "wipe-left",
-        "slide-left",
-        "slide-right",
-        "circle-open",
-        "dissolve",
-        "pixelize",
-        "blur",
-        "zoom-in",
-        "later-clock",
-        "later-tropical",
-        "later-cinematic",
-    }
-    from services.video_layout import stamp_layout
-    clean_clips = []
-    for index, clip in enumerate(clips):
-        if not isinstance(clip, dict):
-            raise HTTPException(status_code=400, detail=f"Clip {index + 1} is invalid")
-        transition = str(clip.get("transition") or "none")
-        if transition not in supported_transitions:
-            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has an unsupported transition")
-        try:
-            transition_duration = float(clip.get("transition_duration") or 0.4)
-            transition_text_size = float(clip.get("transition_text_size") or 100)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail=f"Clip {index + 1} has invalid transition settings") from exc
-        if transition_duration < 0.05 or transition_duration > 5:
-            raise HTTPException(status_code=400, detail="Transition duration must be between 0.05 and 5 seconds")
-        if transition_text_size < 50 or transition_text_size > 160:
-            raise HTTPException(status_code=400, detail="Transition text size must be between 50% and 160%")
-        transition_text = normalise_time_card_text(clip.get("transition_text"))
-        clean_clip = dict(clip)
-        clean_clip.update({
-            "transition": transition,
-            "transition_duration": transition_duration,
-            "transition_text": transition_text,
-            "transition_text_size": transition_text_size,
-        })
-        stamp_layout(clean_clip)
-        clean_clips.append(clean_clip)
-
-    soundtrack = body.get("soundtrack")
-    clean_soundtrack = None
-    if soundtrack is not None:
-        if not isinstance(soundtrack, dict):
-            raise HTTPException(status_code=400, detail="The soundtrack must be an object")
-        try:
-            trim_start = max(0.0, float(soundtrack.get("trim_start") or 0))
-            trim_end = max(0.0, float(soundtrack.get("trim_end") or 0))
-            volume = float(soundtrack.get("volume") if soundtrack.get("volume") is not None else 1)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Invalid soundtrack settings") from exc
-        if trim_end and trim_end <= trim_start:
-            raise HTTPException(status_code=400, detail="Soundtrack trim_end must be after trim_start")
-        if volume < 0 or volume > 2:
-            raise HTTPException(status_code=400, detail="Soundtrack volume must be between 0 and 2")
-        clean_soundtrack = {
-            "name": str(soundtrack.get("name") or "soundtrack")[:300],
-            "source": str(soundtrack.get("source") or ""),
-            "trim_start": trim_start,
-            "trim_end": trim_end,
-            "volume": volume,
-            "loop": bool(soundtrack.get("loop")),
-        }
-        if not clean_soundtrack["source"].strip():
-            raise HTTPException(status_code=400, detail="Soundtrack source is missing")
-
-    workspace = body.get("workspace") if body.get("workspace") is not None else _get_active_workspace()
-    out_dir = _workspace_dir(workspace)
-    safe_project_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(body.get("name") or "edited_video")).strip("_")
-    safe_project_name = safe_project_name[:60] or "edited_video"
-    timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
-    os.makedirs(out_dir, exist_ok=True)
-    output_name = f"{timestamp}_{safe_project_name}.mp4"
-    output_path = os.path.join(out_dir, output_name)
-    suffix = 2
-    while os.path.exists(output_path):
-        output_name = f"{timestamp}_{safe_project_name}_{suffix}.mp4"
-        output_path = os.path.join(out_dir, output_name)
-        suffix += 1
-
-    from services.video_editor_layers import LayerValidationError, clean_export_layers
-    try:
-        # Timed overlays/audio cues (montages) are validated before queueing.
-        clean_layers = clean_export_layers(body)
-    except LayerValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    clean_body = dict(body)
-    from services.agent_activity import agent_attribution
-    clean_body.update({
-        "width": width,
-        "height": height,
-        "fps": fps,
-        "clips": clean_clips,
-        "soundtrack": clean_soundtrack,
-        "layers": clean_layers,
-        # Only an MCP agent's montages.export is attributed; a body cannot claim it.
-        "requested_by": agent_attribution("montages.export"),
-    })
-    job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
-    task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
-    now = time.time()
-    job = {
-        "job_id": job_id,
-        "task_id": task_id,
-        "root_task_id": root_task_id,
-        "parent_task_id": parent_task_id,
-        "workspace": workspace,
-        "status": "queued",
-        "phase": "queued",
-        "progress": 0,
-        "current": 0,
-        "total": 100,
-        "message": "Waiting to export…",
-        "filename": None,
-        "url": None,
-        "output_files": [],
-        "result": None,
-        "error": None,
-        "provider": "local",
-        "model": "FFmpeg",
-        "server_origin": "local",
-        "resource_lane": _VIDEO_EDITOR_FFMPEG_LANE.key,
-        "resource_requirements": [_VIDEO_EDITOR_FFMPEG_LANE.key],
-        "acquired_resources": [],
-        "created_at": now,
-        "queued_at": now,
-        "updated_at": now,
-        "_cancel_requested": False,
-        "_resource_acquired": False,
-        "_worker_active": True,
-    }
-    try:
-        snapshot = _register_video_editor_job(job)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not queue video export: {exc}") from exc
-    worker = threading.Thread(
-        target=_run_video_editor_export,
-        args=(job_id, clean_body, out_dir, output_path),
-        daemon=True,
-        name=f"maestro-{job_id}",
-    )
-    try:
-        worker.start()
-    except Exception as exc:
-        _video_editor_job_update(
-            job_id,
-            status="failed",
-            phase="failed",
-            error=str(exc),
-            message=f"Could not start video export worker: {exc}",
-            acquired_resources=[],
-            finished_at=time.time(),
-            _worker_active=False,
-        )
-        raise HTTPException(status_code=500, detail=f"Could not start video export: {exc}") from exc
-    return _public_video_editor_job(snapshot)
+# Probe, thumbnail, screenshot and export: the routes keep their place in the table.
+api.include_router(create_video_editor_router(
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    resolve_input_path=_resolve_model3d_input_path,
+    # Defined further down: looked up on each publish, as the inline routes did.
+    publish_legacy_task=lambda snapshot, adapter: _publish_generic_legacy_task(snapshot, adapter),
+    thumbnail_cache_dir=_MEDIA_THUMBNAIL_CACHE_DIR,
+))
 
 
 def _write_comic_animatic_sidecar(output_path, sidecar, workspace_id):
@@ -35742,65 +34998,8 @@ api.include_router(create_comics_animatic_router(
 ))
 
 
-@api.get("/api/v1/video-editor/export/{job_id}")
-def get_video_editor_export(job_id: str):
-    job = _video_editor_job_snapshot(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Video editor export job not found")
-    return _public_video_editor_job(job)
-
-
-@api.post("/api/v1/video-editor/export/{job_id}/cancel")
-def cancel_video_editor_export(job_id: str):
-    """Cancel before FFmpeg, or defer cancellation to its safe boundary."""
-    now = time.time()
-    with _video_editor_jobs_lock:
-        job = _video_editor_jobs.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="Video editor export job not found")
-        if str(job.get("status") or "") in _VIDEO_EDITOR_TERMINAL:
-            snapshot = copy.deepcopy(job)
-            should_publish = False
-        else:
-            job["_cancel_requested"] = True
-            job["cancel_requested_at"] = now
-            if str(job.get("status") or "") in {"queued", "waiting_resource"}:
-                job.update({
-                    "status": "cancelled",
-                    "phase": "cancelled",
-                    "message": "Cancelled before FFmpeg started",
-                    "cancel_mode": "immediate",
-                    "safe_boundary": "before_ffmpeg",
-                    "error": None,
-                    "result": None,
-                    "filename": None,
-                    "url": None,
-                    "output_files": [],
-                    "acquired_resources": [],
-                    "progress": 0,
-                    "current": 0,
-                    "finished_at": now,
-                })
-            else:
-                owns_lane = bool(job.get("acquired_resources"))
-                job.update({
-                    "status": "cancelling",
-                    "phase": "cancelling",
-                    "message": (
-                        "Cancellation deferred to a safe boundary; "
-                        "waiting for FFmpeg to finish…"
-                        if owns_lane else
-                        "FFmpeg safe boundary reached; cleaning up cancellation…"
-                    ),
-                    "cancel_mode": "deferred",
-                    "safe_boundary": "after_current_ffmpeg_render",
-                })
-            job["updated_at"] = now
-            snapshot = copy.deepcopy(job)
-            should_publish = True
-        if should_publish:
-            _publish_video_editor_job(snapshot)
-    return _public_video_editor_job(snapshot)
+# Export status and cancel follow the comic animatic, as before.
+api.include_router(create_video_editor_jobs_router())
 
 
 @api.post("/api/v1/outputs/{name:path}/move")
@@ -36708,8 +35907,7 @@ def _sync_canonical_tasks(workspace: str) -> None:
     for job in comic_jobs:
         if str(job.get("workspace") or "default") == workspace:
             _publish_generic_legacy_task(job, "comic-plan")
-    with _video_editor_jobs_lock:
-        video_editor_jobs = [copy.deepcopy(job) for job in _video_editor_jobs.values()]
+    video_editor_jobs = list_video_editor_jobs()
     for job in video_editor_jobs:
         if str(job.get("workspace") or "default") == workspace:
             _publish_generic_legacy_task(job, "video-editor")

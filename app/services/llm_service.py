@@ -6343,8 +6343,12 @@ def plan_short_film_from_story(
     preserve_visual_style: bool = False,
     character_visual_style: str = "",
     allow_clip_text: bool = False,
+    raw_prompts: bool = False,
 ) -> dict:
     """Plan a short film scene structure from a story description.
+
+    ``raw_prompts`` (Settings › Services › Raw prompts) returns the prompts as
+    the LLM wrote them, with no style, character-style or no-text lock.
 
     Unlike ``plan_dialogue_scenes`` which analyses uploaded audio, this uses
     the LLM to create scenes from scratch — deciding how many scenes there
@@ -6384,6 +6388,7 @@ def plan_short_film_from_story(
         build_visible_text_contract,
         build_visual_style_contract,
         enforce_visual_style_on_clip_plans,
+        no_visible_text_lock_applies,
     )
     style_contract = build_visual_style_contract(
         visual_style,
@@ -6825,12 +6830,18 @@ def plan_short_film_from_story(
 
         current_time += scene_dur
 
+    if raw_prompts:
+        return {"clips": clips, "clip_plans": clip_plans}
+    # The planner above follows the story's Allow-text switch. The final
+    # no-visible-text lock is for sung projects only, and a story is not sung.
     clip_plans = enforce_visual_style_on_clip_plans(
         clip_plans,
         visual_style,
         preserve=preserve_visual_style,
         has_reference=has_image,
         character_visual_style=character_visual_style,
-        allow_clip_text=allow_clip_text,
+        allow_clip_text=not no_visible_text_lock_applies(
+            {"pipeline_type": "short_film_story", "allow_clip_text": allow_clip_text},
+        ),
     )
     return {"clips": clips, "clip_plans": clip_plans}

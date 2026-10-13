@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from .schema import ShotPlan, ProductionPlan, CharacterProfile
 
@@ -596,12 +596,36 @@ def apply_character_visual_style_lock(
         f"CHARACTER STYLE LOCK: {style}. Every visible person or character must keep this "
         "exact rendering medium, material, proportions and surface treatment throughout."
     )
-    combined = f"{lock} {text}".strip()
-    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
-        remaining = max(0, 1449 - len(lock))
-        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
-        combined = f"{lock} {shortened}".strip()
-    return combined
+    return f"{lock} {text}".strip()
+
+
+#: Director workflows whose shots are cut to a song with lyrics. ``music_video``
+#: is also the Director's workflow when a project saved none.
+LYRICS_PIPELINE_TYPES = frozenset({"music_video"})
+
+
+def project_has_lyrics(params: Mapping[str, Any] | None) -> bool:
+    """Whether a Director project is sung: its shots are cut to a song with lyrics.
+
+    The pipeline type is the signal. Every project saves it, and it is the same
+    on the first run, on resume and on every rerun. Director music videos and
+    Story Lab song-led music videos are ``music_video``. Stories, comic movies
+    and audio short films are not sung: the audio of a short film is dialogue,
+    so its ``lyrics`` field is a transcript, not a song.
+    """
+    values = params if isinstance(params, Mapping) else {}
+    return str(values.get("pipeline_type") or "music_video") in LYRICS_PIPELINE_TYPES
+
+
+def no_visible_text_lock_applies(params: Mapping[str, Any] | None) -> bool:
+    """Whether the Director adds the no-visible-text lock to the prompts its LLM wrote.
+
+    The lock exists because planners put the song's lyrics on screen, so only
+    sung projects get it, and only while the project does not allow on-screen
+    text (``allow_clip_text``). A prompt the user types never gets it.
+    """
+    values = params if isinstance(params, Mapping) else {}
+    return values.get("allow_clip_text") is not True and project_has_lyrics(values)
 
 
 def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
@@ -615,12 +639,7 @@ def apply_no_visible_text_lock(prompt: str, *, mode: str) -> str:
         "subtitles, title cards, labels, signs, UI, logos or watermarks. Lyrics and dialogue "
         "remain audio/performance only; any screens or code are abstract and unreadable."
     )
-    combined = f"{lock} {text}".strip()
-    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
-        remaining = max(0, 1449 - len(lock))
-        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
-        combined = f"{lock} {shortened}".strip()
-    return combined
+    return f"{lock} {text}".strip()
 
 
 def apply_visual_style_lock(
@@ -656,15 +675,69 @@ def apply_visual_style_lock(
         )
     if mode in {"video", "i2v", "a2v", "t2v", "extend", "retake"}:
         medium += " Animate the artwork without changing its visual medium."
-    combined = f"{medium} {text}".strip()
-    # MiniMax Image currently rejects prompts at 1500 characters.  Story
-    # prompts can be verbose, so reserve a small transport margin while
-    # keeping the style lock at the front (the most important instruction).
-    if mode in {"image", "image_gen", "keyframe"} and len(combined) > 1450:
-        remaining = max(0, 1449 - len(medium))
-        shortened = text[:remaining].rsplit(" ", 1)[0].rstrip(" .;,")
-        combined = f"{medium} {shortened}".strip()
-    return combined
+    # No length cut here: the lock is for every image model, and only MiniMax
+    # Image-01 has a 1,500-character limit, which its own prepare_prompt keeps
+    # (the start, where the locks sit, and the end).
+    return f"{medium} {text}".strip()
+
+
+#: Plan key listing the prompt fields the user typed at the Director's review
+#: pause. Those prompts are the user's words: the no-text lock is not added.
+TYPED_PROMPTS_KEY = "_director_typed_prompts"
+TYPED_PROMPT_FIELDS = (
+    "image_prompt",
+    "video_prompt",
+    "window_prompts",
+    "keyframe_prompts",
+    "h3_segment_prompts",
+)
+
+
+def typed_prompt_fields(plan: object) -> frozenset[str]:
+    """The prompt fields of a clip plan the user typed at the review pause."""
+    values = plan.get(TYPED_PROMPTS_KEY) if isinstance(plan, dict) else None
+    return frozenset(str(value) for value in values or () if value in TYPED_PROMPT_FIELDS)
+
+
+def _prompt_field_value(value: object) -> object:
+    if not value:
+        return ""
+    if isinstance(value, list):
+        return [
+            " ".join(str(
+                item.get("prompt", item.get("text", "")) if isinstance(item, dict) else item
+            ).split())
+            for item in value
+        ]
+    return " ".join(str(value or "").split())
+
+
+def mark_typed_prompt_edits(planned: object, edited: object) -> object:
+    """Mark the prompts the user changed at the review pause as typed.
+
+    The review sends the whole plan list back. A prompt that differs from the
+    one shown at the pause is the user's; earlier marks are kept.
+    """
+    if not isinstance(edited, list):
+        return edited
+    before = planned if isinstance(planned, list) else []
+    result = []
+    for index, plan in enumerate(edited):
+        if not isinstance(plan, dict):
+            result.append(plan)
+            continue
+        shown = before[index] if index < len(before) and isinstance(before[index], dict) else {}
+        typed = set(typed_prompt_fields(shown)) | set(typed_prompt_fields(plan))
+        typed.update(
+            field for field in TYPED_PROMPT_FIELDS
+            if field in plan
+            and _prompt_field_value(plan[field]) != _prompt_field_value(shown.get(field))
+        )
+        plan = dict(plan)
+        if typed:
+            plan[TYPED_PROMPTS_KEY] = sorted(typed)
+        result.append(plan)
+    return result
 
 
 def enforce_visual_style_on_clip_plans(
@@ -676,13 +749,19 @@ def enforce_visual_style_on_clip_plans(
     character_visual_style: str = "",
     allow_clip_text: bool = True,
 ) -> list[dict]:
-    """Apply final style, character-medium and visible-text locks."""
+    """Apply final style, character-medium and visible-text locks.
+
+    ``allow_clip_text=False`` adds the no-visible-text lock. Director callers
+    pass ``not no_visible_text_lock_applies(params)``: only sung projects get it.
+    A prompt the user typed at the review pause (``TYPED_PROMPTS_KEY``) keeps
+    the style locks but never gets the no-visible-text lock.
+    """
     has_global_style = preserve and bool(compact_visual_style(visual_style))
     has_character_style = preserve and bool(compact_visual_style(character_visual_style))
     if not has_global_style and not has_character_style and allow_clip_text:
         return clip_plans
 
-    def enforce(value: object, mode: str) -> str:
+    def enforce(value: object, mode: str, typed: bool = False) -> str:
         prompt = str(value or "").strip()
         if not prompt:
             return prompt
@@ -701,7 +780,7 @@ def enforce_visual_style_on_clip_plans(
                 mode=mode,
                 preserve=True,
             )
-        if not allow_clip_text:
+        if not allow_clip_text and not typed:
             prompt = apply_no_visible_text_lock(prompt, mode=mode)
         return prompt
 
@@ -713,13 +792,14 @@ def enforce_visual_style_on_clip_plans(
             isinstance(metadata, dict)
             and metadata.get("motion_only_prompt")
         )
+        typed = typed_prompt_fields(plan)
         if str(plan.get("image_prompt") or "").strip():
-            plan["image_prompt"] = enforce(plan["image_prompt"], "image")
+            plan["image_prompt"] = enforce(plan["image_prompt"], "image", "image_prompt" in typed)
         if (
             not motion_only_prompt
             and str(plan.get("video_prompt") or "").strip()
         ):
-            plan["video_prompt"] = enforce(plan["video_prompt"], "video")
+            plan["video_prompt"] = enforce(plan["video_prompt"], "video", "video_prompt" in typed)
         for field, mode in (
             ("window_prompts", "video"),
             ("keyframe_prompts", "image"),
@@ -735,6 +815,7 @@ def enforce_visual_style_on_clip_plans(
                     value.get("prompt", value.get("text", ""))
                     if isinstance(value, dict) else value,
                     mode,
+                    field in typed,
                 )
                 for value in values
             ]
@@ -955,12 +1036,14 @@ def enforce_direct_video_on_clip_plans(
     for plan in clip_plans or []:
         if not isinstance(plan, dict):
             continue
+        # A prompt the user typed at the review pause never gets the no-text lock.
+        typed = typed_prompt_fields(plan)
         plan["video_prompt"] = compose_direct_video_prompt(
             master,
             plan.get("video_prompt"),
             plan=plan,
             audio_direction=audio_direction,
-            allow_clip_text=allow_clip_text,
+            allow_clip_text=allow_clip_text or "video_prompt" in typed,
         )
         # Direct T2VA has no later visual-conditioning conversion. Make the
         # composed prompt the immutable H3 source so official preflight keeps
@@ -976,7 +1059,7 @@ def enforce_direct_video_on_clip_plans(
                     if isinstance(value, dict) else value,
                     plan=plan,
                     audio_direction=audio_direction,
-                    allow_clip_text=allow_clip_text,
+                    allow_clip_text=allow_clip_text or "window_prompts" in typed,
                 )
                 for value in windows
                 if str(

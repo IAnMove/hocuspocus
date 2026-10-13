@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.production_seeds import default_seed
+
 FACADE_SIZE = "768x1024"
 GROUND_SIZE = "1024x1024"
 SKY_SIZE = "1664x928"
@@ -73,7 +75,7 @@ def ground_style(entry: dict) -> str | None:
 
 def picture_jobs(production: Any, name: str, entry: dict, look: str, choice: tuple) -> dict[str, str | None]:
     """Image jobs for the set's facades, ground and sky, keyed ``set:<name>:<part>``."""
-    seed = entry.get("seed", 11)
+    seed = entry.get("seed", default_seed(production, 11))
     attempt = production._attempt("set_attempts", name)
     place = entry["prompt"].rstrip(". ")
     parts = {f"house-{index + 1}": (f"The front wall of {house.rstrip('. ')}, in {place}. {look} {FACADE_STAGING}", FACADE_SIZE)

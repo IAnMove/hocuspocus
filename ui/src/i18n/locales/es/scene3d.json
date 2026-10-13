@@ -229,6 +229,7 @@
     "octree": "Resolución de octree",
     "chunks": "Fragmentos de proceso",
     "seed": "Semilla",
+    "seedRandom": "-1 elige una semilla nueva cada vez",
     "surface": "Algoritmo de superficie",
     "dmc": "DMC",
     "marchingCubes": "Marching Cubes",

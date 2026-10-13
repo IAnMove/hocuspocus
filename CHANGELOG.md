@@ -6,6 +6,54 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Honest defaults.** Regenerate makes something new: a Director image, clip or
+H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
+that made the result (comic films keep the seed their approved PRE pinned). Every
+new `production.*` run draws its own seed base, kept in its record, so two
+productions no longer start from the same noise and a resume asks for the same
+jobs; Hunyuan3D and the external 3D engines draw a seed when none is set (-1),
+and a game asset's Regenerate gets its own. Auto-planned music videos give each
+sung shot its own framing and seed, and a style with no named look keeps the
+brief's own words instead of falling back to anime. Published pages no longer
+carry another production's tagline or Nintendo disclaimer.
+
+**Prompts reach the model as written.** Director prompt polish is off by
+default (opt-in in Settings › Services); the 1,450-character cut is gone (only
+MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
+user types for a rerun, changes at the review pause or approves in the
+direct-video review screen keeps the lettering it asks for. *Raw prompts* in
+Settings › Services sends every Director prompt exactly as planned: no
+art-style prefix, locks, motion-word removal or polish, in planning (the plan
+endpoint, the orchestrator and the legacy planner), after the review pause, in
+the H3 validation pass and on every rerun; the planner's own words are not
+compressed either. Continuity anchors of bounded shots, the spoken-language
+line and H3's own contracts still apply. When a model handler rewrites a
+prompt (H3 window timing, outpainting), Extra info shows *What the model
+received* for each window. Until a production profile is saved, a dismissible
+notice says which providers text and pictures use; a saved profile that cannot
+be read is reported instead of silently replaced.
+
+**Narrower Director layers.** The no-visible-text lock now goes only on music
+videos, where planners used to put the song's lyrics on screen, and only on the
+prompts the LLM wrote. Stories, audio short films and comic movies send their
+prompts without it. A direct-video H3 segment the user types keeps its
+lettering too, and so does a regenerated H3 segment of a shot the user typed at
+the review pause. The project's *allow text* switch still turns the lock off. The
+"Maintain the same … art style." prefix, and the vision call that names the
+reference's style for it, are used only with Flux.2 Klein models, the only ones
+it was tested with, and the call is skipped with *Raw prompts*. Other image
+models get the prompt as planned.
+
+The Video Editor routes now come from one place. The main server mounts the
+extracted Video Editor router and the second copy inside the launch runtime is
+gone, with the same paths, answers and job list as before. Saved montages and
+the agent that asked still reach the export's metadata. A new CI test fails when
+a router is not mounted and not listed with a reason, when a server defines the
+same method and path twice, or when a route of the core server or the route table
+is missing from the main server. A new UI check (`npm run unreachable:check`, in
+CI) fails when a file in `ui/src` cannot be reached from an entry point and is not
+listed with a reason; 11 files that nothing used are deleted.
+
 **A hard rule about minors is now in every LLM system prompt, with NSFW mode on or
 off.** It forbids sexual or sexualized content with minors or with characters who
 look like or are described as minors, whatever the fiction, claimed age or art

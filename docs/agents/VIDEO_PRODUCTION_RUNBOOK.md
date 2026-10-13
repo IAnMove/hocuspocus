@@ -134,7 +134,9 @@ Agents use the same actions as commands:
 
 ## Quality: what the run spends
 
-`quality` in the spec is `draft`, `standard` or `max` (a brief may say `calidad`). It fills only what the spec left out (song seeds: 1 / 3 / 4, `max_takes`: 1 / 2 / 3) and sets the bar `dry_run` measures the plan against: the share of the runtime that may be a still image (60 % / 35 % / 15 %) and the clips a minute (2 / 5 / 7); missing the bar is a `too_static` or `few_clips` warning before any GPU work. No `quality` keeps the spec as written and the `standard` bar. What made the long videos thin was the plan, not a bug: 160 s with 9 clips and `max_takes` 1 is 45 % still pictures and no quality gate. Give a long song more shots, not a slower zoom.
+`quality` in the spec is `draft`, `standard` or `max` (a brief may say `calidad`). It fills only what the spec left out (song candidates: 1 / 3 / 4, `max_takes`: 1 / 2 / 3) and sets the bar `dry_run` measures the plan against: the share of the runtime that may be a still image (60 % / 35 % / 15 %) and the clips a minute (2 / 5 / 7); missing the bar is a `too_static` or `few_clips` warning before any GPU work. No `quality` keeps the spec as written and the `standard` bar. What made the long videos thin was the plan, not a bug: 160 s with 9 clips and `max_takes` 1 is 45 % still pictures and no quality gate. Give a long song more shots, not a slower zoom.
+
+Seeds: leave them out. Each production draws its own random `seed_base` the first time it runs and keeps it in `<production_id>.production.json`; every stage without a `seed` (song candidates, cast, portraits, start frames, sets, model pictures, clips) uses that base plus a fixed offset, so a resume asks for the same jobs and two productions never start from the same noise. A `seed` written in the spec is used exactly as written, for a deliberate repeat. Productions that ran before the base existed keep base 0.
 
 While it runs:
 
@@ -253,7 +255,7 @@ The four code questions:
   "song": {
     "lyrics": "[Verse]\nI had a story stuck inside my head\n...\n[Chorus]\nHocus pocus, make it move\n...",
     "caption": "Upbeat cinematic synth-pop, 112 BPM, bright female pop vocal, big catchy chorus",
-    "duration": 62, "bpm": 112, "key": "A minor", "seeds": [11, 22, 33]
+    "duration": 62, "bpm": 112, "key": "A minor"
   },
   "style": {
     "image": "Cinematic anime key frame, rich painterly lighting, clean lineart, 16:9.",
@@ -261,7 +263,7 @@ The four code questions:
     "lyric_template": "social-caption",
     "finish": {"finish": {"grade": {"contrast": 0.12, "saturation": 0.1, "temperature": 0.2}, "vignette": {"amount": 0.3, "softness": 0.6}}}
   },
-  "cast": [{"id": "sorceress", "seed": 5, "sheet_prompt": "Character design turnaround sheet ... full body front, three-quarter and back views, two head close-ups"}],
+  "cast": [{"id": "sorceress", "sheet_prompt": "Character design turnaround sheet ... full body front, three-quarter and back views, two head close-ups"}],
   "stills": {"story": "/api/v1/uploads/<screenshot>.png", "keyart": "/api/v1/uploads/<keyart>.png"},
   "max_takes": 3,
   "shots": [
@@ -832,7 +834,7 @@ published files are served; directory listing and symlink escapes are blocked.
 
 ```json
 {"version":1,"input":{"workspace":"movie","production_id":"music-video",
-  "slug":"my-homage","extras":["hero.glb","spec.json"]}}
+  "slug":"my-video","extras":["hero.glb","spec.json"]}}
 ```
 
 Call the MCP tool `production.publish` with that body. Its result contains
@@ -1168,7 +1170,7 @@ those actual results, then pass the whole spec to `production.run` in its normal
 {
   "title": "The office meeting",
   "quality": "draft",
-  "song": {"lyrics": "", "caption": "gentle instrumental piano", "duration": 12, "bpm": 100, "seeds": [11, 22, 33]},
+  "song": {"lyrics": "", "caption": "gentle instrumental piano", "duration": 12, "bpm": 100},
   "style": {"image": "layered paper cutouts, matte card, simple geometric shapes"},
   "sets": {
     "office": {"kind": "room", "mold": "despacho", "size": "medium",

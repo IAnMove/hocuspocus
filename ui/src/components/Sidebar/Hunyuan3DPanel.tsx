@@ -89,7 +89,7 @@ export function Hunyuan3DPanel() {
   const [guidance, setGuidance] = useState(5)
   const [octree, setOctree] = useState(256)
   const [chunks, setChunks] = useState(12000)
-  const [seed, setSeed] = useState(1234)
+  const [seed, setSeed] = useState(-1)
   const [outputFormat, setOutputFormat] = useState('glb')
   const [textureResolution, setTextureResolution] = useState(512)
   const [cpuOffload, setCpuOffload] = useState(true)
@@ -340,7 +340,7 @@ export function Hunyuan3DPanel() {
       {external3d && selectedModel && <>
         <p className="text-xs text-text-muted">✕ {t('engines.imageOnly')} {t('engines.hunyuanOnly')}</p>
         <Model3DEngineInputs model={selectedModel} resolution={resolution} onResolution={setResolution} lowVram={lowVram} onLowVram={setLowVram} fov={cameraFov} onFov={setCameraFov} />
-        <label className="text-xs">{t('hunyuan.seed')}<input type="number" min={0} max={4294967295} value={seed} onChange={event => setSeed(Number(event.target.value))} className="ml-2 w-28 bg-bg-primary" /></label>
+        <label className="text-xs">{t('hunyuan.seed')}<input type="number" min={-1} max={4294967295} value={seed} title={t('hunyuan.seedRandom')} onChange={event => setSeed(Number(event.target.value))} className="ml-2 w-28 bg-bg-primary" /></label>
       </>}
       {!remote3d && !capabilities ? (
         <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> {t('hunyuan.loadingModels')}</div>

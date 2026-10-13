@@ -53,5 +53,12 @@
     "title": "Modo {{mode}} bloqueado al arranque · workspace aislado {{workspace}} · proveedores de pago {{paid}}",
     "allowed": "permitidos",
     "blocked": "bloqueados"
+  },
+  "profileNotice": {
+    "defaults": "Hasta que elijas tus proveedores, el texto usa {{text}} y las imágenes {{image}}. No se bloquea nada: puedes cambiarlos cuando quieras en Ajustes → Perfil de producción global.",
+    "invalid": "No se pudo leer tu perfil de producción guardado ({{reason}}), así que se usan los valores por defecto. Vuelve a guardarlo en Ajustes → Perfil de producción global.",
+    "local": "en este ordenador",
+    "choose": "Elegir proveedores",
+    "dismiss": "Cerrar"
   }
 }

@@ -53,5 +53,12 @@
     "title": "Boot-locked {{mode}} mode · isolated workspace {{workspace}} · paid providers {{paid}}",
     "allowed": "allowed",
     "blocked": "blocked"
+  },
+  "profileNotice": {
+    "defaults": "Until you choose your providers, text uses {{text}} and pictures use {{image}}. Nothing is blocked: you can change them at any time in Settings → Global production profile.",
+    "invalid": "Your saved production profile could not be read ({{reason}}), so the defaults are in use. Save it again in Settings → Global production profile.",
+    "local": "on this computer",
+    "choose": "Choose providers",
+    "dismiss": "Dismiss"
   }
 }

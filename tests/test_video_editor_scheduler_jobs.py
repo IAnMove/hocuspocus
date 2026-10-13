@@ -1,8 +1,10 @@
 """Model-free scheduler contract tests for editor and comic animatic jobs.
 
-Importing ``app.launch`` initializes the full Maestro application, so this
-module extracts just the editor job functions from its AST and runs them with
-small in-memory fakes.  No FFmpeg process, model, or GPU runtime is used.
+The editor export runs the mounted router module (``routers.video_editor``),
+which owns the only job registry. Importing ``app.launch`` initializes the full
+Maestro application, so the comic animatic worker is extracted from its AST and
+runs against that same registry with small in-memory fakes. No FFmpeg process,
+model, or GPU runtime is used.
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import routers.video_editor as editor_router
 from services.asset_manifest import SCHEMA_NAME
 
 
@@ -110,8 +113,6 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
     render_calls: list[str] = []
     render_settings: list[dict] = []
     workspace_calls: list[str] = []
-    jobs: dict[str, dict] = {}
-    lane = SimpleNamespace(key=LANE_KEY)
 
     class DeferredThread:
         instances: list["DeferredThread"] = []
@@ -169,24 +170,8 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
             } for index, clip in enumerate(clips)],
         },
     )
-    import services.agent_activity as agent_activity_module
-    import services.asset_manifest as asset_manifest_module
-    import services.montage_documents as montage_documents_module
-    import services.video_editor_layers as video_editor_layers_module
-
-    services_module = _module(
-        "services",
-        video_editor=video_editor_module,
-        asset_manifest=asset_manifest_module,
-    )
-    services_module.__path__ = []
-    monkeypatch.setitem(sys.modules, "services", services_module)
+    # The animatic worker imports its renderer lazily from services.video_editor.
     monkeypatch.setitem(sys.modules, "services.video_editor", video_editor_module)
-    monkeypatch.setitem(sys.modules, "services.asset_manifest", asset_manifest_module)
-    monkeypatch.setitem(sys.modules, "services.video_editor_layers", video_editor_layers_module)
-    # The export names the montage it came from and the agent that asked (montage_link, requested_by).
-    monkeypatch.setitem(sys.modules, "services.agent_activity", agent_activity_module)
-    monkeypatch.setitem(sys.modules, "services.montage_documents", montage_documents_module)
 
     def workspace_dir(workspace=None) -> str:
         workspace_calls.append(workspace)
@@ -199,47 +184,70 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         assert adapter == "video-editor"
         return {"id": job["task_id"], "root_id": job["root_task_id"]}
 
+    def active_workspace():
+        raise AssertionError("explicit workspace was not captured")
+
+    def resolve_in_workspace(source, workspace=None):
+        return str(tmp_path / str(workspace) / os.path.basename(source))
+
+    scheduler = SimpleNamespace(
+        coordinator=Coordinator(),
+        ResourceAcquireCancelled=_ResourceAcquireCancelled,
+    )
+    fake_threading = SimpleNamespace(Thread=DeferredThread)
+
+    # The editor half: the real router module, its registry and runtime binding.
+    editor_router.reset_video_editor_jobs()
+    monkeypatch.setattr(editor_router, "_runtime", editor_router._Runtime())
+    editor_router._bind_video_editor_runtime(
+        workspace_dir=workspace_dir,
+        get_active_workspace=active_workspace,
+        resolve_input_path=lambda value, workspace=None: None,
+        publish_legacy_task=publish,
+        thumbnail_cache_dir=str(tmp_path / "thumbs"),
+    )
+    monkeypatch.setattr(editor_router, "threading", fake_threading)
+    monkeypatch.setattr(editor_router, "resource_scheduler", scheduler)
+    monkeypatch.setattr(editor_router, "_resolve_video_editor_source", resolve_in_workspace)
+    monkeypatch.setattr(editor_router, "_resolve_video_editor_audio_source", resolve_in_workspace)
+    for name in ("render_project", "build_source_provenance_manifest", "normalise_time_card_text"):
+        monkeypatch.setattr(
+            editor_router, name,
+            lambda *args, _name=name, **kwargs: getattr(video_editor_module, _name)(*args, **kwargs),
+        )
+    jobs = editor_router._video_editor_jobs
+
+    # The animatic half: launch and comics code bound to the same registry.
     namespace = {
         "HTTPException": _HTTPException,
         "copy": copy,
         "json": json,
         "os": os,
         "re": re,
-        "threading": SimpleNamespace(Thread=DeferredThread),
+        "threading": fake_threading,
         "time": time,
         "traceback": traceback,
         "uuid": uuid,
-        "resource_scheduler": SimpleNamespace(
-            coordinator=Coordinator(),
-            ResourceAcquireCancelled=_ResourceAcquireCancelled,
-        ),
-        "_VIDEO_EDITOR_FFMPEG_LANE": lane,
-        "_VIDEO_EDITOR_TERMINAL": frozenset({"completed", "failed", "cancelled"}),
-        "_video_editor_jobs": jobs,
-        "_video_editor_jobs_lock": threading.RLock(),
-        "_publish_generic_legacy_task": publish,
+        "resource_scheduler": scheduler,
+        "_VIDEO_EDITOR_FFMPEG_LANE": editor_router._VIDEO_EDITOR_FFMPEG_LANE,
+        "_VIDEO_EDITOR_TERMINAL": editor_router._VIDEO_EDITOR_TERMINAL,
+        "_public_video_editor_job": editor_router._public_video_editor_job,
+        "_video_editor_job_snapshot": editor_router._video_editor_job_snapshot,
+        "_video_editor_job_update": editor_router._video_editor_job_update,
+        "_register_video_editor_job": editor_router._register_video_editor_job,
+        "_video_editor_cancel_requested": editor_router._video_editor_cancel_requested,
+        "_remove_video_editor_output_bundle": editor_router._remove_video_editor_output_bundle,
+        "_finish_video_editor_cancelled": editor_router._finish_video_editor_cancelled,
+        "_video_editor_task_identity": editor_router._video_editor_task_identity,
         "_workspace_dir": workspace_dir,
-        "_get_active_workspace": lambda: (_ for _ in ()).throw(
-            AssertionError("explicit workspace was not captured")
-        ),
+        "_get_active_workspace": active_workspace,
+        "start_video_editor_export": editor_router._start_video_editor_export,
+        "cancel_video_editor_export": editor_router.cancel_video_editor_export,
     }
     _load(
-        "_public_video_editor_job",
-        "_publish_video_editor_job",
-        "_video_editor_job_snapshot",
-        "_video_editor_job_update",
-        "_register_video_editor_job",
-        "_video_editor_cancel_requested",
-        "_remove_video_editor_output_bundle",
-        "_finish_video_editor_cancelled",
-        "_video_editor_task_identity",
-        "_write_video_editor_export_sidecar",
-        "_run_video_editor_export",
-        "start_video_editor_export",
         "_write_comic_animatic_sidecar",
         "_run_comic_animatic",
         "start_comic_animatic",
-        "cancel_video_editor_export",
         namespace=namespace,
     )
     namespace.update({
@@ -252,15 +260,7 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         "video_editor_job_update": namespace["_video_editor_job_update"],
         "public_video_editor_job": namespace["_public_video_editor_job"],
     })
-    namespace["_resolve_video_editor_source"] = (
-        lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
-    )
-    namespace["_resolve_video_editor_audio_source"] = (
-        lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
-    )
-    namespace["_resolve_comic_animatic_image"] = (
-        lambda source, workspace=None: str(tmp_path / str(workspace) / os.path.basename(source))
-    )
+    namespace["_resolve_comic_animatic_image"] = resolve_in_workspace
     namespace.update({
         "DeferredThread": DeferredThread,
         "events": events,

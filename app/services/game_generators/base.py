@@ -1,6 +1,7 @@
 """Shared types for one game-asset generation attempt."""
 from __future__ import annotations
 
+import hashlib
 import re
 
 from dataclasses import dataclass, field
@@ -67,6 +68,16 @@ def spec_seed(asset: dict) -> int:
     if value is None or isinstance(value, bool):
         return 1
     return int(value)
+
+
+def attempt_seed(asset: dict, attempt_id: str) -> int:
+    """The seed an attempt runs with: ``spec.seed`` as given, ``1`` for the first attempt, and for every
+    later attempt (a Regenerate) one taken from its own id, so it does not repeat the first picture and a
+    resume of the same attempt keeps it."""
+    if (asset.get("spec") or {}).get("seed") is not None or not asset.get("attempts"):
+        return spec_seed(asset)
+    digest = hashlib.sha256(str(attempt_id).encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
 
 
 def seed_for_step(asset: dict, step: str) -> int:
