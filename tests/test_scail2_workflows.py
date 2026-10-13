@@ -4039,7 +4039,6 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_scail_edit_advanced_panel_only_shows_effective_settings(self):
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         launch = _read(_LAUNCH_PATH)
-        store = _read(_STORE_PATH)
         restyle = _read(_RESTYLE_SUBMISSION_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
@@ -4079,7 +4078,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn(
             "num_inference_steps: (state.params.num_inference_steps as number)",
-            store,
+            recast,
         )
         self.assertIn(
             "repaintModel === 'scail2_14B'",
