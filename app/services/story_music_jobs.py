@@ -64,7 +64,7 @@ def _public_minimax_music_job(job: dict) -> dict:
 
 
 def _publish_minimax_music_job(job: dict) -> None:
-    publisher = globals().get("_publish_legacy_task") or globals().get("_publish_generic_legacy_task")
+    publisher = globals().get("_publish_generic_legacy_task")
     if not callable(publisher):
         return
     try:
@@ -276,7 +276,7 @@ def _run_minimax_music_job(job_id: str) -> None:
                 (_minimax_music_jobs.get(job_id) or {}).get("_cancel_requested")
             )
 
-    def _advance(index: int) -> bool:
+    for index in range(count):
         if cancelled():
             _finish_unstarted_music_children(
                 job_id, index, "Cancelled before this candidate started",
@@ -286,7 +286,7 @@ def _run_minimax_music_job(job_id: str) -> None:
                 message="MiniMax Music generation cancelled",
                 finishedAt=time.time(), acquired_resources=[],
             )
-            return False
+            return
         child = initial["children"][index]
         child_task_id = str(child["taskId"])
         _minimax_music_child_update(
@@ -382,7 +382,7 @@ def _run_minimax_music_job(job_id: str) -> None:
                     result={"candidates": results}, finishedAt=time.time(),
                     acquired_resources=[],
                 )
-                return False
+                return
         except resource_scheduler.ResourceAcquireCancelled:
             _finish_unstarted_music_children(
                 job_id, index, "Cancelled before this candidate started",
@@ -392,7 +392,7 @@ def _run_minimax_music_job(job_id: str) -> None:
                 message="MiniMax Music generation cancelled",
                 finishedAt=time.time(), acquired_resources=[],
             )
-            return False
+            return
         except minimax_music_service.MiniMaxMusicError as exc:
             _minimax_music_child_update(
                 job_id, index, status="failed", phase="failed",
@@ -407,7 +407,7 @@ def _run_minimax_music_job(job_id: str) -> None:
                 error=str(exc), statusCode=exc.status_code,
                 finishedAt=time.time(), acquired_resources=[],
             )
-            return False
+            return
         except Exception as exc:
             traceback.print_exc()
             _minimax_music_child_update(
@@ -423,12 +423,6 @@ def _run_minimax_music_job(job_id: str) -> None:
                 message=f"MiniMax Music failed: {exc}", error=str(exc),
                 finishedAt=time.time(), acquired_resources=[],
             )
-            return False
-
-        return True
-
-    for index in range(count):
-        if not _advance(index):
             return
 
     with _minimax_music_jobs_lock:
@@ -450,11 +444,12 @@ def bind_story_music_jobs(
     publish_legacy_task: Callable[..., Any] | None = None,
 ):
     """Install one server's workspace, services map and Activity publisher."""
-    global _workspace_dir, _list_workspaces, wgp, _publish_legacy_task
+    global _workspace_dir, _list_workspaces, wgp, _publish_generic_legacy_task
     _workspace_dir = workspace_dir
     _list_workspaces = list_workspaces
     wgp = wgp_module
-    _publish_legacy_task = publish_legacy_task
+    # The moved body reads this name; launch binds its generic publisher and core its own.
+    _publish_generic_legacy_task = publish_legacy_task
     return SimpleNamespace(
         workspace_dir=workspace_dir,
         load_minimax_music_job=_load_minimax_music_job,

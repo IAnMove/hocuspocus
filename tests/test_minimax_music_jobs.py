@@ -96,6 +96,9 @@ def _base_namespace(tmp_path: Path) -> dict:
         "_reserve_story_music_submission": lambda _body, _workspace: {},
         "_load_minimax_music_job": lambda _job_id: None,
         "_finalize_reserved_music_attempt": lambda *_args, **_kwargs: None,
+        # The full server binds neither hook; core binds both (see routers/story_music.py).
+        "_music_generation_gate": None,
+        "_music_before_reserve": None,
     }
 
 

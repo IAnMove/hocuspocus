@@ -118,9 +118,8 @@ def start_story_music_candidates_job(body: dict):
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
     _workspace_dir(workspace)
     # Absent on the full server. Core uses it to answer 409 before a paid-model check.
-    gate = globals().get("_music_generation_gate")
-    if callable(gate):
-        gate(body)
+    if _music_generation_gate is not None:
+        _music_generation_gate(body)
     try:
         execution_mode.validate_remote_provider(workspace, "minimax-music")
     except execution_mode.ExecutionModeError as exc:
@@ -153,9 +152,8 @@ def start_story_music_candidates_job(body: dict):
             )
 
     # Core opens its Activity registry here, before the reservation writes a task.
-    prepare = globals().get("_music_before_reserve")
-    if callable(prepare):
-        prepare(workspace)
+    if _music_before_reserve is not None:
+        _music_before_reserve(workspace)
     reserved = _reserve_story_music_submission(body, workspace) or {}
     if reserved.get("replay"):
         existing = _load_minimax_music_job(str(reserved.get("job_id") or ""))
@@ -293,9 +291,8 @@ async def generate_story_music_candidates(body: dict):
 
     services = wgp.server_config.get("services", {})
     workspace = str(body.get("workspace") or _get_active_workspace())
-    gate = globals().get("_music_generation_gate")
-    if callable(gate):
-        gate(body)
+    if _music_generation_gate is not None:
+        _music_generation_gate(body)
     execution_mode.validate_remote_provider(workspace, "minimax-music")
     model = _confirmed_paid_model(body)
     reference_audio_path = None
