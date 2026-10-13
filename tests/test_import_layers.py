@@ -53,7 +53,11 @@ KERNEL_LEAF_SERVICES = {
     "services.upload_stream": "the upload streaming and transcoding that PathPolicy wraps",
 }
 # R4 violations that cannot be injected without rewriting a moved body. Only ever delete entries.
-KERNEL_IMPORTING_A_SLICE: set[tuple[str, str]] = set()
+KERNEL_IMPORTING_A_SLICE = {
+    # GenerationQueue.new_job applies the MiniMax H3 dialogue duration contract inline;
+    # it goes with the engine port.
+    ("app/services/kernel/jobs.py", "services.minimax_h3_duration"),
+}
 
 
 def _first_party_roots() -> set[str]:

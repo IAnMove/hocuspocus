@@ -9,13 +9,17 @@ import asyncio
 import json
 import os
 import stat
+import threading
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
+from services import execution_mode, job_lifecycle, resource_scheduler
 from services.kernel import paths as kernel_paths
 from services.kernel.config import ConfigStore
+from services.kernel.jobs import GenerationQueue
 from services.kernel.paths import PathPolicy, safe_join
 from services.kernel.workspaces import WorkspaceService
 
@@ -388,3 +392,444 @@ def test_story_cover_reference_is_found_in_uploads_audio_or_the_workspace(tmp_pa
     assert policy.story_cover_reference_path("cover.wav", "default") == os.path.realpath(tmp_path / "outputs" / "cover.wav")
     assert policy.story_cover_reference_path("missing.wav", "default") is None
     assert policy.story_cover_reference_path("../x.wav", "default") is None
+
+
+# --- the generation queue --------------------------------------------------
+
+H3_LEGACY = "minimax_h3_legacy"
+H3_NATIVE = "minimax_h3_native"
+
+
+class _Hooks:
+    """What the server hands the queue: the H3 predicates, the H3 cancel and the task publisher."""
+
+    def __init__(self) -> None:
+        self.cancelled_legacy = 0
+        self.published: list[dict] = []
+        self.publisher_result = None
+        self.publisher_error: Exception | None = None
+        self.publisher_present = True
+
+    def is_legacy(self, model_type) -> bool:
+        return str(model_type or "").strip() == H3_LEGACY
+
+    def is_minimax(self, model_type) -> bool:
+        return str(model_type or "").startswith("minimax_h3")
+
+    def cancel_legacy(self) -> None:
+        self.cancelled_legacy += 1
+
+    def lookup(self):
+        return self.publish if self.publisher_present else None
+
+    def publish(self, job: dict):
+        self.published.append(job)
+        if self.publisher_error is not None:
+            raise self.publisher_error
+        return self.publisher_result
+
+
+@pytest.fixture
+def empty_fifo():
+    """The coordinator's GPU-0 lock is shared by the process, and so is the FIFO behind it."""
+    def clear() -> None:
+        lock = resource_scheduler.coordinator.shared_lock(resource_scheduler.local_gpu_lane(0))
+        with job_lifecycle._generation_queue_condition:
+            job_lifecycle._generation_queues.pop(id(lock), None)
+
+    clear()
+    yield
+    clear()
+
+
+@pytest.fixture
+def queue_parts(tmp_path, empty_fifo):
+    engine = _engine(tmp_path, save_path=str(tmp_path / "outputs"))
+    engine.get_model_def = lambda model_type: {"name": f"Name of {model_type}"} if model_type == "known_model" else None
+    (tmp_path / "outputs").mkdir()
+    config = ConfigStore(lambda: engine)
+    workspaces = WorkspaceService(config)
+    hooks = _Hooks()
+    queue = GenerationQueue(
+        config,
+        workspaces,
+        is_legacy_h3_model=hooks.is_legacy,
+        is_minimax_h3_model=hooks.is_minimax,
+        cancel_legacy_h3=hooks.cancel_legacy,
+        task_publisher=hooks.lookup,
+    )
+    return SimpleNamespace(queue=queue, hooks=hooks, engine=engine, workspaces=workspaces, tmp_path=tmp_path)
+
+
+def test_a_queue_owns_its_state_and_shares_the_coordinators_gpu_lock(queue_parts, tmp_path) -> None:
+    queue = queue_parts.queue
+    lane = resource_scheduler.local_gpu_lane(0)
+    assert queue.registry == {} and queue.active_states == {}
+    assert queue.local_gpu_lane == lane
+    assert queue.gen_lock is resource_scheduler.coordinator.shared_lock(lane)
+    assert queue.durable_queue.path == os.path.join(
+        os.path.realpath(tmp_path / "outputs"), ".maestro_generation_queue.json",
+    )
+    assert not queue.recovery_lock.locked()
+    other = GenerationQueue(
+        queue._config, queue._workspaces,
+        is_legacy_h3_model=queue._is_legacy_h3_model, is_minimax_h3_model=queue._is_minimax_h3_model,
+        cancel_legacy_h3=queue._cancel_legacy_h3, task_publisher=queue._task_publisher,
+    )
+    assert other.registry is not queue.registry and other.active_states is not queue.active_states
+    assert other.recovery_lock is not queue.recovery_lock
+
+
+def test_building_a_queue_creates_no_file_and_no_thread(tmp_path, empty_fifo) -> None:
+    engine = _engine(tmp_path, save_path=str(tmp_path / "fresh"))
+    before = threading.active_count()
+    config = ConfigStore(lambda: engine)
+    GenerationQueue(
+        config, WorkspaceService(config),
+        is_legacy_h3_model=lambda _m: False, is_minimax_h3_model=lambda _m: False,
+        cancel_legacy_h3=lambda: None, task_publisher=lambda: None,
+    )
+    assert not (tmp_path / "fresh").exists()
+    assert threading.active_count() == before
+
+
+def _params(**extra) -> dict:
+    return {"model_type": "known_model", "prompt": "a prompt", **extra}
+
+
+def test_new_job_freezes_the_request_and_reserves_its_place_in_the_fifo(queue_parts) -> None:
+    queue = queue_parts.queue
+    params = _params(nested={"a": [1]})
+    job = queue.new_job(params, "default", job_id="j1", created_at=1700000000.0)
+    params["nested"]["a"].append(2)
+    assert job["params"]["nested"] == {"a": [1]}
+    assert job["params"]["_execution_mode"] == execution_mode.policy().mode
+    assert (job["id"], job["task_id"], job["root_task_id"]) == ("j1", "task-generation-j1", "task-generation-j1")
+    assert (job["status"], job["message"], job["created_at"], job["recovered"]) == ("queued", "Queued", 1700000000.0, False)
+    assert job["out_dir"] == os.path.realpath(queue_parts.tmp_path / "outputs")
+    assert job["workspace"] == "default" and job["output_files"] == [] and job["acquired_resources"] == []
+    assert job_lifecycle.generation_queue_position(queue.gen_lock, job) == 1
+    assert "j1" not in queue.registry, "new_job does not add the job to the registry; its caller does"
+
+
+def test_new_job_invents_an_id_and_stamps_the_time(queue_parts) -> None:
+    job = queue_parts.queue.new_job(_params(), "default")
+    assert len(job["id"]) == 8 and job["task_id"] == f"task-generation-{job['id']}"
+    assert job["created_at"] > 0
+
+
+def test_new_job_names_the_root_task_after_the_pipeline_that_owns_it(queue_parts) -> None:
+    queue = queue_parts.queue
+    series = queue.new_job(_params(_director_pipeline_id="series:abc"), "default", job_id="s1", reserve_generation=False)
+    director = queue.new_job(_params(_director_pipeline_id="pipe-9"), "default", job_id="d1", reserve_generation=False)
+    plain = queue.new_job(_params(), "default", job_id="p1", reserve_generation=False)
+    assert series["root_task_id"] == "task-series-render-abc"
+    assert director["root_task_id"] == "task-director-pipe-9"
+    assert plain["root_task_id"] == "task-generation-p1"
+
+
+def test_new_job_marks_a_recovered_job_and_can_skip_the_fifo(queue_parts) -> None:
+    queue = queue_parts.queue
+    job = queue.new_job(_params(), "default", job_id="r1", recovered=True, reserve_generation=False,
+                        provenance={"origin": "recovery"})
+    assert (job["recovered"], job["message"], job["provenance"]) == (True, "Recovered · queued", {"origin": "recovery"})
+    assert job_lifecycle.generation_queue_position(queue.gen_lock, job) is None
+
+
+def test_new_job_refuses_an_invalid_workspace_before_anything_is_reserved(queue_parts) -> None:
+    with pytest.raises(HTTPException) as caught:
+        queue_parts.queue.new_job(_params(), "../x", job_id="bad", reserve_generation=True)
+    assert caught.value.status_code == 400
+    assert job_lifecycle._generation_queues == {} or all(
+        not entries for entries in job_lifecycle._generation_queues.values()
+    )
+
+
+def test_new_job_follows_the_execution_mode_policy(queue_parts, monkeypatch) -> None:
+    queue = queue_parts.queue
+    monkeypatch.setattr(execution_mode, "POLICY", SimpleNamespace(mode="simulate", workspace="sandbox"))
+    with pytest.raises(execution_mode.ExecutionModeError, match="isolated to workspace 'sandbox'"):
+        queue.new_job(_params(), "default", job_id="x", reserve_generation=False)
+    monkeypatch.setattr(execution_mode, "POLICY", SimpleNamespace(mode="plan", workspace="default"))
+    with pytest.raises(execution_mode.ExecutionModeError, match="Plan mode stops before queue submission"):
+        queue.new_job(_params(), "default", job_id="x", reserve_generation=False)
+    monkeypatch.setattr(execution_mode, "POLICY", SimpleNamespace(mode="simulate", workspace="default"))
+    job = queue.new_job(_params(), "default", job_id="y", reserve_generation=False)
+    assert job["params"]["_execution_mode"] == "simulate"
+
+
+def test_new_job_publishes_through_the_publisher_found_at_call_time(queue_parts) -> None:
+    hooks = queue_parts.hooks
+    hooks.publisher_present = False
+    first = queue_parts.queue.new_job(_params(), "default", job_id="a", reserve_generation=False)
+    assert hooks.published == [] and first["task_id"] == "task-generation-a"
+    hooks.publisher_present = True
+    hooks.publisher_result = {"id": "task-published", "root_id": "task-root"}
+    second = queue_parts.queue.new_job(_params(), "default", job_id="b", reserve_generation=False)
+    assert hooks.published == [second]
+    assert (second["task_id"], second["root_task_id"]) == ("task-published", "task-root")
+
+
+def test_new_job_keeps_its_ids_when_the_publisher_answers_nothing_or_fails(queue_parts, capsys) -> None:
+    hooks = queue_parts.hooks
+    nothing = queue_parts.queue.new_job(_params(), "default", job_id="a", reserve_generation=False)
+    assert (nothing["task_id"], nothing["root_task_id"]) == ("task-generation-a", "task-generation-a")
+    hooks.publisher_error = RuntimeError("registry offline")
+    failed = queue_parts.queue.new_job(_params(), "default", job_id="b", reserve_generation=False)
+    assert failed["task_id"] == "task-generation-b"
+    assert "[Task registry] Could not publish generation b: registry offline" in capsys.readouterr().out
+
+
+def test_new_job_can_skip_publishing(queue_parts) -> None:
+    queue_parts.queue.new_job(_params(), "default", job_id="a", reserve_generation=False, publish_task=False)
+    assert queue_parts.hooks.published == []
+
+
+def test_new_job_applies_the_h3_dialogue_duration_only_to_h3_models(queue_parts) -> None:
+    queue = queue_parts.queue
+    plain = queue.new_job(_params(), "default", job_id="p", reserve_generation=False)
+    assert "_h3_dialogue_duration_contract" not in plain["params"]
+    h3 = queue.new_job({"model_type": H3_NATIVE, "prompt": "hola"}, "default", job_id="h", reserve_generation=False)
+    assert h3["params"]["model_type"] == H3_NATIVE and h3["status"] == "queued"
+
+
+def _manual(job_id="m1", **extra) -> dict:
+    return {"id": job_id, "workspace": "default", "status": "queued", **extra}
+
+
+def test_register_manual_job_fills_the_defaults_and_publishes(queue_parts) -> None:
+    queue, hooks = queue_parts.queue, queue_parts.hooks
+    hooks.publisher_result = {"id": "task-m", "root_id": "task-m-root"}
+    job = _manual(params={"prompt": "x"})
+    assert queue.register_manual_job(job) is job
+    assert queue.registry["m1"] is job
+    assert job["params"] == {"prompt": "x", "_execution_mode": execution_mode.policy().mode,
+                             "model_type": "post_processing", "generation_mode": "video"}
+    assert (job["acquired_resources"], job["started_at"], job["finished_at"]) == ([], None, None)
+    assert (job["task_id"], job["root_task_id"]) == ("task-m", "task-m-root")
+    assert hooks.published == [job]
+    assert job_lifecycle.generation_queue_position(queue.gen_lock, job) == 1
+
+
+def test_register_manual_job_keeps_what_the_caller_set(queue_parts) -> None:
+    job = _manual("m2", params={"model_type": "known_model", "generation_mode": "image"},
+                  task_id="mine", root_task_id="my-root", started_at=5)
+    queue_parts.queue.register_manual_job(job)
+    assert (job["task_id"], job["root_task_id"], job["started_at"]) == ("mine", "my-root", 5)
+    assert job["params"]["model_type"] == "known_model" and job["params"]["generation_mode"] == "image"
+
+
+def test_register_manual_job_without_an_id_registers_nothing(queue_parts) -> None:
+    with pytest.raises(ValueError, match="requires an id"):
+        queue_parts.queue.register_manual_job({"params": {}})
+    assert queue_parts.queue.registry == {}
+
+
+def test_register_manual_job_uses_the_active_workspace_for_the_mode_check(queue_parts, monkeypatch) -> None:
+    monkeypatch.setattr(execution_mode, "POLICY", SimpleNamespace(mode="simulate", workspace="sandbox"))
+    queue_parts.engine.server_config["services"] = {"active_workspace": "sandbox"}
+    queue_parts.queue.register_manual_job({"id": "m3"})
+    assert "m3" in queue_parts.queue.registry
+    queue_parts.engine.server_config["services"] = {"active_workspace": "other"}
+    with pytest.raises(execution_mode.ExecutionModeError):
+        queue_parts.queue.register_manual_job({"id": "m4"})
+    assert "m4" not in queue_parts.queue.registry
+
+
+def test_register_manual_job_survives_a_failing_publisher(queue_parts, capsys) -> None:
+    queue_parts.hooks.publisher_error = RuntimeError("boom")
+    job = _manual("m5", params={})
+    queue_parts.queue.register_manual_job(job)
+    assert queue_parts.queue.registry["m5"] is job
+    assert "[Task registry] Could not publish manual job m5: boom" in capsys.readouterr().out
+
+
+def test_job_acceptance_names_the_tasks_and_the_public_details(queue_parts) -> None:
+    job = {"task_id": "t", "params": {"model_type": "known_model", "prompt": "p"}}
+    accepted = queue_parts.queue.job_acceptance(job)
+    assert accepted["task_id"] == "t" and accepted["root_task_id"] == "t"
+    assert accepted["generation_details"]["model_name"] == "Name of known_model"
+    assert queue_parts.queue.job_acceptance({"task_id": "t", "root_task_id": "r"})["root_task_id"] == "r"
+    assert queue_parts.queue.job_acceptance({})["generation_details"] == {}
+
+
+def test_public_details_keep_private_paths_out_and_bound_the_prompt(queue_parts) -> None:
+    details = queue_parts.queue.public_details({
+        "model_type": "known_model", "generation_mode": "video", "_execution_mode": "simulate",
+        "prompt": "p\x00ix", "alt_prompt": " style ", "_initiator": "mcp\x00", "seed": 0, "resolution": "",
+        "activated_loras": ["/secret/dir/a.safetensors", "C:\\x\\b.safetensors", " "],
+        "start_image": "/private/frame.png",
+    })
+    assert details["prompt"] == "style\n\npix" and details["initiator"] == "mcp"
+    assert details["loras"] == ["a.safetensors", "b.safetensors"] and details["lora_count"] == 2
+    assert details["simulated"] is True and details["seed"] == 0 and "resolution" not in details
+    assert "start_image" not in details and "/secret" not in json.dumps(details)
+    assert len(queue_parts.queue.public_details({"model_type": "known_model", "prompt": "x" * 40_000})["prompt"]) == 32_000
+
+
+def test_public_details_fall_back_to_the_label_or_the_model_type(queue_parts) -> None:
+    queue = queue_parts.queue
+    assert queue.public_details({"model_type": "post_processing"})["model_name"] == "Post-processing"
+    assert queue.public_details({"model_type": "unheard_of"})["model_name"] == "unheard_of"
+    assert queue.public_details("not a dict") == {} and queue.public_details({"model_type": " "}) == {}
+
+
+def test_public_details_survive_an_engine_that_cannot_describe_the_model(queue_parts) -> None:
+    def broken(_model_type):
+        raise RuntimeError("catalog offline")
+
+    queue_parts.engine.get_model_def = broken
+    assert queue_parts.queue.public_details({"model_type": "known_model"})["model_name"] == "known_model"
+
+
+def test_public_details_report_the_h3_cache_flag(queue_parts) -> None:
+    queue = queue_parts.queue
+    assert queue.public_details({"model_type": H3_NATIVE})["cache"] is False
+    cached = queue.public_details({"model_type": "known_model", "skip_steps_cache_type": "tea"})
+    assert (cached["cache"], cached["cache_type"]) == (True, "tea")
+
+
+def test_only_ordinary_studio_generations_are_durable() -> None:
+    durable = GenerationQueue.is_durable_job
+    assert durable({"params": {"model_type": "m"}}) is True
+    assert durable({"params": {"model_type": "m", "_director_pipeline_id": "p"}}) is False
+    assert durable({"params": {"model_type": "m", "_non_durable_tool": True}}) is False
+    assert durable({"params": {}}) is False and durable({}) is False and durable({"params": "x"}) is False
+
+
+def test_persist_and_remove_use_the_durable_queue_file(queue_parts) -> None:
+    queue = queue_parts.queue
+    job = queue.new_job(_params(), "default", job_id="d1", created_at=12.5, reserve_generation=False,
+                        provenance={"from": "test"})
+    queue.persist_job(job)
+    saved = queue.durable_queue.list()
+    assert [(item["id"], item["status"], item["created_at"], item["workspace"], item["provenance"]) for item in saved] == [
+        ("d1", "queued", 12.5, "default", {"from": "test"}),
+    ]
+    assert saved[0]["params"]["prompt"] == "a prompt"
+    queue.remove_persisted_job(job)
+    assert queue.durable_queue.list() == []
+
+
+def test_persist_skips_what_is_not_durable_and_never_raises(queue_parts, capsys) -> None:
+    queue = queue_parts.queue
+    queue.persist_job({"id": "n", "params": {"model_type": "m", "_non_durable_tool": True}})
+    assert queue.durable_queue.list() == []
+
+    def refuse(_record):
+        raise OSError("read-only disk")
+
+    queue.durable_queue.upsert = refuse
+    queue.persist_job({"id": "e", "params": {"model_type": "m"}})
+    assert "[Queue recovery] Could not persist job e: read-only disk" in capsys.readouterr().out
+    queue.durable_queue.remove = lambda _id: (_ for _ in ()).throw(OSError("busy"))
+    queue.remove_persisted_job({"id": "e", "params": {"model_type": "m"}})
+    assert "[Queue recovery] Could not remove job e: busy" in capsys.readouterr().out
+
+
+def test_pending_gpu_jobs_are_the_queued_and_running_ones_that_name_a_model(queue_parts) -> None:
+    queue = queue_parts.queue
+    registry = queue.registry
+    registry["q"] = {"status": "queued", "params": {"model_type": "m"}}
+    registry["r"] = {"status": "running", "params": {"model_type": "m"}}
+    registry["done"] = {"status": "completed", "params": {"model_type": "m"}}
+    registry["audio"] = {"status": "running", "params": {}}
+    registry["bare"] = {"status": "queued"}
+    assert [job for job in queue.pending_gpu_jobs()] == [registry["q"], registry["r"]]
+    assert queue.pending_gpu_jobs(exclude_job_id="q") == [registry["r"]]
+
+
+def test_cancel_answers_missing_for_a_job_it_does_not_hold(queue_parts) -> None:
+    assert queue_parts.queue.cancel("nope") == {"status": "missing", "was_running": False}
+
+
+def test_cancel_settles_a_queued_job_and_forgets_its_durable_record(queue_parts) -> None:
+    queue = queue_parts.queue
+    job = queue.new_job(_params(), "default", job_id="c1")
+    queue.registry["c1"] = job
+    queue.persist_job(job)
+    assert queue.cancel("c1") == {"status": "cancelled", "was_running": False}
+    assert queue.durable_queue.list() == []
+    assert queue_parts.hooks.cancelled_legacy == 0
+    assert queue.cancel("c1") == {"status": "cancelled", "was_running": False}
+
+
+def test_cancel_signals_the_abort_state_of_a_running_job(queue_parts) -> None:
+    queue = queue_parts.queue
+    job = queue.new_job(_params(), "default", job_id="c2", reserve_generation=False)
+    queue.registry["c2"] = job
+    assert job_lifecycle.try_start(job)
+    state: dict = {}
+    assert job_lifecycle.register_abort_state(job, "c2", queue.active_states, state)
+    assert queue.cancel("c2") == {"status": "cancelling", "was_running": True}
+    assert state["abort"] is True
+    job_lifecycle.unregister_abort_state("c2", queue.active_states, state)
+    assert queue.active_states == {} and job["status"] == "cancelled"
+    assert queue_parts.hooks.cancelled_legacy == 0
+
+
+def test_cancelling_a_running_legacy_h3_job_stops_the_isolated_runtime(queue_parts) -> None:
+    queue = queue_parts.queue
+    job = queue.new_job({"model_type": H3_LEGACY, "prompt": "x"}, "default", job_id="c3", reserve_generation=False)
+    queue.registry["c3"] = job
+    assert job_lifecycle.try_start(job)
+    state: dict = {}
+    job_lifecycle.register_abort_state(job, "c3", queue.active_states, state)
+    queue.cancel("c3")
+    assert queue_parts.hooks.cancelled_legacy == 1
+    job_lifecycle.unregister_abort_state("c3", queue.active_states, state)
+
+
+def _held(lock) -> bool:
+    """The GPU lock is a semaphore: it is held when it cannot be taken without waiting."""
+    if lock.acquire(blocking=False):
+        lock.release()
+        return False
+    return True
+
+
+@pytest.fixture
+def adopted(monkeypatch):
+    """Record what the slot hands the coordinator instead of running the engine hand-off."""
+    seen: list[dict] = []
+
+    @contextmanager
+    def adopt_acquired(lane, *, task_id, description=""):
+        seen.append({"lane": lane, "task_id": task_id, "description": description})
+        yield lane
+
+    monkeypatch.setattr(resource_scheduler.coordinator, "adopt_acquired", adopt_acquired)
+    return seen
+
+
+def test_slot_takes_the_gpu_in_turn_and_names_the_owner_by_engine(queue_parts, adopted) -> None:
+    queue = queue_parts.queue
+    wgp_job = {"id": "w", "params": {"model_type": "known_model"}}
+    with queue.slot(wgp_job) as acquired:
+        assert acquired is True and _held(queue.gen_lock)
+    assert not _held(queue.gen_lock)
+    legacy = {"id": "h", "params": {"model_type": H3_LEGACY}, "task_id": "task-h"}
+    with queue.slot(legacy):
+        pass
+    with queue.slot({"id": "n", "params": {}}):
+        pass
+    with queue.slot({"id": "x", "params": {}}, description="custom"):
+        pass
+    assert [(item["task_id"], item["description"]) for item in adopted] == [
+        ("w", resource_scheduler.gpu_engine_description(
+            resource_scheduler.GPU_ENGINE_WGP, "HocusPocus Lab WGP generation · known_model")),
+        ("task-h", resource_scheduler.gpu_engine_description(
+            resource_scheduler.GPU_ENGINE_H3_LEGACY, "HocusPocus Lab H3 Legacy generation")),
+        ("n", "HocusPocus Lab GPU generation"),
+        ("x", "custom"),
+    ]
+    assert all(item["lane"] == queue.local_gpu_lane for item in adopted)
+
+
+def test_slot_yields_false_for_a_job_cancelled_while_it_waited(queue_parts, adopted) -> None:
+    queue = queue_parts.queue
+    job = {"id": "gone", "params": {"model_type": "known_model"}, "cancel_requested": True}
+    with queue.slot(job) as acquired:
+        assert acquired is False
+    assert adopted == [] and not _held(queue.gen_lock)
+    assert job_lifecycle.generation_queue_position(queue.gen_lock, job) is None
