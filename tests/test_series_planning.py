@@ -422,6 +422,14 @@ def test_known_series_bootstrap_is_rich_draft_and_resolves_character_names():
     assert proposal["props"][0]["ownerCharacterId"] == "lead_one"
     assert proposal["canon"]["currentFacts"][0]["status"] == "draft"
     assert proposal["canon"]["timeline"][0]["occurredAt"] == "Original run"
+    for language, expected in (
+        ("Español", "Borrador no oficial"), ("es-MX", "Borrador no oficial"),
+        ("English", "Unofficial draft based"), ("Esperanto", "Unofficial draft based"),
+    ):
+        without_note = copy.deepcopy(raw)
+        without_note["setup"].pop("rightsNote")
+        without_note["setup"]["language"] = language
+        assert normalize_known_series_bootstrap(without_note, series)["rightsNote"].startswith(expected), language
     prompt, system = known_series_bootstrap_prompt(series, "Quiero nuevos capítulos de Seinfeld")
     assert "Quiero nuevos capítulos de Seinfeld" in prompt
     assert "NOT live web research" in system

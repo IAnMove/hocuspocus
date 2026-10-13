@@ -29,6 +29,7 @@ import {
   SERIES_LAB_SECTIONS,
   STORY_LAB_SECTIONS,
 } from '../stories/labNavigation'
+import i18n from '../../i18n'
 import { replayWizardPresentation } from './wizardPresentation'
 
 /**
@@ -300,13 +301,13 @@ export function registerNavigationQueueCapabilities(
         return {
           ...outcome,
           message: cancelledBatch
-            ? `${outcome.message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+            ? i18n.t('wizard:replies.alsoCancelPanelBatch', { detail: outcome.message })
             : outcome.message,
         }
       } catch (error) {
         if (!cancelledBatch) throw error
         return {
-          message: 'He pedido cancelar el lote de viñetas; las ilustraciones terminadas se conservan.',
+          message: i18n.t('wizard:replies.cancelPanelBatch'),
           target: ACTIVITY_TARGET,
         }
       }

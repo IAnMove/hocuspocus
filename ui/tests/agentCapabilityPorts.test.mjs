@@ -31,6 +31,10 @@ const LEGACY_EXECUTE_ALLOWLIST = [
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
+  // Translation catalogs for Wizard replies and errors; no store, transport or execution port.
+  '../../i18n',
+  // Pure helper: the content language of new work follows the UI language.
+  '../../lib/contentLanguage',
   '../../stores/useStore',
   '../../types',
   '../comics/generateArtwork',
@@ -65,6 +69,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './wizardTurnReport',
   // Action type only. Execution stays on the world3dTemplates adapter.
   './world3dTemplateCapabilities',
+  // Type only (ParseKeys for catalog progress keys).
+  'i18next',
 ]
 
 const LAB_ACTIONS_IMPORTS = [

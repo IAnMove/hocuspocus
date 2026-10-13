@@ -9,7 +9,7 @@ import {
 import { normalizeStoryMusicModel } from './musicModel'
 import { contentLanguageForUi } from '../../lib/contentLanguage'
 import i18n from '../../i18n'
-import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { normalizeLanguageIntent, savedProjectLanguage } from '../../lib/languageIntent'
 import { extraDecisions, normalizeGuide } from '../writing-guide/model'
 import { defaultStoryProductionRecipe, normalizeStoryProductionRecipe } from './storyProductionRecipe'
 
@@ -480,6 +480,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
   const fallback = createStoryProject()
   if (!value || typeof value !== 'object') return fallback
   const project = value as Partial<StoryProject>
+  const savedLanguage = savedProjectLanguage(project)
   const creativeBrief = project.creativeBrief && typeof project.creativeBrief === 'object'
     ? project.creativeBrief : fallback.creativeBrief
   const world: Partial<StoryProject['world']> =
@@ -589,11 +590,11 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         Number(creativeBrief.durationSeconds)
         || (project.projectType === 'quick_video' ? 15 : project.projectType === 'trailer' ? 60 : 90))),
     },
-    language: text(project.language, 'English'),
-    spokenLanguage: text(project.spokenLanguage, text(project.language, 'English')),
+    language: savedLanguage.language,
+    spokenLanguage: savedLanguage.spokenLanguage,
     languageIntent: normalizeLanguageIntent(project.languageIntent, {
-      contentLanguage: text(project.language, 'English'),
-      spokenLanguage: text(project.spokenLanguage, text(project.language, 'English')),
+      contentLanguage: savedLanguage.language,
+      spokenLanguage: savedLanguage.spokenLanguage,
       technicalPromptLanguage: 'en',
     }),
     locationVariety: project.locationVariety === 'single_location' ? 'single_location' : 'balanced',

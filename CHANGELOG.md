@@ -6,7 +6,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
-**New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it, including when a missing field is filled in on save. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs.
+**New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
 
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice

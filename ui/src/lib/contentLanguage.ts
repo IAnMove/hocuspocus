@@ -8,9 +8,8 @@ export interface ContentLanguage {
 }
 
 /**
- * Language for content created right now. Saved projects do not call this:
- * a missing field on an old file stays English so switching the UI later
- * does not rewrite it.
+ * Language for content created right now. Saved projects do not call this
+ * (see savedProjectLanguage in languageIntent.ts), so switching the UI later does not rewrite them.
  */
 export function contentLanguageForUi(language = i18n.resolvedLanguage || i18n.language): ContentLanguage {
   const spanish = String(language || 'en').toLowerCase().startsWith('es')
@@ -28,7 +27,8 @@ export function scaffoldLanguage(language?: string | null): 'en' | 'es' {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
   if (
-    key.startsWith('es')
+    key === 'es'
+    || /^es[-_]/.test(key)
     || key.includes('espanol')
     || key.includes('castellano')
     || key.includes('spanish')

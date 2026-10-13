@@ -87,6 +87,14 @@ def test_series_creation_and_normalization_always_return_language_intent():
     filled = normalize_series_project(missing, missing["id"], "default")
     assert filled["language"] == "English"
     assert filled["spokenLanguage"] == "English"
+    from_intent = dict(created)
+    from_intent.pop("language")
+    from_intent.pop("spokenLanguage")
+    from_intent["languageIntent"] = {"contentLanguage": "Español", "spokenLanguage": "Español de España"}
+    recovered = normalize_series_project(from_intent, from_intent["id"], "default")
+    assert recovered["language"] == "Español", "a saved intent is kept instead of flipping to English"
+    assert recovered["spokenLanguage"] == "Español de España"
+    assert recovered["languageIntent"]["contentLanguage"] == "Español"
 
 
 def test_series_canon_tracks_production_language_but_not_chat_language():

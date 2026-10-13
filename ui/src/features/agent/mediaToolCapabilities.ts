@@ -83,7 +83,7 @@ export function registerMediaToolCapabilities(register: typeof defineCapability)
       properties: { type: { const: 'media_tool' }, operation: { enum: [...MEDIA_TOOL_OPERATIONS] }, input: { type: 'object' } },
       required: ['type', 'operation', 'input'],
     },
-    risk: 'edit', confirmation: 'none', progress: i18n.t('wizard:replies.preparingFile'),
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.preparingFile',
     resolve(raw) {
       if (typeof raw.operation !== 'string' || !operations.has(raw.operation) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) return null
       return { type: 'media_tool', operation: raw.operation as MediaToolOperation, input: raw.input as Record<string, unknown> }

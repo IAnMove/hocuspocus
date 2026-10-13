@@ -19,8 +19,9 @@ SERIES_SHOT_MAX_ITEMS = 720
 
 def _default_rights_note(language: str) -> str:
     """Rights copy follows the series language. An omitted language is English."""
-    key = language.strip().lower()
-    if key.startswith("es") or "español" in key or "espanol" in key or key in {"spanish", "castellano"}:
+    key = language.strip().lower().replace("_", "-")
+    spanish_words = ("español", "espanol", "spanish", "castellano")
+    if key == "es" or key.startswith("es-") or any(word in key for word in spanish_words):
         return (
             "Borrador no oficial basado en una obra de terceros. "
             "Verifica los derechos necesarios antes de publicar o monetizar."

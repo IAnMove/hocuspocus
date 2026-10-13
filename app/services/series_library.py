@@ -72,6 +72,21 @@ def _text(value: Any, fallback: str = "") -> str:
     return value if isinstance(value, str) else fallback
 
 
+def _saved_language_labels(project: dict) -> tuple[str, str]:
+    """Labels for a saved series. A saved label wins; a missing one comes from
+    the saved language intent, and only then is English."""
+    raw_intent = project.get("languageIntent")
+    intent = raw_intent if isinstance(raw_intent, dict) else {}
+    intent_content = _text(intent.get("contentLanguage") or intent.get("content_language")).strip()
+    intent_spoken = _text(intent.get("spokenLanguage") or intent.get("spoken_language")).strip()
+    language = _text(project.get("language"), intent_content or "English")
+    spoken = _text(
+        project.get("spokenLanguage"),
+        _text(project.get("language"), intent_spoken or intent_content or "English"),
+    )
+    return language, spoken
+
+
 def _id(value: Any, fallback: str = "") -> str:
     result = _text(value, fallback).strip()
     if not result or len(result) > 240 or any(ord(char) < 32 for char in result):
@@ -963,6 +978,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "historicalProductionIds": _unique_ids(import_source.get("historicalProductionIds")),
         "migrationNotes": _text(import_source.get("migrationNotes")),
     })
+    saved_language, saved_spoken_language = _saved_language_labels(project)
     project.update({
         "version": 1,
         "id": series_id,
@@ -975,16 +991,12 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "defaultEpisodeDurationSeconds": max(15, min(3600, _integer(
             project.get("defaultEpisodeDurationSeconds"), 75, 15
         ))),
-        "language": _text(project.get("language"), "English"),
-        "spokenLanguage": _text(
-            project.get("spokenLanguage"), _text(project.get("language"), "English")
-        ),
+        "language": saved_language,
+        "spokenLanguage": saved_spoken_language,
         "languageIntent": normalize_language_intent(
             project.get("languageIntent"),
-            content_language=_text(project.get("language"), "English"),
-            spoken_language=_text(
-                project.get("spokenLanguage"), _text(project.get("language"), "English")
-            ),
+            content_language=saved_language,
+            spoken_language=saved_spoken_language,
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
         "protagonistCharacterId": (

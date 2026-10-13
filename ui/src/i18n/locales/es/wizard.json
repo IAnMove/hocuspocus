@@ -214,7 +214,6 @@
     "prepareMusicVideoOnly": "Prepararé el videoclip en Music Video Director con la historia, la canción y el cue exactos. No iniciaré generación. 🪄",
     "prepareSfxPack": "Prepararé Studio → Audio → SFX y encolaré el pack de efectos. Irán detrás de lo que ya use la GPU. La galería Audios solo muestra resultados cuando terminen. 🪄",
     "prepareStudioAudio": "Prepararé Studio → Audio con los valores visibles y enviaré la generación a la cola. 🪄",
-    "preparingFile": "Preparando el archivo…",
     "preparingSeriesEpisode": "Preparando la serie y el nuevo episodio…",
     "queuePreparedStudioVideo": "Lanzo a la cola el vídeo ya preparado en Studio. 🪄",
     "queueingSeriesRender": "Encolando render de Series Lab ({{mode}})…",
@@ -364,6 +363,7 @@
     "writingAndSavingStory": "Escribiendo y guardando la nueva historia…",
     "updatingLipsCreator": "Actualizando Lips Creator…",
     "generatingLipsMouths": "Generando bocas de Lips Creator…",
-    "searchingWork": "Buscando la obra…"
+    "searchingWork": "Buscando la obra…",
+    "preparingFile": "Preparando el archivo…"
   }
 }

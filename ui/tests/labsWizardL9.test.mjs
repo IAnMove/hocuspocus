@@ -58,7 +58,7 @@ test('T2V production issues do not demand images; image-guided and refs still bl
   film.musicVideoGenerationMode = 'image_guided'
   const imageIssues = collectStoryProductionIssues(film, 'image_guided', t)
   assert.ok(imageIssues.some(issue => issue.id === 'recipe:identities'))
-  assert.throws(() => assertStoryVisualRecipeReady(film), /identidades visuales/)
+  assert.throws(() => assertStoryVisualRecipeReady(film), /approved visual identities/)
 
   film.musicVideoGenerationMode = 'direct_references'
   const refIssues = collectStoryProductionIssues(film, 'direct_references', t)

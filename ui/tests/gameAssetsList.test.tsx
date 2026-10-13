@@ -68,7 +68,7 @@ test('the list dialog shows problems with lines and production confirms the esti
     render(<GameListPasteDialog onClose={() => undefined} />)
     const textarea = screen.getByLabelText('Asset list') as HTMLTextAreaElement
     assert.equal(textarea.value, '', 'the example is a placeholder')
-    assert.ok(textarea.placeholder.startsWith('personaje heroe'))
+    assert.ok(textarea.placeholder.startsWith('character hero'))
     assert.equal((screen.getByRole('button', { name: 'Check' }) as HTMLButtonElement).disabled, true)
     fireEvent.change(textarea, { target: { value: 'monstruo x: y' } })
     fireEvent.click(screen.getByRole('button', { name: 'Check' }))

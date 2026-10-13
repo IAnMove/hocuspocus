@@ -1438,7 +1438,7 @@
     "episode": "Episode {{number}}"
   },
   "errors": {
-    "pendingCanon": "This series has pending canon changes. Approve them in Series Lab → Bible, or explicitly ask to accept those changes. Creating an episode does not approve someone else's canon.",
+    "pendingCanon": "This series has pending canon changes. Approve them in Series Lab → Bible, or ask explicitly to accept them. Creating an episode does not approve pending canon changes.",
     "unknownSection": "Series Lab has no section named “{{name}}”.",
     "seriesMissingUnauthorized": "Series “{{title}}” does not exist and the command did not authorize creating it.",
     "stageComicNeedsConfirm": "Preparing a comic from Series Lab requires confirm=true because it replaces the current Comics draft.",

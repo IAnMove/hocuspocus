@@ -214,7 +214,6 @@
     "prepareMusicVideoOnly": "I will prepare the music video in Music Video Director with the exact story, song, and cue. I will not start generation. 🪄",
     "prepareSfxPack": "I will prepare Studio → Audio → SFX and queue the effects pack. They will wait behind whatever is already using the GPU. The Audios gallery only shows results when they finish. 🪄",
     "prepareStudioAudio": "I will prepare Studio → Audio with the visible values and send the generation to the queue. 🪄",
-    "preparingFile": "Preparing the file…",
     "preparingSeriesEpisode": "Preparing the series and the new episode…",
     "queuePreparedStudioVideo": "I am sending the video already prepared in Studio to the queue. 🪄",
     "queueingSeriesRender": "Queueing the Series Lab render ({{mode}})…",
@@ -364,6 +363,7 @@
     "writingAndSavingStory": "Writing and saving the new story…",
     "updatingLipsCreator": "Updating Lips Creator…",
     "generatingLipsMouths": "Generating Lips Creator mouths…",
-    "searchingWork": "Searching the work…"
+    "searchingWork": "Searching the work…",
+    "preparingFile": "Preparing the file…"
   }
 }
