@@ -134,3 +134,19 @@ def test_sung_shots_do_not_share_one_start_frame():
     sung = [shot["frame"] for shot in _passes(_brief())["shots"] if shot.get("sing")]
     assert len(sung) >= 4 and len(set(sung)) == 4
     assert all("lips parted" in frame and "in the scene: " in frame for frame in sung)
+
+
+def test_the_cta_stays_on_the_end_cards_and_the_theme_is_only_the_scene():
+    """The CTA used to be every chorus's sung action and the theme every verse's: both were hidden texts."""
+    spec = _passes(_brief(tema="Un faro que se apaga en la costa gallega", cta="Escúchala ya"))
+    assert spec["section_actions"] == {"scene": "Un faro que se apaga en la costa"}
+    shots = spec["shots"]
+    assert not any("Escúchala" in shot.get("action", "") or "Escúchala" in shot.get("frame", "") for shot in shots)
+    assert next(shot for shot in shots if shot["key"] == "outro")["title"]["fields"]["cta"] == "Escúchala ya"
+    sung = [shot for shot in shots if shot.get("sing")]
+    assert all("faro" not in shot["action"] and shot["frame"].endswith("in the scene: Un faro que se apaga en la costa") for shot in sung)
+    assert {shot["action"].split(" Only this")[0] for shot in sung if shot["key"].startswith("c")} == {
+        "(S1) The singer sings the chorus to the camera with a bigger gesture."}
+    content = [shot for shot in shots if shot["kind"] == "h3" and not shot.get("sing")]
+    assert content and all("Un faro que se apaga en la costa" in shot["frame"] for shot in content)
+    assert all(left["frame"] != right["frame"] for left, right in zip(content, content[1:]))

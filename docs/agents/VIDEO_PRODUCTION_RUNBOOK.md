@@ -168,7 +168,9 @@ reveal, a riser climbs through it and ends on the hit, the reveal lands on an im
 to the montage as `audioCues` and the soundtrack is the processed file (`<id>-trailer-soundtrack.wav`); anchors are the planned shots'
 `t0`. A trailer may be instrumental (`song.lyrics: ""`: the music model gets `[Instrumental]`, nothing is transcribed), and then
 `song.late_entry` (seconds) delays the music; a song with lyrics is never shifted because its captions are timed to it.
-Use `treatment.moments[].at` with a beat name to say what the reveal or the tension is.
+Use `treatment.moments[].at` with a beat name to say what the reveal or the tension is. Each beat's generated shot
+carries the beat's own prose ("Slow establishing shot of the world…", "…the camera pulls back"), with the moment's event
+in place of the scene phrase; `dry_run.windows` shows every trailer window's `beat` and that `action`.
 
 ## What the run does
 
@@ -178,7 +180,7 @@ Use `treatment.moments[].at` with a beat name to say what the reveal or the tens
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
 | cast | `generation.image` (`style.image_model`, Qwen Image 2.1 by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
 | frames | `generation.image` with that portrait as the reference (the sheet if the portrait failed) | one start frame per `h3` shot |
-| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
+| clips | `generate` with the H3 model in `spec.video` (default MiniMax H3 Fused Turbo, 4 steps) and the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
@@ -328,7 +330,38 @@ Style fields beyond the example:
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
 
-`shots` may be `"auto"`. The agent then writes lyrics and an optional action phrase per section (`section_actions`, keys `verse` and `chorus`). A verse alternates a sung H3 shot with a still or screen, a chorus is one H3 spanning two lines, the intro and outro are end cards, and fill shots cover any gap longer than two bars.
+`shots` may be `"auto"`. The agent then writes lyrics and, optionally, `section_actions`: `scene` is where every planned
+shot takes place (default: the `verse` phrase, else the title), and `verse`, `pre-chorus` and `chorus` replace the sung
+action of those sections (default: "(S1) The singer sings the verse to the camera, swaying gently." and its chorus twin).
+A verse alternates a sung H3 shot with a content shot (a still, a screen or a short H3 clip of the protagonist), a chorus is
+sung two lines per shot, the intro and outro are end cards, and fill shots cover any gap longer than two bars. That skeleton
+is what `"auto"` means; write `shots` yourself for another one. Sung shots and H3 content shots each take the next of four
+framings in turn (content: wide establishing, medium in the action, a detail insert, over the shoulder), each "in the scene:"
+the scene phrase. The content action is "The protagonist acts out the scene: <scene>. Clear movement." plus the camera move
+of its framing (glides forward, tracks sideways, pushes in, drifts to one side). Those words are the move: H3 makes it,
+and the scene keeps the clip still (`camera-locked`) because the planner gives no shot a `camera`; give a shot `camera` to
+add a 2D move over the clip. In a trailer each beat opens on its own framing (wide for the presentation and the reveal,
+closer ones for the tension, over the shoulder for the close) and keeps the beat's own camera words. `dry_run` shows what
+was filled in under `auto_plan` (`scene` and `scene_from`, `content_framings`, `content_actions`, `sung_framings`, and
+`sung_actions` with `from`: `section_actions` or `default`), and marks sung windows `sing`. `production.plan` puts the brief's `tema` in `section_actions.scene` only; its `cta` goes on the
+end cards, never into a sung action. A spec that has already run is stored expanded, so its shots keep their texts.
+
+`video` picks the model that shoots the H3 clips, for example `{"model": "minimax_h3"}`. Without it the clips are shot as
+they always were: `minimax_h3_fused_turbo` at 4 steps, the audio-driven lip-sync model the pipeline and its lip-sync
+thresholds were tuned on. `model` is one of `minimax_h3` (base: slower, finer detail), `minimax_h3_full`,
+`minimax_h3_fused_turbo` and `minimax_h3_legacy`: the first frame + audio H3 models with a definition in `app/defaults`,
+which take the same request and the same 124 + 17k frame lattice. `steps` defaults to that definition (4 for Fused
+Turbo, 20 for the others) and must be in the model's range: 4-8 for Fused Turbo, 1-50 for the others (the generate call
+refuses other values, so `invalid_spec` says so before any GPU work). LTX-2 and the Ref2VA models are refused with
+`invalid_spec` and the list. `dry_run` and `production.status` show the choice as `video_model` (`model`, `steps`,
+`source`: `spec` or `default`; in `dry_run`, `error` when the run would refuse it); `video` on the status stays the
+finished video's URL. Each kept clip and each take records the model and steps it was shot with. A run whose spec asks
+for another model or other steps shoots the kept clips of unlocked shots again and logs which; the new take replaces the
+old one whatever its score. A locked shot keeps its take, so its clip may come from another model. Nothing is marked on
+the kept clip: a spec that goes back to the model that shot it keeps it. A clip from before this field counts as Fused
+Turbo at 4 steps, so an existing production shoots nothing again. `dry_run.minutes` keeps clip minutes per model: until this workspace has
+finished a run with the chosen model, a take is the Fused Turbo default scaled by steps (`estimate_source`
+`defaults+model_steps`).
 
 Shot fields:
 
@@ -512,10 +545,23 @@ entry's own `scale` wins, and a new height does not remake the model.
 and a resume retries it with a new picture.
 
 **Sets.** `spec.sets` paints the backgrounds for those templates in the same image
-batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. Each
-is drawn eye-level, with an open floor across the lower third, a clear horizon and
-nobody in it, so the projected floor has ground for the cast to stand on. A shot
-names it as its `background`: `{"template": "dance-stage", "background": "harbour",
+batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. By
+default (`staging: "floor"`) each is drawn eye-level, with an open empty floor across
+the lower third, a clear horizon and nobody in it, so the projected floor has ground
+for the cast to stand on, and the sentences of `style.image` that put people in the
+picture are left out (a sentence naming people, characters, a crowd, figures, figurines
+or dolls, the whole sentence; words that name a medium or a material, such as
+"figurine look", "doll-like", "cast shadows", "cast iron" or "crowd-pleasing", stay). `staging: "backdrop"` asks only for a far view with a clear horizon and
+nobody in it, without the floor: give the shot a `floor` other than `backdrop` (a ground
+style, `tiles`, `none`) so the picture is not projected as ground. `staging: "none"`
+sends the prompt and the whole look as written, so people may appear in the plate.
+`dry_run` lists each set under `sets` with its `staging`, the `prompt_sent` and the
+`look_sentences_dropped` (or an `error` for a staging the run would refuse). A set painted
+before `staging` existed is not painted again.
+On the projected floor the renderer holds a template's orbit to 0.06 turn
+(`SET_MAX_TURNS` in `ui/scripts/production-scene3d.mjs`), because a wider arc swings
+past the edge of a flat picture: an orbit template on a painted set is a short arc, and a
+diorama or parallax set is the way to orbit wide. A shot names it as its `background`: `{"template": "dance-stage", "background": "harbour",
 "cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
 
 **Worlds.** `world` plays the shot's template (its camera, cast, props and moves)
