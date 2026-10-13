@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from .lyrics_language import repair_lyrics_language, validate_lyrics_language
-from .minimax_music_service import ALLOWED_MODELS, COVER_MODELS
+from .minimax_music_models import ALLOWED_MODELS, COVER_MODELS
 
 
 GUIDE_REVISION = "music-model-contract-v1"

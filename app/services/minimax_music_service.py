@@ -13,12 +13,10 @@ from typing import Any, Callable
 import requests
 
 from . import resource_scheduler
+from .minimax_music_models import ALLOWED_MODELS, COVER_MODELS, ORIGINAL_MODELS  # noqa: F401 (re-exported)
 
 
 API_URL = "https://api.minimax.io/v1/music_generation"
-ORIGINAL_MODELS = {"music-3.0", "music-2.6", "music-3.0-free", "music-2.6-free"}
-COVER_MODELS = {"music-cover", "music-cover-free"}
-ALLOWED_MODELS = ORIGINAL_MODELS | COVER_MODELS
 MAX_COVER_BYTES = 50 * 1024 * 1024
 
 

@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
+import sys
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -27,6 +30,7 @@ from services.music_submission import classify_music_route
 from services.production_song import _music_params
 from services.studio_music_spec import StudioMusicSpecError, freeze_studio_music_spec
 
+APP = Path(__file__).resolve().parents[1] / "app"
 LOCAL = "ace_step_v1_5_xl_sft_lm_4b"
 PAID_REFUSAL = "Paid MiniMax music is disabled (music-3.0); use a local model: ace_step_v1_5_xl_sft_lm_4b, minimax_music3"
 SONG = {"prompt": "cinematic dream pop", "lyrics": "[Verse]\nAcross the night", "count": 1}
@@ -215,6 +219,25 @@ def test_a_production_spec_with_a_paid_song_model_is_refused():
     assert refused.value.code == "invalid_spec" and str(refused.value).startswith(PAID_REFUSAL)
     spec["song"]["model"] = "minimax_music3"
     assert validate_spec(spec)["song"]["model"] == "minimax_music3"
+
+
+def test_the_production_spec_check_needs_no_http_client():
+    """production.* and media.options read the paid ids without the MiniMax client (the E2E server has no requests)."""
+    script = (
+        "import sys\n"
+        "sys.modules['requests'] = None\n"
+        "import services.media_options\n"
+        "from services.music_production import ProductionError, validate_spec\n"
+        "song = {'lyrics': 'a', 'caption': 'pop', 'duration': 30, 'bpm': 120, 'model': 'music-3.0'}\n"
+        "spec = {'title': 't', 'song': song, 'style': {}, 'shots': [{'key': 'i', 'kind': 'still', 't0': 0, 'still': 'k'}]}\n"
+        "try:\n"
+        "    validate_spec(spec)\n"
+        "except ProductionError as error:\n"
+        "    print(error)\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], cwd=APP, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith(PAID_REFUSAL)
 
 
 def test_media_options_lists_local_music_and_no_paid_music():
