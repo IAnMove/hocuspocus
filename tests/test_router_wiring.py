@@ -31,7 +31,6 @@ PENDING = "Pending owner decision (2026-10-13): neither wired nor deleted."
 # Router factories the main server does not mount, as "module:factory".
 CORE_SERVER_ONLY = {
     "core_labs:create_core_labs_router": "Core server only: the main server serves these Labs routes itself.",
-    "core_mcp:create_core_mcp_router": "Core server only: the main server mounts wangp_mcp.",
     "core_remote:create_core_remote_router": "Core server only: remote generation routes without a local engine.",
     "core_series_plan:create_core_series_plan_router": "Core server only: the main server plans Series itself.",
 }
@@ -207,6 +206,23 @@ def test_every_router_factory_is_mounted_by_the_main_server_or_listed() -> None:
     assert all(reason.strip() for reason in NOT_MOUNTED_IN_MAIN.values())
     core = {f"{module}:{factory}" for module, factory in _mounted(CORE)}
     assert set(CORE_SERVER_ONLY) <= core
+
+
+def test_core_mcp_returns_the_shared_wangp_router() -> None:
+    tree = _parse(ROUTERS / "core_mcp.py")
+    factory = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "create_core_mcp_router"
+    )
+    calls = [
+        node for node in ast.walk(factory)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "create_wangp_mcp_router"
+    ]
+    assert len(calls) == 1
+    assert not any(
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "APIRouter"
+        for node in ast.walk(factory)
+    )
 
 
 def test_video_editor_routers_are_mounted_once_by_the_main_server() -> None:
