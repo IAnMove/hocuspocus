@@ -17,12 +17,18 @@ from services import minimax_music_service, resource_scheduler
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
 STORY_MUSIC = ROOT / "app" / "routers" / "story_music.py"
+STORY_MUSIC_JOBS = ROOT / "app" / "services" / "story_music_jobs.py"
 LAUNCH_TREE = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
 STORY_MUSIC_TREE = ast.parse(STORY_MUSIC.read_text(encoding="utf-8"), filename=str(STORY_MUSIC))
+STORY_MUSIC_JOBS_TREE = ast.parse(STORY_MUSIC_JOBS.read_text(encoding="utf-8"), filename=str(STORY_MUSIC_JOBS))
 
 
 def _function(name: str) -> tuple[ast.FunctionDef, Path]:
-    for tree, source in ((STORY_MUSIC_TREE, STORY_MUSIC), (LAUNCH_TREE, LAUNCH)):
+    for tree, source in (
+        (STORY_MUSIC_JOBS_TREE, STORY_MUSIC_JOBS),
+        (STORY_MUSIC_TREE, STORY_MUSIC),
+        (LAUNCH_TREE, LAUNCH),
+    ):
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
                 clone = copy.deepcopy(node)

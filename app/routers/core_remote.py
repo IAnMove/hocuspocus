@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 from typing import Any
+from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException, Request
 
-from services import core_remote_3d, core_remote_music, core_workspace as core
+from services import core_remote_3d, core_workspace as core
+from services.core_canonical_tasks import publish_music_activity
+from services.story_music_jobs import bind_story_music_jobs
+from routers.story_music import create_story_music_router
 from services.core_production import (
     ensure_llm_loaded,
     production_profile_response,
@@ -26,6 +30,62 @@ def _workspace(value: Any) -> str:
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return name
+
+
+class _CoreMusicServices:
+    """Live services map. The worker reads it when a candidate starts, not at boot."""
+
+    def get(self, key, default=None):
+        if key == "services":
+            return core.services_raw()
+        return default
+
+
+def _core_music_workspace_dir(workspace: str | None = None) -> str:
+    try:
+        return core.workspace_dir(workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _core_story_cover_reference_path(filename: str, workspace: str) -> str | None:
+    try:
+        return core.resolve_media(str(filename or ""), workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def core_music_generation_gate(body: dict) -> None:
+    """Local music stays unavailable (409) before Story Lab's paid-model check."""
+    from routers.system_capabilities import require_capability_http as require_local
+    from services.music_model_contract import DEFAULT_MUSIC_MODEL
+    from services.music_submission import MusicSubmissionError, classify_music_route
+
+    model = str((body or {}).get("model") or DEFAULT_MUSIC_MODEL).strip()
+    try:
+        route = classify_music_route(model)
+    except MusicSubmissionError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
+    if route != "remote_minimax":
+        require_local("local_audio_ai")
+
+
+def _core_music_before_reserve(workspace: str) -> None:
+    """Open Activity before the reservation writes a task, so startup interrupt cannot eat it."""
+    from services import core_generation_commands
+
+    core_generation_commands.registry_for(str(workspace or "default"))
+
+
+def _core_story_music_binding():
+    music_wgp = SimpleNamespace(server_config=_CoreMusicServices())
+    jobs = bind_story_music_jobs(
+        workspace_dir=_core_music_workspace_dir,
+        list_workspaces=core.list_workspaces,
+        wgp_module=music_wgp,
+        publish_legacy_task=publish_music_activity,
+    )
+    return jobs, music_wgp
 
 
 def create_core_remote_router() -> APIRouter:
@@ -77,29 +137,15 @@ def create_core_remote_router() -> APIRouter:
             raise HTTPException(status_code=404, detail="3D generation job not found")
         return job
 
-    @router.post("/api/v1/stories/music-candidates/jobs", status_code=202)
-    def start_music_job(body: dict):
-        workspace = _workspace(body.get("workspace") if isinstance(body, dict) else None)
-        try:
-            return core_remote_music.start_job(body or {}, workspace=workspace)
-        except HTTPException:
-            raise
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-
-    @router.get("/api/v1/stories/music-candidates/jobs/{job_id}")
-    def music_job_status(job_id: str):
-        job = core_remote_music.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="MiniMax Music job not found")
-        return job
-
-    @router.post("/api/v1/stories/music-candidates/jobs/{job_id}/cancel")
-    def music_job_cancel(job_id: str):
-        job = core_remote_music.cancel_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="MiniMax Music job not found")
-        return job
+    music_jobs, music_wgp = _core_story_music_binding()
+    router.include_router(create_story_music_router(
+        music_jobs,
+        get_active_workspace=core.active_workspace,
+        story_cover_reference_path=_core_story_cover_reference_path,
+        wgp_module=music_wgp,
+        music_generation_gate=core_music_generation_gate,
+        before_reserve=_core_music_before_reserve,
+    ))
 
     router.include_router(create_director_plan_reads_router(ensure_llm_loaded=ensure_llm_loaded))
     router.include_router(create_director_pipeline_status_router(

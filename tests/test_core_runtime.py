@@ -832,6 +832,118 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 409)
         self.assertEqual(denied.json()["detail"]["code"], FEATURE_UNAVAILABLE)
 
+    def _clear_music_jobs(self):
+        from services import story_music_jobs
+
+        with story_music_jobs._minimax_music_jobs_lock:
+            story_music_jobs._minimax_music_jobs.clear()
+
+    def test_minimax_music_reloads_an_interrupted_checkpoint(self):
+        job_id = "minimax-music-abc123def456"
+        folder, previous = self._in_temp_workspace()
+        try:
+            checkpoint = Path("outputs") / ".minimax-music-jobs"
+            checkpoint.mkdir(parents=True)
+            payload = {
+                "jobId": job_id,
+                "taskId": f"task-{job_id}",
+                "workspace": "default",
+                "status": "running",
+                "phase": "requesting",
+                "message": "in progress",
+                "children": [{
+                    "taskId": f"task-{job_id}-candidate-1",
+                    "status": "running",
+                    "phase": "requesting",
+                }],
+            }
+            (checkpoint / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+            loaded = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(loaded.status_code, 200, loaded.text)
+        body = loaded.json()
+        self.assertEqual(body["status"], "interrupted")
+        self.assertIn("restarted", body["message"])
+        self.assertEqual(body["children"][0]["status"], "interrupted")
+
+    def test_minimax_music_replay_does_not_start_a_second_worker(self):
+        from routers import story_music
+
+        started = []
+
+        class RecordingThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                self.args = args
+
+            def start(self):
+                started.append(self.args)
+
+        payload = {
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nAcross the night",
+            "count": 1,
+            "workspace": "default",
+            "paid_music_confirmed": True,
+            "idempotencyKey": "same-song-key",
+        }
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                story_music.threading, "Thread", RecordingThread,
+            ):
+                first = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                second = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(first.status_code, 202, first.text)
+        self.assertEqual(second.status_code, 202, second.text)
+        self.assertTrue(second.json().get("replay"))
+        self.assertEqual(second.json()["jobId"], first.json()["jobId"])
+        self.assertEqual(len(started), 1)
+
+    def test_minimax_music_start_publishes_activity(self):
+        from routers import story_music
+
+        class QuietThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                return None
+
+            def start(self):
+                return None
+
+        payload = {
+            "model": "music-3.0",
+            "prompt": "cinematic dream pop",
+            "lyrics": "[Verse]\nAcross the night",
+            "count": 1,
+            "workspace": "default",
+            "paid_music_confirmed": True,
+            "idempotencyKey": "activity-song-key",
+        }
+        folder, previous = self._in_temp_workspace()
+        try:
+            with patch("services.execution_mode.validate_remote_provider"), patch.object(
+                story_music.threading, "Thread", QuietThread,
+            ):
+                started = self.client.post("/api/v1/stories/music-candidates/jobs", json=payload)
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        body = started.json()
+        tasks = {task["id"]: task for task in listed.json()["tasks"]}
+        parent = tasks[body["taskId"]]
+        self.assertEqual(parent["provider"], "minimax")
+        self.assertEqual(parent["metadata"]["adapter"], "minimax-music")
+        child_id = body["children"][0]["taskId"]
+        self.assertEqual(tasks[child_id]["metadata"]["adapter"], "minimax-music-candidate")
+
     def test_minimax_image_generate_starts_a_studio_job(self):
         folder, previous = self._in_temp_workspace()
         try:

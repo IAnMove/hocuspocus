@@ -99,6 +99,38 @@ def _editor_task_fields(snapshot: dict, adapter: str, status: str, task_id: str)
     }
 
 
+def publish_music_activity(job: dict, adapter: str) -> dict | None:
+    """Publish one MiniMax Music snapshot into the core Activity registry."""
+    if not isinstance(job, dict):
+        return None
+    task_id = _editor_text(job.get("taskId"), "")
+    if not task_id:
+        return None
+    status = task_status(job.get("status"))
+    parent = _editor_text(job.get("parentTaskId"), "") or None
+    root = _editor_text(job.get("rootTaskId"), "") or task_id
+    title = "MiniMax Music candidate" if adapter == "minimax-music-candidate" else "MiniMax Music"
+    return upsert_task(
+        _editor_text(job.get("workspace"), "default"),
+        task_id,
+        root_id=root,
+        parent_id=parent,
+        kind="music",
+        workflow=adapter or "minimax-music",
+        title=title,
+        status=status,
+        phase=_editor_text(job.get("phase"), status)[:160],
+        message=_editor_text(job.get("message"), status),
+        provider=_editor_text(job.get("provider"), "minimax"),
+        model=_editor_text(job.get("model"), ""),
+        server_origin=_editor_text(job.get("server_origin"), "https://api.minimax.io"),
+        acquired_resources=_editor_list(job.get("acquired_resources")),
+        result_refs=_editor_list(job.get("output_files")),
+        backend_job_id=_editor_text(job.get("jobId"), ""),
+        metadata={"adapter": adapter},
+    )
+
+
 def publish_video_editor_activity(snapshot: dict, adapter: str) -> dict | None:
     """Publish one video-editor job snapshot into the core Activity registry."""
     task_id = _editor_text(snapshot.get("task_id"), "")
