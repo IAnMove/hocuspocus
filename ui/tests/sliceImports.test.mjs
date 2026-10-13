@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const uiRoot = fileURLToPath(new URL('..', import.meta.url))
 const storeModule = 'useStore'
@@ -39,28 +40,44 @@ function pointsAtUseStore(fromFile, specifier) {
   return target === useStorePath
 }
 
-function isTypeOnlyClause(clause) {
-  const trimmed = clause.trim()
-  if (/^type\b/.test(trimmed)) return true
-  const braceAt = trimmed.indexOf('{')
-  if (braceAt === -1) return false
-  if (trimmed.slice(0, braceAt).trim()) return false
-  const parts = trimmed.slice(braceAt + 1, trimmed.lastIndexOf('}')).split(',').map(part => part.trim()).filter(Boolean)
-  return parts.length > 0 && parts.every(part => /^type\b/.test(part))
+function isTypeOnlyImport(node) {
+  const clause = node.importClause
+  if (!clause) return false
+  if (clause.isTypeOnly) return true
+  if (clause.name) return false
+  const bindings = clause.namedBindings
+  return Boolean(bindings && ts.isNamedImports(bindings)
+    && bindings.elements.length > 0 && bindings.elements.every(element => element.isTypeOnly))
 }
 
+function isTypeOnlyExport(node) {
+  if (node.isTypeOnly) return true
+  const clause = node.exportClause
+  return Boolean(clause && ts.isNamedExports(clause)
+    && clause.elements.length > 0 && clause.elements.every(element => element.isTypeOnly))
+}
+
+/** Parsed with the TypeScript compiler, so a statement can never swallow the
+ *  next one the way a regular expression over the source text can. */
 function runtimeUseStoreImports(file, text) {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
   const found = []
-  const fromImport = /(?:^|\n)\s*(import|export)\s+([\s\S]*?)\sfrom\s+['"]([^'"]+)['"]/g
-  for (const match of text.matchAll(fromImport)) {
-    if (!pointsAtUseStore(file, match[3])) continue
-    if (isTypeOnlyClause(match[2])) continue
-    found.push(match[3])
+  const visit = node => {
+    if (ts.isImportDeclaration(node) && !isTypeOnlyImport(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      if (pointsAtUseStore(file, node.moduleSpecifier.text)) found.push(node.moduleSpecifier.text)
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && !isTypeOnlyExport(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      if (pointsAtUseStore(file, node.moduleSpecifier.text)) found.push(node.moduleSpecifier.text)
+    } else if (ts.isImportEqualsDeclaration(node) && !node.isTypeOnly && ts.isExternalModuleReference(node.moduleReference)
+      && ts.isStringLiteral(node.moduleReference.expression)) {
+      if (pointsAtUseStore(file, node.moduleReference.expression.text)) found.push(node.moduleReference.expression.text)
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+      && node.arguments.length > 0 && ts.isStringLiteralLike(node.arguments[0])) {
+      if (pointsAtUseStore(file, node.arguments[0].text)) found.push(node.arguments[0].text)
+    }
+    ts.forEachChild(node, visit)
   }
-  const dynamicImport = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g
-  for (const match of text.matchAll(dynamicImport)) {
-    if (pointsAtUseStore(file, match[1])) found.push(match[1])
-  }
+  visit(source)
   return found
 }
 
