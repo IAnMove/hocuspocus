@@ -278,3 +278,29 @@ test('create_series_episode on an existing series keeps its style and lists only
     harness.restore()
   }
 })
+
+test('a story with no style of its own is staged for the Director with no style, so there is no lock', async () => {
+  const { buildShortFilmAdaptation, buildTrailerAdaptation, DEFAULT_TRAILER_DIRECTION } = await import('../src/features/stories/adaptations')
+  const { createStoryProject } = await import('../src/features/stories/model')
+  const FALLBACK = /Match the approved Story reference artwork/
+  const bare = createStoryProject()
+  assert.equal(bare.enforceVisualStyle, true)
+  for (const adaptation of [
+    buildShortFilmAdaptation(bare, 'A short film', 45, { preserveVisualStyle: true }),
+    buildTrailerAdaptation(bare, DEFAULT_TRAILER_DIRECTION, 60, {
+      format: 'theatrical', narration: 'hybrid', spoiler: 'balanced', intensity: 'rising',
+      tagline: '', titleCards: false, preserveVisualStyle: true,
+    }),
+  ]) {
+    assert.equal(adaptation.visualStyle, '')
+    assert.doesNotMatch(adaptation.sceneDescription, FALLBACK)
+  }
+  // A style the person wrote is used exactly as before.
+  const styled = { ...bare, visualStyle: 'Hand-painted gouache' }
+  assert.equal(buildShortFilmAdaptation(styled, 'A short film', 45).visualStyle, 'Hand-painted gouache')
+  const world = { ...bare, world: { ...bare.world, visualLanguage: 'Low sun, long shadows' } }
+  assert.equal(buildShortFilmAdaptation(world, 'A short film', 45).visualStyle, 'Low sun, long shadows')
+  // A story that has a style but does not enforce it keeps the reference-artwork sentence it always had.
+  const notEnforced = { ...styled, enforceVisualStyle: false }
+  assert.match(buildShortFilmAdaptation(notEnforced, 'A short film', 45).visualStyle, FALLBACK)
+})
