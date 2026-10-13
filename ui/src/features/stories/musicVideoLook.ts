@@ -16,7 +16,6 @@ const NAMED_LOOK = /\b(pel[ií]cula|film\b|movie\b|serie\b|series\b|anthology|an
 const YEAR_LOOK = /\b((?:19|20)\d{2})\b.{0,48}\b(film|movie|pel[ií]cula|animated|animaci[oó]n|anthology)\b/i
 const YEAR_LOOK_FLIP = /\b(film|movie|pel[ií]cula|animated|animaci[oó]n|anthology)\b.{0,48}\b((?:19|20)\d{2})\b/i
 const HEAVY_METAL_1981 = /\bheavy metal\b.{0,24}\b1981\b|\b1981\b.{0,24}\bheavy metal\b/i
-const GENERIC_VISUAL_STYLE = /^(?:direcci[oó]n visual cinematogr[aá]fica coherente, personajes legibles y continuidad entre escenas\.?|identidades consistentes, siluetas reconocibles y expresiones claras\.?)$/i
 const NEW_SONG_REQUESTS = [
   /\b(?:videoclip|clip\s+musical)\b[^.!?\n]{0,160}\b(?:de|con|para)\s+una\s+canci[oó]n\b/i,
   /\bmusic\s*video\b[^.!?\n]{0,160}\b(?:for|with|of)\s+(?:an?\s+)?(?:new\s+|original\s+)?song\b/i,
@@ -113,7 +112,7 @@ export function newMusicVideoStoryAction(request: string, conversationLanguage =
     theme: topic,
     ending: i18n.t('storyLab:scaffold.musicVideoEnding', { topic, lng }),
     genre: i18n.t('storyLab:scaffold.musicVideoGenre', { lng }),
-    tone: i18n.t('storyLab:scaffold.tone', { lng }),
+    tone: '',
     visualStyle: request.trim().slice(0, 2_000),
     worldSummary: topic,
     language,
@@ -147,9 +146,8 @@ export function resolveMusicVideoVisualStyle(
   const style = String(visualStyle || '').trim()
   const brief = String(creativeBrief || '').trim()
   if (projectType !== 'music_video') return style
-  if (style && !GENERIC_VISUAL_STYLE.test(style)) return style
-  if (brief && namedFilmOrSeriesLook(brief)) return brief
-  return style
+  if (style) return style
+  return brief && namedFilmOrSeriesLook(brief) ? brief : style
 }
 
 export function musicVideoShouldUseDirectVideo(project: Pick<StoryProject, 'musicVideoGenerationMode' | 'visualStyle' | 'characterVisualStyle'>): boolean {
