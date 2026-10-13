@@ -30267,7 +30267,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
     from services.series_render import (
         apply_series_h3_model_settings, apply_series_shot_duration, model_for_manifest,
         normalize_series_resolution, quantize_h3_frames, series_dialogue_preflight_issues,
-        shot_generation_prompt,
+        shot_generation_prompt, shot_render_settings,
     )
 
     workspace = _series_library_workspace(body.get("workspace"))
@@ -30363,7 +30363,7 @@ def start_series_episode_render(series_id: str, episode_id: str, body: dict):
             duration_contract = shot.get("dialogueDuration") \
                 if isinstance(shot.get("dialogueDuration"), dict) else {}
             shot_settings = apply_series_h3_model_settings(model, {
-                **settings,
+                **shot_render_settings(settings, shot),
                 "requestedDurationSeconds": float(shot.get("durationSeconds") or 0),
                 "dialogueDuration": copy.deepcopy(duration_contract),
                 "videoLengthFrames": int(duration_contract.get("effectiveFrames"))
