@@ -142,6 +142,18 @@ def test_the_bible_lists_what_an_agent_may_use():
     assert audio_files(["mus-a.wav", "x.mp3"])["other"] == ["x.mp3"]
 
 
+def test_the_bible_shows_the_series_episode_format_and_finish_and_the_guide_their_defaults():
+    plain = build_bible(series(), {}, [])["series"]
+    assert plain["episodeFormat"] is None and plain["finish"] == "paper", "a series that chose nothing gets the defaults"
+    own = build_bible({**series(), "episodeFormat": "Two acts, 2 minutes, 14 shots.", "look": {"finish": "film"}}, {}, [])["series"]
+    assert own["episodeFormat"] == "Two acts, 2 minutes, 14 shots." and own["finish"] == "film"
+    guide = guide_text()
+    for phrase in ("`pan-left`", "`drift`", "are `static` (push-in words `push`)", "`look.finish`", "`none`",
+                   "Follow the series' `episodeFormat`, else this sitcom format", "45–55 shots", "else push on punchlines"):
+        assert phrase in guide, phrase
+    assert "`static` or `push`" not in guide, "the camera is not only static or push any more"
+
+
 def test_a_compact_episode_keeps_layout_lines_and_takes():
     ep = episode()
     ep["shots"][0]["transitionIn"] = {"kind": "fade_black", "seconds": 0.8}

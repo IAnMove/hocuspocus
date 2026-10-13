@@ -4,8 +4,8 @@ import shutil
 import pytest
 
 from services.series_shot_plan import (
-    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, frame_size, language_key, normalize_layout2d, plan_cast,
-    plan_timing, sound_tracks, spread,
+    CAMERAS, background_for, build_shot_spec, card_texts, classify_camera, classify_framing, frame_size, language_key, normalize_layout2d,
+    plan_cast, plan_timing, sound_tracks, spread,
 )
 
 
@@ -40,6 +40,23 @@ def test_camera_spread_language_and_timing():
     timing, duration = plan_timing([1.0, 2.0])
     assert timing == [(0.35, 1.35), (1.57, 3.57)] and duration == round(round(4.02 * 24) / 24, 4)
     assert plan_timing([], at_least=6)[1] == 6
+
+
+def test_a_shot_names_its_camera_move_and_old_words_read_as_they_always_did():
+    assert CAMERAS == ("static", "push", "pull", "pan-left", "pan-right", "drift")
+    for move in CAMERAS:
+        assert normalize_layout2d({"camera": move}) == {"camera": move} and classify_camera(f" {move.upper()} ") == move
+    # Stored planner shots say such words and rendered static; their take fingerprint does not see the words, so they
+    # must keep rendering static. Only a move's own name moves the camera, as push-in words always did.
+    for words in ("Cámara fija con paneo suave", "Paneo horizontal lento de izquierda a derecha", "slow pan left", "pull back to reveal",
+                  "zoom out", "drifting", "pan left"):
+        assert classify_camera(words) == "static", words
+    assert classify_camera("slow push-in") == "push" and classify_camera("Cámara fija, ligero push-in") == "push"
+    assert normalize_layout2d({"camera": "Pan-Left"}) is None, "the stored plan takes the exact name"
+    shot = {"id": "s1", "locationId": "garage", "visibleCharacterIds": ["kevin"], "camera": "slow push-in"}
+    plan = lambda value: build_shot_spec(series(), {"id": "ep1"}, value, workspace="cast", recorded={})["camera"]
+    assert plan(shot) == "push" and plan({**shot, "camera": "pan-right"}) == "pan-right"
+    assert plan({**shot, "layout2d": {"camera": "drift"}}) == "drift", "the plan's own camera wins over the words"
 
 
 def test_backgrounds_prefer_the_variant_then_the_location_and_quote_paths():
@@ -215,6 +232,21 @@ def test_the_bridge_compiles_a_planned_shot_with_the_editor_code(tmp_path):
     document = run_series_shot({"mode": "shot", "kits": {"kit-kevin": sized}, "shot": spec})
     assert document["dialogueBeats"][0]["lipSync"]["cues"] and len(document["dialogueBeats"][0]["mouthLayerIds"]) == 9
     assert any(layer.get("characterKitRef", {}).get("id") == "kit-kevin" for layer in document["layers"])
+
+
+def test_a_stored_shot_compiles_to_the_video2d_document_it_always_did():
+    """The native render hashes the compiled document: a shot stored before camera moves and finishes were choices
+    compiles to the same one (fixtures and the digests at bc518b86 in test_series_finish)."""
+    from services.series_shot_bridge import run_series_shot
+    from services.video2d_compile import TSX
+    from tests.test_series_finish import KITS, digest, planned_spec, stored_cases
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    for name, value, shot, expected in stored_cases():
+        spec = planned_spec(value, shot)
+        document = run_series_shot({"mode": "shot", "kits": {cast["kitId"]: KITS[cast["kitId"]] for cast in spec["cast"]}, "shot": spec})
+        assert digest(document) == expected[3], name
+        assert any(layer["type"] == "camera" for layer in document["layers"]) is (expected[4] == "push"), name
 
 
 def test_props_stand_on_background_anchors_and_follow_the_framing_zoom():

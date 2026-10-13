@@ -233,7 +233,15 @@
     "applyCanon": "Apply reviewed canon",
     "applyCanonImages": "Apply reviewed canon and generate missing images",
     "resumeCanon": "Resume canon preparation",
-    "imageUnavailable": "Generated image for {{name}} is no longer available"
+    "imageUnavailable": "Generated image for {{name}} is no longer available",
+    "episodeFormat": "Episode format",
+    "episodeFormatHint": "How each episode is built: parts, length, number of shots. The episode planner and agents follow it. Empty: agents follow the default sitcom format shown here.",
+    "episodeFormatDefault": "Default: cold open (30–60 s), title card (7 s, theme), 3–4 scenes ending with the moral, credits card (6 s): 5–6 minutes, 45–55 shots.",
+    "finish": "Finish",
+    "finishHint": "The look over every 2D shot. Paper (the default) adds paper texture, grain and a vignette; None gives a clean picture. A shot can choose its own in its Framing and timing.",
+    "finishPaper": "Paper (default)",
+    "finishNone": "None",
+    "finishCustom": "Own amounts (set by an agent)"
   },
   "identity": {
     "title": "Series identity",
@@ -1000,7 +1008,8 @@
       "auto": "Automatic",
       "intro": "Intro (s)",
       "tail": "Tail (s)",
-      "jsonObject": "Write a JSON object"
+      "jsonObject": "Write a JSON object",
+      "finish": "Finish"
     },
     "framings": {
       "wide": "Wide",
@@ -1012,7 +1021,11 @@
     },
     "cameras": {
       "static": "Static",
-      "push": "Push in"
+      "push": "Push in",
+      "pull": "Pull out",
+      "panLeft": "Pan left",
+      "panRight": "Pan right",
+      "drift": "Drift"
     },
     "editor": {
       "title": "Editing shot #{{order}}",
@@ -1304,7 +1317,9 @@
       "length": "{{seconds}} s",
       "introShort": "intro {{seconds}} s",
       "gapShort": "gap {{seconds}} s",
-      "tailShort": "tail {{seconds}} s"
+      "tailShort": "tail {{seconds}} s",
+      "seriesFinish": "Series finish",
+      "finishShort": "finish: {{finish}}"
     },
     "card": {
       "title": "Title card",

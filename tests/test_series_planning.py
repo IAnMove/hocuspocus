@@ -141,6 +141,16 @@ def test_prompt_uses_frozen_snapshot_and_excludes_attempt_history():
     assert 'The only valid scene IDs are ["scene_a"]' in shots_prompt
 
 
+def test_the_shot_prompt_names_the_camera_moves_and_a_series_episode_format_only_when_it_has_one():
+    series, episode = prepared()
+    prompt, system = planning_prompt("outline", series, episode)
+    assert "episodeFormat" not in prompt and "episodeFormat" not in system, "a series without one keeps the prompt it had"
+    assert "pan-left, pan-right or drift" in system and "cameraLanguage asks" in system and "push for punchlines" in system
+    series["episodeFormat"] = "Cold open, two acts, a tag: 3 minutes."
+    prompt, system = planning_prompt("outline", series, episode)
+    assert '"episodeFormat": "Cold open, two acts, a tag: 3 minutes."' in prompt and "series.episodeFormat" in system
+
+
 def test_script_resolves_labels_to_authoritative_ids():
     series, episode = prepared()
     result = normalize_planning_result("script", script_result(), series, episode)

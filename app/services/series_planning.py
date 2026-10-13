@@ -836,7 +836,9 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
         "Each shot may contain dialogue from only one character; split every speaker change into a separate shot. "
         "Write short dialogue suitable for best-effort native lip sync. "
         "For animation_2d shots the framing must start with one of: wide shot, two-shot, medium shot, close-up, insert, "
-        "title card; the camera is either static or slow push-in (keep push-ins for punchlines and reveals). "
+        "title card; write the camera as exactly one of static, push (slow push-in), pull (slow pull-out), pan-left, "
+        "pan-right or drift, as the series' cameraLanguage asks; when it asks for no other move, use static, and push "
+        "for punchlines and reveals. "
         "A shot's visibleCharacterIds are the cutouts placed in it, left to right; keep each character on the same side "
         "of the frame within a scene. "
         "Write all generation-facing visual shot fields (prompt, action, framing, camera, and negativePrompt) "
@@ -847,6 +849,11 @@ def planning_prompt(stage: str, series: dict, episode: dict, instruction: str = 
         "cover them across separate single-speaker shots in conversational order. "
         "Do not mutate canon; canon changes are proposals for later human review."
     )
+    if series.get("episodeFormat"):
+        # Only a series that wrote its own shape: the others keep the prompt they always had.
+        context["series"]["episodeFormat"] = series["episodeFormat"]
+        system += (" series.episodeFormat is how this series builds each episode (parts, lengths, number of shots): "
+                   "follow it within the limits of each stage.")
     requirements = {
         "outline": "Create a compact episode outline with 4–8 causal beats.",
         "script": (

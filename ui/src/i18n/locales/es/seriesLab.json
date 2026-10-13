@@ -233,7 +233,15 @@
     "applyCanon": "Aplicar canon revisado",
     "applyCanonImages": "Aplicar canon revisado y generar imágenes que falten",
     "resumeCanon": "Reanudar la preparación del canon",
-    "imageUnavailable": "La imagen generada de {{name}} ya no está disponible"
+    "imageUnavailable": "La imagen generada de {{name}} ya no está disponible",
+    "episodeFormat": "Formato del capítulo",
+    "episodeFormatHint": "Cómo se arma cada capítulo: partes, duración, número de planos. Lo siguen el planificador de capítulos y los agentes. Vacío: los agentes siguen el formato de sitcom por defecto que se ve aquí.",
+    "episodeFormatDefault": "Por defecto: arranque en frío (30–60 s), cartela de título (7 s, sintonía), 3–4 escenas que acaban con la moraleja, cartela de créditos (6 s): 5–6 minutos, 45–55 planos.",
+    "finish": "Acabado",
+    "finishHint": "El acabado de cada plano 2D. Papel (por defecto) añade textura de papel, grano y viñeta; Ninguno da una imagen limpia. Cada plano puede elegir el suyo en su Encuadre y ritmo.",
+    "finishPaper": "Papel (por defecto)",
+    "finishNone": "Ninguno",
+    "finishCustom": "Valores propios (puestos por un agente)"
   },
   "identity": {
     "title": "Identidad de la serie",
@@ -1000,7 +1008,8 @@
       "auto": "Automático",
       "intro": "Entrada (s)",
       "tail": "Cola (s)",
-      "jsonObject": "Escribe un objeto JSON"
+      "jsonObject": "Escribe un objeto JSON",
+      "finish": "Acabado"
     },
     "framings": {
       "wide": "General",
@@ -1012,7 +1021,11 @@
     },
     "cameras": {
       "static": "Fija",
-      "push": "Acercamiento"
+      "push": "Acercamiento",
+      "pull": "Alejamiento",
+      "panLeft": "Panorámica a la izquierda",
+      "panRight": "Panorámica a la derecha",
+      "drift": "Deriva"
     },
     "editor": {
       "title": "Editando el plano #{{order}}",
@@ -1304,7 +1317,9 @@
       "length": "{{seconds}} s",
       "introShort": "entrada {{seconds}} s",
       "gapShort": "hueco {{seconds}} s",
-      "tailShort": "cola {{seconds}} s"
+      "tailShort": "cola {{seconds}} s",
+      "seriesFinish": "El de la serie",
+      "finishShort": "acabado: {{finish}}"
     },
     "card": {
       "title": "Rótulo",

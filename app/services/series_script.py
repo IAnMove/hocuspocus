@@ -26,7 +26,7 @@ clear message instead of halfway through a render::
                           {"file": "prop-robot-key.png", "x": 80, "scale": 0.5, "ground": true}], "timing": {"intro": 1.0},
                 "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8},
                            {"file": "bg-crowd.mp4", "depth": 0.2, "start": 2.5, "loop": "pingpong", "speed": 0.5}], "castDepth": 0.6,
-                "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
+                "voiceRoom": "cathedral", "finish": "none", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
                 "transitionIn": {"kind": "dissolve", "seconds": 0.6},
                 "foley": {"prompt": "wooden airship creaking, wind", "volume": 0.5}}]}
 """
@@ -35,6 +35,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from services.series_entrances import GAITS
+from services.series_finish import check_finish
 from services.series_library import assign_episode_number
 from services.series_layers import layout_layers
 from services.series_look_room import apply as keep_look_room
@@ -214,6 +215,7 @@ class EpisodeScript:
         self._check_layers(shot, where)
         self._check_transition(shot, where)
         self._check_resolution(shot, where)
+        self._check_finish(shot, where)
         series_stop_motion.check_shot(shot, where, check.problems)
         reference_problems(shot, check, where)
 
@@ -308,6 +310,18 @@ class EpisodeScript:
         elif series_resolution_preset(raw) is None:
             self.checker.problems.append(f"{where}: resolution must be one of {', '.join(SERIES_RESOLUTIONS)}")
 
+    def _check_finish(self, shot: dict[str, Any], where: str) -> None:
+        """``finish`` is the look over a 2D shot's picture (``series_finish``); a 3D or video shot has none."""
+        if shot.get("finish") is None:
+            return
+        if shot.get("kind") not in (None, "2d"):
+            self.checker.problems.append(f"{where}: finish is only for 2d shots")
+            return
+        try:
+            check_finish(shot["finish"])
+        except ValueError as error:
+            self.checker.problems.append(f"{where}: {error}")
+
     def _check_document(self, index: int, shot: dict[str, Any], where: str) -> None:
         """A document card's style and reveal are refused when they are unknown. Text that cannot fit at the
         readable minimum is a warning (``document_text_too_long``, one per document title) and still writes."""
@@ -355,7 +369,7 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom"):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom", "finish"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
         layout.update(series_hearing.layout_hearing(shot))

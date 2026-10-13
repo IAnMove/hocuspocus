@@ -33,7 +33,10 @@ Answer with JSON only: {{"changes": {{...}}, "append": {{...}}, "summary": "what
 Shot vocabulary (same as series.episode.from_script):
 - cast: [{{"characterId", "poseId", "x" (% of frame width), "enterFrom": "left"|"right", "motion": "idle"|"still"|"shake"}}]
 - lines: [{{"who": characterId, "es": "...", "en": "...", "pauseBefore": seconds}}] (one key per language the episode has)
-- framing: wide|two|medium|close|insert|title; camera: static|push (push on punchlines and reveals)
+- framing: wide|two|medium|close|insert|title; camera: static|push|pull|pan-left|pan-right|drift (push: slow push-in;
+  pull: slow pull-out; pan-left/pan-right: across the plate; drift: a slight float; static: none)
+- finish (2d shots): "paper" (paper texture, grain and vignette) | "none" (a clean picture) | a Video 2D finish id
+  (film, noir, sepia, oldDoc, flashback, warm, cold, vhs...); null goes back to the series' finish
 - fx: [{{"kind", "line": index | "at": seconds, "anchor": "start"|"end", "offset", "duration": seconds | "shot", "x", "y", "size" (%), "color": "#rrggbb"}}]
 - sfx: [{{"file", "at": seconds | "line": index, "anchor": "start"|"end", "offset", "volume" 0-1, "in": source second, "length": seconds}}]
 - props: [{{"file", "x", "y" (%), "scale" (fraction of frame height), "ground": true}}] (an image with alpha)
