@@ -8,6 +8,31 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **The Studio store is starting to split.** System settings, generation presets, foreground activity, and the CivitAI browser now live in their own slices. The screen still reads and writes them through the same `useStore` hook.
 
+**Security fix: the macOS "core" server no longer serves uploaded pages and
+scripts as pages of the app.** On the core server, `POST /api/v1/upload` kept
+any extension, so an uploaded `x.html`, `x.svg` or `x.js` was stored under that
+name and `GET /api/v1/uploads/...` sent it to the browser as a page on the
+app's own address (stored cross-site scripting). Both servers now use one
+uploads router, `app/routers/uploads.py`: only the known media, model, text and
+archive extensions are kept, every other name is stored as `.bin`, and every
+file it serves back carries `X-Content-Type-Options: nosniff`. The full server already did
+this, so its answers do not change. The core server also gets what the full
+server had: files are streamed to disk instead of held in memory (500 MB cap),
+a name that is not an upload falls back to the workspace outputs, MP3, M4A and
+AAC files become WAV (with the ffmpeg program when the install has no
+ffmpeg-python package, as the core install does), and a video upload reports its `fps`, `frame_count`,
+`duration_seconds` and `has_audio`. The core server's old raw-body upload
+(`?filename=`) and a multipart upload without a `file` part now answer `422`,
+as on the full server, and `GET /api/v1/uploads/` no longer accepts a name with
+slashes in it. Core also had four wrong or hidden routes, now fixed: `POST
+/api/v1/llm/load` ignored the stored provider key and the LLM routing and loaded
+with an empty key; `GET /api/v1/series/{id}` and `POST /api/v1/llm/plan-h3-windows`
+were each defined twice, so one copy never ran; and `GET /api/v1/jobs/recovery`
+offered the jobs that were running as leftovers of a crash, which the recovery
+dialog would have offered to resume. It now answers an empty list.
+
+**The Wizard says which defaults it chose, and no longer invents a "cinematic" style.** When the Wizard creates a Story or a Series from a short request, it still does not stop to ask about style, model, duration or format, but it now says so: if the style or the tone was left unset, its reply ends with one line ("Choices I made: style not set (the model decides), tone not set. Tell me if you want something else.") and lists only what really stayed empty. Before, it filled the style with a generic sentence ("Coherent cinematic direction..."), the tone with "Cinematic" and a Series camera with a television camera language. Story Lab then turned that sentence into a "VISUAL STYLE LOCK" prefix on every image and video prompt, so every Wizard story looked like the same "cinematic TV". Now a Story or Series made by the Wizard with no style has an empty style (no lock), an empty tone and an empty camera language; new projects made by hand also start with an empty tone, and a style or tone you write is kept exactly. The Story Lab writer and the Comic planner leave the "Tone:" line out of their prompt when there is no tone. Projects already saved keep what they have. Risk: a Wizard story with no style gets no style lock from Story Lab, so its look can drift between shots until you write one; the reply line tells you. The same holds when such a story is staged for the Director: with no style of its own it is staged with no style (before, the Director's own sentence "Match the approved Story reference artwork exactly... keep it illustrated..." took its place and became a lock that forced an illustrated look), so the Director adds no style lock. A story that has a style it does not enforce keeps that sentence.
+
 **A safety net for the coming split of the two largest files (no behaviour
 change).** Tests can now import the full server with a fake WanGP engine, with
 no GPU. `tests/characterization` records what read-only routes answer

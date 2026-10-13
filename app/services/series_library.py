@@ -194,7 +194,7 @@ def create_series_project(
             None, content_language=content_language, spoken_language=spoken_language
         ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
-        "genre": "", "tone": "Cinematic", "audience": "General",
+        "genre": "", "tone": "", "audience": "General",
         "visualStyle": "", "characterVisualStyle": "", "cameraLanguage": "",
         "allowClipText": False, "sourceMode": "original", "masterUniversePrompt": "",
         "rightsNote": "", "bestEffortLipSyncAcknowledged": False,

@@ -1022,6 +1022,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/wizardStoryDefaults.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/wizardTruthfulnessDom.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",

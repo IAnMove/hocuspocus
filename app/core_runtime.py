@@ -34,6 +34,7 @@ from routers.series_assembly import create_series_assembly_router
 from routers.series_review import create_series_review_router
 from routers.style_library import create_style_library_router
 from routers.system_capabilities import create_system_capabilities_router, require_capability_http
+from routers.uploads import create_uploads_router
 from routers.user_diagnostics import create_user_diagnostics_router
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
 from routers.wizard_activity import create_wizard_activity_router
@@ -47,8 +48,9 @@ from services import (
     core_remote_image,
     core_scene_recording,
     core_series_assembly,
-    core_upload,
     core_workspace as core,
+    upload_stream,
+    upload_video_metadata,
 )
 from services.mcp_access import McpAccess
 from services.agent_activity import ActorHeaderMiddleware, AgentActivity
@@ -199,7 +201,6 @@ BLOCKED = (
     ("POST", "/api/v1/audio/analyze/jobs", "whisper_local"),
     ("POST", "/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video", "wangp_local"),
     ("POST", "/api/v1/director/pipelines/{pid}/repair", "wangp_local"),
-    ("POST", "/api/v1/llm/plan-h3-windows", "wangp_local"),
 )
 
 
@@ -373,10 +374,15 @@ async def put_services_config(request: Request):
 
 
 @api.get("/api/v1/jobs")
-@api.get("/api/v1/jobs/recovery")
 def list_jobs():
     jobs = core_remote_image.list_active()
     return {"jobs": jobs, "pipelines": [], "total": len(jobs)}
+
+
+@api.get("/api/v1/jobs/recovery")
+def jobs_recovery():
+    """The core keeps no durable generation queue, so a crash leaves nothing to offer back."""
+    return {"jobs": []}
 
 
 @api.get("/api/v1/system-stats")
@@ -678,49 +684,14 @@ def video_export_status(job_id: str):
     return job
 
 
-@api.post("/api/v1/upload")
-async def upload_file(request: Request, filename: str = "upload.bin"):
-    chunks: list[bytes] = []
-    total = 0
-    async for chunk in request.stream():
-        total += len(chunk)
-        if total > core_upload.MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
-        chunks.append(chunk)
-    try:
-        data, original = core_upload.extract_upload(
-            b"".join(chunks),
-            request.headers.get("content-type") or "",
-            filename,
-        )
-        return core_upload.save_upload(core.uploads_dir(), data, original)
-    except ValueError as error:
-        status = 413 if "too large" in str(error).lower() else 400
-        raise HTTPException(status_code=status, detail=str(error)) from error
-
-
-@api.get("/api/v1/uploads/{filename:path}")
-def serve_upload(filename: str):
-    path = core.safe_join(core.uploads_dir(), filename)
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Upload not found")
-    return FileResponse(path)
-
-
-@api.post("/api/v1/llm/load")
-async def llm_load(request: Request):
-    body = await request.json()
-    provider = str((body or {}).get("provider") or core.services_config().get("llm_provider") or "local")
-    if provider == "local":
-        require_capability_http("local_llm")
-    from services import llm_service
-    llm_service.load_model(
-        model_id=str((body or {}).get("model_id") or ""),
-        provider=provider,
-        remote_url=str((body or {}).get("remote_url") or ""),
-        api_key=str((body or {}).get("api_key") or ""),
-    )
-    return {"status": "ok", **llm_service.get_status()}
+api.include_router(create_uploads_router(
+    uploads_dir=core.uploads_dir,
+    stream_upload=upload_stream.stream_upload_file,
+    transcode_upload=upload_stream.transcode_upload,
+    probe_video_metadata=upload_video_metadata.probe_with_ffprobe,
+    safe_join=core.safe_join,
+    output_fallback=serve_file,
+))
 
 
 api.include_router(create_llm_router(
@@ -732,6 +703,7 @@ api.include_router(create_llm_router(
     ensure_llm_loaded=core_production.ensure_llm_loaded,
     comic_writing_llm=core_production.comic_writing_llm,
     resolve_visual_media=core_production.resolve_visual_media,
+    require_local_llm=lambda: require_capability_http("local_llm"),
 ))
 api.include_router(create_llm_prompt_router(
     get_services_config=core.services_raw,
@@ -743,6 +715,7 @@ api.include_router(create_llm_prompt_router(
     get_cached_hardware=lambda: {},
     get_enhancer_enabled=lambda: 0,
     enhance_with_wangp=_hidden_wangp_enhance,
+    plan_h3_gate=lambda: require_capability_http("wangp_local"),
 ))
 
 

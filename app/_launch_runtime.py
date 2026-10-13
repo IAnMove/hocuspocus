@@ -283,7 +283,7 @@ debug_trace.start_session(
 # Upload size caps — enforced in upload handlers. Tuned for real-world
 # media the app actually ingests; anything larger is almost certainly
 # abuse or a user mistake.
-MAX_IMAGE_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (generic /api/v1/upload handles images and videos)
+from routers.uploads import MAX_IMAGE_UPLOAD_BYTES   # 500 MB, defined with the upload route
 # Bumped from 250 MB → 500 MB when /api/v1/upload-audio was extended
 # to accept video files for audio extraction. A 5-min 1080p H.264
 # music video runs ~30-100 MB; longer reference clips can push
@@ -31155,7 +31155,8 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     instruction = str(body.get("instruction") or "").strip()[:4000]
     language = str(body.get("language") or project.get("language") or "English").strip()
     genre = str(body.get("genre") or project.get("genre") or "Adventure").strip()
-    tone = str(body.get("tone") or project.get("tone") or "Cinematic").strip()
+    tone = str(body.get("tone") or project.get("tone") or "").strip()
+    tone_line = f"Tone: {tone}\n" if tone else ""
     audience = str(body.get("audience") or project.get("audience") or "General").strip()
     visual_style = str(project.get("visualStyle") or "").strip()[:4000]
     character_visual_style = str(project.get("characterVisualStyle") or "").strip()[:2000]
@@ -31271,8 +31272,7 @@ visible text and names in the language declared by languageIntent and preserve t
 character-for-character; when a technical prompt needs one, isolate it as literal data
 and never translate or paraphrase it.
 Genre: {genre}
-Tone: {tone}
-Audience: {audience}
+{tone_line}Audience: {audience}
 Global visual style (separate from story content): {visual_style or 'not set'}
 Character rendering style (mandatory for every visible person): {character_visual_style or 'not set'}
 Apply that style as a mandatory render-time constraint: {'yes' if enforce_visual_style else 'no'}
@@ -32319,6 +32319,7 @@ def director_comic_plan(body: dict, job_id: str | None = None):
     story_context = str(body.get("storyContext") or "").strip()[:50000]
     source_story = body.get("sourceStory") if isinstance(body.get("sourceStory"), dict) else {}
     writing_llm = _comic_writing_llm(body)
+    tone_line = f"Tone: {tone}\n" if (tone := str(body.get("tone") or "").strip()) else ""
     shared_brief = f"""Production mode: {production_mode}
 Premise: {premise}
 Source Story Lab project: {json.dumps(source_story, ensure_ascii=False) if source_story else 'not supplied'}
@@ -32329,8 +32330,7 @@ Source story bible / adaptation brief:
 {f"Video canvas: {storyboard_aspect}, {storyboard_quality}, {storyboard_resolution}. Every generated frame must use this same aspect ratio." if is_storyboard else ""}
 Language for ALL reader-facing dialogue/captions: {requested_language}
 Genre: {body.get('genre', 'Adventure')}
-Tone: {body.get('tone', 'Cinematic')}
-Audience: {body.get('audience', 'General')}
+{tone_line}Audience: {body.get('audience', 'General')}
 User art-style preference (highest-priority visual lock; it overrides conflicting inherited
 medium, rendering or palette guidance): {manual_art_style or 'not provided; choose an appropriate treatment'}
 User world / period / location override: {manual_world_context or 'not provided'}
@@ -35163,125 +35163,17 @@ def delete_output(name: str, workspace: str | None = None):
     return {"deleted": name}
 
 
-UPLOAD_EXTENSIONS = frozenset({
-    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff", ".avif",
-    ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus",
-    ".glb", ".gltf", ".obj", ".fbx", ".json", ".txt", ".srt", ".vtt", ".lrc", ".csv", ".md", ".pdf", ".zip", ".safetensors", ".pt",
-})
+from routers.uploads import create_uploads_router
+from services.upload_video_metadata import probe_with_decoder
 
-
-@api.post("/api/v1/upload")
-async def upload_image(file: UploadFile = File(...)):
-    """Upload an image or audio/video asset. Image was the original use;
-    audio/video also flow through here when the frontend doesn't hit the
-    dedicated /api/v1/upload-audio endpoint. Compressed audio formats get
-    transcoded to wav so downstream libsndfile callers work."""
-    if file.size is not None and file.size > MAX_IMAGE_UPLOAD_BYTES:
-        await file.close()
-        raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
-
-    upload_dir = os.path.join(os.getcwd(), "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-
-    ext = os.path.splitext(file.filename or "img.png")[1].lower() or ".png"
-    if ext not in UPLOAD_EXTENSIONS:
-        ext = ".bin"  # keeps the bytes; never a name a browser would run
-    unique_name = f"{uuid.uuid4().hex}{ext}"
-    filepath = os.path.join(upload_dir, unique_name)
-
-    try:
-        await _stream_upload(
-            file,
-            filepath,
-            max_bytes=MAX_IMAGE_UPLOAD_BYTES,
-        )
-    except UploadTooLargeError as err:
-        raise HTTPException(status_code=413, detail="File too large (max 500 MB)") from err
-
-    # libsndfile-incompatible audio → transcode to wav so slice_audio_window
-    # and friends can read it without a downstream crash. Mirrors the logic
-    # in /api/v1/upload-audio.
-    if ext in (".mp3", ".m4a", ".aac"):
-        wav_name = f"{os.path.splitext(unique_name)[0]}.wav"
-        wav_path = os.path.join(upload_dir, wav_name)
-        compressed_original = filepath
-        transcode_ok = False
-        try:
-            await _transcode_upload(filepath, wav_path, is_video=False)
-            transcode_ok = True
-            os.remove(compressed_original)
-            filepath = wav_path
-            unique_name = wav_name
-        except UploadTranscodeError as err:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to decode {ext} audio: {(err.stderr or str(err)).strip()[:300]}",
-            ) from err
-        except Exception as err:
-            raise HTTPException(status_code=500, detail=f"Audio transcode failed: {err}") from err
-        finally:
-            if not transcode_ok:
-                for stale in (wav_path, compressed_original):
-                    if stale and os.path.isfile(stale):
-                        try:
-                            os.remove(stale)
-                        except OSError:
-                            pass
-
-    result = {
-        "filename": unique_name,
-        "path": filepath,
-        "url": f"/api/v1/uploads/{unique_name}",
-    }
-    # For video uploads, report the source frame rate so the client can
-    # compute frame counts for models that follow the control video's
-    # fps (force_fps="control" — the SCAIL-2 class). The UI otherwise
-    # converts seconds to frames at the model's nominal 16 fps and
-    # under-counts: a "10s" request against a 25fps guide covered only
-    # 6.4s of the performance.
-    if ext in (".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"):
-        try:
-            from shared.utils.video_decode import probe_video_stream_metadata
-            _metadata = probe_video_stream_metadata(filepath)
-            if _metadata is not None:
-                _fps = float(_metadata.get("fps_float") or _metadata.get("fps") or 0)
-                _frame_count = int(_metadata.get("frame_count") or 0)
-                _duration = float(_metadata.get("duration") or 0)
-            else:
-                from shared.utils.utils import get_video_info
-                _fps, _w, _h, _frame_count = get_video_info(filepath)
-                _duration = float(_frame_count or 0) / float(_fps) if _fps else 0
-            if _fps:
-                result["fps"] = float(_fps)
-                result["frame_count"] = int(_frame_count or 0)
-                result["duration_seconds"] = round(_duration or (float(_frame_count or 0) / float(_fps)), 3)
-            try:
-                import av as _av
-
-                with _av.open(filepath) as _container:
-                    result["has_audio"] = bool(_container.streams.audio)
-            except Exception:
-                result["has_audio"] = False
-        except Exception:
-            pass
-    return result
-
-
-@api.get("/api/v1/uploads/{filename}")
-def serve_upload(filename: str):
-    """Serve an uploaded image.
-
-    Falls back to output-workspace resolution: Director-mode start frames are
-    keyframe images that live in the pipeline's outputs workspace, never in
-    uploads/, yet sidecars record only their basename — so gallery thumbnails,
-    the info bar, and pencil-restore all ask this endpoint for them.
-    """
-    from services.win_safe_files import share_delete_file_response
-    base = os.path.join(os.getcwd(), "uploads")
-    filepath = _safe_join(base, filename)
-    if filepath is not None and os.path.isfile(filepath):
-        return share_delete_file_response(filepath)
-    return serve_file(filename)
+api.include_router(create_uploads_router(
+    uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
+    stream_upload=_stream_upload,
+    transcode_upload=_transcode_upload,
+    probe_video_metadata=probe_with_decoder,
+    safe_join=_safe_join,
+    output_fallback=serve_file,
+))
 
 
 # ============================================================================

@@ -48,7 +48,7 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     protagonistCharacterId: objects<SeriesCharacter>(project.characters)
       .some(character => character.id === text(project.protagonistCharacterId))
       ? text(project.protagonistCharacterId) : '',
-    tone: text(project.tone, 'Cinematic'), audience: text(project.audience, 'General'),
+    tone: text(project.tone), audience: text(project.audience, 'General'),
     visualStyle: text(project.visualStyle), characterVisualStyle: text(project.characterVisualStyle),
     cameraLanguage: text(project.cameraLanguage), allowClipText: project.allowClipText === true,
     sourceMode: project.sourceMode === 'known_universe_experimental' || project.sourceMode === 'hybrid'
