@@ -14,7 +14,7 @@ import json
 import math
 import os
 import re
-from typing import Optional, Any
+from typing import Any, NamedTuple, Optional
 
 from ..schema import (
     ProductionPlan, ShotPlan, CharacterProfile, ReferenceAssets,
@@ -2555,6 +2555,62 @@ def _video_character_name_rules(preserve_names: bool) -> str:
 - NOT "Ava looks annoyed" → YES "the woman from the reference image looks annoyed"."""
 
 
+# Pass-2 wording with sexual examples: the 40/60/80 s bucket lines, the
+# "MIX BUCKET SIZES" scene kinds and the multi-shot FLOWING beats. Mature mode
+# keeps the historical text word for word; without it the sexual examples are
+# left out and only the non-sexual ones remain.
+_MATURE_DURATION_BUCKET_RULES = (
+    "   - 40s = TWO connected beats that flow together as one continuous\n"
+    "     scene (an extended dialogue, a foreplay-to-act transition, a\n"
+    "     slow reveal, a full kiss + embrace). USE FREELY — don't default\n"
+    "     to two 20s shots when the screenplay has a continuous 40s beat.\n"
+    "     Two windows.\n"
+    "   - 60s = THREE connected beats in one sustained scene (a long\n"
+    "     romantic encounter, a sex sequence, a confrontation that builds\n"
+    "     and breaks). Three windows. Common in NSFW films and any film\n"
+    "     with sustained dramatic scenes — don't avoid 60s shots.\n"
+    "   - 80s = FOUR connected beats in a single uninterrupted sequence\n"
+    "     (a sustained sex act, a long climactic confrontation, an extended\n"
+    "     seduction). Four windows. Use when the screenplay has a beat\n"
+    "     that genuinely needs the breathing room."
+)
+_DURATION_BUCKET_RULES = (
+    "   - 40s = TWO connected beats that flow together as one continuous\n"
+    "     scene (an extended dialogue, a slow reveal, a full kiss +\n"
+    "     embrace). USE FREELY — don't default to two 20s shots when the\n"
+    "     screenplay has a continuous 40s beat. Two windows.\n"
+    "   - 60s = THREE connected beats in one sustained scene (a\n"
+    "     confrontation that builds and breaks). Three windows. Common in\n"
+    "     any film with sustained dramatic scenes — don't avoid 60s shots.\n"
+    "   - 80s = FOUR connected beats in a single uninterrupted sequence\n"
+    "     (a long climactic confrontation). Four windows. Use when the\n"
+    "     screenplay has a beat that genuinely needs the breathing room."
+)
+
+
+class _Pass2Examples(NamedTuple):
+    bucket_rules: str
+    long_scenes: str
+    flowing_beats: str
+
+
+_MATURE_PASS2_EXAMPLES = _Pass2Examples(
+    bucket_rules=_MATURE_DURATION_BUCKET_RULES,
+    long_scenes="romantic / dramatic / sex",
+    flowing_beats="a kiss, a sex act, a held reaction, a slow push-in",
+)
+_PASS2_EXAMPLES = _Pass2Examples(
+    bucket_rules=_DURATION_BUCKET_RULES,
+    long_scenes="romantic / dramatic",
+    flowing_beats="a kiss, a held reaction, a slow push-in",
+)
+
+
+def _pass2_examples(nsfw: bool) -> _Pass2Examples:
+    """Pass-2 examples; the sexual ones appear only in mature mode."""
+    return _MATURE_PASS2_EXAMPLES if nsfw else _PASS2_EXAMPLES
+
+
 class ShortFilmPlanner(BasePlanner):
     skill_type = "short_film"
 
@@ -3830,6 +3886,8 @@ H3 CHARACTER-AUTHENTICITY RULES:
         # (Replaces the old explicit-keyword pre-scan, which can't be version-
         # controlled and missed scenes phrased without its keywords.)
         effective_nsfw = nsfw
+        # Sexual examples in the pass-2 rules belong to mature mode only.
+        pass2_examples = _pass2_examples(effective_nsfw)
 
         # Keyframe guidance is useful only when Director will actually render
         # still-image artifacts for this project.
@@ -4019,8 +4077,8 @@ Go:"""
 
                 "FORMAT A — FLOWING (only for sustained single beats):\n"
                 "A normal flowing paragraph describing ONE continuous "
-                "camera take. Use ONLY for: a kiss, a sex act, a held "
-                "reaction, a slow push-in — beats that would be RUINED "
+                f"camera take. Use ONLY for: {pass2_examples.flowing_beats}"
+                " — beats that would be RUINED "
                 "by camera cuts.\n\n"
 
                 "RULES THAT DO NOT CHANGE:\n"
@@ -4207,19 +4265,7 @@ CRITICAL OUTPUT REQUIREMENTS (these override any conflicting system-prompt guida
    - 20s = single beat (a transition, a brief reaction, an
      establishing moment, a short dialogue exchange). One prompt,
      no windows.
-   - 40s = TWO connected beats that flow together as one continuous
-     scene (an extended dialogue, a foreplay-to-act transition, a
-     slow reveal, a full kiss + embrace). USE FREELY — don't default
-     to two 20s shots when the screenplay has a continuous 40s beat.
-     Two windows.
-   - 60s = THREE connected beats in one sustained scene (a long
-     romantic encounter, a sex sequence, a confrontation that builds
-     and breaks). Three windows. Common in NSFW films and any film
-     with sustained dramatic scenes — don't avoid 60s shots.
-   - 80s = FOUR connected beats in a single uninterrupted sequence
-     (a sustained sex act, a long climactic confrontation, an extended
-     seduction). Four windows. Use when the screenplay has a beat
-     that genuinely needs the breathing room.
+{pass2_examples.bucket_rules}
    - HEURISTIC: aim for variety. A {target_duration}s film with NINE
      20s shots feels choppy; a film with three 20s shots + two 40s +
      one 60s feels cinematic. Mix the bucket sizes.
@@ -4279,7 +4325,7 @@ The user's original request:
 Shot-construction rules:
 - KEEP CONTINUOUS ACTION TOGETHER — physical progression that flows from one beat to the next is ONE shot. See the WRONG/RIGHT examples above. The video model handles intra-shot action progression; do not fragment.
 - KEEP CONVERSATIONS TOGETHER — one conversation = one shot, using window_prompts if over 20s.
-- MIX BUCKET SIZES. Use 40s for connected dialogue/action pairs. Use 60s for long romantic / dramatic / sex scenes. Use 80s for genuinely sustained sequences. With only {shot_count_high} shots allowed total, you CANNOT hit {target_duration}s using only 20s — the math forces you to use longer buckets. That is intentional: longer buckets produce more cinematic, less choppy films.
+- MIX BUCKET SIZES. Use 40s for connected dialogue/action pairs. Use 60s for long {pass2_examples.long_scenes} scenes. Use 80s for genuinely sustained sequences. With only {shot_count_high} shots allowed total, you CANNOT hit {target_duration}s using only 20s — the math forces you to use longer buckets. That is intentional: longer buckets produce more cinematic, less choppy films.
 - Only cut to a new shot when location changes, a new character enters, or there's a clear dramatic beat transition (see strict criteria above).
 - Preserve ALL dialogue from the screenplay verbatim — but each line goes in EXACTLY ONE shot/window, never repeated.
 {keyframe_user_rule}

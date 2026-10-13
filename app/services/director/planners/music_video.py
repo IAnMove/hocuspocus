@@ -1281,7 +1281,7 @@ Return exactly one object for every clip requested in the current batch. Preserv
         if polish_block and not direct_video:
             system_prompt = f"{system_prompt}\n\n{polish_block}"
 
-        # Inject content guidance (NSFW or safety guardrails)
+        # Inject content guidance (the minors rule, plus mature guidance in NSFW mode)
         system_prompt = inject_nsfw_if_enabled(
             system_prompt,
             nsfw,
