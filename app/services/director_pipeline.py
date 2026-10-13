@@ -89,6 +89,12 @@ from services.director.policies import (
     mark_typed_prompt_edits,
     no_visible_text_lock_applies,
 )
+from services.director.visible_defaults import (
+    RUN_OPTION_NAMES,
+    resolve_run_options,
+    saved_option,
+    wants_generated_anchor,
+)
 from services.director_pipeline_state import (
     _DIRECTOR_TEMP_DIRNAME,
     _PIPELINE_FILE_PREFIX,
@@ -899,6 +905,13 @@ def _normalise_master_seed(params: dict) -> int:
     return value
 
 
+def _services_settings() -> dict:
+    """Settings › Services of the running app (empty before it is bound)."""
+    config = getattr(_wgp, "server_config", None)
+    services = config.get("services") if isinstance(config, dict) else None
+    return services if isinstance(services, dict) else {}
+
+
 def _raw_prompts() -> bool:
     """Settings › Services › Raw prompts: every prompt reaches the model as the plan wrote it.
 
@@ -1559,6 +1572,9 @@ def _save_pipeline_state_locked(pid: str) -> bool:
             params.get("generated_reference_image_filename")
             or p.get("generated_reference_image_filename")
         ),
+        # "deterministic_fallback" when the planner returned no shots and
+        # Director built a simple plan from the story itself.
+        "planning_source": p.get("planning_source"),
         "character_ref_paths": params.get("character_ref_paths", []),
         "location_ref_paths": params.get("location_ref_paths", []),
         "auto_mode": params.get("auto_mode", True),
@@ -2319,9 +2335,27 @@ def _queue_plans_from_saved_state(data: Mapping[str, Any]) -> tuple[list[dict], 
 
 
 def hydrate_queue_clips(state: Mapping[str, Any] | None) -> dict:
-    """Expose a displayable clip queue even when generation never started."""
+    """Expose a displayable clip queue even when generation never started.
 
-    data = dict(state or {})
+    The saved run's recipe (shared reference, light, wardrobe…) goes with it
+    as ``generation_details`` for the Dashboard.
+    """
+    data = _hydrate_queue_clip_list(dict(state or {}))
+    params = _director_params_from_saved_state(data)
+    if "generated_reference_image_filename" not in params:
+        params["generated_reference_image_filename"] = data.get(
+            "generated_reference_image_filename"
+        )
+    details = _public_pipeline_generation_details(
+        params, len(data.get("clips") or []),
+    )
+    if details:
+        data["generation_details"] = details
+    return data
+
+
+def _hydrate_queue_clip_list(data: dict) -> dict:
+    """The clip queue of ``hydrate_queue_clips``."""
     clips = data.get("clips") if isinstance(data.get("clips"), list) else []
     if clips:
         data["queue_source"] = "clips"
@@ -2978,10 +3012,20 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
 
     user_ref_path = state.get("reference_image_path") or ""
     ref_path = user_ref_path if os.path.isfile(user_ref_path) else ""
+    # The run's shared-reference mode: "off" (or a cleared anchor) means a
+    # rerun neither reuses nor adopts one.
+    uses_anchor = wants_generated_anchor(
+        saved_option(state.get("_params_snapshot"), "reference_anchor"),
+        has_cast_refs=any(
+            path and os.path.isfile(path)
+            for path in state.get("character_ref_paths") or []
+        ),
+    )
     persisted_anchor = state.get("generated_reference_image_filename") or ""
     anchor_to_persist = ""
     if (
         not ref_path
+        and uses_anchor
         and persisted_anchor
         and os.path.basename(persisted_anchor) == persisted_anchor
     ):
@@ -2992,7 +3036,7 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     # Backward-compatible recovery for pipelines saved before generated
     # anchors were persisted: a valid first clip image is the safest visual
     # identity reference available.
-    if not ref_path:
+    if not ref_path and uses_anchor:
         for saved_clip in clips:
             saved_start = saved_clip.get("start_image_filename") or ""
             if not saved_start or os.path.basename(saved_start) != saved_start:
@@ -3082,7 +3126,7 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
             "Start-image generation completed without a recorded output."
         )
 
-    if not ref_path:
+    if not ref_path and uses_anchor:
         anchor_to_persist = new_filename
 
     # Update the saved pipeline state
@@ -5485,6 +5529,10 @@ def start_pipeline(params: dict) -> str:
     params.pop("generated_reference_image_filename", None)
     params = dict(params)
     _normalise_master_seed(params)
+    # Shared reference, light and wardrobe: request → Settings › Services →
+    # default, persisted so resume and repair do the same thing.
+    resolve_run_options(params, _services_settings())
+    params.pop("generated_reference_image_prompt", None)
     direct_video, _master_prompt = _direct_video_settings(params)
     if direct_video:
         # Text-only mode must not inherit stale image/reference inputs or an
@@ -5614,6 +5662,46 @@ def _public_pipeline_model_name(model_type: str) -> str:
     return str(model_def.get("name") or fallback)
 
 
+def _public_reference_anchor(params: Mapping[str, Any]) -> dict:
+    """The shared reference every start image is drawn from, for the UI.
+
+    ``source`` is ``user`` (the user's reference image), ``generated`` (the
+    picture Director drew from shot 1) or ``none``.
+    """
+    anchor: dict[str, Any] = {"mode": saved_option(params, "reference_anchor")}
+    user_reference = str(params.get("reference_image_path") or "").strip()
+    generated = str(params.get("generated_reference_image_filename") or "").strip()
+    if user_reference:
+        anchor.update(source="user", filename=os.path.basename(user_reference))
+    elif generated and os.path.basename(generated) == generated:
+        anchor.update(
+            source="generated",
+            filename=generated,
+            prompt=str(params.get("generated_reference_image_prompt") or ""),
+        )
+    else:
+        anchor["source"] = "none"
+    return anchor
+
+
+def _public_visible_defaults(params: dict) -> dict:
+    """The run options that used to be hidden house rules (see visible_defaults)."""
+    # A copy: resolving the policy normalises the music-video treatment.
+    view = dict(params)
+    if not shot_images_required(_director_effective_shot_image_policy(view)):
+        return {}
+    details: dict[str, Any] = {
+        "reference_anchor": _public_reference_anchor(view),
+        "lighting_continuity": saved_option(view, "lighting_continuity"),
+        "keep_reference_wardrobe": saved_option(view, "keep_reference_wardrobe"),
+    }
+    treatment = view.get("music_video_treatment")
+    if view.get("pipeline_type", "music_video") == "music_video" and isinstance(treatment, dict):
+        details["chorus_set"] = treatment.get("chorus_set")
+        details["coverage_cycle"] = treatment.get("coverage")
+    return details
+
+
 def _public_pipeline_generation_details(
     params: dict | None,
     clip_count: int = 0,
@@ -5659,6 +5747,7 @@ def _public_pipeline_generation_details(
             or len(params.get("provided_clip_plans") or [])
             or len(params.get("planned_clips") or [])
         ),
+        **_public_visible_defaults(params),
     }
     return {
         key: value for key, value in details.items()
@@ -9137,6 +9226,8 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     flags_dict = params.get("director_flags", {})
     flags = DirectorFlags.from_dict(flags_dict) if flags_dict else DirectorFlags()
     flags.raw_prompts = _raw_prompts()
+    for option in RUN_OPTION_NAMES:
+        setattr(flags, option, saved_option(params, option))
 
     writing_llm = _scoped_writing_llm(params)
     direct_video, _direct_master_prompt = _direct_video_settings(params)
@@ -9416,7 +9507,11 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     plan = director.plan(skill_type, **planner_kwargs)
 
     # Store the production plan in pipeline state for later reference
-    _update_pipeline(pid, production_plan=plan.to_dict())
+    _update_pipeline(
+        pid,
+        production_plan=plan.to_dict(),
+        planning_source=getattr(plan, "planning_source", None),
+    )
 
     # Render only the prompt families this saved workflow will consume.  In
     # prompt-only/direct-reference H3 projects the planner already writes a
@@ -10167,6 +10262,72 @@ def _director_location_ref_for_plan(plan: dict, params: dict) -> tuple[str, str]
     return scored[0][2], scored[0][3]
 
 
+def _first_field(record: dict, *keys: str) -> str:
+    return next((str(record[key]).strip() for key in keys if record.get(key)), "")
+
+
+def _anchor_character_profile(character: dict) -> str:
+    """One "name: description; wardrobe: …" line for a Story character."""
+    name = _first_field(character, "name", "display_name")
+    description = _first_field(
+        character, "description", "physical_description", "visual_description",
+    )
+    wardrobe = _first_field(character, "wardrobe")
+    profile = ": ".join(part for part in (name, description) if part)
+    if wardrobe:
+        profile = f"{profile}; wardrobe: {wardrobe}" if profile else wardrobe
+    return profile
+
+
+def _anchor_character_profiles(params: dict) -> list[str]:
+    profiles = (
+        _anchor_character_profile(character)
+        for character in params.get("characters", []) or []
+        if isinstance(character, dict)
+    )
+    return [profile for profile in profiles if profile]
+
+
+def _director_anchor_prompt(
+    params: dict,
+    clip_plans: list[dict],
+    *,
+    has_cast_refs: bool,
+) -> str:
+    """The prompt of the shared reference picture, with no fixed style word.
+
+    The subject is shot 1's image prompt (or the scene description); the look
+    comes only from the Story style that the shot prompts carry.
+    """
+    scene_desc = " ".join(str(params.get("scene_description") or "").split())
+    first_shot_prompt = str(
+        clip_plans[0].get("image_prompt", "") if clip_plans else ""
+    ).strip()
+    anchor_subject = first_shot_prompt or scene_desc
+    anchor_prompt = (
+        "Create a character reference for visual continuity. Clearly "
+        "establish the recurring subject or people, especially faces, hair, "
+        "wardrobe, body attributes, and overall design."
+    )
+    if anchor_subject:
+        anchor_prompt += f" {anchor_subject}"
+    character_profiles = _anchor_character_profiles(params)
+    if character_profiles:
+        anchor_prompt += (
+            " Recurring character profiles: "
+            + " | ".join(character_profiles)
+            + "."
+        )
+    if has_cast_refs:
+        anchor_prompt += (
+            " Use the provided character reference image(s) as the "
+            "definitive identity and appearance source."
+        )
+    if scene_desc and scene_desc.lower() not in anchor_subject.lower():
+        anchor_prompt += f" Project concept: {scene_desc}"
+    return anchor_prompt
+
+
 def _run_image_generation(
     pid: str,
     params: dict,
@@ -10445,55 +10606,19 @@ def _run_image_generation(
 
     # With no user reference, first create a dedicated identity anchor and
     # then condition every planned shot on it. The anchor is not itself a shot:
-    # shot prompts still control the actual framing and location.
-    if not (ref_image_path and os.path.isfile(ref_image_path)):
-        scene_desc = " ".join(str(params.get("scene_description") or "").split())
-        first_shot_prompt = str(
-            clip_plans[0].get("image_prompt", "") if clip_plans else ""
-        ).strip()
-        anchor_subject = first_shot_prompt or scene_desc or (
-            "cinematic establishing shot"
+    # shot prompts still control the actual framing and location. The run's
+    # ``reference_anchor`` (Settings › Services › Director shared reference)
+    # can limit it to casts without character references, or turn it off.
+    if (
+        not (ref_image_path and os.path.isfile(ref_image_path))
+        and wants_generated_anchor(
+            saved_option(params, "reference_anchor"),
+            has_cast_refs=bool(valid_character_refs),
         )
-        anchor_prompt = (
-            "Create a definitive cinematic character anchor for visual "
-            "continuity. Clearly establish the recurring subject or people, "
-            "especially faces, hair, wardrobe, body attributes, and overall "
-            f"design. {anchor_subject}"
+    ):
+        anchor_prompt = _director_anchor_prompt(
+            params, clip_plans, has_cast_refs=bool(valid_character_refs),
         )
-        character_profiles = []
-        for character in params.get("characters", []) or []:
-            if not isinstance(character, dict):
-                continue
-            name = str(
-                character.get("name")
-                or character.get("display_name")
-                or ""
-            ).strip()
-            description = str(
-                character.get("description")
-                or character.get("physical_description")
-                or character.get("visual_description")
-                or ""
-            ).strip()
-            wardrobe = str(character.get("wardrobe") or "").strip()
-            profile = ": ".join(part for part in (name, description) if part)
-            if wardrobe:
-                profile = f"{profile}; wardrobe: {wardrobe}" if profile else wardrobe
-            if profile:
-                character_profiles.append(profile)
-        if character_profiles:
-            anchor_prompt += (
-                " Recurring character profiles: "
-                + " | ".join(character_profiles)
-                + "."
-            )
-        if valid_character_refs:
-            anchor_prompt += (
-                " Use the provided character reference image(s) as the "
-                "definitive identity and appearance source."
-            )
-        if scene_desc and scene_desc.lower() not in anchor_subject.lower():
-            anchor_prompt += f" Project concept: {scene_desc}"
         total_images += 1
         _update_pipeline(pid, progress={
             "current": 0,
@@ -10520,6 +10645,7 @@ def _run_image_generation(
             )
         ref_image_path = anchor_path
         params["generated_reference_image_filename"] = anchor_file
+        params["generated_reference_image_prompt"] = anchor_prompt
         _update_pipeline(
             pid,
             params=params,

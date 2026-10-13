@@ -6,6 +6,28 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Director's hidden house rules are now visible.** With no reference image,
+Director still draws one shared picture from shot 1 and draws every shot from
+it, but the Dashboard now shows that picture, its prompt and the run's options
+above the shots, and can replace it with another image of the run or stop
+using it for repairs and reruns. Settings › Services › *Director shared
+reference* chooses Always (default), Only when there are no character
+references, or Off (each shot from its own prompt); a run can override it with
+`reference_anchor`. The shared picture's prompt no longer says "cinematic".
+"Use lighting and color temp from reference image" is gone from the guide used
+when no reference exists, and elsewhere it follows *Light from the reference*
+(default: only with your own reference image, so a story with character
+portraits alone no longer copies the anchor's light). *Keep clothes from
+references* (on by default) can be turned off to describe clothes per shot.
+*Raw prompts* now also skips the planner's cleanup of image prompts, as its
+description promised; otherwise Extra info says how many clothing words,
+motion sentences and filler phrases that cleanup removed. The music-video
+treatment shows its coverage cycle and what choruses do (return to the first
+set by default, rotate through the sets, or the planner chooses), and the
+Dashboard shows each shot's planned set and coverage. When the planner returns
+no shots and Director builds a simple plan itself, the Dashboard says so and
+that plan no longer says "cinematic" either.
+
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
 that made the result (comic films keep the seed their approved PRE pinned). Every

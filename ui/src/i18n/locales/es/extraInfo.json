@@ -25,6 +25,8 @@
     "negativePrompt": "Prompt negativo",
     "modelPrompt": "Lo que recibió el modelo · ventana {{window}}",
     "modelPromptHint": "El modelo reescribió el prompt de generación antes de usarlo (por ejemplo, el reparto en el tiempo de un clip largo de H3). Este es el texto exacto con el que generó.",
+    "promptCleanup": "Quitado antes del modelo: {{garments}} palabras de ropa, {{motion}} frases de movimiento, {{fillers}} frases de relleno",
+    "promptCleanupHint": "El planificador de Director quitó esto del prompt de imagen del plano. Ajustes › Servicios › Prompts sin capas desactiva esta limpieza; si desactivas Mantener la ropa de las referencias, las palabras de ropa se quedan.",
     "allSavedSettings": "Todos los ajustes guardados",
     "prompt": "Prompt",
     "allSavedMetadata": "Todos los metadatos guardados"

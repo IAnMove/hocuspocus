@@ -334,6 +334,31 @@ export interface GenerationDetails {
   video_model_name?: string
   video_resolution?: string
   video_steps?: number
+  /** Director: the shared reference every start image is drawn from. */
+  reference_anchor?: DirectorReferenceAnchor
+  /** Director: whether image prompts copy the reference's light. */
+  lighting_continuity?: DirectorLightingContinuity
+  /** Director: whether clothing words are removed so references keep their clothes. */
+  keep_reference_wardrobe?: boolean
+  /** Director music video: which recurring set each chorus gets. */
+  chorus_set?: MusicVideoChorusSet
+  /** Director music video: clip i gets line i % length (empty: no hint). */
+  coverage_cycle?: string[]
+}
+
+/** Settings › Services › Director shared reference (run option ``reference_anchor``). */
+export type DirectorReferenceAnchorMode = 'always' | 'no_cast_refs' | 'off'
+/** Settings › Services › Light from the reference (run option ``lighting_continuity``). */
+export type DirectorLightingContinuity = 'auto' | 'reference' | 'per_shot'
+export type MusicVideoChorusSet = 'first' | 'rotate' | 'free'
+
+/** The picture a Director run draws every start image from. */
+export interface DirectorReferenceAnchor {
+  mode: DirectorReferenceAnchorMode
+  /** ``user``: the user's reference image; ``generated``: drawn from shot 1. */
+  source: 'user' | 'generated' | 'none'
+  filename?: string
+  prompt?: string
 }
 
 export interface GenerationJob {
@@ -1029,6 +1054,8 @@ export interface VideoClipInfo {
   audio_prompt: string
   /** Window number → the prompt a model handler rewrote before generating (what the model received). */
   model_prompts?: Record<string, string>
+  /** Director: what the planner's cleanup removed from this shot's image prompt (empty: nothing). */
+  prompt_cleanup?: { garments?: number; motion_sentences?: number; fillers?: number }
   saved_metadata: Record<string, unknown>
 }
 
@@ -1144,6 +1171,9 @@ export interface ServicesConfig {
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
   /** The Director sends every prompt exactly as planned: no style prefix, locks or polish. */
   raw_prompts?: boolean
+  director_reference_anchor?: DirectorReferenceAnchorMode
+  director_lighting_continuity?: DirectorLightingContinuity
+  director_keep_reference_wardrobe?: boolean
   workflow_parallelism_enabled: boolean
   debug_trace_enabled: boolean
   debug_trace_log_path: string
@@ -1539,6 +1569,10 @@ export interface MusicVideoTreatment {
   chorus_signature: string
   surrealism: number
   forbidden_elements: string
+  /** Coverage cycle: clip i gets line i % length. Missing: the server's six; empty: no hint. */
+  coverage?: string[]
+  /** Which recurring set each chorus gets. Missing: ``first``. */
+  chorus_set?: MusicVideoChorusSet
 }
 
 /** Partial plan returned from single-phase LLM calls */
@@ -2002,6 +2036,11 @@ export interface SavedPipelineState {
   preview_clips?: Array<Record<string, unknown>>
   scene_description: string
   reference_image_path: string | null
+  /** The shared reference Director drew from shot 1 (a file of this run). */
+  generated_reference_image_filename?: string | null
+  /** ``deterministic_fallback``: the planner returned no shots and Director built a simple plan. */
+  planning_source?: string | null
+  generation_details?: GenerationDetails
   auto_mode: boolean
   seamless: boolean
   image_model: string

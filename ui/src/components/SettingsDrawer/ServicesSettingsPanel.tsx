@@ -3,6 +3,7 @@ import { RefreshCw, ShieldAlert, ShieldCheck, Lock, Loader2 } from 'lucide-react
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { testLlmConnection } from '../../api/client'
+import { DirectorReferenceSettings } from '../../features/director/DirectorReferenceSettings'
 
 const McpSettingsPanel = lazy(() => import('./McpSettingsPanel').then(module => ({ default: module.McpSettingsPanel })))
 const ProductionProfileSettings = lazy(() => import('./ProductionProfileSettings').then(module => ({ default: module.ProductionProfileSettings })))
@@ -752,6 +753,8 @@ export function ServicesSettingsPanel() {
             }`} />
           </div>
         </label>
+
+        <DirectorReferenceSettings config={servicesConfig} onChange={updateConfig} />
 
         {/* Resource-aware workflow overlap */}
         <label className="flex items-center justify-between cursor-pointer group">

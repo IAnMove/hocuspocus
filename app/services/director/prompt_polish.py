@@ -940,7 +940,25 @@ def sanitize_image_prompt(
     *,
     log_prefix: str = "[ImagePromptSanitize]",
 ) -> str:
+    """Apply Layer 1 deterministic cleanup to an image_prompt (see the counted variant)."""
+    return sanitize_image_prompt_with_counts(
+        text, name_to_descriptor, log_prefix=log_prefix,
+    )[0]
+
+
+def sanitize_image_prompt_with_counts(
+    text: str,
+    name_to_descriptor: Optional[dict] = None,
+    *,
+    strip_garments: bool = True,
+    log_prefix: str = "[ImagePromptSanitize]",
+) -> tuple[str, dict]:
     """Apply Layer 1 deterministic cleanup to an image_prompt.
+
+    Returns the cleaned prompt and how many clothing words (``garments``),
+    motion sentences (``motion_sentences``) and fillers (``fillers``) it
+    removed. ``strip_garments=False`` keeps clothing words (Settings ›
+    Services › Keep clothes from references off).
 
     Run after Pass 2 produces the image_prompt and again after Pass 3
     polish. Dedupe pass is skipped if name_to_descriptor is None.
@@ -959,12 +977,12 @@ def sanitize_image_prompt(
         unchanged if it's empty or no changes are needed).
     """
     if not text or not text.strip():
-        return text
+        return text, {"garments": 0, "motion_sentences": 0, "fillers": 0}
     # Strip any hallucinated dialogue FIRST — before the other cleanup
     # passes run, so they don't waste cycles deduping descriptors inside
     # speech tags we're about to delete.
     cleaned, dialogue_dropped = _strip_dialogue(text)
-    cleaned, garments = _strip_garments(cleaned)
+    cleaned, garments = _strip_garments(cleaned) if strip_garments else (cleaned, 0)
     cleaned, fillers = _strip_narrative_filler(cleaned)
     # Motion-verb sanitizer (B): drop sentences containing motion verbs
     # like "rising", "thrusting", "bobbing". Image prompts must be
@@ -1004,7 +1022,11 @@ def sanitize_image_prompt(
         if orphans:
             notes.append(f"{orphans} orphan fragment(s) dropped")
         print(f"{log_prefix} {', '.join(notes)}")
-    return cleaned
+    return cleaned, {
+        "garments": garments,
+        "motion_sentences": motion_dropped,
+        "fillers": fillers,
+    }
 
 
 
