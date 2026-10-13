@@ -220,7 +220,7 @@ def test_a_signal_during_the_cleanup_waits_for_the_whole_restore(tmp_path, monke
 def test_once_leaving_later_signals_are_ignored(smoke_signals) -> None:
     with pytest.raises(SystemExit):
         signal.raise_signal(signal.SIGTERM)
-    signal.raise_signal(signal.SIGHUP)
+    signal.raise_signal(signal.SIGTERM)
     with boot_smoke.held_signals():
         signal.raise_signal(signal.SIGINT)
 

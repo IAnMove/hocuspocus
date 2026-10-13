@@ -45,6 +45,8 @@ def test_the_server_keeps_temp_files_and_libraries_in_its_state_folder(full_serv
     assert Path(tempfile.gettempdir()).resolve().is_relative_to(state)
     assert Path(os.environ["TMPDIR"]).resolve().is_relative_to(state)
     assert Path(os.environ["NUMBA_CACHE_DIR"]).resolve().is_relative_to(state)
+    numba = pytest.importorskip("numba")  # It reads NUMBA_CACHE_DIR once, when first imported.
+    assert Path(numba.config.CACHE_DIR).resolve().is_relative_to(state)
     assert resolve_style_library_root(APP_DIR).is_relative_to(state)
     assert resolve_template_library_root(APP_DIR).is_relative_to(state)
 
