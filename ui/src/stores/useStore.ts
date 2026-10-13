@@ -25,8 +25,6 @@ import { contentLanguageForUi } from '../lib/contentLanguage'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
-import { createKeyedWriteSequencer } from '../lib/keyedWriteSequencer'
-import { createActivityPublicationGate } from '../lib/activityPublication'
 import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
 import { isHttpStatus } from '../api/http'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
@@ -38,6 +36,13 @@ import { createSettingsSlice, type SettingsSlice } from './settingsSlice'
 import { createSidebarSlice, type SidebarSlice } from './sidebarSlice'
 import { createSystemSlice, type SystemSlice } from './systemSlice'
 import { createPresetsSlice, type PresetsSlice } from '../features/studio/store/presetsSlice'
+import {
+  beginAppActivity,
+  createActivitySlice,
+  type ActivitySlice,
+  type ForegroundActivity,
+} from '../features/activity/store'
+export type { ForegroundActivity }
 import { bindSlice } from './storeApi'
 import { createThemeSlice, type ThemeSlice } from './themeSlice'
 import { createGallerySlice, type GallerySlice } from './gallerySlice'
@@ -1042,33 +1047,6 @@ function getDefaultModelForMode(mode: GenerationMode, families: ModelFamily[], m
   return ''
 }
 
-export interface ForegroundActivity {
-  id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
-  phase: string
-  message: string
-  title?: string
-  kind?: string
-  parentId?: string
-  current?: number
-  total?: number
-  progress?: number
-  detailMessage?: string
-  detailVolatile?: boolean
-  detailCurrent?: number
-  detailTotal?: number
-  tokenUsage?: {
-    promptTokens?: number
-    completionTokens?: number
-    totalTokens?: number
-    calls?: number
-  }
-  generationDetails?: GenerationDetails
-  error?: string | null
-  startedAt?: number
-  updatedAt?: number
-}
-
 /** Trailer excerpt and transcription hints, shared by every way audio can
  *  reach Director. */
 type DirectorAudioOptions = {
@@ -1097,7 +1075,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1638,11 +1616,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   llmStreamDone: boolean
 
   // Director Pipeline (server-side)
-  foregroundActivity: ForegroundActivity | null
-  setForegroundActivity: (activity: ForegroundActivity | null) => void
-  activities: Record<string, ForegroundActivity>
-  upsertActivity: (activity: ForegroundActivity) => void
-  removeActivity: (activityId: string) => void
   pipelineId: string | null
   pipelineStatus: import('../api/client').PipelineStatus | null
   activeDirectorPipelines: import('../api/client').ActiveDirectorPipeline[]
@@ -1651,85 +1624,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
   stopPipeline: (pipelineId?: string) => Promise<void>
   pollPipelineStatus: () => void
-}
-
-const CLIENT_ACTIVITY_TERMINAL_STATUSES = new Set<ForegroundActivity['status']>([
-  'completed',
-  'failed',
-  'cancelled',
-])
-const _canonicalClientTaskWrites = createKeyedWriteSequencer()
-const _activityPublicationGate = createActivityPublicationGate<ForegroundActivity>()
-
-function beginAppActivity(
-  get: () => AppState,
-  options: {
-    kind: string
-    title: string
-    phase: string
-    message: string
-    total?: number
-    generationDetails?: GenerationDetails
-  },
-) {
-  const id = `${options.kind}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-  const report = (
-    phase: string,
-    message: string,
-    current = 0,
-    total = options.total || 0,
-    details?: Partial<Pick<ForegroundActivity, 'detailMessage' | 'detailVolatile' | 'detailCurrent' | 'detailTotal' | 'tokenUsage' | 'generationDetails'>>,
-  ) => get().upsertActivity({
-    id,
-    kind: options.kind,
-    title: options.title,
-    status: 'running',
-    phase,
-    message,
-    current,
-    total,
-    ...details,
-  })
-  report(options.phase, options.message, 0, options.total || 0, {
-    generationDetails: options.generationDetails,
-  })
-  return {
-    id,
-    report,
-    finish: (message = 'Complete') => {
-      const clearVolatileDetail = get().activities[id]?.detailVolatile
-        ? { detailMessage: '', detailVolatile: false }
-        : {}
-      get().upsertActivity({
-        id,
-        kind: options.kind,
-        title: options.title,
-        status: 'completed',
-        phase: 'completed',
-        message,
-        current: options.total || 1,
-        total: options.total || 1,
-        ...clearVolatileDetail,
-      })
-      window.setTimeout(() => get().removeActivity(id), 4000)
-    },
-    fail: (error: unknown, phase = options.phase) => {
-      const message = error instanceof Error ? error.message : String(error)
-      const clearVolatileDetail = get().activities[id]?.detailVolatile
-        ? { detailMessage: '', detailVolatile: false }
-        : {}
-      get().upsertActivity({
-        id,
-        kind: options.kind,
-        title: options.title,
-        status: 'failed',
-        phase,
-        message,
-        error: message,
-        ...clearVolatileDetail,
-      })
-    },
-  }
 }
 
 let directorReconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -1907,6 +1801,7 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createStudioMusicSlice),
   ...bindSlice(set, get, createSystemSlice),
   ...bindSlice(set, get, createPresetsSlice),
+  ...bindSlice(set, get, createActivitySlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -6209,76 +6104,10 @@ export const useStore = create<AppState>((set, get) => {
   directorStoryProductionHandoff: null,
   llmStreamText: '',
   llmStreamDone: true,
-  foregroundActivity: null,
-  activities: {},
   pipelineId: null,
   pipelineStatus: null,
   activeDirectorPipelines: [],
   pipelinePolling: false,
-  upsertActivity: (activity) => {
-    const previous = get().activities[activity.id]
-    if (
-      previous
-      && CLIENT_ACTIVITY_TERMINAL_STATUSES.has(previous.status)
-      && !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)
-    ) return
-    const now = Date.now()
-    const published = {
-      ...previous,
-      ...activity,
-      workspace: get().activeWorkspace,
-      startedAt: previous?.startedAt || activity.startedAt || now,
-      updatedAt: activity.updatedAt || now,
-    }
-    // Keep each client root's running -> terminal -> dismissal writes ordered.
-    // Different activities still publish concurrently, and observability never
-    // blocks the foreground operation.
-    _activityPublicationGate.publish(published, latest => {
-      void _canonicalClientTaskWrites.enqueue(activity.id, async () => {
-        await api.upsertCanonicalClientTask(latest as unknown as Record<string, unknown>)
-      }).catch(() => undefined)
-    })
-    set(state => ({
-      activities: { ...state.activities, [activity.id]: published },
-    }))
-  },
-  removeActivity: (activityId) => {
-    const activity = get().activities[activityId]
-    if (!activity || !CLIENT_ACTIVITY_TERMINAL_STATUSES.has(activity.status)) return
-    const workspace = get().activeWorkspace
-    void _canonicalClientTaskWrites.enqueue(activityId, async () => {
-      await api.dismissCanonicalTask(api.canonicalClientTaskId(activityId), workspace)
-    }).catch(() => undefined)
-    _activityPublicationGate.clear(activityId)
-    set(state => {
-      if (!state.activities[activityId]) return {}
-      const activities = { ...state.activities }
-      delete activities[activityId]
-      return { activities }
-    })
-  },
-  // Compatibility bridge for older feature panels. New workflows should use
-  // the registry directly so concurrent activities cannot overwrite one another.
-  setForegroundActivity: (activity) => set(state => {
-    const activities = { ...state.activities }
-    if (!activity) {
-      if (state.foregroundActivity?.id) delete activities[state.foregroundActivity.id]
-      return { foregroundActivity: null, activities }
-    }
-    if (state.foregroundActivity?.id && state.foregroundActivity.id !== activity.id) {
-      delete activities[state.foregroundActivity.id]
-    }
-    const previous = activities[activity.id]
-    const now = Date.now()
-    const normalized = {
-      ...previous,
-      ...activity,
-      startedAt: previous?.startedAt || activity.startedAt || now,
-      updatedAt: activity.updatedAt || now,
-    }
-    activities[activity.id] = normalized
-    return { foregroundActivity: normalized, activities }
-  }),
   setDirectorSkill: (skill) => {
     set({ directorSkill: skill, ...(skill === 'music_video' ? { directorPacingProfile: 'balanced' as const } : {}) })
     // Music director default for image-to-video reference strength is
