@@ -100,7 +100,8 @@ agents were told one fixed episode shape. The camera can now also pull out, pan 
 pan right or drift (in the shot's *Framing and timing*, `series.shot.update` and the
 script's `camera`); a pan or drift frames the plate a little closer so its edge never
 shows. The finish is chosen for the series in Setup (`look.finish`: paper, none, any
-Video 2D finish such as film or noir, or an agent's own amounts) and for one shot.
+Video 2D finish such as film or noir, without its letterbox bars, or an agent's own
+amounts) and for one shot.
 Setup also has an *Episode format*: the episode planner and agents follow it, and
 when it is empty agents keep the default sitcom format, which Setup now shows.
 Nothing changes for a series that chooses nothing: paper stays the default, only a

@@ -5,7 +5,8 @@ change it. A finish choice is one of:
 
 - ``"paper"``: that same finish. It is the default: a series and a shot that choose nothing still get it;
 - ``"none"``: a clean picture;
-- the id of a Video 2D finish in ``app/shared/finish_presets.json`` (``film``, ``noir``, ``oldDoc``...);
+- the id of a Video 2D finish in ``app/shared/finish_presets.json`` (``film``, ``noir``, ``oldDoc``...), without its
+  letterbox bars;
 - ``{"texture": {"kind", "amount"}, "grain": {"amount", "size"}, "vignette": {"amount", "softness"}}``: your own
   amounts of any of the three (``kind`` paper, film-dust or scratches; amounts 0-1, size 0.5-4, softness 0-1).
 
@@ -114,7 +115,9 @@ def resolve(value: str | dict[str, Any]) -> dict[str, Any] | None:
     found = presets().get(value)
     if found is None:
         raise ValueError(f"unknown finish {value!r}: it must be {_choices_text()}")
-    return copy.deepcopy(found)
+    # Never a finish's letterbox: the episode cuts its 2D shots with 3D and video shots that have no bars, and in a
+    # vertical frame a 2.39 band would hide three quarters of the picture.
+    return {key: copy.deepcopy(part) for key, part in found.items() if key != "letterbox"}
 
 
 def shot_finish(series: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any] | None:

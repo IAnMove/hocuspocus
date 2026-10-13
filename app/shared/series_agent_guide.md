@@ -160,8 +160,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   `insert`/`title` (no cast; cards).
 - **camera:** `static` (default), `push`/`pull` (slow push-in/out), `pan-left`, `pan-right` or `drift`; other words
   are `static` (push-in words `push`). Follow the series' `cameraLanguage`, else push on punchlines.
-- **finish:** `paper` (default: texture, grain, vignette), `none`, a Video 2D finish id (`scenes.catalog` kind
-  `finish`) or `{texture, grain, vignette}`: the shot's own, else the series' `look.finish`.
+- **finish:** `paper` (default), `none`, a Video 2D finish id (`scenes.catalog`) or `{texture, grain, vignette}`;
+  else the series' `look.finish`.
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
   as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,

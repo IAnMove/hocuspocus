@@ -54,6 +54,15 @@ _PUSH_WORDS = ("push", "dolly in", "zoom in", "creep in", "acerc", "zoom lento",
 # The 2D camera moves (``cameraLayer`` in ui/scripts/seriesShot.ts): a slow push-in or pull-out, a pan across the plate
 # and a slight drift. ``static`` adds no camera.
 CAMERAS = ("static", "push", "pull", "pan-left", "pan-right", "drift")
+# Where each move starts and ends, as the camera's (x, y, scale): ``CAMERA_MOVES`` of seriesShot.ts, kept equal by a
+# test. A camera that goes on from the shot before (the same picture) goes on only through ``CAMERA_CONTINUES``; the
+# other moves always start and end at these poses.
+CAMERA_POSES = {
+    "push": ((50, 50, 1), (50, 48.5, 1.07)), "pull": ((50, 48.5, 1.07), (50, 50, 1)),
+    "pan-left": ((53.5, 50, 1.08), (46.5, 50, 1.08)), "pan-right": ((46.5, 50, 1.08), (53.5, 50, 1.08)),
+    "drift": ((49, 50, 1.03), (51, 50, 1.03)),
+}
+CAMERA_CONTINUES = ("static", "push")
 LANGUAGE_KEYS = {"en": "english", "es": "spanish", "fr": "french", "de": "german", "it": "italian", "pt": "portuguese",
                  "ja": "japanese", "ko": "korean", "cmn": "chinese", "zh": "chinese", "ru": "russian"}
 MOTIONS = ("idle", "still", "shake")

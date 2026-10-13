@@ -11,21 +11,24 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
+from pathlib import Path
 
 import pytest
 
-from services.series_finish import PAPER, check_finish, fingerprint, shot_finish, store_look
+from services.series_finish import _PARTS, PAPER, TEXTURES, check_finish, fingerprint, shot_finish, store_look
 from services.series_library import normalize_series_project
 from services.series_review import content_digest
 from services.series_script import EpisodeScript, ScriptError
 from services.series_shot_edit import ShotEditError
 from services.series_shot_instruction import SYSTEM
-from services.series_shot_plan import build_shot_spec, normalize_layout2d
+from services.series_shot_plan import CAMERA_CONTINUES, CAMERA_POSES, CAMERAS, build_shot_spec, normalize_layout2d
 from services.series_take_inputs import render_inputs
 from services.video2d_preset_catalog import finish_presets
 from tests.test_series_script_produce import FILES, KITS as SCRIPT_KITS, SCRIPT, project
 from tests.test_series_shot_edit import edit, library
 
+ROOT = Path(__file__).resolve().parents[1]
 STATES = ["closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue"]
 
 
@@ -119,6 +122,11 @@ def test_any_other_finish_is_a_new_picture_and_renders_again():
     assert "finish" not in planned_spec(clean, shot) and render_inputs(clean, shot, KITS) != old
     film = series(look={"finish": "film"})
     assert planned_spec(film, shot)["finish"] == finish_presets()["film"] and render_inputs(film, shot, KITS) not in (old, render_inputs(clean, shot, KITS))
+    # A Video 2D finish comes without its letterbox: a vertical frame would be three quarters bars.
+    cinema = {key: value for key, value in finish_presets()["warmCinema"].items() if key != "letterbox"}
+    assert "letterbox" in finish_presets()["warmCinema"] and cinema
+    for value in (series(look={"finish": "warmCinema"}), series(look={"finish": "warmCinema"}, **PORTRAIT)):
+        assert planned_spec(value, shot)["finish"] == cinema
     own = {"grain": {"amount": 0.2}, "vignette": {"amount": 0.4, "softness": 0.5}}
     stored = check_finish(own)
     assert stored == {"grain": {"amount": 0.2, "size": 1.2}, "vignette": {"amount": 0.4, "softness": 0.5}}
@@ -174,6 +182,37 @@ def test_the_catalog_never_takes_the_names_of_the_series_choices():
     named = SYSTEM.split("finish (2d shots):", 1)[1].split("\n- ", 1)[0]
     for preset in ("film", "noir", "sepia", "oldDoc", "flashback", "warm", "cold", "vhs"):
         assert preset in named and preset in finish_presets(), preset
+
+
+# Every Video 2D finish when the choice became visible. A series may name any of them in look.finish or a shot's
+# layout2d.finish, and an unknown name is refused when the workspace's series library is read.
+PRESETS_2026_10_13 = ("warmCinema", "oldDoc", "nightNeon", "paperComic", "risoPress", "natural", "teal_orange", "bleach",
+                      "noir", "sepia", "flashback", "dream", "giallo", "cold", "warm", "vhs", "film")
+
+
+def test_a_finish_a_series_may_name_stays_in_the_catalog():
+    missing = set(PRESETS_2026_10_13) - set(finish_presets())
+    assert not missing, (f"{sorted(missing)} left app/shared/finish_presets.json: a series that chose one could no longer "
+                         "be read. Keep the id, or map it to another in series_finish.check_finish, before removing it.")
+
+
+def test_own_amounts_take_the_video2d_ranges():
+    ranges = json.loads((ROOT / "app" / "shared" / "finish_presets.json").read_text(encoding="utf-8"))["ranges"]
+    assert list(TEXTURES) == ranges["texture"]["kinds"]
+    for part, keys in _PARTS.items():
+        assert {key: [low, high] for key, low, high, _default in keys} == {key: value for key, value in ranges[part].items()
+                                                                          if key != "kinds"}, part
+
+
+def test_the_python_camera_poses_are_the_compiler_s():
+    """series_shot_plan.CAMERA_POSES, where a camera that goes on from the shot before starts, are the compiler's poses."""
+    source = (ROOT / "ui" / "scripts" / "seriesShot.ts").read_text(encoding="utf-8")
+    block = source.split("export const CAMERA_MOVES", 1)[1].split("\n}\n", 1)[0]
+    pose = r"\{ x: ([\d.]+), y: ([\d.]+), scale: ([\d.]+) \}"
+    found = {name: tuple(tuple(float(n) for n in match) for match in re.findall(pose, poses))
+             for name, poses in re.findall(r"^\s*'?([a-z-]+)'?: \[(.*)\],?$", block, re.M)}
+    assert found == {name: tuple(tuple(float(n) for n in end) for end in ends) for name, ends in CAMERA_POSES.items()}
+    assert {"static", *CAMERA_POSES} == set(CAMERAS) and set(CAMERA_CONTINUES) <= set(CAMERAS)
 
 
 def _stored(**fields):

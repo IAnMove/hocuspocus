@@ -247,6 +247,13 @@ def test_a_stored_shot_compiles_to_the_video2d_document_it_always_did():
         document = run_series_shot({"mode": "shot", "kits": {cast["kitId"]: KITS[cast["kitId"]] for cast in spec["cast"]}, "shot": spec})
         assert digest(document) == expected[3], name
         assert any(layer["type"] == "camera" for layer in document["layers"]) is (expected[4] == "push"), name
+    # "none" plans no finish key at all and a Video 2D finish plans the preset: the compiler takes both as they are.
+    from services.video2d_preset_catalog import finish_presets
+    from tests.test_series_finish import SHOTS, series as finish_series
+    for choice, expected_finish in (("none", None), ("film", finish_presets()["film"])):
+        spec = planned_spec(finish_series(look={"finish": choice}), SHOTS["static"])
+        document = run_series_shot({"mode": "shot", "kits": {cast["kitId"]: KITS[cast["kitId"]] for cast in spec["cast"]}, "shot": spec})
+        assert document.get("finish") == expected_finish, choice
 
 
 def test_props_stand_on_background_anchors_and_follow_the_framing_zoom():
