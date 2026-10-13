@@ -6885,172 +6885,46 @@ async def wangp_capabilities():
     return {"revision": "362c3467a70e1136ceb52eec95907205a8f88543", "processors": processors}
 
 
-@api.get("/api/v1/model3d/capabilities")
-def model3d_capabilities():
-    from services import model3d_service
-    return model3d_service.capabilities()
+class _LaunchCollectionLookup:
+    """The collections registry is created later in this module; look it up per request."""
+
+    def get(self, key):
+        return globals()["_workspace_collection_registry"].get(key)
 
 
-@api.post("/api/v1/model3d/generate")
-async def generate_model3d(request: Request):
-    from services import model3d_service
-    from services.generation_provenance import normalize_submission_provenance
-
-    body = await request.json()
-    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
-    collection_id = body["provenance"].get("workspace_id")
-    if collection_id and not _workspace_collection_registry.get(collection_id):
-        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    try:
-        execution_mode.validate_generation(workspace)
-    except execution_mode.ExecutionModeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raw_images = body.get("images") or {}
-    if not isinstance(raw_images, dict):
-        raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
-    # Backward-compatible single-image input becomes the front view.
-    if body.get("image_path") and not raw_images.get("front"):
-        raw_images["front"] = body["image_path"]
-    image_paths = {}
-    for view, value in raw_images.items():
-        if view not in {"front", "left", "right", "back"} or not value:
-            continue
-        resolved = _resolve_model3d_input_path(str(value), workspace)
-        if not resolved or not os.path.isfile(resolved):
-            raise HTTPException(status_code=400, detail=f"3D {view} image not found")
-        image_paths[view] = resolved
-    source_mesh_path = None
-    if str(body.get("operation") or "generate").lower() == "retexture":
-        source_mesh_path = _resolve_model3d_input_path(
-            str(body.get("source_model") or ""), workspace,
-        )
-        if not source_mesh_path or not os.path.isfile(source_mesh_path):
-            raise HTTPException(status_code=400, detail="Source GLB not found")
-    try:
-        job = model3d_service.start_job(
-            body=body,
-            image_paths=image_paths,
-            output_dir=_workspace_dir(workspace),
-            source_mesh_path=source_mesh_path,
-            workspace=workspace,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "model3d")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/model3d/status/{job_id}")
-def model3d_job_status(job_id: str):
-    from services import model3d_service
-    job = model3d_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
+def _publish_moved_studio_task(record, adapter):
+    """Activity publish stays the launch function, which is defined further down."""
     publisher = globals().get("_publish_generic_legacy_task")
     if callable(publisher):
-        publisher(job, "model3d")
-    return job
+        publisher(record, adapter)
 
 
-@api.post("/api/v1/model3d/jobs/{job_id}/cancel")
-def cancel_model3d_job(job_id: str):
+def _launch_model3d_engine():
     from services import model3d_service
-    job = model3d_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "model3d")
-    return job
+    return model3d_service
 
 
-@api.post("/api/v1/model3d/unload")
-def unload_model3d():
-    """Stop active workers. Completed jobs already release all Hunyuan VRAM."""
-    from services import model3d_service
-    cancelled = model3d_service.cancel_all_jobs()
-    return {"status": "ok", "cancelled_jobs": cancelled, "model_loaded": False}
+from routers.model3d import create_model3d_router
+from routers.rig import create_rig_router
 
-
-# ============================================================================
-# API Routes: Rig & Animate (procedural skeletons for 3D outputs)
-# ============================================================================
-
-@api.get("/api/v1/rig/capabilities")
-def rig_capabilities():
-    from services import rig_service
-    return rig_service.capabilities()
-
-
-@api.post("/api/v1/rig/generate")
-async def generate_rig(request: Request):
-    from services import rig_service
-    from services.generation_provenance import normalize_submission_provenance
-    body = await request.json()
-    raw_provenance, trusted = body.pop("provenance", None), getattr(request, "trusted_tool", None)
-    # A UI rig keeps its historical "rig" origin; an agent or Wizard request carries who asked.
-    provenance = normalize_submission_provenance(raw_provenance, trusted_tool=trusted) if raw_provenance or trusted else None
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    source_name = str(body.get("source") or "").strip()
-    if not source_name:
-        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
-    if not source_name.lower().endswith(".glb"):
-        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = _safe_join(_workspace_dir(workspace), source_name)
-    if not source_path or not os.path.isfile(source_path):
-        # Also accept absolute/upload paths through the shared 3D resolver.
-        source_path = _resolve_model3d_input_path(source_name, workspace)
-    if not source_path or not os.path.isfile(source_path):
-        raise HTTPException(status_code=400, detail="Source 3D model not found")
-    try:
-        job = rig_service.start_job(
-            body=body,
-            source_path=source_path,
-            output_dir=_workspace_dir(workspace),
-            workspace=workspace,
-            provenance=provenance,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "rig")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/rig/status/{job_id}")
-def rig_job_status(job_id: str):
-    from services import rig_service
-    job = rig_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
-
-
-@api.post("/api/v1/rig/jobs/{job_id}/cancel")
-def cancel_rig_job(job_id: str):
-    from services import rig_service
-    job = rig_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
+api.include_router(create_model3d_router(
+    engine=_launch_model3d_engine,
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    validate_generation=lambda workspace: execution_mode.validate_generation(workspace),
+    collection_registry=_LaunchCollectionLookup(),
+    publish_task=_publish_moved_studio_task,
+))
+from routers.model3d import cancel_model3d_job, generate_model3d, model3d_job_status
+api.include_router(create_rig_router(
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    safe_join=_safe_join,
+    publish_task=_publish_moved_studio_task,
+))
+from routers.rig import cancel_rig_job, generate_rig, rig_job_status
 
 
 # ============================================================================

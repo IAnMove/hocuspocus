@@ -452,58 +452,37 @@ def wangp_capabilities():
     return {"processors": []}
 
 
-@api.get("/api/v1/rig/capabilities")
-def rig_capabilities():
-    from services import rig_service
-    payload = rig_service.capabilities()
-    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
-    payload["engines"] = [engine for engine in payload["engines"] if engine["id"] in {"procedural", "humanoid"}]
-    return payload
-
-
-@api.post("/api/v1/rig/generate")
-async def generate_rig(request: Request):
-    from services import rig_service
-    body = await request.json()
-    if str(body.get("engine") or "procedural") not in {"procedural", "humanoid"}:
+def _core_rig_gate(body: dict) -> None:
+    if str((body or {}).get("engine") or "procedural") not in {"procedural", "humanoid"}:
         require_capability_http("unirig_ai")
-    try:
-        workspace = body.get("workspace") or core.active_workspace()
-        folder = core.workspace_dir(workspace)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    source_name = str(body.get("source") or "").strip()
-    if not source_name:
-        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
-    if not source_name.lower().endswith(".glb"):
-        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = core.safe_join(folder, source_name)
-    if not source_path or not os.path.isfile(source_path):
-        raise HTTPException(status_code=400, detail="Source 3D model not found")
-    try:
-        return rig_service.start_job(body=body, source_path=source_path, output_dir=folder, workspace=workspace)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
-@api.get("/api/v1/rig/status/{job_id}")
-def rig_job_status(job_id: str):
-    from services import rig_service
-    job = rig_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    return job
+def _core_rig_engines(engines: list) -> list:
+    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
+    return [engine for engine in engines if engine.get("id") in {"procedural", "humanoid"}]
 
 
-@api.post("/api/v1/rig/jobs/{job_id}/cancel")
-def cancel_rig_job(job_id: str):
-    from services import rig_service
-    job = rig_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    return job
+def _core_rig_input(value: str, workspace: str | None = None) -> str | None:
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=core.safe_join,
+        workspace_dir=core.workspace_dir,
+        save_path=lambda: str(core.outputs_root()),
+    )
+
+
+from routers.rig import create_rig_router
+api.include_router(create_rig_router(
+    resolve_input_path=_core_rig_input,
+    workspace_dir=core.workspace_dir_or_400,
+    get_active_workspace=core.active_workspace,
+    safe_join=core.safe_join,
+    publish_task=core_canonical_tasks.publish_studio_activity,
+    engine_gate=_core_rig_gate,
+    filter_engines=_core_rig_engines,
+))
 
 
 @api.post("/api/v1/scenes/recordings")

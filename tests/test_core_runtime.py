@@ -132,6 +132,140 @@ class CoreRuntimeTests(unittest.TestCase):
         finally:
             self._leave_temp_workspace(folder, previous)
 
+    def _copy_rig_fixture(self, destination: Path) -> None:
+        import shutil
+        fixture = Path(__file__).resolve().parents[1] / "ui" / "tests" / "fixtures" / "tv-head-humanoid.glb"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(fixture, destination)
+
+    def test_rig_keeps_the_submission_provenance(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            self._copy_rig_fixture(core_runtime.core.outputs_root() / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={
+                "source": "prop.glb",
+                "animations": ["idle"],
+                "provenance": {"actor": "wizard", "capability": "rig"},
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(started.json().get("provenance", {}).get("actor"), "wizard")
+
+    def test_rig_accepts_an_uploaded_glb(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            self._copy_rig_fixture(Path("uploads") / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={
+                "source": "/api/v1/uploads/prop.glb",
+                "animations": ["idle"],
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+
+    def test_rig_publishes_an_activity_task(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            self._copy_rig_fixture(core_runtime.core.outputs_root() / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={
+                "source": "prop.glb", "animations": ["idle"],
+            })
+            self.assertEqual(started.status_code, 200, started.text)
+            tasks = self.client.get("/api/v1/tasks", params={"status": "all", "workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(tasks.status_code, 200, tasks.text)
+        workflows = [item.get("workflow") for item in tasks.json()["tasks"]]
+        self.assertIn("rig", workflows)
+
+    def test_meshy_completion_writes_an_asset_manifest(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+
+            def fake_generate(**kwargs):
+                name = "meshy-manifest.glb"
+                path = Path(kwargs["output_dir"]) / name
+                path.write_bytes(b"glb")
+                return {"filename": name, "path": str(path), "provider": "meshy"}
+
+            with patch("services.meshy_3d_service.generate_model", side_effect=fake_generate), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_3d.threading.Thread", ImmediateThread):
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            sidecar = core_runtime.core.outputs_root() / "meshy-manifest.meta.json"
+            published = sidecar.is_file() and json.loads(sidecar.read_text(encoding="utf-8"))["technical"]["published_on_generate"]
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(published)
+
+    def test_model3d_job_publishes_an_activity_task(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.meshy_3d_service.generate_model", return_value={"filename": "meshy-test.glb"}), patch(
+                "services.execution_mode.validate_remote_provider",
+            ):
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            tasks = self.client.get("/api/v1/tasks", params={"status": "all", "workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        workflows = [item.get("workflow") for item in tasks.json()["tasks"]]
+        self.assertIn("model3d", workflows)
+
+    def test_hi3d_text_prompt_uses_a_minimax_still(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            core_runtime.core.save_config({"services": {
+                "active_workspace": "default",
+                "minimax_image_api_key": "test-key",
+                "hi3d_api_key": "hi-key",
+            }})
+            seen = {}
+
+            def fake_still(**kwargs):
+                path = Path(kwargs["output_dir"]) / "still.png"
+                path.write_bytes(b"png")
+                return {"path": str(path)}
+
+            def fake_hi3d(**kwargs):
+                seen["image"] = kwargs.get("image_path")
+                name = "hi3d-out.glb"
+                Path(kwargs["output_dir"], name).write_bytes(b"glb")
+                return {"filename": name}
+
+            with patch("services.minimax_image_service.generate_image", side_effect=fake_still), patch(
+                "services.hi3d_service.generate_model", side_effect=fake_hi3d,
+            ), patch("services.execution_mode.validate_remote_provider"), patch(
+                "services.core_remote_3d.threading.Thread", ImmediateThread,
+            ):
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "hi3d", "prompt": "a clay robot", "workspace": "default",
+                })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(str(seen.get("image") or "").endswith("still.png"))
+
+    def test_model3d_execution_mode_refusal_is_409(self):
+        from services.execution_mode import ExecutionModeError
+        with patch(
+            "services.execution_mode.validate_generation",
+            side_effect=ExecutionModeError("plan mode stops before queue submission"),
+        ):
+            response = self.client.post("/api/v1/model3d/generate", json={
+                "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+            })
+        self.assertEqual(response.status_code, 409, response.text)
+
     def test_diagnostics_snapshot_and_report_on_the_core_profile(self):
         snapshot = self.client.get("/api/v1/diagnostics")
         self.assertEqual(snapshot.status_code, 200, snapshot.text)

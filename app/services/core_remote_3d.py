@@ -1,6 +1,7 @@
 """Remote Meshy/Hi3D jobs for the core/remote profile. No Hunyuan or Torch."""
 from __future__ import annotations
 
+import os
 import threading
 import time
 import uuid
@@ -80,6 +81,75 @@ def _patch(job_id: str, **fields: Any) -> None:
             current.update(fields)
 
 
+def _image_provider(profile: dict[str, Any]) -> str:
+    image = profile.get("image") if isinstance(profile.get("image"), dict) else {}
+    return str(image.get("provider") or "").strip().lower()
+
+
+def _minimax_image_key() -> str:
+    from services.provider_profile import resolve_minimax_key
+    return resolve_minimax_key(core.services_raw(), "image")
+
+
+def _hi3d_can_draw_a_still(profile: dict[str, Any]) -> bool:
+    return _image_provider(profile) == "minimax" and bool(_minimax_image_key())
+
+
+def _draw_minimax_still(prompt: str, output_dir: str, job_id: str) -> str | None:
+    """The same text-to-still fallback the full server uses before Hi3D."""
+    from services.minimax_image_service import MiniMaxImageError, generate_image
+
+    key = _minimax_image_key()
+    text = str(prompt or "").strip()
+    if not key or not text:
+        return None
+    condition = text if "white background" in text.lower() else (
+        f"{text}, white background, centered 3D object, studio product shot, no people, no text, no extra objects"
+    )
+    try:
+        result = generate_image(
+            api_key=key,
+            prompt=condition,
+            aspect_ratio="1:1",
+            output_dir=output_dir,
+            filename_prefix="hy3d-ref",
+            task_id=job_id,
+            root_task_id=job_id,
+        )
+    except MiniMaxImageError:
+        return None
+    return str(result.get("path") or "") or None
+
+
+def _publish_asset_manifest(job_id: str, filename: str, provider: str) -> None:
+    from services.asset_manifest import publish_generation_job_sidecar
+
+    with _LOCK:
+        job = dict(_JOBS.get(job_id) or {})
+    request = dict(job.get("_request") or {})
+    output_dir = str(request.get("output_dir") or "")
+    if not filename or not output_dir:
+        return
+    publish_generation_job_sidecar(
+        job,
+        os.path.join(output_dir, filename),
+        {
+            "generation_mode": "model3d",
+            "mode": "model3d",
+            "params": {
+                "prompt": request.get("prompt"),
+                "model_id": request.get("model"),
+                "model_type": request.get("model"),
+                "provider": provider,
+                "image_path": os.path.basename(str(request.get("image_path") or "")) or None,
+            },
+        },
+        job_id_key="job_id",
+        output_folder=str(job.get("workspace") or "default"),
+        tool="model3d",
+    )
+
+
 def _remote_provider(body: dict[str, Any], profile: dict[str, Any]) -> str:
     provider = alias_model3d_provider(str(
         body.get("provider") or profile.get("model3d", {}).get("provider") or "local",
@@ -99,7 +169,7 @@ def start_job(body: dict[str, Any], *, workspace: str, output_dir: str) -> dict[
     provider = _remote_provider(body, profile)
     image_path = _front_image(body, workspace)
     prompt = str((body.get("prompt") or "")).strip()
-    if provider == "hi3d" and not image_path:
+    if provider == "hi3d" and not image_path and not _hi3d_can_draw_a_still(profile):
         raise ValueError("Hi3D needs a reference image")
     if provider == "meshy" and not image_path and not prompt:
         raise ValueError("A prompt or a reference image is required")
@@ -112,6 +182,7 @@ def start_job(body: dict[str, Any], *, workspace: str, output_dir: str) -> dict[
         "message": f"Queued {provider} generation", "error": None,
         "filename": None, "url": None, "operation": "generate",
         "model_id": model_id, "provider": provider, "workspace": workspace,
+        "provenance": dict(body.get("provenance") or {}),
         "created_at": time.time(), "updated_at": time.time(),
         "_cancel_requested": False,
         "_request": {"prompt": prompt, "image_path": image_path, "model": model_id, "output_dir": output_dir},
@@ -123,7 +194,7 @@ def start_job(body: dict[str, Any], *, workspace: str, output_dir: str) -> dict[
     return initial
 
 
-def _call_provider(provider: str, request: dict[str, Any], stem: str, cancelled) -> dict[str, Any]:
+def _call_provider(provider: str, request: dict[str, Any], stem: str, cancelled, job_id: str) -> dict[str, Any]:
     services = core.services_raw()
     output_dir = str(request.get("output_dir") or core.workspace_dir())
     if provider == "meshy":
@@ -137,7 +208,14 @@ def _call_provider(provider: str, request: dict[str, Any], stem: str, cancelled)
     from services.hi3d_service import generate_model as generate_hi3d
     image_path = request.get("image_path")
     if not image_path:
-        raise RuntimeError("Hi3D needs a reference image")
+        image_path = _draw_minimax_still(str(request.get("prompt") or ""), output_dir, job_id)
+        if not image_path:
+            raise RuntimeError("Hi3D needs a photo. Add a reference image or configure MiniMax Image.")
+        request["image_path"] = image_path
+        with _LOCK:
+            current = _JOBS.get(job_id)
+            if current and isinstance(current.get("_request"), dict):
+                current["_request"]["image_path"] = image_path
     return generate_hi3d(
         api_key=str(services.get("hi3d_api_key") or ""), image_path=str(image_path),
         output_dir=output_dir, model=str(request.get("model") or "hitem3dv2.1"),
@@ -159,8 +237,9 @@ def _run(job_id: str) -> None:
         if cancelled():
             _patch(job_id, status="cancelled", phase="cancelled", message="Cancelled")
             return
-        result = _call_provider(provider, dict(job.get("_request") or {}), f"{provider}-{job_id[:8]}", cancelled)
+        result = _call_provider(provider, dict(job.get("_request") or {}), f"{provider}-{job_id[:8]}", cancelled, job_id)
         filename = result["filename"]
+        _publish_asset_manifest(job_id, filename, provider)
         _patch(job_id, status="completed", phase="completed", progress=1.0,
                message="3D model ready", filename=filename, url=f"/api/v1/file/{filename}")
     except Exception as exc:
@@ -168,3 +247,14 @@ def _run(job_id: str) -> None:
             _patch(job_id, status="cancelled", phase="cancelled", message="Cancelled")
             return
         _patch(job_id, status="failed", phase="failed", message=str(exc), error=str(exc))
+
+
+def cancel_all_jobs() -> int:
+    with _LOCK:
+        active = [
+            job_id for job_id, job in _JOBS.items()
+            if job.get("status") in {"queued", "running", "cancelling", "waiting_resource"}
+        ]
+    for job_id in active:
+        cancel_job(job_id)
+    return len(active)
