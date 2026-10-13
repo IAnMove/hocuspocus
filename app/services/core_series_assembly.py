@@ -29,19 +29,15 @@ from services.series_transitions import any_active, filter_for
 
 
 def asset_local_path(workspace: str, asset: dict[str, Any]) -> str:
-    uri = str(asset.get("uri") or "")
-    if uri.startswith("https://"):
-        raise ValueError(
-            f"Remote Series asset {asset.get('id')} must be imported into the workspace before assembly"
-        )
-    folder = os.path.realpath(core.workspace_dir(workspace))
-    relative = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
-    candidate = os.path.realpath(os.path.join(folder, relative))
-    if candidate != folder and not candidate.startswith(folder + os.sep):
-        raise ValueError(f"Series asset {asset.get('id')} leaves its workspace")
-    if not os.path.isfile(candidate):
-        raise ValueError(f"Series reference file is missing: {uri}")
-    return candidate
+    from services.series_asset_path import series_asset_local_path
+
+    return series_asset_local_path(
+        workspace,
+        asset,
+        workspace_dir=core.workspace_dir,
+        remote_purpose="assembly",
+        on_missing="raise",
+    )
 
 
 def available_filename(directory: str, name: str) -> str:

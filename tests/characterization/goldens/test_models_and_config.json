@@ -651,6 +651,47 @@
     },
     "status": 200
   },
+  "production profile save": {
+    "body": {
+      "configured": true,
+      "profile": {
+        "image": {
+          "model": "image-01",
+          "provider": "minimax"
+        },
+        "model3d": {
+          "model": "hunyuan3d-2mini-turbo",
+          "provider": "local"
+        },
+        "music": {
+          "model": "ace_step_v1_5_xl_sft_lm_4b",
+          "provider": "local"
+        },
+        "text": {
+          "base_url": "https://api.minimax.io",
+          "model": "MiniMax-M3",
+          "provider": "minimax"
+        },
+        "version": 1,
+        "video": {
+          "model": "minimax_h3_legacy",
+          "provider": "local",
+          "settings": {
+            "aspectRatio": "16:9",
+            "audioShift": 3.0,
+            "cache": false,
+            "flowShift": 12.0,
+            "loras": [],
+            "profile": "quality",
+            "resolution": "540p",
+            "steps": 20,
+            "turbo": false
+          }
+        }
+      }
+    },
+    "status": 200
+  },
   "services config": {
     "body": {
       "anthropic_api_key": "",

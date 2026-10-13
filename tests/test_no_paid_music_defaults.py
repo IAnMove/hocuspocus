@@ -11,6 +11,7 @@ import json
 import subprocess
 import sys
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,7 +19,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from services import core_production, core_remote_music, media_options, minimax_music_service
+from services import core_production, media_options, minimax_music_service
 from services.music_model_contract import (
     DEFAULT_MUSIC_MODEL,
     MusicModelError,
@@ -88,21 +89,22 @@ def test_the_runtime_minimax_worker_fills_no_model(tmp_path, monkeypatch):
     assert posted == []
 
 
-def test_the_core_endpoint_never_turns_a_missing_model_into_a_paid_one(monkeypatch):
+def test_the_core_endpoint_never_turns_a_missing_model_into_a_paid_one(tmp_path, monkeypatch):
     """With no model the core runtime asks for the local default, which it cannot run (409)."""
     from routers import system_capabilities
+    from routers.core_remote import core_music_generation_gate
 
     def unavailable(capability):
         raise HTTPException(status_code=409, detail={"code": "feature_unavailable", "capability": capability})
 
     started = []
     monkeypatch.setattr(system_capabilities, "require_capability_http", unavailable)
-    monkeypatch.setattr(core_remote_music, "_run", started.append)
-    monkeypatch.setattr(core_remote_music, "_JOBS", {})
-    with pytest.raises(HTTPException) as refused:
-        core_remote_music.start_job(dict(SONG), workspace="default")
-    assert refused.value.status_code == 409 and refused.value.detail["capability"] == "local_audio_ai"
-    assert started == [] and core_remote_music._JOBS == {}
+    with _story_music_client(
+        tmp_path, monkeypatch, started, music_generation_gate=core_music_generation_gate,
+    ) as client:
+        refused = client.post("/api/v1/stories/music-candidates/jobs", json={**SONG, "workspace": "default"})
+    assert refused.status_code == 409 and refused.json()["detail"]["capability"] == "local_audio_ai"
+    assert started == []
 
 
 # -- the paid Story endpoints need the person's confirmation ------------------------------------
@@ -119,68 +121,100 @@ def test_the_paid_contract_needs_an_explicit_confirmed_choice():
     assert require_confirmed_paid_music({**SONG, "model": "music-2.6", "paid_music_confirmed": True}) == "music-2.6"
 
 
-def _story_music_client(tmp_path, monkeypatch, started):
+@contextmanager
+def _story_music_client(tmp_path, monkeypatch, started, music_generation_gate=None):
     from routers import story_music
 
+    saved = {
+        name: getattr(story_music, name, None)
+        for name in (
+            "_get_active_workspace", "_workspace_dir", "_story_cover_reference_path",
+            "_load_minimax_music_job", "_persist_minimax_music_job", "_publish_minimax_music_job",
+            "_public_minimax_music_job", "_run_minimax_music_job", "_minimax_music_jobs",
+            "_minimax_music_jobs_lock", "_MINIMAX_MUSIC_TERMINAL", "_finish_unstarted_music_children",
+            "_minimax_music_job_update", "wgp", "_music_generation_gate", "_music_before_reserve",
+            "_music_resolve_workspace",
+        )
+    }
     monkeypatch.setattr(story_music.execution_mode, "validate_remote_provider", lambda *_args: None)
     app = FastAPI()
     app.include_router(story_music.create_story_music_router(
+        SimpleNamespace(
+            workspace_dir=lambda *_args: str(tmp_path),
+            load_minimax_music_job=lambda _job_id: None,
+            persist_minimax_music_job=lambda _job: None,
+            publish_minimax_music_job=lambda _job: None,
+            public_minimax_music_job=lambda job: {key: value for key, value in job.items() if key != "request"},
+            run_minimax_music_job=started.append,
+            minimax_music_jobs={},
+            minimax_music_jobs_lock=threading.RLock(),
+            minimax_music_terminal={"completed", "failed", "cancelled"},
+            finish_unstarted_music_children=lambda *_args, **_kwargs: None,
+            minimax_music_job_update=lambda *_args, **_kwargs: None,
+        ),
         get_active_workspace=lambda: "default",
-        workspace_dir=lambda *_args: str(tmp_path),
         story_cover_reference_path=lambda *_args: None,
-        load_minimax_music_job=lambda _job_id: None,
-        persist_minimax_music_job=lambda _job: None,
-        publish_minimax_music_job=lambda _job: None,
-        public_minimax_music_job=lambda job: {key: value for key, value in job.items() if key != "request"},
-        run_minimax_music_job=started.append,
-        minimax_music_jobs={},
-        minimax_music_jobs_lock=threading.RLock(),
-        minimax_music_terminal={"completed", "failed", "cancelled"},
-        finish_unstarted_music_children=lambda *_args, **_kwargs: None,
-        minimax_music_job_update=lambda *_args, **_kwargs: None,
         wgp_module=SimpleNamespace(server_config={"services": {}}),
+        music_generation_gate=music_generation_gate,
     ))
-    return TestClient(app)
+    try:
+        yield TestClient(app)
+    finally:
+        for name, value in saved.items():
+            setattr(story_music, name, value)
 
 
 def test_the_story_job_endpoint_refuses_unconfirmed_or_missing_models(tmp_path, monkeypatch):
     started = []
-    client = _story_music_client(tmp_path, monkeypatch, started)
     body = {**SONG, "workspace": "default"}
-    missing = client.post("/api/v1/stories/music-candidates/jobs", json=body)
-    unconfirmed = client.post("/api/v1/stories/music-candidates/jobs", json={**body, "model": "music-3.0"})
-    assert missing.status_code == 400 and LOCAL in missing.json()["detail"]
-    assert unconfirmed.status_code == 403 and unconfirmed.json()["detail"].startswith(PAID_REFUSAL)
-    assert started == [] and not (tmp_path / "music-submissions").exists()
-    accepted = client.post("/api/v1/stories/music-candidates/jobs", json={
-        **body, "model": "music-3.0", "paid_music_confirmed": True,
-    })
-    assert accepted.status_code == 202 and accepted.json()["model"] == "music-3.0"
-    for _ in range(50):
-        if started:
-            break
-        threading.Event().wait(0.02)
-    assert started == [accepted.json()["jobId"]]
+    with _story_music_client(tmp_path, monkeypatch, started) as client:
+        missing = client.post("/api/v1/stories/music-candidates/jobs", json=body)
+        unconfirmed = client.post("/api/v1/stories/music-candidates/jobs", json={**body, "model": "music-3.0"})
+        assert missing.status_code == 400 and LOCAL in missing.json()["detail"]
+        assert unconfirmed.status_code == 403 and unconfirmed.json()["detail"].startswith(PAID_REFUSAL)
+        assert started == [] and not (tmp_path / "music-submissions").exists()
+        accepted = client.post("/api/v1/stories/music-candidates/jobs", json={
+            **body, "model": "music-3.0", "paid_music_confirmed": True,
+        })
+        assert accepted.status_code == 202 and accepted.json()["model"] == "music-3.0"
+        for _ in range(50):
+            if started:
+                break
+            threading.Event().wait(0.02)
+        assert started == [accepted.json()["jobId"]]
 
 
 def test_the_legacy_sync_endpoint_refuses_before_calling_minimax(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(minimax_music_service, "generate_candidates", lambda **kwargs: calls.append(kwargs) or [])
-    client = _story_music_client(tmp_path, monkeypatch, [])
-    refused = client.post("/api/v1/stories/music-candidates", json={**SONG, "model": "music-2.6"})
+    with _story_music_client(tmp_path, monkeypatch, []) as client:
+        refused = client.post("/api/v1/stories/music-candidates", json={**SONG, "model": "music-2.6"})
     assert refused.status_code == 403 and "Paid MiniMax music is disabled (music-2.6)" in refused.json()["detail"]
     assert calls == []
 
 
-def test_the_core_endpoint_refuses_an_unconfirmed_paid_model(monkeypatch):
-    from services import execution_mode
+def test_the_core_endpoint_refuses_an_unconfirmed_paid_model(tmp_path, monkeypatch):
+    from routers.core_remote import core_music_generation_gate
 
-    monkeypatch.setattr(execution_mode, "validate_remote_provider", lambda *_args: None)
-    with pytest.raises(HTTPException) as refused:
-        core_remote_music._validated_request({**SONG, "model": "music-3.0"}, "default")
-    assert refused.value.status_code == 403 and refused.value.detail.startswith(PAID_REFUSAL)
-    confirmed = core_remote_music._validated_request({**SONG, "model": "music-3.0", "paid_music_confirmed": True}, "default")
-    assert confirmed["model"] == "music-3.0"
+    started = []
+    with _story_music_client(
+        tmp_path, monkeypatch, started, music_generation_gate=core_music_generation_gate,
+    ) as client:
+        refused = client.post(
+            "/api/v1/stories/music-candidates/jobs",
+            json={**SONG, "model": "music-3.0", "workspace": "default"},
+        )
+        assert refused.status_code == 403 and refused.json()["detail"].startswith(PAID_REFUSAL)
+        confirmed = client.post(
+            "/api/v1/stories/music-candidates/jobs",
+            json={**SONG, "model": "music-3.0", "paid_music_confirmed": True, "workspace": "default"},
+        )
+        assert confirmed.status_code == 202 and confirmed.json()["model"] == "music-3.0"
+        for _ in range(50):
+            if started:
+                break
+            threading.Event().wait(0.02)
+    assert started == [confirmed.json()["jobId"]]
 
 
 # -- agents, MCP and production.* get a clear refusal -------------------------------------------

@@ -34,6 +34,45 @@ def test_model_settings_defaults(server, golden) -> None:
     server.check(golden, "production profile", "GET", "/api/v1/production-profile")
 
 
+def test_production_profile_save(server, golden, monkeypatch) -> None:
+    """The saved profile the Settings screen writes. Recorded before the normalizer moves."""
+    config = server.wgp.server_config
+    monkeypatch.setitem(config, "maestro_production_profile", config.get("maestro_production_profile"))
+    services = config.get("services")
+    if isinstance(services, dict):
+        monkeypatch.setitem(config, "services", dict(services))
+    selections = config.get("maestro_model_selections")
+    if isinstance(selections, dict):
+        monkeypatch.setitem(config, "maestro_model_selections", dict(selections))
+    server.check(
+        golden,
+        "production profile save",
+        "PUT",
+        "/api/v1/production-profile",
+        json={"profile": {
+            "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
+            "image": {"provider": "minimax", "model": "image-01"},
+            "music": {"provider": "local", "model": "ace_step_v1_5_xl_sft_lm_4b"},
+            "model3d": {"provider": "local", "model": "hunyuan3d-2mini-turbo"},
+            "video": {
+                "provider": "local",
+                "model": "minimax_h3_legacy",
+                "settings": {
+                    "profile": "quality",
+                    "steps": 20,
+                    "flowShift": 12,
+                    "audioShift": 3,
+                    "turbo": False,
+                    "cache": False,
+                    "loras": [],
+                    "resolution": "540p",
+                    "aspectRatio": "16:9",
+                },
+            },
+        }},
+    )
+
+
 def test_the_server_keeps_temp_files_and_libraries_in_its_state_folder(full_server) -> None:
     """The import sweeps the temp folder; Numba and the libraries default to the live install's folders."""
     import tempfile

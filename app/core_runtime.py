@@ -45,7 +45,7 @@ from services import (
     core_generation_commands,
     core_production,
     core_remote_image,
-    core_scene_recording,
+    scene_save,
     core_series_assembly,
     core_workspace as core,
     upload_stream,
@@ -509,36 +509,24 @@ def cancel_rig_job(job_id: str):
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(request: Request):
     try:
-        return await core_scene_recording.publish_from_form(await request.form())
+        return await scene_save.publish_from_form(await request.form())
     except HTTPException:
         raise
     except Exception as error:
         raise HTTPException(
-            status_code=core_scene_recording.http_error_status(error),
-            detail=core_scene_recording.http_error_detail(error),
+            status_code=scene_save.http_error_status(error),
+            detail=scene_save.http_error_detail(error),
         ) from error
 
 
 @api.post("/api/v1/scenes")
 async def save_scene(request: Request):
     body = await request.json()
-    scene = body.get("scene") if isinstance(body, dict) else None
-    if not isinstance(scene, dict):
-        raise HTTPException(status_code=400, detail="A version 1 scene is required")
-    workspace = body.get("workspace")
-    if workspace is None:
-        workspace = core.active_workspace()
-    folder = core.workspace_dir(workspace)
-    os.makedirs(folder, exist_ok=True)
-    import json
-    import time
-    import uuid
-    name = f"{time.strftime('%Y-%m-%d-%Hh%Mm%Ss')}_scene_{uuid.uuid4().hex[:6]}.scene.json"
-    path = os.path.join(folder, name)
-    Path_write = path
-    with open(Path_write, "w", encoding="utf-8") as handle:
-        json.dump(scene, handle)
-    return {"name": name, "type": "scene", "url": f"/api/v1/file/{name}?workspace={workspace}"}
+    return scene_save.save_core_scene(
+        body,
+        workspace_dir=core.workspace_dir,
+        active_workspace=core.active_workspace,
+    )
 
 
 def _resolve_editor_input(value: str, workspace: str | None = None) -> str | None:
