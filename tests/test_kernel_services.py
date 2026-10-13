@@ -19,8 +19,10 @@ from fastapi import HTTPException
 from services import execution_mode, job_lifecycle, resource_scheduler
 from services.kernel import paths as kernel_paths
 from services.kernel.config import ConfigStore
+from services import task_manager
 from services.kernel.jobs import GenerationQueue
 from services.kernel.paths import PathPolicy, safe_join
+from services.kernel.tasks import CanonicalTasks
 from services.kernel.workspaces import WorkspaceService
 
 
@@ -833,3 +835,82 @@ def test_slot_yields_false_for_a_job_cancelled_while_it_waited(queue_parts, adop
         assert acquired is False
     assert adopted == [] and not _held(queue.gen_lock)
     assert job_lifecycle.generation_queue_position(queue.gen_lock, job) is None
+
+
+# --- canonical tasks --------------------------------------------------------
+
+
+@pytest.fixture
+def tasks(tmp_path):
+    workspaces, engine = _workspaces(tmp_path, services={"active_workspace": "film"})
+    yield CanonicalTasks(workspaces), workspaces, engine
+    for folder in (tmp_path / "outputs", tmp_path / "outputs" / "film", tmp_path / "outputs" / "other"):
+        task_manager.forget_task_registry(os.path.realpath(folder))
+
+
+def test_the_task_registry_of_the_active_workspace_is_the_one_for_its_folder(tasks) -> None:
+    canonical, workspaces, _engine_ = tasks
+    registry = canonical.for_workspace()
+    assert registry is task_manager.get_task_registry(workspaces.workspace_dir("film"))
+    assert canonical.for_workspace(None) is registry
+    assert canonical.for_workspace("film") is registry
+
+
+def test_a_named_workspace_has_its_own_task_registry(tasks) -> None:
+    canonical, workspaces, _engine_ = tasks
+    other = canonical.for_workspace("other")
+    assert other is task_manager.get_task_registry(workspaces.workspace_dir("other"))
+    assert other is not canonical.for_workspace("film")
+    assert canonical.for_workspace("default") is task_manager.get_task_registry(workspaces.workspace_dir("default"))
+
+
+def test_the_task_registry_follows_the_active_workspace_when_it_changes(tasks) -> None:
+    canonical, _workspaces_, engine = tasks
+    film = canonical.for_workspace()
+    engine.server_config["services"]["active_workspace"] = "other"
+    assert canonical.for_workspace() is not film
+    assert canonical.for_workspace() is canonical.for_workspace("other")
+
+
+def test_the_task_registry_refuses_an_invalid_workspace_name(tasks) -> None:
+    canonical, _workspaces_, _engine_ = tasks
+    with pytest.raises(HTTPException) as caught:
+        canonical.for_workspace("../x")
+    assert caught.value.status_code == 400
+
+
+class _Adapter:
+    def list(self, workspace):
+        return []
+
+    def snapshot(self, workspace, task_id):
+        return None
+
+    def cancel(self, workspace, task_id):
+        return None
+
+
+def test_adapters_register_once_per_kind_and_come_back_in_order(tasks) -> None:
+    canonical = tasks[0]
+    assert canonical.adapters() == {} and canonical.adapter_for("series") is None
+    series, story = _Adapter(), _Adapter()
+    canonical.register_adapter("series", series)
+    canonical.register_adapter("story", story)
+    assert canonical.adapter_for("series") is series
+    assert list(canonical.adapters()) == ["series", "story"]
+    with pytest.raises(ValueError, match="already registered for 'series'"):
+        canonical.register_adapter("series", _Adapter())
+    assert canonical.adapter_for("series") is series
+
+
+@pytest.mark.parametrize("kind", ["", "  ", None, 3])
+def test_an_adapter_needs_a_kind(tasks, kind) -> None:
+    with pytest.raises(ValueError, match="needs a kind"):
+        tasks[0].register_adapter(kind, _Adapter())
+
+
+def test_the_adapter_list_is_a_copy(tasks) -> None:
+    canonical = tasks[0]
+    canonical.register_adapter("series", _Adapter())
+    canonical.adapters().clear()
+    assert list(canonical.adapters()) == ["series"]

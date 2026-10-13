@@ -125,9 +125,11 @@ from services.kernel.config import ConfigStore
 from services.kernel.paths import PathPolicy
 from services.kernel.workspaces import WorkspaceService
 from services.kernel.jobs import GenerationQueue
+from services.kernel.tasks import CanonicalTasks
 _config = ConfigStore()
 _workspaces = WorkspaceService(_config)
 _paths = PathPolicy(_workspaces)
+_tasks = CanonicalTasks(_workspaces)
 _generation_queue = GenerationQueue(
     _config,
     _workspaces,
@@ -33576,11 +33578,7 @@ api.include_router(create_uploads_router(
 # Canonical task registry and compatibility adapters
 # ============================================================================
 
-def _task_registry(workspace: str | None = None):
-    from services.task_manager import get_task_registry
-
-    target = _get_active_workspace() if workspace is None else workspace
-    return get_task_registry(_workspace_dir(target))
+_task_registry = _tasks.for_workspace
 
 
 def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
