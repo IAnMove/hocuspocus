@@ -31951,7 +31951,7 @@ def _run_minimax_music_job(job_id: str) -> None:
                     count=1,
                     output_dir=_workspace_dir(workspace),
                     instrumental=bool(request_body.get("instrumental")),
-                    model=str(request_body.get("model") or "music-3.0"),
+                    model=str(request_body.get("model") or ""),
                     reference_audio_path=request_body.get("reference_audio_path"),
                     task_id=child_task_id,
                     root_task_id=str(initial.get("rootTaskId") or initial.get("taskId")),

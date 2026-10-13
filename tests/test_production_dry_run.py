@@ -218,3 +218,38 @@ def test_an_h3_tail_is_left_to_gap_without_fill():
     shot = {"key": "s0", "kind": "h3", "t0": 0, "t1": 6, "frame": "f", "action": "a"}
     codes = {item["code"] for item in dry_run(_spec(title="Short", shots=[shot]))["warnings"]}
     assert "gap_without_fill" in codes and "held_tail" not in codes
+
+
+def test_dry_run_shows_each_set_prompt_staging_and_the_look_it_left_out():
+    spec = _spec(title="Short", style={"image": "Stop-motion figurine look. People dance in the street."},
+                 sets={"square": {"prompt": "a village square"}, "far": {"prompt": "distant hills", "staging": "backdrop"},
+                       "raw": {"prompt": "a market", "staging": "none"},
+                       "town": {"kind": "diorama", "prompt": "a town", "houses": ["a red house", "a blue house"],
+                                "ground": "cobble", "sky": "a clear night"}})
+    sets = dry_run(spec)["sets"]
+    assert sets["square"]["staging"] == "floor" and sets["square"]["prompt_sent"].startswith("An EMPTY set with nobody in it")
+    assert sets["square"]["look_sentences_dropped"] == ["People dance in the street."]
+    assert "Stop-motion figurine look." in sets["square"]["prompt_sent"]
+    assert sets["far"]["prompt_sent"].endswith("wide view of the scenery, clear horizon, nobody in it, no text")
+    assert sets["raw"] == {"staging": "none", "prompt_sent": "a market. Stop-motion figurine look. People dance in the street.",
+                           "look_sentences_dropped": []}
+    assert sets["town"] == {"staging": "diorama", "look_sentences_dropped": ["People dance in the street."]}
+    wrong = dry_run(_spec(title="Short", sets={"roof": {"prompt": "a roof", "staging": "wall"}}))["sets"]["roof"]
+    assert wrong == {"staging": "wall", "error": "sets.roof.staging must be one of floor, backdrop, none"}
+    assert "sets" not in dry_run(_spec(title="Short"))
+
+
+def test_dry_run_shows_what_auto_planning_filled_in_and_the_trailer_beats():
+    lyrics = "[Verse]\nfirst line\nsecond line\n[Chorus]\nthird line\nfourth line\n"
+    auto = dry_run(_spec(title="Short", song={"lyrics": lyrics, "caption": "pop", "duration": 30, "bpm": 120},
+                         cast=[{"id": "hero", "sheet_prompt": "a hero"}], shots="auto",
+                         section_actions={"scene": "a rainy rooftop"}))
+    assert auto["auto_plan"]["scene"] == "a rainy rooftop" and auto["auto_plan"]["scene_from"] == "section_actions.scene"
+    assert any(row.get("sing") for row in auto["windows"]) and not all(row.get("sing") for row in auto["windows"])
+    assert "auto_plan" not in dry_run(_spec(title="Short"))
+    trailer = dry_run(_spec(title="Short", song={"lyrics": "", "caption": "score", "duration": 40, "bpm": 120},
+                            cast=[{"id": "hero", "sheet_prompt": "a hero"}], shots="auto", structure="trailer"))
+    beats = {row["beat"]: row for row in trailer["windows"] if row.get("beat")}
+    assert set(beats) == {"presentation", "tension", "escalation", "reveal", "close"}
+    assert beats["presentation"]["action"].startswith("Slow establishing shot of the world")
+    assert trailer["auto_plan"]["structure"] == "trailer"

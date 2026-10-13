@@ -39,6 +39,7 @@ from services.production_review import review_for_status
 from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
 from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps
 from services.production_style_presets import expand_style_preset
+from services.production_video_model import DEFAULT_MODEL as DEFAULT_VIDEO_MODEL, VIDEO_MODELS, check_video
 from services.production_commands import extra_catalog, extra_handlers
 from services.production_control import Cancelled, sleep_until
 from services.production_package import editable_summary
@@ -82,7 +83,8 @@ SPEC_SCHEMA: dict[str, Any] = {
             "lyrics": {"type": "string", "maxLength": 20000}, "caption": {"type": "string", "maxLength": 2000},
             "duration": {"type": "number", "minimum": 10, "maximum": 300}, "bpm": {"type": "integer", "minimum": 60, "maximum": 200},
             "key": {"type": "string"}, "seeds": {"type": "array", "items": {"type": "integer"}, "maxItems": 6},
-            "model": {"type": "string"}, "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
+            "model": {"type": "string", "description": "local music model: ace_step_v1_5_xl_sft_lm_4b (default), minimax_music3 or yue2; paid MiniMax API music is refused"},
+            "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
             "language": {"type": "string", "description": "sung language (es, en, Spanish, ...). Default: told from the lyrics, else en"}}},
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
@@ -101,7 +103,7 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                         "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
                                                                   "description": "ids of other cast entries: one reference image with their portraits side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
-        "sets": {"type": "object", "description": "name -> {prompt, seed}: painted sets for scene3d background, drawn eye-level with an open floor and nobody in it, in the same image batch as the models"},
+        "sets": {"type": "object", "description": "name -> {prompt, seed, staging}: painted sets for scene3d background, in the same image batch as the models. staging floor (default): eye-level with an open empty floor and nobody in it, for the projected floor; backdrop: a far view with a clear horizon and nobody in it, no floor asked for; none: the prompt and the look as written (people may appear). dry_run shows each prompt and the look sentences left out"},
         "models": {"type": "object", "description": "name -> {from (cast id, stills name or picture URL) or prompt, rig (humanoid, prop, vehicle, quadruped, flying, serpentine, none; humanoid for a cast id), animations [clip names], seed}: textured Hunyuan3D GLBs, rigged with clips on the song's tempo, made in one batch after cast. A scene3d cast entry uses the name."},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
             "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d", "scene2d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
@@ -115,6 +117,11 @@ SPEC_SCHEMA: dict[str, Any] = {
             "allow": {"type": "array", "maxItems": 4, "items": {"enum": ["still", "dark", "secondary", "title_card"]},
                       "description": "Deliberate: still skips frozen_shot and the quality gate's still checks, dark skips black_bars, secondary skips duplicate_people and appearance_changed, title_card keeps a full-frame title over a moving shot"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
+        "section_actions": {"type": "object", "additionalProperties": False, "description": "shots auto only: scene is where every planned shot takes place (default: verse, else the title); verse, pre-chorus and chorus replace the sung action of those sections",
+                            "properties": {"scene": {"type": "string", "maxLength": 200}, "verse": {"type": "string"},
+                                           "pre-chorus": {"type": "string"}, "chorus": {"type": "string"}}},
+        "video": {"type": "object", "additionalProperties": False, "description": f"the H3 model that shoots the clips (default {DEFAULT_VIDEO_MODEL} at 4 steps); steps default to the model's own (20 for the others) and must be in its range ({DEFAULT_VIDEO_MODEL} 4-8, the others 1-50). Another model or steps shoots the kept clips of unlocked shots again; dry_run and production.status show it as video_model",
+                  "properties": {"model": {"enum": list(VIDEO_MODELS)}, "steps": {"type": "integer", "minimum": 1, "maximum": 50}}},
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
         "structure": {"enum": ["clip", "trailer"], "description": "clip (default): verse/chorus shots on the song's lines; trailer: five beats on time (presentation, tension, escalation, reveal, close) with designed silence, risers and hits"},
         "treatment": {"type": "object", "description": "what happens: arc (what changes first image to last), want, obstacle, moments [{at, event}] (at: chorus2, bridge, line:N), motifs. dry_run checks the plan carries it"},
@@ -137,8 +144,9 @@ def _require_spec_fields(spec: dict) -> None:
         raise ProductionError("invalid_spec", "spec.song needs lyrics, caption, duration and bpm")
     if not isinstance(spec.get("style"), dict):
         raise ProductionError("invalid_spec", "spec.style must be an object")
-    from services.production_song import require_song_language
+    from services.production_song import require_local_song_model, require_song_language
     require_song_language(song)
+    require_local_song_model(song)
 
 
 def _image_models(spec: dict) -> list:
@@ -203,6 +211,9 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
+    check_video(spec)
+    from services.production_shot_plan import check_section_actions
+    check_section_actions(spec)
     from services.production_lyric_looks import LyricLookError, check_finish, check_lyric_looks
     from services.production_models import ModelError, check_models
     try:
@@ -566,6 +577,8 @@ def status_summary(state: dict, workspace: str, root: str | None = None, product
     if smooth:
         summary["smoothness"] = smooth
     summary.update(review_for_status(state, root))
+    from services.production_video_model import resolve_video
+    summary["video_model"] = resolve_video(state.get("spec"))      # "video" is the finished video's URL
     from services.production_progress import progress_summary
     summary["progress"] = progress_summary(state, root)
     from services.production_shot_review import apply_artistic
@@ -594,6 +607,8 @@ def command_catalog() -> list[dict[str, Any]]:
                                       "message naming the shots; allow_thin true runs it anyway and returns those as warnings. "
                                       "through frames stops after the start frames (frames_ready); through animatic builds a CPU preview "
                                       "from those frames (animatic_ready) and a later run continues at the clips. "
+                                      "spec.video picks the H3 model and steps (default minimax_h3_fused_turbo, 4 steps; dry_run and "
+                                      "production.status show it as video_model). "
                                       "See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
@@ -609,9 +624,9 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them), an optional footer (small print on every scene) and an optional idioma/language (else told from the lyrics; fills song.language).",
+        {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them), an optional footer (small print on every scene) and an optional idioma/language (else told from the lyrics; fills song.language). tema becomes section_actions.scene (where the planned shots take place) and cta goes on the end cards only.",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
-        {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), what allow_thin let through (allow_thin), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
+        {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, the H3 model that shoots its clips (video_model), stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), what allow_thin let through (allow_thin), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait. 0 returns at once. Maximum 1200. 300 remains a safe client poll."},

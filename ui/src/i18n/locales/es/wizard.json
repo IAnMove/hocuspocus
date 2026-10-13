@@ -1,4 +1,5 @@
 {
+  "paidMusicDisabled": "La música de pago de MiniMax está desactivada ({{model}}); usa un modelo local: {{local}}. La API de MiniMax solo se usa si la eliges en Story Lab y confirmas el coste.",
   "title": "Ask to the Wizard",
   "open": "Pregunta al mago sobre la aplicación o la cola de tareas",
   "placeholder": "Pide un hechizo en HocusPocus…",

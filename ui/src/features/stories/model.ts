@@ -6,7 +6,7 @@ import {
   DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
   LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
 } from '../../types/index.ts'
-import { normalizeStoryMusicModel } from './musicModel'
+import { normalizeStoryMusicChoice } from './musicModel'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
 import { extraDecisions, normalizeGuide } from '../writing-guide/model'
 import { defaultStoryProductionRecipe, normalizeStoryProductionRecipe } from './storyProductionRecipe'
@@ -674,7 +674,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       : {},
     music: {
       mode: project.music?.mode === 'cover' ? 'cover' : 'original',
-      model: normalizeStoryMusicModel(project.music?.model),
+      ...normalizeStoryMusicChoice(project.music),
       brief: text(project.music?.brief),
       style: text(project.music?.style),
       sourceLyrics: text(project.music?.sourceLyrics),
