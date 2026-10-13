@@ -882,6 +882,32 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("restarted", body["message"])
         self.assertEqual(body["children"][0]["status"], "interrupted")
 
+    def test_minimax_music_reload_skips_a_folder_that_is_not_a_workspace_name(self):
+        """An outputs folder with an invalid workspace name must not stop the checkpoint scan."""
+        job_id = "minimax-music-0123456789ab"
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs", "bad name").mkdir(parents=True)
+            checkpoint = Path("outputs", "lab", ".minimax-music-jobs")
+            checkpoint.mkdir(parents=True)
+            payload = {
+                "jobId": job_id,
+                "taskId": f"task-{job_id}",
+                "workspace": "lab",
+                "status": "running",
+                "phase": "requesting",
+                "message": "in progress",
+                "children": [],
+            }
+            (checkpoint / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+            loaded = self.client.get(f"/api/v1/stories/music-candidates/jobs/{job_id}")
+        finally:
+            self._clear_music_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(loaded.status_code, 200, loaded.text)
+        self.assertEqual(loaded.json()["status"], "interrupted")
+        self.assertEqual(loaded.json()["workspace"], "lab")
+
     def test_minimax_music_replay_does_not_start_a_second_worker(self):
         from routers import story_music
 

@@ -185,7 +185,11 @@ def _load_minimax_music_job(job_id: str) -> dict | None:
         if cached is not None:
             return copy.deepcopy(cached)
     for item in _list_workspaces():
-        path = _minimax_music_checkpoint_path(job_id, item["name"])
+        try:
+            path = _minimax_music_checkpoint_path(job_id, item["name"])
+        except Exception:
+            # A folder whose name is not a valid workspace holds no checkpoint; keep scanning.
+            continue
         if not path or not os.path.isfile(path):
             continue
         try:
