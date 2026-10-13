@@ -28,6 +28,15 @@ def test_unknown_route(server, golden) -> None:
     server.check(golden, "unknown api route", "GET", "/api/v1/does-not-exist")
 
 
+def test_story_music_job_missing(server, golden) -> None:
+    server.check(
+        golden,
+        "story music job missing",
+        "GET",
+        "/api/v1/stories/music-candidates/jobs/minimax-music-000000000000",
+    )
+
+
 def test_director_plan_and_pipeline_reads_reject_a_missing_target(server, golden) -> None:
     """The plan and pipeline-read answers this step moves, before the move."""
     server.check(golden, "director plan prompts need clips", "POST", "/api/v1/director/plan-prompts", json={})

@@ -118,6 +118,12 @@
     },
     "status": 200
   },
+  "story music job missing": {
+    "body": {
+      "detail": "MiniMax Music job not found"
+    },
+    "status": 404
+  },
   "task missing": {
     "body": {
       "detail": "Task not found"
