@@ -48,6 +48,7 @@ from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
+from services.series_render import SERIES_RESOLUTIONS, series_resolution_preset
 from services.series_video_shots import budget_warning, parse_budget, reference_problems, store_video
 from services.series_voice_rooms import PRESETS
 
@@ -58,6 +59,8 @@ CARD_KINDS = ("title", "disclaimer", "end", "document")
 # "generated" is a MiniMax H3 take made outside. Both get the shot's sfx and music at the cut
 # (services/series_take_sound.py).
 METHODS = {"3d": "animation_3d", "video": "imported_video", "generated": "generated_video"}
+# The kinds whose take an H3 clip can be: ``resolution`` (480p, 540p, 720p, 768p) picks its size.
+VIDEO_KINDS = ("video", "generated")
 
 
 class ScriptError(ValueError):
@@ -210,6 +213,7 @@ class EpisodeScript:
         series_hearing.check_shot(shot, where, check.problems)
         self._check_layers(shot, where)
         self._check_transition(shot, where)
+        self._check_resolution(shot, where)
         series_stop_motion.check_shot(shot, where, check.problems)
         reference_problems(shot, check, where)
 
@@ -293,6 +297,16 @@ class EpisodeScript:
             normalize_transition(raw)
         except ValueError as error:
             self.checker.problems.append(f"{where}: {error}")
+
+    def _check_resolution(self, shot: dict[str, Any], where: str) -> None:
+        """``resolution`` is the size of a video shot's H3 clip; a 2D or 3D shot makes none."""
+        raw = shot.get("resolution")
+        if raw is None:
+            return
+        if shot.get("kind") not in VIDEO_KINDS:
+            self.checker.problems.append(f"{where}: resolution is only for kind video or generated")
+        elif series_resolution_preset(raw) is None:
+            self.checker.problems.append(f"{where}: resolution must be one of {', '.join(SERIES_RESOLUTIONS)}")
 
     def _check_document(self, index: int, shot: dict[str, Any], where: str) -> None:
         """A document card's style and reveal are refused when they are unknown. Text that cannot fit at the
@@ -384,6 +398,9 @@ class EpisodeScript:
             body["foley"] = normalize_foley(shot["foley"])
         # Always present, so a rewritten script clears a transition the new script omits.
         body["transitionIn"] = normalize_transition(shot.get("transitionIn"))
+        if shot.get("kind") in VIDEO_KINDS:
+            # Present on a video shot for the same reason; None (480p from the series) is not stored.
+            body["resolution"] = series_resolution_preset(shot.get("resolution"))
         self._attach_video(shot, body)
         return body
 
