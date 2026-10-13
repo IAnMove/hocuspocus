@@ -7,6 +7,7 @@ import {
   creativeLocations,
   normalizeName,
   outlineBeats,
+  unsetDefaultsLine,
 } from '../../lib/labHelpers'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
@@ -433,9 +434,9 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
     spokenLanguage: authoredSpoken,
     languageIntent,
     genre: action.genre || i18n.t('storyLab:scaffold.genre', { lng }),
-    tone: action.tone || i18n.t('storyLab:scaffold.tone', { lng }),
-    visualStyle: resolvedVisualStyle || i18n.t('storyLab:scaffold.visualStyle', { lng }),
-    characterVisualStyle: resolvedVisualStyle || i18n.t('storyLab:scaffold.characterVisualStyle', { lng }),
+    tone: action.tone,
+    visualStyle: resolvedVisualStyle,
+    characterVisualStyle: resolvedVisualStyle,
     premise: action.premise,
     logline: action.logline,
     synopsis: action.synopsis || action.premise,
@@ -449,7 +450,7 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
       society: i18n.t('storyLab:scaffold.society', { lng }),
       technology: i18n.t('storyLab:scaffold.technology', { lng }),
       rules: [i18n.t('storyLab:scaffold.ruleContinuity', { lng })],
-      visualLanguage: resolvedVisualStyle || i18n.t('storyLab:scaffold.visualLanguage', { lng }),
+      visualLanguage: resolvedVisualStyle,
       visualPrompt: resolvedVisualStyle,
       negativePrompt: 'continuity errors, inconsistent characters, unreadable composition',
       locations,
@@ -495,7 +496,10 @@ export async function createFilledStory(action: CreateStoryCommand): Promise<Com
     workspace,
     project,
     'overview',
-    i18n.t('storyLab:replies.storyCreated', { title: project.title, characters: characters.length, locations: locations.length, beats: beats.length }),
+    [
+      i18n.t('storyLab:replies.storyCreated', { title: project.title, characters: characters.length, locations: locations.length, beats: beats.length }),
+      unsetDefaultsLine({ style: !project.visualStyle.trim(), tone: !project.tone.trim() }),
+    ].filter(Boolean).join('\n\n'),
   )
 }
 

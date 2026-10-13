@@ -61,6 +61,20 @@ export function creativeLocations(values: CreativeLocation[], language?: string)
   }]
 }
 
+/**
+ * The Wizard does not block on questions, so it creates Stories and Series with
+ * whatever the user left out, and it must not invent a look to fill the gap.
+ * This is the one deterministic reply line that says what stayed unset ("" when
+ * the user gave everything). Interface language, like the rest of the reply.
+ */
+export function unsetDefaultsLine(unset: { style: boolean; tone: boolean }): string {
+  const list = [
+    unset.style ? i18n.t('wizard:styleUnset') : '',
+    unset.tone ? i18n.t('wizard:toneUnset') : '',
+  ].filter(Boolean).join(', ')
+  return list ? i18n.t('wizard:defaultsChosen', { list }) : ''
+}
+
 export function outlineBeats(values: string[], premise: string, ending: string, language?: string): string[] {
   if (values.length >= 3) return values
   const lng = scaffoldLanguage(language)
