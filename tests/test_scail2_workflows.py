@@ -53,6 +53,9 @@ _LORA_MULTIPLIERS_PATH = os.path.join(
     _ROOT, "app", "shared", "utils", "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_STUDIO_EDIT_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
+)
 _MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
 _LORAS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "lorasSlice.ts")
 _RECAST_CONTROLS_PATH = os.path.join(
@@ -3613,6 +3616,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_strict_pixel_lock_is_an_opt_in_fallback(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         self.assertIn('body.get("protect_bystanders") is True', launch)
         self.assertIn('"_recast_protect_bystanders": protect_bystanders', launch)
@@ -3622,8 +3626,8 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('wgp.release_model()', launch)
         self.assertIn("source_video, adaptive_mask, generated_video", launch)
         self.assertIn("Protecting people outside the generated replacement", launch)
-        self.assertIn("editRecastProtectBystanders: boolean", store)
-        self.assertIn("editRecastProtectBystanders: false", store)
+        self.assertIn("editRecastProtectBystanders: boolean", edit_store)
+        self.assertIn("editRecastProtectBystanders: false", edit_store)
         self.assertIn("protect_bystanders: false", store)
         self.assertNotIn("Strict pixel lock outside replacement", controls)
 
@@ -3632,6 +3636,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('if "preserve_bystanders" in body:', launch)
@@ -3685,7 +3690,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("def _load_additional_ref_mask", scail2)
         self.assertIn('"scail2_primary_reference_people"', scail2)
         self.assertIn("binary_background = black | white", scail2)
-        self.assertIn("editRecastPreserveBystanders: true", store)
+        self.assertIn("editRecastPreserveBystanders: true", edit_store)
         self.assertIn("preserve_bystanders: true", store)
         self.assertIn("p.edit_recast_preserve_scene_reference === true", store)
         self.assertIn("_recast_probe_needs_bystander_tracking(", launch)
@@ -3816,6 +3821,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_recast_relighting_is_hash_pinned_and_opt_in(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         selector = _read(_LORA_SELECTOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
@@ -3831,7 +3837,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('body.get("use_relighting") is True', launch)
         self.assertIn("def _normalize_recast_lora_settings(", launch)
         self.assertIn("single-phase LoRA settings", launch)
-        self.assertIn("editRecastUseRelighting: false", store)
+        self.assertIn("editRecastUseRelighting: false", edit_store)
         self.assertIn("use_relighting: state.editRecastUseRelighting", store)
         self.assertIn("const recastSinglePhase =", _read(_LORAS_PATH))
         self.assertIn("const recastSinglePhase =", selector)
@@ -3849,6 +3855,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         scail2 = _read(_SCAIL2_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn('body.get("isolate_reference") is not False', launch)
@@ -3860,7 +3867,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("def _load_reference_alpha", scail2)
         self.assertIn("def _isolate_scail2_reference", scail2)
         self.assertIn("image_ref = _isolate_scail2_reference(", scail2)
-        self.assertIn("editRecastIsolateReference: true", store)
+        self.assertIn("editRecastIsolateReference: true", edit_store)
         self.assertIn("isolate_reference: true", store)
         self.assertNotIn("Isolate replacement from reference background", controls)
         self.assertIn("t('recast.aboutText')", controls)
@@ -3942,6 +3949,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_recast_resolution_profile_does_not_change_model_schedule(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         selector = _read(_SCAIL_RESOLUTION_SELECTOR_PATH)
         client = api_client_source()
@@ -3961,7 +3969,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             launch,
         )
         self.assertNotIn('if resolution_profile == "512p"', launch)
-        self.assertIn("editRecastResolutionProfile: '480p'", store)
+        self.assertIn("editRecastResolutionProfile: '480p'", edit_store)
         self.assertIn(
             "resolution_profile: state.editRecastResolutionProfile",
             store,
@@ -3991,6 +3999,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_repaint_shares_resolution_profiles_and_adaptive_windows(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_REPAINT_CONTROLS_PATH)
 
         self.assertIn(
@@ -4006,7 +4015,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             '"edit_repaint_resolution_profile": resolution_profile',
             launch,
         )
-        self.assertIn("editRepaintResolutionProfile: '480p'", store)
+        self.assertIn("editRepaintResolutionProfile: '480p'", edit_store)
         self.assertIn(
             "resolution_profile: state.editRepaintResolutionProfile",
             store,
@@ -4098,13 +4107,14 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_ui_keeps_mapping_cards_and_moves_edited_frame_to_repaint(self):
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         repaint_controls = _read(_REPAINT_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
-        self.assertIn("editRecastMappings: RecastCharacterMapping[]", store)
+        self.assertIn("editRecastMappings: RecastCharacterMapping[]", edit_store)
         self.assertIn("character_mappings: recastMappings.map", store)
         self.assertIn("additional_ref_image_paths: mapping.additionalRefs", store)
-        self.assertIn("target.anchor === 'recast'", store)
+        self.assertIn("target.anchor === 'recast'", edit_store)
         self.assertIn("const refUrl = api.getFileUrl(refName)", store)
         self.assertNotIn("sendFrameToImageMode('recast')", controls)
         self.assertIn("sendFrameToImageMode('repaint')", repaint_controls)
@@ -4116,7 +4126,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertEqual(studio["recast"]["addCharacter"], "Add character")
         self.assertEqual(studio["recast"]["moreViews"], "More views")
         self.assertEqual(studio["recast"]["prepared"], "Prepared references")
-        self.assertIn("editRecastRefAligned: boolean", store)
+        self.assertIn("editRecastRefAligned: boolean", edit_store)
         self.assertIn(
             "reference_aligned_to_source: mapping.referenceAlignedToSource",
             store,
@@ -4128,6 +4138,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_recast_auto_face_detail_is_previewed_saved_and_automatic(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         client = api_client_source()
         studio = json.loads(_read(_STUDIO_EN_PATH))
@@ -4138,7 +4149,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             launch,
         )
         self.assertIn('"auto_face_detail_refs": auto_face_detail_refs', launch)
-        self.assertIn("editRecastAutoFaceDetail: true", store)
+        self.assertIn("editRecastAutoFaceDetail: true", edit_store)
         self.assertIn("auto_face_detail: true", store)
         self.assertIn(
             "p.edit_recast_auto_face_detail !== false",
@@ -4155,6 +4166,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_recast_prompt_guidance_is_compatible_but_off_and_hidden(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         self.assertIn(
             'body.get("enhance_prompt") is True',
@@ -4168,7 +4180,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             '"edit_recast_raw_prompt": raw_recast_prompt',
             launch,
         )
-        self.assertIn("editRecastEnhancePrompt: false", store)
+        self.assertIn("editRecastEnhancePrompt: false", edit_store)
         self.assertIn("enhance_prompt: false", store)
         self.assertIn(
             "p.edit_recast_enhance_prompt === true",
@@ -4183,6 +4195,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_repaint_reuses_scail_animate_and_is_a_first_class_edit_mode(self):
         launch = _read(_LAUNCH_PATH)
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_REPAINT_CONTROLS_PATH)
         toggle = _read(_EDIT_SUBMODE_PATH)
         client = api_client_source()
@@ -4201,8 +4214,8 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('"edit_sub_mode": "restyle"', launch)
         self.assertIn("submitRepaint({", store)
         self.assertIn("target_frame_path: state.editRepaintFramePath", store)
-        self.assertIn("editRepaintMappings: RepaintRegionMapping[]", store)
-        self.assertIn("target.anchor === 'repaint'", store)
+        self.assertIn("editRepaintMappings: RepaintRegionMapping[]", edit_store)
+        self.assertIn("target.anchor === 'repaint'", edit_store)
         self.assertIn("submitRepaint", client)
         self.assertIn("repaintPreview", client)
         self.assertIn("{ value: 'restyle', labelKey: 'editSubModes.restyle' }", toggle)

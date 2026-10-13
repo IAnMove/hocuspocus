@@ -50,6 +50,9 @@ _LORAS_MULTIPLIERS_PATH = os.path.join(
     "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_STUDIO_EDIT_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
+)
 _MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
 _VISIBILITY_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelVisibility.ts")
 _INPUTS_PATH = os.path.join(
@@ -1731,10 +1734,11 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         controls = _read(_OUTPAINT_CONTROLS_PATH)
         client = api_client_source()
         store = _read(_STORE_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn("t('outpaint.preserveScene')", controls)
         self.assertEqual(studio["outpaint"]["preserveScene"], "Preserve original scene")
-        self.assertIn("outpaintMaskPreserving: true", store)
+        self.assertIn("outpaintMaskPreserving: true", edit_store)
         self.assertIn("mask_preserving_outpaint?: boolean", client)
         self.assertIn("outpaint_aspect?:", client)
         self.assertIn("outpaint_aspect: state.outpaintAspect", store)
