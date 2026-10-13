@@ -598,6 +598,10 @@ class CoreRuntimeTests(unittest.TestCase):
                 "workspace": "default",
             })
             missing = self.client.post("/api/v1/video-editor/export/does-not-exist/cancel")
+            foreign = self.client.post("/api/v1/video-editor/export", json={
+                "clips": [{"source": "clip.mp4"}],
+                "workspace": "../outside",
+            })
         finally:
             self._leave_temp_workspace(folder, previous)
         self.assertEqual(rejected.status_code, 400, rejected.text)
@@ -608,6 +612,8 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("resolution", str(huge.json()["detail"]).lower())
         self.assertEqual(missing.status_code, 404, missing.text)
         self.assertIn("Video editor export job not found", str(missing.json()["detail"]))
+        self.assertEqual(foreign.status_code, 400, foreign.text)
+        self.assertIn("Invalid workspace name", str(foreign.json()["detail"]))
 
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")

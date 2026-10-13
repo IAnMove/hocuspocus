@@ -8,6 +8,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
 from app_identity import read_app_version
 from services.kernel.paths import safe_join
 from services.media_refs import parse_media_ref
@@ -103,6 +105,14 @@ def workspace_dir(workspace: str | None = None) -> str:
     if name != "default":
         target.mkdir(parents=True, exist_ok=True)
     return str(target)
+
+
+def workspace_dir_or_400(workspace: str | None = None) -> str:
+    """``workspace_dir`` for the shared routers that expect the full server's 400 for a bad name."""
+    try:
+        return workspace_dir(workspace)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 def _file_count(path: str) -> int:

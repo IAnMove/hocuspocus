@@ -555,7 +555,7 @@ def _resolve_editor_input(value: str, workspace: str | None = None) -> str | Non
 from routers.video_editor import create_video_editor_jobs_router, create_video_editor_router
 
 api.include_router(create_video_editor_router(
-    workspace_dir=core.workspace_dir,
+    workspace_dir=core.workspace_dir_or_400,
     get_active_workspace=core.active_workspace,
     resolve_input_path=_resolve_editor_input,
     publish_legacy_task=core_canonical_tasks.publish_video_editor_activity,
