@@ -82,7 +82,13 @@ from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
 )
-from services.director.policies import no_visible_text_lock_applies
+from services.director.policies import (
+    TYPED_PROMPTS_KEY,
+    enforce_direct_video_on_clip_plans,
+    enforce_visual_style_on_clip_plans,
+    mark_typed_prompt_edits,
+    no_visible_text_lock_applies,
+)
 from services.director_pipeline_state import (
     _DIRECTOR_TEMP_DIRNAME,
     _PIPELINE_FILE_PREFIX,
@@ -882,14 +888,68 @@ def _normalise_master_seed(params: dict) -> int:
 def _raw_prompts() -> bool:
     """Settings › Services › Raw prompts: every prompt reaches the model as the plan wrote it.
 
-    Off by default. When on, the Director adds nothing at generation time: no
-    style prefix, no motion-effect strip, no style, character or no-text locks
-    and no prompt polish. What a model handler itself requires (H3's window
-    timing) still applies and is shown in the output's Extra info.
+    Off by default. When on, the Director adds nothing to the planner's words,
+    in planning, after the review pause or on a rerun: no style prefix, no
+    motion-effect strip, no style, character or no-text locks, no source-style
+    anchor or compression in the orchestrator and no prompt polish. What a
+    model handler itself requires (H3's window timing) still applies and is
+    shown in the output's Extra info.
     """
     config = getattr(_wgp, "server_config", None)
     services = config.get("services") if isinstance(config, dict) else None
     return isinstance(services, dict) and services.get("raw_prompts") is True
+
+
+def _clip_text_allowed(params: Mapping[str, Any]) -> bool:
+    """No no-visible-text lock: Raw prompts is on, the project is not sung or it allows on-screen text."""
+    return _raw_prompts() or not no_visible_text_lock_applies(params)
+
+
+def _apply_final_prompt_locks(
+    clip_plans: list[dict],
+    params: dict,
+    *,
+    direct_video: bool = False,
+) -> list[dict]:
+    """The final style, character-style and no-visible-text locks on planned prompts.
+
+    None of them with Raw prompts. The no-visible-text lock is for sung
+    projects only (``no_visible_text_lock_applies``). Direct video gets only
+    its own contract (``_apply_direct_video_contract``).
+    """
+    if _raw_prompts():
+        return clip_plans
+    return enforce_visual_style_on_clip_plans(
+        clip_plans,
+        "" if direct_video else params.get("visual_style", ""),
+        preserve=not direct_video and bool(params.get("preserve_visual_style", False)),
+        has_reference=_has_visual_references(params),
+        character_visual_style="" if direct_video else params.get("character_visual_style", ""),
+        allow_clip_text=direct_video or not no_visible_text_lock_applies(params),
+    )
+
+
+def _apply_direct_video_contract(
+    clip_plans: list[dict],
+    params: dict,
+    master_prompt: str,
+) -> list[dict]:
+    """Compose each direct-video prompt with its master; no no-text lock with Raw prompts."""
+    return enforce_direct_video_on_clip_plans(
+        clip_plans,
+        master_prompt,
+        audio_direction=str(
+            (params.get("video_params") or {}).get("h3_audio_prompt") or ""
+        ),
+        allow_clip_text=_clip_text_allowed(params),
+    )
+
+
+def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> bool:
+    """Whether the user typed this saved prompt at the review pause (see ``continue_pipeline``)."""
+    plans = state.get("clip_plans")
+    plan = plans[clip_index] if isinstance(plans, list) and 0 <= clip_index < len(plans) else None
+    return isinstance(plan, dict) and field in (plan.get(TYPED_PROMPTS_KEY) or ())
 
 
 def _regenerate_seed(state: Mapping[str, Any], stored: Any) -> int:
@@ -2845,7 +2905,7 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         state,
         prompt_override or clip.get("image_prompt", ""),
         "image",
-        typed=bool(prompt_override),
+        typed=bool(prompt_override) or _typed_at_review(state, clip_index, "image_prompt"),
     )
     if not prompt:
         raise ValueError("No image prompt for this clip")
@@ -3323,7 +3383,7 @@ def _rerun_clip_video_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
         state,
         prompt_override or clip.get("video_prompt", ""),
         "video",
-        typed=bool(prompt_override),
+        typed=bool(prompt_override) or _typed_at_review(state, clip_index, "video_prompt"),
     )
     if not prompt:
         raise ValueError("No video prompt for this clip")
@@ -4024,8 +4084,8 @@ def rerun_h3_segment(
     direct_params = {**state, **snapshot}
     direct_video, direct_video_master_prompt = _direct_video_settings(direct_params)
     # A prompt the user typed keeps its lettering; a saved one the LLM wrote
-    # gets the no-text lock only in a sung project.
-    allow_segment_text = bool(prompt_override) or not no_visible_text_lock_applies(direct_params)
+    # gets the no-text lock only in a sung project, and never with Raw prompts.
+    allow_segment_text = bool(prompt_override) or _clip_text_allowed(direct_params)
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs, video_refs, audio_refs = (
         ([], [], []) if direct_video else _h3_edit_references(state, clip_index)
@@ -5830,7 +5890,11 @@ def continue_pipeline(pid: str, updates: Optional[dict] = None):
             return False
         if updates:
             if "clip_plans" in updates:
-                p["clip_plans"] = updates["clip_plans"]
+                # A prompt the user changed at the review pause is typed: the
+                # re-check after the pause does not put the no-text lock back.
+                p["clip_plans"] = mark_typed_prompt_edits(
+                    p.get("clip_plans"), updates["clip_plans"],
+                )
         p["status"] = "running"
         p["pause_reason"] = None
         p["updated_at"] = time.time()
@@ -7831,31 +7895,10 @@ def _run_pipeline(pid: str, resume: bool = False):
         # Prompt polish is allowed to improve model dialect, never to erase the
         # Story's authored medium.  This deterministic final pass also covers
         # remote writing providers, for which third-pass polish is skipped.
-        # The no-visible-text lock is for sung projects only.
-        from services.director.policies import enforce_visual_style_on_clip_plans
-        clip_text_allowed = not no_visible_text_lock_applies(params)
-        clip_plans = clip_plans if _raw_prompts() else enforce_visual_style_on_clip_plans(
-            clip_plans,
-            "" if direct_video else params.get("visual_style", ""),
-            preserve=(
-                False if direct_video
-                else bool(params.get("preserve_visual_style", False))
-            ),
-            has_reference=_has_visual_references(params),
-            character_visual_style=(
-                "" if direct_video else params.get("character_visual_style", "")
-            ),
-            allow_clip_text=True if direct_video else clip_text_allowed,
-        )
+        clip_plans = _apply_final_prompt_locks(clip_plans, params, direct_video=direct_video)
         if direct_video:
-            from services.director.policies import enforce_direct_video_on_clip_plans
-            clip_plans = enforce_direct_video_on_clip_plans(
-                clip_plans,
-                direct_video_master_prompt,
-                audio_direction=str(
-                    (params.get("video_params") or {}).get("h3_audio_prompt") or ""
-                ),
-                allow_clip_text=clip_text_allowed,
+            clip_plans = _apply_direct_video_contract(
+                clip_plans, params, direct_video_master_prompt,
             )
         else:
             # Bounded shots have no semantic memory of the preceding
@@ -7901,30 +7944,14 @@ def _run_pipeline(pid: str, resume: bool = False):
             _wait_for_resume(pid)
             if _pipeline_cancel_requested(pid):
                 return
-            # Reload clip_plans in case user edited them
+            # Reload clip_plans in case user edited them. continue_pipeline
+            # marked the prompts the user changed as typed: they keep the
+            # style locks but never get the no-text lock back.
             clip_plans = _pipelines[pid]["clip_plans"]
-            clip_plans = enforce_visual_style_on_clip_plans(
-                clip_plans,
-                "" if direct_video else params.get("visual_style", ""),
-                preserve=(
-                    False if direct_video
-                    else bool(params.get("preserve_visual_style", False))
-                ),
-                has_reference=_has_visual_references(params),
-                character_visual_style=(
-                    "" if direct_video else params.get("character_visual_style", "")
-                ),
-                allow_clip_text=True if direct_video else clip_text_allowed,
-            )
+            clip_plans = _apply_final_prompt_locks(clip_plans, params, direct_video=direct_video)
             if direct_video:
-                from services.director.policies import enforce_direct_video_on_clip_plans
-                clip_plans = enforce_direct_video_on_clip_plans(
-                    clip_plans,
-                    direct_video_master_prompt,
-                    audio_direction=str(
-                        (params.get("video_params") or {}).get("h3_audio_prompt") or ""
-                    ),
-                    allow_clip_text=clip_text_allowed,
+                clip_plans = _apply_direct_video_contract(
+                    clip_plans, params, direct_video_master_prompt,
                 )
             _update_pipeline(pid, clip_plans=clip_plans)
 
@@ -7957,14 +7984,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                     clip_plans,
                     planned_clips,
                 )
-                clip_plans = enforce_visual_style_on_clip_plans(
-                    clip_plans,
-                    params.get("visual_style", ""),
-                    preserve=bool(params.get("preserve_visual_style", False)),
-                    has_reference=_has_visual_references(params),
-                    character_visual_style=params.get("character_visual_style", ""),
-                    allow_clip_text=clip_text_allowed,
-                )
+                clip_plans = _apply_final_prompt_locks(clip_plans, params)
                 _update_pipeline(
                     pid,
                     clip_plans=clip_plans,
@@ -9081,6 +9101,7 @@ def _run_planning_v2(pid: str, params: dict, pipeline_type: str):
     # Build feature flags from params
     flags_dict = params.get("director_flags", {})
     flags = DirectorFlags.from_dict(flags_dict) if flags_dict else DirectorFlags()
+    flags.raw_prompts = _raw_prompts()
 
     writing_llm = _scoped_writing_llm(params)
     direct_video, _direct_master_prompt = _direct_video_settings(params)
@@ -9555,6 +9576,7 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
             frames_minimum=frames_minimum,
             visual_style=params.get("visual_style", ""),
             preserve_visual_style=params.get("preserve_visual_style", False),
+            raw_prompts=_raw_prompts(),
         )
         planned_clips = result.get("clips", [])
         clip_plans = result.get("clip_plans", [])
@@ -9593,15 +9615,7 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
     if clip_plans and isinstance(clip_plans[0], str):
         clip_plans = [{"video_prompt": p, "image_prompt": ""} for p in clip_plans]
 
-    from services.director.policies import enforce_visual_style_on_clip_plans
-    clip_plans = enforce_visual_style_on_clip_plans(
-        clip_plans,
-        params.get("visual_style", ""),
-        preserve=bool(params.get("preserve_visual_style", False)),
-        has_reference=_has_visual_references(params),
-        character_visual_style=params.get("character_visual_style", ""),
-        allow_clip_text=not no_visible_text_lock_applies(params),
-    )
+    clip_plans = _apply_final_prompt_locks(clip_plans, params)
     return clip_plans, planned_clips
 
 
@@ -12850,7 +12864,7 @@ def _run_minimax_h3_story_video(
                     str(video_params.get("h3_audio_prompt") or ""),
                     segment_reference_mode,
                     direct_video_master_prompt,
-                    not no_visible_text_lock_applies(params),
+                    _clip_text_allowed(params),
                 ),
                 segment_reference_mode,
             ))

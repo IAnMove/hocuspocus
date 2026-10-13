@@ -46,6 +46,9 @@ class DirectorFlags:
         self.aggressive_compression = False
         self.log_validation_details = True
         self.log_compression_deltas = True
+        # Settings › Services › Raw prompts: the planner's prompts are kept as
+        # written, with no style lock, source-style anchor or compression.
+        self.raw_prompts = False
 
     @staticmethod
     def from_dict(d: dict) -> "DirectorFlags":
@@ -157,6 +160,7 @@ class DirectorOrchestrator:
             llm_generate=self._generate,
             llm_generate_streaming=self._generate_streaming,
         )
+        planner.raw_prompts = self._raw_prompts
 
         print(f"[Director] Planning with {planner_cls.__name__}...")
         production_plan = planner.plan(**kwargs)
@@ -239,13 +243,8 @@ class DirectorOrchestrator:
                         # LLM may return dicts instead of strings
                         if isinstance(wp, dict):
                             wp = wp.get("prompt", wp.get("text", str(wp)))
-                        metadata = shot.metadata or {}
-                        validated_windows.append(apply_visual_style_lock(
-                            str(wp).strip(),
-                            metadata.get("canonical_visual_style") or shot.visual_style,
-                            mode=video_mode,
-                            preserve=bool(metadata.get("preserve_visual_style", False)),
-                            has_reference=has_reference,
+                        validated_windows.append(self._style_lock(
+                            str(wp).strip(), shot, video_mode, has_reference,
                         ))
                     result["video_prompt"] = "\n".join(validated_windows)
                     result["window_count"] = len(validated_windows)
@@ -273,15 +272,13 @@ class DirectorOrchestrator:
 
             # Pass through keyframe prompts if present
             if shot.keyframe_prompts:
-                metadata = shot.metadata or {}
                 result["keyframe_prompts"] = [
-                    apply_visual_style_lock(
+                    self._style_lock(
                         prompt.get("prompt", prompt.get("text", ""))
                         if isinstance(prompt, dict) else prompt,
-                        metadata.get("canonical_visual_style") or shot.visual_style,
-                        mode="image",
-                        preserve=bool(metadata.get("preserve_visual_style", False)),
-                        has_reference=has_reference,
+                        shot,
+                        "image",
+                        has_reference,
                     )
                     for prompt in shot.keyframe_prompts
                 ]
@@ -332,7 +329,8 @@ class DirectorOrchestrator:
         # I2V needs an immutable source-style anchor even when the planner has
         # supplied its own final prompt.  Without this, anime/comic first
         # frames can drift toward photorealism despite being image-conditioned.
-        if mode == "i2v" and isinstance(renderer, LtxI2VRenderer):
+        # Raw prompts keeps the planner's words.
+        if mode == "i2v" and isinstance(renderer, LtxI2VRenderer) and not self._raw_prompts:
             prompt = renderer.ensure_source_style(prompt, shot)
 
         # Validate
@@ -343,8 +341,8 @@ class DirectorOrchestrator:
                       f"score={validation.completeness_score:.2f}, "
                       f"warnings={validation.warnings}")
 
-        # Compress
-        if self.flags.use_prompt_compression:
+        # Compress (never with Raw prompts)
+        if self.flags.use_prompt_compression and not self._raw_prompts:
             compression = compress_prompt(
                 prompt, mode, shot,
                 aggressive=self.flags.aggressive_compression,
@@ -361,16 +359,26 @@ class DirectorOrchestrator:
         # prompt-polish pass can silently turn illustrated artwork into live
         # action.  Direct Studio I2V remains covered by ensure_source_style()
         # even when no Story contract exists.
+        return self._style_lock(
+            prompt, shot, mode, bool(context.get("has_reference", False)),
+        )
+
+    @property
+    def _raw_prompts(self) -> bool:
+        return bool(getattr(self.flags, "raw_prompts", False))
+
+    def _style_lock(self, prompt: str, shot: ShotPlan, mode: str, has_reference: bool) -> str:
+        """The shot's Story style lock; none with Raw prompts."""
+        if self._raw_prompts:
+            return prompt
         metadata = shot.metadata or {}
-        prompt = apply_visual_style_lock(
+        return apply_visual_style_lock(
             prompt,
             metadata.get("canonical_visual_style") or shot.visual_style,
             mode=mode,
             preserve=bool(metadata.get("preserve_visual_style", False)),
-            has_reference=bool(context.get("has_reference", False)),
+            has_reference=has_reference,
         )
-
-        return prompt
 
     def _choose_video_mode(
         self,

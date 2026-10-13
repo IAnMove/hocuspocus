@@ -48,6 +48,9 @@ class BasePlanner(ABC):
 
     # Subclasses set this
     skill_type: str = ""
+    # Settings › Services › Raw prompts (set by the orchestrator): the planner
+    # adds no deterministic style lock to the prompts it writes.
+    raw_prompts: bool = False
 
     def __init__(self, llm_generate: Any = None, llm_generate_streaming: Any = None):
         """
