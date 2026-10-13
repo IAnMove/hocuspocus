@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import routers.video_editor as editor_router
 from services import execution_mode
 from services.asset_manifest import (
     SCHEMA_NAME,
@@ -477,7 +478,8 @@ def test_editor_gallery_sidecar_publishes_canonical_manifest_without_invented_ac
 ):
     artifact = tmp_path / filename
     artifact.write_bytes(b"media")
-    write = _load_launch_function(
+    # The Video Editor's writers live in its mounted router module.
+    write = getattr(editor_router, writer_name, None) or _load_launch_function(
         writer_name,
         {
             "os": os,
@@ -549,11 +551,16 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
         "_write_scene_recording_sidecar",
-        "_write_video_editor_screenshot_sidecar",
-        "_write_video_editor_export_sidecar",
         "_write_comic_animatic_sidecar",
     ):
         body = function_source(name)
+        assert "publish_generation_sidecar" in body
+        assert "json.dump" not in body
+    editor_source = Path(editor_router.__file__).read_text(encoding="utf-8")
+    editor_tree = ast.parse(editor_source)
+    for name in ("_write_video_editor_screenshot_sidecar", "_write_video_editor_export_sidecar"):
+        node = next(item for item in editor_tree.body if isinstance(item, ast.FunctionDef) and item.name == name)
+        body = ast.get_source_segment(editor_source, node)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
     h3_slice = source.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]

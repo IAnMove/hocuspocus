@@ -8,6 +8,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
 
+The Video Editor routes now come from one place. The main server mounts the
+extracted Video Editor router and the second copy inside the launch runtime is
+gone, with the same paths, answers and job list as before. Saved montages and
+the agent that asked still reach the export's metadata. A new CI test fails when
+a router is not mounted and not listed with a reason, when a server defines the
+same method and path twice, or when a route of the core server or the route table
+is missing from the main server. A new UI check (`npm run unreachable:check`, in
+CI) fails when a file in `ui/src` cannot be reached from an entry point and is not
+listed with a reason; 11 files that nothing used are deleted.
+
 **A hard rule about minors is now in every LLM system prompt, with NSFW mode on or
 off.** It forbids sexual or sexualized content with minors or with characters who
 look like or are described as minors, whatever the fiction, claimed age or art

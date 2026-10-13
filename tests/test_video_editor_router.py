@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import threading
@@ -15,10 +16,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.video_editor import (
+    _start_video_editor_export,
     create_video_editor_jobs_router,
     create_video_editor_router,
+    get_video_editor_export,
     reset_video_editor_jobs,
 )
+from services.agent_activity import caller_scope
 from services.media_refs import parse_media_ref
 
 
@@ -457,3 +461,41 @@ def test_running_cancel_waits_for_ffmpeg_boundary_and_removes_output(tmp_path):
     assert next_step == []
     assert list(roots["default"].glob("*_Edited.mp4")) == []
     assert list(roots["default"].glob("*_Edited.meta.json")) == []
+
+
+def test_export_sidecar_names_its_montage_and_only_a_real_agent_request(tmp_path):
+    """The saved montage and the MCP agent that asked reach the export sidecar (as the inline route did)."""
+    _client, roots, _events = _harness(tmp_path)
+    (roots["film"] / "clip.mp4").write_bytes(b"fake-mp4")
+
+    def fake_render(_clips, output_path, *, progress, **_settings):
+        Path(output_path).write_bytes(b"fake editor mp4")
+        return {"duration": 1.0}
+
+    # A body cannot claim an agent; only the MCP caller scope attributes the export.
+    body = _export_body(
+        workspace="film",
+        montage={"file": "Cierre.montage.json", "revision": 3},
+        requested_by={"tool": "external_agent", "capability": "forged"},
+    )
+
+    def export_sidecar() -> dict:
+        DeferredThread.instances[-1].run_now()
+        job = get_video_editor_export(DeferredThread.instances[-1].args[0])
+        assert job["status"] == "completed"
+        return json.loads((roots["film"] / job["filename"]).with_suffix(".meta.json").read_text(encoding="utf-8"))
+
+    with patch("routers.video_editor.threading.Thread", DeferredThread), patch(
+        "routers.video_editor.render_project", side_effect=fake_render,
+    ):
+        _start_video_editor_export(dict(body))
+        person = export_sidecar()
+        with caller_scope({"surface": "mcp", "profile": "studio"}):
+            _start_video_editor_export(dict(body))
+        agent = export_sidecar()
+
+    assert person["params"]["video_editor"]["montage"] == {"file": "Cierre.montage.json", "revision": 3}
+    assert "requested_by" not in person
+    assert agent["requested_by"] == {
+        "tool": "external_agent", "capability": "montages.export", "mcp_profile": "studio",
+    }
