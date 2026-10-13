@@ -9,6 +9,8 @@ import { TemplateAssetPicker } from './TemplateAssetPicker'
 import { importApprovedReference } from './referenceImport'
 import { TemplateReferencePanel } from './TemplateReferencePanel'
 import { TemplateComponentHelp } from './TemplateComponentHelp'
+import { animationDef, controlsForCard, findKitAnimationBySheet, localized, type Localized } from '../../lib/characterAnimations'
+import { useCharacterKitLibrary } from '../characters/useCharacterKitLibrary'
 
 const SLOT_COPY = {
   subject_1: 'composer.slot.subject_1',
@@ -21,6 +23,9 @@ const SLOT_COPY = {
 
 /** Controls with their own fixed inputs; every other exposed control is drawn from its spec. */
 const FIXED_CONTROLS = new Set(['duration', 'bpm', 'intensity'])
+/** The cards that play a sheet from Characters › Animaciones: picking one fills the card's controls. */
+const SHEET_CARDS: ReadonlySet<string> = new Set(['walk-cycle-sheet', 'character-reaction'])
+const animationTitle = (id: string): Localized => animationDef(id)?.title ?? { es: id, en: id }
 const CONTROL_NAMES = ['drift', 'camera', 'atmosphere', 'bounce', 'bouncer', 'outcome', 'mood', 'entrance', 'caption', 'yearFrom', 'yearTo', 'yearLabel', 'banner'] as const
 const OPTION_NAMES = ['push', 'sweep', 'open', 'beat', 'fireflies', 'confetti', 'bokeh', 'on', 'off', 'subject', 'prop', 'miss', 'shield', 'explode', 'calm', 'lonely', 'leaves', 'streaks', 'rise', 'left', 'right'] as const
 const isControlName = (name: string): name is (typeof CONTROL_NAMES)[number] => (CONTROL_NAMES as readonly string[]).includes(name)
@@ -71,7 +76,7 @@ function ControlField({ name, spec, value, onChange }: { name: string; spec: Con
 }
 
 function TemplateComposerForm({ template, workspace, onClose, onApply }: Props & { template: SceneTemplateDefinition }) {
-  const { t } = useUiTranslation('scene3d')
+  const { t, i18n } = useUiTranslation('scene3d')
   const [selections, setSelections] = useState<CatalogSelections>({})
   const [activeSlot, setActiveSlot] = useState<TemplateSlotName>(template.slots[0].id)
   const [values, setValues] = useState(() => defaults(template))
@@ -86,6 +91,14 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
   const missing = template.slots.some(item => needed.has(item.id) && !selections[item.id])
   const extraControls = Object.entries(template.controls).filter(([name, spec]) => spec.exposed && !FIXED_CONTROLS.has(name))
   const setValue = (name: string) => (value: ControlValue) => setValues(current => ({ ...current, [name]: value }))
+  // A sheet made in Characters › Animaciones names how it plays: its poses, columns, pace and the way it looks.
+  const { kits } = useCharacterKitLibrary(workspace, false, SHEET_CARDS.has(template.id))
+  const made = SHEET_CARDS.has(template.id) ? findKitAnimationBySheet(kits, selections.subject_1?.filename) : undefined
+  const madeKey = made ? `${made.kit.id}/${made.id}/${made.animation.sheet.source}` : ''
+  useEffect(() => {
+    if (made) setValues(current => ({ ...current, ...controlsForCard(made.animation, template.id, template.controls) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the sheet picked decides; edits to the controls after it are kept
+  }, [madeKey, template.id])
 
   const apply = async () => {
     if (busy || missing || !replaceConfirmed) return
@@ -134,6 +147,7 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
         <p className="mt-1 font-mono text-cyan-200">{item.id} · {item.kinds.join(', ')}</p>
         <p className="mt-1 text-text-muted">{item.description}</p>
         <p className="mt-1 break-all">{selections[item.id]?.filename || t('composer.unassigned')}</p>
+        {item.id === 'subject_1' && made && <p className="mt-1 text-emerald-200">{t('composer.fromAnimation', { animation: localized(animationTitle(made.id), i18n.language), character: made.kit.name })}</p>}
         {selections[item.id] && <><p className="break-all text-[10px] text-text-muted">ID: {selections[item.id]!.id}</p><button type="button" aria-label={t('composer.removeAria', { slot: t(SLOT_COPY[item.id]) })} onClick={() => setSelections(current => ({ ...current, [item.id]: undefined }))} className="mt-1 text-rose-200">{t('composer.remove')}</button></>}
       </div>)}</div>
       <p className="text-xs">{t('composer.assignHelp', { slot: t(SLOT_COPY[slot.id]) })}</p>

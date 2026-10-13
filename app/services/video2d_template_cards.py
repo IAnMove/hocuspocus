@@ -18,7 +18,7 @@ from services.world3d_template_vocabulary import QUERY_STOP, expand
 ROOT = Path(__file__).resolve().parents[1] / "shared"
 TRAITS_FILE = "video2d_template_traits.json"
 
-USES = ("music", "dance", "performance", "product", "transition", "entrance", "exit", "establishing", "dialogue",
+USES = ("music", "dance", "performance", "product", "transition", "entrance", "exit", "walk", "reaction", "establishing", "dialogue",
         "documentary", "space")
 MOVES = ("push", "pull", "slide", "rise", "descend", "orbit", "roll", "shake", "drift", "bounce", "spin")
 MOVING = ("camera", "subject", "subjects", "props", "background", "particles", "text")
@@ -66,12 +66,21 @@ GROUPS_2D: tuple[frozenset[str], ...] = tuple(frozenset(words.split()) for words
     "exit exits salida salidas sale salen salir saliendo leave leaves leaving desaparece desaparecen desaparecer "
     "vanish vanishes disappear disappears",
     "clone clones clon copia copias copy copies duplicate duplicates",
+    "walk walks walking walked camina caminar caminando caminan andar anda andan andando paseo pasea pasear paso pasos "
+    "step steps stroll strolls stride strides",
     "swing swings sway sways pendulo pendulum balanceo balancea vaiven oscila oscilan oscilar",
     "drift drifts drifting deriva flota flotan flotar float floats floating",
     "cannon canon canones launch launches launched lanza lanzan lanzar lanzado lanzada lanzamiento catapult "
     "catapulta disparada disparado",
     "documentary documental documentales archive archivo historico historica history historical",
     "postcard postcards postal postales",
+    "react reacts reaction reactions reacciona reaccionan reaccionar reaccion reacciones gesture gestures gesto gestos "
+    "expression expressions expresion expresiones",
+    "angry anger furious enfado enfadado enfadada enfadarse furia furioso furiosa rabia",
+    "wave waves waving saluda saludan saludar saludo greet greets greeting nod nods nodding asiente asentir",
+    "surprise surprised surprises sorpresa sorprendido sorprendida shock shocked susto asustado asustada scared miedo",
+    "sad sadness triste tristeza llora llorar llorando cry cries crying happy alegre alegria feliz smug embarrassed "
+    "vergüenza verguenza",
 ))
 _GROUP_2D = {word: group for group in GROUPS_2D for word in group}
 # Comparison words a writer puts in a line («rebota como una bola», «swinging like a pendulum»): never a search word.

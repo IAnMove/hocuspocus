@@ -473,6 +473,7 @@
         "tests/test_workspace_cleanup.py",
         "tests/test_series_native_render_router.py",
         "tests/test_speech_qa.py",
+        "tests/test_character_animations.py",
         "tests/test_character_styles.py",
         "tests/test_character_tools.py",
         "tests/test_series_jobs.py",
@@ -915,6 +916,21 @@
         "tests/test_flat_rig_guided.py",
         "tests/test_flat_rig_warp.py",
         "tests/test_character_styles.py"
+      ]
+    },
+    {
+      "prefix": "app/services/character_animations.py",
+      "paths": [
+        "tests/test_character_animations.py",
+        "tests/test_series_commands.py",
+        "tests/test_character_kit_library.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/character_animations.json",
+      "paths": [
+        "tests/test_character_animations.py",
+        "tests/test_series_commands.py"
       ]
     },
     {

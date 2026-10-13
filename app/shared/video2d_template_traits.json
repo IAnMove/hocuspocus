@@ -909,6 +909,161 @@
       ],
       "background": "drift",
       "duration": 6
+    },
+    "walk-follow-back": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "walk"
+      ],
+      "background": "drift",
+      "duration": 6
+    },
+    "walk-toward-camera": {
+      "moves": [
+        "pull"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "none",
+      "format": "landscape",
+      "uses": [
+        "walk"
+      ],
+      "background": "drift",
+      "duration": 6
+    },
+    "walk-behind-foreground": {
+      "moves": [
+        "drift"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "in",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "entrance",
+        "walk"
+      ],
+      "background": "drift",
+      "duration": 6
+    },
+    "walk-shadow-first": {
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera",
+        "subjects",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0.01,
+      "subjects": 1,
+      "props": 0,
+      "travel": "in",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "entrance",
+        "walk"
+      ],
+      "background": "drift",
+      "duration": 6
+    },
+    "walk-two-pose": {
+      "moves": [
+        "drift"
+      ],
+      "moving": [
+        "camera",
+        "subjects",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 2,
+      "props": 0,
+      "travel": "in",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "entrance",
+        "walk"
+      ],
+      "background": "drift",
+      "duration": 6
+    },
+    "walk-cycle-sheet": {
+      "moves": [],
+      "moving": [
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "cross",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "entrance",
+        "exit",
+        "walk"
+      ],
+      "background": "still",
+      "duration": 6
+    },
+    "character-reaction": {
+      "moves": [
+        "drift"
+      ],
+      "moving": [
+        "camera",
+        "subject",
+        "particles"
+      ],
+      "still": false,
+      "holdShare": 0,
+      "subjects": 1,
+      "props": 0,
+      "travel": "in",
+      "format": "landscape",
+      "uses": [
+        "transition",
+        "entrance",
+        "reaction"
+      ],
+      "background": "drift",
+      "duration": 4
     }
   }
 }

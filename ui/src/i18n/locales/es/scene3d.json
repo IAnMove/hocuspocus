@@ -1219,6 +1219,7 @@
   "composer": {
     "title": "Crear escena desde Library",
     "heading": "Plantillas procedurales · Library",
+    "fromAnimation": "Hoja de la animación «{{animation}}» de {{character}}: los controles de la ficha se han rellenado con sus poses y su ritmo.",
     "close": "Cerrar",
     "intro": "{{count}} acciones: fichas musicales, coreografías de recortes, planos espaciales y las postales de documental y ciudad, todas pendientes de revisión. Los planos de cine (establecimiento, primer plano, doble plano…) están en la rejilla narrativa. Tus assets crean una composición nueva, todavía por revisar. No se generan imágenes, vídeo ni audio automáticamente.",
     "action": "Acción / plantilla",

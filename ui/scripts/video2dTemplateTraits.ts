@@ -15,7 +15,7 @@ import type { AnimatorLayer, AnimatorScene, LayerState } from '../src/lib/scene2
 export const TRAIT_MOVES = ['push', 'pull', 'slide', 'rise', 'descend', 'orbit', 'roll', 'shake', 'drift', 'bounce', 'spin'] as const
 export const TRAIT_MOVING = ['camera', 'subject', 'subjects', 'props', 'background', 'particles', 'text'] as const
 export const TRAIT_TRAVEL = ['none', 'cross', 'rise', 'fall', 'orbit', 'in', 'out'] as const
-export const TRAIT_USES = ['music', 'dance', 'performance', 'product', 'transition', 'entrance', 'exit', 'establishing', 'dialogue', 'documentary', 'space'] as const
+export const TRAIT_USES = ['music', 'dance', 'performance', 'product', 'transition', 'entrance', 'exit', 'walk', 'reaction', 'establishing', 'dialogue', 'documentary', 'space'] as const
 export const TRAIT_BACKGROUNDS = ['still', 'drift', 'strip', 'video'] as const
 
 export type TraitMove = typeof TRAIT_MOVES[number]
@@ -315,14 +315,21 @@ function stepsAside(cast: Cast[]): boolean {
   return cast.some(({ samples }) => range(series(samples, 'x')) >= DIALOGUE_STEP || range(series(samples, 'y')) >= DIALOGUE_STEP)
 }
 
+/** A walking card (its id says so): the figure steps, it does not dance, whatever its bob measures. */
+const walks = (m: Measured) => idWords(m.hints.id).includes('walk')
+/** A reaction card (its id says so): the figure stays on its mark and plays a sheet of a gesture or an expression. */
+const reacts = (m: Measured) => idWords(m.hints.id).includes('reaction')
+
 const USE_RULES: ReadonlyArray<[TraitUse, (m: Measured) => boolean]> = [
   ['music', m => m.hints.family === 'music' || m.rhythm],
-  ['dance', m => m.cast.some(cast => dances(cast, m.scene))],
+  ['dance', m => !walks(m) && !reacts(m) && m.cast.some(cast => dances(cast, m.scene))],
   ['performance', m => m.hints.family === 'music' && alwaysInView(m.cast) && m.travel === 'none' && midHeight(m.cast) >= PERFORMER && m.moves.length > 0],
   ['product', m => idWords(m.hints.id).includes('product')],
   ['transition', m => showsIn(m.cast) && (clearAt(m.cast, 0) || clearAt(m.cast, m.cast[0].samples.length - 1))],
   ['entrance', m => showsIn(m.cast) && clearAt(m.cast, 0)],
   ['exit', m => showsIn(m.cast) && clearAt(m.cast, m.cast[0].samples.length - 1)],
+  ['walk', walks],
+  ['reaction', reacts],
   ['establishing', m => cameraOpens(m.moves) && midHeight(m.cast) <= SMALL_SUBJECT && m.hints.slots.some(slot => slotRole(slot) === 'background')],
   ['dialogue', m => m.subjects >= 2 && alwaysInView(m.cast) && m.travel === 'none' && !stepsAside(m.cast) && !m.cast.some(cast => dances(cast, m.scene))],
   ['documentary', m => idWords(m.hints.id).includes('documentary')],

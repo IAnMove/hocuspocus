@@ -1219,6 +1219,7 @@
   "composer": {
     "title": "Create scene from Library",
     "heading": "Procedural templates · Library",
+    "fromAnimation": "Sheet of the “{{animation}}” animation of {{character}}: the card controls were filled with its poses and pace.",
     "close": "Close",
     "intro": "{{count}} actions: music cards, cutout choreographies, space shots and the documentary and city postcards, all pending review. Cinema shots (establishing, close-up, two-shot…) live in the narrative grid. Your assets create a new composition, still to review. Images, video and audio are not generated automatically.",
     "action": "Action / template",

@@ -748,5 +748,48 @@
     "noIdentity": "El kit no tiene una referencia de identidad para construir la pose base.",
     "visemePacks": "No pude cargar los packs de visemas.",
     "presetMissing": "No existe el preset de animación “{{name}}”."
+  },
+  "animations": {
+    "title": "Animaciones del personaje",
+    "loading": "Cargando animaciones…",
+    "intro": "Pequeñas animaciones de un personaje guardado: andar, gestos y las expresiones de anime más habituales. Cada una son unas pocas poses del mismo personaje, hechas con Qwen a partir de su propia imagen, recortadas y juntadas en una hoja de sprites que las plantillas de Video 2D reproducen. Revisa cada animación antes de aprobarla.",
+    "noKits": "Primero crea y guarda un personaje: las animaciones se hacen a partir de su imagen.",
+    "kit": "Personaje",
+    "state": {
+      "none": "Sin hacer",
+      "pending": "Por revisar",
+      "approved": "Aprobada",
+      "rejected": "Rechazada"
+    },
+    "make": "Crear",
+    "makeAgain": "Rehacer todo",
+    "tryAgain": "Reintentar",
+    "working": "Creando…",
+    "cancel": "Cancelar",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "delete": "Borrar",
+    "remake": "Rehacer",
+    "remakePose": "Rehacer la pose {{pose}}",
+    "posesCount_one": "{{count}} pose",
+    "posesCount_other": "{{count}} poses",
+    "stage": {
+      "poses": "Haciendo las poses, una tras otra…",
+      "sheet": "Juntando las poses en la hoja…"
+    },
+    "pose": {
+      "waiting": "en espera",
+      "reused": "se conserva",
+      "generating": "generando",
+      "keying": "recortando",
+      "ready": "lista",
+      "failed": "falló"
+    },
+    "plays": "Se reproduce con la plantilla {{template}} ({{controls}}).",
+    "saved": "Animación guardada en el personaje. Revísala y apruébala.",
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "nextFrame": "Siguiente",
+    "frameOf": "Pose {{frame}} de {{count}}"
   }
 }

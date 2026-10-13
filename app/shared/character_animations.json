@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "note": "Small animations of one character: a few poses of the same figure joined into an equal-cell sprite sheet (services/character_animations.py, ui/src/lib/characterAnimations.ts). Each pose is one Qwen picture made from the character's own picture as an identity reference, on a plain screen, keyed and cropped. `view` picks the framing sentence, `loop` how the sheet plays (loop | pingpong | once), `template` the Video 2D card that plays it.",
+  "sheet": {"feet": 0.96, "figure": 0.86, "cellHeight": 640, "maxPoses": 12, "alphaFloor": 8, "torsoShare": 0.55},
+  "identity": "The same character as the reference image: same face, proportions, colours, outfit and art style. {description}",
+  "negative": "photo, photorealistic, 3D render, blurry, text, watermark, speech bubble, panel border, frame, multiple characters, background scenery, floor, cast shadow, turnaround sheet, collage of views",
+  "viewNegatives": {"bust": "full body, whole body, standing figure, waist, hands, legs, feet, boots"},
+  "views": {
+    "side": "Exact side view of the whole body, facing right, seen from head to boots, centred, the same size as in the reference picture.",
+    "front": "Front view of the whole body, seen from head to boots, centred, the same size as in the reference picture.",
+    "bust": "Close-up portrait: only the head, neck and shoulders of the character, the picture cropped at the chest so no waist, hands, legs or feet are in it, facing the viewer, centred, the face large and filling the upper half of the picture."
+  },
+  "groups": [
+    {"id": "cycle", "title": {"es": "Ciclos", "en": "Cycles"}},
+    {"id": "gesture", "title": {"es": "Gestos", "en": "Gestures"}},
+    {"id": "expression", "title": {"es": "Expresiones de anime", "en": "Anime expressions"}}
+  ],
+  "animations": [
+    {
+      "id": "walk", "group": "cycle", "view": "side", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152",
+      "title": {"es": "Andar", "en": "Walk"},
+      "summary": {"es": "Ciclo de paso de perfil en cuatro poses: contacto, paso, contacto, paso. Mira a la derecha.", "en": "Side-view gait in four poses: contact, passing, contact, passing. Looks right."},
+      "poses": [
+        {"id": "contact", "label": {"es": "Contacto", "en": "Contact"}, "prompt": "Walking: the contact pose of a walk cycle, the front leg stretched forward with the heel of the boot just touching the ground, the back leg stretched behind pushing off on the toes of the boot, the arm nearest the viewer swinging back and the other arm forward."},
+        {"id": "passing", "label": {"es": "Paso", "en": "Passing"}, "prompt": "Walking: the passing pose of a walk cycle, balancing on one straight leg while the other knee is bent with the boot lifted off the ground and passing forward under the body, the two legs close together, arms hanging near the sides."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Walking: the contact pose of a walk cycle with the other foot, the leg nearest the viewer stretched forward with the heel just touching the ground and the other leg stretched behind pushing off on its toes, the arm nearest the viewer swinging forward and the other arm back."},
+        {"id": "passing-b", "label": {"es": "Paso (otro pie)", "en": "Passing (other foot)"}, "prompt": "Walking: the passing pose of a walk cycle with the other foot, balancing on the leg nearest the viewer while the far leg is bent with its boot lifted and passing forward, the two legs close together, arms hanging near the sides."}
+      ]
+    },
+    {
+      "id": "run", "group": "cycle", "view": "side", "facing": "right", "loop": "loop", "fps": 8, "template": "walk-cycle-sheet", "resolution": "896x1152",
+      "title": {"es": "Correr", "en": "Run"},
+      "summary": {"es": "Carrera de perfil en cuatro poses: contacto, vuelo, contacto, vuelo. Mira a la derecha.", "en": "Side-view run in four poses: contact, flight, contact, flight. Looks right."},
+      "poses": [
+        {"id": "contact", "label": {"es": "Contacto", "en": "Contact"}, "prompt": "Running: the contact pose of a run cycle, the front knee bent with the boot landing ahead of the body, the back leg stretched behind on its toes, the body leaning forward, the arms bent and pumping, one forward and one back."},
+        {"id": "flight", "label": {"es": "Vuelo", "en": "Flight"}, "prompt": "Running: the flight pose of a run cycle, both boots off the ground, the back knee drawn up under the body, the front leg reaching forward, the body leaning forward, the arms bent and pumping."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Running: the contact pose of a run cycle with the other foot, the leg nearest the viewer landing ahead of the body with the knee bent, the other leg stretched behind on its toes, the body leaning forward, the arms pumping the other way."},
+        {"id": "flight-b", "label": {"es": "Vuelo (otro pie)", "en": "Flight (other foot)"}, "prompt": "Running: the flight pose of a run cycle with the other foot, both boots off the ground, the knee nearest the viewer drawn up under the body, the other leg reaching forward, the body leaning forward, the arms pumping the other way."}
+      ]
+    },
+    {
+      "id": "wave", "group": "gesture", "view": "front", "facing": "front", "loop": "pingpong", "fps": 5, "template": "character-reaction", "resolution": "896x1152",
+      "title": {"es": "Saludar", "en": "Wave"},
+      "summary": {"es": "Levanta la mano y la agita a un lado y a otro. Cuatro poses de frente.", "en": "Raises a hand and waves it from side to side. Four front poses."},
+      "poses": [
+        {"id": "raise", "label": {"es": "Levantar", "en": "Raise"}, "prompt": "Waving hello: the right arm raised halfway up, the forearm bent upward, the hand open, a friendly smile."},
+        {"id": "wave-a", "label": {"es": "Mano a un lado", "en": "Hand to one side"}, "prompt": "Waving hello: the right hand raised beside the head with the palm open facing the viewer, tilted outward to the side, a friendly smile."},
+        {"id": "wave-b", "label": {"es": "Mano al otro", "en": "Hand to the other"}, "prompt": "Waving hello: the right hand raised beside the head with the palm open facing the viewer, tilted inward toward the head, a friendly smile."},
+        {"id": "wave-c", "label": {"es": "Mano arriba", "en": "Hand up"}, "prompt": "Waving hello: the right hand held high above the shoulder with the palm open facing the viewer, upright, a broad friendly smile."}
+      ]
+    },
+    {
+      "id": "nod", "group": "gesture", "view": "bust", "facing": "front", "loop": "pingpong", "fps": 4, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Asentir", "en": "Nod"},
+      "summary": {"es": "Dice que sí con la cabeza. Tres poses de busto.", "en": "Nods yes. Three bust poses."},
+      "poses": [
+        {"id": "level", "label": {"es": "Cabeza recta", "en": "Head level"}, "prompt": "Nodding yes: the head held level, looking at the viewer, a calm agreeing expression."},
+        {"id": "down", "label": {"es": "Cabeza abajo", "en": "Head down"}, "prompt": "Nodding yes: the head tipped forward and down, the eyes lowered, the chin tucked toward the chest, a calm agreeing expression."},
+        {"id": "up", "label": {"es": "Cabeza arriba", "en": "Head up"}, "prompt": "Nodding yes: the head tipped slightly back and up, looking at the viewer, a calm agreeing expression."}
+      ]
+    },
+    {
+      "id": "shake", "group": "gesture", "view": "bust", "facing": "front", "loop": "pingpong", "fps": 4, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Negar", "en": "Shake head"},
+      "summary": {"es": "Dice que no con la cabeza. Tres poses de busto.", "en": "Shakes the head no. Three bust poses."},
+      "poses": [
+        {"id": "left", "label": {"es": "Cabeza a un lado", "en": "Head to one side"}, "prompt": "Shaking the head no: the head turned to the left, the eyes half closed, a disapproving frown."},
+        {"id": "centre", "label": {"es": "Cabeza al frente", "en": "Head forward"}, "prompt": "Shaking the head no: the head facing the viewer, the eyes half closed, a disapproving frown."},
+        {"id": "right", "label": {"es": "Cabeza al otro lado", "en": "Head to the other side"}, "prompt": "Shaking the head no: the head turned to the right, the eyes half closed, a disapproving frown."}
+      ]
+    },
+    {
+      "id": "point", "group": "gesture", "view": "front", "facing": "front", "loop": "once", "fps": 4, "template": "character-reaction", "resolution": "896x1152",
+      "title": {"es": "Señalar", "en": "Point"},
+      "summary": {"es": "Levanta el brazo y señala al frente. Tres poses.", "en": "Raises an arm and points ahead. Three poses."},
+      "poses": [
+        {"id": "down", "label": {"es": "Brazo abajo", "en": "Arm down"}, "prompt": "Pointing: both arms relaxed at the sides, looking toward the viewer's right."},
+        {"id": "half", "label": {"es": "Brazo a medias", "en": "Arm half raised"}, "prompt": "Pointing: the right arm raised halfway toward the viewer's right, the hand starting to point, looking toward the viewer's right."},
+        {"id": "point", "label": {"es": "Señalando", "en": "Pointing"}, "prompt": "Pointing: the right arm stretched out straight toward the viewer's right with the index finger extended, the other hand on the hip, looking toward the viewer's right."}
+      ]
+    },
+    {
+      "id": "angry", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Enfado", "en": "Angry"},
+      "summary": {"es": "De molesto a furioso: ceño fruncido, dientes apretados y la vena de anime en la frente.", "en": "From annoyed to furious: a deep frown, clenched teeth and the anime anger vein on the forehead."},
+      "poses": [
+        {"id": "annoyed", "label": {"es": "Molesto", "en": "Annoyed"}, "prompt": "Anime expression: annoyed and irritated, the eyebrows lowered and slanted toward the nose, a tight frown, a small cross-shaped anger vein mark on the forehead."},
+        {"id": "furious", "label": {"es": "Furioso", "en": "Furious"}, "prompt": "Anime expression: furious, the eyebrows slanted sharply down toward the nose, narrow glaring eyes, the teeth clenched in a snarl, a large cross-shaped anger vein mark on the forehead."}
+      ]
+    },
+    {
+      "id": "surprised", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Sorpresa", "en": "Surprised"},
+      "summary": {"es": "Ojos como platos y boca en O, con las rayas de susto del anime.", "en": "Saucer eyes and a round open mouth, with the anime shock lines."},
+      "poses": [
+        {"id": "startled", "label": {"es": "Sobresalto", "en": "Startled"}, "prompt": "Anime expression: startled, the eyes wide open, the eyebrows raised, the mouth slightly open."},
+        {"id": "shocked", "label": {"es": "Atónito", "en": "Shocked"}, "prompt": "Anime expression: shocked, huge round eyes with tiny pupils, the eyebrows high on the forehead, the mouth wide open in an O, a few short shock lines around the head."}
+      ]
+    },
+    {
+      "id": "sad", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Tristeza", "en": "Sad"},
+      "summary": {"es": "Cejas caídas y ojos brillantes de lágrimas, hasta el llanto.", "en": "Drooping brows and watery eyes, down to crying."},
+      "poses": [
+        {"id": "downcast", "label": {"es": "Abatido", "en": "Downcast"}, "prompt": "Anime expression: downcast and sad, the eyebrows tilted up in the middle, the eyes glossy, the mouth a small trembling frown, the head bowed."},
+        {"id": "crying", "label": {"es": "Llorando", "en": "Crying"}, "prompt": "Anime expression: crying, the eyebrows tilted up in the middle, the eyes shut tight, a stream of big tears running down both cheeks, the mouth open in a wail."}
+      ]
+    },
+    {
+      "id": "happy", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Alegría", "en": "Happy"},
+      "summary": {"es": "De sonrisa tranquila a risa con ojos de arco y chispas.", "en": "From a calm smile to a laugh with arc eyes and sparkles."},
+      "poses": [
+        {"id": "smile", "label": {"es": "Sonrisa", "en": "Smile"}, "prompt": "Anime expression: a gentle happy smile, the eyes bright, rosy cheeks."},
+        {"id": "beaming", "label": {"es": "Radiante", "en": "Beaming"}, "prompt": "Anime expression: overjoyed, the eyes closed in happy upward arcs, the mouth wide open in a laugh, blushing cheeks, a few small sparkles around the head."}
+      ]
+    },
+    {
+      "id": "embarrassed", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Vergüenza", "en": "Embarrassed"},
+      "summary": {"es": "Sonrojo, mirada huida y una gota de sudor.", "en": "A blush, averted eyes and a sweat drop."},
+      "poses": [
+        {"id": "shy", "label": {"es": "Tímido", "en": "Shy"}, "prompt": "Anime expression: shy, a light blush across the cheeks, the eyes glancing away to the side, a small awkward smile."},
+        {"id": "flustered", "label": {"es": "Abochornado", "en": "Flustered"}, "prompt": "Anime expression: flustered and embarrassed, a deep red blush across the whole face, the eyes looking away, the mouth a wobbly small wave, a big sweat drop on the temple, one hand scratching the back of the head."}
+      ]
+    },
+    {
+      "id": "scared", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Miedo", "en": "Scared"},
+      "summary": {"es": "Cara pálida, pupilas diminutas y rayas azules de pánico.", "en": "A pale face, tiny pupils and blue panic lines."},
+      "poses": [
+        {"id": "uneasy", "label": {"es": "Inquieto", "en": "Uneasy"}, "prompt": "Anime expression: uneasy and nervous, the eyes wide, the eyebrows slanted up in the middle, a tight worried mouth, a sweat drop."},
+        {"id": "terrified", "label": {"es": "Aterrado", "en": "Terrified"}, "prompt": "Anime expression: terrified, a pale face, tiny shaking pupils, the mouth open in a scream, vertical blue gloom lines across the forehead."}
+      ]
+    },
+    {
+      "id": "smug", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Suficiencia", "en": "Smug"},
+      "summary": {"es": "Sonrisa de lado, ojos entornados y una ceja arriba.", "en": "A sideways grin, half-lidded eyes and one raised brow."},
+      "poses": [
+        {"id": "sly", "label": {"es": "Pícaro", "en": "Sly"}, "prompt": "Anime expression: sly, the eyes half-lidded, a small one-sided smirk."},
+        {"id": "smug", "label": {"es": "Suficiente", "en": "Smug"}, "prompt": "Anime expression: smug and self-satisfied, half-lidded eyes, one eyebrow raised, a wide sly one-sided grin, the chin lifted."}
+      ]
+    },
+    {
+      "id": "confused", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Duda", "en": "Confused"},
+      "summary": {"es": "Una ceja arriba, la cabeza ladeada y un signo de interrogación.", "en": "One brow up, the head tilted and a question mark."},
+      "poses": [
+        {"id": "puzzled", "label": {"es": "Extrañado", "en": "Puzzled"}, "prompt": "Anime expression: puzzled, one eyebrow raised, the eyes looking up, the mouth a small crooked line."},
+        {"id": "lost", "label": {"es": "Perdido", "en": "Lost"}, "prompt": "Anime expression: totally confused, the head tilted to one side, one eyebrow raised high, the mouth a wavy line, a sweat drop and a question mark floating above the head."}
+      ]
+    },
+    {
+      "id": "determined", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Determinación", "en": "Determined"},
+      "summary": {"es": "Mirada afilada y puño en alto: va a por todas.", "en": "A sharp stare and a raised fist: going all in."},
+      "poses": [
+        {"id": "focused", "label": {"es": "Concentrado", "en": "Focused"}, "prompt": "Anime expression: focused, level eyebrows, sharp steady eyes, the mouth firmly closed."},
+        {"id": "resolute", "label": {"es": "Decidido", "en": "Resolute"}, "prompt": "Anime expression: fiercely determined, low level eyebrows, sharp eyes with a bright spark in them, a small confident grin, one clenched fist raised in front of the chest."}
+      ]
+    },
+    {
+      "id": "tired", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Cansancio", "en": "Tired"},
+      "summary": {"es": "Párpados pesados, ojeras y los hombros caídos.", "en": "Heavy eyelids, dark circles and slumped shoulders."},
+      "poses": [
+        {"id": "sleepy", "label": {"es": "Somnoliento", "en": "Sleepy"}, "prompt": "Anime expression: sleepy, heavy half-closed eyelids, a small yawn."},
+        {"id": "drained", "label": {"es": "Agotado", "en": "Drained"}, "prompt": "Anime expression: completely drained, nearly closed eyes with dark circles under them, the mouth a limp wavy line, the shoulders slumped."}
+      ]
+    },
+    {
+      "id": "love", "group": "expression", "view": "bust", "facing": "front", "loop": "once", "fps": 3, "template": "character-reaction", "resolution": "1024x1024",
+      "title": {"es": "Enamorado", "en": "Lovestruck"},
+      "summary": {"es": "Ojos de corazón, sonrojo y corazoncitos flotando.", "en": "Heart eyes, a blush and little hearts floating."},
+      "poses": [
+        {"id": "smitten", "label": {"es": "Prendado", "en": "Smitten"}, "prompt": "Anime expression: smitten, a rosy blush, a dreamy soft smile, the eyes shining."},
+        {"id": "hearts", "label": {"es": "Corazones", "en": "Hearts"}, "prompt": "Anime expression: lovestruck, heart-shaped eyes, a deep rosy blush, a dreamy open smile, several small pink hearts floating around the head."}
+      ]
+    }
+  ]
+}

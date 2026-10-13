@@ -7,7 +7,7 @@ one goal: better clips of every kind, and templates an LLM picks correctly. P1�
 
 ## Decisions
 
-1. **41 scene templates.** 9 cards merge into another card and 2 retire (table below). A merged id stays an
+1. **41 scene templates** (48 with the walking and reaction cards, below). 9 cards merge into another card and 2 retire (table below). A merged id stays an
    **alias**: compiling it gives the surviving card with the alias's control preset, so old MCP calls, productions
    and saved recipes keep working. The catalog lists only the 41.
 2. **One slot vocabulary**: `subject_1`, `subject_2`, `background`, `prop_1`, `prop_2`, `foreground`.
@@ -84,7 +84,7 @@ Control names and option lists above are the contract. Defaults reproduce the su
 subjects, props, background, particles, text), `still` (true when nothing but particles moves for more than half the
 shot), `holdShare` (0–1, share of the shot in which nothing but particles moves), `subjects`, `props`, `travel`
 (none, cross, rise, fall, orbit, in, out), `format` (landscape), `uses` (music, dance, performance, product, transition,
-entrance, exit, establishing, dialogue, documentary, space), `background` (still, drift, strip, video), `duration`.
+entrance, exit, walk, establishing, dialogue, documentary, space), `background` (still, drift, strip, video), `duration`.
 
 ## `scene2d` production shot (P10)
 
@@ -105,3 +105,47 @@ another family fails with `scene2d_family_not_allowed`.
   `reviewStatus`, and accept the filters `use`, `move`, `subjects`, `format`.
 - New `scenes.templates.suggest`: `{line, speakers, mood, beat, format, limit}` → up to `limit` (default 3, max 8)
   music cards with a plain-words `reason`, `unknown_words` and the derived filters; read-only. The Wizard calls it.
+
+## Walking and reaction cards (2026-10-13)
+
+Seven `cinema` cards in their own `walk` group, at the end of the catalog (the 17 originals stay first), with no narrative
+twin (so they are on the composer shelf) and `reviewStatus: candidate` until their real-asset renders are reviewed. The catalog lists 48 cards. They exist because a
+cut-out figure that slides in with a bob shows legs that never move: each card hides the legs or moves them.
+
+| card | what it does | slots |
+| --- | --- | --- |
+| `walk-follow-back` | from behind, waist up; the figure holds its size, the room comes to it with parallax | `subject_1` (back view), `background` (the room seen from the door), `foreground` optional |
+| `walk-toward-camera` | reverse tracking from the front, waist up; the camera backs away, the room recedes | `subject_1` (front), `background`, `foreground` optional |
+| `walk-behind-foreground` | a whole figure in profile crosses behind a foreground that covers its legs, walking the way it looks (`facing`) | `subject_1` (profile), `background`, `foreground` (required, alpha) |
+| `walk-shadow-first` | a huge shadow (the figure in black) crosses the wall, then the figure stands on its mark | `subject_1`, `background`, `foreground` optional |
+| `walk-two-pose` | two pictures of a figure in profile take turns (the stride on every footfall, the legs together mid-step) over a contact shadow that beats; the walk is paced by `step`, so the boots do not skate, and the figure stops legs together | `subject_1` (stride), `subject_2` (legs together), `background`, `foreground` optional |
+| `walk-cycle-sheet` | a sprite sheet of the gait (four poses by default: contact, passing, contact, passing) plays at `step`, and the figure crosses at the speed its feet need | `subject_1` (sheet with alpha, profile, boots at 96 % of the cell), `background`, `foreground` optional |
+| `character-reaction` | a figure stays on its mark and plays a sheet of a gesture (wave, nod, point) or an anime expression (angry, surprised, sad…): it pops in, plays once and holds its last pose (`loop: once`) or keeps playing (`loop`, `pingpong`), and breathes. `framing: bust` stands a bust on the frame's bottom edge; `full` stands a whole figure on the floor with a contact shadow | `subject_1` (sheet with alpha), `background`, `foreground` optional |
+
+- **The world moves, not the figure.** A figure held on screen takes `parallax: 0` and `parallaxZoom: true`; the plate
+  takes `parallax: .5` with `parallaxZoom`, so a push or a pull moves the room (the camera zoom reaches a layer by
+  `1 + (zoom - 1) * parallax`).
+- **A walk takes a whole number of steps** (`step`, seconds, default .55): a footfall lands on its first and last
+  frame, the figure dips on every footfall, rises mid-step and leans onto the planted foot (`sway`, degrees). A longer
+  shot takes more steps instead of slower ones.
+- **Profile figures walk the way they look** (`facing`: `right` or `left`, default `right`): a figure looking right comes in
+  from the left. A layer cannot be mirrored (a layer's `flip` exists only for strip copies), so the card never turns a
+  figure around: it asks for the figure already facing the right way. The Character Kit says the same of a pose
+  (`facing: left | right | front`).
+- **Paced walks** (`walk-two-pose`, `walk-cycle-sheet`): one step covers `.42` of the figure's height, so the figure's
+  speed is `.42 * height / step` and a longer shot has more empty room, not slower feet. In `walk-two-pose` the stride
+  shows on every footfall and the legs together from a quarter to three quarters of each step; both pictures share their
+  beats and the one that shows changes inside one frame (1/60 s), so there is no cross-fade. A sheet plays `frames / (2 * step)`
+  frames a second (a cycle is two steps).
+- **Making the sheets in HocusPocus**: Characters › Animaciones (`docs/character-kits/HOWUSEIT.md` §4.7; MCP `characters.animations`,
+  `characters.animation.sheet`) makes the sheet of a saved character, with the controls each card needs. By hand: one Qwen picture per pose from the figure (`generation.image` with the figure as
+  an image ref and the pose in the prompt), keyed with `image.remove_background` (`crop: true`, so a pose is fitted to its
+  outline and stands on its boots), and for a sheet joined with `media.compose` (equal cells, `anchor: bottom`, same height).
+  The game-assets `animation` kind (`game_actions.json`, `strip` method) makes the same kind of sheet for a game character.
+- **Framing** (`framing`: `waist` or `chest`): the figure's picture is a cut-out cropped to its outline, head near the
+  top of the frame and the boots far below it.
+- **Traits `walk` and `reaction`** are in `uses` for every card whose id has the word `walk` or `reaction`; the dance rule does not apply to them.
+  `walk-behind-foreground`, `walk-shadow-first`, `walk-two-pose` and `walk-cycle-sheet` also measure `entrance`.
+- **Not covered:** `scene2d` production shots still play `music-*` cards only (decision 6), so a Series entrance does
+  not use these cards yet. `walk-cycle-sheet` plays a sheet it is given; it does not draw the cycle.
+

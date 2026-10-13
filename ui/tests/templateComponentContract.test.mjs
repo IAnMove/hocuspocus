@@ -18,17 +18,17 @@ import { MUSIC_MOTION_TEMPLATES } from '../src/features/sceneTemplates/musicMoti
 
 const keys = contract => contract.components.map(component => component.key)
 
-test('resuelve las 41 fichas con un solo vocabulario de slots', () => {
+test('resuelve las 48 fichas con un solo vocabulario de slots', () => {
   assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 17)
   assert.equal(MUSIC_MOTION_TEMPLATES.length, 22)
-  assert.equal(ALL_SCENE_TEMPLATES.length, 41)
+  assert.equal(ALL_SCENE_TEMPLATES.length, 48)
 
   for (const template of ALL_SCENE_TEMPLATES) {
     assert.equal(getCandidateSceneTemplate(template.id).id, template.id)
     const contract = describeTemplateComponents(template.id)
     assert.equal(contract.schema, 'hocuspocus.template-components')
     assert.equal(contract.generationPolicy, 'provided_only')
-    assert.equal(contract.status, 'approved')
+    assert.equal(contract.status, (template.id.startsWith('walk-') || template.id === 'character-reaction') ? 'candidate' : 'approved')
     assert.equal(contract.catalogVersion, templateCatalogVersion(template))
     const labels = templateSlotLabels()
     for (const component of contract.components) assert.equal(component.label, labels[component.key], `${template.id}/${component.key} has a label`)

@@ -200,6 +200,26 @@ def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp
     assert error.value.status_code == 404
 
 
+def test_character_animations_and_their_sheet_go_through_the_http_contract(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"animations": [{"id": "walk"}], "sheet": {"feet": 0.96}},
+                                               {"animations": [{"id": "walk"}], "sheet": {"feet": 0.96}}, {"prompt": "p", "screen": "green"},
+                                               {"source": "/api/v1/file/walk-sheet-1.png?workspace=w", "count": 4}])
+    listed = call(handlers, "characters.animations", {})["result"]
+    assert listed["animations"][0]["id"] == "walk" and "prompt" not in listed
+    built = call(handlers, "characters.animations", {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"})["result"]
+    assert built["prompt"] == {"prompt": "p", "screen": "green"}
+    sheet = call(handlers, "characters.animation.sheet", {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"})["result"]
+    assert sheet["count"] == 4
+    assert [(method, url.split("9", 1)[1]) for method, url, _ in calls] == [
+        ("GET", "/api/v1/character-kits/animations/catalog"), ("GET", "/api/v1/character-kits/animations/catalog"),
+        ("POST", "/api/v1/character-kits/animations/prompt"), ("POST", "/api/v1/character-kits/animations/sheet")]
+    assert calls[2][2] == {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"}
+    assert calls[3][2] == {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"}
+    from services.series_commands import _operation_schema
+    assert _operation_schema("characters.animations", *OPERATIONS["characters.animations"])["mutation"] is False
+    assert _operation_schema("characters.animation.sheet", *OPERATIONS["characters.animation.sheet"])["mutation"] is True
+
+
 def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [{"jobId": "native-1", "status": "queued"}, {"jobId": "native-1", "status": "running"},
                                                {"jobId": "native-1", "status": "queued"}])

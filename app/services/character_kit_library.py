@@ -14,6 +14,7 @@ import threading
 import uuid
 from typing import Any
 
+from .character_animations import CharacterAnimationError, normalize_kit_animations
 from .character_face_patch import normalize_character_face_patch
 from .character_speech_definition import normalize_speech3d, normalize_character_voice, normalize_character_voices_by_language
 from .pose_facing import normalize_facing
@@ -274,6 +275,11 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
         voices = normalize_character_voices_by_language(value["voicesByLanguage"])
         if voices:
             result["voicesByLanguage"] = voices
+    if value.get("animations"):
+        try:
+            result["animations"] = normalize_kit_animations(value["animations"])
+        except CharacterAnimationError as exc:
+            raise ValueError(str(exc)) from exc
     if value.get("lookNotes"):
         result["lookNotes"] = _text(value["lookNotes"], "Character look notes", 4000)
     if value.get("restPose") is not None:

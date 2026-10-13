@@ -20,6 +20,7 @@ import {
 } from './characterCreatorHistory'
 import { useUiTranslation } from '../../i18n'
 import { CharacterSpeechWorkshopEntry } from './CharacterSpeechWorkshopEntry'
+import { CharacterAnimationsEntry } from './CharacterAnimationsEntry'
 import { CharacterFacePackMaker } from './CharacterFacePackMaker'
 import { CharacterImageCreator } from './CharacterImageCreator'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
@@ -602,6 +603,7 @@ function CharacterCreatorWorkshop() {
         }} />
         <CharacterFacePackMaker />
         <CharacterSpeechWorkshopEntry workspace={activeWorkspace} />
+        <CharacterAnimationsEntry workspace={activeWorkspace} />
         <Character3DLibraryEntry workspace={activeWorkspace} />
         <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <div className="space-y-3">

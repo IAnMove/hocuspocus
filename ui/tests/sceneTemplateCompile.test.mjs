@@ -123,9 +123,9 @@ const assertRelationships = scene => {
   }
 }
 
-test('all 41 cards compile both deterministic demo variants', () => {
-  assert.equal(IDS.length, 41)
-  assert.equal(new Set(IDS).size, 41, 'card IDs are unique')
+test('all 48 cards compile both deterministic demo variants', () => {
+  assert.equal(IDS.length, 48)
+  assert.equal(new Set(IDS).size, 48, 'card IDs are unique')
   const failures = []
   for (const current of cases()) {
     try {
@@ -164,7 +164,7 @@ test('all candidate scenes preserve exact slot sources in candidate provenance',
     )
     assert.equal(scene.narrative?.controls.catalogVersion, versionOf(current.id))
     assert.equal(scene.narrative?.controls.templateVersion, 1)
-    assert.equal(scene.narrative?.controls.reviewStatus, 'approved')
+    assert.equal(scene.narrative?.controls.reviewStatus, (current.id.startsWith('walk-') || current.id === 'character-reaction') ? 'candidate' : 'approved')
   }
 })
 
@@ -220,7 +220,7 @@ test('the chorus alias pulses the camera around its declared pose without discar
   assert.throws(() => pulse({ duration: 4, bpm: 120, intensity: .6, bindings: {} }, camera), /existing keyframes/i)
 })
 
-test('all 41 cards have distinct motion fingerprints beyond asset sources and names', () => {
+test('all 48 cards have distinct motion fingerprints beyond asset sources and names', () => {
   const fingerprints = new Map()
   for (const id of IDS) {
     const fingerprint = motionFingerprint(build({ id, variant: 'coral' }))
@@ -228,7 +228,7 @@ test('all 41 cards have distinct motion fingerprints beyond asset sources and na
     assert.equal(previous, undefined, `${id} shares its motion fingerprint with ${previous ?? 'another candidate'}`)
     fingerprints.set(fingerprint, id)
   }
-  assert.equal(fingerprints.size, 41)
+  assert.equal(fingerprints.size, 48)
 })
 
 test('candidate scenes round-trip through scene JSON and MP4 sidecar payload shape', () => {
@@ -239,7 +239,7 @@ test('candidate scenes round-trip through scene JSON and MP4 sidecar payload sha
     assert.equal(recovered.narrative?.templateId, current.id)
     assert.equal(recovered.narrative?.controls.catalogVersion, versionOf(current.id))
     assert.equal(recovered.narrative?.controls.templateVersion, 1)
-    assert.equal(recovered.narrative?.controls.reviewStatus, 'approved')
+    assert.equal(recovered.narrative?.controls.reviewStatus, (current.id.startsWith('walk-') || current.id === 'character-reaction') ? 'candidate' : 'approved')
     assert.deepEqual(provenanceRecord(recovered), provenanceRecord(original), `${current.id}/${current.variant} recovered provenance`)
   }
 })

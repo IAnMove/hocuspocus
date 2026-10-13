@@ -3157,6 +3157,665 @@
       "defaultDuration": 6,
       "group": "music-motion",
       "motionIntensity": "high"
+    },
+    {
+      "id": "walk-follow-back",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Plano de cintura para arriba visto desde detrás: la figura camina hacia dentro de la sala y conserva su tamaño mientras la sala viene hacia ella con paralaje. Solo se ven el rebote de cada paso y la inclinación de los hombros; las piernas quedan fuera del cuadro.",
+      "title": "Seguimiento por la espalda",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Figura de espaldas, recortada con alfa y ajustada a su contorno (cabeza arriba, botas abajo); se enseña de la cabeza a la cintura."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "La sala vista desde la puerta, mirando hacia dentro, con perspectiva de un punto de fuga."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "description": "Capa opcional que pasa cerca de cámara (marco de puerta, planta, niebla baja); se acerca más rápido que la sala."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 6
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "step": {
+          "min": 0.3,
+          "max": 1,
+          "default": 0.55,
+          "exposed": true
+        },
+        "framing": {
+          "options": [
+            "waist",
+            "chest"
+          ],
+          "default": "waist",
+          "exposed": true
+        },
+        "travel": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
+        },
+        "sway": {
+          "min": 0,
+          "max": 4,
+          "default": 1.2,
+          "exposed": false
+        }
+      },
+      "limits": [
+        "La vista de espaldas y el plano desde la puerta son dos imágenes que hay que aportar; ninguna se inventa.",
+        "Cine en 2.5D con la imagen proporcionada; no hay ciclo de piernas: el paso se ve en el rebote, la inclinación y el mundo que se mueve.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: da más pasos, no los alarga.",
+        "Sin sonido de pasos: añádelos con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"walk-follow-back\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 6,
+      "group": "walk",
+      "twins": []
+    },
+    {
+      "id": "walk-toward-camera",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Travelling inverso: la figura camina de frente hacia nosotros en plano de cintura para arriba, la cámara retrocede a su paso y la sala se aleja detrás con paralaje. Las piernas quedan fuera del cuadro y el movimiento lo pone el mundo, no la figura.",
+      "title": "Camina hacia cámara",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Figura de frente, recortada con alfa y ajustada a su contorno (cabeza arriba, botas abajo); se enseña de la cabeza a la cintura."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "La sala vista desde la puerta o desde el punto adonde llega la figura."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "description": "Capa opcional que pasa cerca de cámara (marco de puerta, planta, niebla baja); se acerca más rápido que la sala."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 6
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "step": {
+          "min": 0.3,
+          "max": 1,
+          "default": 0.55,
+          "exposed": true
+        },
+        "framing": {
+          "options": [
+            "waist",
+            "chest"
+          ],
+          "default": "waist",
+          "exposed": true
+        },
+        "travel": {
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "exposed": true
+        },
+        "sway": {
+          "min": 0,
+          "max": 4,
+          "default": 1.2,
+          "exposed": false
+        }
+      },
+      "limits": [
+        "No hace falta ninguna imagen nueva: sirve la pose de frente que ya tienes.",
+        "Cine en 2.5D con la imagen proporcionada; no hay ciclo de piernas: el paso se ve en el rebote, la inclinación y el mundo que se mueve.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: da más pasos, no los alarga.",
+        "Sin sonido de pasos: añádelos con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"walk-toward-camera\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 6,
+      "group": "walk",
+      "twins": []
+    },
+    {
+      "id": "walk-behind-foreground",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Una figura entera de perfil cruza el cuadro por detrás de un primer plano (mostrador, muro bajo, verja) que le tapa las piernas: se ve el cuerpo, el rebote y la inclinación de cada paso, pero no los pies. Camina hacia donde mira.",
+      "title": "Entrada tras el primer plano",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Figura entera de perfil, recortada con alfa y ajustada a su contorno; camina hacia donde mira (por defecto, a la derecha) y los pies se ocultan tras el primer plano."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "Placa de la sala vista de lado, con el suelo en el tercio inferior."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Primer plano a pantalla completa con alfa (mostrador o muro) cuya parte alta tapa las piernas de la figura."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 6
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "facing": {
+          "options": [
+            "right",
+            "left"
+          ],
+          "default": "right",
+          "exposed": true
+        },
+        "step": {
+          "min": 0.3,
+          "max": 1,
+          "default": 0.55,
+          "exposed": true
+        },
+        "sway": {
+          "min": 0,
+          "max": 4,
+          "default": 1.2,
+          "exposed": false
+        }
+      },
+      "limits": [
+        "El primer plano tiene que ser tan alto como las piernas de la figura: si queda bajo, los pies se verán.",
+        "La figura va de perfil y camina hacia donde mira: mirando a la derecha entra por la izquierda y mirando a la izquierda, por la derecha. No se espeja: aporta la figura ya orientada.",
+        "Cine en 2.5D con la imagen proporcionada; no hay ciclo de piernas: el paso se ve en el rebote, la inclinación y el mundo que se mueve.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: da más pasos, no los alarga.",
+        "Sin sonido de pasos: añádelos con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"walk-behind-foreground\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 6,
+      "group": "walk",
+      "twins": []
+    },
+    {
+      "id": "walk-shadow-first",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Corte en la acción: una sombra enorme y suave cruza la pared antes de que aparezca nadie y, al desvanecerse, la figura ya está de pie en su marca con un pequeño pisotón. No se ve caminar.",
+      "title": "Sombra primero",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Figura entera, recortada con alfa; su propia imagen, en negro y desenfocada, hace de sombra."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "Placa con una pared o un fondo liso donde proyectar la sombra y suelo abajo."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "description": "Capa opcional que pasa cerca de cámara (marco de puerta, planta, niebla baja); se acerca más rápido que la sala."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 6
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "entrance": {
+          "options": [
+            "left",
+            "right"
+          ],
+          "default": "left",
+          "exposed": true
+        }
+      },
+      "limits": [
+        "La sombra es la propia figura en negro, no una proyección calculada: elige una pose de pie y clara.",
+        "Cine en 2.5D con la imagen proporcionada; no hay ciclo de piernas: el paso se ve en el rebote, la inclinación y el mundo que se mueve.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: da más pasos, no los alarga.",
+        "Sin sonido de pasos: añádelos con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"walk-shadow-first\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 6,
+      "group": "walk",
+      "twins": []
+    },
+    {
+      "id": "walk-two-pose",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Plano general: una figura de perfil cruza andando alternando dos dibujos, el paso con las piernas abiertas en cada pisada y las piernas juntas a mitad de paso, con una sombra de contacto que late. Al llegar a su marca se detiene con las piernas juntas. La velocidad sigue al paso para que las botas no patinen.",
+      "title": "Paso de dos poses con sombra",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Figura entera de perfil caminando, con las piernas abiertas (pose de contacto), recortada con alfa y ajustada a su contorno; camina hacia donde mira."
+        },
+        {
+          "id": "subject_2",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "La misma figura de perfil con las piernas juntas (pose de paso o de reposo), del mismo tamaño y orientación que subject_1, recortada con alfa y ajustada a su contorno."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "Placa de la sala vista de lado, con el suelo en el tercio inferior."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "description": "Capa opcional que pasa cerca de cámara (marco de puerta, planta, niebla baja); se acerca más rápido que la sala."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 6
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "facing": {
+          "options": [
+            "right",
+            "left"
+          ],
+          "default": "right",
+          "exposed": true
+        },
+        "step": {
+          "min": 0.3,
+          "max": 1,
+          "default": 0.55,
+          "exposed": true
+        },
+        "sway": {
+          "min": 0,
+          "max": 4,
+          "default": 1.2,
+          "exposed": false
+        }
+      },
+      "limits": [
+        "Solo hay dos dibujos que se turnan: el paso se lee como animación limitada, no fluida.",
+        "Los dos dibujos se recortan ajustados a su contorno y se apoyan por los pies, así que se igualan en altura: conviene que midan lo mismo.",
+        "La figura va de perfil y camina hacia donde mira: mirando a la derecha entra por la izquierda y mirando a la izquierda, por la derecha. No se espeja: aporta las figuras ya orientadas.",
+        "La velocidad de la figura sigue a step: un paso más corto la hace ir más despacio, y llega a su marca antes o después.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "En planos largos el movimiento conserva su velocidad: da más pasos, no los alarga.",
+        "Sin sonido de pasos: añádelos con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"walk-two-pose\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 6,
+      "group": "walk",
+      "twins": []
+    },
+    {
+      "id": "walk-cycle-sheet",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Una figura de perfil cruza el plano entera mientras se reproduce una hoja de sprites con su ciclo de paso (contacto, paso, contacto, paso): las piernas se mueven de verdad. El ritmo de la hoja sigue a la velocidad de la figura para que las botas no resbalen.",
+      "title": "Ciclo de paso en hoja de sprites",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Hoja de sprites con alfa: las poses del ciclo de paso en celdas iguales, de izquierda a derecha y de arriba abajo, con la figura de perfil y las botas tocando el suelo en la misma línea (al 96 % del alto de la celda) en todas."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "Placa de la sala vista de lado, con el suelo en el tercio inferior."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "description": "Capa opcional que pasa cerca de cámara (marco, planta, niebla baja)."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 6
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "facing": {
+          "options": [
+            "right",
+            "left"
+          ],
+          "default": "right",
+          "exposed": true
+        },
+        "step": {
+          "min": 0.3,
+          "max": 1,
+          "default": 0.55,
+          "exposed": true
+        },
+        "frames": {
+          "min": 3,
+          "max": 12,
+          "default": 4,
+          "exposed": true
+        },
+        "columns": {
+          "min": 1,
+          "max": 12,
+          "default": 4,
+          "exposed": true
+        }
+      },
+      "limits": [
+        "La hoja se aporta hecha: esta plantilla no dibuja el ciclo de paso, solo lo reproduce. En HocusPocus se hace con una pose por imagen (Qwen a partir de la figura), recortada y juntada con media.compose.",
+        "El ritmo de la hoja y la velocidad de la figura siguen a step (un ciclo son dos pasos): en un plano más largo la figura no va más lenta, queda la sala vacía.",
+        "Con cuatro poses el ciclo cambia a pocos fotogramas por segundo: es animación limitada, no fluida; más poses la suavizan.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "La figura camina hacia donde mira: para el otro sentido aporta la hoja con la figura mirando a la izquierda y facing left. No se espeja.",
+        "Sin sonido de pasos: añádelos con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"walk-cycle-sheet\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 6,
+      "group": "walk",
+      "twins": []
+    },
+    {
+      "id": "character-reaction",
+      "family": "cinema",
+      "reviewStatus": "candidate",
+      "visualIntent": "Una figura se queda en su marca y reacciona: entra con un pequeño salto, reproduce una hoja de poses de un gesto (saludar, asentir, negar, señalar) o de una expresión de anime (enfado, sorpresa, tristeza, alegría, vergüenza, miedo…) y se queda respirando. La hoja se hace en Personajes › Animaciones.",
+      "title": "Reacción de personaje",
+      "version": 1,
+      "slots": [
+        {
+          "id": "subject_1",
+          "types": [
+            "image"
+          ],
+          "required": true,
+          "description": "Hoja de sprites con alfa de una acción del personaje: las poses en celdas iguales, de izquierda a derecha y de arriba abajo, con la figura (entera o de busto) apoyada en la misma línea, al 96 % del alto de la celda, en todas."
+        },
+        {
+          "id": "background",
+          "types": [
+            "image",
+            "video"
+          ],
+          "required": true,
+          "description": "Placa del lugar donde reacciona, de frente o de lado."
+        },
+        {
+          "id": "foreground",
+          "types": [
+            "image"
+          ],
+          "required": false,
+          "description": "Capa opcional que pasa cerca de cámara (marco, planta, niebla baja)."
+        }
+      ],
+      "controls": {
+        "duration": {
+          "min": 3,
+          "max": 12,
+          "default": 4
+        },
+        "bpm": {
+          "min": 40,
+          "max": 220,
+          "default": 120,
+          "exposed": false
+        },
+        "intensity": {
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "exposed": false
+        },
+        "fps": {
+          "min": 1,
+          "max": 12,
+          "default": 4,
+          "exposed": true
+        },
+        "frames": {
+          "min": 1,
+          "max": 12,
+          "default": 2,
+          "exposed": true
+        },
+        "columns": {
+          "min": 1,
+          "max": 12,
+          "default": 2,
+          "exposed": true
+        },
+        "loop": {
+          "options": [
+            "once",
+            "loop",
+            "pingpong"
+          ],
+          "default": "once",
+          "exposed": true
+        },
+        "framing": {
+          "options": [
+            "full",
+            "bust"
+          ],
+          "default": "full",
+          "exposed": true
+        },
+        "mark": {
+          "options": [
+            "centre",
+            "left",
+            "right"
+          ],
+          "default": "centre",
+          "exposed": true
+        }
+      },
+      "limits": [
+        "La hoja se aporta hecha: esta plantilla no dibuja las poses, solo las reproduce. En HocusPocus se hace en Personajes › Animaciones (o con characters.animations y characters.animation.sheet).",
+        "Con once la hoja se reproduce una vez y se queda en su última pose; con loop o pingpong sigue sin parar. La hoja empieza con el plano: la reacción ocurre en los primeros segundos.",
+        "framing bust apoya el busto en el borde inferior del cuadro; full pone una figura entera en el suelo con una sombra de contacto.",
+        "Con pocas poses la reacción cambia a pocos fotogramas por segundo: es animación limitada, no fluida.",
+        "Usa únicamente assets proporcionados.",
+        "Sin vídeo generado por IA.",
+        "Sin diálogo incluido.",
+        "El BPM no implica música ni audio real en previews.",
+        "Sin sonido: añádelo con scenes.effects.apply o en la edición."
+      ],
+      "example": "Usa la plantilla candidata \"character-reaction\" para crear un plano cinematográfico editable, respetando sus slots, límites y assets proporcionados.",
+      "defaultDuration": 4,
+      "group": "walk",
+      "twins": []
     }
   ]
 }

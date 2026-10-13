@@ -99,6 +99,12 @@ character's ink.
 5. **Nothing else changes.** `from_script` and `produce` show each pose its own mouths; after a re-rig, `produce`
    renders again the shots that use that kit.
 
+## Small animations of a character
+
+`characters.animations` lists walk, gestures, anime expressions as poses, builds each prompt: `generation.image`
+with the character as `image_refs`, `studio.key`, `characters.animation.sheet`; `characters.save` stores `animations.<id>`
+pending: a person approves. Cards `walk-cycle-sheet`, `character-reaction` play it.
+
 ## The script
 
 ```json

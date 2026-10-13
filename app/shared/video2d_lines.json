@@ -440,6 +440,41 @@
       "lineEs": "Travelling: la figura cruza el plano de un lado a otro y la cámara la acompaña con paralaje, entre hojas; con atmosphere streaks pasan rayas de velocidad.",
       "lineEn": "Tracking shot: the figure crosses the shot from side to side and the camera follows with parallax, through leaves; with atmosphere streaks speed lines rush past."
     },
+    "walk-follow-back": {
+      "titleEs": "Seguimiento por la espalda", "titleEn": "Follow from behind",
+      "lineEs": "Camina de espaldas hacia dentro de la sala, de cintura para arriba: la figura conserva su tamaño, rebota en cada paso y la sala viene hacia ella con paralaje. Las piernas no se ven.",
+      "lineEn": "Walks away from us into the room, waist up: the figure keeps its size and bobs on every step while the room comes toward it with parallax. The legs are never seen."
+    },
+    "walk-toward-camera": {
+      "titleEs": "Camina hacia cámara", "titleEn": "Walk toward camera",
+      "lineEs": "Travelling inverso: camina de frente hacia nosotros, de cintura para arriba, mientras la cámara retrocede y la sala se aleja detrás. Rebote y balanceo en cada paso; las piernas quedan fuera del cuadro.",
+      "lineEn": "Reverse tracking: walks toward us waist up while the camera backs away and the room recedes behind. A bob and a sway on every step; the legs stay out of the frame."
+    },
+    "walk-behind-foreground": {
+      "titleEs": "Entrada tras el primer plano", "titleEn": "Entrance behind the foreground",
+      "lineEs": "Una figura entera de perfil entra caminando por un lado y cruza por detrás de un mostrador o muro que le tapa las piernas; se ve el cuerpo con el rebote de cada paso y se detiene en su marca.",
+      "lineEn": "A whole figure in profile walks in from one side and crosses behind a counter or low wall that hides its legs; the body bobs on every step and stops on its mark."
+    },
+    "walk-shadow-first": {
+      "titleEs": "Sombra primero", "titleEn": "Shadow first",
+      "lineEs": "Corte en la acción: una sombra enorme cruza la pared antes de que aparezca nadie y, al desvanecerse, la figura ya está de pie en su marca con un pequeño pisotón. No se ve caminar.",
+      "lineEn": "Cut on action: a huge shadow crosses the wall before anyone shows and, as it fades, the figure is already standing on its mark with a small stomp. No walking is shown."
+    },
+    "walk-two-pose": {
+      "titleEs": "Paso de dos poses con sombra", "titleEn": "Two-pose walk with shadow",
+      "lineEs": "Plano general: una figura de perfil cruza andando alternando dos dibujos, piernas abiertas en cada pisada y juntas a mitad de paso, con una sombra de contacto que late. Se detiene con las piernas juntas.",
+      "lineEn": "Wide shot: a figure in profile walks across swapping two drawings, legs apart on every footfall and together mid-step, with a contact shadow that beats. It stops with its legs together."
+    },
+    "walk-cycle-sheet": {
+      "titleEs": "Ciclo de paso en hoja de sprites", "titleEn": "Walk cycle sprite sheet",
+      "lineEs": "Plano general: una figura de perfil cruza andando mientras se reproduce una hoja de sprites con su ciclo de paso (contacto, paso, contacto, paso). Las piernas se mueven de verdad y el ritmo de la hoja evita que las botas resbalen.",
+      "lineEn": "Wide shot: a figure in profile walks across while a sprite sheet of its gait plays (contact, passing, contact, passing). The legs really move and the sheet is paced so the boots do not slide."
+    },
+    "character-reaction": {
+      "titleEs": "Reacción de personaje", "titleEn": "Character reaction",
+      "lineEs": "Una figura se queda en su marca y reacciona: salta a escena, reproduce una hoja de poses de un gesto (saludar, asentir, señalar) o de una expresión de anime (enfado, sorpresa, tristeza…) y se queda respirando.",
+      "lineEn": "A figure stays on its mark and reacts: it pops in, plays a sheet of poses of a gesture (wave, nod, point) or an anime expression (angry, surprised, sad…) and keeps breathing."
+    },
     "music-pulse": {
       "titleEs": "Pulso musical", "titleEn": "Music pulse",
       "lineEs": "Un cantante o bailarín rebota al ritmo en el escenario mientras la cámara empuja, con luciérnagas. El control camera la cambia: barrido lateral (sweep), apertura de final (open) o latido de estribillo al compás (beat); atmosphere confetti echa confeti.",

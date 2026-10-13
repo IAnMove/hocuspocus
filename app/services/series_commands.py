@@ -71,6 +71,30 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Save the kit with provenance [{\"method\": \"character-style-create\", \"style\": \"<style id>\"}] and "
         "characters.rig.flat uses that style's rig with no style given (or pass the rig as its style).",
     ),
+    "characters.animations": (
+        {"animation": {"type": "string", "maxLength": 64}, "pose": {"type": "string", "maxLength": 120},
+         "description": {"type": "string", "maxLength": 2000}, "style": {"type": "string", "maxLength": 80}},
+        [], False,
+        "List the small animations one character can have (walk, run, wave, nod, point and the usual anime expressions: "
+        "angry, surprised, sad, happy, embarrassed, scared, smug, confused, determined, tired, love), each as a few poses "
+        "to make with the character's own keyed picture as image_refs, and the sheet contract (equal cells, boots on the "
+        "line `feet` of a cell, the figure `figure` of its height). With animation and pose (and the character's look as "
+        "description, style optional), also returns the prompt, negative prompt, screen colour and resolution for that one "
+        "pose: generation.image it with the character as the reference, key it with studio.key in that screen and, once every "
+        "pose is made, join them with characters.animation.sheet. Store the result on the kit with characters.save as "
+        "animations.<id> = {sheet, frames, fps, loop, facing, reviewState: pending}. The Video 2D cards walk-cycle-sheet and "
+        "character-reaction play the sheet.",
+    ),
+    "characters.animation.sheet": (
+        {"workspace": WORKSPACE, "sources": {"type": "array", "items": {"type": "string", "maxLength": 1200}, "minItems": 1, "maxItems": 12},
+         "name": {"type": "string", "maxLength": 80}, "columns": {"type": "integer", "minimum": 1, "maximum": 12}},
+        ["workspace", "sources"], True,
+        "Join 1 to 12 keyed pose pictures (workspace files with alpha, from studio.key) into one sprite sheet PNG of equal "
+        "cells, in the order given: each pose is cropped to its outline, all share one scale (the tallest fills 86 % of a cell, "
+        "so a crouch stays lower than a stand), the boots stand on one line (96 % of the cell) and the upper body is centred, "
+        "so legs that swing do not move the torso. Returns source (a workspace URL), width, height, count, columns, rows and "
+        "the cell: bind it to the Video 2D card walk-cycle-sheet (controls frames = count, columns) or character-reaction.",
+    ),
     "characters.rig.flat": (
         {"workspace": WORKSPACE, "character_id": ID, "base_revision": REVISION,
          "style": {"type": "object", "properties": {
@@ -625,6 +649,19 @@ def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_ext
     return result
 
 
+def _character_animations(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    result = request("GET", "/api/v1/character-kits/animations/catalog")
+    if data.get("animation") and data.get("pose"):
+        body = {key: data[key] for key in ("animation", "pose", "description", "style") if key in data}
+        result = {**result, "prompt": request("POST", "/api/v1/character-kits/animations/prompt", body=body)}
+    return result
+
+
+def _animation_sheet(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {key: data[key] for key in ("workspace", "sources", "name", "columns") if key in data}
+    return request("POST", "/api/v1/character-kits/animations/sheet", body=body)
+
+
 def _rig_flat_character(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body: dict[str, Any] = {"workspace": data["workspace"], "baseRevision": data["base_revision"]}
     for key in ("style", "poses", "hints"):
@@ -941,6 +978,8 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.get": _get_character,
     "characters.save": _save_character,
     "characters.styles": _character_styles,
+    "characters.animations": _character_animations,
+    "characters.animation.sheet": _animation_sheet,
     "characters.rig.flat": _rig_flat_character,
     "characters.rig.flat.preview": _preview_flat_rig,
     "characters.rig.check": _check_flat_rig,

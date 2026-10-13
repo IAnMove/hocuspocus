@@ -748,5 +748,48 @@
     "noIdentity": "The kit has no identity reference to build the base pose.",
     "visemePacks": "I could not load the viseme packs.",
     "presetMissing": "Animation preset “{{name}}” does not exist."
+  },
+  "animations": {
+    "title": "Character animations",
+    "loading": "Loading animations…",
+    "intro": "Small animations of a saved character: walking, gestures and the most common anime expressions. Each one is a few poses of the same character, made with Qwen from its own picture, keyed and joined into a sprite sheet that the Video 2D cards play. Review each animation before approving it.",
+    "noKits": "Create and save a character first: animations are made from its picture.",
+    "kit": "Character",
+    "state": {
+      "none": "Not made",
+      "pending": "To review",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "make": "Make",
+    "makeAgain": "Make all again",
+    "tryAgain": "Try again",
+    "working": "Making…",
+    "cancel": "Cancel",
+    "approve": "Approve",
+    "reject": "Reject",
+    "delete": "Delete",
+    "remake": "Redo",
+    "remakePose": "Redo the {{pose}} pose",
+    "posesCount_one": "{{count}} pose",
+    "posesCount_other": "{{count}} poses",
+    "stage": {
+      "poses": "Making the poses, one after another…",
+      "sheet": "Joining the poses into the sheet…"
+    },
+    "pose": {
+      "waiting": "waiting",
+      "reused": "kept",
+      "generating": "generating",
+      "keying": "keying",
+      "ready": "ready",
+      "failed": "failed"
+    },
+    "plays": "Plays with the {{template}} card ({{controls}}).",
+    "saved": "Animation saved on the character. Review it and approve it.",
+    "play": "Play",
+    "pause": "Pause",
+    "nextFrame": "Next",
+    "frameOf": "Pose {{frame}} of {{count}}"
   }
 }

@@ -53,7 +53,7 @@ test('migrates valid legacy keep/discard/pending choices and keeps new IDs pendi
   assert.equal(loaded.state.choices[newTemplate.id].notes, '')
   assert.equal(loaded.state.choices.unknown, undefined)
   assert.match(loaded.warning, /17.*previous/)
-  assert.match(loaded.warning, /24.*new.*pending/)
+  assert.match(loaded.warning, /31.*new.*pending/)
 })
 
 test('does not preserve malformed legacy rows, even when another legacy row is valid', () => {
