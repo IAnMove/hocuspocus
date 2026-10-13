@@ -8,6 +8,29 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
 
+**The code-health check now recognizes moved code and no longer misses new
+folders.** It checks every pull request against its base, and the coming
+refactor moves functions out of `_launch_runtime.py` and `useStore.ts`. Before,
+moving a complex function word for word into a new file failed as a "new
+complexity hotspot", and nothing could waive that. Now the check records a
+fingerprint of each complex function. A Python function that moves with the
+same name and the same code is reported as `moved: X from A to B` and passes.
+Comments, docstrings and the route decorator may differ. A UI function passes
+when it keeps its name and its complexity does not rise. A changed body, a
+rise in complexity or a copy left behind still counts as new code. The limit of
+five new complex functions per pull request no longer counts pieces split out
+of an existing function, as long as that function gets simpler by at least as
+much and the pull request adds no logic overall. The development → main
+release check gives the same split credit at each merge. A new file over 1,200
+lines still fails, moved or not. The check also fails when Python code is added
+under `app/` in a folder it does not measure (for example a new
+`app/features/`). Vendored engine folders and the eleven files that are already
+outside the measured folders are exempt, but those eleven files can no longer
+grow by more than 75 lines (in a pull request, or over a development → main
+release) or gain a complex function, and new vendored files are listed for
+reviewers. A waiver now covers only its own rule and exactly its file, and its
+expiry must be a real date. No limit changed.
+
 **Music videos show their defaults, and the agent can change them.** Auto-planned
 music videos no longer turn the brief's call to action into every chorus's sung
 action, or its theme into every verse's: the theme is now only where the shots take
