@@ -3,16 +3,17 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import TYPE_CHECKING
 
-from fastapi import HTTPException
-
-from services.kernel.workspaces import WorkspaceService
 from services.media_paths import (
     MediaPathNotAllowed,
     resolve_permitted_media_path,
     resolve_story_cover_audio,
 )
 from services.upload_stream import stream_upload_file, transcode_upload
+
+if TYPE_CHECKING:
+    from services.kernel.workspaces import WorkspaceService
 
 
 def safe_join(base: str, *parts: str) -> str | None:
@@ -44,7 +45,7 @@ class PathPolicy:
     semaphores is cancellable and never holds a global application lock.
     """
 
-    def __init__(self, workspaces: WorkspaceService | None = None) -> None:
+    def __init__(self, workspaces: "WorkspaceService | None" = None) -> None:
         # Only the two request-media resolvers look a workspace up.
         self._workspaces = workspaces
         self.ingest_slots = asyncio.Semaphore(4)
@@ -87,6 +88,8 @@ class PathPolicy:
         kinds: tuple[str, ...] = ("audio", "video"),
     ) -> str:
         """Resolve request media without exposing host paths in API errors."""
+        from fastapi import HTTPException
+
         try:
             return resolve_permitted_media_path(
                 value,

@@ -24,6 +24,10 @@ from services.kernel import jobs as kernel_jobs
 from services.kernel.config import ConfigStore
 from services.kernel.jobs import GenerationQueue
 
+# generate() imports this lazily, after the fakes below replace parts of services.*; load it first so
+# the file passes on its own, not only after another test has imported it.
+import services.generation_output_name  # noqa: E402,F401
+
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"

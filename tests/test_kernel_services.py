@@ -549,9 +549,7 @@ def test_new_job_refuses_an_invalid_workspace_before_anything_is_reserved(queue_
     with pytest.raises(HTTPException) as caught:
         queue_parts.queue.new_job(_params(), "../x", job_id="bad", reserve_generation=True)
     assert caught.value.status_code == 400
-    assert job_lifecycle._generation_queues == {} or all(
-        not entries for entries in job_lifecycle._generation_queues.values()
-    )
+    assert not job_lifecycle._generation_queues.get(id(queue_parts.queue.gen_lock))
 
 
 def test_new_job_follows_the_execution_mode_policy(queue_parts, monkeypatch) -> None:
@@ -999,6 +997,20 @@ def test_importing_the_kernel_starts_nothing_and_does_not_touch_wgp(tmp_path) ->
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip() == "0 False False []"
+
+
+def test_the_path_rules_stay_light_for_the_services_that_import_them(tmp_path) -> None:
+    """win_safe_files and core_workspace import services.kernel.paths: that must not pull in FastAPI."""
+    app = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app")
+    probe = (
+        "import sys\n"
+        f"sys.path.insert(0, {app!r})\n"
+        "import services.kernel.paths, services.win_safe_files\n"
+        "print('fastapi' in sys.modules, 'torch' in sys.modules, 'services.kernel.workspaces' in sys.modules)\n"
+    )
+    done = subprocess.run([sys.executable, "-I", "-c", probe], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "False False False"
 
 
 # --- the Director pipeline gets its hardware probe from the server ---------------------------
