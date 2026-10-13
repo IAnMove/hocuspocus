@@ -92,7 +92,9 @@ profile's size), and H3 now keeps a 540p or 768p choice instead of rendering it 
 720p. Shots and takes made before this change keep their digests, so nothing already
 made is generated again. A series on H3 (not H3 Legacy) saved at 540p or 768p now
 renders its new takes at that size; its earlier takes stay 1280x704, and the cut
-scales every clip to the episode frame. Choose 720p to keep the old size.
+scales every clip to the episode frame. Choose 720p to keep the old size. Switching
+the series to portrait is a new clip request, so produce does not keep the landscape
+take.
 
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice

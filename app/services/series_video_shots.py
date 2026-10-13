@@ -20,9 +20,10 @@ the next attempt takes the next number, up to ``maxTakes`` per run.
 
 The clip is an H3 preset in the series frame (``480x864`` for a portrait 480p series):
 the shot's own ``resolution``, else the series' ``videoShotResolution``, else 480p.
-Both take 480p, 540p, 720p or 768p. Only a size other than 480p enters the request
-digest a take keeps (``videoRequest``), so the takes made while every clip was 480p
-still match their shot and are not made again.
+Both take 480p, 540p, 720p or 768p. Only a size other than 480p, and portrait only
+when the series is vertical, enter the request digest a take keeps (``videoRequest``),
+so the takes made while every clip was landscape 480p still match their shot and are
+not made again. Changing the series to portrait is a new request.
 """
 from __future__ import annotations
 
@@ -157,10 +158,12 @@ def video_resolution(series: dict[str, Any], shot: dict[str, Any] | None = None)
     return H3_RESOLUTIONS[("portrait" if height > width else "landscape", video_preset(series, shot))]
 
 
-def digest_request(request: dict[str, Any], preset: str) -> dict[str, Any]:
-    """The request a take's ``videoRequest`` digests: the size only when it is not 480p, so a 480p take keeps the
-    digest it had before sizes could be chosen."""
-    return request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
+def digest_request(request: dict[str, Any], preset: str, series: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The request a take's ``videoRequest`` digests: the size only when it is not 480p, and portrait only when the
+    series is vertical, so a landscape 480p take keeps the digest it had before sizes could be chosen."""
+    body = request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
+    width, height = frame_size(series or {})
+    return {**body, "orientation": "portrait"} if height > width else body
 
 
 def cancel_generation(deps: Any, job_id: str) -> None:
@@ -413,7 +416,7 @@ def _next_take(number: int, failed: list[int]) -> int:
 
 def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
     try:
-        digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
+        digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot), series))
     except ValueError:
         return False
     assets = series.get("assets") or {}
@@ -456,7 +459,7 @@ def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[s
         distance = _drift(start_path, take_path, request["frames"])
         if best is None or _closer(distance, best.get("distance")):
             best = {"distance": distance, "file": take_path, "intent": intent, "number": number,
-                    "request": digest_request(request, video_preset(series, shot))}
+                    "request": digest_request(request, video_preset(series, shot), series)}
         if distance is not None and distance <= STYLE_DRIFT_THRESHOLD:
             break
     if best is None:

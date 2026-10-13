@@ -48,7 +48,7 @@ def _stored_video_shot():
 
 
 def _video_digest(series, shot):
-    return _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
+    return _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot), series))
 
 
 def test_a_stored_shot_keeps_every_digest_it_had():
@@ -70,6 +70,43 @@ def test_a_stored_shot_keeps_every_digest_it_had():
     # A shot's own size is not what it shows: review decisions and native render inputs never count it.
     assert "resolution" in SHOT_EDITOR_FIELDS and "resolution" not in SHOT_CONTENT_FIELDS
     assert content_digest({**shot, "resolution": "720p"}) == OLD_CONTENT
+
+
+def test_portrait_is_a_new_request_and_landscape_480p_keeps_the_old_digest():
+    shot = _stored_video_shot()
+    landscape = {}
+    portrait = {"provider": {"videoSettings": {"orientation": "portrait"}}}
+    assert _video_digest(landscape, shot) == OLD_VIDEO_REQUEST
+    assert _video_digest(portrait, shot) != OLD_VIDEO_REQUEST
+    sized = {**shot, "resolution": "720p"}
+    assert _video_digest(landscape, sized) != _video_digest(portrait, sized)
+    assert video_resolution(portrait, shot) == "480x864"
+    library, _episode_body = _episode(_request())
+    series, stored = _made_before(library)
+    series["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    assert not _take_matches(series, stored)
+
+
+def test_changing_orientation_makes_the_clip_again(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, _episode_body = _episode(_request())
+    series = library["seriesById"]["uv"]
+    series["videoShotResolution"] = "720p"
+    series["provider"] = {"videoSettings": {"orientation": "landscape"}}
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert _video_calls(tools, "generation.video")[0]["input"]["params"]["resolution"] == "1280x704"
+    landscape_digest = tools.imports[0]["metadata"]["videoRequest"]
+    series["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    shot = series["episodesById"]["ep1"]["shots"][0]
+    assert not _take_matches(series, shot)
+    tools.calls.clear()
+    tools.imports.clear()
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video")[0]["input"]["params"]["resolution"] == "704x1280"
+    assert tools.imports[0]["metadata"]["videoRequest"] == _video_digest(series, shot) != landscape_digest
 
 
 def test_a_480p_choice_is_the_old_digest_and_any_other_size_is_a_new_request():
