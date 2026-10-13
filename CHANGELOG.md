@@ -8,6 +8,29 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
 
+**Music videos show their defaults, and the agent can change them.** Auto-planned
+music videos no longer turn the brief's call to action into every chorus's sung
+action, or its theme into every verse's: the theme is now only where the shots take
+place (`section_actions.scene`) and the call to action stays on the end cards. Content
+shots no longer share one "Wide cinematic shot… slow camera" text: they rotate four
+framings, each with its own camera move in words (H3 makes the move), and a trailer
+beat opens on a framing of its own scale. `dry_run` shows what the planner filled in
+(`auto_plan`), which windows are sung, and each trailer beat's action.
+`spec.video` picks the H3 model and steps (Fused Turbo at 4 steps stays the
+default; base, full and legacy H3 can be chosen; steps must be in the model's range,
+4-8 for Fused Turbo); `dry_run` and `production.status` show it as `video_model`, and
+a change shoots the kept clips of unlocked shots again instead of mixing models, while
+going back to the earlier model keeps the clips it shot. Painted sets keep the
+empty-floor recipe by default and can ask for a `backdrop` or no staging
+(`sets.<name>.staging`); `dry_run` shows each set's prompt and the look sentences it
+leaves out, and a look that names its medium or material ("figurine look",
+"doll-like", "cast iron") keeps it. Productions that already ran resume unchanged:
+the same spec, seeds and jobs, and no set or clip is made again. A new set, or a model
+drawn from a prompt, whose look names a figurine or doll medium now keeps that
+sentence, and a sentence about a crowd is now left out. A scene2d shot that draws its
+own background from such a look draws it again on its next run (lock the shot to
+keep it).
+
 **Music never uses paid MiniMax by default.** Every music default is now the local,
 free ACE-Step 1.5 XL model, the one Studio and `production.*` already use. The paid
 MiniMax API models (`music-3.0`, `music-2.6` and covers) run only when you pick one

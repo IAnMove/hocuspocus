@@ -22,6 +22,9 @@ BEAT_SHARE = {"presentation": 0.14, "tension": 0.28, "escalation": 0.30, "reveal
 MIN_H3_S = 4.0            # a generated shot shorter than this wastes most of the 5 s a clip costs
 _CUT_RATIO = 0.88         # each escalation cut is this much shorter than the one before
 _CAMERAS = ("camera-whip-pan", "camera-push-in", "camera-pan-right", "camera-crane-up", "camera-pull-out", "camera-pan-left")
+# The content framing (production_shot_plan._CONTENT_FRAMES) each beat's generated shot opens on: a wide picture for
+# the presentation and the reveal, closer ones in turn for the tension, over the shoulder for the aftermath.
+_BEAT_FRAMINGS = {"presentation": (0,), "tension": (1, 3, 2), "reveal": (0,), "close": (3,)}
 _ACTIONS = {
     "presentation": "Slow establishing shot of the world, calm and inviting: {phrase}. Slow push in.",
     "tension": "Quiet and tense, something is about to happen: {phrase}. Slow, controlled camera.",
@@ -122,6 +125,8 @@ def _beat_shots(entry: dict, look: dict, title: str, spec: dict, event: str | No
                                 "t1": round(cursor + span, 3), "sing": False}
         plan._paint(shot, look)
         if shot["kind"] == "h3":
+            framings = _BEAT_FRAMINGS[beat]
+            shot["frame"] = plan.content_frame(look, framings[index % len(framings)])      # the beat's own scale
             shot["action"] = _ACTIONS[beat].format(phrase=phrase) + plan._alone(look["cast"])
             big.append(key)
         if beat == "presentation":
