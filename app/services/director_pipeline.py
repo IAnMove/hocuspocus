@@ -82,6 +82,7 @@ from services.director_model_compat import (
     DIRECTOR_PIPELINE_TYPES,
     assess_director_model,
 )
+from services.director.policies import no_visible_text_lock_applies
 from services.director_pipeline_state import (
     _DIRECTOR_TEMP_DIRNAME,
     _PIPELINE_FILE_PREFIX,
@@ -762,10 +763,27 @@ def _normalize_style_phrase(raw: str) -> str:
     return s
 
 
-def _style_prefix_for(style: str) -> str:
-    """The exact lead sentence validated to hold Klein to a medium."""
+def _is_flux2_klein(image_model: str) -> bool:
+    """Flux.2 Klein family: 4B, 9B, their base models and finetunes built on them."""
+    model = str(image_model or "").strip()
+    getter = getattr(_wgp, "get_base_model_type", None)
+    try:
+        architecture = str(getter(model) or "") if model and callable(getter) else ""
+    except Exception:
+        architecture = ""
+    return (architecture or model).startswith("flux2_klein")
+
+
+def _style_prefix_for(style: str, image_model: str) -> str:
+    """The exact lead sentence validated to hold Klein to a medium.
+
+    Only for the Flux.2 Klein family, the only one it was tested with
+    (3d4d74b3). With every other image model the prompt stays as planned.
+    """
     style = (style or "").strip()
-    return f"Maintain the same {style} art style. " if style else ""
+    if not style or not _is_flux2_klein(image_model):
+        return ""
+    return f"Maintain the same {style} art style. "
 
 
 # Motion-photography effects have no place in a START-FRAME prompt — the
@@ -2766,7 +2784,8 @@ def _saved_prompt_contract(state: dict, prompt: str, mode: str, typed: bool = Fa
     """Reapply durable Story prompt policies to manual reruns and edits.
 
     ``typed`` is a prompt the user wrote for this rerun: the no-text lock no
-    longer deletes the lettering the user asked for in it.
+    longer deletes the lettering the user asked for in it. The saved prompts
+    the LLM wrote get that lock only in sung projects (music videos).
     """
     if _raw_prompts():
         return str(prompt or "").strip()
@@ -2802,7 +2821,7 @@ def _saved_prompt_contract(state: dict, prompt: str, mode: str, typed: bool = Fa
             mode=mode,
             preserve=True,
         )
-    if params.get("allow_clip_text") is not True and not typed:
+    if not typed and no_visible_text_lock_applies(params):
         result = apply_no_visible_text_lock(result, mode=mode)
     return result
 
@@ -2831,19 +2850,23 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     if not prompt:
         raise ValueError("No image prompt for this clip")
 
-    # Reference art-style lock: reruns re-apply the detected style prefix
-    # (the pipeline prepends it at generation time, so the saved
-    # image_prompt does not carry it). Motion-effect strip mirrors
+    # Get image gen params from the saved pipeline state
+    image_model = state.get("image_model") or "flux2_klein_9b"
+
+    # Reference art-style lock (Flux.2 Klein only): reruns re-apply the
+    # detected style prefix (the pipeline prepends it at generation time, so
+    # the saved image_prompt does not carry it). Motion-effect strip mirrors
     # _gen_image for the same reason.
     raw = _raw_prompts()
     if not raw:
         prompt = _strip_motion_effects(prompt)
-    _style_prefix = "" if raw else _style_prefix_for((state.get("_params_snapshot") or {}).get("_reference_style") or "")
+    _style_prefix = "" if raw else _style_prefix_for(
+        (state.get("_params_snapshot") or {}).get("_reference_style") or "",
+        image_model,
+    )
     if _style_prefix and not prompt.lower().startswith("maintain the same"):
         prompt = _style_prefix + prompt
 
-    # Get image gen params from the saved pipeline state
-    image_model = state.get("image_model") or "flux2_klein_9b"
     image_loras = state.get("image_loras") or {}
     image_params = state.get("image_params") or {}
     validation_params = _director_params_from_saved_state(state)
@@ -4000,6 +4023,9 @@ def rerun_h3_segment(
     snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
     direct_params = {**state, **snapshot}
     direct_video, direct_video_master_prompt = _direct_video_settings(direct_params)
+    # A prompt the user typed keeps its lettering; a saved one the LLM wrote
+    # gets the no-text lock only in a sung project.
+    allow_segment_text = bool(prompt_override) or not no_visible_text_lock_applies(direct_params)
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs, video_refs, audio_refs = (
         ([], [], []) if direct_video else _h3_edit_references(state, clip_index)
@@ -4016,7 +4042,7 @@ def rerun_h3_segment(
                 str(video_params.get("h3_audio_prompt") or ""),
                 mode,
                 direct_video_master_prompt,
-                direct_params.get("allow_clip_text") is True,
+                allow_segment_text,
             )
         clip["video_prompt"] = prompt_override
     elif prompt_override:
@@ -4082,7 +4108,7 @@ def rerun_h3_segment(
                     str(record.get("prompt") or ""),
                     plan=segment_plan,
                     audio_direction=str(video_params.get("h3_audio_prompt") or ""),
-                    allow_clip_text=direct_params.get("allow_clip_text") is True,
+                    allow_clip_text=allow_segment_text,
                 )
             else:
                 prompt = format_minimax_h3_prompt(
@@ -7805,7 +7831,9 @@ def _run_pipeline(pid: str, resume: bool = False):
         # Prompt polish is allowed to improve model dialect, never to erase the
         # Story's authored medium.  This deterministic final pass also covers
         # remote writing providers, for which third-pass polish is skipped.
+        # The no-visible-text lock is for sung projects only.
         from services.director.policies import enforce_visual_style_on_clip_plans
+        clip_text_allowed = not no_visible_text_lock_applies(params)
         clip_plans = clip_plans if _raw_prompts() else enforce_visual_style_on_clip_plans(
             clip_plans,
             "" if direct_video else params.get("visual_style", ""),
@@ -7817,9 +7845,7 @@ def _run_pipeline(pid: str, resume: bool = False):
             character_visual_style=(
                 "" if direct_video else params.get("character_visual_style", "")
             ),
-            allow_clip_text=(
-                True if direct_video else params.get("allow_clip_text") is True
-            ),
+            allow_clip_text=True if direct_video else clip_text_allowed,
         )
         if direct_video:
             from services.director.policies import enforce_direct_video_on_clip_plans
@@ -7829,7 +7855,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                 audio_direction=str(
                     (params.get("video_params") or {}).get("h3_audio_prompt") or ""
                 ),
-                allow_clip_text=params.get("allow_clip_text") is True,
+                allow_clip_text=clip_text_allowed,
             )
         else:
             # Bounded shots have no semantic memory of the preceding
@@ -7888,9 +7914,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                 character_visual_style=(
                     "" if direct_video else params.get("character_visual_style", "")
                 ),
-                allow_clip_text=(
-                    True if direct_video else params.get("allow_clip_text") is True
-                ),
+                allow_clip_text=True if direct_video else clip_text_allowed,
             )
             if direct_video:
                 from services.director.policies import enforce_direct_video_on_clip_plans
@@ -7900,7 +7924,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                     audio_direction=str(
                         (params.get("video_params") or {}).get("h3_audio_prompt") or ""
                     ),
-                    allow_clip_text=params.get("allow_clip_text") is True,
+                    allow_clip_text=clip_text_allowed,
                 )
             _update_pipeline(pid, clip_plans=clip_plans)
 
@@ -7939,7 +7963,7 @@ def _run_pipeline(pid: str, resume: bool = False):
                     preserve=bool(params.get("preserve_visual_style", False)),
                     has_reference=_has_visual_references(params),
                     character_visual_style=params.get("character_visual_style", ""),
-                    allow_clip_text=params.get("allow_clip_text") is True,
+                    allow_clip_text=clip_text_allowed,
                 )
                 _update_pipeline(
                     pid,
@@ -8042,12 +8066,14 @@ def _run_pipeline(pid: str, resume: bool = False):
         # One vision call naming the medium concretely; the phrase gets
         # prepended to every image prompt in _run_image_generation (see
         # the module-level "Reference art-style lock" note). Skipped when
-        # already detected (resume) or the reference is photographic.
+        # already detected (resume), when the image model is not Flux.2
+        # Klein (no prefix) or the reference is photographic.
         from services import llm_service
         _style_ref = params.get("reference_image_path") or ""
         if (
             requires_shot_images
             and "_reference_style" not in params
+            and _is_flux2_klein(params.get("image_model") or "flux2_klein_9b")
             and _style_ref
             and os.path.isfile(_style_ref)
         ):
@@ -9574,7 +9600,7 @@ def _run_planning_legacy(pid: str, params: dict, pipeline_type: str):
         preserve=bool(params.get("preserve_visual_style", False)),
         has_reference=_has_visual_references(params),
         character_visual_style=params.get("character_visual_style", ""),
-        allow_clip_text=params.get("allow_clip_text") is True,
+        allow_clip_text=not no_visible_text_lock_applies(params),
     )
     return clip_plans, planned_clips
 
@@ -10264,11 +10290,15 @@ def _run_image_generation(
     image_count = 0
 
     # Reference art-style lock: the exact lead sentence validated to hold
-    # Klein to a stylized medium. Applied to EVERY image prompt (start
-    # images, keyframes, anchor) at generation time — after polish, and
-    # regardless of whether the planner remembered to name the medium.
+    # Klein to a stylized medium. With a Flux.2 Klein model it is applied to
+    # EVERY image prompt (start images, keyframes, anchor) at generation
+    # time — after polish, and regardless of whether the planner remembered
+    # to name the medium. Other image models get the prompt as planned.
     raw_prompts = _raw_prompts()
-    _style_prefix = "" if raw_prompts else _style_prefix_for(params.get("_reference_style") or "")
+    _style_prefix = "" if raw_prompts else _style_prefix_for(
+        params.get("_reference_style") or "",
+        image_model,
+    )
 
     def _gen_image(
         prompt: str,
@@ -12820,7 +12850,7 @@ def _run_minimax_h3_story_video(
                     str(video_params.get("h3_audio_prompt") or ""),
                     segment_reference_mode,
                     direct_video_master_prompt,
-                    params.get("allow_clip_text") is True,
+                    not no_visible_text_lock_applies(params),
                 ),
                 segment_reference_mode,
             ))

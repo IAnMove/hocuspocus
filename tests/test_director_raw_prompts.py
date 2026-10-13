@@ -6,7 +6,12 @@ from unittest.mock import patch
 
 from app.services import director_pipeline
 
-STATE = {"_params_snapshot": {"preserve_visual_style": True, "visual_style": "European comic art, ink lines"}}
+# A music video: the no-visible-text lock is for sung projects only
+# (tests/test_director_narrow_locks.py covers stories).
+STATE = {
+    "pipeline_type": "music_video",
+    "_params_snapshot": {"preserve_visual_style": True, "visual_style": "European comic art, ink lines"},
+}
 PROMPT = "A shop window with a sign reading 'OPEN'."
 
 
@@ -14,7 +19,7 @@ def _services(**services):
     return patch.object(director_pipeline, "_wgp", SimpleNamespace(server_config={"services": services}))
 
 
-def test_rerun_prompts_get_the_locks_by_default():
+def test_music_video_rerun_prompts_get_the_locks_by_default():
     with _services():
         sent = director_pipeline._saved_prompt_contract(STATE, PROMPT, "image")
     assert sent.startswith("NO VISIBLE TEXT LOCK") and "VISUAL STYLE LOCK:" in sent

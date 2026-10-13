@@ -10634,7 +10634,15 @@ async def _director_v2_plan_body(body: dict):
                 ),
             )
 
-        from services.director.policies import enforce_visual_style_on_clip_plans
+        from services.director.policies import (
+            enforce_visual_style_on_clip_plans,
+            no_visible_text_lock_applies,
+        )
+        # The no-visible-text lock is for sung projects (music videos) only.
+        clip_text_allowed = not no_visible_text_lock_applies({
+            "pipeline_type": skill_type,
+            "allow_clip_text": body.get("allow_clip_text"),
+        })
         clip_plans = enforce_visual_style_on_clip_plans(
             clip_plans,
             "" if direct_video else body.get("visual_style", ""),
@@ -10646,9 +10654,7 @@ async def _director_v2_plan_body(body: dict):
             character_visual_style=(
                 "" if direct_video else body.get("character_visual_style", "")
             ),
-            allow_clip_text=(
-                True if direct_video else body.get("allow_clip_text") is True
-            ),
+            allow_clip_text=True if direct_video else clip_text_allowed,
         )
         if direct_video:
             from services.director.policies import enforce_direct_video_on_clip_plans
@@ -10656,7 +10662,7 @@ async def _director_v2_plan_body(body: dict):
                 clip_plans,
                 normalized_treatment.get("direct_video_master_prompt"),
                 audio_direction=body.get("h3_audio_prompt", ""),
-                allow_clip_text=body.get("allow_clip_text") is True,
+                allow_clip_text=clip_text_allowed,
             )
         elif _is_minimax_h3_model(video_model):
             from services.director.minimax_h3_prompting import (
@@ -10677,7 +10683,7 @@ async def _director_v2_plan_body(body: dict):
                 preserve=bool(body.get("preserve_visual_style", False)),
                 has_reference=has_reference,
                 character_visual_style=body.get("character_visual_style", ""),
-                allow_clip_text=body.get("allow_clip_text") is True,
+                allow_clip_text=clip_text_allowed,
             )
         llm_service.update_activity_tracking(
             tracking_id,
