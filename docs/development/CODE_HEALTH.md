@@ -260,7 +260,13 @@ tracked `app/**/*.py` file fails as **unmeasured product code**, except:
   `app/setup.py` and the eight `app/scripts/*.py` tools).
 
 New feature code goes under `app/services/` or `app/routers/`. Developer tools
-go in the repository's `scripts/` folder.
+go in the repository's `scripts/` folder. Both lists are copied into the
+report, and a list that grows versus the PR base fails ("needs owner review").
+A baseline file that is deleted and later created again fails as new versus
+the base. A baseline entry whose file no longer exists prints a warning:
+remove it from the list. `tests/test_code_health_moves.py` requires the list
+to match today's tree exactly, so a PR that deletes or moves one of those
+files also removes it from `UNMEASURED_BASELINE`.
 
 The baseline files stay where they are, but they cannot absorb code moved out
 of the measured scope. `app/core_runtime.py`, for example, is a 790-line
@@ -277,20 +283,15 @@ Instead the report lists every tracked `.py` file under those prefixes
 (`unmeasured.vendor_files`), and the PR table warns about each new one:
 "N new Python file(s) under vendored folders are not measured". Reviewers must
 confirm that such a file is engine code and not product code moved out of the
-ratchet. Both lists are copied into the
-report, and a list that grows versus the PR base fails ("needs owner review").
-A baseline file that is deleted and later created again fails as new versus
-the base. A baseline entry whose file no longer exists prints a warning:
-remove it from the list. `tests/test_code_health_moves.py` requires the list
-to match today's tree exactly, so a PR that deletes or moves one of those
-files also removes it from `UNMEASURED_BASELINE`.
+ratchet. Code added to an existing vendored file gets no warning, so reviewers
+read every diff into those folders.
 
 ### Compatibility
 
 - The PR base is measured by the base's own analyzer. A base from before this
-  change has no `fingerprints` or `unmeasured` data. Against it there is no
-  move or split credit, and the scope lists cannot be compared, so the old
-  strict rules apply.
+  change has no `fingerprints`, `summary.decisions` or `unmeasured` data.
+  Against it there is no move or split credit, and the scope lists and
+  baseline files cannot be compared, so the old strict rules apply.
 - The release integration verifier (below) treats any change to
   `scripts/code_health.py` in the release chain as a measurement change and
   fails closed. The first development → main release after an analyzer change
