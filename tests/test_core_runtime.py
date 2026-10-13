@@ -2084,6 +2084,168 @@ class CoreRuntimeTests(unittest.TestCase):
             ("GET", "/api/v1/uploads/{filename}"): "app/routers/uploads.py",
         })
 
+    def test_director_plan_prompts_keep_the_validation_answers(self):
+        missing_clips = self.client.post("/api/v1/director/plan-prompts", json={})
+        self.assertEqual(missing_clips.status_code, 400)
+        self.assertEqual(missing_clips.json()["detail"], "clips is required")
+        missing_style = self.client.post("/api/v1/director/plan-prompts", json={"clips": [{}]})
+        self.assertEqual(missing_style.status_code, 400)
+        self.assertEqual(missing_style.json()["detail"], "style_prompt is required")
+        missing_angle = self.client.post("/api/v1/director/plan-angle-prompts", json={})
+        self.assertEqual(missing_angle.status_code, 400)
+        self.assertEqual(missing_angle.json()["detail"], "style_prompt is required")
+
+    def test_director_pipeline_list_marks_a_stale_run_and_keeps_summary_fields(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            out = Path("outputs")
+            out.mkdir()
+            payload = {
+                "pipeline_id": "pipe-stale",
+                "status": "running",
+                "phase": "video",
+                "comic_id": "issue-1",
+                "clips": [],
+                "output_files": [],
+                "scene_description": "A stale run",
+                "resource_schedule": {"lane": "video"},
+            }
+            (out / "_director_pipeline_pipe-stale.json").write_text(
+                json.dumps(payload), encoding="utf-8",
+            )
+            listed = self.client.get("/api/v1/director/pipelines")
+            self.assertEqual(listed.status_code, 200, listed.text)
+            rows = listed.json()["pipelines"]
+            self.assertEqual(len(rows), 1, listed.text)
+            row = rows[0]
+            self.assertEqual(row["status"], "crashed")
+            self.assertEqual(row["comic_id"], "issue-1")
+            self.assertIn("repair_status", row)
+            self.assertEqual(row["resource_schedule"], {"lane": "video"})
+            self.assertIn("preview_fingerprint", row)
+            saved = json.loads((out / "_director_pipeline_pipe-stale.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["status"], "crashed")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_active_pipelines_lists_the_in_memory_run(self):
+        from services import director_pipeline
+
+        pipeline_id = "pipe-live"
+        with director_pipeline._pipeline_lock:
+            previous_pipeline = director_pipeline._pipelines.get(pipeline_id)
+            director_pipeline._pipelines[pipeline_id] = {
+                "id": pipeline_id,
+                "status": "running",
+                "phase": "video",
+                "workspace": "default",
+                "created_at": 10,
+                "pipeline_type": "comic",
+                "params": {"pipeline_type": "comic"},
+                "clip_plans": [],
+            }
+        folder, previous = self._in_temp_workspace()
+        try:
+            listed = self.client.get("/api/v1/director/pipelines/active")
+            self.assertEqual(listed.status_code, 200, listed.text)
+            rows = listed.json()["pipelines"]
+            self.assertEqual([row["id"] for row in rows], [pipeline_id])
+            self.assertEqual(rows[0]["status"], "running")
+            self.assertNotIn("params", rows[0])
+        finally:
+            with director_pipeline._pipeline_lock:
+                if previous_pipeline is None:
+                    director_pipeline._pipelines.pop(pipeline_id, None)
+                else:
+                    director_pipeline._pipelines[pipeline_id] = previous_pipeline
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_saved_pipeline_hydrates_the_queue(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            out = Path("outputs")
+            out.mkdir()
+            payload = {
+                "pipeline_id": "pipe-queue",
+                "status": "completed",
+                "clip_plans": [{"image_prompt": "a cat", "video_prompt": "walk"}],
+                "planned_clips": [{"shot_id": "shot-1", "duration_sec": 4}],
+            }
+            (out / "_director_pipeline_pipe-queue.json").write_text(
+                json.dumps(payload), encoding="utf-8",
+            )
+            saved = self.client.get("/api/v1/director/pipelines/pipe-queue")
+            self.assertEqual(saved.status_code, 200, saved.text)
+            body = saved.json()
+            self.assertEqual(body["queue_source"], "clip_plans")
+            self.assertEqual(body["clips"][0]["image_prompt"], "a cat")
+            self.assertEqual(body["clips"][0]["shot_id"], "shot-1")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_saved_pipeline_missing_uses_the_launch_404(self):
+        missing = self.client.get("/api/v1/director/pipelines/missing-pipeline")
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(missing.json(), {"error": "Pipeline not found"})
+
+    def test_director_pipeline_status_reports_a_saved_run_with_preview_fields(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            out = Path("outputs")
+            out.mkdir()
+            payload = {
+                "pipeline_id": "pipe-done",
+                "status": "completed",
+                "auto_mode": True,
+                "clips": [{
+                    "image_prompt": "a cat",
+                    "video_prompt": "walk",
+                    "video_filename": "cat.mp4",
+                }],
+                "output_files": ["cat.mp4"],
+                "params": {"secret": "no"},
+            }
+            (out / "_director_pipeline_pipe-done.json").write_text(
+                json.dumps(payload), encoding="utf-8",
+            )
+            status = self.client.get("/api/v1/director/pipeline/pipe-done")
+            self.assertEqual(status.status_code, 200, status.text)
+            body = status.json()
+            self.assertTrue(body["recovered_from_disk"])
+            self.assertEqual(body["status"], "completed")
+            self.assertIn("preview_fingerprint", body)
+            self.assertFalse(body["preview_approved"])
+            self.assertEqual(body["quality_gate"]["status"], "pending")
+            self.assertNotIn("params", body)
+            self.assertNotIn("secret", json.dumps(body))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_director_pipeline_reads_come_from_the_shared_router(self):
+        shared = "app/routers/director_pipeline_reads.py"
+        paths = {
+            "/api/v1/director/plan-prompts",
+            "/api/v1/director/plan-angle-prompts",
+            "/api/v1/director/pipelines",
+            "/api/v1/director/pipelines/active",
+            "/api/v1/director/pipelines/{pid}",
+            "/api/v1/director/pipeline/{pid}",
+        }
+        owners = {
+            (row["method"], row["path"]): row["source"]
+            for row in self._served_core_routes()
+            if row["path"] in paths
+        }
+        self.assertEqual(set(owners), {
+            ("POST", "/api/v1/director/plan-prompts"),
+            ("POST", "/api/v1/director/plan-angle-prompts"),
+            ("GET", "/api/v1/director/pipelines"),
+            ("GET", "/api/v1/director/pipelines/active"),
+            ("GET", "/api/v1/director/pipelines/{pid}"),
+            ("GET", "/api/v1/director/pipeline/{pid}"),
+        })
+        self.assertEqual(set(owners.values()), {shared})
+
 
 def test_safe_join_copies_use_the_launch_containment_check():
     """A child of ``/`` stays inside ``/``. The prefix copy rejected it."""
