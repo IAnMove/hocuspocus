@@ -31155,7 +31155,8 @@ def _generate_story_lab_stage(body: dict, scope: str) -> dict:
     instruction = str(body.get("instruction") or "").strip()[:4000]
     language = str(body.get("language") or project.get("language") or "English").strip()
     genre = str(body.get("genre") or project.get("genre") or "Adventure").strip()
-    tone = str(body.get("tone") or project.get("tone") or "Cinematic").strip()
+    tone = str(body.get("tone") or project.get("tone") or "").strip()
+    tone_line = f"Tone: {tone}\n" if tone else ""
     audience = str(body.get("audience") or project.get("audience") or "General").strip()
     visual_style = str(project.get("visualStyle") or "").strip()[:4000]
     character_visual_style = str(project.get("characterVisualStyle") or "").strip()[:2000]
@@ -31271,8 +31272,7 @@ visible text and names in the language declared by languageIntent and preserve t
 character-for-character; when a technical prompt needs one, isolate it as literal data
 and never translate or paraphrase it.
 Genre: {genre}
-Tone: {tone}
-Audience: {audience}
+{tone_line}Audience: {audience}
 Global visual style (separate from story content): {visual_style or 'not set'}
 Character rendering style (mandatory for every visible person): {character_visual_style or 'not set'}
 Apply that style as a mandatory render-time constraint: {'yes' if enforce_visual_style else 'no'}
@@ -32319,6 +32319,7 @@ def director_comic_plan(body: dict, job_id: str | None = None):
     story_context = str(body.get("storyContext") or "").strip()[:50000]
     source_story = body.get("sourceStory") if isinstance(body.get("sourceStory"), dict) else {}
     writing_llm = _comic_writing_llm(body)
+    tone_line = f"Tone: {tone}\n" if (tone := str(body.get("tone") or "").strip()) else ""
     shared_brief = f"""Production mode: {production_mode}
 Premise: {premise}
 Source Story Lab project: {json.dumps(source_story, ensure_ascii=False) if source_story else 'not supplied'}
@@ -32329,8 +32330,7 @@ Source story bible / adaptation brief:
 {f"Video canvas: {storyboard_aspect}, {storyboard_quality}, {storyboard_resolution}. Every generated frame must use this same aspect ratio." if is_storyboard else ""}
 Language for ALL reader-facing dialogue/captions: {requested_language}
 Genre: {body.get('genre', 'Adventure')}
-Tone: {body.get('tone', 'Cinematic')}
-Audience: {body.get('audience', 'General')}
+{tone_line}Audience: {body.get('audience', 'General')}
 User art-style preference (highest-priority visual lock; it overrides conflicting inherited
 medium, rendering or palette guidance): {manual_art_style or 'not provided; choose an appropriate treatment'}
 User world / period / location override: {manual_world_context or 'not provided'}

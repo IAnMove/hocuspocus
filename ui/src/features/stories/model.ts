@@ -420,7 +420,7 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     protagonistConsistency: false,
     protagonistCharacterId: '',
     genre: 'Adventure',
-    tone: 'Cinematic',
+    tone: '',
     audience: 'General',
     visualStyle: '',
     characterVisualStyle: '',

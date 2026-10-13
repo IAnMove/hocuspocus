@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**The Wizard says which defaults it chose, and no longer invents a "cinematic" style.** When the Wizard creates a Story or a Series from a short request, it still does not stop to ask about style, model, duration or format, but it now says so: if the style or the tone was left unset, its reply ends with one line ("Choices I made: style not set (the model decides), tone not set. Tell me if you want something else.") and lists only what really stayed empty. Before, it filled the style with a generic sentence ("Coherent cinematic direction..."), the tone with "Cinematic" and a Series camera with a television camera language. Story Lab then turned that sentence into a "VISUAL STYLE LOCK" prefix on every image and video prompt, so every Wizard story looked like the same "cinematic TV". Now a Story or Series made by the Wizard with no style has an empty style (no lock), an empty tone and an empty camera language; new projects made by hand also start with an empty tone, and a style or tone you write is kept exactly. The Story Lab writer and the Comic planner leave the "Tone:" line out of their prompt when there is no tone. Projects already saved keep what they have. Risk: a Wizard story with no style gets no style lock, so its look can drift between shots until you write one; the reply line tells you.
+
 **A safety net for the coming split of the two largest files (no behaviour
 change).** Tests can now import the full server with a fake WanGP engine, with
 no GPU. `tests/characterization` records what read-only routes answer

@@ -42,6 +42,8 @@ def test_constructors_produce_ids_defaults_and_frozen_snapshot():
     assert series["provider"]["videoModel"] == "minimax_h3_legacy"
     assert series["provider"]["useGlobalProfile"] is True
     assert series["provider"]["videoSettings"]["orientation"] == "landscape"
+    # No invented look: a new series has no tone and no style until its author writes one.
+    assert (series["tone"], series["visualStyle"], series["characterVisualStyle"], series["cameraLanguage"]) == ("", "", "", "")
     assert re.fullmatch(r"episode_[0-9a-f]{32}", episode["id"])
     assert episode["canonSnapshot"]["revision"] == series["canon"]["revision"]
     series["canon"]["worldSummary"] = "Changed later"
