@@ -187,6 +187,11 @@ test('a shot that shows the previous picture goes on from its camera, pushing on
   const held = camera(shot({ camera: 'static', cameraStart: { scale: 1.07, y: 48.5 } }))!
   assert.deepEqual([held.animation.start.scale, held.animation.end.scale, held.animation.end.y], [1.07, 1.07, 48.5])
   assert.equal(camera(shot({ camera: 'static' })), undefined, 'a static shot at rest has no camera, as before')
+  const panEnd = CAMERA_MOVES['pan-left'][1]
+  const fromPan = camera(shot({ cameraStart: panEnd }))!
+  assert.deepEqual([fromPan.animation.start.x, fromPan.animation.end.x, fromPan.animation.end.scale], [46.5, 46.5, 1.15], 'x stays, the push grows')
+  const pan = camera(shot({ camera: 'pan-left', cameraStart: panEnd }))!
+  assert.deepEqual([pan.animation.start, pan.animation.end].map(pose => pose.x), [53.5, 46.5], 'a pan plays its own move')
 })
 
 test('a detail frames a point of the same plate closer, as far as its edges allow', () => {
@@ -257,10 +262,16 @@ test('a push compiles to the camera layer it always did, and a static or unknown
 test('every camera move keeps the plate over the whole frame, in a flat or a layered set, at any framing', () => {
   const layers: ShotSpec['layers'] = [{ id: 'layer-1', name: 'Front', source: '/api/v1/file/fg.png?workspace=cast', kind: 'image', x: 8, y: 62, scale: 0.9, depth: 0.9, front: true }]
   const framings = [['wide', 50], ['two', 0], ['medium', 100], ['close', 0], ['close', 100]] as const
-  for (const move of Object.keys(CAMERA_MOVES) as Array<keyof typeof CAMERA_MOVES>) {
+  // Each move, and a push or a hold that goes on from where each move ended (the same picture, series_continuity).
+  const cameras: Array<Pick<ShotSpec, 'camera' | 'cameraStart'>> = [
+    ...(Object.keys(CAMERA_MOVES) as Array<keyof typeof CAMERA_MOVES>).map(move => ({ camera: move })),
+    ...Object.values(CAMERA_MOVES).flatMap(([, end]) => (['push', 'static'] as const).map(camera => ({ camera, cameraStart: end }))),
+  ]
+  for (const camera of cameras) {
+    const move = `${camera.camera}${camera.cameraStart ? ` from ${JSON.stringify(camera.cameraStart)}` : ''}`
     for (const [framing, focusX] of framings) {
       for (const set of [{}, { layers }]) {
-        const scene = normalizeScene2D(compileSeriesShot(kits, shot({ camera: move, framing, background: { ...shot().background!, focusX }, ...set })))
+        const scene = normalizeScene2D(compileSeriesShot(kits, shot({ ...camera, framing, background: { ...shot().background!, focusX }, ...set })))
         const evaluator = createSceneEvaluator(scene)
         const background = scene.layers.find(layer => layer.id === 'background')!
         for (let step = 0; step <= 20; step += 1) {

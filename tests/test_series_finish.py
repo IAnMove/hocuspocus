@@ -4,7 +4,8 @@ The pinned digests were computed with the code before these choices existed (dev
 shot stored then keep every digest they had: the plan approval (``content_digest``), the take fingerprint
 (``render_inputs``) and the shot spec here, and the compiled Video 2D document the native render hashes in
 ``test_series_shot_plan`` (it compiles with the UI's tsx, so it runs in the python-b shard). Nothing already made
-is made again or reads as out of date, and every 2D shot keeps the paper finish.
+is made again or reads as out of date, and every 2D shot keeps the paper finish. A lone close-up or medium shot now
+pans toward the character's place in the room (#1015, ``series_continuity``): only that crop changes its spec.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from services import series_continuity
 from services.series_finish import _PARTS, PAPER, TEXTURES, check_finish, fingerprint, shot_finish, store_look
 from services.series_library import normalize_series_project
 from services.series_review import content_digest
@@ -89,6 +91,13 @@ OLD = {
 }
 
 
+# #1015 pans a lone medium or close-up toward the character's place in the room (kevin's home in the garage, 30), on
+# purpose: the spec and the compiled document of these shots change with that crop alone (centred, they are the
+# digests above), and the episode puts the crop in their take fingerprint (``series_continuity.inputs``).
+PLACED = {"push": ("d47a1653a5d7c0f7", "adb57a61d8a00153"), "push-portrait": ("ebd6499102503260", "b186968ecdf614fd"),
+          "words": ("fa52311f22bc661d", "c78c10d21670d2de")}
+
+
 def digest(value):
     return hashlib.sha1(json.dumps(value, sort_keys=True).encode()).hexdigest()[:16]
 
@@ -96,7 +105,8 @@ def digest(value):
 def stored_cases():
     for name, expected in OLD.items():
         shot_name, _, portrait = name.partition("-")
-        yield name, series(**(PORTRAIT if portrait else {})), SHOTS[shot_name], expected
+        spec, document = PLACED.get(name, expected[2:4])
+        yield name, series(**(PORTRAIT if portrait else {})), SHOTS[shot_name], (*expected[:2], spec, document, expected[4])
 
 
 def planned_spec(value, shot):
@@ -105,7 +115,7 @@ def planned_spec(value, shot):
 
 
 @pytest.mark.parametrize("name", list(OLD))
-def test_a_stored_shot_keeps_every_digest_and_its_paper_finish(name):
+def test_a_stored_shot_keeps_every_digest_and_its_paper_finish(name, monkeypatch):
     _name, value, shot, (inputs, content, spec_digest, _document, camera) = next(case for case in stored_cases() if case[0] == name)
     assert render_inputs(value, shot, KITS) == inputs
     assert content_digest(shot) == content
@@ -113,6 +123,9 @@ def test_a_stored_shot_keeps_every_digest_and_its_paper_finish(name):
     assert digest(spec) == spec_digest and spec["camera"] == camera and spec["finish"] == PAPER
     # Choosing paper by name is the same picture: nothing renders again.
     assert render_inputs(series(look={"finish": "paper"}, **(PORTRAIT if "portrait" in name else {})), shot, KITS) == inputs
+    # With the centre crop of before #1015, every spec is the one at bc518b86.
+    monkeypatch.setattr(series_continuity, "focus", lambda value, _shots, shot, framing: series_continuity._plain_focus(value, shot, framing))
+    assert digest(planned_spec(value, shot)) == OLD[name][2]
 
 
 def test_any_other_finish_is_a_new_picture_and_renders_again():

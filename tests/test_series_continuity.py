@@ -33,8 +33,8 @@ def test_the_same_still_plate_twice_goes_on_pushing_and_warns():
     ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "calle", "insert"), shot("s3", 3, "calle", "insert", camera="static"))
     first, second, third = (spec(series(), ep, sid) for sid in ("s1", "s2", "s3"))
     assert "cameraStart" not in first and first["camera"] == "push"
-    assert second["cameraStart"] == {"scale": 1.07, "y": 48.5} and second["camera"] == "push", "it starts where s1's push ended"
-    assert third["cameraStart"] == {"scale": 1.14, "y": 47.0} and third["camera"] == "static", "a static shot holds there"
+    assert second["cameraStart"] == {"x": 50.0, "y": 48.5, "scale": 1.07} and second["camera"] == "push", "it starts where s1's push ended"
+    assert third["cameraStart"] == {"x": 50.0, "y": 47.0, "scale": 1.14} and third["camera"] == "static", "a static shot holds there"
     warnings = same_picture_warnings(series(), ep["shots"])
     assert [(item["code"], item["shots"]) for item in warnings] == [("same_picture", ["s1", "s2"]), ("same_picture", ["s2", "s3"])]
     assert "make it one shot, or frame a detail of the same plate (detail)" in warnings[0]["message"]
@@ -49,8 +49,22 @@ def test_another_plate_or_framing_starts_the_camera_at_rest():
 def test_a_push_stops_growing_at_the_limit_and_holds():
     ep = episode(*(shot(f"s{n}", n, "calle", "insert") for n in range(1, 8)))
     starts = [camera_start(series(), ordered(ep), item) for item in ep["shots"]]
-    assert all(start[0] <= CAMERA_LIMIT for start in starts[1:]) and starts[-1][2] is False
-    assert starts[-1][0] == starts[-2][0], "past the limit the camera holds where it got to"
+    assert all(start[2] <= CAMERA_LIMIT for start in starts[1:]) and starts[-1][3] is False
+    assert starts[-1][2] == starts[-2][2], "past the limit the camera holds where it got to"
+
+
+def test_a_pull_pan_or_drift_plays_its_own_move_and_the_run_goes_on_from_its_end():
+    run = lambda *cameras: episode(*(shot(f"s{n}", n, "calle", "insert", camera=camera) for n, camera in enumerate(cameras, 1)))
+    ep = run("push", "pan-left", "static", "push")
+    pan, held, pushed = (spec(series(), ep, sid) for sid in ("s2", "s3", "s4"))
+    assert pan["camera"] == "pan-left" and "cameraStart" not in pan, "a pan after a push keeps its own move"
+    assert held["cameraStart"] == {"x": 46.5, "y": 50, "scale": 1.08} and held["camera"] == "static", "it holds at the pan's end"
+    assert pushed["cameraStart"] == {"x": 46.5, "y": 50, "scale": 1.08} and pushed["camera"] == "push", "a push goes on from there"
+    assert inputs(series(), ep, ep["shots"][2]) == {"cameraStart": [1.08, 50, False, 46.5]}, "an off-centre start adds its x"
+    ep = run("push", "pull", "static")
+    assert [camera_start(series(), ordered(ep), item) for item in ep["shots"]] == [None, None, None], "a pull ends at rest"
+    ep = run("drift", "push")
+    assert camera_start(series(), ordered(ep), ep["shots"][1]) == (51, 50, 1.03, True)
 
 
 def test_a_lone_close_up_shows_its_side_of_the_room():

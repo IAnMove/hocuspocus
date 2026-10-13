@@ -6,10 +6,12 @@ its x in the nearest ``wide`` or ``two`` shot of the same location (the same sce
 Shot and reverse shot then show two sides of the room, not the same patch of wall behind both faces.
 
 Two shots in a row that show the same picture (the same plate, framing and crop, ``picture``) would cut back to
-where the first one's push started. The second one's camera starts where the first one's ended instead, and a push
-goes on from there (``camera_start``) up to ``CAMERA_LIMIT``, past which the camera holds. ``from_script`` warns about
-each such pair (``same_picture_warnings``): the same still plate twice in a row is one shot, or the second one frames
-a ``detail`` of that plate (a new picture of the same place would not look like it).
+where the first one's camera started. A ``static`` or ``push`` second one (``CAMERA_CONTINUES``) starts where the first
+one's camera ended instead (``camera_start``): a push goes on from there up to ``CAMERA_LIMIT``, past which the camera
+holds. A pull, pan or drift always plays its own move from its own poses (``CAMERA_POSES``), and the run goes on from
+where it ended. ``from_script`` warns about each such pair (``same_picture_warnings``): the same still plate twice in
+a row is one shot, or the second one frames a ``detail`` of that plate (a new picture of the same place would not
+look like it).
 
 Both depend on other shots, so ``series_take_inputs`` fingerprints them (``inputs``) and a take renders again when a
 neighbour moves its picture. A shot whose crop and camera are the plain ones adds nothing and keeps its digest.
@@ -18,13 +20,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.series_shot_plan import (_cast_entries, _cast_x, _homes, _shot_camera, _shot_framing, background_for,
-                                       frame_size, shot_detail, spread)
+from services.series_shot_plan import (CAMERA_CONTINUES, CAMERA_POSES, _cast_entries, _cast_x, _homes, _shot_camera,
+                                       _shot_framing, background_for, frame_size, shot_detail, spread)
 
 # The push of ``cameraLayer`` in ui/scripts/seriesShot.ts: it grows the camera this much and lifts it this many %.
-PUSH_SCALE, PUSH_RISE = 0.07, 1.5
+PUSH_SCALE = round(CAMERA_POSES["push"][1][2] - CAMERA_POSES["push"][0][2], 3)
+PUSH_RISE = round(CAMERA_POSES["push"][0][1] - CAMERA_POSES["push"][1][1], 3)
 CAMERA_LIMIT = 1.3
-REST = (1.0, 50.0)
+REST = (50.0, 50.0, 1.0)  # the camera's (x, y, scale) at rest
 _WIDE, _TIGHT = ("wide", "two"), ("medium", "close")
 
 
@@ -106,20 +109,42 @@ def _same(series: dict[str, Any], shots: list[dict[str, Any]], index: int) -> bo
     return here is not None and here == picture(series, shots, shots[index - 1])
 
 
-def camera_start(series: dict[str, Any], shots: list[dict[str, Any]], shot: dict[str, Any]) -> tuple[float, float, bool] | None:
-    """(scale, y, push) of a shot that goes on from the previous shot's camera; None when it starts at rest."""
+def _move(shot: dict[str, Any]) -> str:
+    return _shot_camera(_layout(shot), shot)
+
+
+def camera_start(series: dict[str, Any], shots: list[dict[str, Any]],
+                 shot: dict[str, Any]) -> tuple[float, float, float, bool] | None:
+    """(x, y, scale, push) of a static or push shot that goes on from the previous shot's camera; None when it starts
+    at rest, and for a pull, pan or drift, which always plays its own move. Along the run of shots that show the same
+    picture, the camera starts at rest or where the last pull, pan or drift ended, and each push after it goes on."""
     index = next((i for i, other in enumerate(shots) if other.get("id") == shot.get("id")), None)
-    if index is None or not _same(series, shots, index):
+    if index is None or _move(shot) not in CAMERA_CONTINUES or not _same(series, shots, index):
         return None
     first = index
     while _same(series, shots, first):
         first -= 1
-    scale, y = REST
+    x, y, scale = REST
     for other in shots[first:index]:
-        if _shot_camera(_layout(other), other) == "push" and scale + PUSH_SCALE <= CAMERA_LIMIT + 1e-9:
-            scale, y = scale + PUSH_SCALE, y - PUSH_RISE
-    push = _shot_camera(_layout(shot), shot) == "push" and scale + PUSH_SCALE <= CAMERA_LIMIT + 1e-9
-    return (round(scale, 3), round(y, 3), push) if (scale, y) != REST else None
+        move = _move(other)
+        if move not in CAMERA_CONTINUES:
+            x, y, scale = CAMERA_POSES[move][1]
+        elif move == "push" and scale + PUSH_SCALE <= CAMERA_LIMIT + 1e-9:
+            y, scale = y - PUSH_RISE, scale + PUSH_SCALE
+    push = _move(shot) == "push" and scale + PUSH_SCALE <= CAMERA_LIMIT + 1e-9
+    return (round(x, 3), round(y, 3), round(scale, 3), push) if (x, y, scale) != REST else None
+
+
+def camera_fields(series: dict[str, Any], shots: list[dict[str, Any]], shot: dict[str, Any], camera: str) -> dict[str, Any]:
+    """The spec's ``cameraStart`` {x, y, scale} of a shot that goes on from the previous shot's camera, and its
+    ``camera``: a push while under ``CAMERA_LIMIT``, else a hold. Nothing for a shot that starts at rest."""
+    start = camera_start(series, shots, shot)
+    if not start:
+        return {}
+    fields: dict[str, Any] = {"cameraStart": {"x": start[0], "y": start[1], "scale": start[2]}}
+    if camera in CAMERA_CONTINUES:  # only these go on; a pull, pan or drift plays its own move
+        fields["camera"] = "push" if start[3] else "static"
+    return fields
 
 
 def inputs(series: dict[str, Any], episode: dict[str, Any] | None, shot: dict[str, Any]) -> dict[str, Any]:
@@ -134,7 +159,10 @@ def inputs(series: dict[str, Any], episode: dict[str, Any] | None, shot: dict[st
         found["focus"] = round(crop, 3)
     start = camera_start(series, shots, shot)
     if start:
-        found["cameraStart"] = list(start)
+        x, y, scale, push = start
+        # [scale, y, push], the digest a start after pushes always had; a start off centre (a pan's or a drift's end)
+        # adds its x.
+        found["cameraStart"] = [scale, y, push, *([x] if x != REST[0] else [])]
     return found
 
 

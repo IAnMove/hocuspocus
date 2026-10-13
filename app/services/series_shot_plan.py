@@ -612,9 +612,7 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
     # shows the previous shot's picture goes on from its camera (series_continuity).
     from services import series_continuity as continuity
     shots = continuity.ordered(episode)
-    start = continuity.camera_start(series, shots, shot)
-    if start:
-        spec["cameraStart"], spec["camera"] = {"scale": start[0], "y": start[1]}, "push" if start[2] else "static"
+    spec.update(continuity.camera_fields(series, shots, shot, spec["camera"]))
     return _with_set(spec, series, shot, continuity.focus(series, shots, shot, framing), workspace)
 
 
