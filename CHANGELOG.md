@@ -28,6 +28,16 @@ Numba cache. A test checks the fake engine's names and parameters against the
 real WanGP source, also for a function WanGP imports from another module, so
 the fake cannot drift unnoticed.
 
+**Music never uses paid MiniMax by default.** Every music default is now the local,
+free ACE-Step 1.5 XL model, the one Studio and `production.*` already use. The paid
+MiniMax API models (`music-3.0`, `music-2.6` and covers) run only when you pick one
+in Story Lab, where they are labelled "MiniMax API (paid)", and confirm the cost
+before each request. The Wizard, MCP tools, `production.*` specs and the core
+profile no longer offer them and refuse an explicit request with the local model
+IDs to use instead. Stories saved with `music-3.0` as their old default now read as
+the local model and Story Lab tells you so; the file on disk is not rewritten.
+`media.options` lists the installed local music models.
+
 **Honest defaults.** Regenerate makes something new: a Director image, clip or
 H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
 that made the result (comic films keep the seed their approved PRE pinned). Every

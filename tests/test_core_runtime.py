@@ -534,7 +534,8 @@ class CoreRuntimeTests(unittest.TestCase):
         profile = listed.json()["profile"]
         self.assertEqual(profile["text"]["provider"], "minimax")
         self.assertEqual(profile["image"]["provider"], "minimax")
-        self.assertEqual(profile["music"]["provider"], "minimax")
+        # Music is local first: the paid MiniMax API is never a default.
+        self.assertEqual(profile["music"], {"provider": "local", "model": "ace_step_v1_5_xl_sft_lm_4b"})
         self.assertEqual(profile["model3d"]["provider"], "meshy")
 
     def test_mcp_lists_read_tools_and_omits_local_generate(self):

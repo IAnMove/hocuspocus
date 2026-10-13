@@ -157,13 +157,15 @@ def test_start_returns_a_durable_job_before_provider_work(tmp_path):
             Thread=_DeferredThread,
         ),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
 
     before = time.monotonic()
     result = start({
         "prompt": "cinematic dream pop",
+        "model": "music-3.0",
+        "paid_music_confirmed": True,
         "lyrics": "[Verse]\nAcross the night",
         "count": 3,
         "workspace": "default",
@@ -212,11 +214,13 @@ def test_replay_without_checkpoint_starts_the_worker(tmp_path):
         },
         "threading": SimpleNamespace(Thread=CaptureThread),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
     result = start({
         "prompt": "cinematic dream pop",
+        "model": "music-3.0",
+        "paid_music_confirmed": True,
         "lyrics": "[Verse]\nAcross the night",
         "workspace": "default",
     })
@@ -259,7 +263,7 @@ def test_concurrent_replay_without_checkpoint_starts_one_worker(tmp_path):
         },
         "threading": SimpleNamespace(Thread=CaptureThread),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
     results: list[dict | None] = [None] * 8
@@ -270,6 +274,8 @@ def test_concurrent_replay_without_checkpoint_starts_one_worker(tmp_path):
             barrier.wait(timeout=2)
             results[index] = start({
                 "prompt": "cinematic dream pop",
+                "model": "music-3.0",
+                "paid_music_confirmed": True,
                 "lyrics": "[Verse]\nAcross the night",
                 "workspace": "default",
             })
@@ -303,13 +309,15 @@ def test_start_rejects_a_non_numeric_candidate_count_as_bad_input(tmp_path):
         "_public_minimax_music_job": lambda job: job,
         "threading": SimpleNamespace(Thread=_DeferredThread),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
 
     try:
         start({
             "prompt": "cinematic dream pop",
+            "model": "music-3.0",
+            "paid_music_confirmed": True,
             "lyrics": "[Verse]\nAcross the night",
             "count": "many",
         })

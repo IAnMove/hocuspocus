@@ -1,4 +1,7 @@
-"""MiniMax Music jobs for the core/remote profile. Local ACE-Step stays 409."""
+"""MiniMax Music jobs for the core/remote profile. Local ACE-Step stays 409.
+
+The paid API runs only for a model a person picked and confirmed in Story Lab.
+"""
 from __future__ import annotations
 
 import copy
@@ -8,7 +11,8 @@ import uuid
 from typing import Any
 
 from services import core_workspace as core
-from services.minimax_music_service import ALLOWED_MODELS, COVER_MODELS, MiniMaxMusicError, generate_candidates
+from services.minimax_music_service import COVER_MODELS, MiniMaxMusicError, generate_candidates
+from services.music_model_contract import DEFAULT_MUSIC_MODEL, MusicModelError, require_confirmed_paid_music
 from services.music_submission import classify_music_route
 from services.provider_profile import resolve_minimax_key
 
@@ -56,19 +60,28 @@ def _candidate_count(body: dict[str, Any]) -> int:
         raise ValueError("MiniMax Music candidate count must be an integer from 1 to 3") from exc
 
 
-def _validated_request(body: dict[str, Any], workspace: str) -> dict[str, Any]:
+def _confirmed_paid_model(body: dict[str, Any]) -> str:
+    """A local model (the default) is unavailable here (409); a paid one needs Story Lab's confirmation."""
+    from fastapi import HTTPException
     from routers.system_capabilities import require_capability_http
-    from services import execution_mode
 
-    model = str(body.get("model") or "music-3.0").strip()
+    model = str(body.get("model") or DEFAULT_MUSIC_MODEL).strip()
     try:
         route = classify_music_route(model)
     except Exception as exc:
         raise ValueError(str(exc)) from exc
     if route != "remote_minimax":
         require_capability_http("local_audio_ai")
-    if model not in ALLOWED_MODELS:
-        raise ValueError(f"Unsupported MiniMax Music model: {model}")
+    try:
+        return require_confirmed_paid_music({**body, "model": model})
+    except MusicModelError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+def _validated_request(body: dict[str, Any], workspace: str) -> dict[str, Any]:
+    from services import execution_mode
+
+    model = _confirmed_paid_model(body)
     execution_mode.validate_remote_provider(workspace, "minimax-music")
     count = _candidate_count(body)
     prompt = str(body.get("prompt") or "").strip()[:300]
@@ -128,7 +141,7 @@ def _run(job_id: str) -> None:
             count=int(request.get("count") or 1),
             output_dir=core.workspace_dir(str(job.get("workspace") or "default")),
             instrumental=bool(request.get("instrumental")),
-            model=str(request.get("model") or "music-3.0"),
+            model=str(request.get("model") or ""),
             reference_audio_path=request.get("reference_audio_path"),
             task_id=str(job.get("taskId") or ""), root_task_id=str(job.get("rootTaskId") or ""),
             cancelled=cancelled,
