@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createCharacterKit, parseCharacterKitPoseLayerId, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
 import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
-import { blinkTimes, bodyKeyframes, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
+import { createSceneEvaluator } from '../src/lib/scene2d/evaluate.ts'
+import { normalizeScene2D } from '../src/lib/scene2d/normalize.ts'
+import { blinkTimes, bodyKeyframes, CAMERA_MOVES, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type CameraMove, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
 
 const STATES = ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
 const asset = (id: string, kind: 'image' | 'overlay' = 'overlay', size?: { width: number; height: number }): CharacterKitAsset => ({
@@ -219,4 +221,47 @@ test('stop-motion is copied onto the scene only when the shot sets it', () => {
   const plain = compileSeriesShot(kits, shot())
   assert.equal('motionStep' in plain, false)
   assert.equal('stopMotionJitter' in plain, false)
+})
+
+test('a push compiles to the camera layer it always did, and a static or unknown camera to none', () => {
+  const still = { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 }, pushed = { x: 50, y: 48.5, scale: 1.07, opacity: 1, rotation: 0 }
+  assert.deepEqual(compileSeriesShot(kits, shot()).layers.find(layer => layer.type === 'camera'), {
+    id: 'camera', name: 'Camera', type: 'camera', source: '', visible: true, locked: false, z: 1000, transform: still,
+    animation: { start: still, end: pushed, duration: 4, curve: 'ease', keyframes: [
+      { id: 'camera-0', time: 0, ...still, curve: 'ease' }, { id: 'camera-4000', time: 4, ...pushed, curve: 'ease' }] },
+  })
+  for (const camera of ['static', 'zoom', 'toString'] as CameraMove[]) {
+    assert.equal(compileSeriesShot(kits, shot({ camera })).layers.some(layer => layer.type === 'camera'), false, camera)
+  }
+})
+
+test('every camera move keeps the plate over the whole frame, in a flat or a layered set, at any framing', () => {
+  const layers: ShotSpec['layers'] = [{ id: 'layer-1', name: 'Front', source: '/api/v1/file/fg.png?workspace=cast', kind: 'image', x: 8, y: 62, scale: 0.9, depth: 0.9, front: true }]
+  const framings = [['wide', 50], ['two', 0], ['medium', 100], ['close', 0], ['close', 100]] as const
+  for (const move of Object.keys(CAMERA_MOVES) as Array<keyof typeof CAMERA_MOVES>) {
+    for (const [framing, focusX] of framings) {
+      for (const set of [{}, { layers }]) {
+        const scene = normalizeScene2D(compileSeriesShot(kits, shot({ camera: move, framing, background: { ...shot().background!, focusX }, ...set })))
+        const evaluator = createSceneEvaluator(scene)
+        const background = scene.layers.find(layer => layer.id === 'background')!
+        for (let step = 0; step <= 20; step += 1) {
+          const state = evaluator.renderedLayerStates(background, step / 20)[0]
+          const margin = 50 * (state.scale - 1)
+          assert.ok(Math.abs(state.x - 50) <= margin + 1e-6 && Math.abs(state.y - 50) <= margin + 1e-6,
+            `${move} ${framing} focus ${focusX} ${set.layers ? 'layered' : 'flat'} at ${step / 20}: the plate's edge shows`)
+        }
+      }
+    }
+  }
+})
+
+test('a pan crosses the plate the way it is named and a pull ends wider than it starts', () => {
+  const picture = (camera: CameraMove, progress: number) => {
+    const scene = normalizeScene2D(compileSeriesShot(kits, shot({ camera, framing: 'wide' })))
+    return createSceneEvaluator(scene).renderedLayerStates(scene.layers.find(layer => layer.id === 'background')!, progress)[0]
+  }
+  assert.ok(picture('pan-left', 1).x > picture('pan-left', 0).x, 'pan left: the picture slides right under the frame')
+  assert.ok(picture('pan-right', 1).x < picture('pan-right', 0).x, 'pan right: the picture slides left')
+  assert.ok(picture('pull', 1).scale < picture('pull', 0).scale && picture('push', 1).scale > picture('push', 0).scale)
+  assert.ok(picture('drift', 1).x !== picture('drift', 0).x && picture('drift', 0).scale > 1)
 })

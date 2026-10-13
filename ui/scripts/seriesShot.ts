@@ -65,7 +65,7 @@ export type ShotSpec = {
   /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
   layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
-  camera?: 'static' | 'push'; narrative?: Scene['narrative']
+  camera?: CameraMove; narrative?: Scene['narrative']
   /** Picture holds every 2, 3 or 4 frames. Absent, the scene clock is unchanged. */
   motionStep?: 2 | 3 | 4
   /** Deterministic shake of one hold, in pixels, from 0 to 2. */
@@ -415,8 +415,23 @@ function speechTrack(line: LineSpec): NonNullable<Scene['audioTracks']>[number] 
     volume: line.volume ?? 1, prompt: line.text }
 }
 
-function cameraLayer(duration: number): SceneLayer {
-  const from = { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 }, to = { x: 50, y: 48.5, scale: 1.07, opacity: 1, rotation: 0 }
+/** The 2D camera moves (series_shot_plan.CAMERAS); ``static`` adds no camera layer. */
+export type CameraMove = 'static' | 'push' | 'pull' | 'pan-left' | 'pan-right' | 'drift'
+type CameraPose = { x: number; y: number; scale: number }
+/** Where each move starts and ends. A push grows the view by 0.07 and lifts it 1.5 %, a pull is the same in reverse.
+ * A pan holds the view 8 % closer and crosses 7 % of the frame, a drift 3 % closer and 2 %, so the plate's edge, which
+ * the closer view keeps outside the frame, never shows. */
+export const CAMERA_MOVES: Record<Exclude<CameraMove, 'static'>, readonly [CameraPose, CameraPose]> = {
+  push: [{ x: 50, y: 50, scale: 1 }, { x: 50, y: 48.5, scale: 1.07 }],
+  pull: [{ x: 50, y: 48.5, scale: 1.07 }, { x: 50, y: 50, scale: 1 }],
+  'pan-left': [{ x: 53.5, y: 50, scale: 1.08 }, { x: 46.5, y: 50, scale: 1.08 }],
+  'pan-right': [{ x: 46.5, y: 50, scale: 1.08 }, { x: 53.5, y: 50, scale: 1.08 }],
+  drift: [{ x: 49, y: 50, scale: 1.03 }, { x: 51, y: 50, scale: 1.03 }],
+}
+
+function cameraLayer(duration: number, move: Exclude<CameraMove, 'static'>): SceneLayer {
+  const [start, end] = CAMERA_MOVES[move]
+  const from = { ...start, opacity: 1, rotation: 0 }, to = { ...end, opacity: 1, rotation: 0 }
   return { id: 'camera', name: 'Camera', type: 'camera', source: '', visible: true, locked: false, z: 1000, transform: { ...from },
     animation: { start: from, end: to, duration, curve: 'ease', keyframes: [key('camera', 0, from, 'ease'), key('camera', duration, to, 'ease')] } } as SceneLayer
 }
@@ -488,7 +503,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     layers.push(...mounted.layers)
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
-  if (shot.camera === 'push') layers.push(cameraLayer(shot.duration))
+  if (shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) layers.push(cameraLayer(shot.duration, shot.camera))
   const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthsForLine(shot.cast, line, mouths)))
   const sfx = shotEffects(shot.sfx, shot.cast, poseLayerIds)
   return {

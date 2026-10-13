@@ -5,7 +5,7 @@ A shot already says what the planner or the writer decided: free-text
 visible characters, the location and its variant, and the dialogue. An
 optional ``layout2d`` block overrides any of it explicitly:
 
-    {"framing": "two", "camera": "push",
+    {"framing": "two", "camera": "push", "finish": "none",
      "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left",
                "enterAt": 0.5, "enterDuration": 2.4, "enterGait": "walk"}],
      "card": {"kind": "title", "title": "...", "body": "..."},
@@ -21,7 +21,8 @@ location (laid by the episode assembly instead when ``ambienceMode`` is
 heard in (``roomByLocation``, or ``layout2d.voiceRoom`` on one shot; the native
 render swaps the line audio for the room's copy, ``series_voice_rooms``).
 Timing follows the recorded lines: 0.35 s in, 0.22 s between lines, 0.45 s
-out, at least 1.5 s.
+out, at least 1.5 s. ``camera`` is one of ``CAMERAS`` (``static`` when nothing says otherwise) and ``finish`` the
+look over the picture (``series_finish``: the series' ``look.finish``, else paper).
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services import series_entrances as entrances
+from services import series_finish
 from services import series_shot_extras as extras
 from services import series_hearing
 from services.series_ambience import ambience_mode
@@ -49,12 +51,22 @@ _FRAMING_WORDS = (
     ("wide", ("wide", "general", "establishing", "long shot", "full shot", "de situación", "plano de conjunto")),
 )
 _PUSH_WORDS = ("push", "dolly in", "zoom in", "creep in", "acerc", "zoom lento", "travelling hacia")
+# The 2D camera moves (``cameraLayer`` in ui/scripts/seriesShot.ts): a slow push-in or pull-out, a pan across the plate
+# and a slight drift. ``static`` adds no camera.
+CAMERAS = ("static", "push", "pull", "pan-left", "pan-right", "drift")
+# Where each move starts and ends, as the camera's (x, y, scale): ``CAMERA_MOVES`` of seriesShot.ts, kept equal by a
+# test. A camera that goes on from the shot before (the same picture) goes on only through ``CAMERA_CONTINUES``; the
+# other moves always start and end at these poses.
+CAMERA_POSES = {
+    "push": ((50, 50, 1), (50, 48.5, 1.07)), "pull": ((50, 48.5, 1.07), (50, 50, 1)),
+    "pan-left": ((53.5, 50, 1.08), (46.5, 50, 1.08)), "pan-right": ((46.5, 50, 1.08), (53.5, 50, 1.08)),
+    "drift": ((49, 50, 1.03), (51, 50, 1.03)),
+}
+CAMERA_CONTINUES = ("static", "push")
 LANGUAGE_KEYS = {"en": "english", "es": "spanish", "fr": "french", "de": "german", "it": "italian", "pt": "portuguese",
                  "ja": "japanese", "ko": "korean", "cmn": "chinese", "zh": "chinese", "ru": "russian"}
 MOTIONS = ("idle", "still", "shake")
 FPS = 24
-FINISH = {"texture": {"kind": "paper", "amount": 0.08}, "grain": {"amount": 0.03, "size": 1.2},
-          "vignette": {"amount": 0.12, "softness": 0.7}, "applyToTexts": False}
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -135,17 +147,24 @@ def _layout_voice_room(value: dict) -> dict[str, str]:
     return {"voiceRoom": value["voiceRoom"]}
 
 
+def _layout_finish(value: dict) -> dict[str, Any]:
+    """``finish`` (``series_finish``) for this shot instead of its series'; null clears it, an unknown one is refused."""
+    if value.get("finish") is None:
+        return {}
+    return {"finish": series_finish.check_finish(value["finish"], "layout2d.finish")}
+
+
 def _layout_list(value: dict, key: str, limit: int, normalize: Any) -> dict[str, list]:
     items = [entry for entry in (normalize(item) for item in (value.get(key) or [])[:limit]) if entry]
     return {key: items} if items else {}
 
 
 def normalize_layout2d(value: Any) -> dict[str, Any] | None:
-    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` or a bad layer
-    is refused). ``layers: []`` is kept: it turns the location's layers off for this shot."""
+    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` or ``finish`` or
+    a bad layer is refused). ``layers: []`` is kept: it turns the location's layers off for this shot."""
     if not isinstance(value, dict):
         return None
-    layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", ("static", "push")),
+    layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", CAMERAS), **_layout_finish(value),
               **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
@@ -164,7 +183,12 @@ def classify_framing(text: str, cast_count: int) -> str:
 
 
 def classify_camera(text: str) -> str:
-    lowered = str(text or "").lower()
+    """A shot's camera in words: a move's own name (``pan-left``), else ``push`` for push-in words, else ``static``.
+    Other words for the newer moves ("slow pan left") stay ``static``: stored shots say such things and rendered
+    static, and their take fingerprint does not see these words, so reading them as moves would change old pictures."""
+    lowered = str(text or "").strip().lower()
+    if lowered in CAMERAS:
+        return lowered
     return "push" if any(word in lowered for word in _PUSH_WORDS) else "static"
 
 
@@ -508,7 +532,7 @@ def _shot_lines(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
 
 
 def _shot_camera(layout: dict[str, Any], shot: dict[str, Any]) -> str:
-    return layout["camera"] if layout.get("camera") in ("static", "push") else classify_camera(shot.get("camera", ""))
+    return layout["camera"] if layout.get("camera") in CAMERAS else classify_camera(shot.get("camera", ""))
 
 
 def _focus(cast: list[dict[str, Any]], framing: str) -> float:
@@ -553,9 +577,11 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
         "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, shot, beats, timing, recorded, cast),
         "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
         "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
-        "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
-        **series_stop_motion.read_fields(shot),
+        "camera": _shot_camera(layout, shot), "finish": series_finish.shot_finish(series, shot),
+        "narrative": _narrative(series, episode, shot), **series_stop_motion.read_fields(shot),
     }
+    if spec["finish"] is None:
+        spec.pop("finish")  # "none": a clean picture
     spec["lines"], spec["audioTracks"] = series_hearing.shape(series, shot, spec["lines"], spec["audioTracks"])
     if document:
         return spec

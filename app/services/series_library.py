@@ -375,6 +375,22 @@ def _store_shot_resolution(shot: dict) -> None:
         shot.pop("resolution", None)
 
 
+EPISODE_FORMAT_LIMIT = 2000
+
+
+def _store_episode_format(project: dict) -> None:
+    """``episodeFormat``: how the series builds each episode (parts, lengths, number of shots), in words. Empty is
+    removed, so a series that never wrote one stays as it was; agents then follow the guide's default shape."""
+    raw = project.get("episodeFormat")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        project.pop("episodeFormat", None)
+        return
+    if not isinstance(raw, str):
+        raise ValueError("episodeFormat must be text")
+    if len(raw) > EPISODE_FORMAT_LIMIT:
+        raise ValueError(f"episodeFormat is at most {EPISODE_FORMAT_LIMIT} characters")
+
+
 def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -> dict:
     from .series_render import normalize_series_shot_duration
     from .series_production import PRODUCTION_METHODS
@@ -858,6 +874,7 @@ def series_put_payload(current: dict, sent: dict) -> dict:
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     from services.series_ambience import check_sound_design
+    from services.series_finish import store_look
     from services.series_layers import normalize_location
     from services.series_production import normalize_production_methods
     from services.series_voice_rooms import check_voice_rooms
@@ -1040,6 +1057,9 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     })
     # The H3 tier of the script's video shots (series_video_shots); absent is 480p.
     _store_resolution(project, "videoShotResolution", "videoShotResolution")
+    # The finish over its 2D shots (series_finish; absent is paper) and its own episode shape (absent: the guide's).
+    store_look(project)
+    _store_episode_format(project)
     synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
     keep_record_author(project)

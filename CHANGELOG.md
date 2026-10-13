@@ -174,6 +174,21 @@ made is generated again. A series on H3 (not H3 Legacy) saved at 540p or 768p no
 renders its new takes at that size; its earlier takes stay 1280x704, and the cut
 scales every clip to the episode frame. Choose 720p to keep the old size.
 
+**Series camera, finish and episode format are now visible choices.** A 2D Series
+shot could only hold still or push in, every 2D shot got the same paper finish, and
+agents were told one fixed episode shape. The camera can now also pull out, pan left,
+pan right or drift (in the shot's *Framing and timing*, `series.shot.update` and the
+script's `camera`); a pan or drift frames the plate a little closer so its edge never
+shows. The finish is chosen for the series in Setup (`look.finish`: paper, none, any
+Video 2D finish such as film or noir, without its letterbox bars, or an agent's own
+amounts) and for one shot.
+Setup also has an *Episode format*: the episode planner and agents follow it, and
+when it is empty agents keep the default sitcom format, which Setup now shows.
+Nothing changes for a series that chooses nothing: paper stays the default, only a
+camera's own name (`pan-left`) moves it, so words such as "slow pan" stored in old
+shots still render static, and every stored shot keeps its digests, takes and
+approvals.
+
 **VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
 speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
 Design*, and the Character Creator voice designer and new reference voices start on
