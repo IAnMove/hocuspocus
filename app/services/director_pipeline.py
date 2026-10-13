@@ -206,14 +206,19 @@ def _director_hardware_snapshot() -> dict:
     """Read the same cached hardware facts used by Studio's H3 preflight."""
 
     try:
-        return dict(_get_cached_hardware() or {})
+        hardware = dict(_get_cached_hardware() or {})
+        # A real probe always has cuda_available; the server caches {"gpu_vram_gb": 0.0}
+        # when its first probe failed, and that must not stick: probe again below.
+        if "cuda_available" in hardware:
+            return hardware
     except Exception:
-        try:
-            from services.hardware_detect import detect_hardware
+        pass
+    try:
+        from services.hardware_detect import detect_hardware
 
-            return dict(detect_hardware() or {})
-        except Exception:
-            return {"gpu_vram_gb": 0.0}
+        return dict(detect_hardware() or {})
+    except Exception:
+        return {"gpu_vram_gb": 0.0}
 
 
 def _create_director_video_execution_profile(

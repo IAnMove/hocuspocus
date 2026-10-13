@@ -1055,3 +1055,20 @@ def test_the_director_falls_back_when_the_cached_probe_fails(pipeline_wiring, mo
     assert director_pipeline._director_hardware_snapshot() == {"gpu_vram_gb": 6.0}
     monkeypatch.setattr(hardware_detect, "detect_hardware", broken)
     assert director_pipeline._director_hardware_snapshot() == {"gpu_vram_gb": 0.0}
+
+
+def test_the_director_probes_again_while_the_server_holds_a_failed_probe(pipeline_wiring, monkeypatch) -> None:
+    """A failed first probe must not stick for the Director.
+
+    The server caches ``{"gpu_vram_gb": 0.0}`` for the whole process when its first probe raises. Before the
+    kernel the Director never read that cache in the real server (``python launch.py`` runs the runtime as
+    ``__main__``, so ``from launch import _get_cached_hardware`` failed) and probed again on every call.
+    A real probe always carries ``cuda_available`` (``detect_hardware``'s schema); the placeholder does not.
+    """
+    from services import hardware_detect
+
+    fresh = {"cuda_available": True, "gpu_vram_gb": 24.0}
+    monkeypatch.setattr(hardware_detect, "detect_hardware", lambda: fresh)
+    pipeline_wiring(get_cached_hardware=lambda: {"gpu_vram_gb": 0.0})
+    snapshot = director_pipeline._director_hardware_snapshot()
+    assert snapshot == fresh and snapshot is not fresh
