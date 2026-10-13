@@ -17,13 +17,11 @@ import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } fr
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
-import type { GenerateParams, OutputFile, MediaFilter, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, SettingsTab, OutputMetadata, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, ClipPlan, DirectorClipImage, DirectorImageGenProgress, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, MusicVideoTreatment, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanJob, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, SystemConfig, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, CivitAIModel, CivitAIDownload, PipelineListItem, PipelineRepairState, SavedPipelineState, SystemDetectResponse, SystemStats, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
-import type { GalleryView } from './gallerySlice'
 import i18n from '../i18n'
 import { contentLanguageForUi } from '../lib/contentLanguage'
-import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
@@ -33,14 +31,14 @@ import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettl
 import { isHttpStatus } from '../api/http'
 import { mapDirectorClipImages } from '../lib/directorClipImages'
 import { llmActivityPreview } from '../lib/llmActivityPreview'
-import { createDeveloperModeSlice } from './developerModeSlice'
-import { createDirectorSlice } from './directorSlice'
-import { createRetakeDialogSlice } from './retakeDialogSlice'
-import { createSettingsSlice } from './settingsSlice'
-import { createSidebarSlice } from './sidebarSlice'
+import { createDeveloperModeSlice, type DeveloperModeSlice } from './developerModeSlice'
+import { createDirectorSlice, type DirectorSlice } from './directorSlice'
+import { createRetakeDialogSlice, type RetakeDialogSlice } from './retakeDialogSlice'
+import { createSettingsSlice, type SettingsSlice } from './settingsSlice'
+import { createSidebarSlice, type SidebarSlice } from './sidebarSlice'
 import { bindSlice } from './storeApi'
-import { createThemeSlice } from './themeSlice'
-import { createGallerySlice } from './gallerySlice'
+import { createThemeSlice, type ThemeSlice } from './themeSlice'
+import { createGallerySlice, type GallerySlice } from './gallerySlice'
 import { createLlmSlice, UNLOADED_LLM_STATUS, type LlmSlice } from './llmSlice'
 import { createStudioConfigurationSlice, type StudioConfigurationSlice } from './studioConfigurationSlice'
 import {
@@ -1245,7 +1243,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1504,32 +1502,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   setParam: <K extends keyof GenerateParams>(key: K, value: GenerateParams[K]) => void
   setParams: (partial: Partial<GenerateParams>) => void
 
-  // UI state
-  settingsOpen: boolean
-  toggleSettings: () => void
-  setSettingsOpen: (open: boolean) => void
-  sidebarOpen: boolean
-  toggleSidebar: () => void
-  setSidebarOpen: (open: boolean) => void
-
-  // Theme — see lib/theme.ts. Two-dimensional: a dark/light/auto mode
-  // plus a theme family (each family has a dark and a light variant).
-  // Persisted to localStorage; an inline script in index.html applies
-  // the resolved theme to <html> BEFORE React mounts to avoid a flash
-  // of the default theme.
-  themePrefs: ThemePrefs
-  setThemeMode: (mode: ThemeMode) => void
-  setThemeFamily: (family: FamilyId) => void
-  /** Internal tools (Auditoría interna). Off by default; persisted locally. */
-  developerMode: boolean
-  setDeveloperMode: (enabled: boolean) => void
-
-  // Retake Dialog
-  retakeDialogOpen: boolean
-  retakeSourceFile: string | null
-  openRetakeDialog: (filename: string) => void
-  closeRetakeDialog: () => void
-
   // CivitAI LoRA Browser
   // Director Pipeline Dashboard
   dashboardOpen: boolean
@@ -1599,10 +1571,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   setAllModelsEnabled: (enabled: boolean) => void
   /** Bulk-toggle a list of models (family-level enable/disable, issue #14). */
   setModelsEnabled: (modelTypes: string[], enabled: boolean) => void
-  // ModelSelector "+N more" hint → open Settings and expand Enabled Models.
-  modelVisibilityFocus: GenerationMode | null
-  openModelVisibility: (mode: GenerationMode) => void
-  clearModelVisibilityFocus: () => void
 
   // ── Tools area (standalone post-processing on an existing clip) ──────
   // Apply FlashVSR upscale or SeedVC revoice to any gallery output or an
@@ -1724,24 +1692,8 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   systemStats: SystemStats | null
   loadSystemStats: () => Promise<void>
 
-  // Settings tab
-  settingsTab: SettingsTab
-  setSettingsTab: (tab: SettingsTab) => void
-
   // Select model (triggers side effects)
   selectModel: (modelType: string, preserveAudioReferences?: boolean) => void
-
-  // Workspaces
-  workspaces: Array<{ name: string; path: string; file_count?: number }>
-  activeWorkspace: string
-  /** Gallery is showing the virtual "Uploads" view (browse-only — the
-   *  server-side active workspace, and where generations save, is
-   *  untouched). Entered via switchWorkspace('__uploads__'). */
-  browsingUploads: boolean
-  loadWorkspaces: () => Promise<void>
-  switchWorkspace: (name: string) => Promise<void>
-  createWorkspace: (name: string) => Promise<void>
-  deleteWorkspace: (name: string) => Promise<void>
 
   // Storage Manager overlay
   storageDashboardOpen: boolean
@@ -1753,46 +1705,8 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   loraPickerSort: 'name' | 'newest'
   setLoraPickerSort: (sort: 'name' | 'newest') => void
 
-  // Outputs
-  outputs: OutputFile[]
-  outputsTotal: number
-  selectedOutput: number
-  setSelectedOutput: (i: number) => void
-  mediaFilter: MediaFilter
-  /** Gallery layout preference — see gallerySlice. */
-  galleryView: GalleryView
-  setGalleryView: (view: GalleryView) => void
-  galleryGridColumns: number | null
-  setGalleryGridColumns: (columns: number | null) => void
-  galleryOrder: import('../api/outputs').GalleryOrder
-  setGalleryOrder: (order: import('../api/outputs').GalleryOrder) => void
-  mobileHistoryOpen: boolean
-  setMobileHistoryOpen: (open: boolean) => void
-  outputSearchQuery: string
-  galleryFeedAtTop: boolean
-  galleryRefreshPending: boolean
-  galleryToast: { id: number; message: string } | null
-  setMediaFilter: (f: MediaFilter) => void
-  setOutputSearchQuery: (q: string) => void
-  setGalleryFeedAtTop: (atTop: boolean) => void
-  clearGalleryToast: () => void
-  maybeRefreshGallery: (opts?: { message?: string; force?: boolean }) => Promise<void>
-  filteredOutputs: () => OutputFile[]
-  outputsLoading: boolean
-  loadOutputs: () => Promise<void>
-  loadMoreOutputs: () => Promise<void>
-  refreshOutputs: () => Promise<void>
-  toggleFavorite: (name: string) => Promise<void>
-  mergeOutputFacts: (facts: import('../api/outputs').OutputFacts) => number
-
-  // Output metadata (lazy-loaded for selected output)
-  selectedOutputMeta: OutputMetadata | null
-  metadataLoading: boolean
-  loadOutputMetadata: (name: string) => Promise<void>
   loadSettingsFromOutput: (source?: OutputSettingsSource) => Promise<boolean | void>
   rerollGeneration: (source?: OutputSettingsSource) => Promise<boolean | void>
-  deleteSelectedOutput: () => Promise<void>
-  rejoinClipGroup: (groupId: string) => Promise<void>
 
   // Services config
   servicesConfig: ServicesConfig | null
@@ -1813,71 +1727,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
 
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
-  directorStep: 'upload' | 'analyze' | 'structure' | 'style' | 'plan' | 'review' | 'generate_images' | 'plan_video' | 'review_video'
-  /** The loaded track's identity, for the UI and for the generation payload.
-   *  A name rather than the File: audio reaches Director either as an upload
-   *  or adopted by name from the server, and nothing reads the bytes back —
-   *  the server works from directorAudioPath. */
-  directorAudioName: string | null
-  directorAudioPath: string | null
-  directorAnalysis: AudioAnalysisResult | null
-  directorPlannedClips: PlannedClip[]
-  directorEnergyBias: number
-  directorPacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
-  directorMusicVideoTreatment: MusicVideoTreatment
-  setDirectorMusicVideoTreatment: (partial: Partial<MusicVideoTreatment>) => void
-  directorClipPlans: ClipPlan[]
-  directorSceneDescription: string
-  directorSpokenLanguage: string
-  directorLoading: boolean
-  /** Sub-status for the current loading phase (e.g. "Loading
-   *  transcription model (first use downloads ~300MB)..."). Set by
-   *  the analyze polling loop in directorUploadAndAnalyze; read by
-   *  the sidebar loading spinner. Falls back to a default like
-   *  "Analyzing audio..." in the UI when null. */
-  directorLoadingMessage: string | null
-  directorError: string | null
-  /** Durable partial plan shown after a provider failure. It contains no
-   * prompts, only saved/missing indexes and the resume identifier. */
-  directorPlanRecovery: DirectorV2PlanJob | null
-  directorReferenceImage: File | null
-  directorReferenceImagePath: string | null
-  directorCharacterRefs: File[]
-  directorCharacterRefPaths: string[]
-  directorCharacterRefLabels: string[]
-  directorLocationRefs: File[]
-  directorLocationRefPaths: string[]
-  directorLocationRefLabels: string[]
-  directorH3VideoRefs: File[]
-  directorH3VideoRefPaths: string[]
-  directorH3AudioRefs: File[]
-  directorH3AudioRefPaths: string[]
-  directorVoiceRef: File | null
-  directorVoiceRefPath: string | null
-  directorIdentityGuidanceScale: number
-  /** Experimental: bypass the safety check that disables ID-LoRA reference
-   *  audio concatenation on the distilled LTX-2.3 pipeline. The base
-   *  distilled model produces noise when ref tokens are prepended, but
-   *  newer ID-LoRA variants (e.g. AviadDahan CelebVHQ-3K) claim distilled
-   *  compatibility — this flag lets users test those LoRAs.
-   *
-   *  REMOVED 2026-05-26: Per WanGP v11.77 testing, the CelebVHQ ID-LoRA
-   *  works on both dev and distilled. The block-on-distilled gate and
-   *  this experimental override are both gone. The comment is preserved
-   *  for historical context only. */
-  setDirectorVoiceRef: (file: File | null) => void
-  setDirectorIdentityGuidanceScale: (v: number) => void
-  directorClipImages: DirectorClipImage[]
-  directorImageGenProgress: DirectorImageGenProgress | null
-  directorSpeakers: string[]
-  directorSpeakerMappings: SpeakerMapping[]
-  directorAutoMode: boolean
-  directorSeamless: boolean
-  directorShotImageGuidance: DirectorShotImageGuidance
-  /** Completed LLM stream outputs, kept so the thinking/output boxes stay
-   *  in the chat history after each stage finishes instead of vanishing. */
-  directorLlmLog: { stage: string; text: string }[]
-  directorAppendLlmLog: (stage: string, text: string) => void
   directorSkill: DirectorSkill | null
   /** Exact Story production currently loaded by the embedded Wizard. */
   directorStoryProductionHandoff: {
@@ -1887,25 +1736,7 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
     cueId?: string
     candidateId?: string
   } | null
-  directorResolution: ResolutionPreset
-  directorAspectRatio: AspectRatio
-  /** Director-owned inference-step choices, keyed by video model. Keeping
-   *  these separate from Studio prevents one surface from silently changing
-   *  the other and lets each Director model retain its own valid recipe. */
-  directorVideoInferenceStepsByModel: Record<string, number>
-  /** Optional expert override of Director's hardware-safe native-shot cap. */
-  directorVideoMaxShotFramesByModel: Record<string, number>
-  /** Director-owned H3 Turbo choices, separate from Studio's active mode. */
-  directorH3TurboModeByModel: Record<string, boolean>
-  setDirectorAutoMode: (v: boolean) => void
-  setDirectorSeamless: (v: boolean) => void
-  setDirectorShotImageGuidance: (v: DirectorShotImageGuidance) => void
   setDirectorSkill: (skill: DirectorSkill) => void
-  setDirectorResolution: (preset: ResolutionPreset) => void
-  setDirectorAspectRatio: (ratio: AspectRatio) => void
-  setDirectorVideoInferenceSteps: (modelType: string, steps: number | null) => void
-  setDirectorVideoMaxShotFrames: (modelType: string, frames: number | null) => void
-  setDirectorH3TurboMode: (modelType: string, enabled: boolean) => void
   selectDirectorImageModel: (modelType: string) => void
   selectDirectorVideoModel: (modelType: string) => Promise<void>
   setDirectorH3Profile: (profile: 'balanced' | 'quality' | 'low_memory') => void
@@ -1925,19 +1756,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
    *  the trailer excerpt, then analyze and plan. */
   directorLoadAudioSource: (source: DirectorAudioSource, opts?: DirectorAudioOptions) => Promise<void>
   // Music Video: generate-the-track source + song setup
-  directorMusicSource: 'upload' | 'generate' | null
-  directorSongDescription: string
-  directorSongInstrumental: boolean
-  directorSongStyle: string
-  directorSongLyrics: string
-  directorSongDuration: number
-  directorTrackGenerating: boolean
-  setDirectorMusicSource: (s: 'upload' | 'generate' | null) => void
-  setDirectorSongDescription: (v: string) => void
-  setDirectorSongInstrumental: (v: boolean) => void
-  setDirectorSongStyle: (v: string) => void
-  setDirectorSongLyrics: (v: string) => void
-  setDirectorSongDuration: (v: number) => void
   directorWriteSong: () => Promise<void>
   directorGenerateTrack: () => Promise<void>
   directorAnalyzeAndPlan: (audioPath: string, opts?: { transcribe?: boolean; lyricsHint?: string; classifyLyricsHint?: string; activityId?: string; totalDuration?: number; workspace?: string }) => Promise<void>
@@ -1969,17 +1787,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   _uploadDirectorRefs: () => Promise<{ refImagePath: string | null; charPaths: string[]; locPaths: string[] }>
 
   // Short Film Director
-  shortFilmCharacters: ShortFilmCharacter[]
-  shortFilmPath: ShortFilmPath | null
-  shortFilmTargetDuration: number
-  directorWritingProvider: 'maestro' | 'deepseek' | 'minimax' | 'openai' | 'openai-compatible' | 'ollama' | 'grok'
-  directorWritingModel: string
-  directorWritingBaseUrl: string
-  shortFilmNarrative: boolean
-  shortFilmVisualStyle: string
-  shortFilmPreserveVisualStyle: boolean
-  directorCharacterVisualStyle: string
-  directorAllowClipText: boolean
   shortFilmSetCharacters: (characters: ShortFilmCharacter[]) => void
   shortFilmSetPath: (path: ShortFilmPath) => void
   shortFilmSetTargetDuration: (duration: number) => void
