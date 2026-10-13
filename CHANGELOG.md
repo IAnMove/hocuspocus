@@ -6,6 +6,29 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Security fix: the macOS "core" server no longer serves uploaded pages and
+scripts as pages of the app.** On the core server, `POST /api/v1/upload` kept
+any extension, so an uploaded `x.html`, `x.svg` or `x.js` was stored under that
+name and `GET /api/v1/uploads/...` sent it to the browser as a page on the
+app's own address (stored cross-site scripting). Both servers now use one
+uploads router, `app/routers/uploads.py`: only the known media, model, text and
+archive extensions are kept, every other name is stored as `.bin`, and every
+answer carries `X-Content-Type-Options: nosniff`. The full server already did
+this, so its answers do not change. The core server also gets what the full
+server had: files are streamed to disk instead of held in memory (500 MB cap),
+a name that is not an upload falls back to the workspace outputs, MP3, M4A and
+AAC files become WAV (with the ffmpeg program when the install has no
+ffmpeg-python package, as the core install does), and a video upload reports its `fps`, `frame_count`,
+`duration_seconds` and `has_audio`. The core server's old raw-body upload
+(`?filename=`) and a multipart upload without a `file` part now answer `422`,
+as on the full server, and `GET /api/v1/uploads/` no longer accepts a name with
+slashes in it. Core also had four wrong or hidden routes, now fixed: `POST
+/api/v1/llm/load` ignored the stored provider key and the LLM routing and loaded
+with an empty key; `GET /api/v1/series/{id}` and `POST /api/v1/llm/plan-h3-windows`
+were each defined twice, so one copy never ran; and `GET /api/v1/jobs/recovery`
+offered the jobs that were running as leftovers of a crash, which the recovery
+dialog would have offered to resume. It now answers an empty list.
+
 **A safety net for the coming split of the two largest files (no behaviour
 change).** Tests can now import the full server with a fake WanGP engine, with
 no GPU. `tests/characterization` records what read-only routes answer

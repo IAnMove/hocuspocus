@@ -34,6 +34,7 @@ from routers.series_assembly import create_series_assembly_router
 from routers.series_review import create_series_review_router
 from routers.style_library import create_style_library_router
 from routers.system_capabilities import create_system_capabilities_router, require_capability_http
+from routers.uploads import create_uploads_router
 from routers.user_diagnostics import create_user_diagnostics_router
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
 from routers.wizard_activity import create_wizard_activity_router
@@ -47,8 +48,9 @@ from services import (
     core_remote_image,
     core_scene_recording,
     core_series_assembly,
-    core_upload,
     core_workspace as core,
+    upload_stream,
+    upload_video_metadata,
 )
 from services.mcp_access import McpAccess
 from services.agent_activity import ActorHeaderMiddleware, AgentActivity
@@ -682,33 +684,14 @@ def video_export_status(job_id: str):
     return job
 
 
-@api.post("/api/v1/upload")
-async def upload_file(request: Request, filename: str = "upload.bin"):
-    chunks: list[bytes] = []
-    total = 0
-    async for chunk in request.stream():
-        total += len(chunk)
-        if total > core_upload.MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File too large (max 500 MB)")
-        chunks.append(chunk)
-    try:
-        data, original = core_upload.extract_upload(
-            b"".join(chunks),
-            request.headers.get("content-type") or "",
-            filename,
-        )
-        return core_upload.save_upload(core.uploads_dir(), data, original)
-    except ValueError as error:
-        status = 413 if "too large" in str(error).lower() else 400
-        raise HTTPException(status_code=status, detail=str(error)) from error
-
-
-@api.get("/api/v1/uploads/{filename:path}")
-def serve_upload(filename: str):
-    path = core.safe_join(core.uploads_dir(), filename)
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Upload not found")
-    return FileResponse(path)
+api.include_router(create_uploads_router(
+    uploads_dir=core.uploads_dir,
+    stream_upload=upload_stream.stream_upload_file,
+    transcode_upload=upload_stream.transcode_upload,
+    probe_video_metadata=upload_video_metadata.probe_with_ffprobe,
+    safe_join=core.safe_join,
+    output_fallback=serve_file,
+))
 
 
 api.include_router(create_llm_router(

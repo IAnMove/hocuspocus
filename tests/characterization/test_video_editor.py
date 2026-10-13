@@ -75,6 +75,15 @@ def test_compressed_audio_that_cannot_be_decoded_is_refused_and_removed(server, 
     assert list((server.root / "uploads").iterdir()) == []
 
 
+def test_upload_over_the_cap_is_refused_and_leaves_nothing(server, monkeypatch) -> None:
+    monkeypatch.setattr("routers.uploads.MAX_IMAGE_UPLOAD_BYTES", 8)
+    refused = server.client.post("/api/v1/upload", files={"file": ("big.png", b"123456789", "image/png")})
+    assert (refused.status_code, refused.json()) == (413, {"detail": "File too large (max 500 MB)"})
+    allowed = server.client.post("/api/v1/upload", files={"file": ("small.png", b"12345678", "image/png")})
+    assert allowed.status_code == 200
+    assert [item.name for item in (server.root / "uploads").iterdir()] == [allowed.json()["filename"]]
+
+
 def test_serving_an_upload_that_is_not_there(server, golden) -> None:
     (server.root / "secret.txt").write_text("outside the uploads folder", encoding="utf-8")
     server.check(golden, "serve a missing upload", "GET", "/api/v1/uploads/never-uploaded.png")
