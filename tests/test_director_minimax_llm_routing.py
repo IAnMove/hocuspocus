@@ -248,6 +248,36 @@ class TestSharedLlmReload(unittest.TestCase):
         self.assertEqual(loaded.get("api_key"), "secret")
         self.assertEqual(loaded.get("provider"), "anthropic")
 
+    def test_anthropic_with_a_configured_url_does_not_reload_on_every_call(self):
+        """The real llm_service never reports an Anthropic URL, so "" is not a change.
+
+        ``get_status()`` hides ``remote_url`` for Anthropic and Anthropic
+        requests ignore it. A leftover ``llm_remote_url`` made every call look
+        like a URL change and unloaded and loaded the client each time.
+        """
+        from services import llm_routing
+
+        unloaded = []
+        real_unload = llm_service.unload_model
+        self.addCleanup(real_unload)
+
+        def counting_unload():
+            unloaded.append(True)
+            real_unload()
+
+        with patch.object(llm_service, "unload_model", side_effect=counting_unload):
+            for _ in range(3):
+                llm_routing._ensure_llm_loaded(
+                    services={"anthropic_api_key": "secret"},
+                    provider="anthropic",
+                    model="claude",
+                    remote_url="https://proxy.example",
+                    device="cpu",
+                    default_model="Abhiray/gemma-4-E4B-it-heretic-GGUF",
+                )
+        self.assertEqual(llm_service.get_status()["provider"], "anthropic")
+        self.assertEqual(unloaded, [])
+
     def test_deepseek_url_change_reloads_and_the_same_url_does_not(self):
         unloaded, loaded = self._load(
             provider="deepseek",
