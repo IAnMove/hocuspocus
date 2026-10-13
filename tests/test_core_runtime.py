@@ -615,6 +615,47 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(foreign.status_code, 400, foreign.text)
         self.assertIn("Invalid workspace name", str(foreign.json()["detail"]))
 
+    def test_activity_cancel_stops_a_queued_video_editor_export(self):
+        """Core Activity now lists editor exports; Cancel must stop FFmpeg, not MiniMax."""
+        from services import core_workspace as core
+
+        class FrozenThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                pass
+
+            def start(self):
+                return None
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            workspace = core.workspace_dir("default")
+            Path(workspace, "clip.mp4").write_bytes(b"clip")
+            with patch("routers.video_editor.threading.Thread", FrozenThread):
+                started = self.client.post("/api/v1/video-editor/export", json={
+                    "clips": [{"source": "clip.mp4"}],
+                    "name": "Harbour cut",
+                    "workspace": "default",
+                })
+                job_id = started.json()["job_id"]
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+                editor = next(
+                    task for task in listed.json().get("tasks") or []
+                    if task.get("backend_job_id") == job_id
+                )
+                cancelled = self.client.post(
+                    f"/api/v1/tasks/{editor['id']}/cancel",
+                    params={"workspace": "default"},
+                )
+                status = self.client.get(f"/api/v1/video-editor/export/{job_id}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertTrue(editor.get("cancelable"), editor)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["status"], "cancelled", status.json())
+        self.assertEqual(cancelled.json()["task"]["status"], "cancelled")
+
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")
         self.assertEqual(listed.status_code, 200)

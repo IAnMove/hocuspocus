@@ -127,8 +127,12 @@ def control_task(task: dict, action: str):
     workspace = str(task.get("workspace") or "default")
     task_id = str(task.get("id") or "")
     job_id = str(task.get("backend_job_id") or "")
+    adapter = str((task.get("metadata") or {}).get("adapter") or "")
     if action != "cancel":
         raise HTTPException(status_code=409, detail=f"Task does not support {action}")
+    if adapter == "video-editor" and job_id:
+        from routers.video_editor import cancel_video_editor_export
+        return cancel_video_editor_export(job_id)
     if job_id:
         cancelled = core_remote_image.cancel_job(job_id)
         if cancelled is None:
