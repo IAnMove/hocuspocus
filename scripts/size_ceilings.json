@@ -2,7 +2,7 @@
   "version": 1,
   "note": "Line ceilings that only go down (scripts/size_ceilings.py). The merge train recomputes them at merge time.",
   "ceilings": {
-    "app/_launch_runtime.py": 36719,
+    "app/_launch_runtime.py": 36725,
     "app/core_runtime.py": 790,
     "ui/src/stores/useStore.ts": 10098
   }

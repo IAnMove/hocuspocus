@@ -559,7 +559,9 @@ def test_story_image_style_lock_keeps_the_whole_prompt_and_minimax_cuts_its_own(
     assert len(sent) < 1500 and sent.startswith("VISUAL STYLE LOCK:")
 
 
-def test_story_prompt_contract_forces_character_medium_and_removes_lyric_lettering():
+def test_sung_prompt_contract_forces_character_medium_and_removes_lyric_lettering():
+    # allow_clip_text=False is what the Director passes for a sung project
+    # (a music video); stories pass True and get no text lock.
     plans = [{
         "image_prompt": "A low-poly singer stands under cyan light.",
         "video_prompt": (

@@ -87,6 +87,7 @@ from services.director.policies import (
     enforce_direct_video_on_clip_plans,
     enforce_visual_style_on_clip_plans,
     mark_typed_prompt_edits,
+    no_visible_text_lock_applies,
 )
 from services.director_pipeline_state import (
     _DIRECTOR_TEMP_DIRNAME,
@@ -768,10 +769,41 @@ def _normalize_style_phrase(raw: str) -> str:
     return s
 
 
-def _style_prefix_for(style: str) -> str:
-    """The exact lead sentence validated to hold Klein to a medium."""
+def _is_flux2_klein(image_model: str) -> bool:
+    """Flux.2 Klein family: 4B, 9B, their base models and finetunes built on them."""
+    model = str(image_model or "").strip()
+    getter = getattr(_wgp, "get_base_model_type", None)
+    try:
+        architecture = str(getter(model) or "") if model and callable(getter) else ""
+    except Exception:
+        architecture = ""
+    return (architecture or model).startswith("flux2_klein")
+
+
+def _style_prefix_for(style: str, image_model: str) -> str:
+    """The exact lead sentence validated to hold Klein to a medium.
+
+    Only for the Flux.2 Klein family, the only one it was tested with
+    (3d4d74b3). With every other image model the prompt stays as planned.
+    """
     style = (style or "").strip()
-    return f"Maintain the same {style} art style. " if style else ""
+    if not style or not _is_flux2_klein(image_model):
+        return ""
+    return f"Maintain the same {style} art style. "
+
+
+def _reference_style_wanted(params: Mapping[str, Any]) -> bool:
+    """Whether a run asks the vision model to name the reference's art style.
+
+    The phrase only feeds the Klein style prefix. No call when it is already
+    known (resume), with Raw prompts (no prefix) or with an image model that
+    is not Flux.2 Klein. The model is read as ``_run_image_generation`` reads it.
+    """
+    return (
+        "_reference_style" not in params
+        and not _raw_prompts()
+        and _is_flux2_klein(params.get("image_model", "flux2_klein_9b"))
+    )
 
 
 # Motion-photography effects have no place in a START-FRAME prompt — the
@@ -883,8 +915,8 @@ def _raw_prompts() -> bool:
 
 
 def _clip_text_allowed(params: Mapping[str, Any]) -> bool:
-    """No no-visible-text lock: Raw prompts is on, or the project allows on-screen text."""
-    return _raw_prompts() or params.get("allow_clip_text") is True
+    """No no-visible-text lock: Raw prompts is on, the project is not sung or it allows on-screen text."""
+    return _raw_prompts() or not no_visible_text_lock_applies(params)
 
 
 def _apply_final_prompt_locks(
@@ -895,8 +927,9 @@ def _apply_final_prompt_locks(
 ) -> list[dict]:
     """The final style, character-style and no-visible-text locks on planned prompts.
 
-    None of them with Raw prompts. Direct video gets only its own contract
-    (``_apply_direct_video_contract``).
+    None of them with Raw prompts. The no-visible-text lock is for sung
+    projects only (``no_visible_text_lock_applies``). Direct video gets only
+    its own contract (``_apply_direct_video_contract``).
     """
     if _raw_prompts():
         return clip_plans
@@ -906,7 +939,7 @@ def _apply_final_prompt_locks(
         preserve=not direct_video and bool(params.get("preserve_visual_style", False)),
         has_reference=_has_visual_references(params),
         character_visual_style="" if direct_video else params.get("character_visual_style", ""),
-        allow_clip_text=direct_video or params.get("allow_clip_text") is True,
+        allow_clip_text=direct_video or not no_visible_text_lock_applies(params),
     )
 
 
@@ -942,6 +975,18 @@ def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> b
     plans = state.get("clip_plans")
     plan = plans[clip_index] if isinstance(plans, list) and 0 <= clip_index < len(plans) else None
     return isinstance(plan, dict) and field in (plan.get(TYPED_PROMPTS_KEY) or ())
+
+
+def _h3_segment_typed_at_review(state: Mapping[str, Any], clip_index: int) -> bool:
+    """Whether an H3 segment's saved prompt comes from a shot prompt the user typed at review.
+
+    A segment is cut from the shot's video prompt, its windows or its own
+    segment prompts, so a mark on any of them counts.
+    """
+    return any(
+        _typed_at_review(state, clip_index, field)
+        for field in ("video_prompt", "window_prompts", "h3_segment_prompts")
+    )
 
 
 def _regenerate_seed(state: Mapping[str, Any], stored: Any) -> int:
@@ -2836,7 +2881,8 @@ def _saved_prompt_contract(state: dict, prompt: str, mode: str, typed: bool = Fa
     """Reapply durable Story prompt policies to manual reruns and edits.
 
     ``typed`` is a prompt the user wrote for this rerun: the no-text lock no
-    longer deletes the lettering the user asked for in it.
+    longer deletes the lettering the user asked for in it. The saved prompts
+    the LLM wrote get that lock only in sung projects (music videos).
     """
     if _raw_prompts():
         return str(prompt or "").strip()
@@ -2872,7 +2918,7 @@ def _saved_prompt_contract(state: dict, prompt: str, mode: str, typed: bool = Fa
             mode=mode,
             preserve=True,
         )
-    if params.get("allow_clip_text") is not True and not typed:
+    if not typed and no_visible_text_lock_applies(params):
         result = apply_no_visible_text_lock(result, mode=mode)
     return result
 
@@ -2901,19 +2947,23 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     if not prompt:
         raise ValueError("No image prompt for this clip")
 
-    # Reference art-style lock: reruns re-apply the detected style prefix
-    # (the pipeline prepends it at generation time, so the saved
-    # image_prompt does not carry it). Motion-effect strip mirrors
+    # Get image gen params from the saved pipeline state
+    image_model = state.get("image_model") or "flux2_klein_9b"
+
+    # Reference art-style lock (Flux.2 Klein only): reruns re-apply the
+    # detected style prefix (the pipeline prepends it at generation time, so
+    # the saved image_prompt does not carry it). Motion-effect strip mirrors
     # _gen_image for the same reason.
     raw = _raw_prompts()
     if not raw:
         prompt = _strip_motion_effects(prompt)
-    _style_prefix = "" if raw else _style_prefix_for((state.get("_params_snapshot") or {}).get("_reference_style") or "")
+    _style_prefix = "" if raw else _style_prefix_for(
+        (state.get("_params_snapshot") or {}).get("_reference_style") or "",
+        image_model,
+    )
     if _style_prefix and not prompt.lower().startswith("maintain the same"):
         prompt = _style_prefix + prompt
 
-    # Get image gen params from the saved pipeline state
-    image_model = state.get("image_model") or "flux2_klein_9b"
     image_loras = state.get("image_loras") or {}
     image_params = state.get("image_params") or {}
     validation_params = _director_params_from_saved_state(state)
@@ -4070,8 +4120,11 @@ def rerun_h3_segment(
     snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
     direct_params = {**state, **snapshot}
     direct_video, direct_video_master_prompt = _direct_video_settings(direct_params)
-    # A prompt the user typed keeps its lettering; Raw prompts adds no lock.
-    allow_segment_text = bool(prompt_override) or _clip_text_allowed(direct_params)
+    # A prompt the user typed, now or at the review pause, keeps its
+    # lettering; a saved one the LLM wrote gets the no-text lock only in a
+    # sung project, and never with Raw prompts.
+    typed_segment = bool(prompt_override) or _h3_segment_typed_at_review(state, clip_index)
+    allow_segment_text = typed_segment or _clip_text_allowed(direct_params)
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs, video_refs, audio_refs = (
         ([], [], []) if direct_video else _h3_edit_references(state, clip_index)
@@ -4168,7 +4221,7 @@ def rerun_h3_segment(
                         video_params,
                     ),
                 )
-            prompt = _saved_prompt_contract(state, prompt, "video", typed=bool(prompt_override))
+            prompt = _saved_prompt_contract(state, prompt, "video", typed=typed_segment)
             prompt = _h3_apply_portrait_composition_contract(
                 prompt,
                 str(video_params.get("resolution") or "960x544"),
@@ -8069,12 +8122,13 @@ def _run_pipeline(pid: str, resume: bool = False):
         # One vision call naming the medium concretely; the phrase gets
         # prepended to every image prompt in _run_image_generation (see
         # the module-level "Reference art-style lock" note). Skipped when
-        # already detected (resume) or the reference is photographic.
+        # already detected (resume), with Raw prompts, when the image model is
+        # not Flux.2 Klein (no prefix) or the reference is photographic.
         from services import llm_service
         _style_ref = params.get("reference_image_path") or ""
         if (
             requires_shot_images
-            and "_reference_style" not in params
+            and _reference_style_wanted(params)
             and _style_ref
             and os.path.isfile(_style_ref)
         ):
@@ -10285,11 +10339,15 @@ def _run_image_generation(
     image_count = 0
 
     # Reference art-style lock: the exact lead sentence validated to hold
-    # Klein to a stylized medium. Applied to EVERY image prompt (start
-    # images, keyframes, anchor) at generation time — after polish, and
-    # regardless of whether the planner remembered to name the medium.
+    # Klein to a stylized medium. With a Flux.2 Klein model it is applied to
+    # EVERY image prompt (start images, keyframes, anchor) at generation
+    # time — after polish, and regardless of whether the planner remembered
+    # to name the medium. Other image models get the prompt as planned.
     raw_prompts = _raw_prompts()
-    _style_prefix = "" if raw_prompts else _style_prefix_for(params.get("_reference_style") or "")
+    _style_prefix = "" if raw_prompts else _style_prefix_for(
+        params.get("_reference_style") or "",
+        image_model,
+    )
 
     def _gen_image(
         prompt: str,
