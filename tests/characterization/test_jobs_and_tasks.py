@@ -28,6 +28,27 @@ def test_unknown_route(server, golden) -> None:
     server.check(golden, "unknown api route", "GET", "/api/v1/does-not-exist")
 
 
+def test_director_plan_and_pipeline_reads_reject_a_missing_target(server, golden) -> None:
+    """The plan and pipeline-read answers this step moves, before the move."""
+    server.check(golden, "director plan prompts need clips", "POST", "/api/v1/director/plan-prompts", json={})
+    server.check(
+        golden,
+        "director plan prompts need a style",
+        "POST",
+        "/api/v1/director/plan-prompts",
+        json={"clips": [{"start": 0, "end": 1}]},
+    )
+    server.check(
+        golden,
+        "director plan angle prompts need a style",
+        "POST",
+        "/api/v1/director/plan-angle-prompts",
+        json={},
+    )
+    server.check(golden, "director saved pipeline missing", "GET", "/api/v1/director/pipelines/missing-pipeline")
+    server.check(golden, "director pipeline status missing", "GET", "/api/v1/director/pipeline/missing-pipeline")
+
+
 def test_task_upsert_keeps_a_terminal_task_terminal(server, golden) -> None:
     """A queued task may jump to completed, and a later active snapshot does not reopen it."""
     body = {

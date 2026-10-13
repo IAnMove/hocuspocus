@@ -1,4 +1,10 @@
 {
+  "director pipeline status missing": {
+    "body": {
+      "detail": "Pipeline not found"
+    },
+    "status": 404
+  },
   "director pipelines": {
     "body": {
       "limit": 0,
@@ -13,6 +19,30 @@
       "pipelines": []
     },
     "status": 200
+  },
+  "director plan angle prompts need a style": {
+    "body": {
+      "detail": "style_prompt is required"
+    },
+    "status": 400
+  },
+  "director plan prompts need a style": {
+    "body": {
+      "detail": "style_prompt is required"
+    },
+    "status": 400
+  },
+  "director plan prompts need clips": {
+    "body": {
+      "detail": "clips is required"
+    },
+    "status": 400
+  },
+  "director saved pipeline missing": {
+    "body": {
+      "error": "Pipeline not found"
+    },
+    "status": 404
   },
   "director v2 plan jobs": {
     "body": {
