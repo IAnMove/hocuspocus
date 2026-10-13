@@ -160,7 +160,12 @@ async function seriesHarness(workspace: string) {
       return respond(series)
     }
     if (method === 'PUT' && path === '/api/v1/series/series-saved') {
+      const current = library.seriesById['series-saved']
       const saved: SeriesProject = { ...body.series, revision: body.baseRevision + 1 }
+      // Same rule as PUT /api/v1/series/{id}: a language-intent change demotes canon.
+      if (current && JSON.stringify(current.languageIntent) !== JSON.stringify(saved.languageIntent)) {
+        saved.canon = { ...saved.canon, approval: 'draft', approvedAt: undefined }
+      }
       library.seriesById[saved.id] = saved
       saves.push(saved)
       return respond(saved)
@@ -252,6 +257,33 @@ test('create_series_episode lists only what was really left unset', async () => 
     assert.equal(result.ok, true, result.message)
     assert.ok(result.message.includes('Choices I made: tone not set. Tell me if you want something else.'), result.message)
     assert.doesNotMatch(result.message, /style not set/)
+  } finally {
+    harness.restore()
+  }
+})
+
+test('create_series_episode on an approved series keeps later verbatim language and still creates the episode', async () => {
+  const harness = await seriesHarness('wizard-defaults-series-verbatim')
+  try {
+    const first = await createEpisodeReply({ episode_title: 'La demo' })
+    assert.equal(first.ok, true, first.message)
+    assert.equal(harness.library.seriesById['series-saved'].canon.approval, 'approved')
+    const savesBefore = harness.saves.length
+
+    const second = await createEpisodeReply({
+      episode_title: 'El postmortem',
+      language_intent: {
+        content_language: 'Español',
+        spoken_language: 'Español de España',
+        verbatim_segments: [{ kind: 'dialogue', text: '¡Hola, mundo!', language: 'es' }],
+      },
+    })
+    assert.equal(second.ok, true, second.message)
+    const series = harness.library.seriesById['series-saved']
+    assert.equal(Object.keys(series.episodesById).length, 2)
+    assert.equal(series.languageIntent.verbatimSegments[0]?.text, '¡Hola, mundo!')
+    assert.equal(series.canon.approval, 'approved')
+    assert.ok(harness.saves.length > savesBefore, 'the verbatim contract was saved')
   } finally {
     harness.restore()
   }

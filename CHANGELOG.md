@@ -6,6 +6,17 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Series Lab keeps a story's protected quotes, and a later episode with new
+quoted text no longer fails.** Importing a Story Lab project into Series Lab
+copied the language labels but dropped `languageIntent`, so lyrics and dialogue
+the story had marked as exact text were unprotected on the new series. Creating
+a second episode with `language_intent` (the Wizard does this for any quoted
+line) treated that as unfinished setup, saved the approved canon as a draft, and
+then refused to approve it again — the episode died with an empty error. Import
+now copies the full language contract. A later episode saves the new quotes
+without going through that setup path and re-approves if the server demoted
+canon for the language change.
+
 **Security fix: the macOS "core" server no longer serves uploaded pages and
 scripts as pages of the app.** On the core server, `POST /api/v1/upload` kept
 any extension, so an uploaded `x.html`, `x.svg` or `x.js` was stored under that

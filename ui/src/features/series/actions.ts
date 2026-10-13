@@ -169,12 +169,15 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
   // No clause for a missing visual style: the Wizard does not invent one, and a
   // series without a style is not unfinished. Setup would re-save the approved
   // canon as a draft on every later episode.
+  // Language-intent updates stay out of that setup path too. Folding them in
+  // demotes approved canon (and the server does the same on PUT) and then
+  // shouldApproveCanonForExplicitEpisodeCreate refuses to re-approve, so a
+  // later episode with quoted dialogue fails with an empty error.
   const needsSetup = createdSeries
     || !series.premise.trim()
     || !series.canon.worldSummary.trim()
     || !series.characters.length
     || !series.locations.length
-    || languageSetupChanged
   let defaultsLine = ''
   if (needsSetup) {
     const patched = {
@@ -214,15 +217,26 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     }
     series = await api.saveSeriesProject(workspace, patched, series.revision)
     defaultsLine = unsetDefaultsLine({ style: !series.visualStyle.trim(), tone: !series.tone.trim() })
+  } else if (languageSetupChanged) {
+    series = await api.saveSeriesProject(workspace, {
+      ...series,
+      language: languageIntent.contentLanguage || action.language || series.language,
+      spokenLanguage: languageIntent.spokenLanguage || action.language || series.spokenLanguage,
+      languageIntent,
+      updatedAt: new Date().toISOString(),
+    }, series.revision)
   }
   let approvedCanon = false
   if (series.canon.approval !== 'approved') {
-    const decision = shouldApproveCanonForExplicitEpisodeCreate({
-      createdSeries,
-      previousApproval,
-      previousWorldSummary,
-      previousCharacterCount,
-    })
+    const languageOnlyRefresh = !needsSetup && languageSetupChanged && previousApproval === 'approved'
+    const decision = languageOnlyRefresh
+      ? { approve: true, reason: '' }
+      : shouldApproveCanonForExplicitEpisodeCreate({
+        createdSeries,
+        previousApproval,
+        previousWorldSummary,
+        previousCharacterCount,
+      })
     if (!decision.approve) throw new Error(decision.reason)
     series = await api.approveSeriesCanon(workspace, series.id, series.canon.revision)
     approvedCanon = true
