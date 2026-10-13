@@ -11,12 +11,14 @@ from __future__ import annotations
 import argparse
 import ast
 import datetime
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -52,6 +54,31 @@ POLICY = {
 }
 EXCEPTION_FIELDS = ("path", "rule", "reason", "owner", "issue", "expires")
 WAIVABLE_RULES = {"hotspot_growth", "complexity_hotspot"}
+# Tracked app/**/*.py outside the measured scope fails as unmeasured product
+# code, except vendored engine code and the files that were already there on
+# 2026-10-13. Neither list may grow versus the PR base (compare() checks it).
+UNMEASURED_VENDOR_PREFIXES = (
+    "app/models/",
+    "app/plugins/",
+    "app/postprocessing/",
+    "app/preprocessing/",
+    "app/shared/",
+)
+UNMEASURED_BASELINE = (
+    "app/app_identity.py",
+    "app/core_runtime.py",
+    "app/scripts/benchmark_h3.py",
+    "app/scripts/benchmark_h3_memory.py",
+    "app/scripts/benchmark_h3_report.py",
+    "app/scripts/benchmark_h3_review.py",
+    "app/scripts/benchmark_h3_speech.py",
+    "app/scripts/benchmark_qwen21_turbo.py",
+    "app/scripts/install_gguf_kernels.py",
+    "app/scripts/task_db_maintenance.py",
+    "app/setup.py",
+)
+# Move and split notes are reported with the warnings but are not warnings.
+NOTE_PREFIXES = ("moved: ", "split: ", "split not credited: ")
 
 
 @dataclass(frozen=True)
@@ -60,6 +87,11 @@ class FunctionMetric:
     name: str
     line: int
     complexity: int
+    # Normalized-AST hash, only for Python functions at COMPLEXITY_WARNING+.
+    fingerprint: str = field(default="", compare=False)
+
+    def as_dict(self) -> dict:
+        return {"path": self.path, "name": self.name, "line": self.line, "complexity": self.complexity}
 
 
 class _DecisionCounter(ast.NodeVisitor):
@@ -110,6 +142,57 @@ class _DecisionCounter(ast.NodeVisitor):
     visit_Lambda = visit_FunctionDef
 
 
+_DOCSTRING_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _has_docstring(body: list) -> bool:
+    first = body[0] if body else None
+    return (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+    )
+
+
+def _serialize(node: object, out: list[str], *, top: bool = False) -> None:
+    """``ast.dump`` without positions, docstrings or the top def's name/decorators."""
+    if isinstance(node, ast.AST):
+        out.append(type(node).__name__ + "(")
+        for name, value in ast.iter_fields(node):
+            if top and name in {"name", "decorator_list"}:
+                continue
+            if name == "body" and isinstance(node, _DOCSTRING_SCOPES) and _has_docstring(value):
+                value = value[1:]
+            out.append(name + "=")
+            _serialize(value, out)
+            out.append(",")
+        out.append(")")
+    elif isinstance(node, list):
+        out.append("[")
+        for item in node:
+            _serialize(item, out)
+            out.append(",")
+        out.append("]")
+    else:
+        out.append(repr(node))
+
+
+def python_fingerprint(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """Hash a function's code, ignoring docstrings, comments and positions.
+
+    Nothing is renamed. The node type (sync or async), arguments, return
+    annotation and body are hashed, with the docstring of every def and class
+    inside removed. The function's own name and its decorators are left out:
+    moves are matched by name separately, and a route moved from
+    ``@app.post`` in launch to ``@router.post`` in a router changes only its
+    decorator, which does not count towards complexity. Comments never reach
+    the AST and positions are not serialized.
+    """
+    out: list[str] = []
+    _serialize(node, out, top=True)
+    return hashlib.sha256("".join(out).encode("utf-8")).hexdigest()[:20]
+
+
 class _PythonFunctionCollector(ast.NodeVisitor):
     def __init__(self, path: str) -> None:
         self.path = path
@@ -121,7 +204,11 @@ class _PythonFunctionCollector(ast.NodeVisitor):
         for statement in node.body:
             counter.visit(statement)
         name = ".".join((*self.scope, node.name))
-        self.metrics.append(FunctionMetric(self.path, name, node.lineno, 1 + counter.decisions))
+        complexity = 1 + counter.decisions
+        fingerprint = ""
+        if complexity >= COMPLEXITY_WARNING:
+            fingerprint = python_fingerprint(node)
+        self.metrics.append(FunctionMetric(self.path, name, node.lineno, complexity, fingerprint))
         self.scope.append(node.name)
         self.generic_visit(node)
         self.scope.pop()
@@ -150,6 +237,101 @@ def _is_product(path: str) -> bool:
     if path in PYTHON_EXACT or (path.endswith(".py") and path.startswith(PYTHON_PREFIXES)):
         return True
     return path.startswith(UI_PREFIX) and Path(path).suffix in UI_SUFFIXES
+
+
+def _unmeasured_product(tracked: list[str]) -> list[str]:
+    """Tracked app/**/*.py that the ratchet does not measure and is not vendored."""
+    return sorted(
+        path for path in tracked
+        if path.startswith("app/") and path.endswith(".py")
+        and not _is_product(path)
+        and not path.startswith(UNMEASURED_VENDOR_PREFIXES)
+    )
+
+
+def _ui_name(label: str) -> str:
+    """The identifier in an ESLint label such as "Async method 'startGeneration'".
+
+    Anonymous functions ("Arrow function", "Constructor") have no name and so
+    can never be matched as a move or a split.
+    """
+    match = re.search(r"'([^']+)'$", label)
+    return match.group(1) if match else ""
+
+
+def _matchable_name(item: FunctionMetric) -> str:
+    return item.name if item.path.endswith(".py") else _ui_name(item.name)
+
+
+def _split_stem(name: str) -> str:
+    return name.rsplit(".", 1)[-1].lstrip("_")
+
+
+def _parent_candidates(name: str) -> tuple[list[str], list[str]]:
+    """Names a split piece called ``name`` may come from (see ``_carved_from``).
+
+    Returns (qualified names it is nested in, last-part stems it extends).
+    """
+    nested = [name[:index] for index, char in enumerate(name) if char == "."]
+    stem = _split_stem(name)
+    stems = [
+        stem[:index] for index in range(1, len(stem))
+        if stem[index] == "_" or stem[index].isupper() or stem[index].isdigit()
+    ]
+    return nested, stems
+
+
+def _related_below_warning(functions: list[FunctionMetric], complex_: list[FunctionMetric]) -> list[FunctionMetric]:
+    """Functions under COMPLEXITY_WARNING that split accounting needs.
+
+    These are every function that shares a name with a complex one, plus every
+    function whose name makes it a split parent of a complex one (see
+    ``_carved_from``). With them, every instance of a parent's name is in both
+    reports, so compare() sees the parent's full drop even below the warning
+    level, without recording all functions.
+    """
+    by_name: dict[tuple[bool, str], list[FunctionMetric]] = {}
+    by_stem: dict[tuple[bool, str], list[FunctionMetric]] = {}
+    for item in functions:
+        name = _matchable_name(item)
+        if item.complexity >= COMPLEXITY_WARNING or not name:
+            continue
+        python = item.path.endswith(".py")
+        by_name.setdefault((python, name), []).append(item)
+        by_stem.setdefault((python, _split_stem(name)), []).append(item)
+    found: dict[int, FunctionMetric] = {}
+    for item in complex_:
+        python = item.path.endswith(".py")
+        name = _matchable_name(item)
+        nested, stems = _parent_candidates(name)
+        groups = [by_name.get((python, key), []) for key in (name, *nested)]
+        groups += [by_stem.get((python, key), []) for key in stems]
+        for group in groups:
+            found.update((id(candidate), candidate) for candidate in group)
+    return list(found.values())
+
+
+def _fingerprint_records(functions: list[FunctionMetric]) -> list[dict]:
+    """Move and split evidence: every function at COMPLEXITY_WARNING+.
+
+    Also the weaker functions that split accounting needs (see
+    ``_related_below_warning``). Python records at COMPLEXITY_WARNING+ carry a normalized-AST hash.
+    UI records carry only the name and complexity (``hash`` is None): ESLint
+    reports where a function's head is, not its body, so there is nothing to
+    hash without a second parse.
+    """
+    complex_ = [item for item in functions if item.complexity >= COMPLEXITY_WARNING]
+    records = []
+    for item in [*complex_, *_related_below_warning(functions, complex_)]:
+        python = item.path.endswith(".py")
+        records.append({
+            "path": item.path,
+            "name": _matchable_name(item),
+            "line": item.line,
+            "complexity": item.complexity,
+            "hash": (item.fingerprint or None) if python else None,
+        })
+    return sorted(records, key=lambda record: (record["path"], record["line"], record["name"]))
 
 
 def _line_count(path: Path) -> tuple[int, int]:
@@ -275,10 +457,298 @@ def collect(*, require_ui: bool) -> dict:
             ((path, value) for path, value in complexity_by_file.items() if value >= COMPLEXITY_WARNING),
             key=lambda item: (-item[1], item[0]),
         )),
-        "top_complexity": [asdict(item) for item in ranked[:30]],
+        "top_complexity": [item.as_dict() for item in ranked[:30]],
+        "fingerprints": _fingerprint_records(functions),
+        "unmeasured": {
+            "paths": _unmeasured_product(tracked),
+            "vendor_prefixes": list(UNMEASURED_VENDOR_PREFIXES),
+            "allowed": list(UNMEASURED_BASELINE),
+        },
     }
     report["quality"] = quality_score(report)
     return report
+
+
+def _records(report: dict) -> list[dict] | None:
+    """Function fingerprints of a report; None when the analyzer did not record them."""
+    records = report.get("fingerprints")
+    return records if isinstance(records, list) else None
+
+
+def _is_python(record: dict) -> bool:
+    return str(record["path"]).endswith(".py")
+
+
+Indexed = tuple[int, dict]
+
+
+def _without_paths(records: list[Indexed], stayed: Counter) -> list[Indexed]:
+    """Drop, per path, as many records as stayed at that path."""
+    left = Counter(stayed)
+    kept = []
+    for index, record in sorted(records, key=lambda item: (item[1]["path"], item[1]["line"], item[0])):
+        if left[record["path"]] > 0:
+            left[record["path"]] -= 1
+            continue
+        kept.append((index, record))
+    return kept
+
+
+def _pair_moves(before: list[Indexed], after: list[Indexed], *, by_hash: bool) -> dict[int, dict]:
+    stayed = Counter(item["path"] for _, item in before) & Counter(item["path"] for _, item in after)
+    gone = [record for _, record in _without_paths(before, stayed)]
+    arrived = _without_paths(after, stayed)
+    if by_hash:
+        # Identical code: pair in file order; any surplus in `arrived` is a copy.
+        return {index: source for (index, _), source in zip(arrived, gone)}
+    moves: dict[int, dict] = {}
+    available = sorted(gone, key=lambda item: item["complexity"])
+    for index, target in sorted(arrived, key=lambda item: item[1]["complexity"]):
+        source = next((item for item in available if item["complexity"] >= target["complexity"]), None)
+        if source is not None:
+            available.remove(source)
+            moves[index] = source
+    return moves
+
+
+def verified_moves(current: dict, baseline: dict) -> dict[int, dict]:
+    """Functions at COMPLEXITY_WARNING+ that left their base file for another file.
+
+    Keyed by the index of the current record in ``current["fingerprints"]``
+    (two UI functions can share a line); each value is the base record. A
+    Python move needs the same qualified name and the same normalized-AST
+    hash. UI records have no hash, so a UI move needs the same name and a
+    complexity no higher than the base function's, which is its ceiling. A
+    base function still at its old path cannot be claimed: a copy is new code.
+    """
+    now, old = _records(current), _records(baseline)
+    if now is None or old is None:
+        return {}
+    groups: dict[tuple, tuple[list[Indexed], list[Indexed]]] = {}
+    for side, records in ((0, old), (1, now)):
+        for index, record in enumerate(records):
+            python = _is_python(record)
+            if record["complexity"] < COMPLEXITY_WARNING or not record.get("name"):
+                continue
+            if python and not record.get("hash"):
+                continue
+            key = (python, record["name"], record.get("hash") if python else None)
+            groups.setdefault(key, ([], []))[side].append((index, record))
+    moves: dict[int, dict] = {}
+    for (python, _, _), (before, after) in groups.items():
+        moves.update(_pair_moves(before, after, by_hash=python))
+    return moves
+
+
+def _move_notes(current: dict, moves: dict[int, dict]) -> list[str]:
+    records = _records(current) or []
+    notes = []
+    for index in sorted(moves, key=lambda key: (-records[key]["complexity"], records[key]["path"], records[key]["line"])):
+        target, source = records[index], moves[index]
+        ceiling = "" if target["complexity"] == source["complexity"] else f", ceiling {source['complexity']}"
+        notes.append(
+            f"moved: {target['name']} (complexity {target['complexity']}{ceiling}) "
+            f"from {source['path']} to {target['path']}"
+        )
+    limit = 30
+    if len(notes) > limit:
+        notes = notes[:limit] + [f"moved: +{len(notes) - limit} more functions at complexity >= {COMPLEXITY_WARNING}"]
+    return notes
+
+
+def _not_moved_reason(record: dict, baseline: dict) -> str:
+    """Why a function over a limit did not get move credit (for the failure text)."""
+    label = f"{record['name'] or 'an anonymous function'} ({record['complexity']})"
+    if not record["name"]:
+        return f"{label} has no name to match"
+    old = _records(baseline)
+    if old is None:
+        return f"{label}: the base report has no function fingerprints"
+    same = [item for item in old if item.get("name") == record["name"] and _is_python(item) == _is_python(record)]
+    if not same:
+        return f"{label} is not in the base"
+    where = ", ".join(sorted({f"{item['path']} ({item['complexity']})" for item in same})[:3])
+    if _is_python(record) and not any(item.get("hash") == record["hash"] for item in same):
+        return f"{label} has the name of base {where} but different code, so it counts as new"
+    if not _is_python(record) and max(item["complexity"] for item in same) < record["complexity"]:
+        return f"{label} rose above its base ceiling {where}"
+    return f"{label} is a copy: the base function is still at {where}"
+
+
+def _complexity_rise_failure(
+    path: str, limit: int, message: str, current: dict, baseline: dict, moves: dict[int, dict],
+) -> str | None:
+    """None when every function over ``limit`` in ``path`` is a verified move."""
+    above = [
+        (index, item) for index, item in enumerate(_records(current) or [])
+        if item["path"] == path and item["complexity"] > limit
+    ]
+    unmoved = [item for index, item in above if index not in moves]
+    if above and not unmoved:
+        return None
+    if unmoved:
+        reasons = [_not_moved_reason(item, baseline) for item in unmoved[:3]]
+        more = "" if len(unmoved) <= 3 else f"; +{len(unmoved) - 3} more"
+        message += "; not a verified move: " + "; ".join(reasons) + more
+    return message
+
+
+def _complexity_hotspot_findings(
+    current: dict, baseline: dict, moves: dict[int, dict],
+) -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
+    failures: list[str] = []
+    old_complexity = baseline.get("complexity_hotspots", {})
+    delta = int(POLICY["complexity_hotspot_delta"])
+    for path, new_value in current.get("complexity_hotspots", {}).items():
+        old_value = old_complexity.get(path)
+        if old_value is None:
+            limit = int(POLICY["new_complexity_hotspot_limit"])
+            message = f"new complexity hotspot {path} is {new_value}; limit is {limit}"
+        else:
+            if new_value > old_value:
+                warnings.append(f"complexity hotspot {path} rose {old_value} -> {new_value}")
+            limit = old_value + delta
+            message = f"complexity hotspot {path} increased by more than {delta}"
+        if new_value <= limit:
+            continue
+        failure = _complexity_rise_failure(path, limit, message, current, baseline, moves)
+        if failure:
+            failures.append(failure)
+    return warnings, failures
+
+
+def _carved_from(child: str, parent: str) -> bool:
+    """Name rule for a split: a nested def of the parent, or the parent's name plus a suffix.
+
+    ``_run_generation`` -> ``_run_generation_prepare`` or ``_run_generation.prepare``;
+    ``startGeneration`` -> ``startGenerationAudio``. Leading underscores and
+    class or module qualifiers are ignored when comparing the last name part.
+    """
+    if child.startswith(parent + "."):
+        return True
+    stem, root = _split_stem(child), _split_stem(parent)
+    if not root or len(stem) <= len(root) or not stem.startswith(root):
+        return False
+    following = stem[len(root)]
+    return following == "_" or following.isupper() or following.isdigit()
+
+
+def _split_parent(child: dict, parents: dict[tuple[bool, str], list[dict]]) -> tuple[bool, str] | None:
+    python = _is_python(child)
+    candidates = [
+        key for key in parents
+        if key[0] == python and _carved_from(child["name"], key[1])
+    ]
+    return max(candidates, key=lambda key: len(key[1])) if candidates else None
+
+
+def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
+    """New functions at COMPLEXITY_WARNING+ carved out of a base function.
+
+    A piece is a named function at COMPLEXITY_WARNING+ whose name is not in
+    the base records, named after a base function at COMPLEXITY_WARNING+
+    (see ``_carved_from``; the longest matching parent wins). The pieces of
+    one parent are credited only when the parent's complexity, summed over
+    every function of that name, drops by at least the pieces' decisions
+    (complexity - 1 each): extracting a block with d decisions lowers the
+    parent by d and creates a piece of complexity d + 1. Both reports record
+    every function of a parent's name at any complexity (see
+    ``_related_below_warning``), so a parent that is not recorded has been
+    deleted.
+    """
+    now, old = _records(current), _records(baseline)
+    if now is None or old is None:
+        return 0, []
+    known: dict[tuple[bool, str], list[dict]] = {}
+    for item in old:
+        if item.get("name"):
+            known.setdefault((_is_python(item), item["name"]), []).append(item)
+    parents = {
+        key: items for key, items in known.items()
+        if max(item["complexity"] for item in items) >= COMPLEXITY_WARNING
+    }
+    pieces: dict[tuple[bool, str], list[dict]] = {}
+    for item in now:
+        if item["complexity"] < COMPLEXITY_WARNING or not item.get("name"):
+            continue
+        if (_is_python(item), item["name"]) in known:
+            continue
+        parent = _split_parent(item, parents)
+        if parent:
+            pieces.setdefault(parent, []).append(item)
+    credit = 0
+    notes = []
+    for key, items in sorted(pieces.items()):
+        before = sum(item["complexity"] for item in parents[key])
+        after = sum(
+            item["complexity"] for item in now
+            if item.get("name") == key[1] and _is_python(item) == key[0]
+        )
+        needed = sum(item["complexity"] - 1 for item in items)
+        names = ", ".join(f"{item['name']} ({item['complexity']})" for item in items)
+        if before - after >= needed:
+            credit += len(items)
+            notes.append(
+                f"split: {names} carved out of {key[1]} ({before} -> {after}); "
+                "not counted against the complex-function budget"
+            )
+        else:
+            notes.append(
+                f"split not credited: {names} named after {key[1]}, but {key[1]} dropped "
+                f"{before - after} ({before} -> {after}) and their decisions sum to {needed}"
+            )
+    return credit, notes
+
+
+def _complex_growth_findings(now: dict, old: dict, current: dict, baseline: dict) -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
+    failures: list[str] = []
+    complex_growth = now["complex_functions"] - old["complex_functions"]
+    if complex_growth > 0:
+        warnings.append(f"functions at complexity >= {COMPLEXITY_WARNING} increased by {complex_growth:+d}")
+    credit, notes = split_credit(current, baseline) if complex_growth > 0 else (0, [])
+    warnings.extend(notes)
+    counted = complex_growth - credit
+    budget = int(POLICY["complex_growth_budget"])
+    if counted > budget:
+        after_splits = f" ({counted} after {credit} credited split pieces)" if credit else ""
+        failures.append(
+            f"high-complexity function count grew by {complex_growth}{after_splits}; "
+            f"budget is {budget}"
+        )
+    return warnings, failures
+
+
+def _unmeasured_findings(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
+    """Fail on product Python outside the measured scope that is not baselined."""
+    scope = current.get("unmeasured")
+    if not isinstance(scope, dict):
+        return [], []
+    warnings: list[str] = []
+    failures: list[str] = []
+    paths = list(scope.get("paths") or [])
+    allowed = set(scope.get("allowed") or [])
+    old_scope = baseline.get("unmeasured") if isinstance(baseline.get("unmeasured"), dict) else None
+    for path in paths:
+        if path not in allowed:
+            failures.append(
+                f"unmeasured product code {path}: put it under "
+                f"{', '.join(PYTHON_PREFIXES)} (tools go in scripts/); the ratchet would not see it"
+            )
+        elif old_scope is not None and path not in (old_scope.get("paths") or []):
+            failures.append(f"unmeasured product code {path} is new versus the base")
+    for path in sorted(allowed - set(paths)):
+        warnings.append(f"stale unmeasured baseline entry {path}; remove it from UNMEASURED_BASELINE")
+    if old_scope is not None:
+        for key in ("vendor_prefixes", "allowed"):
+            added = sorted(set(scope.get(key) or []) - set(old_scope.get(key) or []))
+            if added:
+                failures.append(
+                    f"unmeasured exclusions ({key}) grew versus the base: {', '.join(added)}; "
+                    "code outside the ratchet needs owner review"
+                )
+    return warnings, failures
 
 
 def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
@@ -343,14 +813,9 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     if line_growth > line_budget:
         failures.append(f"production LOC grew {line_growth:,}; budget is {line_budget:,}")
 
-    complex_growth = now["complex_functions"] - old["complex_functions"]
-    if complex_growth > 0:
-        warnings.append(f"functions at complexity >= {COMPLEXITY_WARNING} increased by {complex_growth:+d}")
-    if complex_growth > int(POLICY["complex_growth_budget"]):
-        failures.append(
-            f"high-complexity function count grew by {complex_growth}; "
-            f"budget is {int(POLICY['complex_growth_budget'])}"
-        )
+    found_warnings, found_failures = _complex_growth_findings(now, old, current, baseline)
+    warnings.extend(found_warnings)
+    failures.extend(found_failures)
     if now["max_complexity"] > old["max_complexity"]:
         warnings.append(f"maximum complexity rose {old['max_complexity']} -> {now['max_complexity']}")
     if now["max_complexity"] > old["max_complexity"] + int(POLICY["max_complexity_delta"]):
@@ -358,20 +823,11 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
             f"maximum cyclomatic complexity increased by more than {int(POLICY['max_complexity_delta'])}"
         )
 
-    old_complexity = baseline.get("complexity_hotspots", {})
-    for path, new_value in current.get("complexity_hotspots", {}).items():
-        old_value = old_complexity.get(path)
-        if old_value is None:
-            if new_value > int(POLICY["new_complexity_hotspot_limit"]):
-                failures.append(
-                    f"new complexity hotspot {path} is {new_value}; "
-                    f"limit is {int(POLICY['new_complexity_hotspot_limit'])}"
-                )
-            continue
-        if new_value > old_value:
-            warnings.append(f"complexity hotspot {path} rose {old_value} -> {new_value}")
-        if new_value > old_value + int(POLICY["complexity_hotspot_delta"]):
-            failures.append(f"complexity hotspot {path} increased by more than {int(POLICY['complexity_hotspot_delta'])}")
+    moves = verified_moves(current, baseline)
+    warnings.extend(_move_notes(current, moves))
+    found_warnings, found_failures = _complexity_hotspot_findings(current, baseline, moves)
+    warnings.extend(found_warnings)
+    failures.extend(found_failures)
 
     for path, old_lines in baseline.get("hotspots", {}).items():
         new_lines = current.get("hotspots", {}).get(path, 0)
@@ -394,6 +850,9 @@ def compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
                 f"new hotspot {path} has {lines:,} lines; "
                 f"limit is {int(POLICY['new_hotspot_limit']):,}"
             )
+    found_warnings, found_failures = _unmeasured_findings(current, baseline)
+    warnings.extend(found_warnings)
+    failures.extend(found_failures)
     return warnings, failures
 
 
@@ -503,9 +962,14 @@ def _markdown_report(
             ("Maximum complexity", "max_complexity"),
         ):
             lines.append(f"| {label} | {now[key] - old[key]:+,} |")
-    if warnings:
+    notes = [item for item in warnings or [] if item.startswith(NOTE_PREFIXES)]
+    plain = [item for item in warnings or [] if not item.startswith(NOTE_PREFIXES)]
+    if notes:
+        lines.extend(["", "### Moves and splits", ""])
+        lines.extend(f"- {item}" for item in notes)
+    if plain:
         lines.extend(["", "### Warnings", ""])
-        lines.extend(f"- {item}" for item in warnings)
+        lines.extend(f"- {item}" for item in plain)
     if failures:
         lines.extend(["", "### Failures", ""])
         lines.extend(f"- {item}" for item in failures)
@@ -618,10 +1082,14 @@ def apply_exceptions(
     kept: list[str] = []
     for failure in failures:
         matched = None
+        # The waived file must be the failure's subject (the text before the
+        # first ";"). A "not a verified move" reason names other files, such
+        # as the base file a function came from; it must not match a waiver.
+        subject = failure.split(";", 1)[0]
         for item in exceptions:
             path = str(item["path"])
             rule = str(item["rule"])
-            if path not in failure:
+            if path not in subject:
                 continue
             if rule == "hotspot_growth" and "grew" in failure and "budget is" in failure:
                 matched = item
@@ -697,7 +1165,7 @@ def main() -> int:
         if baseline is not None:
             _print_trend(report, baseline)
             for warning in warnings:
-                print(f"WARN: {warning}")
+                print(f"{'NOTE' if warning.startswith(NOTE_PREFIXES) else 'WARN'}: {warning}")
             for failure in failures:
                 print(f"FAIL: {failure}")
             print("PASS: code-health ratchet" if not failures else f"FAIL: {len(failures)} budget regression(s)")
