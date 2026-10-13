@@ -5,6 +5,7 @@ import copy
 from typing import Any
 
 from services import core_workspace as core
+from services.music_model_contract import DEFAULT_MUSIC_MODEL
 from services.provider_profile import (
     IMAGE_PROVIDERS,
     MODEL3D_PROVIDERS,
@@ -41,7 +42,8 @@ CORE_DEFAULT_PROFILE = {
     "version": PROFILE_VERSION,
     "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
     "image": {"provider": "minimax", "model": "image-01"},
-    "music": {"provider": "minimax", "model": "music-3.0"},
+    # Local music first, as in the full runtime: the paid MiniMax API is never a default.
+    "music": {"provider": "local", "model": DEFAULT_MUSIC_MODEL},
     "model3d": {"provider": "meshy", "model": "latest"},
     "video": copy.deepcopy(DEFAULT_VIDEO),
 }

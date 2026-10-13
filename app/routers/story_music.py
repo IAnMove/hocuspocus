@@ -94,6 +94,16 @@ def _reserve_story_music_submission(body: dict, workspace: str):
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+def _confirmed_paid_model(body: dict) -> str:
+    """The paid model a person picked and confirmed in Story Lab; nothing else reaches MiniMax."""
+    from services.music_model_contract import MusicModelError, require_confirmed_paid_music
+
+    try:
+        return require_confirmed_paid_music(body)
+    except MusicModelError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 def start_story_music_candidates_job(body: dict):
     """Start observable MiniMax Music generation and return immediately."""
     from services import minimax_music_service
@@ -104,9 +114,7 @@ def start_story_music_candidates_job(body: dict):
         execution_mode.validate_remote_provider(workspace, "minimax-music")
     except execution_mode.ExecutionModeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    model = str(body.get("model") or "music-3.0").strip()
-    if model not in minimax_music_service.ALLOWED_MODELS:
-        raise HTTPException(status_code=400, detail=f"Unsupported MiniMax Music model: {model}")
+    model = _confirmed_paid_model(body)
     try:
         count = max(1, min(3, int(body.get("count") or 2)))
     except (TypeError, ValueError, OverflowError) as exc:
@@ -271,7 +279,7 @@ async def generate_story_music_candidates(body: dict):
     services = wgp.server_config.get("services", {})
     workspace = str(body.get("workspace") or _get_active_workspace())
     execution_mode.validate_remote_provider(workspace, "minimax-music")
-    model = str(body.get("model") or "music-3.0").strip()
+    model = _confirmed_paid_model(body)
     reference_audio_path = None
     if model in {"music-cover", "music-cover-free"}:
         reference_audio_path = _story_cover_reference_path(

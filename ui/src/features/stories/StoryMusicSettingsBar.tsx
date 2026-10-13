@@ -1,10 +1,25 @@
 import { Loader2, Palette, RefreshCcw } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { button, input, panel } from './storyLabChrome'
-import { ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL, normalizeStoryMusicModel, storyMusicGenerationReady, storyMusicReadyMessageKey } from './musicModel'
+import { ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL, storyMusicGenerationReady, storyMusicReadyMessageKey, storyMusicSelection } from './musicModel'
 import type { StoryMusicTabProps } from './StoryMusicTab'
 import { useStore } from '../../stores/useStore'
 import { modelRequirementsText } from '../../lib/minimaxMusicCatalog'
+
+/** An older save carried a paid MiniMax default; say it now reads as local until the person dismisses it. */
+function PaidModelReplacedNotice({ project, patch }: Pick<StoryMusicTabProps, 'project' | 'patch'>) {
+  const { t } = useUiTranslation('storyLab')
+  if (!project.music.replacedPaidModel) return null
+  return (
+    <span className="mt-1 block text-[9px] text-amber-300" role="status">
+      {t('music.paidModelReplaced', { model: project.music.replacedPaidModel })}{' '}
+      <button type="button" className="underline"
+        onClick={() => patch({ music: { ...project.music, replacedPaidModel: undefined } })}>
+        {t('music.paidModelReplacedDismiss')}
+      </button>
+    </span>
+  )
+}
 
 export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
   const { t } = useUiTranslation('storyLab')
@@ -21,13 +36,14 @@ export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
       <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
         <label className="block text-[10px] text-text-muted">{t('music.songModel')}
           <select className={`${input} mt-1`} value={project.music.model} title={resourceHint || undefined}
-            onChange={event => patch({ music: { ...project.music, model: normalizeStoryMusicModel(event.target.value) } })}>
+            onChange={event => patch({ music: { ...project.music, ...storyMusicSelection(event.target.value) } })}>
             <option value={ACE_STEP_MUSIC_MODEL}>{t('music.aceStepDefault')}</option>
             <option value={MINIMAX_MUSIC3_LOCAL_MODEL}>{t('music.music30Local')}</option>
             <option value="music-3.0">{t('music.music30Unavailable')}</option>
             <option value="music-2.6">{t('music.music26')}</option>
           </select>
           {resourceHint && <span className="mt-1 block text-[9px] text-text-muted" title={resourceHint}>{resourceHint}</span>}
+          <PaidModelReplacedNotice project={project} patch={patch} />
         </label>
         <div className="text-[10px] text-text-muted">{t('music.oneResultHint')}</div>
         <div className={`rounded-md border px-3 py-2 text-[10px] ${storyMusicGenerationReady(project.music.model, minimaxConfigured) ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
