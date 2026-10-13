@@ -8891,7 +8891,7 @@ def _ensure_llm_loaded(params: dict):
     """Load/reload LLM if needed. Shared between legacy and new planning."""
     from . import llm_service
 
-    from .provider_profile import alias_text_provider, default_url_for_provider, resolve_minimax_key
+    from .provider_profile import alias_text_provider, default_url_for_provider
 
     services_cfg = _wgp.server_config.get("services", {}) if _wgp else {}
     profile_text = {}
@@ -8911,17 +8911,6 @@ def _ensure_llm_loaded(params: dict):
     )
     desired_provider = alias_text_provider(desired_provider, desired_remote_url)
     desired_remote_url = default_url_for_provider(desired_provider, desired_remote_url)
-    desired_api_key = ""
-    if desired_provider == "openai":
-        desired_api_key = services_cfg.get("openai_api_key", "")
-    elif desired_provider == "anthropic":
-        desired_api_key = services_cfg.get("anthropic_api_key", "")
-    elif desired_provider == "minimax":
-        desired_api_key = resolve_minimax_key(services_cfg, "llm")
-        desired_remote_url = desired_remote_url or "https://api.minimax.io"
-    elif desired_provider == "grok":
-        desired_api_key = services_cfg.get("grok_api_key", "")
-        desired_remote_url = desired_remote_url or "https://api.x.ai"
 
     # Free GPU memory before running a local CUDA LLM. Director planning
     # fires right after image edits / audio analysis: memory profiles keep
@@ -8959,13 +8948,16 @@ def _ensure_llm_loaded(params: dict):
         else:
             print("[Pipeline] Generation in progress — skipping pre-LLM VRAM release")
 
-    if llm_service.is_loaded():
-        status = llm_service.get_status()
-        if status.get("model_id") != desired_model or status.get("provider") != desired_provider:
-            llm_service.unload_model()
-            llm_service.load_model(model_id=desired_model, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
-    else:
-        llm_service.load_model(model_id=desired_model, device=desired_device, provider=desired_provider, remote_url=desired_remote_url, api_key=desired_api_key)
+    from services.llm_routing import _ensure_llm_loaded as _load_configured_llm
+
+    _load_configured_llm(
+        services=services_cfg,
+        provider=desired_provider,
+        model=desired_model,
+        remote_url=desired_remote_url,
+        device=desired_device,
+        default_model="Abhiray/gemma-4-E4B-it-heretic-GGUF",
+    )
 
 
 def _scoped_writing_llm(params: dict) -> dict | None:

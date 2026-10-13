@@ -169,5 +169,101 @@
       "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores."
     },
     "status": 400
+  },
+  "wizard conversation empty": {
+    "body": {
+      "confirmations": [],
+      "executedActions": [],
+      "executions": [],
+      "messages": [],
+      "requestedActions": [],
+      "revision": 0,
+      "version": 1
+    },
+    "status": 200
+  },
+  "wizard conversation invalid workspace": {
+    "body": {
+      "detail": "Invalid Story Lab workspace"
+    },
+    "status": 400
+  },
+  "wizard conversation loaded": {
+    "body": {
+      "confirmations": [],
+      "executedActions": [],
+      "executions": [],
+      "messages": [
+        {
+          "cards": [],
+          "createdAt": 1,
+          "error": "",
+          "executionKey": "",
+          "id": "msg-1",
+          "jobLinks": [],
+          "lastState": "",
+          "role": "user",
+          "text": "Hola"
+        }
+      ],
+      "requestedActions": [],
+      "revision": 1,
+      "version": 1
+    },
+    "status": 200
+  },
+  "wizard conversation save": {
+    "body": {
+      "confirmations": [],
+      "executedActions": [],
+      "executions": [],
+      "messages": [
+        {
+          "cards": [],
+          "createdAt": 1,
+          "error": "",
+          "executionKey": "",
+          "id": "msg-1",
+          "jobLinks": [],
+          "lastState": "",
+          "role": "user",
+          "text": "Hola"
+        }
+      ],
+      "requestedActions": [],
+      "revision": 1,
+      "version": 1
+    },
+    "status": 200
+  },
+  "wizard workflows empty": {
+    "body": {
+      "revision": 0,
+      "version": 1,
+      "workflows": []
+    },
+    "status": 200
+  },
+  "wizard workflows invalid workspace": {
+    "body": {
+      "detail": "Invalid Story Lab workspace"
+    },
+    "status": 400
+  },
+  "wizard workflows loaded": {
+    "body": {
+      "revision": 1,
+      "version": 1,
+      "workflows": []
+    },
+    "status": 200
+  },
+  "wizard workflows save": {
+    "body": {
+      "revision": 1,
+      "version": 1,
+      "workflows": []
+    },
+    "status": 200
   }
 }

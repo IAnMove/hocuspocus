@@ -53,9 +53,6 @@ _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
 _OUTPAINT_SUBMISSION_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "outpaintSubmission.ts",
 )
-_RETAKE_SUBMISSION_PATH = os.path.join(
-    _ROOT, "ui", "src", "features", "studio", "retakeInpaintSubmission.ts",
-)
 _STUDIO_EDIT_SLICE_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
 )
@@ -171,7 +168,7 @@ class TestOutpaintSampling(unittest.TestCase):
 
     def test_frontend_sends_the_visible_advanced_values(self):
         client = api_client_source()
-        retake = _read(_RETAKE_SUBMISSION_PATH)
+        outpaint = _read(_OUTPAINT_SUBMISSION_PATH)
         for field in (
             "num_inference_steps?: number",
             "guidance_scale?: number",
@@ -181,11 +178,11 @@ class TestOutpaintSampling(unittest.TestCase):
         self.assertIn(
             "num_inference_steps: "
             "(state.params.num_inference_steps as number)",
-            retake,
+            outpaint,
         )
         self.assertIn(
             "guidance_scale: (state.params.guidance_scale as number)",
-            retake,
+            outpaint,
         )
 
 
@@ -2724,6 +2721,8 @@ class TestModelVisibilityPersistence(unittest.TestCase):
         self.assertIn("initialized_mature_models", models)
         self.assertIn("_enableUninitializedMatureModels", models)
         self.assertNotIn("for (const mt of nsfwModels)", store)
+        # loadModels moved out of useStore.ts: keep the negative pin on its new home.
+        self.assertNotIn("for (const mt of nsfwModels)", models)
 
 
 class TestFramesControlVideoAudio(unittest.TestCase):

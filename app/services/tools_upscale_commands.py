@@ -18,6 +18,7 @@ from services.tools_upscale_preparation import prepare_tools_upscale
 from services.tools_upscale_spec import (
     _asset_id_from_reference,
     freeze_tools_upscale_spec,
+    tools_upscale_schema,
 )
 
 
@@ -177,6 +178,43 @@ def _worker(runtime):
     return runtime["_run_generation"] if policy.simulated else runtime["_run_tool_upscale"]
 
 
+def tools_upscale_command_catalog() -> dict:
+    """Return the exact operation entry consumed by HTTP/MCP discovery."""
+    schema = tools_upscale_schema()
+    input_schema = dict(schema["input"])
+    definitions = input_schema.pop("$defs", {})
+    return {
+        "name": "tools.upscale",
+        "version": 2,
+        "supportedVersions": [2],
+        "domain": "tools",
+        "mutation": True,
+        "description": (
+            "Upscale one exact image or video source in an explicit output "
+            "workspace with an installed local processor. Preserve the "
+            "source workspace, processor settings and intent_id; the shared "
+            "receipt proves admission and its canonical task reports completion."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "$defs": definitions,
+            "properties": {
+                "version": {"type": "integer", "const": 2},
+                "operation": {"const": "tools.upscale"},
+                "intent_id": deepcopy(schema["intent_id"]),
+                "input": input_schema,
+            },
+            "required": ["version", "operation", "intent_id", "input"],
+        },
+    }
+
+
+# Short aliases used by catalog exporters in adjacent command slices.
+tools_upscale_catalog = tools_upscale_command_catalog
+upscale_command_catalog = tools_upscale_command_catalog
+
+
 def create_tools_upscale_operation(runtime: dict[str, Any]) -> NativeGenerationOperation:
     """Create the registered ``tools.upscale`` adapter for one runtime."""
     source_resolver = _resolve_source(runtime)
@@ -209,8 +247,6 @@ def create_tools_upscale_operation(runtime: dict[str, Any]) -> NativeGenerationO
             ready["source"] = canonical_source
         return ready, resources
 
-    from routers.tools_upscale_commands import tools_upscale_command_catalog
-
     return NativeGenerationOperation(
         freeze=freeze,
         prepare=prepare,
@@ -225,4 +261,10 @@ def create_tools_upscale_operation(runtime: dict[str, Any]) -> NativeGenerationO
 create_tools_upscale_adapter = create_tools_upscale_operation
 
 
-__all__ = ["create_tools_upscale_adapter", "create_tools_upscale_operation"]
+__all__ = [
+    "create_tools_upscale_adapter",
+    "create_tools_upscale_operation",
+    "tools_upscale_catalog",
+    "tools_upscale_command_catalog",
+    "upscale_command_catalog",
+]

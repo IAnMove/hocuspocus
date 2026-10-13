@@ -1,18 +1,27 @@
-"""Read-only MCP adapter for core, using the application's canonical catalogs."""
+"""Core MCP handlers on the shared wangp transport.
+
+The transport (auth, JSON-RPC, batches, attribution) lives in ``routers.wangp_mcp``.
+This module only supplies the read-only handlers and the legacy envelope core clients already send.
+"""
 from __future__ import annotations
 
-import json
 import inspect
-import secrets
+import os
+from contextvars import ContextVar
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 
 from routers.system_capabilities import require_capability_http
-from routers.wangp_mcp import PROTOCOL, mcp_payload_response, tool_definitions
+from routers.wangp_mcp import create_wangp_mcp_router
 from services.wangp_agent_adapters import application_endpoint, asset_catalog_handler
 
 LOCAL_MUTATIONS = frozenset({"generate", "recast", "upscale"})
+_INSTRUCTIONS = (
+    "This profile exposes read-only tools. Use canonical asset IDs and paginate with limit and offset."
+)
+_APP: ContextVar = ContextVar("core_mcp_app")
+_ARGUMENT_TOOLS = frozenset({"assets", "models"})
 
 
 def _tool_name(body):
@@ -23,102 +32,84 @@ def _tool_name(body):
     return name
 
 
-def _read_handlers(api):
-    handlers = {
-        "models": lambda arguments: {"models": []},
-        "processors": lambda arguments: {"processors": []},
-        "status": lambda arguments: {"jobs": [], "job_id": arguments.get("job_id")},
-    }
-    for name, path in (("assets", "/api/v1/assets"), ("collections", "/api/v1/workspace-collections")):
-        try:
-            endpoint = application_endpoint(api, path, "GET")
-        except StopIteration:
-            continue
-        handlers[name] = asset_catalog_handler(endpoint) if name == "assets" else lambda arguments, endpoint=endpoint: endpoint()
-    return handlers
+def _models(_arguments):
+    return {"models": []}
 
 
-def _call_tool(params, handlers):
+def _processors():
+    return {"processors": []}
+
+
+def _status(job_id):
+    from services.core_remote_image import get_job
+
+    job = get_job(job_id)
+    if isinstance(job, dict):
+        return job
+    return {"jobs": [], "job_id": job_id}
+
+
+def _assets(arguments):
+    endpoint = application_endpoint(_APP.get(), "/api/v1/assets", "GET")
+    return asset_catalog_handler(endpoint)(arguments)
+
+
+def _collections():
+    endpoint = application_endpoint(_APP.get(), "/api/v1/workspace-collections", "GET")
+    return endpoint()
+
+
+_HANDLERS = {
+    "models": _models,
+    "processors": _processors,
+    "status": _status,
+    "assets": _assets,
+    "collections": _collections,
+}
+
+
+def _legacy_value(name, params):
     if not isinstance(params, dict):
         raise ValueError("Tool call params must be an object")
-    name, arguments = params.get("name"), params.get("arguments", {})
-    if not isinstance(name, str) or name not in handlers or not isinstance(arguments, dict):
+    if not isinstance(name, str) or name not in _HANDLERS:
         raise ValueError("Unknown tool or invalid arguments")
-    if name == "status" and (not isinstance(arguments.get("job_id"), str) or not arguments["job_id"]):
-        raise ValueError("job_id is required")
-    return handlers[name](arguments)
+    if name == "status":
+        job_id = params.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            raise ValueError("job_id is required")
+        return _status(job_id)
+    if name in _ARGUMENT_TOOLS:
+        return _HANDLERS[name](params)
+    return _HANDLERS[name]()
 
 
-async def _dispatch(body, handlers):
-    if not isinstance(body, dict) or body.get("jsonrpc") != "2.0":
-        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid request"}}
-    if "id" not in body:
+async def legacy_envelope(request, body):
+    """Raw JSON for the pre-JSON-RPC clients, and 409 before a local mutation runs."""
+    _APP.set(request.app)
+    if not isinstance(body, dict) or "jsonrpc" in body:
         return None
-    request_id, method = body["id"], body.get("method")
+    params = body.get("params", body)
+    name = _tool_name(body)
+    if isinstance(name, str) and name in LOCAL_MUTATIONS:
+        require_capability_http("wangp_local")
     try:
-        if method == "initialize":
-            result = {
-                "protocolVersion": PROTOCOL, "capabilities": {"tools": {}},
-                "serverInfo": {"name": "hocuspocus-core", "version": "1"},
-                "instructions": "This profile exposes read-only tools. Use canonical asset IDs and paginate with limit and offset.",
-            }
-        elif method == "ping":
-            result = {}
-        elif method == "tools/list":
-            result = {"tools": tool_definitions(handlers, command_operations=[])}
-        elif method == "tools/call":
-            value = _call_tool(body.get("params", {}), handlers)
-            if inspect.isawaitable(value):
-                value = await value
-            result = {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}], "isError": False}
-        else:
-            return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Method not found"}}
-        return {"jsonrpc": "2.0", "id": request_id, "result": result}
-    except (ValueError, KeyError, TypeError, HTTPException) as error:
-        detail = error.detail if isinstance(error, HTTPException) else str(error)
-        return {"jsonrpc": "2.0", "id": request_id, "result": {
-            "isError": True, "content": [{"type": "text", "text": str(detail)}],
-        }}
+        value = _legacy_value(name, params)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    if inspect.isawaitable(value):
+        value = await value
+    return JSONResponse(value)
 
 
-def _require_mcp_bearer(request: Request, token: str) -> None:
-    if not token:
-        raise HTTPException(503, "External agent access is disabled; configure HOCUS_MCP_TOKEN")
-    if not secrets.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}"):
-        raise HTTPException(401, "Invalid MCP credentials")
-    origin = request.headers.get("origin")
-    if origin and origin != f"{request.url.scheme}://{request.url.netloc}":
-        raise HTTPException(403, "Origin is not permitted")
-
-
-def create_core_mcp_router(access) -> APIRouter:
-    router = APIRouter()
-
-    @router.post("/api/v1/wangp/mcp", include_in_schema=False)
-    @router.post("/api/v1/mcp")
-    async def mcp(request: Request):
-        _require_mcp_bearer(request, access.token())
-        try:
-            body = await request.json()
-        except ValueError:
-            return JSONResponse({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}, status_code=400)
-        handlers = _read_handlers(request.app)
-        # Preserve old direct requests and their capability-specific HTTP 409.
-        if isinstance(body, dict) and "jsonrpc" not in body:
-            params = body.get("params", body)
-            name = _tool_name(body)
-            if isinstance(name, str) and name in LOCAL_MUTATIONS:
-                require_capability_http("wangp_local")
-            try:
-                value = _call_tool({"name": name, "arguments": params}, handlers)
-                return await value if inspect.isawaitable(value) else value
-            except ValueError as error:
-                raise HTTPException(400, str(error)) from error
-        return await mcp_payload_response(body, lambda message: _dispatch(message, handlers))
-
-    @router.get("/api/v1/wangp/mcp", include_in_schema=False)
-    @router.get("/api/v1/mcp")
-    async def no_stream():
-        return Response(status_code=405, headers={"Allow": "POST"})
-
-    return router
+def create_core_mcp_router(access):
+    journal = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings", "core-mcp-requests.sqlite3")
+    return create_wangp_mcp_router(
+        handlers=_HANDLERS,
+        journal_path=journal,
+        token_getter=lambda: access.token(),
+        command_operations=[],
+        server_name="hocuspocus-core",
+        instructions=_INSTRUCTIONS,
+        legacy_envelope=legacy_envelope,
+        structured_content=True,
+    )

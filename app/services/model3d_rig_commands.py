@@ -1,5 +1,5 @@
 """MCP access to native UniRig/procedural jobs, without a second GPU queue."""
-from routers.model3d_commands import command_catalog as model_catalog, command_handlers as model_handlers
+from services.model3d_commands import command_catalog as model_catalog, command_handlers as model_handlers
 
 
 def command_catalog() -> list[dict]:

@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from routers.studio_video_commands import video_command_catalog
+from services.studio_video_commands import video_command_catalog
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_video_preparation import prepare_studio_video
 from services.video_generation_spec import freeze_video_generation_spec
