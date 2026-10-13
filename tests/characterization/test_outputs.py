@@ -1,6 +1,9 @@
 """Gallery listing, file serving and metadata over a few outputs made in the test."""
 from __future__ import annotations
 
+import base64
+import json
+
 from tests.characterization import media
 
 IMAGE = "2026-01-02-10h00m00s_seed7_golden_image.png"
@@ -27,6 +30,64 @@ def _outputs(server) -> None:
     media.sound(folder / SONG)
     for offset, name in enumerate((SONG, IMAGE, CLIP)):
         media.stamp(folder / name, offset)
+
+
+# Scene file names end in six random hex digits. The clock stamp is already <TIME>.
+_SCENE_FILE = {"replace": ((r"_[0-9a-f]{6}", "_<ID>"),)}
+_SCENE_PREVIEW = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\npreview").decode()
+_PLAZA = {"version": 1, "name": "Plaza", "layers": [], "width": 64, "height": 36, "fps": 30, "duration": 1}
+
+
+def test_scene_save_answer(server, golden) -> None:
+    """POST /api/v1/scenes as the full server answers it, including a URL with no workspace query."""
+    server.check(
+        golden, "scene save", "POST", "/api/v1/scenes",
+        json={"workspace": "default", "scene": _PLAZA, "preview": _SCENE_PREVIEW},
+        **_SCENE_FILE,
+    )
+    server.check(golden, "scene save needs version 1", "POST", "/api/v1/scenes", json={"scene": {"name": "Plaza"}})
+    server.check(
+        golden, "scene save needs a preview", "POST", "/api/v1/scenes",
+        json={"scene": _PLAZA},
+    )
+
+
+def test_scene_recording_answers(server, golden, tmp_path) -> None:
+    """POST /api/v1/scenes/recordings. The published URL has no workspace query."""
+    server.check(
+        golden, "scene recording metadata must be json", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("clip.webm", b"webm", "video/webm")},
+        data={"metadata": "{"},
+    )
+    server.check(
+        golden, "scene recording metadata too large", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("clip.webm", b"webm", "video/webm")},
+        data={"metadata": "x" * (8 * 1024 * 1024 + 1)},
+    )
+    server.check(
+        golden, "scene recording workspace must be exact", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("clip.webm", b"webm", "video/webm")},
+        data={"metadata": json.dumps({"workspace": " client-lab ", "scene": _PLAZA})},
+    )
+    server.check(
+        golden, "scene recording needs version 1", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("clip.webm", b"webm", "video/webm")},
+        data={"metadata": json.dumps({"scene": {"name": "Plaza"}, "prompt": ""})},
+    )
+    media.need_ffmpeg()
+    clip = tmp_path / "capture.mp4"
+    media.video(clip, seconds=1, size="64x36", fps=30)
+    server.check(
+        golden, "scene recording", "POST", "/api/v1/scenes/recordings",
+        files={"file": ("capture.mp4", clip.read_bytes(), "video/mp4")},
+        data={"metadata": json.dumps({
+            "workspace": "client-lab",
+            "prompt": "harbour",
+            "scene": _PLAZA,
+        })},
+        mask=("size",),
+        **_SCENE_FILE,
+    )
 
 
 def test_gallery_listing(server, golden) -> None:

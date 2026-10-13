@@ -478,15 +478,20 @@ def test_editor_gallery_sidecar_publishes_canonical_manifest_without_invented_ac
 ):
     artifact = tmp_path / filename
     artifact.write_bytes(b"media")
-    # The Video Editor's writers live in its mounted router module.
-    write = getattr(editor_router, writer_name, None) or _load_launch_function(
-        writer_name,
-        {
-            "os": os,
-            "time": time,
-            "publish_generation_sidecar": publish_generation_sidecar,
-        },
-    )
+    # Video Editor writers live in the mounted router. The scene recording
+    # writer lives in the shared save service.
+    write = getattr(editor_router, writer_name, None)
+    if write is None and writer_name == "_write_scene_recording_sidecar":
+        from services.scene_save import _write_scene_recording_sidecar as write
+    elif write is None:
+        write = _load_launch_function(
+            writer_name,
+            {
+                "os": os,
+                "time": time,
+                "publish_generation_sidecar": publish_generation_sidecar,
+            },
+        )
     write(str(artifact), sidecar, "lab")
     loaded = read_asset_manifest(artifact, workspace_id="lab")
     raw = json.loads(artifact.with_suffix(".meta.json").read_text(encoding="utf-8"))
@@ -550,12 +555,20 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
-        "_write_scene_recording_sidecar",
         "_write_comic_animatic_sidecar",
     ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    scene_save = (Path(__file__).parents[1] / "app" / "services" / "scene_save.py").read_text(encoding="utf-8")
+    scene_tree = ast.parse(scene_save)
+    scene_node = next(
+        item for item in scene_tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == "_write_scene_recording_sidecar"
+    )
+    scene_body = ast.get_source_segment(scene_save, scene_node)
+    assert "publish_generation_sidecar" in scene_body
+    assert "json.dump" not in scene_body
     editor_source = Path(editor_router.__file__).read_text(encoding="utf-8")
     editor_tree = ast.parse(editor_source)
     for name in ("_write_video_editor_screenshot_sidecar", "_write_video_editor_export_sidecar"):
