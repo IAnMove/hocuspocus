@@ -29437,19 +29437,15 @@ def _series_render_update_item(job_id: str, item_index: int, **patch) -> dict | 
 
 
 def _series_asset_local_path(workspace: str, asset: dict) -> str:
-    uri = str(asset.get("uri") or "")
-    if uri.startswith("https://"):
-        raise ValueError(
-            f"Remote Series asset {asset.get('id')} must be imported into the workspace before local H3 rendering"
-        )
-    workspace_dir = os.path.realpath(_workspace_dir(workspace))
-    relative = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
-    candidate = os.path.realpath(os.path.join(workspace_dir, relative))
-    if candidate != workspace_dir and not candidate.startswith(workspace_dir + os.sep):
-        raise ValueError(f"Series asset {asset.get('id')} leaves its workspace")
-    if not os.path.isfile(candidate):
-        raise ValueError(f"Series reference file is missing: {uri}")
-    return candidate
+    from services.series_asset_path import series_asset_local_path
+
+    return series_asset_local_path(
+        workspace,
+        asset,
+        workspace_dir=_workspace_dir,
+        remote_purpose="local H3 rendering",
+        on_missing="raise",
+    )
 
 
 def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dict]:
