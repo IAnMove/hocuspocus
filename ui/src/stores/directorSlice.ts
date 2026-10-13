@@ -36,8 +36,15 @@ export type DirectorSlice = {
   directorSceneDescription: string
   directorSpokenLanguage: string
   directorLoading: boolean
+  /** Sub-status for the current loading phase (e.g. "Loading
+   *  transcription model (first use downloads ~300MB)..."). Set by
+   *  the analyze polling loop in directorUploadAndAnalyze; read by
+   *  the sidebar loading spinner. Falls back to a default like
+   *  "Analyzing audio..." in the UI when null. */
   directorLoadingMessage: string | null
   directorError: string | null
+  /** Durable partial plan shown after a provider failure. It contains no
+   * prompts, only saved/missing indexes and the resume identifier. */
   directorPlanRecovery: DirectorV2PlanJob | null
   directorReferenceImage: File | null
   directorReferenceImagePath: string | null
@@ -54,6 +61,16 @@ export type DirectorSlice = {
   directorVoiceRef: File | null
   directorVoiceRefPath: string | null
   directorIdentityGuidanceScale: number
+  /** Experimental: bypass the safety check that disables ID-LoRA reference
+   *  audio concatenation on the distilled LTX-2.3 pipeline. The base
+   *  distilled model produces noise when ref tokens are prepended, but
+   *  newer ID-LoRA variants (e.g. AviadDahan CelebVHQ-3K) claim distilled
+   *  compatibility — this flag lets users test those LoRAs.
+   *
+   *  REMOVED 2026-05-26: Per WanGP v11.77 testing, the CelebVHQ ID-LoRA
+   *  works on both dev and distilled. The block-on-distilled gate and
+   *  this experimental override are both gone. The comment is preserved
+   *  for historical context only. */
   setDirectorVoiceRef: (file: File | null) => void
   setDirectorIdentityGuidanceScale: (v: number) => void
   directorClipImages: DirectorClipImage[]
@@ -63,12 +80,19 @@ export type DirectorSlice = {
   directorAutoMode: boolean
   directorSeamless: boolean
   directorShotImageGuidance: DirectorShotImageGuidance
+  /** Completed LLM stream outputs, kept so the thinking/output boxes stay
+   *  in the chat history after each stage finishes instead of vanishing. */
   directorLlmLog: { stage: string; text: string }[]
   directorAppendLlmLog: (stage: string, text: string) => void
   directorResolution: ResolutionPreset
   directorAspectRatio: AspectRatio
+  /** Director-owned inference-step choices, keyed by video model. Keeping
+   *  these separate from Studio prevents one surface from silently changing
+   *  the other and lets each Director model retain its own valid recipe. */
   directorVideoInferenceStepsByModel: Record<string, number>
+  /** Optional expert override of Director's hardware-safe native-shot cap. */
   directorVideoMaxShotFramesByModel: Record<string, number>
+  /** Director-owned H3 Turbo choices, separate from Studio's active mode. */
   directorH3TurboModeByModel: Record<string, boolean>
   setDirectorAutoMode: (v: boolean) => void
   setDirectorSeamless: (v: boolean) => void

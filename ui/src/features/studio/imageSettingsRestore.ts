@@ -1,5 +1,7 @@
 import * as api from '../../api/client'
-import { findResolutionSelection, getModelMode, invalidateModelOptionsLoad, type AppState } from '../../stores/useStore'
+import { getModelMode } from '../../stores/modelCatalog'
+import { findResolutionSelection } from '../../stores/resolution'
+import { invalidateModelOptionsLoad, type AppState } from '../../stores/useStore'
 import type { GenerateParams, ModelOptions } from '../../types'
 import { restoreImageFile } from '../../lib/storedImageFiles'
 import { concreteImageResolution } from '../../lib/imageResolution'
