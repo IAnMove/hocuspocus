@@ -90,7 +90,10 @@ import type {
   StoryProductionRecipe, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
-import { clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
+import {
+  clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget,
+  storyPaidMusicModel, storyUsesLocalMusicGeneration,
+} from './musicModel'
 import { confirmPaidStoryMusic } from './paidMusicConfirm'
 import {
   commitStoryAudioChoice,
@@ -2500,7 +2503,7 @@ export function StoryLabPanel() {
 
   const generateMinimaxSongs = async () => {
     const sourceProjectId = project.id
-    const usingLocalMusic = isLocalMusicModel(project.music.model)
+    const usingLocalMusic = storyUsesLocalMusicGeneration(project.music)
     if (usingLocalMusic) {
       const cue = project.music.cues.find(item => item.kind === 'story')
       if (!cue) {
@@ -2533,7 +2536,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.uploadCoverFirst') })
       return
     }
-    const paidModel = project.music.mode === 'cover' ? 'music-cover' : project.music.model
+    const paidModel = storyPaidMusicModel(project.music)
     if (!confirmPaidStoryMusic(paidModel, project.music.candidateCount)) return
     const activity = beginStoryActivity(
       'generating_music',

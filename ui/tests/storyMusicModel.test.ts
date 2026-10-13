@@ -27,6 +27,8 @@ test('ready copy names ACE, MiniMax local and MiniMax API separately', () => {
   assert.equal(storyMusicReadyMessageKey(MINIMAX_MUSIC3_LOCAL_MODEL, false), 'music.minimaxLocalReady')
   assert.equal(storyMusicReadyMessageKey('music-3.0', true), 'music.minimaxReady')
   assert.equal(storyMusicReadyMessageKey('music-3.0', false), 'music.minimaxMissing')
+  assert.equal(storyMusicReadyMessageKey(ACE_STEP_MUSIC_MODEL, false, 'cover'), 'music.minimaxMissing')
+  assert.equal(storyMusicReadyMessageKey(ACE_STEP_MUSIC_MODEL, true, 'cover'), 'music.minimaxReady')
 })
 
 test('prompt limits come from the adapter catalog and ACE is not sliced to 300', () => {

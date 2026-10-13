@@ -7,7 +7,10 @@ import {
   ACE_STEP_MUSIC_MODEL,
   normalizeStoryMusicChoice,
   resolveStoryMusicModel,
+  storyMusicGenerationReady,
   storyMusicSelection,
+  storyPaidMusicModel,
+  storyUsesLocalMusicGeneration,
 } from '../src/features/stories/musicModel.ts'
 import { createStoryProject, normalizeStoryProject } from '../src/features/stories/model.ts'
 import { confirmPaidStoryMusic } from '../src/features/stories/paidMusicConfirm.ts'
@@ -73,6 +76,34 @@ test('a paid model picked in the Story Lab selector stays chosen', () => {
   assert.equal(project.music.model, 'music-2.6')
   assert.equal(project.music.paidModelChosen, true)
   assert.equal(project.music.replacedPaidModel, undefined)
+})
+
+test('a cover story saved with music-3.0 keeps the paid model and the MiniMax cover route', () => {
+  const base = createStoryProject('music_video')
+  const saved = {
+    ...base,
+    music: {
+      ...base.music,
+      mode: 'cover' as const,
+      model: 'music-3.0',
+      coverReferenceFilename: 'ref.mp3',
+    },
+  }
+  const project = normalizeStoryProject(saved)
+  assert.equal(project.music.mode, 'cover')
+  assert.equal(project.music.model, 'music-3.0')
+  assert.equal(project.music.replacedPaidModel, undefined)
+  assert.equal(storyUsesLocalMusicGeneration(project.music), false)
+  assert.equal(storyPaidMusicModel(project.music), 'music-cover')
+  assert.equal(storyMusicGenerationReady(project.music.model, false, project.music.mode), false)
+  assert.equal(storyMusicGenerationReady(project.music.model, true, project.music.mode), true)
+})
+
+test('cover mode never takes the local ACE path even after a remapped model', () => {
+  assert.equal(storyUsesLocalMusicGeneration({ model: ACE_STEP_MUSIC_MODEL, mode: 'original' }), true)
+  assert.equal(storyUsesLocalMusicGeneration({ model: ACE_STEP_MUSIC_MODEL, mode: 'cover' }), false)
+  assert.equal(storyPaidMusicModel({ model: ACE_STEP_MUSIC_MODEL, mode: 'cover' }), 'music-cover')
+  assert.equal(storyMusicGenerationReady(ACE_STEP_MUSIC_MODEL, false, 'cover'), false)
 })
 
 test('Story Lab asks before a paid MiniMax request and never for a local one', () => {

@@ -55,17 +55,33 @@ export function clampStoryMusicDuration(value: unknown, model?: string): number 
   return Math.max(STORY_MUSIC_DURATION_MIN, Math.min(storyMusicDurationMax(model), seconds))
 }
 
+export function storyUsesLocalMusicGeneration(
+  music: { model?: string; mode?: string } | undefined,
+): boolean {
+  return music?.mode !== 'cover' && isLocalMusicModel(music?.model)
+}
+
+export function storyPaidMusicModel(
+  music: { model?: string; mode?: string } | undefined,
+): string {
+  return music?.mode === 'cover' ? 'music-cover' : String(music?.model || '')
+}
+
 export function storyMusicGenerationReady(
   model: string | undefined,
   minimaxConfigured: boolean,
+  mode?: string,
 ): boolean {
+  if (mode === 'cover') return minimaxConfigured
   return isLocalMusicModel(model) || minimaxConfigured
 }
 
 export function storyMusicReadyMessageKey(
   model: string | undefined,
   minimaxConfigured: boolean,
+  mode?: string,
 ): 'music.aceLocalReady' | 'music.minimaxLocalReady' | 'music.minimaxReady' | 'music.minimaxMissing' {
+  if (mode === 'cover') return minimaxConfigured ? 'music.minimaxReady' : 'music.minimaxMissing'
   if (isAceStepMusicModel(model)) return 'music.aceLocalReady'
   if (String(model || '') === MINIMAX_MUSIC3_LOCAL_MODEL) return 'music.minimaxLocalReady'
   return minimaxConfigured ? 'music.minimaxReady' : 'music.minimaxMissing'
@@ -103,10 +119,15 @@ type StoryMusicChoice = Pick<StoryMusicDraft, 'model' | 'paidModelChosen' | 'rep
 /** Read a saved music section: an unchosen paid id becomes the local default and is remembered for a notice. */
 export function normalizeStoryMusicChoice(music: unknown): StoryMusicChoice {
   const raw = music && typeof music === 'object' ? music as Record<string, unknown> : {}
+  const cover = raw.mode === 'cover'
   const chosen = raw.paidModelChosen === true && isPaidStoryMusicModel(raw.model)
-  const model = normalizeStoryMusicModel(raw.model, chosen)
+  // Cover is MiniMax-only. An older save in cover mode kept music-3.0 as the
+  // default; remapping it to ACE would send Generate down the local path and
+  // drop the uploaded reference.
+  const keepPaid = chosen || (cover && isPaidStoryMusicModel(raw.model))
+  const model = normalizeStoryMusicModel(raw.model, keepPaid)
   const previous = isPaidStoryMusicModel(raw.replacedPaidModel) ? raw.replacedPaidModel : undefined
-  const replaced = isPaidStoryMusicModel(raw.model) ? (chosen ? undefined : raw.model) : previous
+  const replaced = isPaidStoryMusicModel(raw.model) ? (keepPaid ? undefined : raw.model) : previous
   return {
     model,
     ...(chosen ? { paidModelChosen: true } : {}),
