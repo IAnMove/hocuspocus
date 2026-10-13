@@ -1,0 +1,81 @@
+{
+  "export missing job": {
+    "body": {
+      "detail": "Video editor export job not found"
+    },
+    "status": 404
+  },
+  "probe audio": {
+    "body": {
+      "duration": 0.5,
+      "has_audio": true
+    },
+    "status": 200
+  },
+  "probe audio without source": {
+    "body": {
+      "detail": "Audio source is missing"
+    },
+    "status": 400
+  },
+  "probe missing file": {
+    "body": {
+      "detail": "Video source could not be found: missing.mp4"
+    },
+    "status": 400
+  },
+  "probe outside workspace": {
+    "body": {
+      "detail": "Video source could not be found: passwd"
+    },
+    "status": 400
+  },
+  "probe unsupported file": {
+    "body": {
+      "detail": "Unsupported video format: .txt"
+    },
+    "status": 400
+  },
+  "probe uploaded clip": {
+    "body": {
+      "duration": 1.0,
+      "fps": 8.0,
+      "has_alpha": false,
+      "has_audio": false,
+      "height": 36,
+      "pixel_format": "yuv420p",
+      "width": 64
+    },
+    "status": 200
+  },
+  "probe without source": {
+    "body": {
+      "detail": "Video source is missing"
+    },
+    "status": 400
+  },
+  "probe workspace clip": {
+    "body": {
+      "duration": 2.0,
+      "fps": 12.0,
+      "has_alpha": false,
+      "has_audio": false,
+      "height": 32,
+      "pixel_format": "yuv420p",
+      "width": 48
+    },
+    "status": 200
+  },
+  "upload clip": {
+    "body": {
+      "duration_seconds": 1.0,
+      "filename": "<ID>.mp4",
+      "fps": 8.0,
+      "frame_count": 8,
+      "has_audio": false,
+      "path": "<STATE>/uploads/<ID>.mp4",
+      "url": "/api/v1/uploads/<ID>.mp4"
+    },
+    "status": 200
+  }
+}

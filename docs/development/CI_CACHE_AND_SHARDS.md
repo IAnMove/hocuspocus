@@ -60,6 +60,11 @@ in pytest on shard A and 3.8 min on shard B. `tests/test_ci_shards.py`
 re-checks the balance from a static count of test functions in the tree, so a
 lopsided manifest fails locally before CI does.
 
+`tests/characterization` is listed in both groups for the partition, but its
+tests import the full server and skip inside a shard run. `Python tests A`
+runs them alone in its own step (`python -m pytest tests/characterization`);
+see `tests/characterization/README.md`.
+
 Every test that runs `ui/` scripts through `ui/node_modules/tsx` lives in
 `python-b`, the only Python shard that runs `npm ci --prefix ui
 --ignore-scripts` (after `setup-node`). Elsewhere those tests skip, which is

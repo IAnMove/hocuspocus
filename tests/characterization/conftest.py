@@ -1,0 +1,102 @@
+"""The full server, imported once with a fake WanGP, and a fresh state per test.
+
+Importing the server changes process-wide state (see tests/support/full_server.py),
+so these tests run in their own pytest process:
+
+    python -m pytest tests/characterization -p no:cacheprovider
+
+In a run that also collects other tests (``pytest`` at the repo root), they are
+skipped with that command as the reason. CI runs them in their own step.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tests.support.full_server import ROOT, FullServer, load_full_server
+from tests.support.golden import GoldenBook, normalise
+
+PACKAGE = Path(__file__).resolve().parent
+RUN_ALONE = "python -m pytest tests/characterization -p no:cacheprovider"
+
+
+def _inside_package(item: pytest.Item) -> bool:
+    return PACKAGE in Path(str(item.path)).resolve().parents
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    own = [item for item in items if _inside_package(item)]
+    if own and len(own) != len(items):
+        skip = pytest.mark.skip(
+            reason=f"imports the full server, which changes process-wide state; run alone: {RUN_ALONE}"
+        )
+        for item in own:
+            item.add_marker(skip)
+
+
+@pytest.fixture(scope="session")
+def full_server(tmp_path_factory: pytest.TempPathFactory) -> FullServer:
+    return load_full_server(tmp_path_factory.mktemp("full-server"))
+
+
+@dataclass
+class Server:
+    """One test's view of the shared server: its own outputs and uploads folders."""
+
+    client: Any
+    wgp: Any
+    root: Path
+    outputs: Path
+
+    def normalise(self, body: Any, *, mask: tuple[str, ...] = (),
+                  replace: tuple[tuple[str, str], ...] = ()) -> Any:
+        return normalise(
+            body,
+            paths={str(self.outputs): "<OUTPUTS>", str(self.root): "<STATE>", str(ROOT): "<REPO>"},
+            mask=mask,
+            replace=replace,
+        )
+
+    def check(self, golden: GoldenBook, case: str, method: str, path: str, *,
+              mask: tuple[str, ...] = (), replace: tuple[tuple[str, str], ...] = (), **request: Any) -> Any:
+        """Call one route, compare its status and normalised JSON body with the golden, return the response."""
+        response = self.client.request(method, path, **request)
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"<text>": response.text}
+        golden.check(case, response.status_code, self.normalise(body, mask=mask, replace=replace))
+        return response
+
+
+@pytest.fixture
+def server(full_server: FullServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Server:
+    """Point the server at empty folders for this test.
+
+    The server reads ``wgp.server_config["save_path"]`` on every request, and
+    ``uploads/`` relative to the working directory, so each test starts with
+    no workspaces, outputs or uploads, whatever ran before it.
+    """
+    from fastapi.testclient import TestClient
+
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    fake = full_server.wgp
+    config = fake.server_config
+    for key in ("save_path", "image_save_path", "audio_save_path"):
+        monkeypatch.setitem(config, key, str(outputs))
+        monkeypatch.setattr(fake, key, str(outputs))
+    monkeypatch.setitem(config, "services", {**config.get("services", {}), "active_workspace": "default"})
+    monkeypatch.setattr(fake, "server_config_filename", str(tmp_path / "wgp_config.json"))
+    monkeypatch.chdir(tmp_path)
+    return Server(client=TestClient(full_server.api), wgp=fake, root=tmp_path, outputs=outputs)
+
+
+@pytest.fixture
+def golden(request: pytest.FixtureRequest) -> GoldenBook:
+    """The goldens of the calling test module, in ``goldens/<module>.json``."""
+    module = Path(str(request.node.path)).stem
+    return GoldenBook(PACKAGE / "goldens" / f"{module}.json")

@@ -4,6 +4,9 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
+
+from scripts import architecture_contracts
 from scripts.architecture_contracts import (
     ROOT,
     ROUTE_FIXTURE,
@@ -11,6 +14,8 @@ from scripts.architecture_contracts import (
     extract_route_table,
     extract_wire_inventory,
 )
+
+RUNTIME_ROUTE_FIXTURE = ROOT / "tests" / "fixtures" / "route_table_runtime.json"
 
 
 WGP_ALLOWLIST = {
@@ -103,6 +108,52 @@ def test_static_route_table_matches_launch_and_mounted_router_order() -> None:
     fixture = json.loads(ROUTE_FIXTURE.read_text(encoding="utf-8"))
     assert fixture == {"version": 1, "routes": extract_route_table()}
     assert [route["ordinal"] for route in fixture["routes"]] == list(range(len(fixture["routes"])))
+
+
+def test_static_route_table_names_the_served_routes_in_served_order() -> None:
+    """The static table (no import) and the served table (fake-wgp import) list the same app routes.
+
+    tests/characterization/test_route_table_runtime.py checks the served table
+    against its fixture; this keeps the two fixtures in step without importing.
+    """
+    def rows(path, *, served: bool) -> list[tuple]:
+        routes = json.loads(path.read_text(encoding="utf-8"))["routes"]
+        return [
+            (route["method"], route["path"], route["endpoint"], route["source"], route["status_code"])
+            for route in routes
+            if not served or str(route["source"]).startswith("app/")
+        ]
+
+    assert rows(ROUTE_FIXTURE, served=False) == rows(RUNTIME_ROUTE_FIXTURE, served=True), (
+        "route_table.json and route_table_runtime.json disagree. Run scripts/architecture_contracts.py --write "
+        "with the app's Python and review both diffs."
+    )
+
+
+def _routes_of(source: str) -> list[dict]:
+    function = ast.parse(source).body[0]
+    return architecture_contracts._decorated_routes(function, owner="app/routers/example.py")
+
+
+def test_route_paths_must_be_string_literals(monkeypatch) -> None:
+    computed = "@router.get(f'{PREFIX}/items')\ndef list_items():\n    pass\n"
+    with pytest.raises(ValueError, match="not a string literal"):
+        _routes_of(computed)
+    with pytest.raises(ValueError, match="not a string literal"):
+        _routes_of("@router.post(PREFIX + '/items')\ndef add_item():\n    pass\n")
+    monkeypatch.setitem(
+        architecture_contracts.NON_LITERAL_ROUTE_PATHS,
+        ("app/routers/example.py", "list_items"),
+        "example: listed with a reason",
+    )
+    assert [route["path"] for route in _routes_of(computed)] == ["f'{PREFIX}/items'"]
+
+
+def test_stacked_route_decorators_register_bottom_up() -> None:
+    routes = _routes_of(
+        "@router.get('/first')\n@router.head('/second')\ndef both():\n    pass\n"
+    )
+    assert [(route["method"], route["path"]) for route in routes] == [("HEAD", "/second"), ("GET", "/first")]
 
 
 def test_architecture_wire_inventory_has_no_unclassified_readers() -> None:

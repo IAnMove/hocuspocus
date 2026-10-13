@@ -134,22 +134,6 @@ def _nested_includes(module: str, factory: str) -> list[tuple[str, str]]:
     return _includes(node, _router_imports(tree))
 
 
-def _router_prefix(module: str, factory: str) -> str:
-    """The prefix of ``router = APIRouter(prefix=...)`` in a factory; routers it includes inherit it."""
-    _tree, node = _factory_node(module, factory)
-    for item in ast.walk(node):
-        if (
-            isinstance(item, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "router" for target in item.targets)
-            and isinstance(item.value, ast.Call)
-            and isinstance(item.value.func, ast.Name)
-            and item.value.func.id == "APIRouter"
-        ):
-            prefix = next((keyword.value for keyword in item.value.keywords if keyword.arg == "prefix"), None)
-            return ast.literal_eval(prefix) if prefix is not None else ""
-    return ""
-
-
 def _mounted(server: Path) -> list[tuple[str, str]]:
     """Factories a server mounts, in order, with routers mounted inside routers expanded."""
     mounted: list[tuple[str, str]] = []
@@ -166,15 +150,15 @@ def _mounted(server: Path) -> list[tuple[str, str]]:
 
 
 def _factory_routes(module: str, factory: str, prefix: str = "") -> list[dict]:
-    """A router's routes, and those of the routers it includes under its own prefix."""
-    routes = [
+    """A router's routes, and those of the routers it includes under its own prefix.
+
+    ``_router_factory_routes`` expands the included routers itself, as the
+    route table fixtures need.
+    """
+    return [
         {**route, "path": prefix + route["path"]}
         for route in _router_factory_routes(ROUTERS / f"{module}.py", factory)
     ]
-    nested_prefix = prefix + _router_prefix(module, factory)
-    for nested in _nested_includes(module, factory):
-        routes.extend(_factory_routes(*nested, prefix=nested_prefix))
-    return routes
 
 
 def _server_routes(server: Path) -> list[dict]:

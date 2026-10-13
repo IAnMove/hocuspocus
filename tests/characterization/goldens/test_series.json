@@ -1,0 +1,679 @@
+{
+  "assembly recovery": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "create": {
+    "body": {
+      "allowClipText": false,
+      "allowedProductionMethods": [
+        "generated_video"
+      ],
+      "assets": {},
+      "audience": "General",
+      "bestEffortLipSyncAcknowledged": false,
+      "cameraLanguage": "",
+      "canon": {
+        "approval": "draft",
+        "approvedAt": "",
+        "currentFacts": [],
+        "forbiddenChanges": [],
+        "immutableRules": [],
+        "longArcs": [],
+        "revision": 1,
+        "themes": [],
+        "timeline": [],
+        "worldSummary": ""
+      },
+      "characterVisualStyle": "",
+      "characters": [],
+      "createdAt": "<TIME>",
+      "createdBy": {
+        "actor": "user",
+        "capability": "series.create",
+        "tool": "series"
+      },
+      "defaultEpisodeDurationSeconds": 75,
+      "episodesById": {},
+      "format": "episodic",
+      "genre": "",
+      "id": "series_<ID>",
+      "importSource": {
+        "historicalProductionIds": [],
+        "importedAt": "<TIME>",
+        "kind": "original",
+        "migrationNotes": "Created as an original Series Lab project.",
+        "sourceStoryId": null,
+        "sourceWorkspaceId": null
+      },
+      "language": "English",
+      "languageIntent": {
+        "contentLanguage": "English",
+        "conversationLanguage": "",
+        "spokenLanguage": "English",
+        "technicalPromptLanguage": "en",
+        "verbatimSegments": []
+      },
+      "locations": [],
+      "logline": "",
+      "masterUniversePrompt": "",
+      "premise": "",
+      "props": [],
+      "protagonistCharacterId": "",
+      "protagonistConsistency": false,
+      "provider": {
+        "imageModel": "",
+        "imageProvider": "maestro",
+        "useGlobalProfile": true,
+        "videoCapabilities": {
+          "family": "minimax_h3_legacy",
+          "limits": {
+            "audio": 3,
+            "image": 9,
+            "total": 12,
+            "video": 3
+          },
+          "model": "minimax_h3_legacy",
+          "supportsContinuation": true,
+          "supportsFirstFrame": true,
+          "supportsFirstLast": true,
+          "supportsNativeAudio": true,
+          "version": "runtime-default"
+        },
+        "videoModel": "minimax_h3_legacy",
+        "videoSettings": {
+          "audioShift": 3,
+          "flowShift": 12,
+          "modelProfile": "quality",
+          "numInferenceSteps": 20,
+          "orientation": "landscape",
+          "renderStrategy": "auto",
+          "resolution": "480p"
+        },
+        "writingBaseUrl": "",
+        "writingModel": "",
+        "writingProvider": "maestro"
+      },
+      "relationships": [],
+      "revision": 1,
+      "rightsNote": "",
+      "seasons": [
+        {
+          "arc": "",
+          "createdAt": "<TIME>",
+          "episodeOrder": [],
+          "id": "season_<ID>_1",
+          "number": 1,
+          "premise": "",
+          "title": "Season 1",
+          "updatedAt": "<TIME>"
+        }
+      ],
+      "sourceMode": "original",
+      "spokenLanguage": "English",
+      "title": "Golden series",
+      "tone": "Cinematic",
+      "updatedAt": "<TIME>",
+      "version": 1,
+      "visualStyle": ""
+    },
+    "status": 200
+  },
+  "delete": {
+    "body": {
+      "deleted": true,
+      "outputsPreserved": true,
+      "seriesId": "series_<ID>"
+    },
+    "status": 200
+  },
+  "episode before canon approval": {
+    "body": {
+      "detail": "Approve the reviewed Series canon before creating an episode"
+    },
+    "status": 400
+  },
+  "get": {
+    "body": {
+      "allowClipText": false,
+      "allowedProductionMethods": [
+        "generated_video"
+      ],
+      "assets": {},
+      "audience": "General",
+      "bestEffortLipSyncAcknowledged": false,
+      "cameraLanguage": "",
+      "canon": {
+        "approval": "draft",
+        "approvedAt": "",
+        "currentFacts": [],
+        "forbiddenChanges": [],
+        "immutableRules": [],
+        "longArcs": [],
+        "revision": 1,
+        "themes": [],
+        "timeline": [],
+        "worldSummary": ""
+      },
+      "characterVisualStyle": "",
+      "characters": [],
+      "createdAt": "<TIME>",
+      "createdBy": {
+        "actor": "user",
+        "capability": "series.create",
+        "tool": "series"
+      },
+      "defaultEpisodeDurationSeconds": 75,
+      "episodesById": {},
+      "format": "episodic",
+      "genre": "",
+      "id": "series_<ID>",
+      "importSource": {
+        "historicalProductionIds": [],
+        "importedAt": "<TIME>",
+        "kind": "original",
+        "migrationNotes": "Created as an original Series Lab project.",
+        "sourceStoryId": null,
+        "sourceWorkspaceId": null
+      },
+      "language": "English",
+      "languageIntent": {
+        "contentLanguage": "English",
+        "conversationLanguage": "",
+        "spokenLanguage": "English",
+        "technicalPromptLanguage": "en",
+        "verbatimSegments": []
+      },
+      "locations": [],
+      "logline": "",
+      "masterUniversePrompt": "",
+      "premise": "",
+      "props": [],
+      "protagonistCharacterId": "",
+      "protagonistConsistency": false,
+      "provider": {
+        "imageModel": "",
+        "imageProvider": "maestro",
+        "useGlobalProfile": true,
+        "videoCapabilities": {
+          "family": "minimax_h3_legacy",
+          "limits": {
+            "audio": 3,
+            "image": 9,
+            "total": 12,
+            "video": 3
+          },
+          "model": "minimax_h3_legacy",
+          "supportsContinuation": true,
+          "supportsFirstFrame": true,
+          "supportsFirstLast": true,
+          "supportsNativeAudio": true,
+          "version": "runtime-default"
+        },
+        "videoModel": "minimax_h3_legacy",
+        "videoSettings": {
+          "audioShift": 3,
+          "flowShift": 12,
+          "modelProfile": "quality",
+          "numInferenceSteps": 20,
+          "orientation": "landscape",
+          "renderStrategy": "auto",
+          "resolution": "480p"
+        },
+        "writingBaseUrl": "",
+        "writingModel": "",
+        "writingProvider": "maestro"
+      },
+      "relationships": [],
+      "revision": 1,
+      "rightsNote": "",
+      "seasons": [
+        {
+          "arc": "",
+          "createdAt": "<TIME>",
+          "episodeOrder": [],
+          "id": "season_<ID>_1",
+          "number": 1,
+          "premise": "",
+          "title": "Season 1",
+          "updatedAt": "<TIME>"
+        }
+      ],
+      "sourceMode": "original",
+      "spokenLanguage": "English",
+      "title": "Golden series",
+      "tone": "Cinematic",
+      "updatedAt": "<TIME>",
+      "version": 1,
+      "visualStyle": ""
+    },
+    "status": 200
+  },
+  "get deleted": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "library": {
+    "body": {
+      "schema": "series-library",
+      "seriesById": {
+        "series_<ID>": {
+          "allowClipText": false,
+          "allowedProductionMethods": [
+            "generated_video"
+          ],
+          "assets": {},
+          "audience": "General",
+          "bestEffortLipSyncAcknowledged": false,
+          "cameraLanguage": "",
+          "canon": {
+            "approval": "draft",
+            "approvedAt": "",
+            "currentFacts": [],
+            "forbiddenChanges": [],
+            "immutableRules": [],
+            "longArcs": [],
+            "revision": 1,
+            "themes": [],
+            "timeline": [],
+            "worldSummary": ""
+          },
+          "characterVisualStyle": "",
+          "characters": [],
+          "createdAt": "<TIME>",
+          "createdBy": {
+            "actor": "user",
+            "capability": "series.create",
+            "tool": "series"
+          },
+          "defaultEpisodeDurationSeconds": 75,
+          "episodesById": {},
+          "format": "episodic",
+          "genre": "",
+          "id": "series_<ID>",
+          "importSource": {
+            "historicalProductionIds": [],
+            "importedAt": "<TIME>",
+            "kind": "original",
+            "migrationNotes": "Created as an original Series Lab project.",
+            "sourceStoryId": null,
+            "sourceWorkspaceId": null
+          },
+          "language": "English",
+          "languageIntent": {
+            "contentLanguage": "English",
+            "conversationLanguage": "",
+            "spokenLanguage": "English",
+            "technicalPromptLanguage": "en",
+            "verbatimSegments": []
+          },
+          "locations": [],
+          "logline": "",
+          "masterUniversePrompt": "",
+          "premise": "",
+          "props": [],
+          "protagonistCharacterId": "",
+          "protagonistConsistency": false,
+          "provider": {
+            "imageModel": "",
+            "imageProvider": "maestro",
+            "useGlobalProfile": true,
+            "videoCapabilities": {
+              "family": "minimax_h3_legacy",
+              "limits": {
+                "audio": 3,
+                "image": 9,
+                "total": 12,
+                "video": 3
+              },
+              "model": "minimax_h3_legacy",
+              "supportsContinuation": true,
+              "supportsFirstFrame": true,
+              "supportsFirstLast": true,
+              "supportsNativeAudio": true,
+              "version": "runtime-default"
+            },
+            "videoModel": "minimax_h3_legacy",
+            "videoSettings": {
+              "audioShift": 3,
+              "flowShift": 12,
+              "modelProfile": "quality",
+              "numInferenceSteps": 20,
+              "orientation": "landscape",
+              "renderStrategy": "auto",
+              "resolution": "480p"
+            },
+            "writingBaseUrl": "",
+            "writingModel": "",
+            "writingProvider": "maestro"
+          },
+          "relationships": [],
+          "revision": 2,
+          "rightsNote": "",
+          "seasons": [
+            {
+              "arc": "",
+              "createdAt": "<TIME>",
+              "episodeOrder": [],
+              "id": "season_<ID>_1",
+              "number": 1,
+              "premise": "",
+              "title": "Season 1",
+              "updatedAt": "<TIME>"
+            }
+          ],
+          "sourceMode": "original",
+          "spokenLanguage": "English",
+          "title": "Golden series, revised",
+          "tone": "Cinematic",
+          "updatedAt": "<TIME>",
+          "version": 1,
+          "visualStyle": ""
+        }
+      },
+      "seriesOrder": [
+        "series_<ID>"
+      ],
+      "version": 1,
+      "workspaceId": "golden-series"
+    },
+    "status": 200
+  },
+  "list after delete": {
+    "body": {
+      "series": [],
+      "seriesOrder": [],
+      "workspaceId": "golden-series"
+    },
+    "status": 200
+  },
+  "list empty": {
+    "body": {
+      "series": [],
+      "seriesOrder": [],
+      "workspaceId": "golden-series"
+    },
+    "status": 200
+  },
+  "list one": {
+    "body": {
+      "series": [
+        {
+          "allowClipText": false,
+          "allowedProductionMethods": [
+            "generated_video"
+          ],
+          "assets": {},
+          "audience": "General",
+          "bestEffortLipSyncAcknowledged": false,
+          "cameraLanguage": "",
+          "canon": {
+            "approval": "draft",
+            "approvedAt": "",
+            "currentFacts": [],
+            "forbiddenChanges": [],
+            "immutableRules": [],
+            "longArcs": [],
+            "revision": 1,
+            "themes": [],
+            "timeline": [],
+            "worldSummary": ""
+          },
+          "characterVisualStyle": "",
+          "characters": [],
+          "createdAt": "<TIME>",
+          "createdBy": {
+            "actor": "user",
+            "capability": "series.create",
+            "tool": "series"
+          },
+          "defaultEpisodeDurationSeconds": 75,
+          "episodesById": {},
+          "format": "episodic",
+          "genre": "",
+          "id": "series_<ID>",
+          "importSource": {
+            "historicalProductionIds": [],
+            "importedAt": "<TIME>",
+            "kind": "original",
+            "migrationNotes": "Created as an original Series Lab project.",
+            "sourceStoryId": null,
+            "sourceWorkspaceId": null
+          },
+          "language": "English",
+          "languageIntent": {
+            "contentLanguage": "English",
+            "conversationLanguage": "",
+            "spokenLanguage": "English",
+            "technicalPromptLanguage": "en",
+            "verbatimSegments": []
+          },
+          "locations": [],
+          "logline": "",
+          "masterUniversePrompt": "",
+          "premise": "",
+          "props": [],
+          "protagonistCharacterId": "",
+          "protagonistConsistency": false,
+          "provider": {
+            "imageModel": "",
+            "imageProvider": "maestro",
+            "useGlobalProfile": true,
+            "videoCapabilities": {
+              "family": "minimax_h3_legacy",
+              "limits": {
+                "audio": 3,
+                "image": 9,
+                "total": 12,
+                "video": 3
+              },
+              "model": "minimax_h3_legacy",
+              "supportsContinuation": true,
+              "supportsFirstFrame": true,
+              "supportsFirstLast": true,
+              "supportsNativeAudio": true,
+              "version": "runtime-default"
+            },
+            "videoModel": "minimax_h3_legacy",
+            "videoSettings": {
+              "audioShift": 3,
+              "flowShift": 12,
+              "modelProfile": "quality",
+              "numInferenceSteps": 20,
+              "orientation": "landscape",
+              "renderStrategy": "auto",
+              "resolution": "480p"
+            },
+            "writingBaseUrl": "",
+            "writingModel": "",
+            "writingProvider": "maestro"
+          },
+          "relationships": [],
+          "revision": 2,
+          "rightsNote": "",
+          "seasons": [
+            {
+              "arc": "",
+              "createdAt": "<TIME>",
+              "episodeOrder": [],
+              "id": "season_<ID>_1",
+              "number": 1,
+              "premise": "",
+              "title": "Season 1",
+              "updatedAt": "<TIME>"
+            }
+          ],
+          "sourceMode": "original",
+          "spokenLanguage": "English",
+          "title": "Golden series, revised",
+          "tone": "Cinematic",
+          "updatedAt": "<TIME>",
+          "version": 1,
+          "visualStyle": ""
+        }
+      ],
+      "seriesOrder": [
+        "series_<ID>"
+      ],
+      "workspaceId": "golden-series"
+    },
+    "status": 200
+  },
+  "native render recovery": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "plan recovery": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "produce jobs": {
+    "body": {
+      "jobs": [],
+      "total": 0
+    },
+    "status": 200
+  },
+  "render recovery": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "update": {
+    "body": {
+      "allowClipText": false,
+      "allowedProductionMethods": [
+        "generated_video"
+      ],
+      "assets": {},
+      "audience": "General",
+      "bestEffortLipSyncAcknowledged": false,
+      "cameraLanguage": "",
+      "canon": {
+        "approval": "draft",
+        "approvedAt": "",
+        "currentFacts": [],
+        "forbiddenChanges": [],
+        "immutableRules": [],
+        "longArcs": [],
+        "revision": 1,
+        "themes": [],
+        "timeline": [],
+        "worldSummary": ""
+      },
+      "characterVisualStyle": "",
+      "characters": [],
+      "createdAt": "<TIME>",
+      "createdBy": {
+        "actor": "user",
+        "capability": "series.create",
+        "tool": "series"
+      },
+      "defaultEpisodeDurationSeconds": 75,
+      "episodesById": {},
+      "format": "episodic",
+      "genre": "",
+      "id": "series_<ID>",
+      "importSource": {
+        "historicalProductionIds": [],
+        "importedAt": "<TIME>",
+        "kind": "original",
+        "migrationNotes": "Created as an original Series Lab project.",
+        "sourceStoryId": null,
+        "sourceWorkspaceId": null
+      },
+      "language": "English",
+      "languageIntent": {
+        "contentLanguage": "English",
+        "conversationLanguage": "",
+        "spokenLanguage": "English",
+        "technicalPromptLanguage": "en",
+        "verbatimSegments": []
+      },
+      "locations": [],
+      "logline": "",
+      "masterUniversePrompt": "",
+      "premise": "",
+      "props": [],
+      "protagonistCharacterId": "",
+      "protagonistConsistency": false,
+      "provider": {
+        "imageModel": "",
+        "imageProvider": "maestro",
+        "useGlobalProfile": true,
+        "videoCapabilities": {
+          "family": "minimax_h3_legacy",
+          "limits": {
+            "audio": 3,
+            "image": 9,
+            "total": 12,
+            "video": 3
+          },
+          "model": "minimax_h3_legacy",
+          "supportsContinuation": true,
+          "supportsFirstFrame": true,
+          "supportsFirstLast": true,
+          "supportsNativeAudio": true,
+          "version": "runtime-default"
+        },
+        "videoModel": "minimax_h3_legacy",
+        "videoSettings": {
+          "audioShift": 3,
+          "flowShift": 12,
+          "modelProfile": "quality",
+          "numInferenceSteps": 20,
+          "orientation": "landscape",
+          "renderStrategy": "auto",
+          "resolution": "480p"
+        },
+        "writingBaseUrl": "",
+        "writingModel": "",
+        "writingProvider": "maestro"
+      },
+      "relationships": [],
+      "revision": 2,
+      "rightsNote": "",
+      "seasons": [
+        {
+          "arc": "",
+          "createdAt": "<TIME>",
+          "episodeOrder": [],
+          "id": "season_<ID>_1",
+          "number": 1,
+          "premise": "",
+          "title": "Season 1",
+          "updatedAt": "<TIME>"
+        }
+      ],
+      "sourceMode": "original",
+      "spokenLanguage": "English",
+      "title": "Golden series, revised",
+      "tone": "Cinematic",
+      "updatedAt": "<TIME>",
+      "version": 1,
+      "visualStyle": ""
+    },
+    "status": 200
+  },
+  "update other id": {
+    "body": {
+      "detail": "Series project id does not match the route"
+    },
+    "status": 400
+  },
+  "update stale revision": {
+    "body": {
+      "detail": "Series revision changed to 2; reload before saving"
+    },
+    "status": 409
+  }
+}

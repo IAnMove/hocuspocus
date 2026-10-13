@@ -1,0 +1,688 @@
+{
+  "lan auth status": {
+    "body": {
+      "authenticated": true,
+      "enabled": false,
+      "required": false,
+      "sharing": false
+    },
+    "status": 200
+  },
+  "llm status": {
+    "body": {
+      "device": null,
+      "loaded": false,
+      "model_id": null,
+      "provider": "local",
+      "remote_url": ""
+    },
+    "status": 200
+  },
+  "mcp settings": {
+    "body": {
+      "authentication": "Bearer",
+      "enabled": false,
+      "endpoint": "/api/v1/mcp",
+      "managedByEnvironment": false,
+      "protocolVersion": "2025-03-26",
+      "transport": "streamable-http"
+    },
+    "status": 200
+  },
+  "model selections": {
+    "body": {
+      "configured": false,
+      "selected_models": {
+        "image": "minimax:image-01",
+        "video": "minimax_h3_legacy"
+      },
+      "sources": {
+        "image": "global",
+        "video": "global"
+      }
+    },
+    "status": 200
+  },
+  "model visibility": {
+    "body": {
+      "configured": false,
+      "defaults_version": 0,
+      "enabled_models": [],
+      "initialized_mature_models": []
+    },
+    "status": 200
+  },
+  "models": {
+    "body": {
+      "families": [
+        {
+          "id": "fake",
+          "label": "Fake family",
+          "order": 10
+        },
+        {
+          "id": "hunyuan3d",
+          "label": "Hunyuan3D",
+          "order": 350
+        }
+      ],
+      "models": [
+        {
+          "architecture": "fake_t2v",
+          "description": "A model that exists only in tests.",
+          "director": {
+            "audio_input_mode": "none",
+            "clip_frame_step": null,
+            "clip_max_frames": null,
+            "clip_min_frames": null,
+            "family": "fake",
+            "generates_audio": false,
+            "image": {
+              "compatible": false,
+              "reason": "Director needs a still-image generator."
+            },
+            "max_image_refs": null,
+            "reference_mode": "start_frame",
+            "shot_image_support": "required",
+            "supports_audio_input": false,
+            "supports_endpoint_continuity": false,
+            "supports_voice_reference": false,
+            "video": {
+              "comic_movie": {
+                "compatible": false,
+                "reason": "Director needs start-frame image-to-video support."
+              },
+              "music_video": {
+                "compatible": false,
+                "reason": "Director needs start-frame image-to-video support."
+              },
+              "seamless": {
+                "compatible": false,
+                "reason": "Director needs start-frame image-to-video support."
+              },
+              "short_film_audio": {
+                "compatible": false,
+                "reason": "Director needs start-frame image-to-video support."
+              },
+              "short_film_story": {
+                "compatible": false,
+                "reason": "Director needs start-frame image-to-video support."
+              }
+            },
+            "video_strategy": "rolling_window",
+            "voice_reference_mode": "none"
+          },
+          "family": "fake",
+          "fps": 16,
+          "generates_audio": false,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "lora_compatibility_note": "",
+          "model_type": "fake_t2v",
+          "name": "Fake Text to Video",
+          "nsfw_only": false,
+          "resource_requirements": null,
+          "selector_help": "",
+          "supports_audio": false,
+          "supports_audio_input": false,
+          "supports_end_frame": false,
+          "supports_ref_images": false
+        },
+        {
+          "architecture": "fake_i2v",
+          "description": "A model that exists only in tests.",
+          "director": {
+            "audio_input_mode": "none",
+            "clip_frame_step": null,
+            "clip_max_frames": null,
+            "clip_min_frames": null,
+            "family": "fake",
+            "generates_audio": false,
+            "image": {
+              "compatible": false,
+              "reason": "Director needs a still-image generator."
+            },
+            "max_image_refs": null,
+            "reference_mode": "start_frame",
+            "shot_image_support": "required",
+            "supports_audio_input": false,
+            "supports_endpoint_continuity": false,
+            "supports_voice_reference": false,
+            "video": {
+              "comic_movie": {
+                "compatible": false,
+                "reason": "Director needs sliding-window support for planned shot durations."
+              },
+              "music_video": {
+                "compatible": false,
+                "reason": "Director needs sliding-window support for planned shot durations."
+              },
+              "seamless": {
+                "compatible": false,
+                "reason": "Director needs sliding-window support for planned shot durations."
+              },
+              "short_film_audio": {
+                "compatible": false,
+                "reason": "Director needs sliding-window support for planned shot durations."
+              },
+              "short_film_story": {
+                "compatible": false,
+                "reason": "Director needs sliding-window support for planned shot durations."
+              }
+            },
+            "video_strategy": "rolling_window",
+            "voice_reference_mode": "none"
+          },
+          "family": "fake",
+          "fps": 24,
+          "generates_audio": false,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": true,
+          "is_t2v": false,
+          "lora_compatibility_note": "",
+          "model_type": "fake_i2v",
+          "name": "Fake Image to Video",
+          "nsfw_only": false,
+          "resource_requirements": null,
+          "selector_help": "",
+          "supports_audio": false,
+          "supports_audio_input": false,
+          "supports_end_frame": true,
+          "supports_ref_images": false
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2mini-turbo",
+          "name": "Hunyuan3D 2 Mini Turbo",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2mini-fast",
+            "hunyuan3d-2mini"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2mini-fast",
+          "name": "Hunyuan3D 2 Mini Fast",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2mini-turbo",
+            "hunyuan3d-2mini"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2mini",
+          "name": "Hunyuan3D 2 Mini",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2mini-turbo",
+            "hunyuan3d-2mini-fast"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2-turbo",
+          "name": "Hunyuan3D 2 Turbo",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2-fast",
+            "hunyuan3d-2"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2-fast",
+          "name": "Hunyuan3D 2 Fast",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2-turbo",
+            "hunyuan3d-2"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2",
+          "name": "Hunyuan3D 2",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2-turbo",
+            "hunyuan3d-2-fast"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": true,
+          "is_t2v": false,
+          "model_type": "hunyuan3d-2mv-turbo",
+          "name": "Hunyuan3D 2 Multi-view Turbo",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2mv-fast",
+            "hunyuan3d-2mv"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": true,
+          "is_t2v": false,
+          "model_type": "hunyuan3d-2mv-fast",
+          "name": "Hunyuan3D 2 Multi-view Fast",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2mv-turbo",
+            "hunyuan3d-2mv"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": true,
+          "is_t2v": false,
+          "model_type": "hunyuan3d-2mv",
+          "name": "Hunyuan3D 2 Multi-view",
+          "nsfw_only": false,
+          "shared_cache_group": [
+            "hunyuan3d-2mv-turbo",
+            "hunyuan3d-2mv-fast"
+          ],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": true,
+          "model_type": "hunyuan3d-2.1",
+          "name": "Hunyuan3D 2.1 + PBR",
+          "nsfw_only": false,
+          "shared_cache_group": [],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": true,
+          "is_t2v": false,
+          "model_type": "trellis2",
+          "name": "TRELLIS.2",
+          "nsfw_only": false,
+          "shared_cache_group": [],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "hunyuan3d",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": true,
+          "is_t2v": false,
+          "model_type": "pixal3d",
+          "name": "Pixal3D",
+          "nsfw_only": false,
+          "shared_cache_group": [],
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
+          "architecture": "unirig",
+          "family": "hunyuan3d",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": false,
+          "is_i2v": false,
+          "is_t2v": false,
+          "model_type": "unirig",
+          "name": "UniRig (AI Rigging)",
+          "nsfw_only": false,
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": false,
+          "tool_only": true
+        }
+      ]
+    },
+    "status": 200
+  },
+  "models summary": {
+    "body": {
+      "counts": {
+        "families": 2,
+        "models": 15
+      },
+      "families": [
+        {
+          "counts": {
+            "models": 2
+          },
+          "description": "Fake family",
+          "id": "fake",
+          "name": "Fake family"
+        },
+        {
+          "counts": {
+            "models": 13
+          },
+          "description": "Hunyuan3D",
+          "id": "hunyuan3d",
+          "name": "Hunyuan3D"
+        }
+      ],
+      "models": [
+        {
+          "counts": {
+            "director": 16
+          },
+          "description": "A model that exists only in tests.",
+          "id": "fake_t2v",
+          "name": "Fake Text to Video"
+        },
+        {
+          "counts": {
+            "director": 16
+          },
+          "description": "A model that exists only in tests.",
+          "id": "fake_i2v",
+          "name": "Fake Image to Video"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2mini-turbo",
+          "name": "Hunyuan3D 2 Mini Turbo"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2mini-fast",
+          "name": "Hunyuan3D 2 Mini Fast"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2mini",
+          "name": "Hunyuan3D 2 Mini"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2-turbo",
+          "name": "Hunyuan3D 2 Turbo"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2-fast",
+          "name": "Hunyuan3D 2 Fast"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2",
+          "name": "Hunyuan3D 2"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2mv-turbo",
+          "name": "Hunyuan3D 2 Multi-view Turbo"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2mv-fast",
+          "name": "Hunyuan3D 2 Multi-view Fast"
+        },
+        {
+          "counts": {
+            "sharedCache": 2
+          },
+          "description": "",
+          "id": "hunyuan3d-2mv",
+          "name": "Hunyuan3D 2 Multi-view"
+        },
+        {
+          "counts": {
+            "sharedCache": 0
+          },
+          "description": "",
+          "id": "hunyuan3d-2.1",
+          "name": "Hunyuan3D 2.1 + PBR"
+        },
+        {
+          "counts": {
+            "sharedCache": 0
+          },
+          "description": "",
+          "id": "trellis2",
+          "name": "TRELLIS.2"
+        },
+        {
+          "counts": {
+            "sharedCache": 0
+          },
+          "description": "",
+          "id": "pixal3d",
+          "name": "Pixal3D"
+        },
+        {
+          "counts": {},
+          "description": "",
+          "id": "unirig",
+          "name": "UniRig (AI Rigging)"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "presets": {
+    "body": {
+      "presets": []
+    },
+    "status": 200
+  },
+  "production profile": {
+    "body": {
+      "configured": false,
+      "invalid_reason": "",
+      "profile": {
+        "image": {
+          "model": "image-01",
+          "provider": "minimax"
+        },
+        "model3d": {
+          "model": "hunyuan3d-2mini-turbo",
+          "provider": "local"
+        },
+        "music": {
+          "model": "ace_step_v1_5_xl_sft_lm_4b",
+          "provider": "local"
+        },
+        "text": {
+          "base_url": "https://api.minimax.io",
+          "model": "MiniMax-M3",
+          "provider": "minimax"
+        },
+        "version": 1,
+        "video": {
+          "model": "minimax_h3_legacy",
+          "provider": "local",
+          "settings": {
+            "aspectRatio": "16:9",
+            "audioShift": 3.0,
+            "cache": false,
+            "flowShift": 12.0,
+            "loras": [],
+            "profile": "quality",
+            "resolution": "540p",
+            "steps": 20,
+            "turbo": false
+          }
+        }
+      }
+    },
+    "status": 200
+  },
+  "services config": {
+    "body": {
+      "anthropic_api_key": "",
+      "anthropic_api_key_set": false,
+      "auto_performance": false,
+      "civitai_api_key": "",
+      "civitai_api_key_set": false,
+      "compatible_api_key": "",
+      "compatible_api_key_set": false,
+      "compatible_base_url": "",
+      "debug_trace_enabled": false,
+      "debug_trace_log_path": "<REPO>/logs/debug/maestro-debug-<TODAY>.jsonl",
+      "deepseek_api_key": "",
+      "deepseek_api_key_set": false,
+      "director_keep_reference_wardrobe": true,
+      "director_lighting_continuity": "auto",
+      "director_multishot_lora_mode": false,
+      "director_prompt_polish": "off",
+      "director_reference_anchor": "always",
+      "enhance_llm_device": "cuda",
+      "enhance_llm_model_id": "",
+      "flashvsr_backend": "auto",
+      "flashvsr_mode": 1,
+      "flashvsr_topk_ratio": 0.0,
+      "google_api_key": "",
+      "google_api_key_set": false,
+      "grok_api_key": "",
+      "grok_api_key_set": false,
+      "hi3d_api_key": "",
+      "hi3d_api_key_set": false,
+      "llm_device": "cpu",
+      "llm_model_id": "MiniMax-M3",
+      "llm_provider": "minimax",
+      "llm_remote_url": "https://api.minimax.io",
+      "ltx_progressive_pipeline": false,
+      "meshy_api_key": "",
+      "meshy_api_key_set": false,
+      "minimax_api_key": "",
+      "minimax_api_key_set": false,
+      "minimax_image_api_key": "",
+      "minimax_image_api_key_set": false,
+      "minimax_llm_api_key": "",
+      "minimax_llm_api_key_set": false,
+      "minimax_music_api_key": "",
+      "minimax_music_api_key_set": false,
+      "nsfw_accepted_at": null,
+      "nsfw_mode": false,
+      "openai_api_key": "",
+      "openai_api_key_set": false,
+      "raw_prompts": false,
+      "show_experimental": false,
+      "storage_allow_linked_removal": false,
+      "use_director_v2": true,
+      "voice_reference_enabled": true,
+      "workflow_parallelism_enabled": true
+    },
+    "status": 200
+  }
+}

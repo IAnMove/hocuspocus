@@ -100,12 +100,19 @@ jobs:
           python scripts/select_local_tests.py --group python-a > "${RUNNER_TEMP}/shard-a.txt"
           test -s "${RUNNER_TEMP}/shard-a.txt"
           python -m pytest -q --junitxml=pytest-shard-a.xml $(cat "${RUNNER_TEMP}/shard-a.txt")
+      - name: Characterization tests (full server with a fake WanGP, own process)
+        # They import the full server, which changes process-wide state, so they
+        # skip inside the shard run above and run here alone (tests/characterization/README.md).
+        if: ${{ !cancelled() }}
+        run: python -m pytest -q -p no:cacheprovider --junitxml=pytest-characterization.xml tests/characterization
       - name: Upload shard A report
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: pytest-shard-a
-          path: pytest-shard-a.xml
+          path: |
+            pytest-shard-a.xml
+            pytest-characterization.xml
           if-no-files-found: ignore
 
   python-tests-b:

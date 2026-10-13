@@ -416,6 +416,18 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
+      "file": "tests/test_size_ceilings.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "architecture_rule",
+      "reason": "Counts the file's lines against scripts/size_ceilings.json; never reads its contents."
+    },
+    {
+      "file": "tests/test_size_ceilings.py",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "architecture_rule",
+      "reason": "Counts the file's lines against scripts/size_ceilings.json; never reads its contents."
+    },
+    {
       "file": "tests/test_speech_reference_pauses.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",

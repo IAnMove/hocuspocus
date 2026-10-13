@@ -22,6 +22,8 @@ num2words==0.5.14
 mmgp==3.7.6
 onnxruntime==1.23.2
 pydantic==2.10.6
+# FastAPI needs it to declare upload routes: tests/characterization imports the full server.
+python-multipart==0.0.32
 psutil==7.2.2
 pytest==8.3.5
 rembg==2.0.65
