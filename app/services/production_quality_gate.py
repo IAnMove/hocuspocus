@@ -10,6 +10,8 @@ Each problem carries a plain ``message`` that names the shots, the pictures, mod
 
 The first three only make the video look static (``THIN_CODES``): ``allow_thin: true`` on ``production.run`` (and
 its dry run) turns them into warnings and the run goes ahead. A clip or camera that does not exist is always refused.
+What ``allow_thin`` let through is kept in the state (``allow_thin``) so ``production.status`` shows it for as long as
+that spec runs; the record is never read as permission.
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
@@ -88,6 +90,24 @@ def _still_time(spec: dict, shots: list[dict]) -> tuple[float, float, list[str]]
     return sum(seconds for seconds, _ in held), duration, [str(shot.get("key")) for _, shot in held]
 
 
+def gate_run(state: dict, spec: dict, root: Any = None, *, allow_thin: bool = False) -> list[dict]:
+    """production.run's check (``refuse_thin_plan``) against the saved spec. A new or changed spec also replaces
+    ``state["allow_thin"]``, the shots and checks the flag let through; a resume keeps the record of its spec."""
+    stored = state.get("spec")
+    allowed = refuse_thin_plan(spec, stored, root, allow_thin=allow_thin)
+    if spec != stored:
+        state.pop(ALLOW_THIN, None)
+        if allowed:
+            state[ALLOW_THIN] = [{"code": item["code"], "shots": item["shots"]} for item in allowed]
+    return allowed
+
+
+def allow_thin_status(state: dict) -> dict:
+    """production.status: what ``allow_thin`` let through for the spec this production runs, if anything."""
+    record = state.get(ALLOW_THIN)
+    return {ALLOW_THIN: record} if isinstance(record, list) and record else {}
+
+
 def refuse_thin_plan(spec: dict, stored: Any, root: Any = None, *, allow_thin: bool = False) -> list[dict]:
     """production.run: a new or changed spec that would look thin is HTTP 422 quality_gate; a resume never is.
 
@@ -119,8 +139,8 @@ def refusal_message(problems: list[dict]) -> str:
     broken = [item["message"] for item in problems if item["code"] not in THIN_CODES]
     lines = ["Nothing was started: fix the plan and send it again."]
     if thin:
-        lines.append("These would make the video look static. Fix them, or send allow_thin: true with the spec to make it "
-                     "as planned (they come back as warnings):")
+        lines.append("These would make the video look static. Fix them, or send allow_thin: true next to spec (not inside "
+                     "it) to make it as planned; they come back as warnings:")
         lines += [f"- {message}" for message in thin]
     if broken:
         lines.append("These would fail after the GPU work, so allow_thin does not skip them:")
@@ -129,12 +149,23 @@ def refusal_message(problems: list[dict]) -> str:
 
 
 def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
+    spec = _named(spec)
     shots = _shots(spec)
     problems = _reused_stills(shots) + _too_static(spec, shots)
     problems += _unbaked_clips(spec, shots, root)
     problems += [{**item, "message": _camera_message(item)} for item in unknown_cameras(spec)]
     problems += _hidden_by_titles(shots)
     return problems
+
+
+def _named(spec: dict) -> dict:
+    """A shot with no key is named by its place (``shots[2]``) so no message says "None". production.run refuses
+    such a shot before the gate; only the dry run sees one."""
+    shots = spec.get("shots")
+    if not isinstance(shots, list) or all(not isinstance(shot, dict) or shot.get("key") for shot in shots):
+        return spec
+    return {**spec, "shots": [{**shot, "key": f"shots[{index}]"} if isinstance(shot, dict) and not shot.get("key") else shot
+                              for index, shot in enumerate(shots)]}
 
 
 def _reused_stills(shots: list[dict]) -> list[dict]:
@@ -157,8 +188,8 @@ def _too_static(spec: dict, shots: list[dict]) -> list[dict]:
     limit = profile_of(spec)["static"]
     if ratio <= limit:
         return []
-    quality = spec.get("quality") if spec.get("quality") in PROFILES else DEFAULT
-    bar = f"quality \"{quality}\"" + ("" if "quality" in spec else " (the default)")
+    chosen = spec.get("quality") in PROFILES          # profile_of: a missing or unknown quality is the default's bar
+    bar = f"quality \"{spec['quality'] if chosen else DEFAULT}\"" + ("" if chosen else " (the default)")
     return [{"code": "too_static", "ratio": round(ratio, 2), "limit": limit, "shots": keys,
              "message": f"Still pictures fill {_percent(ratio)} of the song ({_number(seconds)} s of {_number(duration)} s, in "
                         f"{_shot_names(keys)}), and {bar} allows at most {_percent(limit)}. Turn some of these shots into "

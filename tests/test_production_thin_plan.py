@@ -11,7 +11,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from services.music_production import command_catalog, command_handlers
+from services.music_production import command_catalog, command_handlers, status_summary
 from services.production_dry_run import dry_run
 from services.production_quality_gate import LISTED_CLIPS, THIN_CODES, blocking_problems, refuse_thin_plan
 
@@ -92,6 +92,16 @@ def test_two_title_templates_are_named_with_their_shots_in_shot_order():
                                          'and "c"; "title-card" on shot "b".')
 
 
+def test_a_shot_without_a_key_is_named_by_its_place_and_a_missing_quality_is_the_default_bar():
+    """Only the dry run sees a keyless shot (production.run refuses it first); "None" names nothing."""
+    shots = [{"kind": "still", "still": "card-base", "t0": t0} for t0 in (0, 10, 20)] + [h3("h1", 30)]
+    for quality in ({}, {"quality": None}, {"quality": "best"}):
+        found = by_code(blocking_problems({"song": SONG, "shots": shots, **quality}))
+        assert found["still_reused"]["shots"] == found["too_static"]["shots"] == ["shots[0]", "shots[1]", "shots[2]"]
+        assert 'quality "standard" (the default) allows at most 35%' in found["too_static"]["message"], quality
+        assert "None" not in json.dumps(found)
+
+
 def test_by_default_the_thin_checks_still_refuse_and_the_message_offers_allow_thin():
     with pytest.raises(HTTPException) as refused:
         refuse_thin_plan(thin_spec(), None)
@@ -100,7 +110,7 @@ def test_by_default_the_thin_checks_still_refuse_and_the_message_offers_allow_th
     assert [item["code"] for item in detail["problems"]] == list(THIN_CODES)
     lines = detail["message"].split("\n")
     assert lines[0] == "Nothing was started: fix the plan and send it again."
-    assert "allow_thin: true" in lines[1]
+    assert "allow_thin: true next to spec (not inside it)" in lines[1]
     assert lines[2:] == [f"- {item['message']}" for item in detail["problems"]]
 
 
@@ -145,10 +155,11 @@ def _run(handlers, spec, **flags):
 def test_production_run_needs_the_explicit_flag_and_then_returns_the_warnings(tmp_path, monkeypatch):
     started = []
     handlers = _handlers(tmp_path, monkeypatch, started)
-    for flags in ({}, {"allow_thin": False}, {"allow_thin": "true"}):
+    for spec, flags in ((thin_spec(), {}), (thin_spec(), {"allow_thin": False}), (thin_spec(), {"allow_thin": "true"}),
+                        (thin_spec(), {"allow_thin": 1}), ({**thin_spec(), "allow_thin": True}, {})):
         with pytest.raises(HTTPException) as refused:
-            _run(handlers, thin_spec(), **flags)
-        assert refused.value.detail["code"] == "quality_gate", flags
+            _run(handlers, spec, **flags)
+        assert refused.value.detail["code"] == "quality_gate", (flags, "allow_thin" in spec)
     assert started == []
     result = _run(handlers, thin_spec(), allow_thin=True)["result"]
     assert result["running"] is True and len(started) == 1
@@ -174,6 +185,47 @@ def test_dry_run_reports_what_the_run_would_refuse_and_return(tmp_path, monkeypa
     report = dry_run(broken_spec(), root=tmp_path, allow_thin=True)
     assert report["blocking"] == refused.value.detail["problems"]
     assert [item["code"] for item in report["warnings"] if item.get("allowed_by")] == list(THIN_CODES)
+
+
+def test_with_allow_thin_the_dry_run_names_each_static_problem_once():
+    """The dry run's lighter still_reused / too_static give way to the gate's, which name the shots."""
+    spec = thin_spec()
+    spec["shots"] += [still(f"x{index}", 34 + index, "deliberate", allow=["still"]) for index in range(3)]
+    plain = [item["code"] for item in dry_run(spec)["warnings"]]
+    assert plain.count("still_reused") == 2 and plain.count("too_static") == 1, "without the flag nothing changes"
+    warnings = dry_run(spec, allow_thin=True)["warnings"]
+    codes = [item["code"] for item in warnings]
+    assert codes.count("too_static") == 1 and codes.count("still_reused") == 2
+    reused = {item["still"]: item for item in warnings if item["code"] == "still_reused"}
+    assert reused["card-base"]["allowed_by"] == "allow_thin" and reused["card-base"]["shots"] == ["v1", "v2", "v3"]
+    assert reused["deliberate"] == {"code": "still_reused", "still": "deliberate", "shots": 3}, "the gate skips it, the warning stays"
+
+
+def _status(path):
+    """What production.status answers for that file (its handler runs this in a thread the fake Thread replaces)."""
+    return status_summary(json.loads(path.read_text()), "w", str(path.parent), "faro")
+
+
+def test_status_shows_what_allow_thin_let_through_for_the_spec_that_runs(tmp_path, monkeypatch):
+    started = []
+    handlers = _handlers(tmp_path, monkeypatch, started)
+    _run(handlers, thin_spec(), allow_thin=True)
+    record = started[-1].__self__.state["allow_thin"]
+    assert record == [{"code": "still_reused", "shots": ["v1", "v2", "v3"]}, {"code": "too_static", "shots": ["v1", "v2", "v3"]},
+                      {"code": "title_card_hides_shot", "shots": ["h2"]}]
+    saved = tmp_path / "faro.production.json"
+    saved.write_text(json.dumps({"spec": thin_spec(), "status": "failed", "allow_thin": record}))
+    assert _status(saved)["allow_thin"] == record
+    resumed = asyncio.run(handlers["production.run"]({"version": 1, "input": {"workspace": "w", "production_id": "faro"}}))
+    assert "warnings" not in resumed["result"] and started[-1].__self__.state["allow_thin"] == record, "a resume keeps it"
+    with pytest.raises(HTTPException) as refused:
+        _run(handlers, {**thin_spec(), "title": "Faro 2"})
+    assert refused.value.detail["code"] == "quality_gate", "the record is not permission for a changed spec"
+    moving = {**thin_spec(), "shots": [h3("h1", 0), h3("h2", 20)]}
+    _run(handlers, moving)
+    assert "allow_thin" not in started[-1].__self__.state, "a new spec the gate passes drops the old record"
+    saved.write_text(json.dumps({"spec": moving, "status": "failed"}))
+    assert "allow_thin" not in _status(saved)
 
 
 def test_the_mcp_schema_declares_the_flag_and_the_title_card_allowance():

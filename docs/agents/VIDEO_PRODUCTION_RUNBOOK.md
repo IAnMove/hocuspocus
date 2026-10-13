@@ -87,13 +87,19 @@ what the limit is. `problems` has one item per check, each with its own
 
 Checks 1–3 only make the video look static. They refuse by default, because a
 piece that moves is the point. To make such a plan anyway, send
-`allow_thin: true` next to the spec: the run starts and returns those problems
-as `warnings`, each marked `allowed_by: "allow_thin"`. Checks 4–5 would fail
-after the GPU work, so `allow_thin` never skips them. Fix the plan first; use
-`allow_thin` only when the person asked for that look.
+`allow_thin: true` next to the spec (not inside it): the run starts and returns
+those problems as `warnings`, each marked `allowed_by: "allow_thin"`.
+`production.status` then lists them as `allow_thin` (each check with its shots)
+for as long as that spec runs; a resume keeps the record, and a new spec
+replaces it. The flag applies to the spec sent with it: a later changed spec
+needs it again. Checks 4–5 would fail after the GPU work, so `allow_thin` never
+skips them. Fix the plan first; use `allow_thin` only when the person asked for
+that look.
 
 `dry_run` lists the same items under `blocking`. With `allow_thin: true` it lists
-checks 1–3 under `warnings` instead, as the run would return them. It also warns about shot
+checks 1–3 under `warnings` instead, as the run would return them, and they take
+the place of its own `still_reused` and `too_static` warnings for the same
+picture or runtime. It also warns about shot
 fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
 puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
 H3 shots without the cast (`h3_without_cast`), 3D models built from boxes

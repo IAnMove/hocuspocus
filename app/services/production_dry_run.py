@@ -9,7 +9,8 @@ three times, ``max_takes`` 1 and fewer than three song seeds. Each window carrie
 Scene documents are compiled in-process so a bad style is ``scene_invalid`` here.
 ``blocking`` lists what production.run refuses in a new spec (see ``production_quality_gate``), each with a plain
 ``message``; with ``allow_thin`` the checks that only make the video look static move to ``warnings`` (marked
-``allowed_by: "allow_thin"``), as production.run returns them.
+``allowed_by: "allow_thin"``), as production.run returns them, in place of this module's lighter ``still_reused``
+and ``too_static`` for the same picture or runtime.
 With ``song.file`` in the workspace, windows, ``gaps`` and ``motion`` use that file's length (the montage runs all
 of it), with ``song_duration_mismatch`` and ``held_tail`` when it outlasts the plan.
 A ``scene2d`` window shows its card (an alias resolved), where each picture comes from and the compiler's warnings
@@ -84,7 +85,8 @@ def dry_run(spec: Any, mcp: Any = None, *, root: Any = None, production_id: str 
         "resolution": _crop(spec),
         "motion": motion,
         "blocking": blocking,
-        "warnings": allowed + pending + _warnings(missing, gaps, titles, captions) + _quality_warnings(spec, usable, motion) + extra
+        "warnings": allowed + pending + _warnings(missing, gaps, titles, captions)
+        + _unrepeated(_quality_warnings(spec, usable, motion), allowed) + extra
         + treatment_warnings(spec, usable) + plan_warnings(spec, root, production_id) + _song_warnings(spec, file_s, windows) + cards,
     }
 
@@ -228,6 +230,13 @@ def _quality_warnings(spec: dict, shots: list[dict], motion: dict) -> list[dict]
     """Choices that leave the result thin, reported before any GPU work."""
     profile = profile_of(spec)
     return [*_static_warnings(motion, profile), *_pace_warnings(spec, shots, profile), *_reused_stills(shots), *_setup_warnings(spec, shots, profile)]
+
+
+def _unrepeated(found: list[dict], allowed: list[dict]) -> list[dict]:
+    """With ``allow_thin`` the gate's own ``still_reused`` / ``too_static`` (shot keys and a message) is already in
+    the warnings: the lighter one here for the same picture, or the same runtime, would only repeat it."""
+    covered = {(item["code"], item.get("still")) for item in allowed}
+    return [item for item in found if (item["code"], item.get("still")) not in covered]
 
 
 def _static_warnings(motion: dict, profile: dict) -> list[dict]:

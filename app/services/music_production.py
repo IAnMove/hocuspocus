@@ -559,6 +559,8 @@ def status_summary(state: dict, workspace: str, root: str | None = None, product
     from services.production_rooms import set_warnings
     if set_warnings(state):
         summary["set_warnings"] = set_warnings(state)
+    from services.production_quality_gate import allow_thin_status
+    summary.update(allow_thin_status(state))
     from services.production_smoothness import for_status
     smooth = for_status(state)
     if smooth:
@@ -596,7 +598,7 @@ def command_catalog() -> list[dict[str, Any]]:
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
-                                          "allow_thin": {"type": "boolean", "description": "true: run a plan the quality gate refuses only for looking static (still_reused, too_static, title_card_hides_shot); they come back as warnings. A clip a model will not have or a camera that does not exist is refused all the same. Off unless asked; dry_run takes it too."},
+                                          "allow_thin": {"type": "boolean", "description": "true: run a plan the quality gate refuses only for looking static (still_reused, too_static, title_card_hides_shot); they come back as warnings and production.status lists them as allow_thin. A clip a model will not have or a camera that does not exist is refused all the same. Off unless asked; dry_run takes it too."},
                                           "project": {"type": "object", "required": ["kind", "id"], "properties": {"kind": {"enum": ["story", "episode"]}, "id": {"type": "string"}}},
                                           "package": {"type": "boolean", "description": "true: make a finished production editable shot by shot (scene documents, manifest, montage origins) without any GPU or export"},
                                           "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
@@ -609,7 +611,7 @@ def command_catalog() -> list[dict[str, Any]]:
                                          ["workspace", "production_id"])},
         {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them), an optional footer (small print on every scene) and an optional idioma/language (else told from the lyrics; fills song.language).",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
-        {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
+        {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), what allow_thin let through (allow_thin), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait. 0 returns at once. Maximum 1200. 300 remains a safe client poll."},
@@ -696,8 +698,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
-            from services.production_quality_gate import refuse_thin_plan
-            allowed = refuse_thin_plan(spec, production.state.get("spec"), production.root, allow_thin=data.get("allow_thin") is True)
+            from services.production_quality_gate import gate_run
+            allowed = gate_run(production.state, spec, production.root, allow_thin=data.get("allow_thin") is True)
             through = data.get("through", "all")
             if through not in ("all", "frames", "animatic"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})
