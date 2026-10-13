@@ -162,3 +162,54 @@ def test_a_shot_with_one_character_says_nobody_else_appears():
     assert sung and all(shot["action"].endswith(ALONE) for shot in sung)
     two = plan_shots(_spec(cast=[{"id": "a", "sheet_prompt": "x"}, {"id": "b", "sheet_prompt": "y"}]))
     assert not any(ALONE in shot["action"] for shot in two["shots"] if shot["kind"] == "h3")
+
+
+def _content_frames(shots: list[dict]) -> list[str]:
+    return [shot["frame"] for shot in shots if shot["kind"] == "h3" and not shot.get("sing")]
+
+
+def test_content_shots_rotate_their_framing_and_leave_the_camera_to_the_shot():
+    """One shared b-roll text made every content shot the same picture; the camera words fought shot.camera."""
+    shots = plan_shots(_spec(style={"image": "painterly", "video": "painterly motion", "singer": False}))["shots"]
+    frames = _content_frames(shots)
+    assert len(frames) >= 8 and len(set(frames)) == 4
+    assert all(left != right for left, right in zip(frames, frames[1:]))
+    actions = [shot["action"] for shot in shots if shot["kind"] == "h3"]
+    assert not any("slow camera" in action.lower() or "cinematic" in action.lower() for action in actions)
+    assert not any("cinematic" in frame.lower() for frame in frames)
+    assert _content_frames(plan_shots(_spec(style={"singer": False}))["shots"]) == _content_frames(
+        plan_shots(_spec(style={"singer": False}))["shots"]), "the same spec plans the same shots"
+
+
+def test_the_scene_phrase_is_where_shots_take_place_not_what_the_singer_does():
+    planned = plan_shots(_spec(section_actions={"scene": "a lighthouse going dark"}))
+    sung = [shot for shot in planned["shots"] if shot.get("sing")]
+    content = [shot for shot in planned["shots"] if shot["kind"] == "h3" and not shot.get("sing")]
+    assert all(shot["frame"].endswith("in the scene: a lighthouse going dark") for shot in sung)
+    assert all("a lighthouse going dark" in shot["frame"] and "a lighthouse going dark" in shot["action"] for shot in content)
+    assert all("lighthouse" not in shot["action"] for shot in sung)
+    assert {shot["action"].split(" Only this")[0] for shot in sung if shot.get("span") != 2} == {
+        "(S1) The singer sings the verse to the camera, swaying gently."}
+
+
+def test_a_bad_scene_phrase_is_refused():
+    import pytest
+    from services.music_production import ProductionError
+    for scene in ("", "   ", 3, "x" * 201):
+        with pytest.raises(ProductionError, match="section_actions.scene"):
+            validate_spec(_spec(section_actions={"scene": scene}))
+
+
+def test_plan_report_shows_what_auto_filled_in():
+    from services.production_shot_plan import plan_report
+    report = plan_report(_spec(section_actions={"scene": "a night market", "chorus": "lifts both hands"}))
+    assert report["structure"] == "clip" and report["content"] == "h3"
+    assert (report["scene"], report["scene_from"]) == ("a night market", "section_actions.scene")
+    assert len(report["content_framings"]) == 4 and all(frame.endswith("a night market") for frame in report["content_framings"])
+    assert len(report["sung_framings"]) == 4
+    assert report["sung_actions"]["chorus"] == {"text": "lifts both hands", "from": "section_actions"}
+    assert report["sung_actions"]["verse"]["from"] == "default"
+    assert plan_report(_spec())["scene_from"] == "title"
+    assert plan_report({**_spec(), "shots": []}) is None
+    trailer = plan_report(_spec(structure="trailer"))
+    assert trailer["structure"] == "trailer" and "sung_actions" not in trailer

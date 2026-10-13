@@ -1,4 +1,4 @@
-"""H3 clip jobs, take judging and the retake loop.
+"""H3 clip jobs, take judging and the retake loop. The model and steps come from ``spec.video`` (production_video_model).
 
 ``Production.clip_job``, ``clips`` and ``judge_take`` delegate here. The loop
 calls those methods, so a test that replaces ``production.clip_job`` or
@@ -16,6 +16,7 @@ from services.production_control import checkpoint, sleep_until
 from services.production_disk import discard
 from services.production_seeds import default_seed
 from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
+from services.production_video_model import mark_model_changes, resolve_video, stamp
 
 
 def _host():
@@ -38,9 +39,10 @@ def submit_clip(production: Any, spec: dict, window: dict, seed: int, take: int 
     prompt = (f"integrated_multimodal_description: [Shot 1] {(spec.get('style') or {}).get('video', '')} {window['action']}{sing}\n"
               "overall_soundscape: The mapped driving audio: the song.\nnon_diegetic_music: N/A")
     from services.production_resolution import clip_resolution
-    params = {"prompt": prompt, "model_type": "minimax_h3_fused_turbo", "resolution": clip_resolution(spec), "seed": seed, "generation_mode": "video",
+    video = resolve_video(spec)         # spec.video, else H3 Fused Turbo at 4 steps
+    params = {"prompt": prompt, "model_type": video["model"], "resolution": clip_resolution(spec), "seed": seed, "generation_mode": "video",
               "workspace": production.ws, "image_prompt_type": "S", "image_start": production.upload(production.state["frames"][window["key"]])[0],
-              "video_length": frames, "sliding_window_size": frames, "num_inference_steps": 4, "guidance_scale": 1, "image_mode": 0,
+              "video_length": frames, "sliding_window_size": frames, "num_inference_steps": video["steps"], "guidance_scale": 1, "image_mode": 0,
               "input_video_strength": 1.0, "audio_prompt_type": "A", "audio_guide": production.upload(slice_name)[0]}
     # a resumed run must not collide with the journal entry of an earlier take
     reply = production.mcp("generate", {"request_id": f"{production.id}-{window['key']}-{seed}-{uuid.uuid4().hex[:8]}", "params": params})
@@ -56,6 +58,9 @@ def shoot_clips(production: Any, spec: dict, windows: list[dict], retake: tuple[
     host = _host()
     windows = production._unlocked(windows, retake)
     production.state.setdefault("clips", {})
+    # The model and steps these takes are shot with. A kept clip another model shot is shot again, like a song switch.
+    production.state["video_model"] = resolve_video(spec)
+    mark_model_changes(production, production.state["video_model"], windows)
     tried = production.state.setdefault("clip_takes", {})
     max_takes = int(spec.get("max_takes", 3))
     vocals = production.score().get("vocals_file")
@@ -121,8 +126,9 @@ def judge_take(production: Any, window: dict, name: str | None, take: int, vocal
     qa = clip_qa(str(production.root / name), bool(window.get("sing")), str(production.root / vocals) if vocals else None, window["t0"], window["t1"])
     drive = "vocals" if (take - 1) % 2 == 1 and window.get("sing") else "mix"
     production.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
+    video = production.state.get("video_model") or resolve_video(None)
     production.state.setdefault("takes", {}).setdefault(key, []).append(
-        {"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive})
+        stamp({"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive}, video))
     best = clips.get(key)
     # Obsolete r was measured on the previous song; ranking it would keep the
     # old take and throw away the clip shot against the new window.
@@ -131,7 +137,7 @@ def judge_take(production: Any, window: dict, name: str | None, take: int, vocal
     if not ranking or better_take(qa, (ranking.get("qa") or {})):
         if ranking and ranking.get("file") and ranking["file"] != name:
             discard(production.state, ranking["file"])
-        clips[key] = {"file": name, "qa": qa, "url": production.upload(name)[1]}
+        clips[key] = stamp({"file": name, "qa": qa, "url": production.upload(name)[1]}, video)
     else:
         discard(production.state, name)
     return take_settled(qa, previous)

@@ -12,6 +12,11 @@ seconds in ``shot_windows``. Pad shots are not baked into the spec: the
 planner only writes content shots plus a ``fill`` template. ``shot_windows``
 places pads on the score so the time from one start to the next, and from
 the last start to the end of the song, is never longer than two bars.
+
+Every shot takes place in one scene phrase: ``section_actions.scene``, else ``section_actions.verse``, else the
+title. Sung shots and H3 content shots each take the next of four framings in turn, so no two start frames share
+one text. A sung shot's action is ``section_actions.<role>`` or a plain default; the camera move is the shot's
+``camera``, not words in the action. ``plan_report`` is what dry_run shows of all this.
 """
 from __future__ import annotations
 
@@ -28,8 +33,14 @@ _FRAMES = (
     "Low-angle medium close-up of the singer from the cast sheet, looking just past the camera, lips parted",
     "Close-up of the singer from the cast sheet in three-quarter profile, lips parted, background in soft focus",
 )
-_BROLL_FRAME = "Wide cinematic shot of the protagonist from the reference sheet in the scene: {phrase}"
-_BROLL_ACTION = "The protagonist acts out the scene: {phrase}. Clear movement, slow camera."
+# One framing per H3 content shot, in turn, like _FRAMES: one shared text made every content shot the same picture.
+_CONTENT_FRAMES = (
+    "Wide establishing shot of the protagonist from the reference sheet in the scene: {phrase}",
+    "Medium shot of the protagonist from the reference sheet in the middle of the action, in the scene: {phrase}",
+    "Detail insert of the protagonist from the reference sheet: a close view of their hands or of what they hold, in the scene: {phrase}",
+    "Over-the-shoulder shot from behind the protagonist from the reference sheet, looking into the scene: {phrase}",
+)
+_CONTENT_ACTION = "The protagonist acts out the scene: {phrase}. Clear movement."
 _ACTIONS = {
     "verse": "(S1) The singer sings the verse to the camera, swaying gently.",
     "chorus": "(S1) The singer sings the chorus to the camera with a bigger gesture.",
@@ -59,6 +70,39 @@ def plan_shots(spec: Any) -> dict:
     if not planned.get("fill"):
         planned["fill"] = [_fill_template(look, shots)]
     return planned
+
+
+def check_section_actions(spec: dict) -> None:
+    """validate_spec hook: ``section_actions.scene``, when given, is a short phrase."""
+    actions = spec.get("section_actions")
+    scene = actions.get("scene") if isinstance(actions, dict) else None
+    if scene is not None and not (isinstance(scene, str) and 0 < len(scene.strip()) <= 200):
+        from services.music_production import ProductionError
+        raise ProductionError("invalid_spec", "section_actions.scene is a phrase of 1-200 characters")
+
+
+def plan_report(spec: Any) -> dict | None:
+    """What ``shots: "auto"`` fills in, for dry_run: the scene phrase and where it came from, and the framings and
+    actions written into the shots. None when the spec lists its own shots."""
+    if not isinstance(spec, dict) or spec.get("shots") != "auto":
+        return None
+    actions = spec.get("section_actions") if isinstance(spec.get("section_actions"), dict) else {}
+    look = _look(spec, actions)
+    trailer = spec.get("structure") == "trailer"
+    report: dict[str, Any] = {"structure": "trailer" if trailer else "clip", "content": look["kind"], "scene": look["phrase"],
+                              "scene_from": next((f"section_actions.{name}" for name in ("scene", "verse") if _given(actions, name)), "title")}
+    if look["kind"] == "h3":
+        report["content_framings"] = [frame.format(phrase=look["phrase"]) for frame in _CONTENT_FRAMES]
+        report["content_action"] = _CONTENT_ACTION.format(phrase=look["phrase"])
+    if not trailer and look["sings"]:
+        report["sung_framings"] = [f"{frame}, in the scene: {look['phrase']}" for frame in _FRAMES]
+        report["sung_actions"] = {role: {"text": _action(actions, role), "from": "section_actions" if _given(actions, role) else "default"}
+                                  for role in ("verse", "pre-chorus", "chorus")}
+    return report
+
+
+def _given(actions: dict, name: str) -> bool:
+    return isinstance(actions.get(name), str) and bool(actions[name].strip())
 
 
 def is_auto_pad(shot: Any) -> bool:
@@ -163,7 +207,7 @@ def _look(spec: dict, actions: dict) -> dict:
         kind, still = "screen", None
     else:
         kind, still = "h3", None
-    phrase = actions.get("verse") if isinstance(actions.get("verse"), str) and actions["verse"].strip() else str(spec.get("title") or "the song")
+    phrase = next((actions[name] for name in ("scene", "verse") if _given(actions, name)), str(spec.get("title") or "the song"))
     return {"kind": kind, "still": still, "cast": _cast_ids(spec), "phrase": phrase.strip(),
             "sings": style.get("singer") is not False,
             "cta": str(spec.get("cta") or "watch").strip()[:32] or "watch"}
@@ -321,8 +365,10 @@ def _paint(shot: dict, look: dict) -> None:
     elif kind == "screen":
         shot["desktop"] = {"layout": "single", "apps": "mixed"}
     else:
-        shot.update(cast=list(look["cast"]), frame=_BROLL_FRAME.format(phrase=look["phrase"]),
-                    action=_BROLL_ACTION.format(phrase=look["phrase"]) + _alone(look["cast"]))
+        turn = look.get("framed", 0)        # this plan's next content framing; the counter lives in the plan's look
+        look["framed"] = turn + 1
+        shot.update(cast=list(look["cast"]), frame=_CONTENT_FRAMES[turn % len(_CONTENT_FRAMES)].format(phrase=look["phrase"]),
+                    action=_CONTENT_ACTION.format(phrase=look["phrase"]) + _alone(look["cast"]))
 
 
 def _fill_template(look: dict, shots: list[dict]) -> dict:

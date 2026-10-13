@@ -474,3 +474,62 @@ def test_a_parallax_layers_foot_is_the_empty_key_under_its_lowest_piece(tmp_path
     assert foot(tmp_path / "mid.png") == 0.25, "ten empty rows under the piece, of forty"
     Image.new("RGB", (64, 40), (255, 0, 255)).save(tmp_path / "empty.png")
     assert foot(tmp_path / "empty.png") == 0.0
+
+
+FLOOR_PROMPT = ("An EMPTY set with nobody in it, ready for actors to step in: a night harbour with a stone pier. felt puppets "
+                "wide eye-level view, a large open EMPTY floor across the foreground and lower third where actors can stand, "
+                "the scenery behind it, clear horizon, no people, no figurines, no dolls, no characters, no animals, no text")
+
+
+def _painted_prompt(tmp_path, entry, look="felt puppets"):
+    production = Production(tmp_path)
+    make_models(production, {"style": {"image": look}, "sets": {"harbour": entry}}, sleep=lambda _: None)
+    return production, next(image["prompt"] for image in production.images if image["key"] == "set-harbour")
+
+
+def test_the_default_set_prompt_is_the_floor_recipe_byte_for_byte(tmp_path):
+    entry = {"prompt": "a night harbour with a stone pier"}
+    _production, prompt = _painted_prompt(tmp_path, entry)
+    assert prompt == FLOOR_PROMPT
+    assert _painted_prompt(tmp_path, {**entry, "staging": "floor"})[1] == FLOOR_PROMPT
+
+
+def test_a_set_can_be_a_backdrop_or_left_unstaged(tmp_path):
+    look = "Stop-motion figurine look with plasticine textures. People crowd the quay. Warm evening light."
+    _production, backdrop = _painted_prompt(tmp_path, {"prompt": "a night harbour", "staging": "backdrop"}, look)
+    assert backdrop == ("a night harbour. Stop-motion figurine look with plasticine textures. Warm evening light. "
+                        "wide view of the scenery, clear horizon, nobody in it, no text")
+    production, plain = _painted_prompt(tmp_path, {"prompt": "a night harbour", "staging": "none"}, look)
+    assert plain == f"a night harbour. {look}"
+    assert production.state["sets"]["harbour"]["staging"] == "none"
+    for bad in ({"prompt": "x", "staging": "wall"}, {"prompt": "x", "staging": None}):
+        with pytest.raises(ModelError, match="staging must be one of floor, backdrop, none"):
+            check_models({"sets": {"roof": bad}})
+    with pytest.raises(ModelError):
+        check_models({"sets": {"roof": {**DIORAMA, "staging": "none"}}})
+
+
+def test_a_set_made_before_staging_is_not_painted_again(tmp_path):
+    """The fingerprint names staging only when it is not the default floor."""
+    import hashlib
+    from services.production_models import RECIPE
+    entry = {"prompt": "a night harbour with a stone pier", "seed": 4}
+    spec = {"song": {"bpm": 96}, "style": {"image": "felt puppets"}, "sets": {"harbour": entry}}
+    legacy = hashlib.sha256(json.dumps([entry, None, "felt puppets", 96, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
+    production = Production(tmp_path)
+    production.state["sets"] = {"harbour": {"fingerprint": legacy, "url": "/api/v1/uploads/old.png"}}
+    for same in (entry, {**entry, "staging": "floor"}):
+        make_models(production, {**spec, "sets": {"harbour": same}}, sleep=lambda _: None)
+        assert production.images == [] and production.state["sets"]["harbour"]["url"] == "/api/v1/uploads/old.png"
+    make_models(production, {**spec, "sets": {"harbour": {**entry, "staging": "backdrop"}}}, sleep=lambda _: None)
+    assert [image["key"] for image in production.images] == ["set-harbour"], "another staging is another picture"
+
+
+def test_the_look_keeps_its_medium_and_reports_what_it_leaves_out():
+    from services.production_models import scenery_parts
+    assert scenery_parts("Stop-motion figurine look with plasticine textures. Warm evening light.") == (
+        "Stop-motion figurine look with plasticine textures. Warm evening light.", [])
+    assert scenery_parts("Doll-like style, soft felt. A busy crowd fills the square. Strong cast shadows.") == (
+        "Doll-like style, soft felt. Strong cast shadows.", ["A busy crowd fills the square."])
+    assert scenery_parts("Characters have a figurine look. Matte paint.") == ("Matte paint.", ["Characters have a figurine look."])
+    assert scenery_parts("") == ("", [])
