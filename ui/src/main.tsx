@@ -1,6 +1,6 @@
 import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
-import './i18n'
+import i18n from './i18n'
 import './index.css'
 import App from './App.tsx'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
@@ -14,7 +14,7 @@ createRoot(document.getElementById('root')!, {
   <StrictMode>
     <AppErrorBoundary>
       {window.location.pathname === '/scene-template-review'
-        ? <Suspense fallback={<p>Cargando galería de escenas…</p>}><SceneTemplateReview /></Suspense>
+        ? <Suspense fallback={<p>{i18n.t('sceneReviewLoading')}</p>}><SceneTemplateReview /></Suspense>
         : <App />}
     </AppErrorBoundary>
   </StrictMode>,

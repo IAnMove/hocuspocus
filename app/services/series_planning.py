@@ -17,6 +17,21 @@ SERIES_SHOT_IDEAL_SECONDS = 10
 SERIES_SHOT_MAX_ITEMS = 720
 
 
+def _default_rights_note(language: str) -> str:
+    """Rights copy follows the series language. An omitted language is English."""
+    key = language.strip().lower().replace("_", "-")
+    spanish_words = ("español", "espanol", "spanish", "castellano")
+    if key == "es" or key.startswith("es-") or any(word in key for word in spanish_words):
+        return (
+            "Borrador no oficial basado en una obra de terceros. "
+            "Verifica los derechos necesarios antes de publicar o monetizar."
+        )
+    return (
+        "Unofficial draft based on a third-party work. "
+        "Check the rights you need before you publish or monetize."
+    )
+
+
 def _planning_uid(prefix: str) -> str:
     """Create a server-owned, globally unique Series planning identifier."""
     return f"{prefix}_{uuid.uuid4().hex}"
@@ -706,14 +721,12 @@ def normalize_known_series_bootstrap(result: Any, series: dict) -> dict:
         "timeline": facts(canon.get("timeline"), "timeline", 24, timeline=True),
         "revision": int(series.get("canon", {}).get("revision") or 1),
     }
-    fallback_rights = (
-        "Borrador no oficial basado en una obra de terceros. Verifica los derechos necesarios antes de publicar o monetizar."
-    )
+    series_language = text(setup.get("language") or series.get("language") or "English", 200)
     return {
         "title": text(setup.get("title") or series.get("title") or "Untitled series", 300),
         "premise": text(setup.get("premise"), 6000), "logline": text(setup.get("logline"), 2000),
         "format": format_value, "defaultEpisodeDurationSeconds": duration,
-        "language": text(setup.get("language") or series.get("language") or "Español", 200),
+        "language": series_language,
         "genre": text(setup.get("genre"), 500), "tone": text(setup.get("tone"), 1000),
         "audience": text(setup.get("audience") or "General", 500),
         "visualStyle": text(setup.get("visualStyle"), 4000),
@@ -721,7 +734,7 @@ def normalize_known_series_bootstrap(result: Any, series: dict) -> dict:
         "cameraLanguage": text(setup.get("cameraLanguage"), 4000),
         "sourceMode": "known_universe_experimental",
         "masterUniversePrompt": text(setup.get("masterUniversePrompt"), 6000),
-        "rightsNote": text(setup.get("rightsNote") or fallback_rights, 2000),
+        "rightsNote": text(setup.get("rightsNote") or _default_rights_note(series_language), 2000),
         "canon": normalized_canon, "characters": normalized_characters,
         "relationships": normalized_relationships, "locations": normalized_locations,
         "props": normalized_props,

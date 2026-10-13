@@ -12,7 +12,7 @@ import {
 import {
   describeTemplateComponents,
   templateComponentPrompt,
-  TEMPLATE_SLOT_LABELS,
+  templateSlotLabels,
 } from '../src/features/sceneTemplates/componentContract.ts'
 import { MUSIC_MOTION_TEMPLATES } from '../src/features/sceneTemplates/musicMotionCatalog.ts'
 
@@ -30,7 +30,8 @@ test('resuelve las 41 fichas con un solo vocabulario de slots', () => {
     assert.equal(contract.generationPolicy, 'provided_only')
     assert.equal(contract.status, 'approved')
     assert.equal(contract.catalogVersion, templateCatalogVersion(template))
-    for (const component of contract.components) assert.ok(TEMPLATE_SLOT_LABELS[component.key], `${template.id}/${component.key} has a label`)
+    const labels = templateSlotLabels()
+    for (const component of contract.components) assert.equal(component.label, labels[component.key], `${template.id}/${component.key} has a label`)
   }
 })
 
@@ -102,8 +103,13 @@ test('devuelve objetos frescos y no permite mutar el catálogo mediante el contr
   assert.notEqual(fresh.components[0].description, 'mutated locally')
   assert.deepEqual(fresh.components[0].kinds, ['image'])
   assert.ok(!fresh.limits.includes('mutated locally'))
-  assert.equal(TEMPLATE_SLOT_LABELS.subject_2, 'Sujeto 2')
-  assert.equal(TEMPLATE_SLOT_LABELS.prop_1, 'Accesorio 1')
+  const labels = templateSlotLabels()
+  assert.equal(labels.subject_1, 'Subject 1')
+  assert.equal(labels.subject_2, 'Subject 2')
+  assert.equal(labels.background, 'Background')
+  assert.equal(labels.prop_1, 'Prop 1')
+  assert.equal(labels.prop_2, 'Prop 2')
+  assert.equal(labels.foreground, 'Foreground')
 })
 
 test('rechaza una plantilla desconocida y el prompt no intenta generar ni inventar archivos', () => {

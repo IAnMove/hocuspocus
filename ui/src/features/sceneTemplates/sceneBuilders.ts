@@ -1,4 +1,7 @@
 import type { SceneLayer, SceneKeyframe, SceneAtmosphereKind, SceneCatalogAssetReference } from '../../types'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 import type { ControlValue, TemplateAssetKind, TemplateSlotName } from './catalog'
 import { ATMOSPHERE_OPACITY, ATMOSPHERE_PRESETS } from '../../lib/scene2d/layerStyle'
 
@@ -31,7 +34,7 @@ export function keyframes(item: SceneLayer, beats: Beat[]): SceneLayer {
 }
 export function asset(ctx: BuildContext, slot: TemplateSlotName, pose: Pose = {}, z = 10): SceneLayer {
   const binding = ctx.bindings[slot]
-  if (!binding) throw new Error(`Falta el recurso del slot ${slot}.`)
+  if (!binding) throw new Error(i18n.t('scene3d:templateErrors.missingSlotResource', { slot }))
   const item = layer(slot, binding.type, binding.source, ctx.duration, pose, z)
   item.name = `${slot} · ${binding.name || slot}`
   if (binding.type === 'model3d') item.transform = { ...item.transform, rotationX: 65, rotationY: -35 }
@@ -118,7 +121,7 @@ export function atmosphere(ctx: BuildContext, kind: SceneAtmosphereKind, color?:
 }
 /** Pulses a layer on the visual BPM: on every beat, or only on the even or odd beats (two figures taking turns). */
 export function pulse(ctx: BuildContext, item: SceneLayer, kind: 'bounce' | 'scale' = 'scale', on: 'all' | 'even' | 'odd' = 'all'): SceneLayer {
-  if (item.animation.keyframes?.length) throw new Error('El pulso necesita una pose base, no reemplaza keyframes existentes.')
+  if (item.animation.keyframes?.length) throw new Error(i18n.t('scene3d:templateErrors.pulseNeedsBase'))
   const beats: Beat[] = []
   const seconds = 60 / ctx.bpm
   const rest = { scale: item.transform.scale, y: item.transform.y }

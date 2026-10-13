@@ -1,4 +1,5 @@
 import type { defineCapability } from './capabilityRegistry'
+import i18n from '../../i18n'
 
 /**
  * Video 2D music cards for a production shot. scenes.templates.suggest ranks the music-* cards (the cutout
@@ -46,8 +47,8 @@ export function video2dTemplateMessage(reply: Video2DReply): string {
     return [text(card.id), title, text(card.titleEn), why].filter(Boolean).join(' | ')
   })
   const unknown = Array.isArray(result.unknown_words) ? result.unknown_words.map(text).filter(Boolean) : []
-  const missing = unknown.length ? `\nNinguna carta conoce: ${unknown.join(', ')}.` : ''
-  if (!lines.length) return `Ninguna carta 2D coincide.${missing}`
+  const missing = unknown.length ? i18n.t('wizard:replies.video2dUnknown', { words: unknown.join(', ') }) : ''
+  if (!lines.length) return i18n.t('wizard:replies.video2dNone', { missing })
   return `${lines.join('\n')}${missing}`
 }
 
@@ -84,7 +85,7 @@ export function registerVideo2DTemplateCapabilities(register: typeof defineCapab
       },
       required: ['type', 'operation', 'input'],
     },
-    risk: 'read', confirmation: 'none', progress: 'Buscando cartas de Vídeo 2D…',
+    risk: 'read', confirmation: 'none', progress: 'wizard:progress.searchingVideo2dCards',
     resolve(raw) {
       if (typeof raw.operation !== 'string' || !operations.has(raw.operation) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) return null
       return { type: 'video2d_templates', operation: raw.operation as Video2DTemplateOperation, input: raw.input as Record<string, unknown> }

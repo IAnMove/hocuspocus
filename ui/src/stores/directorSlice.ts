@@ -14,6 +14,7 @@ import type {
   SpeakerMapping,
 } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
+import { contentLanguageForUi } from '../lib/contentLanguage'
 import type { SliceCreator } from './storeApi'
 
 export type DirectorSlice = {
@@ -139,7 +140,7 @@ export const createDirectorSlice: SliceCreator<DirectorSlice> = set => {
     })),
     directorClipPlans: [],
     directorSceneDescription: '',
-    directorSpokenLanguage: 'Español de España',
+    directorSpokenLanguage: contentLanguageForUi().spokenLanguage,
     directorLoading: false,
     directorLoadingMessage: null,
     directorError: null,

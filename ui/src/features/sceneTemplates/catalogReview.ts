@@ -1,3 +1,6 @@
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
 import {
   ALL_SCENE_TEMPLATES,
   CATALOG_VERSION,
@@ -51,7 +54,7 @@ const rawCatalogVersion = (raw: string): unknown => {
 }
 
 const migrationWarning = (legacyWarning?: string) => [
-  `Se preservaron las decisiones válidas de las ${LEGACY_REFS.length} plantillas previas; las ${EXPANDED_REFS.length - LEGACY_REFS.length} plantillas nuevas quedan pendientes y no se autoaprueban.`,
+  i18n.t('scene3d:catalogReview.migration', { legacy: LEGACY_REFS.length, added: EXPANDED_REFS.length - LEGACY_REFS.length }),
   legacyWarning,
 ].filter(Boolean).join(' ')
 
@@ -81,7 +84,7 @@ export function loadCatalogReview(storage: Pick<Storage, 'getItem'>): CatalogRev
   } catch {
     return {
       state: blankExpandedReview(),
-      warning: 'No se pudo leer el almacenamiento; las decisiones quedan pendientes en esta sesión.',
+      warning: i18n.t('scene3d:catalogReview.storageReadFailed'),
     }
   }
 

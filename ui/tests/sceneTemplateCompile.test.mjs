@@ -199,7 +199,7 @@ test('keyframed templates expose the actual endpoint poses to legacy editor cont
 
 test('compiler rejects repeated GLB sources and mismatched inline MIME types', () => {
   const pair = candidateDemoBindings('space-chase', 'coral')
-  assert.throws(() => compileCandidateScene('space-chase', { ...pair, prop_1: pair.subject_1 }), /GLB.*repetid/i)
+  assert.throws(() => compileCandidateScene('space-chase', { ...pair, prop_1: pair.subject_1 }), /GLB slots do not accept repeated sources/i)
   assert.throws(() => compileCandidateScene('space-chase', {
     ...pair, subject_1: { ...pair.subject_1, source: 'data:image/png;base64,AA==' },
   }), /MIME/i)
@@ -217,7 +217,7 @@ test('the chorus alias pulses the camera around its declared pose without discar
   assert.equal(camera.animation.keyframes[0].scale, 1.04)
   assert.equal(camera.animation.keyframes.at(-1).scale, 1.04)
   assert.equal(Math.max(...camera.animation.keyframes.map(frame => frame.scale)), 1.04 * (1 + .09 * .6))
-  assert.throws(() => pulse({ duration: 4, bpm: 120, intensity: .6, bindings: {} }, camera), /keyframes existentes/i)
+  assert.throws(() => pulse({ duration: 4, bpm: 120, intensity: .6, bindings: {} }, camera), /existing keyframes/i)
 })
 
 test('all 41 cards have distinct motion fingerprints beyond asset sources and names', () => {
@@ -253,31 +253,31 @@ test('candidate compiler rejects unknown, incomplete, invalid, unsafe, and out-o
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', {}),
-    /slot obligatorio subject_1/i,
+    /Required slot subject_1 is missing/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, unknown: valid.subject_1 }),
-    /slot desconocido/i,
+    /unknown slot/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, subject_1: { ...valid.subject_1, type: 'video' } }),
-    /slot subject_1 no admite video/i,
+    /Slot subject_1 does not accept video/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', valid, { duration: Number.NaN }),
-    /Duración/i,
+    /Duration/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', valid, { duration: 13 }),
-    /Duración/i,
+    /Duration/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, subject_1: { ...valid.subject_1, source: 'blob:unsafe-preview' } }),
-    /asset|referencia|durable/i,
+    /Library asset or a durable/i,
   )
   assert.throws(
     () => compileCandidateScene('cinema-establishing', { ...valid, subject_1: { ...valid.subject_1, source: 'javascript:alert(1)' } }),
-    /asset|referencia|durable/i,
+    /Library asset or a durable/i,
   )
 })
 
@@ -336,7 +336,7 @@ test('merged cards keep the look of the card they absorbed', () => {
   assert.equal(swarm.layers.find(item => item.id === 'prop_1').animation.orbit.count, 5)
   const ricochet = compileCandidateScene('music-ricochet-pass', { ...candidateDemoBindings('music-pinball'), prop_1: demoProp() })
   assert.equal(ricochet.layers.find(item => item.id === 'prop_1').transform.scale, .18)
-  assert.throws(() => compileCandidateScene('music-ricochet-pass', candidateDemoBindings('music-pinball')), /slot obligatorio prop_1/)
+  assert.throws(() => compileCandidateScene('music-ricochet-pass', candidateDemoBindings('music-pinball')), /Required slot prop_1 is missing/)
 })
 
 test('choice and text controls are checked with stable codes', () => {

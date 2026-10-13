@@ -1,5 +1,9 @@
 // Headless bridge: the MCP server validates catalog ids, then this module calls
 // the existing UI builders. It does not save, export, or fetch the network.
+// The template compiler reads its error messages from the i18next instance that
+// src/i18n starts in the app. This Node bridge has no app, so it starts it here
+// (English when no UI language is saved).
+import '../src/i18n/index.ts'
 import { canonicalBindings, resolveSceneTemplate, type TemplateAssetKind } from '../src/features/sceneTemplates/catalog.ts'
 import { compileCandidateScene, type TemplateBindings, type TemplateControlInput } from '../src/features/sceneTemplates/compile.ts'
 import { TemplateError } from '../src/features/sceneTemplates/templateErrors.ts'

@@ -233,6 +233,8 @@
     },
     "voiceAudition": {
       "language": "Sample sentence language",
+      "languageEs": "Spanish",
+      "languageEn": "English",
       "sample": {
         "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
         "en": "Hello, this is my voice. This is how I sound when telling a story in English."

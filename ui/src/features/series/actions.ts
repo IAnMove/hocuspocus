@@ -23,6 +23,7 @@ import type {
   UpdateSeriesEpisodeCommand,
 } from './commands'
 import i18n from '../../i18n'
+import { contentLanguageForUi, scaffoldLanguage } from '../../lib/contentLanguage'
 import { seriesRenderCandidates } from './productionMethods'
 import { shouldApproveCanonForExplicitEpisodeCreate } from './canonPolicy'
 import {
@@ -109,8 +110,12 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     : library.seriesById[useSeriesStore.getState().activeSeriesId]
   const createdSeries = !series
   if (!series) {
-    if (!action.createIfMissing) throw new Error(`No existe la serie “${action.seriesTitle}” y la orden no autorizó crearla.`)
-    series = await api.createSeriesProject(workspace, action.seriesTitle || 'Nueva serie')
+    if (!action.createIfMissing) throw new Error(i18n.t('seriesLab:errors.seriesMissingUnauthorized', { title: action.seriesTitle }))
+    series = await api.createSeriesProject(
+      workspace,
+      action.seriesTitle || i18n.t('seriesLab:scaffold.newSeries', { lng: scaffoldLanguage(action.language) }),
+      action.language || contentLanguageForUi().code,
+    )
   }
   const previousApproval = series.canon.approval
   const previousWorldSummary = series.canon.worldSummary.trim()
@@ -128,31 +133,38 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
       workspace,
       existingEpisode,
       'episode',
-      `El episodio “${existingEpisode.title}” ya existía; lo he abierto en Series Lab → Episode room.`,
+      i18n.t('seriesLab:replies.episodeAlreadyOpen', { title: existingEpisode.title }),
     )
   }
 
-  const characters = series.characters.length ? series.characters : creativeCharacters(action.characters).map((character, index) => ({
+  const languageIntent = resolveSeriesLanguageIntent(series, action.language, action.languageIntent, createdSeries)
+  const languageSetupChanged = seriesLanguageIntentAffectsCanon(series, languageIntent)
+  const authoredLanguage = languageIntent.contentLanguage || action.language || series.language
+  const lng = scaffoldLanguage(authoredLanguage)
+  const characters = series.characters.length ? series.characters : creativeCharacters(action.characters, authoredLanguage).map((character, index) => ({
     ...seriesModel.createSeriesCharacter(),
-    name: character.name || `Personaje ${index + 1}`,
-    role: character.role || (index ? 'Secundario' : 'Protagonista'),
+    name: character.name || i18n.t('seriesLab:scaffold.characterName', { lng, index: index + 1 }),
+    role: character.role || (index
+      ? i18n.t('seriesLab:scaffold.roleSupport', { lng })
+      : i18n.t('seriesLab:scaffold.roleLead', { lng })),
     personality: character.personality,
     desire: character.desire,
-    need: `Aprender algo que contradice su deseo inmediato: ${character.desire || 'resolver el conflicto'}.`,
+    need: i18n.t('seriesLab:scaffold.need', {
+      lng,
+      desire: character.desire || i18n.t('seriesLab:scaffold.needDesire', { lng }),
+    }),
     flaw: character.flaw,
     longArc: action.seriesPremise,
     voiceAndDialogue: character.voice,
     appearance: character.appearance,
-    identityLock: `${character.appearance}. Mantener identidad, edad aparente y vestuario entre episodios.`,
+    identityLock: i18n.t('seriesLab:scaffold.identityLock', { lng, appearance: character.appearance }),
   }))
-  const locations = series.locations.length ? series.locations : creativeLocations(action.locations).map(location => ({
+  const locations = series.locations.length ? series.locations : creativeLocations(action.locations, authoredLanguage).map(location => ({
     ...seriesModel.createSeriesLocation(),
     name: location.name,
     purpose: location.purpose,
     description: location.description,
   }))
-  const languageIntent = resolveSeriesLanguageIntent(series, action.language, action.languageIntent, createdSeries)
-  const languageSetupChanged = seriesLanguageIntentAffectsCanon(series, languageIntent)
   const needsSetup = createdSeries
     || !series.premise.trim()
     || !series.visualStyle.trim()
@@ -166,30 +178,30 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
       title: series.title === 'Untitled series' ? action.seriesTitle : series.title,
       premise: series.premise || action.seriesPremise || action.episodePremise,
       logline: series.logline || action.seriesLogline || action.episodeLogline,
-      genre: series.genre || action.genre || 'Comedia dramática',
-      tone: series.tone || action.tone || 'Cinematográfico',
-      visualStyle: series.visualStyle || action.visualStyle || 'Continuidad televisiva cinematográfica, composición clara y personajes consistentes.',
-      characterVisualStyle: series.characterVisualStyle || action.visualStyle || 'Identidades y vestuario consistentes entre episodios.',
-      cameraLanguage: series.cameraLanguage || 'Planos de situación claros, planos medios para diálogo y primeros planos para reacciones.',
+      genre: series.genre || action.genre || i18n.t('seriesLab:scaffold.genre', { lng }),
+      tone: series.tone || action.tone || i18n.t('seriesLab:scaffold.tone', { lng }),
+      visualStyle: series.visualStyle || action.visualStyle || i18n.t('seriesLab:scaffold.visualStyle', { lng }),
+      characterVisualStyle: series.characterVisualStyle || action.visualStyle || i18n.t('seriesLab:scaffold.characterVisualStyle', { lng }),
+      cameraLanguage: series.cameraLanguage || i18n.t('seriesLab:scaffold.camera', { lng }),
       language: languageIntent.contentLanguage || action.language || series.language,
       spokenLanguage: languageIntent.spokenLanguage || action.language || series.spokenLanguage,
       languageIntent,
       sourceMode: action.knownUniverse ? 'known_universe_experimental' as const : series.sourceMode,
       masterUniversePrompt: series.masterUniversePrompt || (action.knownUniverse
-        ? `Borrador fan inspirado en ${action.seriesTitle}; conservar los rasgos generales sin afirmar derechos sobre la obra original.`
+        ? i18n.t('seriesLab:scaffold.fanPrompt', { lng, title: action.seriesTitle })
         : ''),
       rightsNote: series.rightsNote || (action.knownUniverse
-        ? 'Borrador creativo no oficial. Verifica los derechos necesarios antes de publicar o monetizar.'
+        ? i18n.t('seriesLab:scaffold.rights', { lng })
         : ''),
       canon: {
         ...series.canon,
         worldSummary: series.canon.worldSummary || action.worldSummary || action.seriesPremise || action.episodePremise,
         immutableRules: series.canon.immutableRules.length ? series.canon.immutableRules : [{
           id: seriesModel.seriesId('fact'),
-          description: 'Mantener personalidades, relaciones, espacios y consecuencias coherentes entre episodios.',
+          description: i18n.t('seriesLab:scaffold.canonRule', { lng }),
           status: 'draft' as const,
         }],
-        themes: series.canon.themes.length ? series.canon.themes : [action.theme || 'Relaciones y consecuencias cotidianas'],
+        themes: series.canon.themes.length ? series.canon.themes : [action.theme || i18n.t('seriesLab:scaffold.theme', { lng })],
         approval: 'draft' as const,
         approvedAt: undefined,
       },
@@ -212,13 +224,16 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
     approvedCanon = true
   }
 
-  const beats = outlineBeats(action.outlineBeats, action.episodePremise, action.ending)
+  const beats = outlineBeats(action.outlineBeats, action.episodePremise, action.ending, authoredLanguage)
   const createdEpisode = await api.createSeriesEpisode(
     workspace,
     series.id,
     series.seasons[0]?.id,
     {
-      title: action.episodeTitle || `Episodio ${Object.keys(series.episodesById).length + 1}`,
+      title: action.episodeTitle || i18n.t('seriesLab:scaffold.episode', {
+        lng,
+        number: Object.keys(series.episodesById).length + 1,
+      }),
       premise: action.episodePremise,
       logline: action.episodeLogline,
       targetDurationSeconds: boundedDuration(action.targetDurationSeconds, series.defaultEpisodeDurationSeconds),
@@ -233,17 +248,29 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
   await useSeriesStore.getState().loadWorkspace(workspace)
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(createdEpisode.id)
-  const canonResult = approvedCanon ? 'preparado y aprobado el canon editable necesario, y ' : ''
+  const createdPrefix = createdSeries ? i18n.t('seriesLab:replies.createdSeriesPrefix') : ''
+  const canonPrefix = approvedCanon ? i18n.t('seriesLab:replies.canonPreparedPrefix') : ''
   const savedEpisode = series.episodesById[createdEpisode.id] || createdEpisode
   const synopsis = [
-    series.premise.trim() ? `Serie “${series.title}”: ${series.premise.trim()}` : '',
-    savedEpisode.premise.trim() ? `Primer borrador de “${savedEpisode.title}”: ${savedEpisode.premise.trim()}` : '',
+    series.premise.trim()
+      ? i18n.t('seriesLab:replies.seriesPremiseLine', { title: series.title, premise: series.premise.trim() })
+      : '',
+    savedEpisode.premise.trim()
+      ? i18n.t('seriesLab:replies.episodeDraftLine', { title: savedEpisode.title, premise: savedEpisode.premise.trim() })
+      : '',
   ].filter(Boolean).join('\n\n')
+  const synopsisBlock = synopsis ? `\n\n${synopsis}` : ''
   return seriesEpisodeResult(
     workspace,
     savedEpisode,
     'episode',
-    `He ${createdSeries ? 'creado la serie, ' : ''}${canonResult}guardado el episodio “${savedEpisode.title}” con ${savedEpisode.outline.beats.length} beats; está abierto en Series Lab → Episode room.${synopsis ? `\n\n${synopsis}` : ''}`,
+    i18n.t('seriesLab:replies.episodeSaved', {
+      createdPrefix,
+      canonPrefix,
+      title: savedEpisode.title,
+      beats: savedEpisode.outline.beats.length,
+      synopsis: synopsisBlock,
+    }),
   )
 }
 
@@ -252,7 +279,7 @@ export async function createFilledSeriesEpisode(action: CreateSeriesEpisodeComma
  * preparation step only: no image provider or render job is started.
  */
 export async function stageSeriesComic(action: StageSeriesComicCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Preparar un cómic desde Series Lab requiere confirm=true porque sustituye el borrador actual de Comics.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.stageComicNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [{ useSeriesStore }, { useComicStore }, api, seriesModel] = await Promise.all([
     import('./store'), import('../comics/store'), import('../../api/client'), import('./model'),
@@ -299,7 +326,7 @@ export async function stageSeriesComic(action: StageSeriesComicCommand): Promise
     workspace,
     handoff.comic,
     handoff.provenance as unknown as Record<string, unknown>,
-    `He preparado “${handoff.comic.title}” desde el episodio exacto “${handoff.episode.title}” en Comic Director. El borrador queda editable y no he generado imágenes.`,
+    i18n.t('seriesLab:replies.comicStaged', { title: handoff.comic.title, episode: handoff.episode.title }),
   )
 }
 
@@ -315,17 +342,17 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
   const seriesMatches = action.seriesTitle
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
-  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; renombra una para poder elegirla sin ambigüedad.`)
+  if (seriesMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeriesRename', { title: action.seriesTitle }))
   let series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
-    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
-    : 'No hay una serie activa que modificar.')
+    ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: action.seriesTitle })
+    : i18n.t('seriesLab:errors.noActiveSeriesToUpdate'))
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
   if (episodeMatches.length > 1) {
-    throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; usa un título inequívoco antes de modificarlos.`)
+    throw new Error(i18n.t('seriesLab:errors.ambiguousEpisodeBeforeEdit', { title: action.targetEpisodeTitle }))
   }
   const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
     ? useSeriesStore.getState().activeEpisodeId : ''
@@ -334,8 +361,8 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
     || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
     || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
   if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o un único episodio para poder inferir el destino.`)
+    ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: action.targetEpisodeTitle, series: series.title })
+    : i18n.t('seriesLab:errors.episodeTargetUnclear', { title: series.title }))
 
   if (action.languageIntent) {
     const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent)
@@ -362,23 +389,23 @@ export async function updateSeriesEpisode(action: UpdateSeriesEpisodeCommand): P
   }))
   const saved = await useSeriesStore.getState().saveNow()
   const verified = saved?.episodesById[episode.id]
-  if (!verified) throw new Error(`Series Lab no devolvió el episodio “${episode.title}” tras guardarlo.`)
-  if (action.episodeTitle && verified.title !== action.episodeTitle) throw new Error('El backend no confirmó el nuevo título del episodio.')
-  if (action.episodePremise && verified.premise !== action.episodePremise) throw new Error('El backend no confirmó la nueva premisa del episodio.')
-  if (action.episodeLogline && verified.logline !== action.episodeLogline) throw new Error('El backend no confirmó la nueva logline del episodio.')
+  if (!verified) throw new Error(i18n.t('seriesLab:errors.episodeNotReturned', { title: episode.title }))
+  if (action.episodeTitle && verified.title !== action.episodeTitle) throw new Error(i18n.t('seriesLab:errors.titleNotConfirmed'))
+  if (action.episodePremise && verified.premise !== action.episodePremise) throw new Error(i18n.t('seriesLab:errors.premiseNotConfirmed'))
+  if (action.episodeLogline && verified.logline !== action.episodeLogline) throw new Error(i18n.t('seriesLab:errors.loglineNotConfirmed'))
   if (action.outlineBeats.length && JSON.stringify(verified.outline.beats) !== JSON.stringify(action.outlineBeats)) {
-    throw new Error('El backend no confirmó la nueva estructura del episodio.')
+    throw new Error(i18n.t('seriesLab:errors.structureNotConfirmed'))
   }
   return seriesEpisodeResult(
     workspace,
     verified,
     'episode',
-    `He actualizado y guardado “${verified.title}” en la serie “${saved.title}”; conserva ${verified.script.length} escenas y ${verified.shots.length} tomas existentes.`,
+    i18n.t('seriesLab:replies.episodeUpdated', { title: verified.title, series: saved.title, scenes: verified.script.length, shots: verified.shots.length }),
   )
 }
 
 export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Generar un plan de Series Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.generatePlanNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
     import('../../api/client'),
@@ -390,16 +417,16 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
   const seriesMatches = action.seriesTitle
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
-  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  if (seriesMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeries', { title: action.seriesTitle }))
   let series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
-    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
-    : 'No hay una serie activa que planificar.')
+    ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: action.seriesTitle })
+    : i18n.t('seriesLab:errors.noActiveSeriesToPlan'))
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  if (episodeMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousEpisode', { title: action.targetEpisodeTitle }))
   const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
     ? useSeriesStore.getState().activeEpisodeId : ''
   const episodes = Object.values(series.episodesById)
@@ -407,11 +434,11 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
     || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
     || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
   if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o único.`)
-  if (!episode.premise.trim()) throw new Error(`“${episode.title}” necesita una premisa antes de planificarse.`)
+    ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: action.targetEpisodeTitle, series: series.title })
+    : i18n.t('seriesLab:errors.needsActiveOrOnlyEpisode', { title: series.title }))
+  if (!episode.premise.trim()) throw new Error(i18n.t('seriesLab:errors.premiseRequired', { title: episode.title }))
   if (action.scope === 'shots' && !episode.script.length) {
-    throw new Error('Regenerar shots requiere un guion existente; genera script o complete primero.')
+    throw new Error(i18n.t('seriesLab:errors.shotsNeedScript'))
   }
   if (action.languageIntent) {
     const languageIntent = mergeLanguageIntent(series.languageIntent, action.languageIntent, {
@@ -450,19 +477,19 @@ export async function generateSeriesPlan(action: GenerateSeriesPlanCommand): Pro
     writingBaseUrl: series.provider.writingBaseUrl,
   })
   if (job.seriesId !== series.id || job.episodeId !== episode.id) {
-    throw new Error('Series Lab devolvió un job asociado a otro episodio; no lo mostraré como correcto.')
+    throw new Error(i18n.t('seriesLab:errors.planJobWrongEpisode'))
   }
   return seriesEpisodeResult(
     workspace,
     episode,
     'episode',
-    `He iniciado el plan ${action.scope} de “${episode.title}” (${job.jobId}). El progreso y la propuesta recuperable están abiertos en Series Lab → Episode room; todavía no se ha aplicado ni renderizado.`,
+    i18n.t('seriesLab:replies.planStarted', { scope: action.scope, title: episode.title, jobId: job.jobId }),
     { taskIds: [job.jobId], channel: 'series_plan', job: job as unknown as Record<string, unknown> },
   )
 }
 
 export async function applySeriesPlan(action: ApplySeriesPlanCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Aplicar una propuesta de Series Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.applyPlanNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
     import('../../api/client'),
@@ -474,16 +501,16 @@ export async function applySeriesPlan(action: ApplySeriesPlanCommand): Promise<C
   const seriesMatches = action.seriesTitle
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
-  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  if (seriesMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeries', { title: action.seriesTitle }))
   const series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
-    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
-    : 'No hay una serie activa para aplicar la propuesta.')
+    ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: action.seriesTitle })
+    : i18n.t('seriesLab:errors.noActiveSeriesToApply'))
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  if (episodeMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousEpisode', { title: action.targetEpisodeTitle }))
   const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
     ? useSeriesStore.getState().activeEpisodeId : ''
   const episodes = Object.values(series.episodesById)
@@ -491,23 +518,23 @@ export async function applySeriesPlan(action: ApplySeriesPlanCommand): Promise<C
     || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
     || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
   if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o único.`)
+    ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: action.targetEpisodeTitle, series: series.title })
+    : i18n.t('seriesLab:errors.needsActiveOrOnlyEpisode', { title: series.title }))
 
   const job = action.jobId
     ? await api.fetchSeriesPlanJob(action.jobId)
     : (await api.fetchSeriesPlanRecovery(workspace)).jobs
         .filter(item => item.seriesId === series.id && item.episodeId === episode.id && item.status === 'completed' && item.episodeResult)
         .sort((left, right) => Number(right.updatedAt || right.finishedAt || 0) - Number(left.updatedAt || left.finishedAt || 0))[0]
-  if (!job) throw new Error(`No hay una propuesta completada y recuperable para “${episode.title}”.`)
+  if (!job) throw new Error(i18n.t('seriesLab:errors.noRecoverableProposal', { title: episode.title }))
   if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
-    throw new Error('El job indicado pertenece a otro workspace, serie o episodio; no se aplicará.')
+    throw new Error(i18n.t('seriesLab:errors.jobWrongDestination'))
   }
   if (job.status !== 'completed' || !job.episodeResult) {
-    throw new Error(`El job ${job.jobId} está ${job.status}; sólo se puede aplicar una propuesta completada.`)
+    throw new Error(i18n.t('seriesLab:errors.jobNotCompleted', { jobId: job.jobId, status: job.status }))
   }
   const applied = await api.applySeriesPlanJob(job.jobId, job.episodeResult)
-  if (applied.id !== episode.id) throw new Error('Series Lab aplicó la propuesta a un episodio inesperado; recarga antes de continuar.')
+  if (applied.id !== episode.id) throw new Error(i18n.t('seriesLab:errors.appliedUnexpectedEpisode'))
   await useSeriesStore.getState().reload()
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
@@ -515,13 +542,13 @@ export async function applySeriesPlan(action: ApplySeriesPlanCommand): Promise<C
     workspace,
     applied,
     'episode',
-    `He aplicado el plan ${job.jobId} a “${applied.title}”: ${applied.outline.beats.length} beats, ${applied.script.length} escenas y ${applied.shots.length} tomas. No he renderizado ni comprometido el delta de canon.`,
+    i18n.t('seriesLab:replies.planApplied', { jobId: job.jobId, title: applied.title, beats: applied.outline.beats.length, scenes: applied.script.length, shots: applied.shots.length }),
     { taskIds: [job.jobId], channel: 'series_plan_clear' },
   )
 }
 
 export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Renderizar tomas de Series Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.renderNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
     import('../../api/client'),
@@ -533,16 +560,16 @@ export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promi
   const seriesMatches = action.seriesTitle
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
-  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  if (seriesMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeries', { title: action.seriesTitle }))
   const series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
-    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
-    : 'No hay una serie activa que renderizar.')
+    ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: action.seriesTitle })
+    : i18n.t('seriesLab:errors.noActiveSeriesToRender'))
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  if (episodeMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousEpisode', { title: action.targetEpisodeTitle }))
   const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
     ? useSeriesStore.getState().activeEpisodeId : ''
   const episodes = Object.values(series.episodesById)
@@ -550,27 +577,27 @@ export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promi
     || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
     || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
   if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o único.`)
-  if (!episode.shots.length) throw new Error(`“${episode.title}” no tiene shots; genera y aplica un plan complete primero.`)
+    ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: action.targetEpisodeTitle, series: series.title })
+    : i18n.t('seriesLab:errors.needsActiveOrOnlyEpisode', { title: series.title }))
+  if (!episode.shots.length) throw new Error(i18n.t('seriesLab:errors.noShotsToRender', { title: episode.title }))
   const eligible = seriesRenderCandidates(series, episode, action.mode, action.shotIds)
   if (!eligible.length) throw new Error(i18n.t('seriesLab:renderActions.noCandidates'))
   const staleShots = eligible.filter(shot => shot.scriptDialogueStatus === 'stale' || shot.scriptDialogueStatus === 'manual_conflict')
   if (staleShots.length) {
     throw new Error(
-      `El diálogo del guion y de ${staleShots.length} plano(s) no coincide. Sincroniza los planos en Episodio antes de renderizar.`,
+      i18n.t('seriesLab:errors.staleDialogue', { total: staleShots.length }),
     )
   }
   if (eligible.some(shot => shot.dialogueBeats.length > 0) && !series.bestEffortLipSyncAcknowledged) {
-    throw new Error('Este episodio tiene diálogo. Marca primero “I understand lip sync is best-effort” en Series Lab; el Wizard no puede inferir ese consentimiento.')
+    throw new Error(i18n.t('seriesLab:errors.lipSyncConsentRequired'))
   }
 
   const byId = new Map(episode.shots.map(shot => [shot.id, shot]))
   if (action.mode === 'selected') {
     const unknown = action.shotIds.filter(id => !byId.has(id))
-    if (unknown.length) throw new Error(`Shots desconocidos: ${unknown.join(', ')}.`)
+    if (unknown.length) throw new Error(i18n.t('seriesLab:errors.unknownShots', { shots: unknown.join(', ') }))
     const approved = action.shotIds.filter(id => Boolean(byId.get(id)?.approvedAttemptId))
-    if (approved.length) throw new Error(`Los shots ya aprobados no se vuelven a renderizar: ${approved.join(', ')}.`)
+    if (approved.length) throw new Error(i18n.t('seriesLab:errors.approvedShotsBlocked', { shots: approved.join(', ') }))
   }
 
   await useSeriesStore.getState().openSeries(series.id)
@@ -583,19 +610,19 @@ export async function renderSeriesShots(action: RenderSeriesShotsCommand): Promi
     settings: current.provider.videoSettings,
   })
   if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
-    throw new Error('Series Lab devolvió un render job para otro destino; no se mostrará como correcto.')
+    throw new Error(i18n.t('seriesLab:errors.renderJobWrongDestination'))
   }
   return seriesEpisodeResult(
     workspace,
     episode,
     'review',
-    `He encolado ${eligible.length} shots de “${episode.title}” (${job.jobId}) en modo ${action.mode}. El progreso recuperable está abierto en Series Lab → Resultados.`,
+    i18n.t('seriesLab:replies.shotsQueued', { total: eligible.length, title: episode.title, jobId: job.jobId, mode: action.mode }),
     { taskIds: [job.jobId], channel: 'series_render', job: job as unknown as Record<string, unknown> },
   )
 }
 
 export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Revisar intentos de Series Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.reviewNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
     import('../../api/client'),
@@ -607,16 +634,16 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
   const seriesMatches = action.seriesTitle
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
-  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  if (seriesMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeries', { title: action.seriesTitle }))
   const series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
-    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
-    : 'No hay una serie activa cuyos intentos revisar.')
+    ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: action.seriesTitle })
+    : i18n.t('seriesLab:errors.noActiveSeriesToReview'))
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  if (episodeMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousEpisode', { title: action.targetEpisodeTitle }))
   const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
     ? useSeriesStore.getState().activeEpisodeId : ''
   const episodes = Object.values(series.episodesById)
@@ -624,19 +651,19 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
     || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
     || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
   if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o único.`)
+    ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: action.targetEpisodeTitle, series: series.title })
+    : i18n.t('seriesLab:errors.needsActiveOrOnlyEpisode', { title: series.title }))
 
   const shotsByOrder = new Map<number, typeof episode.shots[number]>()
   for (const shot of episode.shots) {
-    if (shotsByOrder.has(shot.order)) throw new Error(`El episodio tiene más de un shot con el número ${shot.order}; no se puede resolver de forma segura.`)
+    if (shotsByOrder.has(shot.order)) throw new Error(i18n.t('seriesLab:errors.duplicateShotOrder', { order: shot.order }))
     shotsByOrder.set(shot.order, shot)
   }
   const selectedShots = action.scope === 'all_latest' || action.scope === 'replace_latest'
     ? episode.shots
     : action.shotNumbers.map(number => {
         const shot = shotsByOrder.get(number)
-        if (!shot) throw new Error(`No existe el shot ${number} en “${episode.title}”.`)
+        if (!shot) throw new Error(i18n.t('seriesLab:errors.shotMissing', { number, title: episode.title }))
         return shot
       })
 
@@ -654,22 +681,29 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
       const missing = selectedShots.filter(shot => !bulk.selections.some(item => item.shotId === shot.id)
         && !shot.approvedAttemptId)
       if (missing.length) {
-        throw new Error(`El shot ${missing[0].order} no tiene un intento completado y reproducible que aprobar.`)
+        throw new Error(i18n.t('seriesLab:errors.shotNotApprovable', { order: missing[0].order }))
       }
     }
-    if (!selections.length) throw new Error('No hay nuevos intentos elegibles que aprobar; las tomas resueltas ya están aprobadas o no tienen vídeo válido.')
+    if (!selections.length) throw new Error(i18n.t('seriesLab:errors.noEligibleAttempts'))
     const result = await api.approveSeriesAttemptsBulk(workspace, series.id, episode.id, selections, 'wizard')
     if (result.seriesId !== series.id || result.episodeId !== episode.id) {
-      throw new Error('Series Lab aprobó intentos para otro destino; recarga antes de continuar.')
+      throw new Error(i18n.t('seriesLab:errors.approvedWrongDestination'))
     }
     await useSeriesStore.getState().reload()
     await useSeriesStore.getState().openSeries(series.id)
     useSeriesStore.getState().openEpisode(episode.id)
+    const attemptWord = selections.length === 1
+      ? i18n.t('seriesLab:replies.attemptSingular')
+      : i18n.t('seriesLab:replies.attemptPlural')
     return seriesEpisodeResult(
       workspace,
       episode,
       'review',
-      `He aprobado ${selections.length} intento${selections.length === 1 ? '' : 's'} en “${episode.title}” y he abierto Render & Review.`,
+      i18n.t('seriesLab:replies.attemptsApproved', {
+        total: selections.length,
+        attempt: attemptWord,
+        title: episode.title,
+      }),
     )
   }
 
@@ -680,18 +714,18 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
     ? shot.attempts.find(item => item.id === action.attemptId)
     : [...shot.attempts].reverse().find(item => item.status === 'completed' && item.reviewDecision !== 'rejected')
   if (!attempt) throw new Error(action.attemptId
-    ? `El intento ${action.attemptId} no pertenece al shot ${shot.order}.`
-    : `El shot ${shot.order} no tiene un intento completado pendiente de rechazo.`)
+    ? i18n.t('seriesLab:errors.attemptNotOnShot', { attemptId: action.attemptId, order: shot.order })
+    : i18n.t('seriesLab:errors.shotNothingToReject', { order: shot.order }))
   if (attempt.status !== 'completed' || attempt.reviewDecision === 'rejected') {
-    throw new Error(`El intento ${attempt.id} del shot ${shot.order} no se puede rechazar.`)
+    throw new Error(i18n.t('seriesLab:errors.attemptNotRejectable', { attemptId: attempt.id, order: shot.order }))
   }
   if (shot.approvedAttemptId === attempt.id) {
-    throw new Error(`El intento ${attempt.id} ya es el aprobado del shot ${shot.order}; la UI no permite rechazar el montaje final sin elegir antes otra toma.`)
+    throw new Error(i18n.t('seriesLab:errors.cannotRejectFinalTake', { attemptId: attempt.id, order: shot.order }))
   }
   const rejectedShot = await api.rejectSeriesAttempt(workspace, series.id, episode.id, shot.id, attempt.id, 'wizard')
   const rejectedAttempt = rejectedShot.attempts.find(item => item.id === attempt.id)
   if (rejectedShot.id !== shot.id || rejectedAttempt?.reviewDecision !== 'rejected') {
-    throw new Error('Series Lab no confirmó el rechazo solicitado; recarga antes de continuar.')
+    throw new Error(i18n.t('seriesLab:errors.rejectNotConfirmed'))
   }
   await useSeriesStore.getState().reload()
   await useSeriesStore.getState().openSeries(series.id)
@@ -700,12 +734,12 @@ export async function reviewSeriesAttempts(action: ReviewSeriesAttemptsCommand):
     workspace,
     episode,
     'review',
-    `He rechazado el intento ${attempt.id} del shot ${shot.order} en “${episode.title}” y he abierto Render & Review.`,
+    i18n.t('seriesLab:replies.attemptRejected', { attemptId: attempt.id, order: shot.order, title: episode.title }),
   )
 }
 
 export async function assembleSeriesEpisode(action: AssembleSeriesEpisodeCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Ensamblar un episodio de Series Lab requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.assembleNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([
     import('../../api/client'),
@@ -717,16 +751,16 @@ export async function assembleSeriesEpisode(action: AssembleSeriesEpisodeCommand
   const seriesMatches = action.seriesTitle
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle))
     : []
-  if (seriesMatches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  if (seriesMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeries', { title: action.seriesTitle }))
   const series = seriesMatches[0]
     || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
   if (!series) throw new Error(action.seriesTitle
-    ? `No existe la serie “${action.seriesTitle}” en este workspace.`
-    : 'No hay una serie activa que ensamblar.')
+    ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: action.seriesTitle })
+    : i18n.t('seriesLab:errors.noActiveSeriesToAssemble'))
   const episodeMatches = action.targetEpisodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle))
     : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”; el destino no es inequívoco.`)
+  if (episodeMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousEpisode', { title: action.targetEpisodeTitle }))
   const activeEpisodeId = useSeriesStore.getState().activeSeriesId === series.id
     ? useSeriesStore.getState().activeEpisodeId : ''
   const episodes = Object.values(series.episodesById)
@@ -734,66 +768,77 @@ export async function assembleSeriesEpisode(action: AssembleSeriesEpisodeCommand
     || (!action.targetEpisodeTitle && activeEpisodeId ? series.episodesById[activeEpisodeId] : null)
     || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
   if (!episode) throw new Error(action.targetEpisodeTitle
-    ? `No existe el episodio “${action.targetEpisodeTitle}” en “${series.title}”.`
-    : `“${series.title}” necesita un episodio activo o único.`)
-  if (!episode.shots.length) throw new Error(`“${episode.title}” no tiene shots que ensamblar.`)
+    ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: action.targetEpisodeTitle, series: series.title })
+    : i18n.t('seriesLab:errors.needsActiveOrOnlyEpisode', { title: series.title }))
+  if (!episode.shots.length) throw new Error(i18n.t('seriesLab:errors.noShotsToAssemble', { title: episode.title }))
   const incomplete = missingAssemblyShotOrders(
     episode.shots,
     id => Boolean(series.assets[id]),
   )
   if (incomplete.length) {
-    throw new Error(`Aprueba primero un vídeo reproducible para todos los shots. Faltan: ${incomplete.join(', ')}.`)
+    throw new Error(i18n.t('seriesLab:errors.assemblyIncomplete', { shots: incomplete.join(', ') }))
   }
 
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
   const job = await api.startSeriesEpisodeAssembly(workspace, series.id, episode.id)
   if (job.workspace !== workspace || job.seriesId !== series.id || job.episodeId !== episode.id) {
-    throw new Error('Series Lab devolvió un ensamblado para otro destino; no se mostrará como correcto.')
+    throw new Error(i18n.t('seriesLab:errors.assemblyWrongDestination'))
   }
   return seriesEpisodeResult(
     workspace,
     episode,
     'review',
-    `He iniciado el ensamblado ordenado de ${episode.shots.length} shots de “${episode.title}” (${job.jobId}). El progreso recuperable y la descarga están abiertos en Render & Review; no he comprometido el delta de canon.`,
+    i18n.t('seriesLab:replies.assemblyStarted', { total: episode.shots.length, title: episode.title, jobId: job.jobId }),
     { taskIds: [job.jobId], channel: 'series_assembly', job: job as unknown as Record<string, unknown> },
   )
 }
 
 export async function commitSeriesCanonDelta(action: CommitSeriesCanonCommand): Promise<CommandResult> {
-  if (!action.confirm) throw new Error('Comprometer cambios de canon requiere confirm=true.')
+  if (!action.confirm) throw new Error(i18n.t('seriesLab:errors.commitCanonNeedsConfirm'))
   const workspace = useStore.getState().activeWorkspace || 'default'
   const [api, { useSeriesStore }] = await Promise.all([import('../../api/client'), import('./store')])
   await useSeriesStore.getState().loadWorkspace(workspace)
   await useSeriesStore.getState().saveNow()
   const library = await api.fetchSeriesLibrary(workspace)
   const matches = action.seriesTitle ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(action.seriesTitle)) : []
-  if (matches.length > 1) throw new Error(`Hay varias series tituladas “${action.seriesTitle}”; el destino no es inequívoco.`)
+  if (matches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousSeries', { title: action.seriesTitle }))
   const series = matches[0] || (!action.seriesTitle ? library.seriesById[useSeriesStore.getState().activeSeriesId] : null)
-  if (!series) throw new Error(action.seriesTitle ? `No existe la serie “${action.seriesTitle}”.` : 'No hay una serie activa.')
+  if (!series) throw new Error(action.seriesTitle ? i18n.t('seriesLab:errors.seriesMissing', { title: action.seriesTitle }) : i18n.t('seriesLab:errors.noActiveSeries'))
   const episodeMatches = action.targetEpisodeTitle ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(action.targetEpisodeTitle)) : []
-  if (episodeMatches.length > 1) throw new Error(`Hay varios episodios titulados “${action.targetEpisodeTitle}”.`)
+  if (episodeMatches.length > 1) throw new Error(i18n.t('seriesLab:errors.ambiguousEpisodeTitle', { title: action.targetEpisodeTitle }))
   const activeId = useSeriesStore.getState().activeSeriesId === series.id ? useSeriesStore.getState().activeEpisodeId : ''
   const episodes = Object.values(series.episodesById)
   const episode = episodeMatches[0] || (!action.targetEpisodeTitle && activeId ? series.episodesById[activeId] : null) || (!action.targetEpisodeTitle && episodes.length === 1 ? episodes[0] : null)
-  if (!episode) throw new Error(action.targetEpisodeTitle ? `No existe el episodio “${action.targetEpisodeTitle}”.` : 'La serie necesita un episodio activo o único.')
+  if (!episode) throw new Error(action.targetEpisodeTitle ? i18n.t('seriesLab:errors.episodeMissing', { title: action.targetEpisodeTitle }) : i18n.t('seriesLab:errors.seriesNeedsActiveEpisode'))
   const deltaIds = [...episode.proposedCanonDelta.add.map(item => item.id), ...episode.proposedCanonDelta.change.map(item => item.id), ...episode.proposedCanonDelta.retire.map(item => item.factId)]
-  if (!deltaIds.length) throw new Error(`“${episode.title}” no tiene cambios de canon propuestos.`)
+  if (!deltaIds.length) throw new Error(i18n.t('seriesLab:errors.noCanonChanges', { title: episode.title }))
   const unknown = action.itemIds.filter(id => !deltaIds.includes(id))
-  if (unknown.length) throw new Error(`Cambios de canon desconocidos: ${unknown.join(', ')}.`)
+  if (unknown.length) throw new Error(i18n.t('seriesLab:errors.unknownCanonChanges', { ids: unknown.join(', ') }))
   const selected = action.decision.endsWith('_all') ? deltaIds : action.itemIds
   const value = action.decision.startsWith('accept_') ? 'accepted' : 'rejected'
   const decisions = Object.fromEntries(selected.map(id => [id, value])) as Record<string, 'accepted' | 'rejected'>
   const updated = await api.commitSeriesCanon(workspace, series.id, episode.id, episode.proposedCanonDelta.baseRevision, decisions)
-  if (updated.id !== series.id || !updated.episodesById[episode.id]) throw new Error('Series Lab confirmó decisiones para otro destino.')
+  if (updated.id !== series.id || !updated.episodesById[episode.id]) throw new Error(i18n.t('seriesLab:errors.canonWrongDestination'))
   await useSeriesStore.getState().reload()
   await useSeriesStore.getState().openSeries(series.id)
   useSeriesStore.getState().openEpisode(episode.id)
+  const changeWord = selected.length === 1
+    ? i18n.t('seriesLab:replies.changeSingular')
+    : i18n.t('seriesLab:replies.changePlural')
+  const decisionWord = value === 'accepted'
+    ? i18n.t('seriesLab:replies.canonAccepted')
+    : i18n.t('seriesLab:replies.canonRejected')
   return seriesEpisodeResult(
     workspace,
     episode,
     'review',
-    `He marcado ${selected.length} cambio${selected.length === 1 ? '' : 's'} de canon como ${value === 'accepted' ? 'aceptados' : 'rechazados'} en “${episode.title}”. Los demás permanecen pendientes.`,
+    i18n.t('seriesLab:replies.canonMarked', {
+      total: selected.length,
+      change: changeWord,
+      decision: decisionWord,
+      title: episode.title,
+    }),
     { reviewView: 'finish' },
   )
 }

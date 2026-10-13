@@ -7,6 +7,7 @@ import { BASE } from '../../api/http'
 import type { CanonicalTaskEvent } from '../../lib/canonicalTaskEvents'
 import { cardFromReport, type WizardExecutionCard } from './executionCards'
 import { executionKey, executionReport } from './agentContract'
+import i18n from '../../i18n'
 
 export type WizardWorkflowState =
   | 'prepared' | 'queued' | 'waiting' | 'running' | 'completed'
@@ -465,11 +466,19 @@ function workflowCard(workflow: WizardWorkflowRecord): WizardExecutionCard {
               : 'running'
   let message = workflow.recoverableError
   if (!message && workflow.state === 'awaiting_input') {
-    message = `Workflow “${workflow.type}” necesita información: ${workflow.pendingInput?.reason || 'falta una decisión.'}`
+    message = i18n.t('wizard:replies.workflowNeedsInput', {
+      type: workflow.type,
+      reason: workflow.pendingInput?.reason || i18n.t('wizard:replies.workflowDecisionMissing'),
+    })
   } else if (!message && workflow.state === 'completed') {
-    message = `Workflow “${workflow.type}” completado.`
+    message = i18n.t('wizard:replies.workflowCompleted', { type: workflow.type })
   } else if (!message) {
-    message = `Workflow “${workflow.type}”: ${step?.kind || workflow.state} (${workflow.currentStep + 1}/${workflow.steps.length}).`
+    message = i18n.t('wizard:replies.workflowStep', {
+      type: workflow.type,
+      step: step?.kind || workflow.state,
+      current: workflow.currentStep + 1,
+      total: workflow.steps.length,
+    })
   }
   return cardFromReport(executionReport({
     state,

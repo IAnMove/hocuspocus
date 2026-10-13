@@ -739,5 +739,14 @@
     "unsure": "The face points were unsure here (a moustache, a beard, a face seen from below): check that the line is between the lips.",
     "smallFace": "Small face (head {{head}} px): the mouths are warped on the face enlarged {{times}}×, fitted back to the pose and opened a little deeper, so they read when the figure is drawn small.",
     "headPass": "Its face points were read on the head alone."
+  },
+  "actionErrors": {
+    "kitMissing": "Character Kit “{{name}}” does not exist.",
+    "noOpenKit": "There is no Character Kit open.",
+    "singleReference": "Character Kit accepts a single identity reference. Specify exactly one output.",
+    "imageMissing": "Image output “{{name}}” does not exist in this workspace.",
+    "noIdentity": "The kit has no identity reference to build the base pose.",
+    "visemePacks": "I could not load the viseme packs.",
+    "presetMissing": "Animation preset “{{name}}” does not exist."
   }
 }

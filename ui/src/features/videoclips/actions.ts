@@ -5,6 +5,7 @@ import {
   mountAlternativeSong,
 } from '../../api/client'
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
+import i18n from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type {
   AttachAlternativeSongCommand,
@@ -50,28 +51,31 @@ function songResult(
 export async function attachSong(command: AttachAlternativeSongCommand): Promise<CommandResult> {
   const videoclip = command.videoclipName.trim()
   const audio = command.audioOutputName.trim()
-  if (!videoclip) throw new Error('Indica el videoclip exacto.')
-  if (!audio) throw new Error('Indica el output de audio exacto.')
+  if (!videoclip) throw new Error(i18n.t('videoEditor:actionErrors.videoclipRequired'))
+  if (!audio) throw new Error(i18n.t('videoEditor:actionErrors.videoclipAudioRequired'))
   const result = await attachAlternativeSong(videoclip, audio, workspaceName())
   showVideoclips()
+  const adaptation = result.adaptation === 'random_extras'
+    ? i18n.t('videoEditor:replies.videoclipAdaptationRandom')
+    : i18n.t('videoEditor:replies.videoclipAdaptationRepeat')
   return songResult(
     videoclip,
-    `He añadido “${audio}” como canción alternativa de “${videoclip}” (${result.adaptation === 'random_extras' ? 'extras aleatorios si hace falta' : 'se repetirá el videoclip si hace falta'}). Aún no he montado el vídeo.`,
+    i18n.t('videoEditor:replies.videoclipAdded', { audio, videoclip, adaptation }),
     { state: 'prepared' },
   )
 }
 
 export async function mountSong(command: MountAlternativeSongCommand): Promise<CommandResult> {
-  if (!command.confirm) throw new Error('Montar una canción alternativa requiere confirm=true.')
+  if (!command.confirm) throw new Error(i18n.t('videoEditor:actionErrors.videoclipMountConfirm'))
   const videoclip = command.videoclipName.trim()
   const audio = command.audioOutputName.trim()
-  if (!videoclip) throw new Error('Indica el videoclip exacto.')
-  if (!audio && !command.songId) throw new Error('Indica la canción exacta.')
+  if (!videoclip) throw new Error(i18n.t('videoEditor:actionErrors.videoclipRequired'))
+  if (!audio && !command.songId) throw new Error(i18n.t('videoEditor:actionErrors.videoclipSongRequired'))
   let songId = command.songId?.trim() || ''
   if (!songId) {
     const attached = await attachAlternativeSong(videoclip, audio, workspaceName())
     const song = attached.song || attached.songs.find(item => item.audio_name === audio)
-    if (!song) throw new Error('No pude adjuntar la canción alternativa.')
+    if (!song) throw new Error(i18n.t('videoEditor:actionErrors.videoclipAttachFailed'))
     songId = song.id
   }
   const started = await mountAlternativeSong(videoclip, songId, {
@@ -81,7 +85,11 @@ export async function mountSong(command: MountAlternativeSongCommand): Promise<C
   showVideoclips()
   return songResult(
     videoclip,
-    `Estoy montando “${videoclip}” con “${started.song.audio_name}” (FFmpeg, sin regenerar planos). El resultado será “${started.output_name}”.`,
+    i18n.t('videoEditor:replies.videoclipMounting', {
+      videoclip,
+      audio: started.song.audio_name,
+      output: started.output_name,
+    }),
     {
       state: 'running',
       taskId: started.task_id || started.job_id,
@@ -96,9 +104,10 @@ export async function trackSong(command: TrackAlternativeSongCommand): Promise<C
   const mounting = list.songs.find(song => song.status === 'mounting' && song.job_id)
   if (mounting?.job_id) {
     const job = await fetchVideoEditorExport(mounting.job_id)
+    const output = job.filename || mounting.mounted_output
     const message = job.status === 'completed'
-      ? `El montaje de “${mounting.audio_name}” terminó: ${job.filename || mounting.mounted_output}.`
-      : `El montaje de “${mounting.audio_name}” está ${job.status}: ${job.message}`
+      ? i18n.t('videoEditor:replies.videoclipMountFinished', { audio: mounting.audio_name, output })
+      : i18n.t('videoEditor:replies.videoclipMountStatus', { audio: mounting.audio_name, status: job.status, message: job.message })
     const failed = job.status === 'failed' || job.status === 'cancelled'
     return songResult(videoclipName, message, {
       state: job.status === 'completed' ? 'completed' : failed ? 'failed' : 'running',
@@ -110,12 +119,12 @@ export async function trackSong(command: TrackAlternativeSongCommand): Promise<C
   if (mounted?.mounted_output) {
     return songResult(
       videoclipName,
-      `La última canción alternativa montada es “${mounted.audio_name}” → “${mounted.mounted_output}”.`,
+      i18n.t('videoEditor:replies.videoclipLastMounted', { audio: mounted.audio_name, output: mounted.mounted_output }),
       { outputName: mounted.mounted_output },
     )
   }
   const message = list.songs.length
-    ? `“${videoclipName}” tiene ${list.songs.length} canciones alternativas adjuntas y ninguna se está montando.`
-    : `“${videoclipName}” no tiene canciones alternativas todavía.`
+    ? i18n.t('videoEditor:replies.videoclipAlternativesAttached', { name: videoclipName, total: list.songs.length })
+    : i18n.t('videoEditor:replies.videoclipNoAlternatives', { name: videoclipName })
   return songResult(videoclipName, message, { state: 'prepared' })
 }

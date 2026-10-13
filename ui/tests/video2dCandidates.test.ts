@@ -71,6 +71,6 @@ test('a longer titled shot travels further at the same speed, and portrait frame
 })
 
 test('the titled cards take pictures only', () => {
-  assert.throws(() => compileCandidateScene('documentary-history', { ...ASSETS, subject_1: { type: 'model3d', source: '/api/v1/file/a.glb' } }), /no admite model3d/)
-  assert.throws(() => compileCandidateScene('city-postcard', { ...ASSETS, background: { type: 'video', source: '/api/v1/file/loop.mp4' } }), /no admite video/)
+  assert.throws(() => compileCandidateScene('documentary-history', { ...ASSETS, subject_1: { type: 'model3d', source: '/api/v1/file/a.glb' } }), /does not accept model3d/)
+  assert.throws(() => compileCandidateScene('city-postcard', { ...ASSETS, background: { type: 'video', source: '/api/v1/file/loop.mp4' } }), /does not accept video/)
 })

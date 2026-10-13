@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { contentLanguageForUi } from '../../lib/contentLanguage'
 import * as api from '../../api/client'
 import { emptySeriesLibrary, normalizeSeriesLibrary, normalizeSeriesProject } from './model'
 import type { SeriesEpisode, SeriesJobStatus, SeriesLibrary, SeriesProject, SeriesReviewChange, SeriesReviewReply } from './types'
@@ -395,7 +396,11 @@ export const useSeriesStore = create<SeriesState>((set, get) => ({
 
   newSeries: async () => {
     await get().saveNow()
-    adoptNewSeries(set, get, await api.createSeriesProject(get().workspace))
+    adoptNewSeries(set, get, await api.createSeriesProject(
+      get().workspace,
+      'Untitled series',
+      contentLanguageForUi().code,
+    ))
   },
 
   newSeriesFromTemplate: async (templateId, language) => {

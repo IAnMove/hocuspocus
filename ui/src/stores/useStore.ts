@@ -22,6 +22,7 @@ import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import type { GalleryView } from './gallerySlice'
 import i18n from '../i18n'
+import { contentLanguageForUi } from '../lib/contentLanguage'
 import { type FamilyId, type ThemeMode, type ThemePrefs } from '../lib/theme'
 import { splitPromptSchedule } from '../lib/promptScheduler'
 import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
@@ -8357,7 +8358,7 @@ export const useStore = create<AppState>((set, get) => {
       shortFilmPreserveVisualStyle: true,
       directorCharacterVisualStyle: '',
       directorAllowClipText: false,
-      directorSpokenLanguage: 'Español de España',
+      directorSpokenLanguage: contentLanguageForUi().spokenLanguage,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
       // but its poller must not overwrite the next story loaded into Director.

@@ -123,7 +123,8 @@ character's ink.
    "foley": {"prompt": "servo whirs, metal footsteps on gravel", "volume": 0.5}}]}
 ```
 
-The first language is the series' own (`es` or `spanish`); every other language in the lines becomes a version.
+The first language is the series' own (its `spokenLanguage`; `es` or `spanish` for this Spanish series); every other
+language in the lines becomes a version. A series created without `language` is English, so name it in `series.create`.
 `scenes[].id` is short (`cold_open`): the episode prefix is added for you. A shot can override the scene's place with
 `location` and `variant`.
 

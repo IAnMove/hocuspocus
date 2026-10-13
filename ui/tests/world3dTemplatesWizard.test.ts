@@ -35,8 +35,8 @@ test('wizard capability sends the query and shows the real cards', async () => {
   assert.match(outcome.message, /cine-dolly-zoom/)
   const choice = world3dTemplateMessage({ status: 'needs_choice', result: { candidates: [{ id: 'cine-orbit-360', titleEs: 'Órbita de 360 grados', titleEn: '360-Degree Orbit', format: 'landscape', duration: 8 }, { id: 'product-orbit', titleEs: 'Órbita de producto', titleEn: 'Product orbit', format: 'landscape', duration: 6 }] } })
   assert.match(choice, /cine-orbit-360/)
-  assert.match(choice, /Elige un id exacto/)
-  assert.equal(world3dTemplateMessage({ status: 'not_found', result: { candidates: [] } }), 'Ninguna toma coincide con la búsqueda.')
+  assert.match(choice, /Choose an exact id/)
+  assert.equal(world3dTemplateMessage({ status: 'not_found', result: { candidates: [] } }), 'No shot matches the search.')
 })
 
 test('inspect and publish do not remount the open editor', () => {

@@ -29,6 +29,7 @@ import {
   SERIES_LAB_SECTIONS,
   STORY_LAB_SECTIONS,
 } from '../stories/labNavigation'
+import i18n from '../../i18n'
 import { replayWizardPresentation } from './wizardPresentation'
 
 /**
@@ -172,7 +173,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'read',
     confirmation: 'none',
-    progress: 'Abriendo una sección de Story Lab…',
+    progress: 'wizard:progress.openingStoryLabSection',
     resolve: storySection,
     validate(action) {
       return storySectionSet.has(action.section) ? [] : ['story_section must identify a Story Lab section']
@@ -215,7 +216,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'read',
     confirmation: 'none',
-    progress: 'Abriendo una sección de Series Lab…',
+    progress: 'wizard:progress.openingSeriesLabSection',
     resolve: seriesSection,
     validate(action) {
       return seriesSectionSet.has(action.section) ? [] : ['series_section must identify a Series Lab section']
@@ -252,7 +253,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'read',
     confirmation: 'none',
-    progress: 'Consultando la cola canónica…',
+    progress: 'wizard:progress.consultingCanonicalQueue',
     resolve: queueScope,
     validate(action) {
       return action.scope === 'active' || action.scope === 'all' ? [] : ['queue scope is invalid']
@@ -286,7 +287,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'edit',
     confirmation: 'required',
-    progress: 'Cancelando la tarea en la cola…',
+    progress: 'wizard:progress.cancellingQueueTask',
     resolve(raw) { return queueMutation('cancel_task', raw) },
     validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
     async prepare(action) { return action },
@@ -300,13 +301,13 @@ export function registerNavigationQueueCapabilities(
         return {
           ...outcome,
           message: cancelledBatch
-            ? `${outcome.message} También he pedido cancelar el lote de viñetas; las terminadas se conservan.`
+            ? i18n.t('wizard:replies.alsoCancelPanelBatch', { detail: outcome.message })
             : outcome.message,
         }
       } catch (error) {
         if (!cancelledBatch) throw error
         return {
-          message: 'He pedido cancelar el lote de viñetas; las ilustraciones terminadas se conservan.',
+          message: i18n.t('wizard:replies.cancelPanelBatch'),
           target: ACTIVITY_TARGET,
         }
       }
@@ -336,7 +337,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'edit',
     confirmation: 'required',
-    progress: 'Reanudando la tarea en la cola…',
+    progress: 'wizard:progress.resumingQueueTask',
     resolve(raw) { return queueMutation('resume_task', raw) },
     validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
     async prepare(action) { return action },
@@ -368,7 +369,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'compute',
     confirmation: 'required',
-    progress: 'Reintentando la tarea en la cola…',
+    progress: 'wizard:progress.retryingQueueTask',
     resolve(raw) { return queueMutation('retry_task', raw) },
     validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
     async prepare(action) { return action },
@@ -399,7 +400,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Cambiando de workspace…',
+    progress: 'wizard:progress.switchingWorkspace',
     resolve(raw) { return workspaceName('select_workspace', raw) },
     validate(action) { return action.workspaceName.trim() ? [] : ['workspace name is required'] },
     async prepare(action) { return action },
@@ -430,7 +431,7 @@ export function registerNavigationQueueCapabilities(
     },
     risk: 'edit',
     confirmation: 'none',
-    progress: 'Creando el workspace…',
+    progress: 'wizard:progress.creatingWorkspace',
     resolve(raw) { return workspaceName('create_workspace', raw) },
     validate(action) { return action.workspaceName.trim() ? [] : ['workspace name is required'] },
     async prepare(action) { return action },
@@ -460,7 +461,7 @@ export function registerNavigationQueueCapabilities(
         production_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
       }, required: ['type', 'name'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Creando el Workspace de referencias…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.creatingReferenceWorkspace',
     resolve: createWorkspaceCollection,
     validate(action) { return action.name.trim() ? [] : ['name is required'] },
     async prepare(action) { return action },
@@ -488,7 +489,7 @@ export function registerNavigationQueueCapabilities(
         production_ids: { type: 'array', items: { type: 'string' }, maxItems: 500 },
       }, required: ['type', 'workspace_id'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Actualizando el Workspace de referencias…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.updatingReferenceWorkspace',
     resolve: updateWorkspaceCollection,
     validate(action) { return action.workspaceId.trim() ? [] : ['workspace_id is required'] },
     async prepare(action) { return action },

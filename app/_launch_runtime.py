@@ -34472,7 +34472,7 @@ def _saved_video_context_for_extra_info(name: str):
 
 
 @api.get("/api/v1/outputs/{name}/extra-info")
-def get_video_extra_info(name: str, language: str = "es"):
+def get_video_extra_info(name: str, language: str = "en"):
     """Return cached publishing copy for one language, if it exists."""
     from services.video_extra_info import normalize_language
 
@@ -34511,7 +34511,7 @@ async def generate_output_extra_info(name: str, request: Request):
 
     body = await request.json()
     try:
-        code, _ = normalize_language(body.get("language", "es"))
+        code, _ = normalize_language(body.get("language", "en"))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

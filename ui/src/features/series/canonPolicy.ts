@@ -1,3 +1,5 @@
+import i18n from '../../i18n'
+
 export interface SeriesCanonEpisodeCreateContext {
   createdSeries: boolean
   previousApproval: string
@@ -27,6 +29,6 @@ export function shouldApproveCanonForExplicitEpisodeCreate(
   }
   return {
     approve: false,
-    reason: 'El canon de esta serie tiene cambios pendientes. Apruébalos en Series Lab → Biblia, o pide explícitamente aceptar esos cambios. Crear un episodio no aprueba canon ajeno.',
+    reason: i18n.t('seriesLab:errors.pendingCanon'),
   }
 }

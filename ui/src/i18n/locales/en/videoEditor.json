@@ -274,5 +274,36 @@
       "upload": "Uploaded",
       "production": "Director production"
     }
+  },
+  "actionErrors": {
+    "onlyOneDraft": "There is only one Video Editor draft per workspace: “{{name}}”. Ask explicitly to create another project if you want to replace the current draft.",
+    "outputMissing": "Output “{{name}}” does not exist in this workspace.",
+    "clipNotOnTimeline": "Clip “{{name}}” is not on the timeline.",
+    "clipNotFound": "I cannot find clip “{{name}}” to trim.",
+    "audioNameRequired": "Specify the exact audio output name.",
+    "audioMissing": "Audio output “{{name}}” does not exist in this workspace.",
+    "timelineEmpty": "The timeline is empty.",
+    "timelineDuration": "The timeline has no usable duration.",
+    "exportConfirm": "Export requires confirm=true.",
+    "noClips": "There are no clips to export.",
+    "exportNoJob": "The exporter returned success without a jobId.",
+    "noExport": "There is no Video Editor export in progress.",
+    "videoclipRequired": "Specify the exact music video.",
+    "videoclipAudioRequired": "Specify the exact audio output.",
+    "videoclipMountConfirm": "Assembling with an alternative song requires confirm=true.",
+    "videoclipSongRequired": "Specify the exact song.",
+    "videoclipAttachFailed": "I could not attach the alternative song."
+  },
+  "defaultTransition": "A moment later…",
+  "replies": {
+    "videoclipAdaptationRandom": "random extra shots if needed",
+    "videoclipAdaptationRepeat": "the music video will loop if needed",
+    "videoclipAdded": "I added “{{audio}}” as an alternative song for “{{videoclip}}” ({{adaptation}}). I have not assembled the video yet.",
+    "videoclipMounting": "I am assembling “{{videoclip}}” with “{{audio}}” (FFmpeg, without regenerating shots). The result will be “{{output}}”.",
+    "videoclipMountFinished": "The assembly with “{{audio}}” finished: {{output}}.",
+    "videoclipMountStatus": "The assembly with “{{audio}}” is {{status}}: {{message}}",
+    "videoclipLastMounted": "The last alternative song assembled is “{{audio}}” → “{{output}}”.",
+    "videoclipAlternativesAttached": "“{{name}}” has {{total}} alternative song(s) attached and none is being assembled.",
+    "videoclipNoAlternatives": "“{{name}}” has no alternative songs yet."
   }
 }
