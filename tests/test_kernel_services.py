@@ -24,6 +24,7 @@ from services.kernel import paths as kernel_paths
 from services.kernel.config import ConfigStore
 from services import director_pipeline, task_manager
 from services.kernel.context import RuntimeContext, build_context
+from services.kernel import jobs as kernel_jobs
 from services.kernel.jobs import GenerationQueue
 from services.kernel.paths import PathPolicy, safe_join
 from services.kernel.tasks import CanonicalTasks
@@ -449,9 +450,11 @@ def empty_fifo():
 
 
 @pytest.fixture
-def queue_parts(tmp_path, empty_fifo):
+def queue_parts(tmp_path, empty_fifo, monkeypatch):
     engine = _engine(tmp_path, save_path=str(tmp_path / "outputs"))
     engine.get_model_def = lambda model_type: {"name": f"Name of {model_type}"} if model_type == "known_model" else None
+    # The public-details helper reads the bound engine through the module's handle.
+    monkeypatch.setattr(kernel_jobs, "wgp", engine)
     (tmp_path / "outputs").mkdir()
     config = ConfigStore(lambda: engine)
     workspaces = WorkspaceService(config)

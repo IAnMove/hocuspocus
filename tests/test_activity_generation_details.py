@@ -28,7 +28,7 @@ def test_backend_status_and_reconnect_publish_frozen_generation_details():
     client = api_client_source()
     store = STORE.read_text(encoding="utf-8")
 
-    assert "def public_details" in jobs
+    assert "def _public_generation_details" in jobs
     assert launch.count('"generation_details": _public_generation_details') >= 2
     assert "generation_details?: GenerationDetails" in client
     assert "generationDetails: j.generation_details" in store

@@ -24,6 +24,7 @@ from typing import Any, Callable
 from services import execution_mode
 from services import resource_scheduler
 from services.durable_generation_queue import DurableGenerationQueue
+from services.generation import get_wgp
 from services.job_lifecycle import (
     generation_slot,
     register_generation_job,
@@ -32,12 +33,132 @@ from services.job_lifecycle import (
 from services.kernel.config import ConfigStore
 from services.kernel.workspaces import WorkspaceService
 
+
+class _EngineHandle:
+    """The bound WanGP, looked up on every use (``services.generation.get_wgp``).
+
+    It lets ``_public_generation_details`` keep the body it had in launch, where
+    ``wgp`` was a module global.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_wgp(), name)
+
+
+wgp = _EngineHandle()
+
 _PUBLIC_MODEL_LABELS = {
     "minimax:image-01": "MiniMax Image-01",
     "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
     "post_processing": "Post-processing",
     "rembg-u2net": "rembg U2Net",
 }
+
+
+def _public_generation_details(params: dict | None) -> dict:
+    """Return frozen settings suitable for the canonical Activity UI.
+
+    Local paths and reference media stay private.  The authored prompt is
+    intentionally retained: Activity is the user's durable audit trail and
+    must identify what a model is actually generating after the editable form
+    has changed.  It is bounded before persistence and never treated as HTML.
+    """
+    if not isinstance(params, dict):
+        return {}
+
+    model_type = str(params.get("model_type") or "").strip()
+    if not model_type:
+        return {}
+    try:
+        model_def = wgp.get_model_def(model_type) or {}
+    except Exception:
+        model_def = {}
+    details = {
+        "model_type": model_type,
+        "model_name": str(
+            model_def.get("name")
+            or _PUBLIC_MODEL_LABELS.get(model_type)
+            or model_type
+        ),
+    }
+
+    public_values = {
+        "generation_mode": params.get("generation_mode"),
+        "execution_mode": params.get("_execution_mode"),
+        "simulated": params.get("_execution_mode") == "simulate",
+        "capability": params.get("capability"),
+        "source_kind": params.get("source_kind"),
+        "source_asset_id": params.get("source_asset_id"),
+        "source_filename": params.get("source_filename"),
+        "method": params.get("method"),
+        "resolution": params.get("resolution"),
+        "seed": params.get("seed"),
+        "steps": params.get("num_inference_steps"),
+        "guidance": params.get("guidance_scale"),
+        "frames": params.get("video_length") or params.get("total_frames"),
+        "duration_seconds": params.get("duration_seconds"),
+        "dialogue_words": (
+            params.get("_h3_dialogue_duration_contract", {}).get("word_count")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_syllables": (
+            params.get("_h3_dialogue_duration_contract", {}).get("syllable_count")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_seconds_per_syllable": (
+            params.get("_h3_dialogue_duration_contract", {}).get("seconds_per_syllable")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_duration_calculated": (
+            params.get("_h3_dialogue_duration_contract", {}).get("estimated_seconds")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "dialogue_duration_minimum_limited": (
+            params.get("_h3_dialogue_duration_contract", {}).get("minimum_limited")
+            if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
+            else None
+        ),
+        "repeat": params.get("repeat_generation"),
+        "profile": params.get("h3_model_profile"),
+        "flow_shift": params.get("flow_shift"),
+        "audio_shift": params.get("h3_audio_shift"),
+        "turbo": params.get("minimax_h3_turbo_mode"),
+    }
+    for key, value in public_values.items():
+        if value is not None and value != "":
+            details[key] = value
+
+    prompt = str(params.get("prompt") or "").replace("\x00", "").strip()
+    style_prompt = str(params.get("alt_prompt") or "").replace("\x00", "").strip()
+    if prompt or style_prompt:
+        details["prompt"] = (
+            f"{style_prompt}\n\n{prompt}" if style_prompt and prompt else style_prompt or prompt
+        )[:32_000]
+    initiator = str(params.get("_initiator") or "").replace("\x00", "").strip()
+    if initiator:
+        details["initiator"] = initiator[:200]
+
+    cache_type = str(params.get("skip_steps_cache_type") or "").strip()
+    if cache_type or model_type.startswith("minimax_h3"):
+        details["cache"] = bool(cache_type)
+        if cache_type:
+            details["cache_type"] = cache_type
+
+    raw_loras = params.get("activated_loras")
+    selected_loras = raw_loras if isinstance(raw_loras, (list, tuple)) else []
+    public_loras = [
+        os.path.basename(str(item).replace("\\", "/"))
+        for item in selected_loras
+        if str(item or "").strip()
+    ]
+    details["lora_count"] = len(public_loras)
+    if public_loras:
+        details["loras"] = public_loras
+    return details
 
 
 class GenerationQueue:
@@ -112,6 +233,8 @@ class GenerationQueue:
                 description=description,
             ):
                 yield True
+
+    public_details = staticmethod(_public_generation_details)
 
     @staticmethod
     def is_durable_job(job: dict) -> bool:
@@ -281,112 +404,6 @@ class GenerationQueue:
             "root_task_id": job.get("root_task_id") or job.get("task_id"),
             "generation_details": self.public_details(job.get("params")),
         }
-
-    def public_details(self, params: dict | None) -> dict:
-        """Return frozen settings suitable for the canonical Activity UI.
-
-        Local paths and reference media stay private.  The authored prompt is
-        intentionally retained: Activity is the user's durable audit trail and
-        must identify what a model is actually generating after the editable form
-        has changed.  It is bounded before persistence and never treated as HTML.
-        """
-        if not isinstance(params, dict):
-            return {}
-
-        model_type = str(params.get("model_type") or "").strip()
-        if not model_type:
-            return {}
-        wgp = self._config.wgp
-        try:
-            model_def = wgp.get_model_def(model_type) or {}
-        except Exception:
-            model_def = {}
-        details = {
-            "model_type": model_type,
-            "model_name": str(
-                model_def.get("name")
-                or _PUBLIC_MODEL_LABELS.get(model_type)
-                or model_type
-            ),
-        }
-
-        public_values = {
-            "generation_mode": params.get("generation_mode"),
-            "execution_mode": params.get("_execution_mode"),
-            "simulated": params.get("_execution_mode") == "simulate",
-            "capability": params.get("capability"),
-            "source_kind": params.get("source_kind"),
-            "source_asset_id": params.get("source_asset_id"),
-            "source_filename": params.get("source_filename"),
-            "method": params.get("method"),
-            "resolution": params.get("resolution"),
-            "seed": params.get("seed"),
-            "steps": params.get("num_inference_steps"),
-            "guidance": params.get("guidance_scale"),
-            "frames": params.get("video_length") or params.get("total_frames"),
-            "duration_seconds": params.get("duration_seconds"),
-            "dialogue_words": (
-                params.get("_h3_dialogue_duration_contract", {}).get("word_count")
-                if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-                else None
-            ),
-            "dialogue_syllables": (
-                params.get("_h3_dialogue_duration_contract", {}).get("syllable_count")
-                if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-                else None
-            ),
-            "dialogue_seconds_per_syllable": (
-                params.get("_h3_dialogue_duration_contract", {}).get("seconds_per_syllable")
-                if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-                else None
-            ),
-            "dialogue_duration_calculated": (
-                params.get("_h3_dialogue_duration_contract", {}).get("estimated_seconds")
-                if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-                else None
-            ),
-            "dialogue_duration_minimum_limited": (
-                params.get("_h3_dialogue_duration_contract", {}).get("minimum_limited")
-                if isinstance(params.get("_h3_dialogue_duration_contract"), dict)
-                else None
-            ),
-            "repeat": params.get("repeat_generation"),
-            "profile": params.get("h3_model_profile"),
-            "flow_shift": params.get("flow_shift"),
-            "audio_shift": params.get("h3_audio_shift"),
-            "turbo": params.get("minimax_h3_turbo_mode"),
-        }
-        for key, value in public_values.items():
-            if value is not None and value != "":
-                details[key] = value
-
-        prompt = str(params.get("prompt") or "").replace("\x00", "").strip()
-        style_prompt = str(params.get("alt_prompt") or "").replace("\x00", "").strip()
-        if prompt or style_prompt:
-            details["prompt"] = (
-                f"{style_prompt}\n\n{prompt}" if style_prompt and prompt else style_prompt or prompt
-            )[:32_000]
-        initiator = str(params.get("_initiator") or "").replace("\x00", "").strip()
-        if initiator:
-            details["initiator"] = initiator[:200]
-
-        cache_type = str(params.get("skip_steps_cache_type") or "").strip()
-        if cache_type or model_type.startswith("minimax_h3"):
-            details["cache"] = bool(cache_type)
-            if cache_type:
-                details["cache_type"] = cache_type
-
-        raw_loras = params.get("activated_loras")
-        selected_loras = raw_loras if isinstance(raw_loras, (list, tuple)) else []
-        public_loras = [
-            os.path.basename(str(item).replace("\\", "/"))
-            for item in selected_loras
-            if str(item or "").strip()
-        ]
-        details["lora_count"] = len(public_loras)
-        if public_loras:
-            details["loras"] = public_loras
-        return details
 
     def pending_gpu_jobs(self, exclude_job_id: str | None = None) -> list[dict]:
         """Return queued/running GPU-generation jobs, excluding a terminalizing job."""
