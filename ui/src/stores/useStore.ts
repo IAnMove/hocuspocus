@@ -1,6 +1,6 @@
 import { concreteImageResolution, referenceImageResolution } from '../lib/imageResolution'
 import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft, type ImageStudioDraft } from '../features/studio/imageStudioIntent'
-import { beginImageSettingsChange, imageSettingsMode, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
+import { imageSettingsMode, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
 import { restoreWan1300AudioRecipe, wan1300AudioSelection } from '../lib/wan1300Audio'
 import {
   H3_EXPERIMENTAL_MAX_FRAMES,
@@ -17,13 +17,13 @@ import { restoredEditingTrim, restoreWangpSettings, viggleSubmissionOptions } fr
 import { latestAnchorImage, viggleEditingParameters, type ViggleEditSession } from '../lib/viggleWorkflow'
 import { beginWangpRestore, editingInputsChanged, legacyEditingPath, restoredGenericImageRefs } from '../lib/wangpRestore'
 import { create, type StoreApi } from 'zustand'
-import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, ServicesConfig, ProductionProfile, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
+import type { GenerateParams, AspectRatio, ResolutionPreset, ScailResolutionProfile, GenerationDetails, GenerationJob, ModelFamily, ModelDef, GenerationMode, ModelOptions, MultiClip, AudioAnalysisResult, PlannedClip, DirectorClipImage, SpeakerMapping, DirectorSkill, DirectorShotImageGuidance, ShortFilmCharacter, ShortFilmPath, PipelineListItem, PipelineRepairState, SavedPipelineState, RecastCharacterMapping, RepaintRegionMapping, H3WindowPlan, DirectorV2PlanResponse } from '../types'
 import { DEFAULT_DIRECT_VIDEO_MASTER_PROMPT } from '../types'
 import * as api from '../api/client'
 import i18n from '../i18n'
 import { contentLanguageForUi } from '../lib/contentLanguage'
 import { splitPromptSchedule } from '../lib/promptScheduler'
-import { DEFAULT_PRODUCTION_PROFILE, productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
+import { productionImageModelType, resolveSupportedVideoFormat } from '../lib/productionProfile'
 import { defaultSpeechModel, installedPreferredModel } from '../lib/preferredModels'
 import { isGenerationJobActive, isGenerationJobInterrupted, isGenerationJobSettled } from '../lib/generationJobState'
 import { isHttpStatus } from '../api/http'
@@ -37,6 +37,31 @@ import { createSidebarSlice, type SidebarSlice } from './sidebarSlice'
 import { createSystemSlice, type SystemSlice } from './systemSlice'
 import { _downloadTimestampMs, createCivitaiSlice, disposeCivitaiDownloadPoll, type CivitaiSlice } from './civitaiSlice'
 import { createPresetsSlice, type PresetsSlice } from '../features/studio/store/presetsSlice'
+import { _jobTimingPatch, createToolsSlice, type ToolsSlice } from '../features/studio/store/toolsSlice'
+import { _modelOptionsSeq, advanceModelOptionsSeq, createRecipesSlice, type RecipesSlice } from './recipesSlice'
+import { _globalModelSelectionModes, _syncGlobalProductionVideoFormat, createServicesSlice, type ServicesSlice } from './servicesSlice'
+import { createLorasSlice, type LorasSlice } from './lorasSlice'
+import {
+  _loadSettings,
+  _persistModelSelections,
+  _saveSettings,
+  restoreModeParams,
+  snapshotModeParams,
+  type SavedModeParams,
+} from './modeSettingsPersistence'
+import {
+  ENABLED_MODELS_KEY,
+  HUNYUAN3D_VISIBILITY_MIGRATION_KEY,
+  MINIMAX_H3_VISIBILITY_MIGRATION_KEY,
+  _enableUninitializedMatureModels,
+  _initializedMatureModels,
+  _modelVisibilityDefaultsVersion,
+  _modelVisibilityHydrated,
+  _saveEnabledModels,
+  markModelVisibilityHydrated,
+  replaceInitializedMatureModels,
+  setModelVisibilityDefaultsVersion,
+} from './modelVisibility'
 import {
   beginAppActivity,
   createActivitySlice,
@@ -207,26 +232,6 @@ function _pollReconnectedJob(
   window.setTimeout(() => void tick(), RECONNECT_POLL_MS)
 }
 
-function _jobTimingPatch(status: api.ApiJobStatus): Partial<GenerationJob> {
-  const patch: Partial<GenerationJob> = {}
-  if (status.created_at !== undefined) {
-    patch.createdAt = _downloadTimestampMs(status.created_at) ?? undefined
-  }
-  if (status.started_at !== undefined) {
-    patch.startedAt = _downloadTimestampMs(status.started_at) ?? undefined
-  }
-  if (status.finished_at !== undefined) {
-    patch.finishedAt = _downloadTimestampMs(status.finished_at) ?? undefined
-  }
-  if (status.queue_position !== undefined) {
-    patch.queuePosition = status.queue_position
-  }
-  if (status.generation_details) {
-    patch.generationDetails = status.generation_details
-  }
-  return patch
-}
-
 function _generationDetailsFromParams(
   params: Record<string, unknown>,
   models: ModelDef[],
@@ -271,307 +276,6 @@ if (import.meta.hot) {
     }
     _directorRepairDiscoveries.clear()
   })
-}
-
-// --- LocalStorage persistence for per-mode settings ---
-const STORAGE_KEY = 'maestro_mode_settings'
-let _servicesConfigUpdateQueue: Promise<void> = Promise.resolve()
-
-// Persistence schema version. Bump when changing the LoRA-key strategy or
-// adding fields that need migration. Currently:
-//   v1: savedLoraPerMode is keyed by lora_id (e.g. `civitai:12345`) instead
-//       of filename, so settings survive LoRA version bumps. A snapshot of
-//       lora_id → filename at save time is embedded for fast load-time
-//       translation; reconciliation against the fresh map (fetched from
-//       /api/v1/loras/installed) happens after boot in `loadModels()`.
-const _PERSIST_VERSION = 1
-
-type LoraModeBlob = { activated_loras: string[]; loras_multipliers: string; loraWeights: Record<string, number[]>; availableLoras: string[] }
-
-/** Per-mode params snapshot stored in localStorage. Holds whatever
- *  GenerateParams the user had set in that mode, plus a couple of
- *  top-level store fields (filmGrain*) that conceptually belong to
- *  the mode but live outside `params`. Each mode keeps its own
- *  complete snapshot so settings don't leak between modes — this
- *  fixed bugs where e.g. `repeat_generation: 10` set in image mode
- *  would queue up 10 videos when the user switched to video mode,
- *  or `video_prompt_type: 'KFI'` (frames injection) would persist
- *  on a mode where it didn't apply. Partial<GenerateParams> because
- *  the user almost never sets every field. */
-type SavedModeParams = Partial<GenerateParams> & {
-  filmGrainIntensity?: number
-  filmGrainSaturation?: number
-  /** Top-level store field (NOT in GenerateParams), saved per-mode so
-   *  audio's 600/1800 slider.max doesn't leak into video on mode switch.
-   *  See setGenerationMode for the save/restore wiring. */
-  durationSeconds?: number
-}
-
-function snapshotModeParams(params: GenerateParams): SavedModeParams {
-  const snapshot: SavedModeParams = { ...params }
-  delete snapshot.model_type
-  delete snapshot.prompt
-  delete snapshot.activated_loras
-  delete snapshot.loras_multipliers
-  return snapshot
-}
-
-function restoreModeParams(snapshot?: SavedModeParams): Partial<GenerateParams> {
-  if (!snapshot) return {}
-  const restored: SavedModeParams = { ...snapshot }
-  delete restored.filmGrainIntensity
-  delete restored.filmGrainSaturation
-  delete restored.durationSeconds
-  return restored
-}
-
-interface PersistedModeSettings {
-  generationMode: GenerationMode
-  selectedModelPerMode: Partial<Record<GenerationMode, string>>
-  savedParamsPerMode: Partial<Record<GenerationMode, SavedModeParams>>
-  /** Runtime shape (filename-keyed). The on-disk shape is lora_id-keyed
-   *  starting with v1; the persistence layer translates transparently. */
-  savedLoraPerMode: Partial<Record<GenerationMode, LoraModeBlob>>
-  /** Per-mode main prompt (lyrics in audio mode). Tracked separately from
-   *  the params snapshot in memory. Still written for shape stability but
-   *  NO LONGER rehydrated on boot — a refresh starts with a clean prompt
-   *  (see the partial-hydration note in loadModels). */
-  savedPromptPerMode?: Partial<Record<GenerationMode, string>>
-  /** Snapshot of lora_id → filename captured at last save. Returned by
-   *  `_loadSettings` for use in mid-session reconciliation when the fresh
-   *  lora map arrives, so we can rewrite filenames that changed since save. */
-  _loraFilenameSnapshot?: Record<string, string>
-}
-
-let _modelSelectionSaveTask: Promise<void> = Promise.resolve()
-const _globalModelSelectionModes = new Set<GenerationMode>()
-
-function _persistModelSelections(
-  selections: Partial<Record<GenerationMode, string>>,
-) {
-  const payload = Object.fromEntries(
-    Object.entries(selections).filter(([mode, modelType]) => (
-      Boolean(modelType) && !_globalModelSelectionModes.has(mode as GenerationMode)
-    )),
-  ) as Record<string, string>
-  _modelSelectionSaveTask = _modelSelectionSaveTask
-    .catch(() => { /* a later selection should still be persisted */ })
-    .then(async () => {
-      try {
-        await api.updateModelSelections(payload)
-      } catch (error) {
-        console.warn('Failed to persist model selections:', error)
-      }
-    })
-}
-
-/** Build a lora_id-keyed copy of a single LoraModeBlob using filename → lora_id.
- *
- *  Multi-version disambiguation: if two filenames in the same blob share a
- *  lora_id (e.g. user keeps v1 + v2 of the same CivitAI model on disk for
- *  A/B testing), use a `{lora_id}#{filename}` suffix for the collision so
- *  each file's settings persist independently. Without this, the second
- *  file's loraWeights overwrite the first's via Object.fromEntries, and
- *  cross-session A/B silently loses one version's weights. */
-function _modeBlobToLoraIdKeyed(
-  m: LoraModeBlob,
-  filenameToLoraId: Record<string, string>
-): LoraModeBlob {
-  const baseId = (fname: string) => filenameToLoraId[fname] || `local:${fname}`
-  // Detect collisions across the whole blob: count how many filenames in
-  // (activated_loras ∪ loraWeights ∪ availableLoras) map to each base id.
-  const idCounts: Record<string, number> = {}
-  const seen = new Set<string>([
-    ...(m.activated_loras || []),
-    ...Object.keys(m.loraWeights || {}),
-    ...(m.availableLoras || []),
-  ])
-  for (const fname of seen) {
-    const bid = baseId(fname)
-    idCounts[bid] = (idCounts[bid] || 0) + 1
-  }
-  const id = (fname: string): string => {
-    const bid = baseId(fname)
-    return (idCounts[bid] || 0) > 1 ? `${bid}#${fname}` : bid
-  }
-  return {
-    ...m,
-    activated_loras: (m.activated_loras || []).map(id),
-    loraWeights: Object.fromEntries(
-      Object.entries(m.loraWeights || {}).map(([fname, w]) => [id(fname), w])
-    ),
-    availableLoras: (m.availableLoras || []).map(id),
-  }
-}
-
-/** Reverse: lora_id-keyed blob → filename-keyed using lora_id → filename map.
- *
- *  Disambiguated keys (`{loraId}#{filename}`) carry the filename in the
- *  suffix — extract it directly so multi-version A/B state round-trips
- *  losslessly. */
-function _modeBlobToFilenameKeyed(
-  m: LoraModeBlob,
-  loraIdToFilename: Record<string, string>
-): LoraModeBlob {
-  const fname = (id: string): string => {
-    const hashIdx = id.indexOf('#')
-    if (hashIdx > 0) return id.slice(hashIdx + 1)
-    return loraIdToFilename[id] || (id.startsWith('local:') ? id.slice(6) : id)
-  }
-  return {
-    ...m,
-    activated_loras: (m.activated_loras || []).map(fname),
-    loraWeights: Object.fromEntries(
-      Object.entries(m.loraWeights || {}).map(([id, w]) => [fname(id), w])
-    ),
-    availableLoras: (m.availableLoras || []).map(fname),
-  }
-}
-
-/**
- * Persist mode settings. The on-disk shape is lora_id-keyed (so that
- * filename changes from LoRA version bumps are transparent on reload),
- * with an embedded `_loraFilenameSnapshot` so the next load can translate
- * back to filenames immediately without waiting for the fresh map.
- *
- * If no map is provided (e.g. very early in boot before /installed has
- * returned), we skip translation and write the legacy filename-keyed shape
- * with no version flag. The next save with a populated map will upgrade it.
- */
-/** Fields in SavedModeParams that hold file paths or per-gen ephemeral
- *  inputs which should NEVER persist across browser sessions. Persisting
- *  these caused the "ghost reference" bug: on page reload the cached
- *  paths would rehydrate from localStorage and the next generation
- *  would submit them, so users would silently get image-to-image edits
- *  against stale uploads they no longer had selected. Same pattern hit
- *  frame-injection positions in LTX-2 video mode and audio guide refs
- *  in TTS modes.
- *
- *  Rule of thumb: anything pointing to a path under app/uploads/ or any
- *  ephemeral per-job input belongs here. Anything the user genuinely
- *  wants remembered (model settings, slider values, video_prompt_type
- *  letter codes, etc.) stays out of this list and continues to persist.
- *
- *  Workaround for users on a Maestro version before this fix: use a
- *  private/incognito browser window (skips localStorage rehydration).
- */
-const EPHEMERAL_PARAM_FIELDS: ReadonlyArray<keyof SavedModeParams> = [
-  'image_start',
-  'image_end',
-  'image_refs',
-  'h3_ref_videos',
-  'h3_ref_audios',
-  'video_guide',
-  'video_source',
-  'audio_guide',
-  'audio_guide2',
-  'frames_positions',
-]
-
-function _stripEphemeralParams(perMode: Partial<Record<GenerationMode, SavedModeParams>>): Partial<Record<GenerationMode, SavedModeParams>> {
-  const cleaned: Partial<Record<GenerationMode, SavedModeParams>> = {}
-  for (const [mode, params] of Object.entries(perMode || {})) {
-    if (!params) continue
-    const copy: SavedModeParams = { ...params }
-    for (const field of EPHEMERAL_PARAM_FIELDS) {
-      delete copy[field]
-    }
-    // The "T" temporal-alignment flag only means something alongside a
-    // video_source — which is ephemeral-stripped above. Persisting a lone
-    // "T" produced a ghost Advanced badge (counts as an active process
-    // choice while displaying as nothing). Strip it on the way in AND out
-    // so existing users' stale snapshots heal on next load. Only a TRAILING
-    // "T" is the flag — an internal "T" is the depth_temporal control letter
-    // (TVG/PTVG/TEVG) and a global strip silently downgraded those to plain
-    // pose/spatial, so use /T$/.
-    if (typeof copy.video_prompt_type === 'string' && copy.video_prompt_type.endsWith('T')) {
-      copy.video_prompt_type = copy.video_prompt_type.replace(/T$/, '')
-    }
-    cleaned[mode as GenerationMode] = copy
-  }
-  return cleaned
-}
-
-function _saveSettings(
-  state: PersistedModeSettings,
-  filenameToLoraId?: Record<string, string>,
-) {
-  try {
-    // Strip file-bearing / ephemeral fields BEFORE serializing so they
-    // never round-trip through localStorage. The in-memory store keeps
-    // them for the current session; only the persisted snapshot is
-    // pruned. See EPHEMERAL_PARAM_FIELDS comment for the full rationale.
-    const sanitizedParamsPerMode = _stripEphemeralParams(state.savedParamsPerMode || {})
-
-    if (filenameToLoraId && Object.keys(filenameToLoraId).length > 0) {
-      // Translate savedLoraPerMode → lora_id keys
-      const translatedPerMode: Partial<Record<GenerationMode, LoraModeBlob>> = {}
-      for (const [mode, m] of Object.entries(state.savedLoraPerMode || {})) {
-        if (m) translatedPerMode[mode as GenerationMode] = _modeBlobToLoraIdKeyed(m, filenameToLoraId)
-      }
-      // Snapshot: lora_id → filename (so load can translate back instantly)
-      const snapshot: Record<string, string> = {}
-      for (const [fname, id] of Object.entries(filenameToLoraId)) snapshot[id] = fname
-      const payload = {
-        _version: _PERSIST_VERSION,
-        _loraFilenameSnapshot: snapshot,
-        generationMode: state.generationMode,
-        selectedModelPerMode: state.selectedModelPerMode,
-        savedParamsPerMode: sanitizedParamsPerMode,
-        savedLoraPerMode: translatedPerMode,
-        savedPromptPerMode: state.savedPromptPerMode,
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-    } else {
-      // No map yet — write legacy filename-keyed shape, no version. Will be
-      // upgraded on next save with a populated map. Still apply the ephemeral
-      // strip on the way out.
-      const sanitizedState = { ...state, savedParamsPerMode: sanitizedParamsPerMode }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedState))
-    }
-  } catch { /* quota exceeded or private browsing */ }
-  // localStorage is tied to the WebUI origin. Pinokio may assign another
-  // port on the next launch, so mirror model choices into server config.
-  _persistModelSelections(state.selectedModelPerMode)
-}
-
-function _loadSettings(): PersistedModeSettings | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    // v1+: savedLoraPerMode is lora_id-keyed; use the embedded snapshot to
-    // translate back to filenames immediately. Reconciliation against the
-    // fresh map happens in loadModels() once /installed returns.
-    if (parsed && parsed._version === _PERSIST_VERSION && parsed._loraFilenameSnapshot) {
-      const snapshot: Record<string, string> = parsed._loraFilenameSnapshot
-      const translated: Partial<Record<GenerationMode, LoraModeBlob>> = {}
-      for (const [mode, m] of Object.entries(parsed.savedLoraPerMode || {})) {
-        if (m) translated[mode as GenerationMode] = _modeBlobToFilenameKeyed(m as LoraModeBlob, snapshot)
-      }
-      return {
-        generationMode: parsed.generationMode,
-        selectedModelPerMode: parsed.selectedModelPerMode || {},
-        // Strip ephemeral file-bearing fields at load too — protects existing
-        // users whose localStorage was written by a pre-fix version and still
-        // contains stale image_start / image_refs / etc. paths. New saves will
-        // be already-clean from _saveSettings; this is the migration safety
-        // net so the first post-update page load can't immediately rehydrate
-        // ghost references.
-        savedParamsPerMode: _stripEphemeralParams(parsed.savedParamsPerMode || {}),
-        savedLoraPerMode: translated,
-        savedPromptPerMode: parsed.savedPromptPerMode || {},
-        _loraFilenameSnapshot: snapshot,
-      }
-    }
-    // Legacy (no version): blob is already filename-keyed, return as-is —
-    // but still strip ephemeral fields out for the same migration-safety reason.
-    const legacy = parsed as PersistedModeSettings
-    return {
-      ...legacy,
-      savedParamsPerMode: _stripEphemeralParams(legacy.savedParamsPerMode || {}),
-    }
-  } catch { return null }
 }
 
 /** Fetch a model's defaults from the backend and merge primary fields
@@ -654,11 +358,8 @@ const _PRIMARY_MODEL_DEFAULT_FIELDS: ReadonlyArray<string> = [
   'audio_prompt_type',
 ]
 
-// Monotonic sequence for loadModelOptions staleness detection — only the
-// most recently requested model's options may touch the store.
-let _modelOptionsSeq = 0
 let _modelDefaultsSeq = 0
-export function invalidateModelOptionsLoad() { _modelOptionsSeq += 1; _modelDefaultsSeq += 1 }
+export function invalidateModelOptionsLoad() { advanceModelOptionsSeq(); _modelDefaultsSeq += 1 }
 
 function currentModelDefaults(sequence: number, state: Pick<AppState, 'selectedModelPerMode' | 'generationMode'>, model: string) {
   return sequence === _modelDefaultsSeq && state.selectedModelPerMode[state.generationMode] === model
@@ -879,34 +580,7 @@ const DEFAULTS_VERSION_KEY = 'maestro_defaults_version'
 const OLD_MUSIC_DEFAULT = 'ace_step_v1_5_xl_turbo_lm_4b'
 const NEW_MUSIC_DEFAULT = 'ace_step_v1_5_xl_sft_lm_4b'
 
-const ENABLED_MODELS_KEY = 'maestro_enabled_models'
-const HUNYUAN3D_VISIBILITY_MIGRATION_KEY = 'maestro_hunyuan3d_visibility_v2'
-const MINIMAX_H3_VISIBILITY_MIGRATION_KEY = 'maestro_minimax_h3_visibility_v1'
-let _initializedMatureModels = new Set<string>()
-let _modelVisibilityHydrated = false
-let _modelVisibilityDefaultsVersion = 1
-let _modelVisibilitySaveTask: Promise<void> = Promise.resolve()
 let _modelSelectionsHydrated = false
-
-function _saveEnabledModels(models: Set<string>) {
-  try {
-    localStorage.setItem(ENABLED_MODELS_KEY, JSON.stringify([...models]))
-  } catch { /* quota exceeded */ }
-  const payload = {
-    enabled_models: [...models],
-    initialized_mature_models: [..._initializedMatureModels],
-    defaults_version: _modelVisibilityDefaultsVersion,
-  }
-  _modelVisibilitySaveTask = _modelVisibilitySaveTask
-    .catch(() => { /* a later save should still run */ })
-    .then(async () => {
-      try {
-        await api.updateModelVisibility(payload)
-      } catch (error) {
-        console.warn('Failed to persist model visibility:', error)
-      }
-    })
-}
 
 function _loadEnabledModels(): Set<string> | null {
   try {
@@ -947,25 +621,6 @@ function _markMatureModelsInitialized(
       _initializedMatureModels.add(model.model_type)
     }
   }
-}
-
-function _enableUninitializedMatureModels(
-  models: ModelDef[],
-  enabledModels: Set<string>,
-): Set<string> | null {
-  const next = new Set(enabledModels)
-  let changed = false
-  for (const model of models) {
-    if (
-      model.nsfw_only
-      && !_initializedMatureModels.has(model.model_type)
-    ) {
-      _initializedMatureModels.add(model.model_type)
-      next.add(model.model_type)
-      changed = true
-    }
-  }
-  return changed ? next : null
 }
 
 // Default model_type per generation mode
@@ -1037,7 +692,7 @@ interface ScheduledPromptSubmission {
   total: number
 }
 
-export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice {
+export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusicSlice, DirectorSlice, ThemeSlice, SettingsSlice, SidebarSlice, RetakeDialogSlice, GallerySlice, DeveloperModeSlice, SystemSlice, PresetsSlice, ActivitySlice, CivitaiSlice, ToolsSlice, RecipesSlice, ServicesSlice, LorasSlice {
   wangpRestoreError: string
   // Generation mode (top-level: image/video/audio/avatar)
   generationMode: GenerationMode
@@ -1323,17 +978,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   deletePipeline: (pid: string) => Promise<void>
   loadDirectorFromPipeline: (pid: string) => Promise<void>
 
-  // Recipes (one-click Studio presets)
-  recipesOpen: boolean
-  setRecipesOpen: (open: boolean) => void
-  recipes: import('../api/client').RecipeCard[]
-  recipesLoading: boolean
-  loadRecipes: () => Promise<void>
-  applyRecipe: (id: string) => Promise<{ missing: import('../api/client').RecipeLora[] }>
-  saveRecipeFromOutput: (outputName: string, name: string, description: string, nsfw: boolean) => Promise<void>
-  deleteRecipe: (id: string) => Promise<void>
-  downloadRecipeLora: (lora: import('../api/client').RecipeLora, modelType: string) => Promise<void>
-
   // Models & families (from API)
   families: ModelFamily[]
   models: ModelDef[]
@@ -1347,38 +991,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   setAllModelsEnabled: (enabled: boolean) => void
   /** Bulk-toggle a list of models (family-level enable/disable, issue #14). */
   setModelsEnabled: (modelTypes: string[], enabled: boolean) => void
-
-  // ── Tools area (standalone post-processing on an existing clip) ──────
-  // Apply FlashVSR upscale or SeedVC revoice to any gallery output or an
-  // uploaded clip, independent of a generation. See ToolsPanel.tsx + the
-  // /api/v1/tools/* endpoints.
-  toolsTool: 'upscale' | 'revoice' | 'remove_background'
-  setToolsTool: (t: 'upscale' | 'revoice' | 'remove_background') => void
-  /** Gallery filename (resolved against the workspace) OR an absolute upload path. */
-  toolsSourcePath: string | null
-  toolsSourceName: string | null
-  toolsSourceUrl: string | null
-  toolsSourceAssetId: string | null
-  toolsSourceWorkspace: string | null
-  toolsSourceKind: 'image' | 'video' | 'audio' | 'model3d' | null
-  setToolsSource: (src: { path: string; name: string; url: string | null; assetId?: string | null; workspace?: string | null; kind?: 'image' | 'video' | 'audio' | 'model3d' | null } | null) => void
-  toolsUpscaleMethod: string
-  setToolsUpscaleMethod: (m: string) => void
-  toolsRevoiceMode: 'single' | 'two'
-  setToolsRevoiceMode: (m: 'single' | 'two') => void
-  toolsRevoiceRefs: ({ filename: string; path: string } | null)[]
-  setToolsRevoiceRef: (index: number, ref: { filename: string; path: string } | null) => void
-  toolsRemoveBackgroundInstruction: string
-  setToolsRemoveBackgroundInstruction: (instruction: string) => void
-  /** Incremented when a tool publishes an asset so mounted Tools panels can refresh their catalog. */
-  toolsAssetsRevision: number
-  toolsSubmitting: boolean
-  runTool: () => Promise<void>
-  /** Gallery one-click: upscale a specific clip now, with the configured method. */
-  quickUpscaleClip: (name: string, url: string | null) => Promise<void>
-  /** Gallery one-click: load a clip into the Tools panel for a tool that needs
-   *  setup before running (e.g. revoice needs voice references), and switch to it. */
-  sendClipToTools: (name: string, url: string | null, tool: 'upscale' | 'revoice') => void
 
   // Director-mode post-processing (separate image/video)
   directorImageSpatialUpsampling: string
@@ -1410,36 +1022,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
   reconnectJobs: () => Promise<void>
   reconnectDirectorPipelines: () => Promise<void>
 
-  // LoRA state
-  availableLoras: string[]
-  lorasLoading: boolean
-  loraWeights: Record<string, number[]>
-  /** Map of LoRA filename → stable lora_id (e.g. `civitai:12345` for a
-   *  CivitAI-sourced LoRA, `local:foo.safetensors` for hand-installed).
-   *  Populated from /api/v1/loras/installed at boot and refreshed when
-   *  LoRAs are added/removed. Used by the localStorage persistence layer
-   *  to write update-resilient keys. */
-  loraIdByFilename: Record<string, string>
-  /** Reverse: lora_id → current filename. Used by reconciliation to
-   *  detect when a saved filename has been renamed by a LoRA update. */
-  filenameByLoraId: Record<string, string>
-  /** Refresh `loraIdByFilename` / `filenameByLoraId` from the backend.
-   *  Triggers reconciliation of savedLoraPerMode against the fresh map. */
-  refreshLoraIdMap: () => Promise<void>
-  loadLoras: (modelType: string) => Promise<void>
-  toggleLora: (filename: string) => void
-  /** Ensure the LTX-2.3 transition LoRA is downloaded and activated for
-   *  blend mode. Called when blend mode is opened. Idempotent: no-op if
-   *  the LoRA is already installed and activated. */
-  ensureTransitionLoraForBlend: () => Promise<void>
-  /** Ensure the Alissonerdx Edit Anything LoRA is downloaded. Called when
-   *  the Edit Anything sub-mode is opened. Idempotent — no-op if already
-   *  installed. Unlike the transition LoRA, this one is activated
-   *  server-side by the /api/v1/edit-anything endpoint, not client-side,
-   *  so the user's global LoRA list isn't touched. */
-  ensureEditAnythingLora: () => Promise<void>
-  setLoraWeight: (filename: string, phaseIndex: number, value: number) => void
-
   // Model options
   modelOptions: ModelOptions | null
   modelOptionsLoading: boolean
@@ -1460,23 +1042,6 @@ export interface AppState extends LlmSlice, StudioConfigurationSlice, StudioMusi
 
   loadSettingsFromOutput: (source?: OutputSettingsSource) => Promise<boolean | void>
   rerollGeneration: (source?: OutputSettingsSource) => Promise<boolean | void>
-
-  // Services config
-  servicesConfig: ServicesConfig | null
-  servicesConfigLoading: boolean
-  loadServicesConfig: () => Promise<void>
-  updateServicesConfig: (partial: Partial<ServicesConfig>) => Promise<void>
-
-  // Credential-free defaults shared by Studio and every Lab.
-  productionProfile: ProductionProfile
-  productionProfileConfigured: boolean
-  /** Set when the saved profile could not be read and the defaults stand in. */
-  productionProfileInvalidReason: string
-  /** True once the profile has been read from the server at least once. */
-  productionProfileLoaded: boolean
-  productionProfileLoading: boolean
-  loadProductionProfile: () => Promise<void>
-  updateProductionProfile: (profile: ProductionProfile) => Promise<void>
 
   // Director (Music Video Director)
   sidebarMode: 'director' | 'studio'
@@ -1664,61 +1229,6 @@ const BLANK_VIDEO_INPUT_PARAMS: Partial<GenerateParams> = {
   input_video_strength: undefined,
 }
 
-let _productionProfileVideoFormatSeq = 0
-
-/** Keep Director/Story Lab's canvas aligned with a globally inherited model.
- *
- * Model selections and the production profile are hydrated by independent
- * requests at boot.  Resolve the format after either one settles, and reject
- * a late response if the user selected a project/model override meanwhile.
- */
-async function _syncGlobalProductionVideoFormat(
-  profile: ProductionProfile,
-  get: () => AppState,
-  set: (partial: Partial<AppState>) => void,
-): Promise<void> {
-  const requestSeq = ++_productionProfileVideoFormatSeq
-  const modelType = profile.video.model.trim()
-  const requestedResolution = profile.video.settings.resolution
-  const requestedAspect = profile.video.settings.aspectRatio
-  const before = get()
-  if (
-    !modelType
-    || !_globalModelSelectionModes.has('video')
-    || before.selectedModelPerMode.video !== modelType
-  ) return
-
-  let options: ModelOptions
-  try {
-    options = before.modelOptions?.model_type === modelType
-      ? before.modelOptions
-      : await api.fetchModelOptions(modelType)
-  } catch {
-    // The selector remains usable while the backend/model catalog reconnects.
-    return
-  }
-
-  const latest = get()
-  if (
-    requestSeq !== _productionProfileVideoFormatSeq
-    || !_globalModelSelectionModes.has('video')
-    || latest.selectedModelPerMode.video !== modelType
-    || latest.productionProfile.video.model !== modelType
-    || latest.productionProfile.video.settings.resolution !== requestedResolution
-    || latest.productionProfile.video.settings.aspectRatio !== requestedAspect
-  ) return
-
-  const format = resolveSupportedVideoFormat(
-    options,
-    requestedResolution,
-    requestedAspect,
-  )
-  set({
-    directorResolution: format.resolution,
-    directorAspectRatio: format.aspectRatio,
-  })
-}
-
 function restoreCharacterDraft(
   drafts: AppState['imageStudioDrafts'],
   target: AppState['editReturnTarget'],
@@ -1747,6 +1257,10 @@ export const useStore = create<AppState>((set, get) => {
   ...bindSlice(set, get, createPresetsSlice),
   ...bindSlice(set, get, createActivitySlice),
   ...bindSlice(set, get, createCivitaiSlice),
+  ...bindSlice(set, get, createToolsSlice),
+  ...bindSlice(set, get, createRecipesSlice),
+  ...bindSlice(set, get, createServicesSlice),
+  ...bindSlice(set, get, createLorasSlice),
   ...developerMode,
   setDeveloperMode: (enabled: boolean) => {
     developerMode.setDeveloperMode(enabled)
@@ -2916,125 +2430,6 @@ export const useStore = create<AppState>((set, get) => {
     void get().loadSavedPipeline(pid)
     void get().loadPipelineList(pid)
   },
-
-  // ── Recipes (one-click Studio presets) ────────────────────────────
-  recipesOpen: false,
-  setRecipesOpen: (open) => {
-    set({ recipesOpen: open })
-    if (open) get().loadRecipes()
-  },
-  recipes: [],
-  recipesLoading: false,
-  loadRecipes: async () => {
-    set({ recipesLoading: true })
-    try {
-      const { recipes } = await api.fetchRecipes()
-      set({ recipes, recipesLoading: false })
-    } catch (e) {
-      console.error('Failed to load recipes:', e)
-      set({ recipes: [], recipesLoading: false })
-    }
-  },
-  applyRecipe: async (id) => {
-    // Applies a recipe like Load Settings applies a saved output: switch
-    // model + generation mode, land the tuned params in the active Studio
-    // working set, and PREPOPULATE the prompt (a real, editable value — not
-    // placeholder text) so the user just tweaks the subject. Seed and repeat
-    // reset so a recipe reproduces a look, not a specific frame.
-    const recipeChange = beginImageSettingsChange(get)
-    const recipe = await api.fetchRecipe(id)
-    const { models } = get()
-    const model = models.find(m => m.model_type === recipe.model_type)
-    const mode = model ? getModelMode(recipe.model_type, model.family) : ((recipe.mode as GenerationMode) || 'video')
-    if (mode === 'image') {
-      if (!recipeChange.current()) throw new Error('The image form changed while loading the recipe')
-      _modelOptionsSeq += 1
-      set({ modelOptionsLoading: false })
-      const restored = await restoreStudioImageSettings({ ...recipe.params, model_type: recipe.model_type,
-        prompt: recipe.prompt_example || '', seed: -1,
-        activated_loras: (recipe.loras || []).map(item => item.filename),
-        loras_multipliers: (recipe.loras || []).map(item => String(item.multiplier ?? 1)).join(' '),
-      }, get().activeWorkspace, get, set)
-      if (!restored) throw new Error('The image form changed while loading the recipe')
-      await get().loadLoras(recipe.model_type)
-      const present = new Set(get().availableLoras.map(name => name.replace(/\\/g, '/').split('/').pop()))
-      return { missing: (recipe.loras || []).filter(item => !present.has(item.filename)) }
-    }
-
-    const activated = (recipe.loras || []).map(l => l.filename)
-    const multipliers = (recipe.loras || []).map(l => String(l.multiplier ?? '1.0')).join(' ')
-    const loraWeights: Record<string, number[]> = {}
-    for (const l of recipe.loras || []) {
-      loraWeights[l.filename] = String(l.multiplier ?? '1.0').split(';').map(Number)
-    }
-
-    set(s => ({
-      generationMode: mode,
-      // NOTE: do NOT close the overlay here. The RecipesOverlay closes
-      // itself on success, but keeps itself open when the recipe needs
-      // LoRAs you don't have — so it can show the download prompt. Closing
-      // here made that prompt dead code (recipe applied, LoRA missing, user
-      // generated → cryptic "Loras missing" failure with no guidance).
-      params: {
-        ...s.params,
-        ...(recipe.params as Partial<GenerateParams>),
-        model_type: recipe.model_type,
-        prompt: recipe.prompt_example || '',
-        activated_loras: activated,
-        loras_multipliers: multipliers,
-        seed: -1,
-        repeat_generation: 1,
-        // Recipes are look presets — land in the base Studio sub-mode
-        // (Frames for video, image-output for image), not Extend/Blend.
-        image_mode: 0,
-      },
-      loraWeights,
-      availableLoras: [],
-      selectedModelPerMode: { ...s.selectedModelPerMode, [mode]: recipe.model_type },
-      h3WindowPlan: null,
-    }))
-
-    if (recipe.model_type) {
-      get().loadModelOptions(recipe.model_type)
-      // Derive duration from video_length if the recipe carried one.
-      const vlen = (recipe.params as Record<string, unknown>)?.video_length
-      const fps = model?.fps || 16
-      if (typeof vlen === 'number' && vlen > 0) {
-        set({ durationSeconds: Math.round((vlen / fps) * 10) / 10 })
-      }
-      // Await the LoRA list so we can report which recipe LoRAs are missing.
-      await get().loadLoras(recipe.model_type)
-    }
-
-    const present = new Set(get().availableLoras.map(x => (x || '').replace(/\\/g, '/').split('/').pop() || ''))
-    const missing = (recipe.loras || []).filter(l => !present.has(l.filename))
-    return { missing }
-  },
-  saveRecipeFromOutput: async (outputName, name, description, nsfw) => {
-    await api.saveRecipeFromOutput({ output_name: outputName, name, description, nsfw })
-    if (get().recipesOpen) get().loadRecipes()
-  },
-  deleteRecipe: async (id) => {
-    await api.deleteRecipe(id)
-    set(s => ({ recipes: s.recipes.filter(r => r.id !== id) }))
-  },
-  downloadRecipeLora: async (lora, modelType) => {
-    // Best-effort fetch of a recipe's LoRA from its CivitAI source. Portable
-    // recipes carry a direct download_url in source_url; if it isn't a
-    // CivitAI URL the backend rejects it and the UI falls back to the link.
-    if (!lora.source_url) throw new Error('This recipe has no download source for that LoRA — install it manually.')
-    const model = get().models.find(m => m.model_type === modelType)
-    await api.startCivitAIDownload({
-      download_url: lora.source_url,
-      filename: lora.filename,
-      // architecture (not family) is what the backend's get_lora_dir keys on,
-      // so the LoRA lands in the same per-model dir the model loads from.
-      target_arch: (model?.architecture as string) || '',
-      model_id: 0, version_id: 0, trained_words: [],
-      model_name: lora.filename, images: [],
-    })
-    get().pollCivitAIDownloads()
-  },
   loadDirectorFromPipeline: async (pid) => {
     try {
       const pipeline = await api.fetchSavedPipeline(pid)
@@ -3165,10 +2560,10 @@ export const useStore = create<AppState>((set, get) => {
         let restoredModels: Set<string>
         if (visibility.configured) {
           restoredModels = new Set(visibility.enabled_models)
-          _initializedMatureModels = new Set(
+          replaceInitializedMatureModels(new Set(
             visibility.initialized_mature_models,
-          )
-          _modelVisibilityDefaultsVersion = (
+          ))
+          setModelVisibilityDefaultsVersion(
             visibility.defaults_version || 1
           )
         } else {
@@ -3178,21 +2573,21 @@ export const useStore = create<AppState>((set, get) => {
             localStorage.getItem(DEFAULTS_VERSION_KEY) || '',
             10,
           )
-          _modelVisibilityDefaultsVersion = legacyModels
+          setModelVisibilityDefaultsVersion(legacyModels
             ? (legacyDefaultsVersion || 1)
-            : DEFAULTS_VERSION
+            : DEFAULTS_VERSION)
           // An existing browser whitelist is an explicit snapshot. Mark the
           // current Mature entries initialized so migration cannot re-enable
           // one the user deliberately disabled.
-          _initializedMatureModels = legacyModels
+          replaceInitializedMatureModels(legacyModels
             ? new Set(
                 models
                   .filter(model => model.nsfw_only)
                   .map(model => model.model_type),
               )
-            : new Set()
+            : new Set())
         }
-        _modelVisibilityHydrated = true
+        markModelVisibilityHydrated()
         set({ enabledModels: restoredModels })
         if (!visibility.configured) _saveEnabledModels(restoredModels)
       }
@@ -3226,7 +2621,7 @@ export const useStore = create<AppState>((set, get) => {
             })
           }
           migrateMusicDefault = storedVer < 2
-          _modelVisibilityDefaultsVersion = DEFAULTS_VERSION
+          setModelVisibilityDefaultsVersion(DEFAULTS_VERSION)
           localStorage.setItem(DEFAULTS_VERSION_KEY, String(DEFAULTS_VERSION))
           _saveEnabledModels(get().enabledModels)
         }
@@ -3384,181 +2779,6 @@ export const useStore = create<AppState>((set, get) => {
     } catch (e) {
       console.error('Failed to load models:', e)
     }
-  },
-
-  // ── Tools area (standalone post-processing on an existing clip) ──────
-  toolsTool: 'upscale',
-  setToolsTool: (t) => set({ toolsTool: t }),
-  toolsSourcePath: null,
-  toolsSourceName: null,
-  toolsSourceUrl: null,
-  toolsSourceAssetId: null,
-  toolsSourceWorkspace: null,
-  toolsSourceKind: null,
-  setToolsSource: (src) => set(src
-    ? {
-      toolsSourcePath: src.path,
-      toolsSourceName: src.name,
-      toolsSourceUrl: src.url,
-      toolsSourceAssetId: src.assetId ?? null,
-      toolsSourceWorkspace: src.workspace ?? null,
-      toolsSourceKind: src.kind ?? null,
-    }
-    : {
-      toolsSourcePath: null,
-      toolsSourceName: null,
-      toolsSourceUrl: null,
-      toolsSourceAssetId: null,
-      toolsSourceWorkspace: null,
-      toolsSourceKind: null,
-    }),
-  toolsUpscaleMethod: 'flashvsr2',
-  setToolsUpscaleMethod: (m) => set({ toolsUpscaleMethod: m }),
-  toolsRevoiceMode: 'single',
-  setToolsRevoiceMode: (m) => set({ toolsRevoiceMode: m }),
-  toolsRevoiceRefs: [null, null],
-  setToolsRevoiceRef: (index, ref) => set(s => {
-    const next = [...s.toolsRevoiceRefs]
-    while (next.length <= index) next.push(null)
-    next[index] = ref
-    return { toolsRevoiceRefs: next }
-  }),
-  toolsRemoveBackgroundInstruction: '',
-  setToolsRemoveBackgroundInstruction: (instruction) => set({ toolsRemoveBackgroundInstruction: instruction }),
-  toolsAssetsRevision: 0,
-  toolsSubmitting: false,
-  runTool: async () => {
-    const s = get()
-    if (s.toolsSubmitting) return
-    const source = s.toolsSourcePath
-    if (!source) return
-    const tool = s.toolsTool
-
-    // Revoice needs at least one resolved voice reference.
-    const refPaths = s.toolsRevoiceRefs
-      .filter((r): r is { filename: string; path: string } => !!r && !!r.path)
-      .map(r => r.path)
-    if (tool === 'revoice' && refPaths.length === 0) return
-    if (tool === 'remove_background' && s.toolsSourceKind !== 'image' && s.toolsSourceKind !== 'video') return
-    if (tool === 'upscale' && s.toolsSourceKind !== 'image' && s.toolsSourceKind !== 'video') return
-    if (tool === 'revoice' && s.toolsSourceKind !== 'video') return
-    set({ toolsSubmitting: true })
-
-    // Placeholder job tile — mirrors the blend/edit submit pattern so the
-    // progress shows in the main feed and the gallery refreshes on completion.
-    const removingBackground = tool === 'remove_background'
-    const newJob: GenerationJob = {
-      id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
-      phase: '', message: tool === 'upscale'
-        ? 'Submitting upscale...'
-        : tool === 'revoice'
-          ? 'Submitting revoice...'
-          : i18n.t('tools.submittingRemoveBackground', { ns: 'studio' }),
-      outputFiles: [], error: null, oomInfo: null, createdAt: Date.now(),
-    }
-    set(st => {
-      return prependJob(st.jobs, newJob)
-    })
-
-    try {
-      const result = tool === 'upscale'
-        ? await (async () => {
-          const { prepareStudioToolsUpscaleSubmission, toolsUpscaleParamsFromState } =
-            await import('../features/studio/toolsCommandSubmission')
-          return (await prepareStudioToolsUpscaleSubmission(
-            toolsUpscaleParamsFromState(s),
-            s,
-            get,
-            { actor: 'user', capability: 'tools.upscale' },
-          )).submit()
-        })()
-        : tool === 'revoice'
-          ? await api.submitToolRevoice({ video_path: source, voice_ref_paths: refPaths, mode: s.toolsRevoiceMode, workspace: s.activeWorkspace })
-          : await api.submitToolRemoveBackground({
-            asset_id: s.toolsSourceAssetId || undefined,
-            source,
-            source_workspace: s.toolsSourceWorkspace || undefined,
-            workspace: s.activeWorkspace,
-            instruction: s.toolsRemoveBackgroundInstruction,
-            provenance: { actor: 'user' },
-          })
-
-      const taskId = 'task_id' in result && typeof result.task_id === 'string'
-        ? result.task_id
-        : result.job_id
-      set(st => ({
-        jobs: st.jobs.map(j => j === newJob ? {
-          ...j,
-          id: result.job_id,
-          taskId,
-          status: 'queued',
-          message: removingBackground ? i18n.t('tools.queuedRemoveBackground', { ns: 'studio' }) : 'Queued...',
-        } : j),
-      }))
-
-      const pollInterval = setInterval(async () => {
-        if (!get().jobs.find(j => j.id === result.job_id)) { clearInterval(pollInterval); return }
-        try {
-          const status = await api.fetchJobStatus(result.job_id)
-          set(st => ({
-            jobs: st.jobs.map(j => j.id !== result.job_id ? j : {
-              ...j, status: status.status, progress: status.progress / 100,
-              step: status.step ?? 0, totalSteps: status.total_steps ?? 0,
-              phase: status.phase ?? '', message: status.message,
-              outputFiles: status.output_files, error: status.error, oomInfo: status.oom_info ?? null,
-              ..._jobTimingPatch(status),
-            }),
-          }))
-          if (status.status === 'running') void get().maybeRefreshGallery()
-          if (status.status === 'completed') {
-            clearInterval(pollInterval)
-            if (removingBackground) set(st => ({ toolsAssetsRevision: st.toolsAssetsRevision + 1 }))
-            set(st => {
-              return removeJob(st.jobs, j => j.id === result.job_id)
-            })
-            void get().maybeRefreshGallery({ message: 'New output ready' })
-          } else if (isGenerationJobSettled(status.status)) {
-            clearInterval(pollInterval)
-            // Keep the terminal tile visible so the user can inspect or dismiss it.
-            set(st => withJobs(st.jobs))
-          }
-        } catch { /* ignore poll errors */ }
-      }, 2000)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : (tool === 'upscale'
-        ? 'Upscale failed'
-        : tool === 'revoice'
-          ? 'Revoice failed'
-          : i18n.t('tools.removeBackgroundFailed', { ns: 'studio' }))
-      set(st => updateJob(st.jobs, j => j === newJob, j => ({
-        ...j, id: j.id || `tool-fail-${Date.now()}`, status: 'failed', message: msg, error: msg,
-      })))
-      console.error(`Tool ${tool} failed:`, msg)
-    } finally {
-      set({ toolsSubmitting: false })
-    }
-  },
-  quickUpscaleClip: async (name, url) => {
-    // Point the Tools state at this clip and run an upscale immediately,
-    // reusing runTool()'s submit+poll. The Tools panel reflects this clip
-    // afterward (harmless — and convenient if the user opens it).
-    set({ toolsTool: 'upscale', toolsSourcePath: name, toolsSourceName: name, toolsSourceUrl: url, toolsSourceAssetId: null, toolsSourceWorkspace: null, toolsSourceKind: 'video' })
-    // The shortcut is exposed from the video activity view, so the current
-    // mode is usually video. Switch to Tools before runTool snapshots the
-    // form; this also mounts the durable ACK panel that presents the command.
-    const state = get()
-    state.setSettingsOpen(false)
-    state.setDashboardOpen(false)
-    state.setSidebarMode('studio')
-    state.setSidebarOpen(true)
-    state.setGenerationMode('tools')
-    state.setMediaFilter('videos')
-    await get().runTool()
-  },
-  sendClipToTools: (name, url, tool) => {
-    set({ toolsTool: tool, toolsSourcePath: name, toolsSourceName: name, toolsSourceUrl: url, toolsSourceAssetId: null, toolsSourceWorkspace: null, toolsSourceKind: 'video' })
-    get().setGenerationMode('tools')
-    get().setMediaFilter('all')
   },
 
   // Director-mode post-processing (separate image/video)
@@ -5139,352 +4359,12 @@ export const useStore = create<AppState>((set, get) => {
     await refresh()
   },
 
-  // LoRA state
-  availableLoras: [],
-  lorasLoading: false,
-  loraWeights: {},
-  loraIdByFilename: {},
-  filenameByLoraId: {},
-
-  /**
-   * Refresh the lora_id ↔ filename maps from /api/v1/loras/installed.
-   * Called once at boot (from loadModels) and again whenever LoRAs may
-   * have been added/removed (after CivitAI download, scan, etc.).
-   *
-   * Side effect: runs reconciliation against the persisted savedLoraPerMode.
-   * If a saved filename no longer exists on disk but the snapshot lora_id
-   * resolves to a different filename in the fresh map, the rename is
-   * applied transparently — that's the LoRA-version-update flow.
-   */
-  refreshLoraIdMap: async () => {
-    try {
-      const { loras } = await api.fetchInstalledLoras()
-      const byFilename: Record<string, string> = {}
-      const byLoraId: Record<string, string> = {}
-      for (const l of loras) {
-        if (!l.lora_id || !l.filename) continue
-        byFilename[l.filename] = l.lora_id
-        // If two files share a lora_id (rare — user kept v1 + v2 side by
-        // side), the last one wins. Reconciliation will prefer whichever
-        // matches the saved filename.
-        byLoraId[l.lora_id] = l.filename
-      }
-      // Reconcile: rewrite stale filenames in savedLoraPerMode using the
-      // snapshot loaded from localStorage (lora_id → filename-at-save-time).
-      const s = get()
-      const snapshot = s._loraFilenameSnapshotAtLoad || {}
-      const reconciled: typeof s.savedLoraPerMode = {}
-      let changed = false
-      for (const [mode, blob] of Object.entries(s.savedLoraPerMode)) {
-        if (!blob) continue
-        const renameFilename = (fname: string): string | null => {
-          if (byFilename[fname]) return fname  // still on disk, no change
-          // Stale: look up its lora_id in snapshot, then current filename in fresh map.
-          // Walk snapshot backwards (lora_id → fname) to find the lora_id this filename had.
-          let foundId: string | null = null
-          for (const [id, snapFname] of Object.entries(snapshot)) {
-            if (snapFname === fname) { foundId = id; break }
-          }
-          if (foundId && byLoraId[foundId]) {
-            changed = true
-            return byLoraId[foundId]  // renamed
-          }
-          // LoRA was deleted entirely.
-          changed = true
-          return null
-        }
-        const newActivated = (blob.activated_loras || [])
-          .map(renameFilename)
-          .filter((x): x is string => x !== null)
-        const newWeights: Record<string, number[]> = {}
-        for (const [fname, w] of Object.entries(blob.loraWeights || {})) {
-          const renamed = renameFilename(fname)
-          if (renamed) newWeights[renamed] = w
-        }
-        const newAvailable = (blob.availableLoras || [])
-          .map(renameFilename)
-          .filter((x): x is string => x !== null)
-        reconciled[mode as GenerationMode] = {
-          ...blob,
-          activated_loras: newActivated,
-          loraWeights: newWeights,
-          availableLoras: newAvailable,
-        }
-      }
-      if (changed) {
-        // Also rewrite the in-memory runtime state if its keys are stale
-        const renameRuntimeFilename = (fname: string): string | null => {
-          if (byFilename[fname]) return fname
-          let foundId: string | null = null
-          for (const [id, snapFname] of Object.entries(snapshot)) {
-            if (snapFname === fname) { foundId = id; break }
-          }
-          if (foundId && byLoraId[foundId]) return byLoraId[foundId]
-          return null
-        }
-        const curActivated = (s.params.activated_loras || [])
-          .map(renameRuntimeFilename)
-          .filter((x): x is string => x !== null)
-        const curWeights: Record<string, number[]> = {}
-        for (const [fname, w] of Object.entries(s.loraWeights || {})) {
-          const renamed = renameRuntimeFilename(fname)
-          if (renamed) curWeights[renamed] = w
-        }
-        set(state => ({
-          loraIdByFilename: byFilename,
-          filenameByLoraId: byLoraId,
-          savedLoraPerMode: reconciled,
-          params: { ...state.params, activated_loras: curActivated },
-          loraWeights: curWeights,
-        }))
-        // Persist the reconciled state so next boot doesn't need to redo it.
-        const ns = get()
-        _saveSettings({
-          generationMode: ns.generationMode,
-          selectedModelPerMode: ns.selectedModelPerMode,
-          savedParamsPerMode: ns.savedParamsPerMode,
-          savedLoraPerMode: ns.savedLoraPerMode,
-          savedPromptPerMode: ns.savedPromptPerMode,
-        }, byFilename)
-      } else {
-        set({ loraIdByFilename: byFilename, filenameByLoraId: byLoraId })
-      }
-      // Fire-and-forget: kick off an update check, debounced server-side
-      // by a 24h staleness window. If the manifest is fresh, the backend
-      // returns immediately without hitting CivitAI; if stale, it walks
-      // the library and refreshes badges in the background. The user's
-      // current LoraSelector instance will pick up new badges on its
-      // next /details fetch (mode change or refresh).
-      api.checkLoraUpdates(false).catch(() => {
-        // Network failures here are non-fatal — the manual "Check" button
-        // in the LoraSelector remains available for retries.
-      })
-    } catch {
-      // Non-fatal. Persistence will keep using filename-keyed legacy shape
-      // until the map populates on a subsequent attempt.
-    }
-  },
-
-  loadLoras: async (modelType) => {
-    set({ lorasLoading: true })
-    try {
-      const data = await api.fetchLoras(modelType)
-      if (get().params.model_type !== modelType) return
-      set({ availableLoras: data.loras, lorasLoading: false })
-    } catch {
-      if (get().params.model_type !== modelType) return
-      set({ availableLoras: [], lorasLoading: false })
-    }
-  },
-
-  toggleLora: (filename) => {
-    const { params, loraWeights, modelOptions, generationMode, editSubMode } = get()
-    const current = [...params.activated_loras]
-    const idx = current.indexOf(filename)
-    const newWeights = { ...loraWeights }
-    // SCAIL-2 Recast is intentionally a single-phase pipeline even though
-    // the shared Wan model family advertises support for up to three phases.
-    const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
-    const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
-    const removedTurboPreset = (
-      idx >= 0
-      && (filename === modelOptions?.minimax_h3_turbo?.filename || modelOptions?.minimax_h3_turbo?.presets?.some(preset => preset.filename === filename))
-    )
-
-    if (idx >= 0) {
-      current.splice(idx, 1)
-      delete newWeights[filename]
-    } else {
-      current.push(filename)
-      newWeights[filename] = Array(phases).fill(1.0)
-    }
-
-    // Serialize multipliers
-    const multipliers = current.map(name => {
-      const w = newWeights[name] || [1.0]
-      return Array.from(
-        { length: phases },
-        (_, i) => w[i] ?? w[w.length - 1] ?? 1.0,
-      ).map(v => v.toFixed(2)).join(';')
-    }).join(' ')
-
-    set(s => ({
-      loraWeights: newWeights,
-      params: {
-        ...s.params,
-        activated_loras: current,
-        loras_multipliers: multipliers,
-        ...(removedTurboPreset ? { minimax_h3_turbo_mode: false } : {}),
-      },
-    }))
-    // Persist LoRA state
-    const s = get()
-    const mode = s.generationMode
-    const updatedLoraPerMode = {
-      ...s.savedLoraPerMode,
-      [mode]: { activated_loras: current, loras_multipliers: multipliers, loraWeights: newWeights, availableLoras: s.availableLoras },
-    }
-    const updatedParamsPerMode = removedTurboPreset
-      ? {
-          ...s.savedParamsPerMode,
-          [mode]: {
-            ...(s.savedParamsPerMode[mode] || {}),
-            minimax_h3_turbo_mode: false,
-          },
-        }
-      : s.savedParamsPerMode
-    set({
-      savedLoraPerMode: updatedLoraPerMode,
-      savedParamsPerMode: updatedParamsPerMode,
-    })
-    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: updatedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
-  },
-
-  ensureTransitionLoraForBlend: async () => {
-    const state = get()
-    const modelType = state.params.model_type as string
-    // Only applies to LTX-2 family models — the LoRA is trained for LTX-2.3
-    if (!modelType || !modelType.startsWith('ltx2')) return
-
-    const HF_URL = 'https://huggingface.co/valiantcat/LTX-2.3-Transition-LORA'
-    const matchesTransitionLora = (name: string) => /transition/i.test(name)
-
-    try {
-      // Step 1: check if already installed
-      let { loras } = await api.fetchLoras(modelType)
-      let transitionFilename = loras.find(matchesTransitionLora)
-
-      // Step 2: if not installed, trigger HF download
-      if (!transitionFilename) {
-        console.log('[Blend] Transition LoRA not found locally — downloading from HuggingFace')
-        let result: { filename: string } | null = null
-        try {
-          result = await api.importHuggingFaceLora(HF_URL)
-        } catch (e) {
-          console.error('[Blend] Transition LoRA download request failed:', e)
-          return
-        }
-        // Poll the LoRA list until the new file appears (download runs in
-        // a backend thread). Cap at ~3 min total.
-        const expectedFilename = result?.filename
-        for (let i = 0; i < 90; i++) {
-          await new Promise(r => setTimeout(r, 2000))
-          const refreshed = await api.fetchLoras(modelType)
-          loras = refreshed.loras
-          const found = expectedFilename
-            ? loras.find(l => l === expectedFilename || matchesTransitionLora(l))
-            : loras.find(matchesTransitionLora)
-          if (found) { transitionFilename = found; break }
-        }
-        if (!transitionFilename) {
-          console.warn('[Blend] Transition LoRA download did not complete in time — skipping auto-activation')
-          return
-        }
-        console.log(`[Blend] Transition LoRA ready: ${transitionFilename}`)
-        // Refresh the in-store available LoRA list so the UI shows the new file
-        try { await get().loadLoras(modelType) } catch { /* non-fatal */ }
-      }
-
-      // Step 3: ensure it's in activated_loras (but don't toggle-off if it
-      // happens to already be there)
-      const activated = (get().params.activated_loras as string[]) || []
-      if (!activated.includes(transitionFilename)) {
-        get().toggleLora(transitionFilename)
-        console.log(`[Blend] Auto-activated transition LoRA: ${transitionFilename}`)
-      }
-    } catch (e) {
-      console.error('[Blend] ensureTransitionLoraForBlend failed:', e)
-    }
-  },
-
-  ensureEditAnythingLora: async () => {
-    const state = get()
-    const modelType = state.params.model_type as string
-    if (!modelType || !modelType.startsWith('ltx2')) return
-
-    const HF_URL = 'https://huggingface.co/Alissonerdx/LTX-LoRAs'
-    // Must match EDIT_ANYTHING_LORA_FILENAME in app/launch.py. The endpoint
-    // will activate this server-side regardless of the client's LoRA list,
-    // so we only need to ensure the file is present on disk before the
-    // user hits Generate.
-    const EDIT_ANYTHING_FILENAME =
-      'ltx23_edit_anything_global_rank128_v1_9000steps_adamw.safetensors'
-    const matchesEditAnything = (name: string) =>
-      name === EDIT_ANYTHING_FILENAME ||
-      /edit_anything.*9000steps/i.test(name)
-
-    try {
-      const { loras } = await api.fetchLoras(modelType)
-      const already = loras.find(matchesEditAnything)
-      if (already) return
-
-      console.log('[EditAnything] LoRA not found locally — downloading from HuggingFace')
-      try {
-        await api.importHuggingFaceLora(HF_URL, undefined, EDIT_ANYTHING_FILENAME)
-      } catch (e) {
-        console.error('[EditAnything] LoRA download request failed:', e)
-        return
-      }
-      // Poll every 2s until the file appears (up to ~3 min)
-      for (let i = 0; i < 90; i++) {
-        await new Promise(r => setTimeout(r, 2000))
-        const refreshed = await api.fetchLoras(modelType)
-        if (refreshed.loras.find(matchesEditAnything)) {
-          console.log(`[EditAnything] LoRA ready: ${EDIT_ANYTHING_FILENAME}`)
-          try { await get().loadLoras(modelType) } catch { /* non-fatal */ }
-          return
-        }
-      }
-      console.warn('[EditAnything] LoRA download did not complete in time')
-    } catch (e) {
-      console.error('[EditAnything] ensureEditAnythingLora failed:', e)
-    }
-  },
-
-  setLoraWeight: (filename, phaseIndex, value) => {
-    const { params, loraWeights, modelOptions, generationMode, editSubMode } = get()
-    const newWeights = { ...loraWeights }
-    if (!newWeights[filename]) return
-    const recastSinglePhase = generationMode === 'avatar' && editSubMode === 'recast'
-    const phases = recastSinglePhase ? 1 : Math.max(1, modelOptions?.guidance_max_phases ?? 1)
-    if (phaseIndex < 0 || phaseIndex >= phases) return
-    const currentWeights = newWeights[filename]
-    newWeights[filename] = Array.from(
-      { length: phases },
-      (_, i) => currentWeights[i] ?? currentWeights[currentWeights.length - 1] ?? 1.0,
-    )
-    newWeights[filename][phaseIndex] = value
-
-    // Reserialize
-    const multipliers = params.activated_loras.map(name => {
-      const w = newWeights[name] || [1.0]
-      return Array.from(
-        { length: phases },
-        (_, i) => w[i] ?? w[w.length - 1] ?? 1.0,
-      ).map(v => v.toFixed(2)).join(';')
-    }).join(' ')
-
-    set(s => ({
-      loraWeights: newWeights,
-      params: { ...s.params, loras_multipliers: multipliers },
-    }))
-    // Persist LoRA state
-    const s = get()
-    const mode = s.generationMode
-    const updatedLoraPerMode = {
-      ...s.savedLoraPerMode,
-      [mode]: { activated_loras: s.params.activated_loras, loras_multipliers: multipliers, loraWeights: newWeights, availableLoras: s.availableLoras },
-    }
-    set({ savedLoraPerMode: updatedLoraPerMode })
-    _saveSettings({ generationMode: mode, selectedModelPerMode: s.selectedModelPerMode, savedParamsPerMode: s.savedParamsPerMode, savedLoraPerMode: updatedLoraPerMode, savedPromptPerMode: s.savedPromptPerMode }, s.loraIdByFilename)
-  },
-
   // Model options
   modelOptions: null,
   modelOptionsLoading: false,
 
   loadModelOptions: async (modelType, preservedRecipe) => {
-    const seq = ++_modelOptionsSeq
+    const seq = advanceModelOptionsSeq()
     // Virtual SFX has no options endpoint. Still invalidate pending responses
     // and clear the previous model's constraints and Advanced controls.
     if (sfxModelTypes.has(modelType)) {
@@ -5726,170 +4606,6 @@ export const useStore = create<AppState>((set, get) => {
       if (seq === _modelOptionsSeq) {
         set({ modelOptions: null, modelOptionsLoading: false })
       }
-    }
-  },
-
-  // Services config
-  servicesConfig: null,
-  servicesConfigLoading: false,
-  productionProfile: DEFAULT_PRODUCTION_PROFILE,
-  productionProfileConfigured: false,
-  productionProfileInvalidReason: '',
-  productionProfileLoaded: false,
-  productionProfileLoading: false,
-  loadProductionProfile: async () => {
-    set({ productionProfileLoading: true })
-    try {
-      const result = await api.fetchProductionProfile()
-      set({
-        productionProfile: result.profile,
-        productionProfileConfigured: result.configured,
-        productionProfileInvalidReason: result.invalid_reason || '',
-        productionProfileLoaded: true,
-        productionProfileLoading: false,
-      })
-      await _syncGlobalProductionVideoFormat(
-        result.profile,
-        get,
-        partial => set(partial),
-      )
-    } catch (e) {
-      console.error('Failed to load production profile:', e)
-      set({ productionProfileLoading: false })
-    }
-  },
-  updateProductionProfile: async (profile) => {
-    const previous = get().productionProfile
-    set({ productionProfile: profile, productionProfileLoading: true })
-    try {
-      const result = await api.updateProductionProfile(profile)
-      const imageModel = result.profile.image.provider === 'minimax'
-        ? `minimax:${result.profile.image.model}` : result.profile.image.model
-      _globalModelSelectionModes.add('image')
-      _globalModelSelectionModes.add('video')
-      set(state => ({
-        productionProfile: result.profile,
-        productionProfileConfigured: result.configured,
-        productionProfileInvalidReason: result.invalid_reason || '',
-        productionProfileLoading: false,
-        selectedModelPerMode: {
-          ...state.selectedModelPerMode,
-          image: imageModel,
-          video: result.profile.video.model,
-        },
-        ...(state.generationMode === 'image' || state.generationMode === 'video' ? {
-          params: {
-            ...state.params,
-            model_type: state.generationMode === 'image'
-              ? imageModel : result.profile.video.model,
-          },
-        } : {}),
-      }))
-      const activeMode = get().generationMode
-      if (activeMode === 'image' || activeMode === 'video') {
-        const activeModel = get().selectedModelPerMode[activeMode]
-        if (activeModel) await get().loadModelOptions(activeModel)
-      }
-      await _syncGlobalProductionVideoFormat(
-        result.profile,
-        get,
-        partial => set(partial),
-      )
-      // The global text profile is also the provider used by generic tools.
-      await get().loadServicesConfig()
-      await get().loadLlmModels()
-    } catch (e) {
-      console.error('Failed to update production profile:', e)
-      set({ productionProfile: previous, productionProfileLoading: false })
-      throw e
-    }
-  },
-  loadServicesConfig: async () => {
-    set({ servicesConfigLoading: true })
-    try {
-      const config = await api.fetchServicesConfig()
-      set({ servicesConfig: config, servicesConfigLoading: false })
-      if (
-        config.nsfw_mode
-        && _modelVisibilityHydrated
-        && get().models.length > 0
-      ) {
-        set(s => {
-          const next = _enableUninitializedMatureModels(
-            s.models,
-            s.enabledModels,
-          )
-          if (!next) return s
-          _saveEnabledModels(next)
-          return { enabledModels: next }
-        })
-      }
-    } catch (e) {
-      console.error('Failed to load services config:', e)
-      set({ servicesConfigLoading: false })
-    }
-  },
-  updateServicesConfig: async (partial) => {
-    // Keep controlled settings inputs stable immediately. Previously the
-    // select stayed bound to the old server value until PUT + refetch
-    // completed, so choosing another LLM visibly snapped back to Qwen.
-    // Serialize writes as well: remote URLs are edited character-by-character
-    // and out-of-order PUT completions must never restore an older value.
-    const optimistic = Object.fromEntries(
-      Object.entries(partial).filter(([key]) => !key.endsWith('_api_key')),
-    ) as Partial<ServicesConfig>
-    if (Object.keys(optimistic).length > 0) {
-      set(state => ({
-        servicesConfig: state.servicesConfig
-          ? { ...state.servicesConfig, ...optimistic }
-          : state.servicesConfig,
-      }))
-    }
-    const updateTask = _servicesConfigUpdateQueue.then(async () => {
-      const result = await api.updateServicesConfig(partial)
-      set(state => ({
-        servicesConfig: state.servicesConfig
-          ? { ...state.servicesConfig, ...(result.updated as Partial<ServicesConfig>) }
-          : state.servicesConfig,
-      }))
-    })
-    _servicesConfigUpdateQueue = updateTask.catch(() => undefined)
-    try {
-      await updateTask
-      // When Mature Mode flips ON, auto-add all nsfw_only models to
-      // enabledModels so they show up in selectors immediately. Without
-      // this the user would have to walk Settings → System → Model
-      // Visibility and individually enable each one — defeats the
-      // "auto-selected when NSFW is enabled" UX.
-      //
-      // Flipping nsfw_mode OFF doesn't remove them from enabledModels
-      // (they're filtered from view by the nsfw_only + nsfw_mode check
-      // in ModelSelector / SystemSettingsPanel anyway). That way if the
-      // user toggles mature mode back on later, their selections persist.
-      get().loadServicesConfig()
-      if (partial.nsfw_mode === true) {
-        if (_modelVisibilityHydrated) {
-          set(s => {
-            const next = _enableUninitializedMatureModels(s.models, s.enabledModels)
-            if (!next) return s
-            _saveEnabledModels(next)
-            return { enabledModels: next }
-          })
-        } else {
-          const nsfwModels = get().models.filter(m => m.nsfw_only).map(m => m.model_type)
-          if (nsfwModels.length > 0) {
-            set(s => {
-              const next = new Set(s.enabledModels)
-              nsfwModels.forEach(modelType => next.add(modelType))
-              _saveEnabledModels(next)
-              return { enabledModels: next }
-            })
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Failed to update services config:', e)
-      await get().loadServicesConfig()
     }
   },
 
@@ -7933,7 +6649,7 @@ export const useStore = create<AppState>((set, get) => {
 
     // Determine generation mode from model (respects per-model avatar overrides)
     if (imageSettingsMode(p, get())) {
-      _modelOptionsSeq += 1
+      advanceModelOptionsSeq()
       set({ modelOptionsLoading: false })
       return restoreStudioImageSettings(p, source?.workspace || get().activeWorkspace, get, set, restore.isCurrent)
     }
