@@ -121,6 +121,10 @@ print("[HocusPocus Lab] Importing WanGP engine...")
 import wgp
 from services.generation import bind_wgp, get_model_def
 bind_wgp(wgp)
+from services.kernel.config import ConfigStore
+from services.kernel.paths import PathPolicy
+_config = ConfigStore()
+_paths = PathPolicy()
 from services import model3d_service, minimax_h3_service, minimax_image_service
 from services import tools_upscale as tools_upscale_service
 from services import debug_trace
@@ -136,8 +140,6 @@ from services.media_paths import (
 from services.upload_stream import (
     UploadTooLargeError,
     UploadTranscodeError,
-    stream_upload_file,
-    transcode_upload,
 )
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
@@ -171,27 +173,7 @@ try:
 except Exception as _sweep_err:
     print(f"[Workspace] Trash sweep skipped: {_sweep_err}")
 
-def _save_server_config() -> None:
-    """Write wgp.server_config atomically with owner-only permissions.
-
-    The file holds API keys and the workspace list. open("w") truncated it
-    before writing, so a crash or two concurrent saves could leave it empty,
-    and the next start failed to import wgp.
-    """
-    path = wgp.server_config_filename
-    folder = os.path.dirname(os.path.abspath(path)) or "."
-    temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
-    try:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(wgp.server_config, indent=4))
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        try:
-            os.remove(temporary)
-        except OSError:
-            pass
+_save_server_config = _config.save
 
 
 
@@ -290,61 +272,12 @@ from routers.uploads import MAX_IMAGE_UPLOAD_BYTES   # 500 MB, defined with the 
 # higher. 500 MB covers ~25-50 min of typical music-video bitrates.
 MAX_AUDIO_UPLOAD_BYTES = 500 * 1024 * 1024   # 500 MB (also covers video-for-audio-extract)
 
-# Uploads are deliberately bounded independently from GPU/model lanes.  A
-# handful of concurrent clients may ingest at once, while only two ffmpeg
-# workers can compete for CPU, disk and decoder resources.  Waiting on these
-# semaphores is cancellable and never holds a global application lock.
-_UPLOAD_INGEST_SLOTS = asyncio.Semaphore(4)
-_UPLOAD_TRANSCODE_SLOTS = asyncio.Semaphore(2)
-
-
-async def _stream_upload(upload, destination: str, *, max_bytes: int) -> int:
-    async with _UPLOAD_INGEST_SLOTS:
-        return await stream_upload_file(
-            upload,
-            destination,
-            max_bytes=max_bytes,
-        )
-
-
-async def _transcode_upload(source: str, destination: str, *, is_video: bool) -> None:
-    async with _UPLOAD_TRANSCODE_SLOTS:
-        await transcode_upload(source, destination, is_video=is_video)
-
-
-def _safe_join(base: str, *parts: str) -> str | None:
-    """Join `parts` under `base` and return the absolute path only if it
-    stays inside `base`. Returns None on traversal attempts (`..`, absolute
-    paths, symlinks escaping the base, etc.). Use for any endpoint that
-    accepts a user-supplied filename."""
-    from services.kernel.paths import safe_join
-    return safe_join(base, *parts)
-
-
-def _resolve_output_move_path(base: str, relative_name: str) -> str | None:
-    """Resolve one output path for a cross-workspace move.
-
-    The move endpoint accepts a path parameter, so it needs a stricter
-    contract than a generic join: only explicit relative components using
-    URL separators are accepted. Both source and destination are then
-    resolved through ``_safe_join`` so existing symlinks cannot escape their
-    workspace.
-    """
-    if not isinstance(relative_name, str):
-        return None
-    value = relative_name.strip()
-    if not value or "\x00" in value or "\\" in value:
-        return None
-    drive, _tail = os.path.splitdrive(value)
-    if drive or os.path.isabs(value):
-        return None
-    parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in parts):
-        return None
-    resolved = _safe_join(base, *parts)
-    if not resolved or resolved == os.path.realpath(base):
-        return None
-    return resolved
+# Uploads are bounded independently from GPU/model lanes (services/kernel/paths.py).
+_UPLOAD_TRANSCODE_SLOTS = _paths.transcode_slots
+_stream_upload = _paths.stream_upload
+_transcode_upload = _paths.transcode_upload
+_safe_join = _paths.safe_join
+_resolve_output_move_path = _paths.resolve_output_move_path
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
