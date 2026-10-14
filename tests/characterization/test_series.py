@@ -161,6 +161,10 @@ def test_series_render_routes_answer_the_recorded_errors(server, golden) -> None
     server.check(
         golden, "render start with no generated shots", "POST", start, json=workspace,
     )
+    import sys
+    from services.series_render_jobs import series_render_task_adapter
+    launch = sys.modules["_launch_runtime"]
+    assert launch.ctx.tasks.adapter_for("series-render") is series_render_task_adapter
 
 
 def test_series_plan_routes_answer_the_recorded_errors(server, golden) -> None:
