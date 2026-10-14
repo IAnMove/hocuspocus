@@ -1,27 +1,27 @@
 """Outpaint sampling, timing, canvas geometry and shot planning.
 
 The function bodies are the ones that used to live in ``_launch_runtime``.
-Launch hands this module its ``wgp`` and the recast shot helpers once,
-through :func:`bind`. ``_recast_video_frame_count`` is defined further down
-in launch, so launch passes a forwarder that calls launch's function.
+Launch hands this module its ``wgp`` and the two recast shot helpers it
+still defines once, through :func:`bind`. The frame counter is the Recast
+service's own function, the one launch imports too.
 """
 import math
 import os
+
+from services.recast_reference_prepare import _recast_video_frame_count
 
 # Bound by bind(); None until the full server binds them.
 wgp = None
 _detect_recast_shot_ranges = None
 _quantize_recast_shot_frame_count = None
-_recast_video_frame_count = None
 
 
-def bind(*, wgp, detect_recast_shot_ranges, quantize_recast_shot_frame_count, recast_video_frame_count):
+def bind(*, wgp, detect_recast_shot_ranges, quantize_recast_shot_frame_count):
     """Take the launch objects this module reads. Launch calls this once, after it defines them."""
     globals().update(
         wgp=wgp,
         _detect_recast_shot_ranges=detect_recast_shot_ranges,
         _quantize_recast_shot_frame_count=quantize_recast_shot_frame_count,
-        _recast_video_frame_count=recast_video_frame_count,
     )
 
 

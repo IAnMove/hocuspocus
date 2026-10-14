@@ -2,8 +2,10 @@
 
 The function bodies are the ones that used to live in ``_launch_runtime``.
 Launch hands this module the objects it owns once, through :func:`bind`.
-The generation worker and ``_recast_video_frame_count`` are defined further
-down in launch, so launch passes forwarders that call launch's functions.
+The generation worker is defined further down in launch, so launch passes a
+forwarder that calls launch's ``_run_generation``. The frame counter and the
+audio probe are the Recast service's own functions, the ones launch imports
+too.
 """
 import os
 import time
@@ -22,6 +24,7 @@ from services.outpaint_planning import (
     _build_outpaint_shot_manifest,
     _detect_outpaint_video_shot_ranges,
 )
+from services.recast_reference_prepare import _recast_video_frame_count, _recast_video_has_audio
 
 # Bound by bind(); None until the full server binds them.
 wgp = None
@@ -29,15 +32,10 @@ _jobs = None
 _active_gen_states = None
 _coordinated_generation_slot = None
 _workspace_dir = None
-_recast_video_has_audio = None
-_recast_video_frame_count = None
 _run_generation = None
 
 
-def bind(
-    *, wgp, jobs, active_gen_states, coordinated_generation_slot, workspace_dir,
-    recast_video_has_audio, recast_video_frame_count, run_generation,
-):
+def bind(*, wgp, jobs, active_gen_states, coordinated_generation_slot, workspace_dir, run_generation):
     """Take the launch objects this module reads. Launch calls this once, after it defines them."""
     globals().update(
         wgp=wgp,
@@ -45,8 +43,6 @@ def bind(
         _active_gen_states=active_gen_states,
         _coordinated_generation_slot=coordinated_generation_slot,
         _workspace_dir=workspace_dir,
-        _recast_video_has_audio=recast_video_has_audio,
-        _recast_video_frame_count=recast_video_frame_count,
         _run_generation=run_generation,
     )
 

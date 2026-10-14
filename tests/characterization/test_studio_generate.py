@@ -1026,11 +1026,12 @@ def test_a_rig_patch_reaches_the_recast_helper_that_reads_the_name(rig) -> None:
 # -- The wiring the C5 move added (C5 review) ------------------------------------------------------------------------
 # Each outpaint and blend module imports the standard library, execution_mode and the job lifecycle itself, and takes
 # the launch objects it reads (wgp, the job registry and states, the workspace and job helpers, the recast helpers)
-# from one bind() (services) or its router factory (routers), which launch calls once. The generation worker and
-# _recast_video_frame_count are defined further down in launch, so those two slots hold launch's forwarders, which
-# look the launch name up when they are called. A slot left at None, bound to a copy or to another function, or a
-# forwarder that captured its target at bind time would only show on the branch that reads it, so every global each
-# moved function reads is compared here with the object the same name holds in launch, where it read it before.
+# from one bind() (services) or its router factory (routers), which launch calls once; the Recast frame counter and
+# audio probe come from their service, as in launch. The generation worker is defined further down in launch, so that
+# slot holds launch's forwarder, which looks the launch name up when it is called. A slot left at None, bound to a copy
+# or to another function, or a forwarder that captured its target at bind time would only show on the branch that
+# reads it, so every global each moved function reads is compared here with the object the same name holds in launch,
+# where it read it before.
 _C5_EXPORTS = {
     "services.outpaint_planning": (
         "_resolve_outpaint_sampling", "_resolve_outpaint_video_timing", "_resolve_ltx2_outpaint_reference_model",
@@ -1049,7 +1050,6 @@ _C5_EXPORTS = {
 # The launch names defined below the mount block, and the forwarder launch passes for each.
 _C5_FORWARDERS = {
     "_run_generation": "_forward_studio_run_generation",
-    "_recast_video_frame_count": "_forward_outpaint_recast_video_frame_count",
 }
 
 
@@ -1121,19 +1121,15 @@ def test_outpaint_and_blend_read_the_objects_launch_holds(full_server, monkeypat
             "_run_generation", "update_job", "finish_job", "is_cancel_requested", "register_abort_state",
             "unregister_abort_state", "try_start", "try_requeue", "record_job_outputs"} <= compared
 
-    # The two forwarders call whatever launch holds under the name when they are called, not what it held at bind.
+    # The forwarder calls whatever launch holds under the name when it is called, not what it held at bind.
     calls = []
     monkeypatch.setattr(launch, "_run_generation",
                         lambda job_id, **kwargs: calls.append(["worker", job_id, kwargs]) or "ran")
-    monkeypatch.setattr(launch, "_recast_video_frame_count", lambda path: calls.append(["frames", path]) or 9)
     for module_name in ("routers.outpaint", "services.outpaint_run", "routers.blend", "services.blend_run"):
         assert importlib.import_module(module_name)._run_generation(module_name, finalize=False) == "ran"
-    for module_name in ("services.outpaint_planning", "services.outpaint_run"):
-        assert importlib.import_module(module_name)._recast_video_frame_count(module_name) == 9
     assert calls == [
         ["worker", "routers.outpaint", {"finalize": False}], ["worker", "services.outpaint_run", {"finalize": False}],
         ["worker", "routers.blend", {"finalize": False}], ["worker", "services.blend_run", {"finalize": False}],
-        ["frames", "services.outpaint_planning"], ["frames", "services.outpaint_run"],
     ]
     # Python names a route's worker thread from the target, so the forwarder keeps the worker's name.
     assert importlib.import_module("routers.outpaint")._run_generation.__name__ == "_run_generation"
