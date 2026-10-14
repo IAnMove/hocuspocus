@@ -1,4 +1,79 @@
 {
+  "a lifecycle start publishes without a sync": {
+    "body": {
+      "acquired_resources": [
+        "local_gpu:0"
+      ],
+      "attempt": 1,
+      "backend_job_id": "act-edge-started",
+      "cancelable": true,
+      "completed_at": null,
+      "created_at": 1700000000.0,
+      "current": 0,
+      "detail": "",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-generation-act-edge-started",
+      "kind": "generation",
+      "max_attempts": 1,
+      "message": "Loading the model",
+      "metadata": {
+        "actor": "unknown",
+        "adapter": "generation",
+        "capability": null,
+        "command_id": null,
+        "display_prompt": "started",
+        "generation_details": {
+          "lora_count": 0,
+          "model_name": "golden_model",
+          "model_type": "golden_model",
+          "simulated": false
+        },
+        "inference_start_step": null,
+        "inference_started_at": null,
+        "output_name_requested": null,
+        "owner_pipeline_id": "",
+        "reference_images": [],
+        "run_id": null,
+        "tool": "studio",
+        "workflow_id": null
+      },
+      "model": "golden_model",
+      "parent_id": null,
+      "phase": "loading",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "local",
+      "queued_at": null,
+      "recoverable": true,
+      "resource_requirements": [
+        "local_gpu:0"
+      ],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-generation-act-edge-started",
+      "server_origin": "local",
+      "started_at": "<TIME>",
+      "status": "running",
+      "title": "Generation job",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "generation",
+      "workspace": "activity-golden"
+    },
+    "status": 200
+  },
   "activity after the dismissal": {
     "body": {
       "latest_event_id": 33,
@@ -8298,6 +8373,143 @@
     },
     "status": 200
   },
+  "assembly without a workspace field": {
+    "body": {
+      "acquired_resources": [],
+      "attempt": 1,
+      "backend_job_id": "act-edge-assembly",
+      "cancelable": true,
+      "completed_at": null,
+      "created_at": 1700000000.0,
+      "current": 0,
+      "detail": "",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "episode",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-series-assembly-act-edge-assembly",
+      "kind": "assembly",
+      "max_attempts": 1,
+      "message": "Joining without a workspace field",
+      "metadata": {
+        "adapter": "series-assembly"
+      },
+      "model": "FFmpeg",
+      "parent_id": null,
+      "phase": "queued",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "local",
+      "queued_at": "<TIME>",
+      "recoverable": true,
+      "resource_requirements": [
+        "cpu:ffmpeg"
+      ],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-series-assembly-act-edge-assembly",
+      "server_origin": "local",
+      "started_at": null,
+      "status": "queued",
+      "title": "Series Lab · Episode assembly",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "series-assembly",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "cancel a director-owned generation": {
+    "body": {
+      "result": {
+        "job_id": "act-edge-owned",
+        "status": "cancelled",
+        "was_running": false
+      },
+      "task": {
+        "acquired_resources": [],
+        "attempt": 1,
+        "backend_job_id": "act-edge-owned",
+        "cancelable": false,
+        "completed_at": "<TIME>",
+        "created_at": 1700000000.0,
+        "current": 0,
+        "detail": "",
+        "detail_current": 0,
+        "detail_total": 0,
+        "entity_id": "",
+        "entity_type": "",
+        "error": null,
+        "external_request_id": "",
+        "id": "task-generation-act-edge-owned",
+        "kind": "video",
+        "max_attempts": 1,
+        "message": "Cancelled",
+        "metadata": {
+          "actor": "unknown",
+          "adapter": "generation",
+          "capability": null,
+          "command_id": null,
+          "display_prompt": "a golden prompt",
+          "generation_details": {
+            "execution_mode": "real",
+            "generation_mode": "video",
+            "lora_count": 0,
+            "model_name": "golden_model",
+            "model_type": "golden_model",
+            "simulated": false
+          },
+          "inference_start_step": null,
+          "inference_started_at": null,
+          "output_name_requested": null,
+          "owner_pipeline_id": "act-edge-run",
+          "reference_images": [],
+          "run_id": null,
+          "tool": "studio",
+          "workflow_id": null
+        },
+        "model": "golden_model",
+        "parent_id": "task-director-act-edge-run",
+        "phase": "cancelled",
+        "pipeline_id": "act-edge-run",
+        "progress": 0.0,
+        "project_id": "",
+        "provider": "local",
+        "queued_at": "<TIME>",
+        "recoverable": false,
+        "resource_requirements": [
+          "local_gpu:0"
+        ],
+        "result_refs": [],
+        "resumable": false,
+        "root_id": "task-director-act-edge-run",
+        "server_origin": "local",
+        "started_at": null,
+        "status": "cancelled",
+        "title": "Video generation",
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        },
+        "total": 0,
+        "updated_at": "<TIME>",
+        "workflow": "generation",
+        "workspace": "activity-golden"
+      }
+    },
+    "status": 200
+  },
   "cancel a job that does not exist": {
     "body": {
       "detail": "Job not found"
@@ -10321,6 +10533,214 @@
         }
       ],
       "workspace": "default"
+    },
+    "status": 200
+  },
+  "client task events": {
+    "body": {
+      "events": [
+        {
+          "changes": {
+            "acquired_resources": [],
+            "attempt": 1,
+            "backend_job_id": "",
+            "cancelable": false,
+            "completed_at": null,
+            "created_at": "<TIME>",
+            "current": 0,
+            "detail_current": 0,
+            "detail_total": 0,
+            "entity_id": "",
+            "entity_type": "",
+            "error": null,
+            "external_request_id": "",
+            "id": "task-client-act-edge-client",
+            "kind": "foreground",
+            "max_attempts": 1,
+            "message": "working on first volatile detail",
+            "metadata": {
+              "adapter": "frontend",
+              "client_activity_id": "act-edge-client",
+              "generation_details": {},
+              "token_usage": {
+                "calls": 0,
+                "completion": 0,
+                "prompt": 0,
+                "total": 0
+              }
+            },
+            "model": "",
+            "parent_id": null,
+            "phase": "running",
+            "pipeline_id": "",
+            "progress": 0.0,
+            "project_id": "",
+            "provider": "",
+            "queued_at": null,
+            "recoverable": false,
+            "resource_requirements": [],
+            "result_refs": [],
+            "resumable": false,
+            "root_id": "task-client-act-edge-client",
+            "server_origin": "",
+            "started_at": "<TIME>",
+            "status": "running",
+            "title": "Client work",
+            "token_usage": {
+              "calls": 0,
+              "completion": 0,
+              "prompt": 0,
+              "total": 0
+            },
+            "total": 0,
+            "updated_at": "<TIME>",
+            "workflow": "frontend",
+            "workspace": "activity-golden"
+          },
+          "context": {},
+          "event_id": 6,
+          "root_id": "task-client-act-edge-client",
+          "sequence": 1,
+          "task_id": "task-client-act-edge-client",
+          "timestamp": "<TIME>",
+          "type": "task.created"
+        },
+        {
+          "changes": {
+            "message": "working on second volatile detail"
+          },
+          "context": {},
+          "event_id": 7,
+          "root_id": "task-client-act-edge-client",
+          "sequence": 2,
+          "task_id": "task-client-act-edge-client",
+          "timestamp": "<TIME>",
+          "type": "adapter.synced"
+        }
+      ],
+      "resync_required": false
+    },
+    "status": 200
+  },
+  "client upsert first volatile detail": {
+    "body": {
+      "acquired_resources": [],
+      "attempt": 1,
+      "backend_job_id": "",
+      "cancelable": false,
+      "completed_at": null,
+      "created_at": "<TIME>",
+      "current": 0,
+      "detail": "first volatile detail",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-client-act-edge-client",
+      "kind": "foreground",
+      "max_attempts": 1,
+      "message": "working on first volatile detail",
+      "metadata": {
+        "adapter": "frontend",
+        "client_activity_id": "act-edge-client",
+        "generation_details": {},
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        }
+      },
+      "model": "",
+      "parent_id": null,
+      "phase": "running",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "",
+      "queued_at": null,
+      "recoverable": false,
+      "resource_requirements": [],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-client-act-edge-client",
+      "server_origin": "",
+      "started_at": "<TIME>",
+      "status": "running",
+      "title": "Client work",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "frontend",
+      "workspace": "activity-golden"
+    },
+    "status": 200
+  },
+  "client upsert second volatile detail": {
+    "body": {
+      "acquired_resources": [],
+      "attempt": 1,
+      "backend_job_id": "",
+      "cancelable": false,
+      "completed_at": null,
+      "created_at": "<TIME>",
+      "current": 0,
+      "detail": "second volatile detail",
+      "detail_current": 0,
+      "detail_total": 0,
+      "entity_id": "",
+      "entity_type": "",
+      "error": null,
+      "external_request_id": "",
+      "id": "task-client-act-edge-client",
+      "kind": "foreground",
+      "max_attempts": 1,
+      "message": "working on second volatile detail",
+      "metadata": {
+        "adapter": "frontend",
+        "client_activity_id": "act-edge-client",
+        "generation_details": {},
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        }
+      },
+      "model": "",
+      "parent_id": null,
+      "phase": "running",
+      "pipeline_id": "",
+      "progress": 0.0,
+      "project_id": "",
+      "provider": "",
+      "queued_at": null,
+      "recoverable": false,
+      "resource_requirements": [],
+      "result_refs": [],
+      "resumable": false,
+      "root_id": "task-client-act-edge-client",
+      "server_origin": "",
+      "started_at": "<TIME>",
+      "status": "running",
+      "title": "Client work",
+      "token_usage": {
+        "calls": 0,
+        "completion": 0,
+        "prompt": 0,
+        "total": 0
+      },
+      "total": 0,
+      "updated_at": "<TIME>",
+      "workflow": "frontend",
+      "workspace": "activity-golden"
     },
     "status": 200
   },
@@ -16318,6 +16738,150 @@
     },
     "status": 200
   },
+  "edges listed": {
+    "body": {
+      "latest_event_id": 2,
+      "tasks": [
+        {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "act-edge-story",
+          "cancelable": false,
+          "completed_at": 1700000022.0,
+          "created_at": 1700000020.0,
+          "current": 0,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-story-plan-act-edge-story",
+          "kind": "llm-planning",
+          "max_attempts": 1,
+          "message": "Waiting",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "story-plan",
+            "cancel_mode": null,
+            "candidate_id": null,
+            "capability": null,
+            "command_id": null,
+            "generation_id": null,
+            "idempotency_key": null,
+            "run_id": null,
+            "safe_boundary": null,
+            "tool": "story-plan",
+            "workflow_id": null
+          },
+          "model": "",
+          "parent_id": null,
+          "phase": "queued",
+          "pipeline_id": "",
+          "progress": 0.0,
+          "project_id": "",
+          "provider": "local",
+          "queued_at": null,
+          "recoverable": true,
+          "resource_requirements": [
+            "local_cpu:llm"
+          ],
+          "result_refs": [],
+          "resumable": true,
+          "root_id": "task-story-plan-act-edge-story",
+          "server_origin": "local",
+          "started_at": 1700000021.0,
+          "status": "completed",
+          "title": "Story Lab planning",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 0,
+          "updated_at": "<TIME>",
+          "workflow": "story-plan",
+          "workspace": "activity-golden"
+        },
+        {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "act-edge-owned",
+          "cancelable": true,
+          "completed_at": null,
+          "created_at": 1700000000.0,
+          "current": 0,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-generation-act-edge-owned",
+          "kind": "video",
+          "max_attempts": 1,
+          "message": "Queued",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "generation",
+            "capability": null,
+            "command_id": null,
+            "display_prompt": "a golden prompt",
+            "generation_details": {
+              "execution_mode": "real",
+              "generation_mode": "video",
+              "lora_count": 0,
+              "model_name": "golden_model",
+              "model_type": "golden_model",
+              "simulated": false
+            },
+            "inference_start_step": null,
+            "inference_started_at": null,
+            "output_name_requested": null,
+            "owner_pipeline_id": "act-edge-run",
+            "reference_images": [],
+            "run_id": null,
+            "tool": "studio",
+            "workflow_id": null
+          },
+          "model": "golden_model",
+          "parent_id": "task-director-act-edge-run",
+          "phase": "queued",
+          "pipeline_id": "act-edge-run",
+          "progress": 0.0,
+          "project_id": "",
+          "provider": "local",
+          "queued_at": "<TIME>",
+          "recoverable": false,
+          "resource_requirements": [
+            "local_gpu:0"
+          ],
+          "result_refs": [],
+          "resumable": false,
+          "root_id": "task-director-act-edge-run",
+          "server_origin": "local",
+          "started_at": null,
+          "status": "queued",
+          "title": "Video generation",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 0,
+          "updated_at": "<TIME>",
+          "workflow": "generation",
+          "workspace": "activity-golden"
+        }
+      ],
+      "workspace": "activity-golden"
+    },
+    "status": 200
+  },
   "favorite off": {
     "body": {
       "favorite": false,
@@ -16525,6 +17089,84 @@
     },
     "status": 200
   },
+  "observer skips a job with no model": {
+    "body": {
+      "model": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "attempt": 1,
+        "backend_job_id": "act-edge-model",
+        "cancelable": true,
+        "completed_at": null,
+        "created_at": 1700000000.0,
+        "current": 0,
+        "detail": "",
+        "detail_current": 0,
+        "detail_total": 0,
+        "entity_id": "",
+        "entity_type": "",
+        "error": null,
+        "external_request_id": "",
+        "id": "task-generation-act-edge-model",
+        "kind": "generation",
+        "max_attempts": 1,
+        "message": "Running",
+        "metadata": {
+          "actor": "unknown",
+          "adapter": "generation",
+          "capability": null,
+          "command_id": null,
+          "display_prompt": "",
+          "generation_details": {
+            "lora_count": 0,
+            "model_name": "golden_model",
+            "model_type": "golden_model",
+            "simulated": false
+          },
+          "inference_start_step": null,
+          "inference_started_at": null,
+          "output_name_requested": null,
+          "owner_pipeline_id": "",
+          "reference_images": [],
+          "run_id": null,
+          "tool": "studio",
+          "workflow_id": null
+        },
+        "model": "golden_model",
+        "parent_id": null,
+        "phase": "running",
+        "pipeline_id": "",
+        "progress": 0.0,
+        "project_id": "",
+        "provider": "local",
+        "queued_at": null,
+        "recoverable": true,
+        "resource_requirements": [
+          "local_gpu:0"
+        ],
+        "result_refs": [],
+        "resumable": false,
+        "root_id": "task-generation-act-edge-model",
+        "server_origin": "local",
+        "started_at": "<TIME>",
+        "status": "running",
+        "title": "Generation job",
+        "token_usage": {
+          "calls": 0,
+          "completion": 0,
+          "prompt": 0,
+          "total": 0
+        },
+        "total": 0,
+        "updated_at": "<TIME>",
+        "workflow": "generation",
+        "workspace": "activity-golden"
+      },
+      "no model": null
+    },
+    "status": 200
+  },
   "one production": {
     "body": {
       "created_at": "<TIME>",
@@ -16600,6 +17242,34 @@
       "detail": "Production not found"
     },
     "status": 404
+  },
+  "productions of a named workspace": {
+    "body": {
+      "productions": [
+        {
+          "created_at": "<TIME>",
+          "id": "production_legacy_<ID>",
+          "kind": "music_video",
+          "plan": {
+            "clip_count": 0,
+            "generation_mode": "image_guided"
+          },
+          "project": null,
+          "run_ids": [
+            "run_legacy_<ID>"
+          ],
+          "schema": "hocuspocus.production-record",
+          "schema_version": 1,
+          "title": "scene of act-edge-production",
+          "updated_at": "<TIME>",
+          "workspace_ids": [
+            "activity-golden"
+          ]
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
   },
   "productions of the seeded pipeline": {
     "body": {

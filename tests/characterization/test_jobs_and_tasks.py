@@ -853,3 +853,80 @@ def test_canonical_activity_skips_a_registry_it_cannot_read_and_lists_the_rest(s
     monkeypatch.setitem(rig_service._jobs, "act-rig-lock", _plain_job("act-rig-lock", workspace=workspace, lock=threading.Lock()))
     server.check(golden, "activity without the unreadable registries", "GET", "/api/v1/tasks",
                  params={"workspace": workspace, "status": "all"})
+
+
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_canonical_task_edges_the_mutations_found_open(server, golden, tmp_path, monkeypatch) -> None:
+    """Edges no other golden pinned (C10a review mutations), recorded before the move.
+
+    A text time that does not parse falls back to the next key; an Assembly checkpoint without a workspace is read
+    from the folder it is in; cancelling a Director-owned generation reaches the generation job, not the pipeline;
+    the lifecycle observer publishes a transition without a sync and ignores a job with no model; a volatile
+    client detail stays out of the event log; the productions list reads the workspace it is asked for. Recorded
+    on development cda915466, where the canonical task cluster was still in _launch_runtime.py.
+    """
+
+    import json
+
+    from services.series_jobs import SeriesJobStore
+
+    launch = _launch()
+    workspace = ACTIVITY_WORKSPACE
+    params = {"workspace": workspace, "status": "all"}
+    monkeypatch.setattr(launch._durable_generation_queue, "path", str(tmp_path / "queue.json"))
+    monkeypatch.setitem(launch._story_plan_jobs, "act-edge-story", _plain_job(
+        "act-edge-story", workspace=workspace, status="completed",
+        createdAt="not a time", created_at=CREATED + 20,
+        startedAt="", started_at=CREATED + 21, finishedAt="still not a time", finished_at=CREATED + 22,
+    ))
+    checkpoint = _plain_job("act-edge-assembly", message="Joining without a workspace field")
+    checkpoint.pop("workspace")
+    SeriesJobStore(launch._workspace_dir(workspace), "assembly").save(checkpoint)
+    owned = launch._new_generation_job(
+        {**PARAMS, "_director_pipeline_id": "act-edge-run"}, workspace,
+        job_id="act-edge-owned", created_at=CREATED, publish_task=False,
+    )
+    monkeypatch.setitem(launch._jobs, "act-edge-owned", owned)
+    server.check(golden, "edges listed", "GET", "/api/v1/tasks", params=params)
+    # The checkpoint is read from this workspace's folder, and its task is published under "default", the
+    # publisher's own fallback for a record without a workspace.
+    golden.check("assembly without a workspace field", 200, server.normalise(
+        launch._task_registry("default").get("task-series-assembly-act-edge-assembly")))
+    server.check(golden, "cancel a director-owned generation", "POST", "/api/v1/tasks/task-generation-act-edge-owned/cancel",
+                 params={"workspace": workspace})
+
+    registry = launch._task_registry(workspace)
+    # The lifecycle observer publishes a transition by itself, before any Activity sync reads the job.
+    from services import job_lifecycle
+
+    started = {"id": "act-edge-started", "workspace": workspace, "status": "queued", "created_at": CREATED,
+               "params": {"model_type": "golden_model", "prompt": "started"}, "output_files": []}
+    job_lifecycle.try_start(started, phase="loading", message="Loading the model")
+    golden.check("a lifecycle start publishes without a sync", 200,
+                 server.normalise(registry.get("task-generation-act-edge-started")))
+    launch._observe_generation_job_state({"id": "act-edge-no-model", "workspace": workspace, "status": "running",
+                                          "params": {"prompt": "no model"}, "created_at": CREATED})
+    launch._observe_generation_job_state({"id": "act-edge-model", "workspace": workspace, "status": "running",
+                                          "params": {"model_type": "golden_model"}, "created_at": CREATED})
+    golden.check("observer skips a job with no model", 200, {
+        "no model": registry.get("task-generation-act-edge-no-model"),
+        "model": server.normalise(registry.get("task-generation-act-edge-model")),
+    })
+
+    for detail in ("first volatile detail", "second volatile detail"):
+        server.check(golden, f"client upsert {detail}", "POST", "/api/v1/tasks/upsert", json={
+            "id": "act-edge-client", "workspace": workspace, "status": "running", "title": "Client work",
+            "detailMessage": detail, "detailVolatile": True, "message": f"working on {detail}",
+        })
+    client = [task for task in registry.list(limit=500) if task.get("metadata", {}).get("client_activity_id") == "act-edge-client"]
+    server.check(golden, "client task events", "GET", f"/api/v1/tasks/{client[0]['id']}/events", params={"workspace": workspace})
+
+    for folder, pipeline_id in ((server.outputs / workspace, "act-edge-production"), (server.outputs, "act-edge-default")):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"_director_pipeline_{pipeline_id}.json").write_text(json.dumps({
+            "pipeline_id": pipeline_id, "status": "completed", "phase": "completed", "pipeline_type": "music_video",
+            "generation_mode": "image_guided", "created_at": CREATED, "updated_at": CREATED, "completed_at": CREATED,
+            "progress": {"current": 1, "total": 1, "message": "Director finished"},
+            "scene_description": f"scene of {pipeline_id}", "output_files": [],
+        }), encoding="utf-8")
+    server.check(golden, "productions of a named workspace", "GET", "/api/v1/productions", params={"workspace": workspace})

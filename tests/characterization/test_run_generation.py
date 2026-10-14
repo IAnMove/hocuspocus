@@ -2142,3 +2142,15 @@ def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkey
     coefficients = importlib.import_module("services.generation_coefficients")
     monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
     assert coefficients._get_cached_hardware() == {"gpu_vram_gb": 7.0}
+
+
+def test_a_rig_patch_of_time_reaches_the_canonical_task_clock(rig) -> None:
+    """Before C10a the canonical publishers read launch's ``time``, so a Rig patch of ``time`` set the clock a task
+    falls back to when its record has no creation time. The same patch still reaches the publishers in their module."""
+    real = rig.launch.time
+    clock = types.ModuleType("time")
+    clock.__dict__.update({name: getattr(real, name) for name in dir(real) if not name.startswith("__")})
+    clock.time = lambda: 1_600_000_000.0
+    rig.patch("time", clock)
+    task = rig.launch._publish_generic_legacy_task({"id": "rig-clock", "workspace": "default", "status": "queued"}, "rig")
+    assert task["created_at"] == 1_600_000_000.0
