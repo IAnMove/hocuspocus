@@ -71,7 +71,7 @@ def _inpaint(tmp_path, monkeypatch, resolution):
         '_register_manual_generation_job': jobs.append, '_run_generation': lambda _: None,
         '_generation_job_acceptance': lambda _: {},
     }
-    path = Path(__file__).resolve().parents[1] / 'app/_launch_runtime.py'
+    path = Path(__file__).resolve().parents[1] / 'app/services/studio_edit_requests.py'
     node = next(n for n in ast.parse(path.read_text(encoding='utf-8')).body
                 if isinstance(n, ast.AsyncFunctionDef) and n.name == 'inpaint_endpoint')
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), namespace)
