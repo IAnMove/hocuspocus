@@ -41,6 +41,12 @@ class CoreRuntimeTests(unittest.TestCase):
     def tearDown(self):
         for item in self.patches:
             item.stop()
+        # Some tests start a job whose worker thread is stubbed out. Left in the registries it would
+        # stay "queued" for the rest of the process.
+        from services import core_remote_3d
+
+        core_remote_3d._JOBS.clear()
+        core_remote_image._JOBS.clear()
 
     def _in_temp_workspace(self):
         folder = tempfile.TemporaryDirectory()
@@ -1771,6 +1777,94 @@ class CoreRuntimeTests(unittest.TestCase):
         # indent=2: services is one level down, the workspace name two levels down.
         self.assertIn("\n  \"services\"", text)
         self.assertIn("\n    \"active_workspace\"", text)
+
+    def _delete_film_while(self, seed, release):
+        """DELETE ``film`` and then ``other`` on the core app while ``seed`` has a job running in ``film``."""
+        from services import core_workspace as core
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            film, other = core.workspace_dir("film"), core.workspace_dir("other")
+            Path(film, "keep.png").write_bytes(b"png")
+            seed()
+            refused = self.client.delete("/api/v1/workspaces/film")
+            kept = Path(film, "keep.png").is_file()
+            elsewhere = self.client.delete("/api/v1/workspaces/other")
+            release()
+            deleted = self.client.delete("/api/v1/workspaces/film")
+            gone = not Path(film).is_dir()
+            other_gone = not Path(other).is_dir()
+        finally:
+            release()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(refused.status_code, 409, refused.text)
+        self.assertIsInstance(refused.json()["detail"], str)
+        self.assertEqual(refused.json()["code"], "workspace_busy")
+        self.assertTrue(kept)
+        self.assertEqual(elsewhere.status_code, 200, "a job in film must not block deleting another workspace")
+        self.assertTrue(other_gone)
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertTrue(gone)
+        return refused.json()
+
+    def test_core_refuses_to_delete_a_workspace_while_a_video_editor_export_is_running(self):
+        """DELETE is new on core. A queued export still writes into the folder; deleting it
+        would wipe the clips and let workspace_dir resurrect an empty workspace."""
+        from routers.video_editor import _register_video_editor_job, reset_video_editor_jobs
+
+        body = self._delete_film_while(
+            lambda: _register_video_editor_job({"job_id": "export-film", "workspace": "film", "status": "queued"}),
+            reset_video_editor_jobs,
+        )
+        self.assertEqual([item["kind"] for item in body["blocking"]], ["video-editor"])
+
+    def test_core_refuses_to_delete_a_workspace_while_a_3d_job_is_cancelling_or_waiting(self):
+        """cancelling still calls the paid provider and may write a GLB; the old jobs() filter only
+        treated queued/running as busy, and treated every workspace's job as one."""
+        from services import core_remote_3d
+
+        for status in ("cancelling", "waiting_resource", "queued"):
+            with self.subTest(status=status):
+                body = self._delete_film_while(
+                    lambda status=status: core_remote_3d._JOBS.update({
+                        "job-3d": {"job_id": "job-3d", "status": status, "workspace": "film"},
+                    }),
+                    core_remote_3d._JOBS.clear,
+                )
+                self.assertEqual([item["kind"] for item in body["blocking"]], ["core-3d"])
+                self.assertEqual(body["blocking"][0]["status"], status)
+
+    def test_core_refuses_to_delete_a_workspace_while_a_minimax_image_job_runs(self):
+        """The old core guard covered this one, but for every workspace at once."""
+        body = self._delete_film_while(
+            lambda: core_remote_image._JOBS.update({
+                "job-img": {
+                    "id": "job-img", "status": "running", "workspace": "film", "progress": 0.1, "message": "Generating",
+                },
+            }),
+            core_remote_image._JOBS.clear,
+        )
+        self.assertEqual([item["kind"] for item in body["blocking"]], ["core-image"])
+
+    def test_core_delete_ignores_jobs_of_other_workspaces_and_finished_jobs(self):
+        """A 3D job left queued in ``default`` (what the nested-reference test leaves behind) and finished
+        jobs of ``film`` must not keep ``film`` from being deleted."""
+        from services import core_remote_3d
+        from services import core_workspace as core
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            core.workspace_dir("film")
+            core_remote_3d._JOBS.update({
+                "elsewhere": {"job_id": "elsewhere", "status": "queued", "workspace": "default"},
+                "done": {"job_id": "done", "status": "completed", "workspace": "film"},
+                "failed": {"job_id": "failed", "status": "failed", "workspace": "film"},
+            })
+            core_remote_image._JOBS["img-done"] = {"id": "img-done", "status": "cancelled", "workspace": "film"}
+            deleted = self.client.delete("/api/v1/workspaces/film")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(deleted.status_code, 200, deleted.text)
 
     def test_wizard_image_executor_fails_when_minimax_job_fails(self):
         from services import core_generation_commands

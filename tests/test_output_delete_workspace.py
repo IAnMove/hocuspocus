@@ -123,6 +123,15 @@ def test_delete_output_rejects_traversal(tmp_path, monkeypatch, name):
 # real registry or store of each family (never a fake probe), delete workspace "film" and
 # then workspace "other".
 
+@pytest.fixture(autouse=True)
+def _workspace_busy_table_per_test():
+    """Each test of this file starts with an empty probe table and puts the previous one back."""
+    from services import workspace_busy
+
+    with workspace_busy.isolated():
+        yield
+
+
 LEGACY_GENERATION_TEXT = "A generation is queued or running. Wait for it to finish before deleting a workspace."
 
 
@@ -392,3 +401,25 @@ def test_a_cancelled_job_whose_worker_process_is_still_unwinding_keeps_the_works
     assert refused.status_code == 409, refused.text
     assert refused.json()["blocking"][0]["status"] == "cancelling"
     assert allowed.status_code == 200, allowed.text
+
+
+def test_the_busy_profiles_name_real_probes_and_core_runs_only_what_it_mounts():
+    import importlib
+
+    from routers import workspace_busy_probes as manifest
+
+    for name, families in manifest.PROFILES.items():
+        kinds = [kind for kind, _module in families]
+        assert len(kinds) == len(set(kinds)), f"{name} lists a kind twice"
+        for kind, module in families:
+            assert callable(getattr(importlib.import_module(module), manifest.PROBE_FUNCTION)), (kind, module)
+    core = {kind for kind, _module in manifest.PROFILES["core"]}
+    assert core == {"video-editor", "minimax-music", "minimax-image", "rig", "core-3d", "core-image"}
+    assert core.isdisjoint({"model3d", "story-plan", "comic-plan", "director-plan", "series-render"})
+    with pytest.raises(ValueError):
+        manifest.register_profile("nonexistent")
+
+
+def test_the_core_root_passes_the_core_busy_profile_to_the_workspace_router():
+    # The full server's side of this is checked after a real boot, in tests/characterization/test_workspaces.py.
+    assert 'busy_profile="core"' in (ROOT / "app" / "core_runtime.py").read_text(encoding="utf-8")

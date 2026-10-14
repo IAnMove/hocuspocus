@@ -34,7 +34,10 @@ FULL_ONLY: tuple[tuple[str, str], ...] = (
     ("model3d", "services.model3d_service"),
 )
 # The core server (Apple Silicon / remote providers) only.
-CORE_ONLY: tuple[tuple[str, str], ...] = ()
+CORE_ONLY: tuple[tuple[str, str], ...] = (
+    ("core-3d", "services.core_remote_3d"),
+    ("core-image", "services.core_remote_image"),
+)
 
 PROFILES: dict[str, tuple[tuple[str, str], ...]] = {
     "full": COMMON + FULL_ONLY,
