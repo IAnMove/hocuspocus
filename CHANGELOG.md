@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Presets, system settings, and service settings left the launch module.** Saving a preset, changing a memory profile, and reading or updating service settings still answer the same way. An empty update is still refused. The core server keeps its own copies of the settings routes it already served.
+
 **Upscale and revoice left the launch module.** Asking the full server to upscale a clip or replace its voice still answers the same way, including a request it refuses before any model work. The core server still blocks those two routes when the local tool is not available.
 
 **System status, hardware detection, and model release left the launch module.** The full server still answers the same system stats, hardware detection and apply, preflight, runtime capabilities, resource lanes, WanGP processor list, debug user-action, and release-model requests. The core server keeps its own torch-free copies of the routes it already served.
