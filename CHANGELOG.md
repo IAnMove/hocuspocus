@@ -21,7 +21,9 @@ The options sit in a full-width row, and each opens large when the mouse rests
 on it, when it is pressed and held on a touch screen, or when it has the
 keyboard focus. Code: `characterCandidates.ts`, `characterCreatorSession.ts`,
 `CandidateGrid.tsx`; the style prompts no longer leave `{screen}` unreplaced
-(`replaceAll`), which made every graphic-novel run fail.
+(`replaceAll`), which made every graphic-novel run fail, and an option whose eye
+white was cut away by its limits no longer makes `/rig-check` answer 500 (it
+lost that option's "Ready for the rig" note).
 
 **Six Video 2D cards for a figure that walks into a shot (candidates, for the
 owner's review).** A cut-out figure that slides in with a bob shows legs that
