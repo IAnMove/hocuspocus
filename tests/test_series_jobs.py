@@ -466,3 +466,81 @@ def test_manual_episode_proposal_rejects_replaced_internal_ids():
         assert "cannot add, remove, duplicate, or replace internal IDs" in str(exc)
     else:
         raise AssertionError("Replacing a generated shot ID must be rejected")
+
+
+def _drive_series_render(monkeypatch, tmp_path, child_files):
+    """Run one render job over one generated shot with a fake generation queue and the real Series library
+    (so the asset path is validated when the output is registered). ``child_files(params)`` names the clip the
+    fake queue writes. Returns the job, the generation params sent and the stored series."""
+    import services.series_render as series_render
+    import services.series_render_jobs as render_jobs
+    from services.series_library import (
+        append_shot_render_attempt, normalize_series_project, read_series_library, write_series_library,
+    )
+
+    root = str(tmp_path)
+    series = normalize_series_project({
+        "id": "series-1", "title": "T", "allowedProductionMethods": ["generated_video"],
+        "episodesById": {"episode-1": {"id": "episode-1", "number": 1, "script": [{"id": "scene_1"}], "shots": [
+            {"id": "e1s00", "sceneId": "scene_1", "order": 1, "productionMethod": "generated_video", "durationSeconds": 5}]}},
+    }, "series-1", "default")
+    episode = series["episodesById"]["episode-1"]
+    episode["shots"][0], attempt = append_shot_render_attempt(
+        episode["shots"][0], manifest={}, model="minimax_h3", settings={}, seed=1, prompt="a stone lighthouse at night")
+    write_series_library(root, {"seriesById": {"series-1": series}, "seriesOrder": ["series-1"]}, "default")
+    job = {"jobId": "series-render-1", "kind": "render", "workspace": "default", "seriesId": "series-1",
+           "episodeId": "episode-1", "status": "queued", "model": "minimax_h3", "createdAt": 1, "updatedAt": 1,
+           "items": [{"shotId": "e1s00", "attemptId": attempt["id"], "status": "queued", "childJobId": None}]}
+    jobs, sent = {}, []
+
+    def new_job(params, workspace, *, job_id):
+        sent.append(copy.deepcopy(params))
+        jobs[job_id] = {"id": job_id, "params": copy.deepcopy(params), "status": "queued"}
+        return jobs[job_id]
+
+    def run_generation(child_id):
+        child = jobs[child_id]
+        child.update(status="completed", output_files=[child_files(child["params"])])
+
+    monkeypatch.setattr(series_render, "build_h3_generation_params", lambda *_args: {
+        "model_type": "minimax_h3", "seed": 7, "prompt": "integrated description [Shot 1] A stone lighthouse on a rocky island"})
+    for name, value in {
+        "_workspace_dir": lambda _workspace=None: root, "_list_workspaces": lambda: [{"name": "default"}],
+        "_series_library_lock": threading.RLock(), "_series_iso_now": lambda: "2026-10-14T00:00:00Z",
+        "_read_series_workspace": lambda workspace: read_series_library(root, workspace),
+        "_write_series_workspace": lambda workspace, library: write_series_library(root, library, workspace),
+        "_series_project_or_404": lambda library, series_id: library["seriesById"][series_id],
+        "_publish_series_task": None, "_new_generation_job": new_job, "_jobs": jobs, "_run_generation": run_generation,
+        "_request_generation_cancel": lambda _child: None, "_series_render_jobs": {"series-render-1": job},
+        "_series_render_jobs_lock": threading.RLock(), "_series_render_active_jobs": set(),
+    }.items():
+        monkeypatch.setattr(render_jobs, name, value)
+    render_jobs._series_render_store("default").save(job)
+    render_jobs._run_series_render_job_inner("series-render-1")
+    return render_jobs._load_series_render_job("series-render-1"), sent, read_series_library(root, "default")["seriesById"]["series-1"]
+
+
+def _wangp_name(params):
+    """What WanGP does: the requested name, else a stamp and the prompt with its spaces and brackets kept."""
+    requested = params.get("output_filename")
+    return f"{requested}.mp4" if requested else f"2026-10-14-20h05m00s_seed7_{params['prompt']}.mp4"
+
+
+def test_a_series_render_names_its_clip_so_the_asset_path_accepts_it(monkeypatch, tmp_path):
+    """WanGP names an unnamed clip after the prompt (spaces and brackets stay) and adds "(2)" when a name is taken;
+    validate_series_asset_uri accepts neither, so every real H3 shot was marked failed after its GPU time."""
+    from services.series_library import validate_series_asset_uri
+
+    job, sent, series = _drive_series_render(monkeypatch, tmp_path, _wangp_name)
+    assert job["items"][0]["status"] == "completed", job["items"][0].get("error")
+    name = sent[0]["output_filename"]
+    assert name == f"series-e1s00-{job['items'][0]['childJobId']}"
+    uri = next(iter(series["assets"].values()))["uri"]
+    assert validate_series_asset_uri(uri) == uri == f"outputs/{name}.mp4"
+
+
+def test_two_runs_of_the_same_shot_never_share_a_clip_name(monkeypatch, tmp_path):
+    first = _drive_series_render(monkeypatch, tmp_path, _wangp_name)[1][0]["output_filename"]
+    second = _drive_series_render(monkeypatch, tmp_path, _wangp_name)[1][0]["output_filename"]
+    assert first != second, "WanGP would call the second one name(2).mp4, which the asset path refuses"
+

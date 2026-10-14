@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -51,6 +52,16 @@ _is_minimax_h3_model = None
 _release_legacy_h3_when_queue_allows = None
 _release_h3_when_queue_allows = None
 _cancel_series_render_job = None
+
+
+def _clip_name(shot_id: str, child_job_id: str) -> str:
+    """The file stem a render asks WanGP for: only ``[A-Za-z0-9_-]``, unique to this child job.
+
+    WanGP names an unnamed clip after its prompt (spaces and brackets stay) and adds ``(2)`` when a name is taken;
+    ``validate_series_asset_uri`` accepts neither, so the finished clip was registered as a failure.
+    Like ``series_native_render``, a Series render names its outputs."""
+    shot = re.sub(r"[^A-Za-z0-9_-]+", "_", str(shot_id)).strip("_")[:60] or "shot"
+    return f"series-{shot}-{child_job_id}"
 
 
 def _series_render_store(workspace: str):
@@ -314,6 +325,7 @@ def _run_series_render_job_inner(job_id: str) -> None:
                     json.dumps(params, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
                 ).hexdigest()
                 child_job_id = f"sr{uuid.uuid4().hex[:10]}"
+                params["output_filename"] = _clip_name(current_item["shotId"], child_job_id)
                 child = _new_generation_job(
                     params, str(latest["workspace"]), job_id=child_job_id,
                 )
