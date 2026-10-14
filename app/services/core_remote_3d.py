@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from services import core_workspace as core
-from services.provider_profile import alias_model3d_provider
+from services.provider_profile import alias_model3d_provider, refuse_remote_retexture
 
 _JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
@@ -181,6 +181,7 @@ def start_job(
 
     profile = production_profile_response()["profile"]
     provider = _remote_provider(body, profile)
+    refuse_remote_retexture(body)
     image_path = _front_image(body, workspace, resolved_images)
     prompt = str((body.get("prompt") or "")).strip()
     if provider == "hi3d" and not image_path and not _hi3d_can_draw_a_still(profile):

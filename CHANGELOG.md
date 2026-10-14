@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: Meshy and Hi3D no longer start a paid new model when asked to retexture a GLB.** Those two providers only generate a new mesh, so a "Retexture" request used to ignore the source GLB and quietly queue a generation. The 3D panel now disables the Retexture button for them, and a retexture request sent through the API, the Wizard or MCP is refused with a clear message (retexture a GLB with local Hunyuan3D instead).
+
 **Fixed: the LoRA guide can no longer be written outside the LoRA folder.** Asking for a guide with a file name such as `../../other/real.safetensors` or an absolute path used to write the guide and its CivitAI sidecar next to that path. Generating or reading a guide now answers 400 "Invalid filename" for any name that is not a plain file name, the same rule the LoRA delete already uses.
 
 **Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.

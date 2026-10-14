@@ -23,6 +23,29 @@ def test_external_request_uses_native_materials_and_durable_model_identity(model
     assert "octree_resolution" not in request["settings"]
 
 
+def test_remote_provider_refuses_retexture_instead_of_generating(monkeypatch, tmp_path):
+    """Meshy/Hi3D have no remesh path; a retexture must not become a paid generate."""
+    started = []
+    monkeypatch.setattr(service.execution_mode, "validate_generation", lambda *_a, **_k: None)
+    monkeypatch.setattr(service.execution_mode, "validate_remote_provider", lambda *_a, **_k: None)
+    monkeypatch.setattr(service, "_active_profile", lambda: {"model3d_provider": "meshy"})
+    monkeypatch.setattr(
+        service.threading, "Thread",
+        lambda **_kw: started.append("thread") or SimpleNamespace(start=lambda: started.append("start")),
+    )
+    source = tmp_path / "hero.glb"
+    source.write_bytes(b"glb")
+    with pytest.raises(ValueError, match="Retexture a GLB"):
+        service.start_job(
+            body={"provider": "meshy", "operation": "retexture", "prompt": "gold leaf"},
+            image_paths={"front": str(tmp_path / "tex.png")},
+            output_dir=str(tmp_path),
+            source_mesh_path=str(source),
+            workspace="default",
+        )
+    assert started == []
+
+
 @pytest.mark.parametrize("body,images", [
     ({}, {}),
     ({}, {"front": "front.png", "left": "left.png"}),
