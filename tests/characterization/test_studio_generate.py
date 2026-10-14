@@ -23,7 +23,9 @@ import pytest
 from services.hardware_probe import hardware_cache
 
 from tests.characterization import media
-from tests.characterization.test_run_generation import RECAST_MODULES, BODY, Rig, _media_writer, worker_module
+from tests.characterization.test_run_generation import (
+    RECAST_MODULES, SHOT_MODULES, BODY, Rig, _media_writer, worker_module,
+)
 # Fixtures, used by name: the C0 rig and its decodable clip.
 from tests.characterization.test_run_generation import WAIT, _stub_legacy_h3, clip, rig  # noqa: F401
 from tests.support.fake_wgp import FakeEngine, catalog_attributes, default_script, generation_attributes
@@ -890,20 +892,20 @@ def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monke
 
 
 # -- the wiring the C7 move added (C7 review) --------------------------------------------------------------------------
-# The Recast helpers moved to four service modules that import each other directly. Launch hands three of them the
-# launch objects they read through one ``bind`` each: masks gets forwarders for the shot helpers launch still defines
-# below the bind, matte gets ``_app_dir``, preparation gets ``_workspace_dir``. A slot left at None, bound to a copy,
-# a forwarder that captured the function at bind time, or a sibling taken from the wrong module would only show on
-# the branch that reads it, so every global each moved function reads is compared here with the object the same name
+# The Recast helpers moved to four service modules that import each other directly. Launch hands two of them the
+# launch objects they read through one ``bind`` each: matte gets ``_app_dir``, preparation gets ``_workspace_dir``.
+# The six shot helpers the character mask calls moved to services.recast_shot_planning (C8a); masks imports them
+# from there. A slot left at None, bound to a copy, or a sibling taken from the wrong module would only show on the
+# branch that reads it, so every global each moved function reads is compared here with the object the same name
 # holds in launch (where the function read it before the move) and with the module that defines it.
-RECAST_FORWARDED = {
-    "_detect_recast_shot_ranges": "_forward_recast_detect_shot_ranges",
-    "_find_recast_unmapped_shots": "_forward_recast_find_unmapped_shots",
-    "_normalize_recast_tracking_target": "_forward_recast_normalize_tracking_target",
-    "_recover_recast_unmapped_shots": "_forward_recast_recover_unmapped_shots",
-    "_select_recast_timeline_anchor": "_forward_recast_select_timeline_anchor",
-    "_summarize_recast_mapping_mask": "_forward_recast_summarize_mapping_mask",
-}
+RECAST_SHOT_HELPERS = (
+    "_detect_recast_shot_ranges",
+    "_find_recast_unmapped_shots",
+    "_normalize_recast_tracking_target",
+    "_recover_recast_unmapped_shots",
+    "_select_recast_timeline_anchor",
+    "_summarize_recast_mapping_mask",
+)
 
 
 def _recast_global_reads(value) -> set[str]:
@@ -932,25 +934,28 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
     slots = {name: {"_" + param for param in inspect.signature(module.bind).parameters} if hasattr(module, "bind")
              else set() for name, module in modules.items()}
     home: dict[str, object] = {}
-    for module_name, module in modules.items():
+    shot_modules = {name: importlib.import_module(name) for name in SHOT_MODULES}
+    for module_name, module in {**modules, **shot_modules}.items():
         for node in ast.parse(inspect.getsource(module)).body:
             if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name != "bind":
                 home[node.name] = module
             elif isinstance(node, ast.Assign):
                 home.update({target.id: module for target in node.targets
-                             if isinstance(target, ast.Name) and target.id not in slots[module_name]})
+                             if isinstance(target, ast.Name) and target.id not in slots.get(module_name, ())
+                             and not (isinstance(node.value, ast.Constant) and node.value.value is None)})
 
-    # Every name launch imports from a Recast module is that module's object.
+    # Every name launch imports from a Recast helper module is that module's object. (The shot modules, C8a, have
+    # their own check below.)
     exported = set()
     for node in ast.parse(Path(launch.__file__).read_text(encoding="utf-8")).body:
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("services.recast_"):
+        if isinstance(node, ast.ImportFrom) and node.module in modules:
             for alias in node.names:
                 assert getattr(launch, alias.asname or alias.name) is getattr(modules[node.module], alias.name)
                 exported.add(alias.name)
     assert {"_RECAST_RELIGHTING_LORA_FILENAME", "_normalize_recast_lora_settings", "_build_recast_adaptive_mask",
             "_render_recast_mask_locked_video", "_prepare_recast_reference_conditioning"} <= exported
 
-    from_launch, forwarded, siblings = set(), set(), set()
+    from_launch, siblings = set(), set()
     for module_name, module in modules.items():
         namespace = vars(module)
         own = [value for name, value in namespace.items() if name != "bind"
@@ -962,10 +967,7 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
                     continue
                 held = namespace[name]
                 assert held is not None, f"{module_name}.{name} was never bound"
-                if name in RECAST_FORWARDED:
-                    assert held is vars(launch)[RECAST_FORWARDED[name]], f"{module_name}.{name} is not launch's forwarder"
-                    forwarded.add(name)
-                elif name in home:
+                if name in home:
                     assert held is vars(home[name])[name], f"{module_name}.{name} is not {home[name].__name__}.{name}"
                     if name in vars(launch):
                         assert vars(launch)[name] is held, f"launch.{name} is not {module_name}.{name}"
@@ -974,7 +976,8 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
                     assert held is vars(launch)[name], f"{module_name}.{name} is not launch.{name}"
                     from_launch.add(name)
     assert from_launch == {"os", "threading", "_app_dir", "_workspace_dir"}
-    assert forwarded == set(RECAST_FORWARDED) == slots["services.recast_masks"]
+    assert slots["services.recast_masks"] == set() and not hasattr(modules["services.recast_masks"], "bind")
+    assert set(RECAST_SHOT_HELPERS) <= siblings
     assert {"_RECAST_MASK_COLORS", "_resolve_recast_media", "_recast_reference_subject_mask",
             "_refine_recast_reference_cutout", "_recast_subject_crop_box", "_get_recast_u2net_session"} <= siblings
 
@@ -985,10 +988,14 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
     for name in ("_build_recast_adaptive_mask", "_render_recast_mask_locked_video"):
         assert getattr(finalize, name) is getattr(masks, name) is getattr(launch, name), name
 
-    # A forwarder looks the launch name up when the mask builder calls it.
-    for name in RECAST_FORWARDED:
-        monkeypatch.setattr(launch, name, lambda *args, _name=name, **kwargs: (_name, args, kwargs))
-        assert getattr(masks, name)("frames", fps=25.0) == (name, ("frames",), {"fps": 25.0})
+    # The character mask calls the shot helpers recast_shot_planning defines, the objects launch re-exports; launch
+    # keeps no forwarder for them.
+    planning = shot_modules["services.recast_shot_planning"]
+    for name in RECAST_SHOT_HELPERS:
+        assert getattr(masks, name) is getattr(planning, name) is getattr(launch, name), name
+        assert getattr(planning, name).__module__ == "services.recast_shot_planning", name
+    assert not [name for name in vars(launch) if name.startswith("_forward_recast_")
+                and name != "_forward_recast_shot_run_generation"]
 
     # One U2Net session, its locks and its cache: the holder in recast_matte. Launch keeps no copy of any of them.
     matte = modules["services.recast_matte"]
@@ -1136,3 +1143,67 @@ def test_outpaint_and_blend_read_the_objects_launch_holds(full_server, monkeypat
     # Python names a route's worker thread from the target, so the forwarder keeps the worker's name.
     assert importlib.import_module("routers.outpaint")._run_generation.__name__ == "_run_generation"
     assert importlib.import_module("routers.blend")._run_blend_generation.__name__ == "_run_blend_generation"
+
+
+def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    """Every global a moved shot function reads is the launch object, or a forwarder.
+
+    The forwarder is the one case that is not the object: patching the launch
+    name changes what the shot module calls. A slot left at None, or bound to
+    a copy, fails here.
+    """
+    import builtins
+    import importlib
+    import inspect
+
+    launch = worker_module()
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    stems = sorted(path.stem for path in services.glob("recast_shot_*.py"))
+    assert "recast_shot_planning" in stems
+    launch_names = vars(launch)
+    launch_source = Path(launch.__file__).read_text(encoding="utf-8")
+    compared: set[str] = set()
+    forwarded: set[str] = set()
+    for stem in stems:
+        assert launch_source.count(f"from services.{stem} import (") == 1
+        assert launch_source.count(f"_bind_{stem}(") in {0, 1}
+        module_name = f"services.{stem}"
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        own = {
+            name
+            for name, value in namespace.items()
+            if inspect.isfunction(value) and getattr(value, "__module__", None) == module_name and name != "bind"
+        }
+        for name in own:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        reads: set[str] = set()
+        for function_name in sorted(own):
+            reads.update(_global_reads(namespace[function_name]))
+        for name in sorted(reads):
+            if name in own or name.startswith("__") or hasattr(builtins, name):
+                continue
+            assert name in namespace, f"{module_name} reads {name}, which it does not define"
+            value = namespace[name]
+            if name in launch_names and value is launch_names[name]:
+                compared.add(name)
+                continue
+            assert callable(value) and name in launch_names, (
+                f"{module_name}.{name} is not launch.{name} and is not a forwarder"
+            )
+            sentinel = object()
+            original = launch_names[name]
+
+            def patched(*_args, _sentinel=sentinel, **_kwargs):
+                return _sentinel
+
+            monkeypatch.setattr(launch, name, patched)
+            assert value() is sentinel, f"patching launch.{name} did not change {module_name}.{name}"
+            monkeypatch.setattr(launch, name, original)
+            forwarded.add(name)
+    assert "_RECAST_MASK_COLORS" in compared
+    assert "_normalize_recast_person_count" in compared
+    if "recast_shot_run" in stems:
+        assert forwarded == {"_run_generation"}
+    else:
+        assert forwarded == set()

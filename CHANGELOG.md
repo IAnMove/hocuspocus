@@ -14,6 +14,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **The H3 idle-release timer and the hardware probe left the main server file.** A native H3 model still stays loaded while another H3 job is waiting and still releases after the same idle wait. The legacy H3 release and the Wan interrupt are the same functions. The hardware probe still runs once and still reports no VRAM when the probe fails. The coefficient pass and the director pipeline still call that same probe.
 
+**Recast shot planning, the shot manifest and shot generation left the launch module.** Finding the camera shots, recovering a person the first pass missed, building each shot's prompt and reference, and joining the generated clips still work the same way. The assembler still calls the same generation worker. A cancel while the clips are joined still drops the unfinished file.
+
 **Blend left the launch module.** Joining two clips with a generated transition still answers the same way. The blend worker still asks the generation worker to render the transition, then finishes the job itself.
 
 **Outpaint left the launch module.** Extending a picture or a clip, including the official LTX-2 path and a clip with several camera shots, still answers the same way. The generation worker still does the outpaint audio and pixel pass itself.
