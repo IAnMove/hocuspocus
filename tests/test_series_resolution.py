@@ -280,6 +280,20 @@ def test_produce_never_replaces_a_take_a_person_imported_or_chose(tmp_path):
     assert shot["approvedAttemptId"] == "att-720"
 
 
+def test_produce_never_replaces_an_approval_a_person_made_on_a_take_of_another_request(tmp_path):
+    """The series asks for 480p again and a person (in Series Lab, through an agent or the Wizard) approved the 720p
+    clip anyway: that is their choice, not a stale approval. Only an approval produce made itself is pointed again."""
+    for reviewer in ("user", "agent", "wizard"):
+        library, series, shot, _episode_body = _resized(tmp_path)
+        next(item for item in shot["attempts"] if item["id"] == "att-720")["approvedBy"] = reviewer
+        _produce_quietly(tmp_path, library)
+        assert shot["approvedAttemptId"] == "att-720", reviewer
+    library, series, shot, _episode_body = _resized(tmp_path)
+    next(item for item in shot["attempts"] if item["id"] == "att-720")["approvedBy"] = "server"
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-old", "produce's own approval of the other size is pointed again"
+
+
 def test_a_preview_review_repairs_only_a_take_that_was_approved_before(tmp_path):
     review = {"mode": "preview", "shots": {"s00": {"plan": "approved"}}}
     # Nothing is approved: the draft is for a person to look at.

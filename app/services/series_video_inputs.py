@@ -29,6 +29,8 @@ from typing import Any
 # Metadata a take made by ``series_video_shots`` carries; an import by hand carries neither.
 REQUEST_KEY = "videoRequest"
 INPUTS_KEY = "videoInputs"
+# Who approves a take on purpose (``approvedBy``); ``server`` is a produce or render run approving what it made.
+_PEOPLE = ("user", "agent", "wizard")
 
 
 def inputs_digest(parts: dict[str, Any]) -> str:
@@ -62,10 +64,10 @@ def repair_approval(series: dict[str, Any], episode: dict[str, Any], index: int,
     """Approve the shot's latest matching take when the shot is approved on none, or on a take another request made.
 
     Returns the attempt id it approved, None when it left the shot alone. It is left alone when the approved take
-    itself matches (a person may have chosen the older of two), when it was imported by hand, when a person rejected
-    the matching take, and in a preview review when nothing is approved or the matching take was never approved: a
-    draft nobody looked at is not approved here. The language versions' approvals are their own and are never
-    touched."""
+    itself matches (a person may have chosen the older of two), when it was imported by hand, when a person (in
+    Series Lab, through an agent or the Wizard: ``approvedBy``) approved it, when a person rejected the matching take,
+    and in a preview review when nothing is approved or the matching take was never approved: a draft nobody looked
+    at is not approved here. The language versions' approvals are their own and are never touched."""
     from services.series_library import approve_shot_render_attempt
 
     shot = episode["shots"][index]
@@ -73,7 +75,7 @@ def repair_approval(series: dict[str, Any], episode: dict[str, Any], index: int,
     held = _held(shot)
     if not matching or (held is None and preview):
         return None
-    if held is not None and (_matches(held, matching) or not _made_by_produce(series, held)):
+    if held is not None and (_matches(held, matching) or not _made_by_produce(series, held) or _chosen(held)):
         return None
     candidates = [item for item in matching if item.get("reviewDecision") != "rejected"
                   and (not preview or item.get("approvedAt"))]
@@ -91,6 +93,12 @@ def _held(shot: dict[str, Any]) -> dict[str, Any] | None:
     wanted = shot.get("approvedAttemptId")
     attempt = next((item for item in shot.get("attempts") or [] if isinstance(item, dict) and item.get("id") == wanted), None)
     return attempt if attempt and attempt.get("status") == "completed" and attempt.get("outputAssetIds") else None
+
+
+def _chosen(attempt: dict[str, Any]) -> bool:
+    """Approved by a person, an agent or the Wizard (``series_library.REVIEWERS``), not by a produce run (``server``).
+    Every take produce makes has carried ``approvedBy`` since before scripted video existed; none means produce."""
+    return attempt.get("approvedBy") in _PEOPLE
 
 
 def _matches(attempt: dict[str, Any], matching: list[dict[str, Any]]) -> bool:
