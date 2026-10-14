@@ -8,6 +8,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Recast masks, mattes, and reference pictures left the launch module.** A character mask, a mask-locked video, a cut-out reference, and the prepared reference a replacement uses are still built the same way. The background-removal model still loads once, on CPU, and its cache stays one object. The relighting LoRA is still the same file with the same hash, and a job still waits for that download.
 
+**The generation worker left the main server file, split into small steps (no behaviour change).** One function used to run every picture, video, speech and sound job on the full server, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits into `app/services/generation_worker/`, so a job does the same things in the same order and ends the same way on a cancel or an error, and every route that starts a job still calls the same `_run_generation`. The main server file is about 1,800 lines shorter. The server hands the new package its own objects once, at start-up.
+
+**Sound-effect generation left the launch module.** A sound-effect job still prepares MMAudio, writes the clip, and publishes the same sidecar.
+
+**FlashVSR chunked upscaling left the launch module.** A long clip is still upscaled in memory-bounded chunks, and the tools upscale still uses that same function.
+
+**Film grain and spatial upsampling left the launch module.** A finished video is still grained in place, and a spatial upscale still replaces the file and keeps its audio.
+
+**The per-job VRAM coefficient left the launch module.** A job still tightens the safety coefficient for its own weights and puts the saved base value back when the job finishes.
+
 **Hugging Face LoRA import left the launch module.** An empty import, a URL the server does not recognize, and a target directory that leaves the folder still answer the same way. The download registry that import writes is the same object the CivitAI downloads use.
 
 **CivitAI browsing, CivitAI downloads, and checkpoint import left the launch module.** The filter list, the architecture picker, a cached search, a cached model, a refused download, and an empty download list still answer the same way. Installed checkpoints, an update check on an empty folder, and a guide for an unknown checkpoint still answer the same way. The download registry and the CivitAI response cache stay one object each.

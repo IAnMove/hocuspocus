@@ -51,7 +51,9 @@ the skip reason gives the command above. CI runs them in their own step of the
   call `_run_generation` directly (`Rig.call_worker`, in a daemon thread with a deadline) on a job the server's
   own factory built. Tests named `test_oddity_*` pin
   behaviour that looks unintended: a refactor keeps it, and a fix re-records the golden in its own PR. The stubs go
-  through `Rig.patch`, which patches `worker_module()`: a PR that moves the worker repoints that one function.
+  through `Rig.patch`, which patches the name on every module in `worker_modules()` that holds it: the full server
+  module and the modules of `app/services/generation_worker/`, where the worker lives since slice 21 (they get the
+  server's objects through `bind_generation_worker`). `test_generation_worker_bind.py` checks that every injected name is bound.
   A worker that never finishes fails its test; if its thread is still alive when the session ends, `conftest.py`
   ends the process with exit code 1 instead of letting Python wait for it.
 

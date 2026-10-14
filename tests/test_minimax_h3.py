@@ -14,6 +14,7 @@ import types
 import typing
 import unittest
 from unittest import mock
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,7 @@ _HF_IMPORT_PATH = _APP / "services" / "hf_import.py"
 _CIVITAI_PATH = _APP / "services" / "civitai.py"
 _CIVITAI_DOWNLOADS_PATH = _APP / "services" / "civitai_downloads.py"
 _GENERATE_PATH = _APP / "services" / "studio_generate.py"
+_COEFFICIENT_PATH = _APP / "services" / "generation_coefficients.py"
 _LORA_LIBRARY_PATH = _APP / "services" / "lora_library.py"
 _DOWNLOADS_PATH = _APP / "services" / "model_downloads.py"
 _OPTIONS_PATH = _APP / "services" / "model_options.py"
@@ -297,7 +299,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
                 model_def=model_def,
             )
 
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         self.assertIn("minimax_h3_service.generate(", launch)
         self.assertIn("def _is_legacy_h3_model", launch)
         self.assertIn("_release_legacy_h3_when_queue_allows", launch)
@@ -881,14 +883,15 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_video_references_get_a_dedicated_memory_profile(self):
         launch = _read(_LAUNCH_PATH)
+        coefficient = _read(_COEFFICIENT_PATH)
         options = _read(_OPTIONS_PATH)
         wgp = _read(_WGP_PATH)
         transformer = _read(_TRANSFORMER_PATH)
-        self.assertIn("_h3_video_reference_count", launch)
-        self.assertIn("h3_reference_activation_gb", launch)
-        self.assertIn("compute_h3_weight_budget", launch)
-        self.assertIn("h3_weight_budget_gb", launch)
-        self.assertIn("resident H3 profile will reload with packed-sequence headroom", launch)
+        self.assertIn("_h3_video_reference_count", coefficient)
+        self.assertIn("h3_reference_activation_gb", coefficient)
+        self.assertIn("compute_h3_weight_budget", coefficient)
+        self.assertIn("h3_weight_budget_gb", coefficient)
+        self.assertIn("resident H3 profile will reload with packed-sequence headroom", coefficient)
         self.assertIn("_maestro_profile_vram_coefficient", wgp)
         self.assertIn("get_linear_split_map", transformer)
         self.assertIn("MINIMAX_H3_ACTIVATION_CHUNK_TOKENS", transformer)
@@ -1029,7 +1032,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("dialogue", guide)
 
     def test_omni_reference_request_and_ui_are_wired_end_to_end(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         main = _read(_MAIN_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_GENERATION_SLICE_PATH)
