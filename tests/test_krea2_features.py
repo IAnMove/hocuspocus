@@ -14,7 +14,7 @@ _APP = _ROOT / "app"
 _HANDLER_PATH = _APP / "models" / "krea2" / "krea2_handler.py"
 _MAIN_PATH = _APP / "models" / "krea2" / "krea2_main.py"
 _MMDIT_PATH = _APP / "models" / "krea2" / "krea2_mmdit.py"
-_LAUNCH_PATH = _APP / "_launch_runtime.py"
+_HF_IMPORT_PATH = _APP / "services" / "hf_import.py"
 _CIVITAI_PATH = _APP / "services" / "civitai.py"
 _DOWNLOADS_PATH = _APP / "services" / "model_downloads.py"
 _OPTIONS_PATH = _APP / "services" / "model_options.py"
@@ -203,7 +203,7 @@ class TestKrea2LoraCompatibility(unittest.TestCase):
 class TestKrea2LoraBrowser(unittest.TestCase):
     def test_civitai_and_huggingface_routes_target_krea_directory(self):
         civit_map = _literal_assignment(_CIVITAI_PATH, "CIVIT_TO_LOCAL_ARCH")
-        hf_map = _literal_assignment(_LAUNCH_PATH, "HF_BASE_TO_LOCAL_DIR")
+        hf_map = _literal_assignment(_HF_IMPORT_PATH, "HF_BASE_TO_LOCAL_DIR")
         filters = _literal_assignment(_CIVITAI_PATH, "CIVITAI_MODEL_FILTERS")
         self.assertEqual(civit_map["Krea 2"], "krea2")
         self.assertEqual(hf_map["krea/Krea-2-Raw"], "krea2")

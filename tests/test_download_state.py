@@ -17,7 +17,7 @@ from services.kernel.paths import PathPolicy
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_HF_IMPORT_PATH = os.path.join(_ROOT, "app", "services", "hf_import.py")
 _DOWNLOADS_PATH = os.path.join(_ROOT, "app", "services", "civitai_downloads.py")
 _GUIDES_PATH = os.path.join(_ROOT, "app", "services", "lora_guides.py")
 _UI_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "civitaiSlice.ts")
@@ -32,8 +32,8 @@ def _parse_source(path: str, filename: str) -> tuple[ast.Module, str]:
     return ast.parse(source, filename=filename), source
 
 
-def _parse_launch() -> tuple[ast.Module, str]:
-    return _parse_source(_LAUNCH_PATH, "app/_launch_runtime.py")
+def _parse_hf() -> tuple[ast.Module, str]:
+    return _parse_source(_HF_IMPORT_PATH, "app/services/hf_import.py")
 
 
 def _parse_downloads() -> tuple[ast.Module, str]:
@@ -80,14 +80,14 @@ def _load_helpers(tree: ast.Module, names: tuple[str, ...]) -> dict:
         "_lora_guide_scan_lock": threading.Lock(),
         "_safe_join": PathPolicy().safe_join,
     }
-    exec(compile(module, "app/_launch_runtime.py", "exec"), namespace)
+    exec(compile(module, "app/services/civitai_downloads.py", "exec"), namespace)
     return namespace
 
 
 class TestDownloadState(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tree, cls.source = _parse_launch()
+        cls.tree, cls.source = _parse_hf()
         cls.downloads_tree, cls.downloads_source = _parse_downloads()
         cls.guides_tree, cls.guides_source = _parse_guides()
 

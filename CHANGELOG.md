@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Hugging Face LoRA import left the launch module.** An empty import, a URL the server does not recognize, and a target directory that leaves the folder still answer the same way. The download registry that import writes is the same object the CivitAI downloads use.
+
 **CivitAI browsing, CivitAI downloads, and checkpoint import left the launch module.** The filter list, the architecture picker, a cached search, a cached model, a refused download, and an empty download list still answer the same way. Installed checkpoints, an update check on an empty folder, and a guide for an unknown checkpoint still answer the same way. The download registry and the CivitAI response cache stay one object each.
 
 **LoRA guide generation left the launch module.** Asking for a guide, starting a scan, and reading a scan that does not exist still answer the same way. Generating a guide still needs a loaded language model. The scan registry stays one object.

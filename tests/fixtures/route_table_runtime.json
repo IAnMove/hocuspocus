@@ -445,7 +445,7 @@
       "method": "POST",
       "path": "/api/v1/huggingface/import-lora",
       "endpoint": "hf_import_lora",
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/huggingface.py",
       "status_code": null,
       "response_model": null,
       "include_in_schema": true,

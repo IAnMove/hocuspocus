@@ -30,6 +30,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_HF_IMPORT_PATH = _APP / "services" / "hf_import.py"
 _CIVITAI_PATH = _APP / "services" / "civitai.py"
 _CIVITAI_DOWNLOADS_PATH = _APP / "services" / "civitai_downloads.py"
 _LORA_LIBRARY_PATH = _APP / "services" / "lora_library.py"
@@ -1476,7 +1477,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
 class TestMiniMaxH3LoraBrowserRouting(unittest.TestCase):
     def test_civitai_filter_and_base_mapping_target_shared_h3_directory(self):
         civit_map = _literal_assignment(_CIVITAI_PATH, "CIVIT_TO_LOCAL_ARCH")
-        hf_map = _literal_assignment(_LAUNCH_PATH, "HF_BASE_TO_LOCAL_DIR")
+        hf_map = _literal_assignment(_HF_IMPORT_PATH, "HF_BASE_TO_LOCAL_DIR")
         filters = _literal_assignment(_CIVITAI_PATH, "CIVITAI_MODEL_FILTERS")
 
         self.assertEqual(civit_map["MiniMax H3"], "minimax_h3")
@@ -1515,12 +1516,12 @@ class TestMiniMaxH3LoraBrowserRouting(unittest.TestCase):
     def test_browser_and_pasted_url_flows_use_canonical_h3_routing(self):
         civitai = _read(_CIVITAI_PATH)
         downloads = _read(_CIVITAI_DOWNLOADS_PATH)
-        launch = _read(_LAUNCH_PATH)
+        hf_import = _read(_HF_IMPORT_PATH)
         self.assertIn("arch = _civitai_lora_arch(base)", civitai)
         self.assertIn("inferred_target_arch = _civitai_lora_arch(base_model)", downloads)
         self.assertIn("target_arch = _civitai_lora_arch(base_model)", downloads)
-        self.assertIn("if _is_minimax_h3_identity(_identity_blob):", launch)
-        self.assertIn('hf_base_label = "MiniMax H3 (detected from repo name/tags)"', launch)
+        self.assertIn("if _is_minimax_h3_identity(_identity_blob):", hf_import)
+        self.assertIn('hf_base_label = "MiniMax H3 (detected from repo name/tags)"', hf_import)
 
 
 _RUNTIME_AVAILABLE = all(
