@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: on the core server, the gallery shows picture previews again.** Core listed every image and video with a preview address that it did not serve, and the gallery tiles asked for a sized preview route that core did not have, so each tile showed a text placeholder after three retries (and the pickers of the Series and Wizard screens showed a broken image). Core now serves `/api/v1/outputs/thumbnail/...` for the outputs and for the Uploads view, with the same code as the full server.
+
 **Fixed: on the core server, a web page from another site can no longer create, switch or delete workspaces.** The full server already refused browser POST, PUT, PATCH and DELETE requests that carry another site's `Origin`, but the core server (Apple Silicon and machines without a local AI recipe) did not. A page could send a plain-text POST to the local port and make a workspace folder. Core now installs the same check, from the same code, so the app, Pinokio's `https://<port>.localhost` address, other local tools and scripts without an `Origin` header work as before.
 
 **Fixed: a song you queue in Story Lab is no longer marked interrupted by the next task screen that opens its workspace.** Queuing a song wrote its task through a private second task registry for the workspace folder. The first time anything else opened the shared registry of that folder, the queued song was treated as a leftover from a crash and flipped to interrupted. Queuing now uses the folder's one shared registry.

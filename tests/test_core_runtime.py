@@ -512,6 +512,51 @@ class CoreRuntimeTests(unittest.TestCase):
         closed = self.client.post("/api/v1/wangp/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
         self.assertEqual(closed.status_code, 503)
 
+    def test_core_gallery_serves_the_thumbnails_its_rows_point_at(self):
+        """Every row's thumbnail_url (and the sized route the gallery tiles ask for) answered 404 on core."""
+        from PIL import Image
+        from services import output_ops
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("uploads").mkdir()
+            Image.new("RGB", (64, 48), (200, 30, 30)).save(Path("outputs") / "still.png")
+            Image.new("RGB", (32, 32), (30, 30, 200)).save(Path("uploads") / "reference.png")
+            Image.new("RGB", (8, 8), (0, 0, 0)).save("outside.png")
+            Path("outputs", "notes.wav").write_bytes(b"RIFF")
+            with patch.object(output_ops, "_MEDIA_THUMBNAIL_CACHE_DIR", str(Path(folder.name) / "thumbnails")):
+                listings = {
+                    workspace: self.client.get("/api/v1/outputs", params={"workspace": workspace})
+                    for workspace in ("default", "__uploads__")
+                }
+                rows = [
+                    row for response in listings.values() for row in response.json()["outputs"]
+                    if row["type"] == "image"
+                ]
+                row_answers = {row["name"]: self.client.get(row["thumbnail_url"]).status_code for row in rows}
+                sized = {
+                    workspace: self.client.get(
+                        f"/api/v1/outputs/thumbnail/{name}", params={"size": "sm", "workspace": workspace},
+                    )
+                    for workspace, name in (("default", "still.png"), ("__uploads__", "reference.png"))
+                }
+                escaped = self.client.get(
+                    "/api/v1/outputs/thumbnail/..%2Foutside.png", params={"workspace": "__uploads__"},
+                )
+                missing = self.client.get("/api/v1/outputs/thumbnail/nothing.png", params={"workspace": "default"})
+                audio = self.client.get("/api/v1/outputs/thumbnail/notes.wav", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(sorted(row_answers), ["reference.png", "still.png"])
+        self.assertEqual(set(row_answers.values()), {200}, row_answers)
+        for workspace, response in sized.items():
+            self.assertEqual(response.status_code, 200, f"{workspace}: {response.text}")
+            self.assertEqual(response.headers["content-type"], "image/webp")
+        self.assertEqual(escaped.status_code, 404, escaped.text)
+        self.assertEqual(missing.status_code, 404, missing.text)
+        self.assertEqual(audio.status_code, 400, audio.text)
+
     def test_core_refuses_browser_mutations_from_another_origin(self):
         """A foreign page can send a simple POST (text/plain) to a loopback port; core must refuse it like the full server."""
         evil = {"Origin": "http://evil.example"}
