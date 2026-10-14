@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Meshy and Hi3D refuse a retexture instead of generating a new mesh.** Choosing Retexture GLB with Meshy or Hi3D used to queue a paid image-to-3D job and drop the source model. The panel now disables that tab, and both servers answer 400.
+
 **Director music and character-reference description left the launch module.** Asking for a song, or for a description of character reference images, still answers the same way. An empty description still asks for the images. An empty music request still stops before any track is generated.
 
 **Presets, system settings, and service settings left the launch module.** Saving a preset, changing a memory profile, and reading or updating service settings still answer the same way. An empty update is still refused. The core server keeps its own copies of the settings routes it already served.

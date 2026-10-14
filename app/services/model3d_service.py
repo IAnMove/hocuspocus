@@ -798,6 +798,8 @@ def start_job(
     profile = _active_profile()
     provider = str(body.get("provider") or profile.get("model3d_provider") or "local").strip().lower()
     if provider in {"meshy", "hi3d"}:
+        from .provider_profile import refuse_remote_retexture
+        refuse_remote_retexture(body)
         execution_mode.validate_remote_provider(workspace, provider)
         return _start_remote_job(
             provider=provider,
