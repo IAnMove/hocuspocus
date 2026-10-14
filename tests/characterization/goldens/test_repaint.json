@@ -5209,6 +5209,766 @@
     },
     "status": 200
   },
+  "mapped repaint, mapping progress in fine steps": {
+    "body": {
+      "abort states seen by Magic Mask": [
+        [
+          "<JOB>"
+        ],
+        [
+          "<JOB>"
+        ]
+      ],
+      "answer": {
+        "frames": 48,
+        "generation_details": {
+          "execution_mode": "real",
+          "flow_shift": 5,
+          "frames": 48,
+          "generation_mode": "video",
+          "guidance": 1.0,
+          "lora_count": 0,
+          "model_name": "SCAIL-2 Fast",
+          "model_type": "scail2_14B_fast",
+          "prompt": "the edited regions",
+          "resolution": "704x480",
+          "seed": 7,
+          "simulated": false,
+          "steps": 6
+        },
+        "guidance_scale": 1.0,
+        "job_id": "<JOB>",
+        "num_inference_steps": 6,
+        "region_count": 1,
+        "resolution": "704x480",
+        "resolution_profile": "480p",
+        "root_task_id": "task-generation-<JOB>",
+        "sliding_window_size": 81,
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "job": {
+        "accepted": {
+          "frames": 48,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 5,
+            "frames": 48,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Fast",
+            "model_type": "scail2_14B_fast",
+            "prompt": "the edited regions",
+            "resolution": "704x480",
+            "seed": 7,
+            "simulated": false,
+            "steps": 6
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 6,
+          "region_count": 1,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "engine_calls": [
+          {
+            "audio_save_path": "<TMP>/maestro-repaint-shots-<RANDOM>",
+            "image_save_path": "<TMP>/maestro-repaint-shots-<RANDOM>",
+            "kwargs": {
+              "activated_loras": [],
+              "audio_guide": null,
+              "audio_prompt_type": "",
+              "audio_source": null,
+              "custom_settings": {
+                "image_ref_keyword_content": "edited subject one",
+                "scail2_additional_reference_mask_paths": [],
+                "scail2_animate_preprocessing": "raw",
+                "scail2_clip_reference_path": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_shot_ref_<JOB>_1.png",
+                "scail2_dynamic_source_scene_reference": true,
+                "scail2_primary_reference_people": 1,
+                "scail2_reference_expected_colors": [
+                  [
+                    0,
+                    0,
+                    255
+                  ]
+                ],
+                "scail2_reference_mask_path": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_shot_ref_<JOB>_1_mask.png",
+                "scail2_source_scene_mask_path": "<TMP>/maestro-repaint-shots-<RANDOM>/recast_source_scene_mask_repaint_<JOB>_shot_1.png",
+                "scail2_source_scene_reference_path": "<TMP>/maestro-repaint-shots-<RANDOM>/recast_source_scene_ref_repaint_<JOB>_shot_1.png",
+                "scail2_timeline_source_scene_reference": false
+              },
+              "flow_shift": 5,
+              "force_fps": "control",
+              "guidance_scale": 1.0,
+              "image_prompt_type": "S",
+              "image_refs": [],
+              "image_start": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_shot_ref_<JOB>_1.png",
+              "input_video_strength": 1,
+              "loras_multipliers": "",
+              "mode": "",
+              "model_type": "scail2_14B_fast",
+              "multi_clip_info": {
+                "defer_concat": true,
+                "group_id": "repaint_shots_<JOB>",
+                "index": 0,
+                "progress_label": "Shot",
+                "total": 1
+              },
+              "multi_prompts_gen_type": 0,
+              "negative_prompt": "",
+              "num_inference_steps": 6,
+              "output_filename": "repaint_<JOB>_shot_1.mp4",
+              "plugin_data": {},
+              "prompt": "the edited regions",
+              "resolution": "704x480",
+              "sample_solver": "euler",
+              "seed": 7,
+              "sliding_window_overlap": 5,
+              "sliding_window_size": 81,
+              "trim_tail_frames": 1,
+              "video_guide": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_<JOB>_shot_1_guide.mp4",
+              "video_length": 49,
+              "video_mask": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_<JOB>_shot_1_mask.mp4",
+              "video_prompt_type": "V1A"
+            },
+            "params": {
+              "_duration_seconds": 2.0,
+              "_execution_mode": "real",
+              "_repaint_final_out_dir": "<OUTPUTS>",
+              "_repaint_shot_bundle": {
+                "fps": 24.0,
+                "frame_count": 48,
+                "published_shots": [
+                  {
+                    "active_mapping_indices": [
+                      0
+                    ],
+                    "anchor_frame_index": 47,
+                    "camera_shot_index": 0,
+                    "cast_segment_index": 0,
+                    "cooccurring": true,
+                    "end_frame": 48,
+                    "first_all_active_frame_index": 0,
+                    "frame_count": 48,
+                    "generated_frame_count": 49,
+                    "generation_mode": "scail2",
+                    "initial_active_mapping_indices": [
+                      0
+                    ],
+                    "mode": "solo",
+                    "native_scene_preservation": true,
+                    "reference_anchor_frame_index": 0,
+                    "reference_mode": "edited_first_frame",
+                    "segment_reason": "camera_shot",
+                    "shot_index": 0,
+                    "start_frame": 0,
+                    "starts_with_all_active_mappings": true,
+                    "trim_tail_frames": 1
+                  }
+                ],
+                "resolved_seed": 7,
+                "shots": [
+                  {
+                    "active_mapping_indices": [
+                      0
+                    ],
+                    "anchor_frame_index": 47,
+                    "camera_shot_index": 0,
+                    "cast_segment_index": 0,
+                    "cooccurring": true,
+                    "end_frame": 48,
+                    "first_all_active_frame_index": 0,
+                    "frame_count": 48,
+                    "generated_task_index": 0,
+                    "initial_active_mapping_indices": [
+                      0
+                    ],
+                    "mode": "solo",
+                    "segment_reason": "camera_shot",
+                    "shot_index": 0,
+                    "start_frame": 0,
+                    "starts_with_all_active_mappings": true
+                  }
+                ]
+              },
+              "_repaint_shot_temp_dir": "<TMP>/maestro-repaint-shots-<RANDOM>",
+              "_repaint_source_video": "source.mp4",
+              "activated_loras": [],
+              "audio_guide": null,
+              "audio_prompt_type": "",
+              "audio_source": null,
+              "custom_settings": {
+                "image_ref_keyword_content": "edited subject one",
+                "scail2_additional_reference_mask_paths": [],
+                "scail2_animate_preprocessing": "raw",
+                "scail2_clip_reference_path": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_shot_ref_<JOB>_1.png",
+                "scail2_dynamic_source_scene_reference": true,
+                "scail2_primary_reference_people": 1,
+                "scail2_reference_expected_colors": [
+                  [
+                    0,
+                    0,
+                    255
+                  ]
+                ],
+                "scail2_reference_mask_path": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_shot_ref_<JOB>_1_mask.png",
+                "scail2_source_scene_mask_path": "<TMP>/maestro-repaint-shots-<RANDOM>/recast_source_scene_mask_repaint_<JOB>_shot_1.png",
+                "scail2_source_scene_reference_path": "<TMP>/maestro-repaint-shots-<RANDOM>/recast_source_scene_ref_repaint_<JOB>_shot_1.png",
+                "scail2_timeline_source_scene_reference": false
+              },
+              "edit_end_time": 2.0,
+              "edit_repaint_conditioning": "semantic_regions",
+              "edit_repaint_mapping_summaries": [
+                {
+                  "anchor_area": 320,
+                  "anchor_frame_index": 0,
+                  "anchor_time_seconds": 0.0,
+                  "appearance_ranges": [
+                    [
+                      0,
+                      48
+                    ]
+                  ],
+                  "first_frame_index": 0,
+                  "first_time_seconds": 0.0,
+                  "last_frame_index": 47,
+                  "present_frame_count": 48
+                }
+              ],
+              "edit_repaint_native_scene_preservation": true,
+              "edit_repaint_output_resolution": [
+                704,
+                480
+              ],
+              "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+              "edit_repaint_reference_mask": "<STATE>/uploads/repaint_reference_mask_<HEX>.png",
+              "edit_repaint_region_count": 1,
+              "edit_repaint_region_mappings": [
+                {
+                  "id": "repaint-1",
+                  "source": "subject one",
+                  "target": "edited subject one"
+                }
+              ],
+              "edit_repaint_resolution_profile": "480p",
+              "edit_repaint_shot_aware": true,
+              "edit_repaint_shot_plan": [
+                {
+                  "active_mapping_indices": [
+                    0
+                  ],
+                  "anchor_frame_index": 47,
+                  "camera_shot_index": 0,
+                  "cast_segment_index": 0,
+                  "cooccurring": true,
+                  "end_frame": 48,
+                  "first_all_active_frame_index": 0,
+                  "frame_count": 48,
+                  "generated_frame_count": 49,
+                  "generation_mode": "scail2",
+                  "initial_active_mapping_indices": [
+                    0
+                  ],
+                  "mode": "solo",
+                  "native_scene_preservation": true,
+                  "reference_anchor_frame_index": 0,
+                  "reference_mode": "edited_first_frame",
+                  "segment_reason": "camera_shot",
+                  "shot_index": 0,
+                  "start_frame": 0,
+                  "starts_with_all_active_mappings": true,
+                  "trim_tail_frames": 1
+                }
+              ],
+              "edit_repaint_shot_ranges": [
+                [
+                  0,
+                  48
+                ]
+              ],
+              "edit_repaint_sliding_window_size": 81,
+              "edit_repaint_target_frame": "edited.png",
+              "edit_repaint_target_size": [
+                96,
+                64
+              ],
+              "edit_repaint_video_mask": "<STATE>/uploads/repaint_semantic_mask_stub.mp4",
+              "edit_start_time": 0.0,
+              "edit_sub_mode": "restyle",
+              "edit_video_path": "source.mp4",
+              "flow_shift": 5,
+              "force_fps": "control",
+              "generation_mode": "video",
+              "guidance_scale": 1.0,
+              "image_prompt_type": "S",
+              "image_refs": [],
+              "image_start": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_shot_ref_<JOB>_1.png",
+              "input_video_strength": 1,
+              "loras_multipliers": "",
+              "model_type": "scail2_14B_fast",
+              "multi_clip_info": {
+                "defer_concat": true,
+                "group_id": "repaint_shots_<JOB>",
+                "index": 0,
+                "progress_label": "Shot",
+                "total": 1
+              },
+              "multi_prompts_gen_type": 0,
+              "negative_prompt": "",
+              "num_inference_steps": 6,
+              "output_filename": "repaint_<JOB>_shot_1.mp4",
+              "prompt": "the edited regions",
+              "resolution": "704x480",
+              "sample_solver": "euler",
+              "seed": 7,
+              "settings_version": 2.57,
+              "sliding_window_overlap": 5,
+              "sliding_window_size": 81,
+              "trim_tail_frames": 1,
+              "video_guide": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_<JOB>_shot_1_guide.mp4",
+              "video_length": 49,
+              "video_mask": "<TMP>/maestro-repaint-shots-<RANDOM>/repaint_<JOB>_shot_1_mask.mp4",
+              "video_prompt_type": "V1A"
+            },
+            "prompt": "the edited regions",
+            "save_path": "<TMP>/maestro-repaint-shots-<RANDOM>",
+            "state_is_the_task_state": true,
+            "task_id": 1,
+            "vram_safety_coefficient": 0.8
+          }
+        ],
+        "files": [
+          "<STAMP>_seed7_repaint_shot_aware.meta.json",
+          "<STAMP>_seed7_repaint_shot_aware.mp4"
+        ],
+        "left_behind": {
+          "abort_states": [],
+          "audio_save_path": "<TMP>/maestro-repaint-shots-<RANDOM>",
+          "durable_queue": [],
+          "gpu_lock_free": true,
+          "image_save_path": "<OUTPUTS>",
+          "save_path": "<OUTPUTS>",
+          "vram_coefficient": 0.8
+        },
+        "listed": [],
+        "params": {
+          "_duration_seconds": 2.0,
+          "_execution_mode": "real",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "edited subject one",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_primary_reference_people": 1,
+            "scail2_reference_expected_colors": [
+              [
+                0,
+                0,
+                255
+              ]
+            ],
+            "scail2_reference_mask_path": "<STATE>/uploads/repaint_reference_mask_<HEX>.png"
+          },
+          "edit_end_time": 2.0,
+          "edit_repaint_conditioning": "semantic_regions",
+          "edit_repaint_mapping_summaries": [
+            {
+              "anchor_area": 320,
+              "anchor_frame_index": 0,
+              "anchor_time_seconds": 0.0,
+              "appearance_ranges": [
+                [
+                  0,
+                  48
+                ]
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "last_frame_index": 47,
+              "present_frame_count": 48
+            }
+          ],
+          "edit_repaint_native_scene_preservation": true,
+          "edit_repaint_output_resolution": [
+            704,
+            480
+          ],
+          "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+          "edit_repaint_reference_mask": "<STATE>/uploads/repaint_reference_mask_<HEX>.png",
+          "edit_repaint_region_count": 1,
+          "edit_repaint_region_mappings": [
+            {
+              "id": "repaint-1",
+              "source": "subject one",
+              "target": "edited subject one"
+            }
+          ],
+          "edit_repaint_resolution_profile": "480p",
+          "edit_repaint_shot_aware": true,
+          "edit_repaint_shot_plan": [
+            {
+              "active_mapping_indices": [
+                0
+              ],
+              "anchor_frame_index": 47,
+              "camera_shot_index": 0,
+              "cast_segment_index": 0,
+              "cooccurring": true,
+              "end_frame": 48,
+              "first_all_active_frame_index": 0,
+              "frame_count": 48,
+              "generated_frame_count": 49,
+              "generation_mode": "scail2",
+              "initial_active_mapping_indices": [
+                0
+              ],
+              "mode": "solo",
+              "native_scene_preservation": true,
+              "reference_anchor_frame_index": 0,
+              "reference_mode": "edited_first_frame",
+              "segment_reason": "camera_shot",
+              "shot_index": 0,
+              "start_frame": 0,
+              "starts_with_all_active_mappings": true,
+              "trim_tail_frames": 1
+            }
+          ],
+          "edit_repaint_shot_ranges": [
+            [
+              0,
+              48
+            ]
+          ],
+          "edit_repaint_sliding_window_size": 81,
+          "edit_repaint_target_frame": "edited.png",
+          "edit_repaint_target_size": [
+            96,
+            64
+          ],
+          "edit_repaint_video_mask": "<STATE>/uploads/repaint_semantic_mask_stub.mp4",
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "restyle",
+          "edit_video_path": "source.mp4",
+          "flow_shift": 5,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "S",
+          "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+          "input_video_strength": 1,
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 6,
+          "prompt": "the edited regions",
+          "resolution": "704x480",
+          "sample_solver": "euler",
+          "seed": 7,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "source.mp4",
+          "video_length": 48,
+          "video_mask": "<STATE>/uploads/repaint_semantic_mask_stub.mp4",
+          "video_prompt_type": "V1A"
+        },
+        "record": {
+          "acquired_resources": [
+            "local_gpu:0"
+          ],
+          "clip_output_files": {},
+          "join_output_file": "<STAMP>_seed7_repaint_shot_aware.mp4"
+        },
+        "returned": true,
+        "sidecars": {
+          "<STAMP>_seed7_repaint_shot_aware.meta.json": {
+            "created_at": "<TIME>",
+            "generation_mode": "video",
+            "generation_time": "<MASKED>",
+            "job_id": "<JOB>",
+            "output_filename": "<STAMP>_seed7_repaint_shot_aware.mp4",
+            "params": {
+              "_duration_seconds": 2.0,
+              "_execution_mode": "real",
+              "activated_loras": [],
+              "audio_prompt_type": "R",
+              "custom_settings": {
+                "image_ref_keyword_content": "edited subject one",
+                "scail2_animate_preprocessing": "raw",
+                "scail2_primary_reference_people": 1,
+                "scail2_reference_expected_colors": [
+                  [
+                    0,
+                    0,
+                    255
+                  ]
+                ],
+                "scail2_reference_mask_path": "<STATE>/uploads/repaint_reference_mask_<HEX>.png"
+              },
+              "edit_end_time": 2.0,
+              "edit_repaint_conditioning": "semantic_regions",
+              "edit_repaint_mapping_summaries": [
+                {
+                  "anchor_area": 320,
+                  "anchor_frame_index": 0,
+                  "anchor_time_seconds": 0.0,
+                  "appearance_ranges": [
+                    [
+                      0,
+                      48
+                    ]
+                  ],
+                  "first_frame_index": 0,
+                  "first_time_seconds": 0.0,
+                  "last_frame_index": 47,
+                  "present_frame_count": 48
+                }
+              ],
+              "edit_repaint_native_scene_preservation": true,
+              "edit_repaint_output_resolution": [
+                704,
+                480
+              ],
+              "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+              "edit_repaint_reference_mask": "<STATE>/uploads/repaint_reference_mask_<HEX>.png",
+              "edit_repaint_region_count": 1,
+              "edit_repaint_region_mappings": [
+                {
+                  "id": "repaint-1",
+                  "source": "subject one",
+                  "target": "edited subject one"
+                }
+              ],
+              "edit_repaint_resolution_profile": "480p",
+              "edit_repaint_shot_aware": true,
+              "edit_repaint_shot_plan": [
+                {
+                  "active_mapping_indices": [
+                    0
+                  ],
+                  "anchor_frame_index": 47,
+                  "camera_shot_index": 0,
+                  "cast_segment_index": 0,
+                  "cooccurring": true,
+                  "end_frame": 48,
+                  "first_all_active_frame_index": 0,
+                  "frame_count": 48,
+                  "generated_frame_count": 49,
+                  "generation_mode": "scail2",
+                  "initial_active_mapping_indices": [
+                    0
+                  ],
+                  "mode": "solo",
+                  "native_scene_preservation": true,
+                  "reference_anchor_frame_index": 0,
+                  "reference_mode": "edited_first_frame",
+                  "segment_reason": "camera_shot",
+                  "shot_index": 0,
+                  "start_frame": 0,
+                  "starts_with_all_active_mappings": true,
+                  "trim_tail_frames": 1
+                }
+              ],
+              "edit_repaint_shot_ranges": [
+                [
+                  0,
+                  48
+                ]
+              ],
+              "edit_repaint_sliding_window_size": 81,
+              "edit_repaint_target_frame": "edited.png",
+              "edit_repaint_target_size": [
+                96,
+                64
+              ],
+              "edit_repaint_video_mask": "<STATE>/uploads/repaint_semantic_mask_stub.mp4",
+              "edit_start_time": 0.0,
+              "edit_sub_mode": "restyle",
+              "edit_video_path": "source.mp4",
+              "flow_shift": 5,
+              "force_fps": "control",
+              "generation_mode": "video",
+              "guidance_scale": 1.0,
+              "image_prompt_type": "S",
+              "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+              "input_video_strength": 1,
+              "loras_multipliers": "",
+              "model_type": "scail2_14B_fast",
+              "negative_prompt": "",
+              "num_inference_steps": 6,
+              "prompt": "the edited regions",
+              "resolution": "704x480",
+              "sample_solver": "euler",
+              "seed": 7,
+              "settings_version": 2.57,
+              "sliding_window_overlap": 5,
+              "sliding_window_size": 81,
+              "video_guide": "source.mp4",
+              "video_length": 48,
+              "video_mask": "<STATE>/uploads/repaint_semantic_mask_stub.mp4",
+              "video_prompt_type": "V1A"
+            },
+            "upload_filenames": {
+              "image_start": "repaint_target_<JOB>.png",
+              "video_guide": "source.mp4"
+            }
+          }
+        },
+        "status": {
+          "error": null,
+          "message": "Done",
+          "oom_info": null,
+          "output_files": [
+            "<STAMP>_seed7_repaint_shot_aware.mp4"
+          ],
+          "phase": "",
+          "progress": 100,
+          "queue_position": null,
+          "status": "completed",
+          "step": 0,
+          "total_steps": 0
+        },
+        "task": {
+          "acquired_resources": [],
+          "cancelable": false,
+          "error": null,
+          "message": "Done",
+          "phase": "completed",
+          "progress": 1.0,
+          "result_refs": [
+            "<STAMP>_seed7_repaint_shot_aware.mp4"
+          ],
+          "status": "completed"
+        },
+        "timers": [
+          "completed"
+        ],
+        "transitions": [
+          "running | phase 'Mapping repaint regions' | 'Mapping 1 Repaint region...' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 0%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 6%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 12%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 15%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 21%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 25%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 31%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 38%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 40%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 46%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 50%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 56%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 62%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 65%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 71%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 75%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 81%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 88%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 90%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 96%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Mapping repaint regions' | 'Mapping Repaint regions... 100%' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Preparing camera shots' | 'Preparing shot-specific Repaint references...' | 0% | step 0/0 | outputs 0",
+          "queued | phase '' | 'Queued (repaint)' | 0% | step 0/0 | outputs 0",
+          "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+          "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+          "running | phase 'Joining camera shots' | 'Joining Repaint shots and restoring source audio...' | 99% | step 0/0 | outputs 0",
+          "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+        ]
+      },
+      "joined": [
+        {
+          "audio": null,
+          "clips": [
+            "<STAMP>_seed7_the_edited_regions.mp4"
+          ],
+          "options": {
+            "audio_duration_sec": 2.0,
+            "audio_start_sec": 0.0,
+            "pad_audio": true
+          },
+          "output": "<STAMP>_seed7_repaint_shot_aware.mp4"
+        }
+      ],
+      "mask calls": [
+        {
+          "color": [
+            0,
+            0,
+            255
+          ],
+          "frames": 48,
+          "keyword": "subject one",
+          "options": [
+            "colorize_objects",
+            "max_colored_objects",
+            "no_hole"
+          ],
+          "tracking_segments": [
+            [
+              0,
+              48
+            ]
+          ]
+        },
+        {
+          "color": [
+            0,
+            0,
+            255
+          ],
+          "frames": 1,
+          "keyword": "edited subject one",
+          "options": [
+            "colorize_objects",
+            "max_colored_objects",
+            "no_hole"
+          ],
+          "tracking_segments": null
+        }
+      ],
+      "saved mask": [
+        {
+          "background": [
+            0,
+            0,
+            0
+          ],
+          "colors": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              255
+            ]
+          ],
+          "fps": 24.0,
+          "keywords": [
+            "subject one"
+          ],
+          "shape": [
+            48,
+            64,
+            96,
+            3
+          ],
+          "source": "source.mp4"
+        }
+      ],
+      "status": 200
+    },
+    "status": 200
+  },
   "mapped repaint, one region, two camera shots": {
     "body": {
       "abort states seen by Magic Mask": [
@@ -9340,6 +10100,138 @@
         },
         "status": 200
       }
+    },
+    "status": 200
+  },
+  "preview gives overlapping pixels to the first region": {
+    "body": {
+      "body": {
+        "found": true,
+        "frame_index": 0,
+        "mapping_results": [
+          {
+            "color": [
+              0,
+              0,
+              255
+            ],
+            "mapping_index": 0,
+            "source": "subject one",
+            "source_found": true,
+            "target": "edited subject one",
+            "target_found": true
+          },
+          {
+            "color": [
+              255,
+              0,
+              0
+            ],
+            "mapping_index": 1,
+            "source": "subject wide",
+            "source_found": true,
+            "target": "edited subject wide",
+            "target_found": true
+          }
+        ],
+        "source_preview": {
+          "first": [
+            4,
+            0,
+            5
+          ],
+          "last": [
+            0,
+            0,
+            0
+          ],
+          "sha256": "65f2e8868e0ea58a9a555f4a8d059d29950134560002ea6dc68eba8014eab451",
+          "size": [
+            96,
+            64
+          ]
+        },
+        "target_preview": {
+          "first": [
+            188,
+            44,
+            35
+          ],
+          "last": [
+            200,
+            40,
+            40
+          ],
+          "sha256": "30c8f1f243f4e3c4d3603b2eae45fb0a7bff28868c3ae7e051c796ef317b2962",
+          "size": [
+            96,
+            64
+          ]
+        }
+      },
+      "mask calls": [
+        {
+          "color": [
+            0,
+            0,
+            255
+          ],
+          "frames": 1,
+          "keyword": "subject one",
+          "options": [
+            "colorize_objects",
+            "max_colored_objects",
+            "no_hole"
+          ],
+          "tracking_segments": null
+        },
+        {
+          "color": [
+            0,
+            0,
+            255
+          ],
+          "frames": 1,
+          "keyword": "edited subject one",
+          "options": [
+            "colorize_objects",
+            "max_colored_objects",
+            "no_hole"
+          ],
+          "tracking_segments": null
+        },
+        {
+          "color": [
+            255,
+            0,
+            0
+          ],
+          "frames": 1,
+          "keyword": "subject wide",
+          "options": [
+            "colorize_objects",
+            "max_colored_objects",
+            "no_hole"
+          ],
+          "tracking_segments": null
+        },
+        {
+          "color": [
+            255,
+            0,
+            0
+          ],
+          "frames": 1,
+          "keyword": "edited subject wide",
+          "options": [
+            "colorize_objects",
+            "max_colored_objects",
+            "no_hole"
+          ],
+          "tracking_segments": null
+        }
+      ],
+      "status": 200
     },
     "status": 200
   },

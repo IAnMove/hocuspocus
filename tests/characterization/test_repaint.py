@@ -302,14 +302,18 @@ _RECTANGLES = {
     "subject four": (36, 56, 4, 24),
     "subject five": (36, 56, 36, 56),
 }
+# A region that overlaps subjects one and two, for the cases where two regions cover the same pixels.
+_OVERLAPPING = {"subject wide": (8, 28, 12, 44)}
+_ALL_RECTANGLES = {**_RECTANGLES, **_OVERLAPPING}
 
 
 class _Painter:
     """Magic Mask for one scene: which subject is visible in which source frame, and in the edited first frame."""
 
-    def __init__(self, rig, *, present: dict, edited: set, cuts: tuple = (), cancel_on_call: int | None = None):
+    def __init__(self, rig, *, present: dict, edited: set, cuts: tuple = (), cancel_on_call: int | None = None,
+                 progress: tuple = (0.5, 1.0)):
         self.rig, self.present, self.edited, self.cuts = rig, present, edited, cuts
-        self.cancel_on_call = cancel_on_call
+        self.cancel_on_call, self.progress = cancel_on_call, progress
         self.calls: list = []
         self.saved: list = []
         self.abort_states: list = []
@@ -324,7 +328,7 @@ class _Painter:
             frames[start:end] = shades[shot % len(shades)]
             frames[start:end, :, (shot * 7) % _W:(shot * 7) % _W + 8] = 255 - numpy.array(shades[shot % len(shades)])
         for keyword, indexes in self.present.items():
-            top, bottom, left, right = _RECTANGLES[keyword]
+            top, bottom, left, right = _ALL_RECTANGLES[keyword]
             for index in indexes:
                 frames[index, top:bottom, left:right] = (250, 250, 250)
         return frames
@@ -349,14 +353,14 @@ class _Painter:
             launch.request_cancel(launch._jobs[job_id], job_id=job_id, active_states=launch._active_gen_states)
         painted = numpy.zeros_like(video)
         subject = keyword.replace("edited ", "")
-        if subject in _RECTANGLES:
-            top, bottom, left, right = _RECTANGLES[subject]
+        if subject in _ALL_RECTANGLES:
+            top, bottom, left, right = _ALL_RECTANGLES[subject]
             indexes = ([0] if subject in self.edited else []) if video.shape[0] == 1 else self.present.get(subject, [])
             for index in indexes:
                 painted[index, top:bottom, left:right] = color_palette[0]
         if progress_callback is not None:
-            progress_callback(int(video.shape[0]) // 2, int(video.shape[0]))
-            progress_callback(int(video.shape[0]), int(video.shape[0]))
+            for fraction in self.progress:
+                progress_callback(int(int(video.shape[0]) * fraction), int(video.shape[0]))
         return painted
 
     def save(self, source_path, mask, fps, keywords, output_dir=None, abort_callback=None, background_color=None):
@@ -529,6 +533,31 @@ def test_mapped_repaint_removes_its_shot_folder_when_the_manifest_fails(rig, gol
     observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one"))
     observed["shot folders left"] = len(shot_folders() - before)
     _check_mapped(rig, golden, "mapped repaint, the shot manifest fails", observed)
+
+def test_mapped_repaint_reports_region_mapping_progress_in_five_percent_steps(rig, golden, monkeypatch) -> None:
+    painter = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one"},
+                       progress=tuple(step / 40 for step in range(41)))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one"))
+    _check_mapped(rig, golden, "mapped repaint, mapping progress in fine steps", observed)
+
+
+def test_repaint_preview_gives_overlapping_pixels_to_the_first_region(rig, golden, monkeypatch) -> None:
+    from shared import magic_mask
+
+    _probe_as(monkeypatch)
+    painter = _Painter(rig, present={"subject one": range(_T), "subject wide": range(_T)},
+                       edited={"subject one", "subject wide"})
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", painter.masks)
+    folder = rig.server.root
+    video = _present(folder, "source.mp4")
+    matching = _frame(folder, "frame.png", (96, 64))
+    response = rig.server.client.post("/api/v1/repaint/preview", json={
+        "video_path": video, "target_frame_path": matching, "region_mappings": _mapping("subject one", "subject wide")})
+    answer = response.json()
+    if isinstance(answer, dict) and "source_preview" in answer:
+        answer = _preview_pixels(answer)
+    golden.check("preview gives overlapping pixels to the first region", 200, rig.server.normalise(
+        {"status": response.status_code, "body": answer, "mask calls": painter.calls}))
 
 def test_repaint_preview_maps_five_regions(rig, golden, monkeypatch) -> None:
     from shared import magic_mask

@@ -3007,6 +3007,106 @@ class TestMultiPersonRecast(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "aspect ratio"):
             validate(1920, 1080, 1080, 1920)
 
+    def test_repaint_region_mappings_accept_aliases_and_number_their_ids(self):
+        normalize = self.helpers["_normalize_repaint_region_mappings"]
+
+        self.assertEqual(normalize([]), [])
+        self.assertEqual(
+            normalize([
+                {"source_target": " the man ", "target_description": "a knight"},
+                {"source_description": "the dog", "edited_target": "a dragon"},
+                {"source": "", "source_target": "the car", "target": "a carriage", "id": "car"},
+            ]),
+            [
+                {"id": "repaint-1", "source": "the man", "target": "a knight"},
+                {"id": "repaint-2", "source": "the dog", "target": "a dragon"},
+                {"id": "car", "source": "the car", "target": "a carriage"},
+            ],
+        )
+        five = [{"source": f"s{index}", "target": f"t{index}"} for index in range(5)]
+        self.assertEqual(len(normalize(five)), 5)
+        with self.assertRaisesRegex(ValueError, "at most five"):
+            normalize(five + [{"source": "s5", "target": "t5"}])
+        with self.assertRaisesRegex(ValueError, "must be a list"):
+            normalize({"source": "s", "target": "t"})
+        with self.assertRaisesRegex(ValueError, "region 2 is invalid"):
+            normalize([{"source": "s", "target": "t"}, "t"])
+
+    def test_repaint_shot_references_refuse_a_mapping_outside_the_edited_masks(self):
+        build = _load_functions(
+            _REPAINT_PLANNING_PATH,
+            ("_build_repaint_shot_reference_conditioning",),
+            {},
+        )["_build_repaint_shot_reference_conditioning"]
+        frame = np.zeros((8, 12, 3), dtype=np.uint8)
+        masks = [np.zeros((8, 12, 3), dtype=np.uint8)] * 2
+
+        def call(active):
+            return build(
+                frame, masks, active, frame, frame, "unused", "job", 0,
+                cooccurring=True, reference_canvas=(12, 8),
+            )
+
+        for active in ([2], [-1], [0, 2]):
+            with self.assertRaisesRegex(ValueError, "invalid mapping"):
+                call(active)
+        with self.assertRaisesRegex(ValueError, "needs an active region"):
+            call([])
+
+    def test_repaint_shot_assembly_only_removes_its_own_shot_folder(self):
+        import time
+        import traceback
+        import types
+
+        with tempfile.TemporaryDirectory() as outer:
+            jobs = {}
+
+            def assemble(folder):
+                jobs["paint"] = {
+                    "id": "paint",
+                    "status": "running",
+                    "workspace": "tests",
+                    "out_dir": folder,
+                    "params": {
+                        "_repaint_shot_temp_dir": folder,
+                        "_repaint_final_out_dir": outer,
+                        "_repaint_shot_bundle": {
+                            "shots": [], "published_shots": [],
+                            "frame_count": 1, "fps": 1.0, "resolved_seed": 1,
+                        },
+                    },
+                }
+                run = _load_functions(
+                    _REPAINT_RUN_PATH,
+                    ("_run_repaint_shot_generation",),
+                    {
+                        "os": os,
+                        "time": time,
+                        "traceback": traceback,
+                        "_jobs": jobs,
+                        "_active_gen_states": {},
+                        # The shots did not finish: the worker returns before joining.
+                        "_run_generation": lambda *_args, **_kwargs: False,
+                        "unregister_abort_state": lambda *_args, **_kwargs: None,
+                        "_workspace_dir": lambda _workspace=None: outer,
+                        "wgp": types.SimpleNamespace(),
+                    },
+                )["_run_repaint_shot_generation"]
+                run("paint")
+
+            foreign = os.path.join(outer, "not-a-repaint-shot-folder")
+            os.makedirs(foreign)
+            kept = os.path.join(foreign, "keep.txt")
+            with open(kept, "w", encoding="utf-8") as handle:
+                handle.write("kept")
+            assemble(foreign)
+            self.assertTrue(os.path.isfile(kept))
+            self.assertEqual(jobs["paint"]["out_dir"], outer)
+
+            own = tempfile.mkdtemp(prefix="maestro-repaint-shots-", dir=outer)
+            assemble(own)
+            self.assertFalse(os.path.exists(own))
+
     def test_recast_bystander_probe_skips_single_person_full_pass(self):
         import sys
         import types
