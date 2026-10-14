@@ -17,7 +17,6 @@ from routers import core_labs as labs
 from routers.core_labs import create_core_labs_router
 from routers.core_mcp import create_core_mcp_router
 from routers.core_remote import create_core_remote_router
-from routers.core_series_plan import create_core_series_plan_router
 from routers.image_generation_commands import create_image_generation_commands_router
 from routers.lan_auth import create_lan_auth_router
 from routers.llm import create_llm_prompt_router, create_llm_router
@@ -141,7 +140,6 @@ api.include_router(create_series_assembly_router(
     concatenate_clips=lambda *args, **kwargs: core_series_assembly.concatenate_clips(*args, **kwargs),
     iso_now=labs._iso_now,
 ))
-api.include_router(create_core_series_plan_router())
 api.include_router(create_series_review_router(
     resolve_workspace=labs._series_workspace, lock=labs._LOCK, read_library=labs._read_series,
     write_library=labs._write_series, iso_now=labs._iso_now,

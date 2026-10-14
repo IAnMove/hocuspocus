@@ -122,6 +122,50 @@ def _include_prefix(call: ast.Call, *, owner: str) -> str:
     raise ValueError(f"Non-static include_router prefix at {owner}:{call.lineno}")
 
 
+def _add_api_routes(node: ast.AST, *, owner: str, prefix: str = "") -> list[dict]:
+    """``router.add_api_route(path, endpoint, methods=[...])`` in source order.
+
+    A moved handler stays a module-level function so its complexity fingerprint
+    keeps the launch name. The factory registers it here instead of with a
+    decorator. The call has to sit in the factory body: a helper would hide it
+    from this walk, and the static table would no longer match the served one.
+    """
+    routes = []
+    for child in ast.walk(node):
+        if not (
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Attribute)
+            and child.func.attr == "add_api_route"
+            and len(child.args) >= 2
+            and isinstance(child.args[1], ast.Name)
+        ):
+            continue
+        endpoint = child.args[1].id
+        path = _route_path(child.args[0], owner=owner, endpoint=endpoint, line=child.lineno)
+        keywords = {item.arg: item.value for item in child.keywords if item.arg}
+        methods = _literal(keywords.get("methods"))
+        if not isinstance(methods, list) or not methods:
+            raise ValueError(
+                f"add_api_route methods must be a list of strings at {owner}:{child.lineno} ({endpoint})"
+            )
+        for index, method in enumerate(methods):
+            if not isinstance(method, str) or method.lower() not in HTTP_METHODS:
+                raise ValueError(
+                    f"add_api_route method is not an HTTP method at {owner}:{child.lineno} ({endpoint})"
+                )
+            routes.append({
+                "method": method.upper(),
+                "path": f"{prefix}{path}",
+                "endpoint": endpoint,
+                "status_code": _literal(keywords.get("status_code")),
+                "response_model": _literal(keywords.get("response_model")),
+                "include_in_schema": _literal(keywords.get("include_in_schema")),
+                "source": owner,
+                "_line": (child.lineno, index),
+            })
+    return routes
+
+
 def _router_factory_routes(path: Path, factory_name: str, *, outer_prefix: str = "") -> list[dict]:
     """A router factory's routes, nested ``include_router`` calls expanded in place."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -157,7 +201,7 @@ def _router_factory_routes(path: Path, factory_name: str, *, outer_prefix: str =
     prefix = outer_prefix + prefix
     owner = path.relative_to(ROOT).as_posix()
     imports = _router_imports(tree)
-    routes = []
+    routes = _add_api_routes(factory, owner=owner, prefix=prefix)
     for node in ast.walk(factory):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             routes.extend(_decorated_routes(node, owner=owner, prefix=prefix))
