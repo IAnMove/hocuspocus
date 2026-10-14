@@ -2147,6 +2147,54 @@ class CoreRuntimeTests(unittest.TestCase):
         workflows = [item.get("workflow") for item in listed.json()["tasks"]]
         self.assertIn("series-plan", workflows)
 
+    def test_activity_cancel_and_resume_a_queued_series_plan(self):
+        """Core Activity lists Series plans; Cancel/Resume must hit the plan job, not MiniMax."""
+
+        class FrozenThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                pass
+
+            def start(self):
+                return None
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(), patch("routers.series_plan.threading.Thread", FrozenThread):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+                self.assertEqual(started.status_code, 200, started.text)
+                job_id = started.json()["jobId"]
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+                plan = next(
+                    task for task in listed.json().get("tasks") or []
+                    if task.get("backend_job_id") == job_id
+                )
+                cancelled = self.client.post(
+                    f"/api/v1/tasks/{plan['id']}/cancel",
+                    params={"workspace": "default"},
+                )
+                status = self.client.get(f"/api/v1/series/plan/jobs/{job_id}")
+                resumed = self.client.post(
+                    f"/api/v1/tasks/{plan['id']}/resume",
+                    params={"workspace": "default"},
+                )
+                after_resume = self.client.get(f"/api/v1/series/plan/jobs/{job_id}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertTrue(plan.get("cancelable"), plan)
+        self.assertTrue(plan.get("resumable"), plan)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["status"], "cancelled", status.json())
+        self.assertEqual(cancelled.json()["task"]["status"], "cancelled")
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        self.assertEqual(after_resume.status_code, 200, after_resume.text)
+        self.assertEqual(after_resume.json()["status"], "queued", after_resume.json())
+
     def test_core_plan_recovery_and_discard_routes(self):
         folder, previous = self._in_temp_workspace()
         try:

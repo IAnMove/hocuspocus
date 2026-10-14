@@ -221,6 +221,15 @@ def control_task(task: dict, action: str):
     workspace = str(task.get("workspace") or "default")
     task_id = str(task.get("id") or "")
     job_id = str(task.get("backend_job_id") or "")
+    adapter = str((task.get("metadata") or {}).get("adapter") or "")
+    if adapter == "series-plan" and job_id:
+        from routers.series_plan import cancel_series_episode_plan, resume_series_episode_plan
+
+        if action == "cancel":
+            return cancel_series_episode_plan(job_id)
+        if action in {"retry", "resume"}:
+            return resume_series_episode_plan(job_id)
+        raise HTTPException(status_code=409, detail=f"Task does not support {action}")
     if action != "cancel":
         raise HTTPException(status_code=409, detail=f"Task does not support {action}")
     if job_id:
