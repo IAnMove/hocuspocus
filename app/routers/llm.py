@@ -16,7 +16,6 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
 
 from services.lyrics_language import detect_language
 
@@ -424,8 +423,9 @@ def create_llm_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except llm_service.LLMProviderError as e:
-            # The provider failed (a rejected key is its 401/403), not this server.
-            return JSONResponse(status_code=502, content={"detail": str(e), "code": e.code})
+            # The provider failed (a rejected key is its 401/403), not this server. Raised, not
+            # returned: the MCP `analyze` tool calls this function directly and needs the exception.
+            raise HTTPException(status_code=502, detail=str(e), headers={"X-Hocus-Error-Code": e.code}) from e
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

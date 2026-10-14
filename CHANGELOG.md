@@ -22,7 +22,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a Director repair that was running when you reloaded the page shows its progress again** without opening the Productions dashboard.
 
-**Fixed: an LLM provider failure is reported as a bad gateway, not an internal error.** A missing or rejected provider key made `POST /api/v1/llm/generate` answer 500; it now answers 502 with a stable `code` (`provider_auth_failed` for a 401/403, `provider_failed` otherwise) next to the same readable `detail`.
+**Fixed: an LLM provider failure is reported as a bad gateway, not an internal error.** A missing or rejected provider key made `POST /api/v1/llm/generate` answer 500; it now answers 502 with the same readable `detail` and a stable code in the `X-Hocus-Error-Code` header (`provider_auth_failed` for a 401/403, `provider_failed` otherwise). The MCP `analyze` tool still reports the provider's message.
 
 **Fixed: the Wizard keeps snake_case names intact and long tokens wrap.** Names such as `qwen_image_21` or `http_code` used to lose their underscores and turn italic, and a long unbroken token (a provider error, a path) pushed the Wizard bubble wider than the panel.
 
