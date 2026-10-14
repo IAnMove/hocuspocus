@@ -131,16 +131,19 @@ def test_storage_duplicates_never_count_or_delete_one_physical_file_twice(server
 
     A hard link, a symlink, or a linked root that is the primary root through a link is one physical file:
     it is "shared", never a duplicate, and neither reclaim nor remove-linked deletes it. Same-size files that
-    differ in a sampled chunk are conflicts. Pairs under 10 MB are not listed. The "." search root is not a
-    linked install. Recorded on the server before the C9c move (the code under test did not change).
+    differ in a sampled chunk are conflicts, and so is a longer linked file that starts like the primary one.
+    Pairs under 10 MB are not listed. The "." search root is not a linked install. A primary file present in
+    two linked installs is listed once. Remove-linked refuses a primary file. Recorded on the server before the
+    C9c move (the code under test did not change).
     """
     from services import win_safe_files
 
     size = 10 * 1024 * 1024
     primary = tmp_path / "install-a" / "app" / "ckpts"
     linked = tmp_path / "install-b" / "app" / "ckpts"
+    second = tmp_path / "install-c" / "app" / "ckpts"
     joined = tmp_path / "install-j" / "app" / "ckpts"  # a linked root that is the primary root, through a link
-    for folder in (primary, linked, joined.parent):
+    for folder in (primary, linked, second, joined.parent):
         folder.mkdir(parents=True)
     os.symlink(primary, joined)
     loras = tmp_path / "loras"
@@ -162,16 +165,19 @@ def test_storage_duplicates_never_count_or_delete_one_physical_file_twice(server
     write(linked / "middle.safetensors", 4, flip=size // 2 + 7)
     write(primary / "same.safetensors", 5)
     write(linked / "same.safetensors", 5)
+    write(second / "same.safetensors", 5)
+    write(primary / "longer.safetensors", 7)
+    (linked / "longer.safetensors").write_bytes(bytes([7]) * size + b"more")
     (primary / "small.safetensors").write_bytes(b"s" * 1024)
     (linked / "small.safetensors").write_bytes(b"s" * 1024)
     write(tmp_path / "dot.safetensors", 6)  # the "." root is the working directory (tmp_path)
     write(primary / "dot.safetensors", 6)
-    linked_roots = {str(linked), str(joined)}
-    linked_apps = [str(linked.parent), str(joined.parent)]
+    linked_roots = {str(linked), str(second), str(joined)}
+    linked_apps = [str(linked.parent), str(second.parent), str(joined.parent)]
 
     class _Files:
         def get_checkpoints_paths(self):
-            return [str(primary), str(linked), str(joined), "."]
+            return [str(primary), str(linked), str(second), str(joined), "."]
 
         def is_external_root(self, root):
             return os.path.abspath(root) in linked_roots
@@ -188,14 +194,14 @@ def test_storage_duplicates_never_count_or_delete_one_physical_file_twice(server
         ("same.safetensors", "install-b"),
     ]
     assert sorted((row["rel_path"], row["linked_install"]) for row in scan["conflicts"]) == [
-        ("middle.safetensors", "install-b"), ("tail.safetensors", "install-b"),
+        ("longer.safetensors", "install-b"), ("middle.safetensors", "install-b"), ("tail.safetensors", "install-b"),
     ]
     # hard + sym through install-b; every primary name (the small one too) through the joined root.
-    assert scan["shared_via_link"] == 2 + 7
+    assert scan["shared_via_link"] == 2 + 8
     assert scan["total_reclaimable_bytes"] == size
 
     refused = (409, {"detail": "No identical linked copy exists (anymore) — refusing to delete the only copy."})
-    for name in ("hard.safetensors", "sym.safetensors", "tail.safetensors", "middle.safetensors"):
+    for name in ("hard.safetensors", "sym.safetensors", "tail.safetensors", "middle.safetensors", "longer.safetensors"):
         response = server.client.post("/api/v1/storage/duplicates/reclaim", json={"path": str(primary / name)})
         assert (response.status_code, response.json()) == refused, name
         assert (primary / name).is_file() and (linked / name).exists(), name
@@ -203,9 +209,15 @@ def test_storage_duplicates_never_count_or_delete_one_physical_file_twice(server
     monkeypatch.setitem(server.wgp.server_config["services"], "storage_allow_linked_removal", True)
     recycled = []
     monkeypatch.setattr(win_safe_files, "recycle_file", lambda target: recycled.append(target) or True)
-    for name in ("hard.safetensors", "sym.safetensors", "middle.safetensors"):
+    for name in ("hard.safetensors", "sym.safetensors", "middle.safetensors", "longer.safetensors"):
         response = server.client.post("/api/v1/storage/duplicates/remove-linked", json={"path": str(linked / name)})
         assert response.status_code == 409, name
+    response = server.client.post(
+        "/api/v1/storage/duplicates/remove-linked", json={"path": str(primary / "same.safetensors")},
+    )
+    assert (response.status_code, response.json()) == (400, {
+        "detail": "That file is not in a linked install — use Reclaim for HocusPocus Lab's own copies.",
+    })
     response = server.client.post(
         "/api/v1/storage/duplicates/remove-linked", json={"path": str(linked / "same.safetensors")},
     )
