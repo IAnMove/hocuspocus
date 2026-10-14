@@ -17,6 +17,8 @@ hand. ``inputs`` is None when a current part cannot be read (a named start that 
 then compared, because remaking a clip on a read that failed would spend a generation for nothing.
 
 ``matching_attempts`` is the one matcher: completed takes that asked for this request with these inputs.
+``repair_approval`` points the shot's approval at such a take when it points at none or at a take of another request,
+and never over a take a person chose.
 """
 from __future__ import annotations
 
@@ -53,3 +55,50 @@ def matching_attempts(series: dict[str, Any], shot: dict[str, Any], request: str
                 found.append(attempt)
                 break
     return found
+
+
+def repair_approval(series: dict[str, Any], episode: dict[str, Any], index: int, request: str, inputs: str | None,
+                    *, preview: bool) -> str | None:
+    """Approve the shot's latest matching take when the shot is approved on none, or on a take another request made.
+
+    Returns the attempt id it approved, None when it left the shot alone. It is left alone when the approved take
+    itself matches (a person may have chosen the older of two), when it was imported by hand, when a person rejected
+    the matching take, and in a preview review when nothing is approved or the matching take was never approved: a
+    draft nobody looked at is not approved here. The language versions' approvals are their own and are never
+    touched."""
+    from services.series_library import approve_shot_render_attempt
+
+    shot = episode["shots"][index]
+    matching = matching_attempts(series, shot, request, inputs)
+    held = _held(shot)
+    if not matching or (held is None and preview):
+        return None
+    if held is not None and (_matches(held, matching) or not _made_by_produce(series, held)):
+        return None
+    candidates = [item for item in matching if item.get("reviewDecision") != "rejected"
+                  and (not preview or item.get("approvedAt"))]
+    if not candidates:
+        return None
+    try:
+        episode["shots"][index] = approve_shot_render_attempt(shot, str(candidates[0].get("id")), "server")
+    except ValueError:
+        return None
+    return str(candidates[0].get("id"))
+
+
+def _held(shot: dict[str, Any]) -> dict[str, Any] | None:
+    """The shot's approved attempt when it is a usable take; a dangling or unfinished approval counts as none."""
+    wanted = shot.get("approvedAttemptId")
+    attempt = next((item for item in shot.get("attempts") or [] if isinstance(item, dict) and item.get("id") == wanted), None)
+    return attempt if attempt and attempt.get("status") == "completed" and attempt.get("outputAssetIds") else None
+
+
+def _matches(attempt: dict[str, Any], matching: list[dict[str, Any]]) -> bool:
+    return any(item.get("id") == attempt.get("id") for item in matching)
+
+
+def _made_by_produce(series: dict[str, Any], attempt: dict[str, Any]) -> bool:
+    """The take carries the request digest produce writes; an import by hand does not."""
+    assets = series.get("assets") or {}
+    return any(((assets.get(asset_id) or {}).get("metadata") or {}).get(REQUEST_KEY) is not None
+               for asset_id in attempt.get("outputAssetIds") or [])

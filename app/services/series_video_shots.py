@@ -28,7 +28,8 @@ still match their shot and are not made again.
 frame, the cast and location plate a ``plan`` start is composed from, the pixels of a named
 start) is kept in a second digest, ``videoInputs`` (``series_video_inputs``). A take made
 before it existed has none and matches on ``videoRequest`` alone, so an upgrade makes no
-clip again.
+clip again. When the approved take is not the one the shot asks for now, produce points the
+approval at the matching take unless a person chose the approved one.
 """
 from __future__ import annotations
 
@@ -50,7 +51,7 @@ from services.series_render import (
 from services.series_review import episode_mode, shot_entry
 from services.series_script_warnings import listed_shots
 from services.series_shot_plan import frame_size
-from services.series_video_inputs import INPUTS_KEY, REQUEST_KEY, inputs_digest, matching_attempts
+from services.series_video_inputs import INPUTS_KEY, REQUEST_KEY, inputs_digest, matching_attempts, repair_approval
 
 # H3 publishes 24 fps and lengths 124, then +17, through 345 (minimax_h3_handler).
 FRAME_RATE = 24
@@ -218,7 +219,7 @@ def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, canc
     done = set(step.get("doneShots") or [])
     run = _Run(job, step, deps, cancelled, save or (lambda: None))
     for shot in allowed:
-        if _already_made(run, series, shot, done):
+        if _already_made(run, series, episode, shot, done):
             done.add(shot.get("id"))
             continue
         if _plan_blocks(episode, shot):
@@ -243,12 +244,18 @@ def _scripted(episode: dict[str, Any]) -> list[dict[str, Any]]:
     return [shot for shot in episode.get("shots") or [] if isinstance(shot, dict) and isinstance(shot.get("video"), dict)]
 
 
-def _already_made(run: "_Run", series: dict[str, Any], shot: dict[str, Any], done: set) -> bool:
-    """True when this request already has a completed take, made from the same inputs (``videoInputs``)."""
+def _already_made(run: "_Run", series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], done: set) -> bool:
+    """True when this request already has a completed take. The take the shot asks for is then also the approved
+    one, unless a person chose another: changing the size away and back must not skip the generation and cut the
+    clip of the other size, or fail the cut for want of an approval."""
     if shot.get("id") in done:
         return True
     asked = _asked(series, shot, run.space)
-    return asked is not None and bool(matching_attempts(series, shot, *asked))
+    if asked is None or not matching_attempts(series, shot, *asked):
+        return False
+    if not _plan_blocks(episode, shot):
+        _reapprove(run, series, episode, shot, *asked)
+    return True
 
 
 class _Space:
@@ -483,6 +490,45 @@ def _start_pixels(series: dict[str, Any], name: str, space: _Space) -> str | Non
     """The digest of a named start frame's file, or None when the name resolves to no readable file."""
     relative = named_frame_file(series, space.kits if name.startswith("pose:") else {}, space.root, name)
     return (_file_digest(os.path.join(space.root, relative)) or None) if relative else None
+
+
+def _reapprove(run: "_Run", series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], request: str,
+               inputs: str | None) -> None:
+    """Approve the take the shot asks for when it is approved on none or on a take of another request, and store it.
+
+    ``series_video_inputs.repair_approval`` decides; this runs it on the series the produce reads and on the stored
+    library, which may have moved on since (it decides again there)."""
+    preview = episode_mode(episode) == "preview"
+
+    def repair(target: dict[str, Any]) -> dict[str, Any] | None:
+        """The shot after the repair in ``target`` (this job's episode), or None when it was left alone."""
+        stored = (target.get("episodesById") or {}).get(run.job["episodeId"]) or {}
+        index = next((at for at, item in enumerate(stored.get("shots") or [])
+                      if isinstance(item, dict) and item.get("id") == shot.get("id")), None)
+        if index is None or repair_approval(target, stored, index, request, inputs, preview=preview) is None:
+            return None
+        return stored["shots"][index]
+
+    repaired = repair(series)
+    if repaired is None:
+        return
+    if repaired is not shot:
+        shot.clear()
+        shot.update(repaired)
+
+    def mutate(library: dict) -> None:
+        live = (library.get("seriesById") or {}).get(run.job["seriesId"])
+        if isinstance(live, dict):
+            repair(live)
+
+    workspace = run.job["workspace"]
+    if _locked_write(workspace, mutate):
+        return
+    write = getattr(run.deps, "write_library", None)
+    if write:
+        library = json.loads(json.dumps(run.deps.read_library(workspace)))
+        mutate(library)
+        write(workspace, library)
 
 
 # One shot ------------------------------------------------------------------------------------------

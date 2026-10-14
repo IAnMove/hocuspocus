@@ -207,6 +207,128 @@ def test_an_episode_made_before_video_inputs_makes_no_clip_on_the_first_produce(
     assert library == before, "the stored library is as it was"
 
 
+def _added_take(series, shot, attempt, *, request=None, **fields):
+    """A completed take of the shot. ``request`` is the ``videoRequest`` it carries; without one it is an import by hand."""
+    asset = f"asset_{attempt}"
+    shot["attempts"].append({"id": attempt, "status": "completed", "outputAssetIds": [asset], **fields})
+    metadata = {"videoRequest": request} if request else {}
+    series["assets"][asset] = {"id": asset, "kind": "video", "uri": f"outputs/{attempt}.mp4", "metadata": metadata}
+
+
+def _resized(tmp_path, **review):
+    """The 480p take of ``_made_before`` plus a 720p one that is the approved take; the series asks for 480p again."""
+    library, episode = _episode(_request(), review=review or None)
+    series, shot = _made_before(library)
+    sized = _video_digest({"videoShotResolution": "720p"}, shot)
+    _added_take(series, shot, "att-720", request=sized, approvedAt="2026-10-01T00:00:00Z", reviewDecision="approved")
+    shot["approvedAttemptId"] = "att-720"
+    return library, series, shot, episode
+
+
+def _produce_quietly(tmp_path, library):
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == [], "the take that fits is not made again"
+    return tools
+
+
+def test_produce_reapproves_the_matching_take_when_the_inspector_cleared_it(tmp_path):
+    """Changing the size away and back clears the approval; the old take still matches, so produce must point the shot
+    at it again or the cut raises 'Approve shot N'."""
+    library, _episode_body = _episode(_request())
+    series, shot = _made_before(library)
+    shot.pop("approvedAttemptId")
+    assert _take_matches(series, shot)
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-old"
+    assert series["episodesById"]["ep1"]["shots"][0]["approvedAttemptId"] == "att-old"
+
+
+def test_produce_points_at_the_take_of_the_size_they_asked_not_the_last_approved(tmp_path):
+    """A series that produced at 720p and went back to 480p still has the 720p take approved. Skipping because a 480p
+    take exists would cut the 720p clip."""
+    library, series, shot, _episode_body = _resized(tmp_path)
+    version = {"approvedAttemptIds": {"s00": "att-720"}}
+    series["episodesById"]["ep1"]["languageVersions"] = {"english": version}
+    assert _take_matches(series, shot) and shot["approvedAttemptId"] == "att-720"
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-old"
+    assert series["episodesById"]["ep1"]["shots"][0]["approvedAttemptId"] == "att-old"
+    assert version == {"approvedAttemptIds": {"s00": "att-720"}}, "a language version's approval is its own"
+
+
+def test_produce_never_replaces_a_take_a_person_imported_or_chose(tmp_path):
+    # Approved on a clip imported by hand: it has no request to compare.
+    library, series, shot, _episode_body = _resized(tmp_path)
+    shot["attempts"] = [item for item in shot["attempts"] if item["id"] != "att-720"]
+    _added_take(series, shot, "att-manual", reviewDecision="approved")
+    shot["approvedAttemptId"] = "att-manual"
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-manual"
+    # Two takes fit and the older one is approved on purpose.
+    library, series, shot, _episode_body = _resized(tmp_path)
+    _added_take(series, shot, "att-new", request=OLD_VIDEO_REQUEST)
+    shot["approvedAttemptId"] = "att-old"
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-old"
+    # The matching take was rejected: a person said no, and produce does not say yes.
+    library, series, shot, _episode_body = _resized(tmp_path)
+    shot["attempts"][0]["reviewDecision"] = "rejected"
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-720"
+
+
+def test_a_preview_review_repairs_only_a_take_that_was_approved_before(tmp_path):
+    review = {"mode": "preview", "shots": {"s00": {"plan": "approved"}}}
+    # Nothing is approved: the draft is for a person to look at.
+    library, _episode_body = _episode(_request(), review=review)
+    series, shot = _made_before(library)
+    shot.pop("approvedAttemptId")
+    _produce_quietly(tmp_path, library)
+    assert "approvedAttemptId" not in shot
+    # Approved on the 720p take, and the 480p one is a draft nobody approved.
+    library, series, shot, _episode_body = _resized(tmp_path, **review)
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-720"
+    # The same, once a person approved the 480p take.
+    library, series, shot, _episode_body = _resized(tmp_path, **review)
+    shot["attempts"][0]["approvedAt"] = "2026-09-30T00:00:00Z"
+    _produce_quietly(tmp_path, library)
+    assert shot["approvedAttemptId"] == "att-old"
+
+
+def test_a_plan_that_is_not_approved_leaves_the_approval_alone(tmp_path):
+    library, _episode_body = _episode(_request(), review={"mode": "plan", "shots": {"s00": {"plan": "pending"}}})
+    series, shot = _made_before(library)
+    shot.pop("approvedAttemptId")
+    _produce_quietly(tmp_path, library)
+    assert "approvedAttemptId" not in shot
+
+
+def test_a_repaired_approval_is_stored_through_the_series_router_lock(tmp_path, monkeypatch):
+    import threading
+    from routers import series_library as routes
+    library, _episode_body = _episode(_request())
+    series, shot = _made_before(library)
+    shot.pop("approvedAttemptId")
+    stored = {"cast": copy.deepcopy(library)}
+    written = []
+
+    def write(workspace, value):
+        stored[workspace] = copy.deepcopy(value)
+        written.append(workspace)
+        return value
+
+    for name, value in (("_library_lock", threading.RLock()), ("_resolve_workspace", lambda workspace: workspace),
+                        ("_read_library", lambda workspace: copy.deepcopy(stored[workspace])), ("_write_library", write)):
+        monkeypatch.setattr(routes, name, value, raising=False)
+    _produce_quietly(tmp_path, library)
+    assert written == ["cast"]
+    assert stored["cast"]["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][0]["approvedAttemptId"] == "att-old"
+
+
 def test_a_480p_take_asks_for_the_same_clip_plate_and_intent_as_before(tmp_path):
     clip = _png(tmp_path / "clip.png", (196, 180, 154))
     tools = _Server(tmp_path, clip)
