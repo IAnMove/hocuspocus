@@ -4106,8 +4106,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         self.assertIn('"-map_metadata", "2"', launch)
         self.assertIn('file_sidecar["params"]["seed"] = resolved_seed', launch)
-        # The filename-seed read moved with get_output_metadata. The two
-        # lines above still write that seed during post-processing.
+        # The post-processing read of the filename seed is the launch line
+        # below. The `name` form is the metadata reader, which moved out of
+        # the launch module with get_output_metadata.
+        self.assertIn("resolved_seed = _extract_output_seed(fname)", launch)
         self.assertIn(
             "resolved_seed = _extract_output_seed(name)",
             _read(_OUTPUT_OPS_PATH),
