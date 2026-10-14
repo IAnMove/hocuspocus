@@ -10,9 +10,11 @@ import pytest
 from app.services.director.planners.music_video import MusicVideoPlanner
 from app.services.director_plan_jobs import (
     DirectorPlanJobStore,
+    any_director_plan_job_active,
     build_director_plan_failure_detail,
     claim_director_plan_job,
     release_director_plan_job,
+    reset_director_plan_jobs,
 )
 
 
@@ -224,3 +226,15 @@ def test_live_job_claim_is_atomic_but_releasable_for_restart_resume():
     release_director_plan_job(job_id)
     assert claim_director_plan_job(job_id) is True
     release_director_plan_job(job_id)
+
+
+def test_a_claimed_director_plan_counts_as_busy_until_release():
+    reset_director_plan_jobs()
+    try:
+        assert any_director_plan_job_active() is False
+        assert claim_director_plan_job("director-plan-busy-check") is True
+        assert any_director_plan_job_active() is True
+        release_director_plan_job("director-plan-busy-check")
+        assert any_director_plan_job_active() is False
+    finally:
+        reset_director_plan_jobs()

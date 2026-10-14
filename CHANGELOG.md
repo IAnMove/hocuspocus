@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: deleting a workspace is refused while Director v2 music-video planning is still running.** Those planners live in their own claim set and `.director-plan-jobs-v1`, not the local GPU queue, and they write checkpoints back into the workspace folder. A delete mid-plan used to wipe the project and then recreate an empty folder for the leftover worker.
+
 **Canonical tasks left the main server file (no behaviour change).** The helpers that read a job's id, status, time and progress, the functions that publish a generation, a Series plan or render, an assembly, a Director pipeline and the older job kinds, and the functions that list those tasks, retry or cancel one, and reopen one for resume, moved unchanged. The server hands each module its own objects once, and the old names on the server are those same functions. A Series, Story or comic service still reaches them through a forwarder that looks the name up when it is called.
 
 **Fixed: a generation started by a command (picture, speech, music, sound effect or video, from the Studio, the Wizard or MCP) works again on the full server.** Since the generation job core moved into the kernel, such a job was cancelled and marked interrupted ("dispatch_failed") before its worker started. The job now joins the GPU queue and starts as before.

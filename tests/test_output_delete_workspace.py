@@ -114,3 +114,52 @@ def test_delete_output_rejects_traversal(tmp_path, monkeypatch, name):
 
     assert result == {"deleted": name}
     assert outside.read_bytes() == b"keep"
+
+
+def _workspace_delete_client(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers.workspace_outputs import create_workspace_router
+
+    film = tmp_path / "film"
+    film.mkdir()
+    policy = PathPolicy()
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["film"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=policy.safe_join,
+        save_path=lambda: str(tmp_path),
+    ))
+    return TestClient(app), film
+
+
+def test_delete_workspace_refuses_while_director_plan_is_running(tmp_path):
+    """Director v2 planners live in `_ACTIVE_JOB_IDS`, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from services.director_plan_jobs import (
+        claim_director_plan_job,
+        reset_director_plan_jobs,
+    )
+
+    client, film = _workspace_delete_client(tmp_path)
+    (film / "clip.mp4").write_bytes(b"keep")
+    reset_director_plan_jobs()
+    try:
+        assert claim_director_plan_job("director-plan-delete-guard") is True
+        refused = client.delete("/api/v1/workspaces/film")
+        kept = film.is_dir() and (film / "clip.mp4").read_bytes() == b"keep"
+        reset_director_plan_jobs()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        reset_director_plan_jobs()
+
+    assert refused.status_code == 409
+    assert kept
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "ok"

@@ -23,6 +23,25 @@ _STORE_LOCK = threading.RLock()
 _ACTIVE_JOB_IDS: set[str] = set()
 
 
+def any_director_plan_job_active() -> bool:
+    """True while Director v2 music-video planning still writes checkpoints.
+
+    These jobs live in ``_ACTIVE_JOB_IDS`` and ``.director-plan-jobs-v1``,
+    not ``jobs()`` or ``_active_gen_states``. A claimed job persists the
+    next batch into the workspace via ``_workspace_dir``; a finished one
+    has already called ``release_director_plan_job``. Workspace delete
+    must treat a claimed job as busy.
+    """
+    with _STORE_LOCK:
+        return bool(_ACTIVE_JOB_IDS)
+
+
+def reset_director_plan_jobs() -> None:
+    """Drop in-process Director plan claims. Tests use this; production does not."""
+    with _STORE_LOCK:
+        _ACTIVE_JOB_IDS.clear()
+
+
 def claim_director_plan_job(job_id: str) -> bool:
     """Atomically claim one in-process worker while allowing restart recovery."""
     token = str(job_id or "").strip()
