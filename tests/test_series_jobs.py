@@ -569,8 +569,8 @@ def _stale_render_checkpoint(monkeypatch, tmp_path, *, claimed=False, cached=Fal
 def test_a_render_checkpoint_left_running_by_a_restart_is_loaded_as_interrupted(monkeypatch, tmp_path):
     render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path)
     loaded = render_jobs._load_series_render_job("series-render-stale")
-    assert loaded["status"] == "interrupted" and loaded["activeShotId"] is None and "restarted" in loaded["message"]
-    assert [item["status"] for item in loaded["items"]] == ["interrupted", "queued"], "a resume gives the dead one a new attempt"
+    assert loaded["status"] == "interrupted" and "restarted" in loaded["message"] and loaded["finishedAt"]
+    assert [item["status"] for item in loaded["items"]] == ["running", "queued"], "the items stay for cancel and resume to settle"
     assert store.load("series-render-stale")["status"] == "interrupted", "once: the checkpoint itself is settled"
     assert [item["jobId"] for item in store.recoverable()] == ["series-render-stale"], "and recovery still lists it"
 
@@ -583,12 +583,28 @@ def test_a_render_a_worker_of_this_process_owns_is_left_running(monkeypatch, tmp
     assert render_jobs._load_series_render_job("series-render-stale")["status"] == "running", "this process started it"
 
 
-def test_a_stale_running_render_no_longer_blocks_the_next_render_of_the_episode(monkeypatch, tmp_path):
+def test_an_interrupted_render_still_owns_its_episode_whether_or_not_it_was_read_first(monkeypatch, tmp_path):
+    """The render/start guard is the design: an interrupted queue keeps the episode (409, resume or cancel it) so a second
+    render cannot append duplicate attempts. Settling the checkpoint must not make that depend on who looked first."""
     render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path)
-    assert render_jobs._active_series_render_for_episode("default", "series-1", "episode-1") is None
+    owner = render_jobs._active_series_render_for_episode("default", "series-1", "episode-1")
+    assert owner["jobId"] == "series-render-stale" and owner["status"] == "interrupted"
     assert store.load("series-render-stale")["status"] == "interrupted"
-    render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path, claimed=True)
+    assert render_jobs._load_series_render_job("series-render-stale")["status"] == "interrupted"
     assert render_jobs._active_series_render_for_episode("default", "series-1", "episode-1")["jobId"] == "series-render-stale"
+    store.save({**store.load("series-render-stale"), "status": "cancelled"})
+    monkeypatch.setattr(render_jobs, "_series_render_jobs", {})
+    assert render_jobs._active_series_render_for_episode("default", "series-1", "episode-1") is None, "cancelled releases it"
+
+
+def test_a_series_delete_is_no_longer_blocked_by_a_checkpoint_a_restart_interrupted(monkeypatch, tmp_path):
+    """series_lifecycle reads the durable store: a checkpoint left running blocked the series and episode deletes (409)."""
+    from services.series_lifecycle import list_active_series_jobs
+
+    render_jobs, _store = _stale_render_checkpoint(monkeypatch, tmp_path)
+    assert [job["jobId"] for job in list_active_series_jobs(str(tmp_path), "default", "series-1")] == ["series-render-stale"]
+    render_jobs._load_series_render_job("series-render-stale")
+    assert list_active_series_jobs(str(tmp_path), "default", "series-1") == []
 
 
 def test_the_recovery_list_reports_a_stale_render_as_interrupted(monkeypatch, tmp_path):

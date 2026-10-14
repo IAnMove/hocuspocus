@@ -75,8 +75,11 @@ def _reconcile_series_render_job(job: dict) -> dict:
     """A checkpoint that says running without a worker in this process was cut by a restart: interrupted, once.
 
     A render this process started is in ``_series_render_jobs`` and, while it works, in ``_series_render_active_jobs``;
-    anything else read from disk is dead. Its running items become ``interrupted`` (not ``queued``): a resume
-    (``routers.series_render.resume_series_render_job``) gives those a new attempt instead of reusing a dead child."""
+    anything else read from disk is dead. Like ``series_native_render._reconcile`` only the job's status, message and
+    end time change: its items stay as they were, which is what ``cancel_series_render_job`` and
+    ``resume_series_render_job`` already handle after a restart (they cancel, or append a new attempt for, a running item).
+    The interrupted job still owns its episode (``_active_series_render_for_episode``) until it is resumed, cancelled
+    or discarded."""
     job_id = str(job.get("jobId") or "")
     if job.get("status") != "running":
         return job
@@ -84,12 +87,8 @@ def _reconcile_series_render_job(job: dict) -> dict:
         if job_id in _series_render_active_jobs or job_id in _series_render_jobs:
             return job
     settled = copy.deepcopy(job)
-    for item in settled.get("items") or []:
-        if isinstance(item, dict) and item.get("status") == "running":
-            item["status"] = "interrupted"
     now = time.time()
-    settled.update(status="interrupted", stage="interrupted", activeShotId=None, message=INTERRUPTED,
-                   finishedAt=now, updatedAt=now)
+    settled.update(status="interrupted", message=INTERRUPTED, finishedAt=now, updatedAt=now)
     _series_render_store(str(settled.get("workspace") or "default")).save(settled)
     return settled
 
@@ -97,7 +96,9 @@ def _active_series_render_for_episode(
     workspace: str, series_id: str, episode_id: str,
 ) -> dict | None:
     """Return the one queue that owns an episode, including after restart."""
-    active_statuses = {"queued", "running", "cancelling"}
+    # An interrupted queue (a restart cut it, see _reconcile_series_render_job) still owns the episode: its attempts are
+    # not settled until it is resumed, cancelled or discarded, and a second render would append duplicates.
+    active_statuses = {"queued", "running", "cancelling", "interrupted"}
     with _series_render_jobs_lock:
         cached = [copy.deepcopy(job) for job in _series_render_jobs.values()]
     try:
