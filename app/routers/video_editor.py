@@ -128,6 +128,20 @@ def list_video_editor_jobs() -> list[dict]:
         return [copy.deepcopy(job) for job in _video_editor_jobs.values()]
 
 
+def any_video_editor_job_active() -> bool:
+    """True while an export or alternative-song remount still owns the workspace folder.
+
+    Queued, waiting, running and cancelling jobs write into ``workspace_dir``;
+    completed/failed/cancelled ones do not. Workspace delete must treat the
+    first group as busy — they live here, not in ``jobs()`` or ``_active_gen_states``.
+    """
+    with _video_editor_jobs_lock:
+        return any(
+            str(job.get("status") or "") not in _VIDEO_EDITOR_TERMINAL
+            for job in _video_editor_jobs.values()
+        )
+
+
 def _public_video_editor_job(job: dict) -> dict:
     """Return a stable API snapshot without worker-only coordination flags."""
     return {
@@ -1041,6 +1055,7 @@ __all__ = [
     "create_video_editor_jobs_router",
     "create_video_editor_router",
     "get_video_editor_export",
+    "any_video_editor_job_active",
     "list_video_editor_jobs",
     "reset_video_editor_jobs",
     "_VIDEO_EDITOR_FFMPEG_LANE",

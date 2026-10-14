@@ -114,3 +114,48 @@ def test_delete_output_rejects_traversal(tmp_path, monkeypatch, name):
 
     assert result == {"deleted": name}
     assert outside.read_bytes() == b"keep"
+
+
+def test_delete_workspace_refuses_while_a_video_editor_export_is_running(tmp_path):
+    """Editor/alternative-song FFmpeg jobs live in `_video_editor_jobs`, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers.video_editor import _register_video_editor_job, reset_video_editor_jobs
+    from routers.workspace_outputs import create_workspace_router
+
+    film = tmp_path / "film"
+    film.mkdir()
+    (film / "clip.mp4").write_bytes(b"clip")
+    policy = PathPolicy()
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["film"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=policy.safe_join,
+        save_path=lambda: str(tmp_path),
+    ))
+    client = TestClient(app)
+    reset_video_editor_jobs()
+    try:
+        _register_video_editor_job({
+            "job_id": "export-film",
+            "workspace": "film",
+            "status": "running",
+        })
+        refused = client.delete("/api/v1/workspaces/film")
+        kept_clip = film.is_dir() and (film / "clip.mp4").read_bytes() == b"clip"
+        reset_video_editor_jobs()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        reset_video_editor_jobs()
+    assert refused.status_code == 409, refused.text
+    assert "generation" in refused.json()["detail"].lower()
+    assert kept_clip
+    assert deleted.status_code == 200, deleted.text
+    assert not film.is_dir()

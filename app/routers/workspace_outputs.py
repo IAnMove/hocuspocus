@@ -108,6 +108,16 @@ def create_workspace_router(
         busy = any(j.get("status") in ("queued", "running") for j in jobs())
         if busy or not generation_idle():
             raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        # Video-editor exports and alternative-song remounts write into the
+        # workspace from `_video_editor_jobs`, which is neither jobs() nor
+        # `_active_gen_states`. Deleting mid-FFmpeg wipes the clips and lets
+        # workspace_dir resurrect an empty folder for the leftover worker.
+        try:
+            from routers.video_editor import any_video_editor_job_active
+            if any_video_editor_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
         # Director pipelines are alive between their generation jobs (LLM
         # planning, review pauses) with no _jobs entry — but their next step
         # would resurrect the folder via _workspace_dir().
