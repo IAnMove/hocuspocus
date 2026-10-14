@@ -19,6 +19,13 @@ repoints ``worker_module``.
 The goldens pin today's behaviour, including its oddities. Tests whose names
 start with ``test_oddity_`` pin behaviour that looks unintended; a refactor must
 keep it, and a fix is its own PR that re-records the golden.
+
+Film grain, the chunked FlashVSR upscale and the spatial-upsampling pass are
+not reached from the worker tests: those tests replace film grain and spatial
+upsampling, and nothing calls the chunked upscale. The tests at the bottom of
+this module call the three functions and record what they do to a file. Torch,
+decord, the grain kernel, the FlashVSR model and ffmpeg are stubbed: grain is
+random, and FlashVSR needs a GPU this suite does not have.
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -1306,3 +1314,399 @@ def test_oddity_the_sound_effect_sidecar_reads_a_job_id_key_jobs_do_not_have(rig
     assert [item["job_id"] for item in handed] == [""]
     (sidecar,) = rig.sidecars().values()
     assert sidecar["job_id"] == job_id
+
+
+# -- post-processing passes the worker tests never enter -------------------------------------------------------------
+def _masked_argv(command) -> list[str]:
+    """Flags stay; absolute paths do not, so a golden does not carry this machine's temp directory."""
+    return ["<PATH>" if os.path.isabs(str(part)) else str(part) for part in command]
+
+
+def _file_mark(path: Path) -> str:
+    return {
+        b"ORIGINAL": "original",
+        b"SOURCE": "source",
+        b"GRAIN": "grain",
+        b"MUXED": "muxed",
+        b"SEGMENT": "segment",
+        b"JOINED": "joined",
+    }.get(path.read_bytes(), f"other:{path.stat().st_size}")
+
+
+def _extras(folder: Path, source: Path) -> list[str]:
+    return sorted(path.name for path in folder.iterdir() if path.name != source.name)
+
+
+_FLASH_KEYS = ("flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend", "flashvsr_persistence")
+
+
+def _prepare_flashvsr(rig, monkeypatch, *, fps: float, width: int, height: int, frames: int,
+                      variant: str, expect_ffmpeg: bool, stop_at: str | None) -> dict:
+    """Stub everything ``_chunked_flashvsr_upscale`` touches except its own chunking and persistence.
+
+    ``get_video_info`` reports ``width`` x ``height`` so the chunk-size formula runs for real, while the
+    frames handed back are 2x2. A long 4000-pixel ``tiny`` clip therefore still chunks, without allocating
+    the output buffer the formula is there to avoid.
+    """
+    import torch
+    from shared.utils import utils as video_utils
+
+    notes: dict = {"reads": [], "saves": [], "upscales": [], "messages": [], "commands": [], "releases": 0,
+                   "persistence_during": []}
+
+    monkeypatch.setattr(video_utils, "get_video_info", lambda _path: (fps, width, height, frames))
+
+    def get_resampled_video(_path, start, count, got_fps):
+        notes["reads"].append({"start": start, "count": count, "fps": got_fps})
+        take = min(int(count), max(0, frames - int(start)))
+        if take <= 0:
+            return None
+        return torch.zeros((take, 2, 2, 3), dtype=torch.uint8)
+
+    def save_video(**kwargs):
+        tensor = kwargs["tensor"]
+        Path(kwargs["save_file"]).write_bytes(b"SEGMENT")
+        notes["saves"].append({
+            "file": Path(kwargs["save_file"]).name,
+            "fps": kwargs["fps"],
+            "nrow": kwargs["nrow"],
+            "normalize": kwargs["normalize"],
+            "value_range": list(kwargs["value_range"]) if "value_range" in kwargs else None,
+            "codec_type": kwargs["codec_type"],
+            "container": kwargs["container"],
+            "shape": list(tensor.shape),
+            "dtype": str(tensor.dtype),
+        })
+
+    def upscale(seg, method, **kwargs):
+        notes["persistence_during"].append(rig.server.wgp.server_config.get("flashvsr_persistence"))
+        notes["upscales"].append({
+            "method": method,
+            "frames": int(seg.shape[1]),
+            "in_shape": list(seg.shape),
+            "in_dtype": str(seg.dtype),
+            "continue_cache": kwargs.get("continue_cache") is not None,
+            "return_continue_cache": kwargs.get("return_continue_cache"),
+            "profile": kwargs.get("profile"),
+            "seed": kwargs.get("seed"),
+            "still_image": kwargs.get("still_image"),
+            "process_files": kwargs.get("process_files"),
+            "vae_config": kwargs.get("vae_config"),
+            "init_pipe": kwargs.get("init_pipe"),
+        })
+        produced = int(seg.shape[1])
+        return torch.zeros((3, produced, 2, 2), dtype=torch.float32), {"n": len(notes["upscales"])}
+
+    def run(command, *args, **kwargs):
+        argv = _masked_argv(command)
+        notes["commands"].append(argv)
+        if not expect_ffmpeg:
+            raise AssertionError(f"ffmpeg was called: {argv}")
+        if argv[0] != "ffmpeg":
+            raise AssertionError(argv[0])
+        Path(list(command)[-1]).write_bytes(b"JOINED")
+        return subprocess.CompletedProcess(list(command), 0, "", "")
+
+    # A class body does not see this function's locals, so the callable is attached afterwards.
+    flash = SimpleNamespace(
+        PERSIST_RAM=2, PERSIST_UNLOAD=1,
+        scale_for_upsampling=lambda _method: 2.0,
+        settings=lambda: (True, variant, 1),
+        upscale=upscale,
+    )
+    rig.set_wgp("flashvsr", flash)
+    rig.set_wgp("get_resampled_video", get_resampled_video)
+    rig.set_wgp("save_video", save_video)
+    rig.set_wgp("loaded_profile", 4)
+    rig.set_wgp("process_files_def", "process-files")
+    rig.set_wgp("vae_config", {"tile": 0})
+    rig.set_wgp("init_pipe", "init-pipe")
+    rig.set_wgp("release_flashvsr_vram", lambda: notes.__setitem__("releases", notes["releases"] + 1))
+    monkeypatch.setattr(subprocess, "run", run)
+
+    def update_job(_job, **changes):
+        message = changes.get("message")
+        notes["messages"].append(message)
+        if stop_at and isinstance(message, str) and message.startswith(stop_at):
+            return False
+        return True
+
+    rig.patch("update_job", update_job)
+    services = dict(rig.server.wgp.server_config.get("services") or {})
+    services.update(flashvsr_mode=3, flashvsr_topk_ratio=1.5, flashvsr_backend="sparge")
+    monkeypatch.setitem(rig.server.wgp.server_config, "services", services)
+    return notes
+
+
+def _clear_flash_keys(config: dict) -> None:
+    """The upscale copies settings onto the shared fake and forces persistence; leave neither behind."""
+    for key in _FLASH_KEYS:
+        config.pop(key, None)
+
+
+_FILM_GRAIN = ["silent rewrite", "audio mux", "cuda oom fallback", "unreadable video"]
+
+
+@pytest.mark.parametrize("case", _FILM_GRAIN)
+def test_film_grain_rewrites_the_file_and_restores_the_decord_bridge(rig, golden, tmp_path, monkeypatch, case) -> None:
+    """The real grain pass re-encodes in place, muxes audio back when the source has it, falls back to CPU on
+    a CUDA out-of-memory, and puts decord's bridge back to ``native`` even when the reader cannot open the file."""
+    import torch
+
+    assert not torch.cuda.is_available()
+    folder = tmp_path / "grain"
+    folder.mkdir()
+    source = folder / "clip.mp4"
+    source.write_bytes(b"ORIGINAL")
+    bridge_calls: list[str] = []
+    grain: list[dict] = []
+    saves: list[dict] = []
+    commands: list[list[str]] = []
+
+    class _Bridge:
+        current = "native"
+
+        def set_bridge(self, name: str) -> None:
+            bridge_calls.append(name)
+            self.current = name
+
+    class _Reader:
+        def __init__(self, _path: str) -> None:
+            if case == "unreadable video":
+                raise RuntimeError("cannot open this video")
+
+        def get_avg_fps(self) -> float:
+            return 23.6
+
+        def __len__(self) -> int:
+            return 2
+
+        def get_batch(self, _index):
+            return torch.zeros((2, 4, 6, 3), dtype=torch.uint8)
+
+    bridge = _Bridge()
+    monkeypatch.setitem(sys.modules, "decord", SimpleNamespace(bridge=bridge, VideoReader=_Reader))
+    monkeypatch.setattr(tempfile, "mktemp", lambda suffix="": str(folder / f"extracted{suffix}"))
+
+    def add_film_grain(frames, intensity, saturation):
+        grain.append({
+            "device": str(frames.device),
+            "dtype": str(frames.dtype),
+            "shape": list(frames.shape),
+            "intensity": intensity,
+            "saturation": saturation,
+        })
+        if case == "cuda oom fallback" and len(grain) == 1:
+            raise torch.cuda.OutOfMemoryError("out of memory")
+        return torch.full_like(frames, 7)
+
+    def save_video(**kwargs):
+        tensor = kwargs["tensor"]
+        Path(kwargs["save_file"]).write_bytes(b"GRAIN")
+        saves.append({
+            "file": Path(kwargs["save_file"]).name,
+            "fps": kwargs["fps"],
+            "nrow": kwargs["nrow"],
+            "normalize": kwargs["normalize"],
+            "codec_type": kwargs["codec_type"],
+            "container": kwargs["container"],
+            "shape": list(tensor.shape),
+            "dtype": str(tensor.dtype),
+        })
+
+    def run(command, *args, **kwargs):
+        argv = list(command)
+        commands.append(_masked_argv(argv))
+        if argv[0] == "ffprobe":
+            stdout = "audio\n" if case == "audio mux" else ""
+            return subprocess.CompletedProcess(argv, 0, stdout, "")
+        if argv[0] == "ffmpeg":
+            Path(argv[-1]).write_bytes(b"MUXED" if "-c:a" in argv else b"AAC")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        raise AssertionError(argv[0])
+
+    monkeypatch.setattr("postprocessing.film_grain.add_film_grain", add_film_grain)
+    monkeypatch.setattr("shared.utils.audio_video.save_video", save_video)
+    monkeypatch.setattr(subprocess, "run", run)
+
+    returned = None
+    error = None
+    try:
+        returned = rig.launch._apply_film_grain_to_file(str(source), 0.4, 0.7)
+    except RuntimeError as exc:
+        error = str(exc)
+
+    if case == "unreadable video":
+        assert error == "cannot open this video" and grain == [] and saves == []
+        assert _file_mark(source) == "original"
+    elif case == "cuda oom fallback":
+        assert error is None and returned is None and len(grain) == 2
+        assert [item["device"] for item in grain] == ["cpu", "cpu"]
+        assert _file_mark(source) == "grain"
+    elif case == "audio mux":
+        assert error is None and _file_mark(source) == "muxed" and len(commands) == 3
+        assert commands[1][commands[1].index("-vn") + 1:commands[1].index("-vn") + 3] == ["-acodec", "copy"]
+        assert "-shortest" in commands[2] and commands[2][commands[2].index("-c:a") + 1] == "aac"
+    else:
+        assert error is None and _file_mark(source) == "grain" and len(grain) == 1 and len(commands) == 1
+    assert bridge_calls == ["torch", "native"] and bridge.current == "native" and _extras(folder, source) == []
+    if saves:
+        assert saves[0]["fps"] == 24 and saves[0]["codec_type"] == "libx264_8" and saves[0]["container"] == "mp4"
+        assert saves[0]["normalize"] is False and saves[0]["shape"] == [1, 3, 2, 4, 6]
+    rig.check(golden, f"film grain: {case}", {
+        "bridge": bridge_calls,
+        "bridge_after": bridge.current,
+        "grain": grain,
+        "saves": saves,
+        "commands": commands,
+        "file": _file_mark(source),
+        "leftovers": _extras(folder, source),
+        "error": error,
+        "returned": returned,
+    })
+
+
+_FLASH_CASES = ["three chunks", "persistence already resident", "aborted before the first frame",
+                "stopped on the second chunk"]
+
+
+@pytest.mark.parametrize("case", _FLASH_CASES)
+def test_chunked_flashvsr_upscale_chunks_a_long_clip_and_restores_persistence(rig, golden, tmp_path, monkeypatch,
+                                                                             case) -> None:
+    """A 100-frame 4000-pixel ``tiny`` clip is three 49-frame chunks with an 11-frame overlap, joined by ffmpeg.
+    Persistence is forced to resident for the call and put back afterwards, and an abort leaves no segment files."""
+    folder = tmp_path / "flash"
+    folder.mkdir()
+    source = folder / "long.mp4"
+    source.write_bytes(b"SOURCE")
+    config = rig.server.wgp.server_config
+    notes = _prepare_flashvsr(
+        rig, monkeypatch, fps=8.9, width=4000, height=4000, frames=100, variant="tiny",
+        expect_ffmpeg=case in ("three chunks", "persistence already resident"),
+        stop_at="Upscaling chunk 2/" if case == "stopped on the second chunk" else None,
+    )
+    if case == "persistence already resident":
+        monkeypatch.setitem(config, "flashvsr_persistence", rig.server.wgp.flashvsr.PERSIST_RAM)
+    try:
+        result = rig.launch._chunked_flashvsr_upscale(
+            str(source), "flashvsr2", job={"id": "flash-job"},
+            abort_check=(lambda: True) if case == "aborted before the first frame" else None,
+        )
+        copied = {key: config.get(key) for key in ("flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend")}
+        persistence_after = config.get("flashvsr_persistence")
+        if case in ("three chunks", "persistence already resident"):
+            assert notes["reads"] == [
+                {"start": 0, "count": 49, "fps": 8.9},
+                {"start": 38, "count": 60, "fps": 8.9},
+                {"start": 87, "count": 60, "fps": 8.9},
+            ]
+            assert [item["frames"] for item in notes["upscales"]] == [49, 60, 13]
+            assert [item["return_continue_cache"] for item in notes["upscales"]] == [True, True, False]
+            assert notes["persistence_during"] == [2, 2, 2]
+            assert _file_mark(Path(result)) == "joined" and _file_mark(source) == "source"
+            assert len(notes["commands"]) == 1 and notes["commands"][0][1:8] == ["-y", "-f", "concat", "-safe", "0", "-i", "<PATH>"]
+        elif case == "aborted before the first frame":
+            assert result is None and notes["reads"] == [] and notes["upscales"] == [] and _extras(folder, source) == []
+        else:
+            assert result is None and len(notes["reads"]) == 2 and len(notes["upscales"]) == 1
+            assert notes["messages"] == [
+                "Upscaling chunk 1/3 (FlashVSR)...",
+                "Upscaling chunk 2/3 (FlashVSR)...",
+            ]
+            assert _extras(folder, source) == []
+        if case == "persistence already resident":
+            assert notes["releases"] == 0 and persistence_after == 2
+        else:
+            assert notes["releases"] == 1 and persistence_after == 1
+        assert copied == {"flashvsr_mode": 3, "flashvsr_topk_ratio": 1.5, "flashvsr_backend": "sparge"}
+        rig.check(golden, f"flashvsr chunks: {case}", {
+            "reads": notes["reads"],
+            "upscales": notes["upscales"],
+            "saves": notes["saves"],
+            "messages": notes["messages"],
+            "commands": notes["commands"],
+            "persistence_during": notes["persistence_during"],
+            "persistence_after": persistence_after,
+            "released": notes["releases"],
+            "settings_copied": copied,
+            "returned": None if result is None else Path(result).name,
+            "returned_bytes": None if result is None else _file_mark(Path(result)),
+            "source": _file_mark(source),
+            "leftovers": _extras(folder, source),
+        })
+    finally:
+        _clear_flash_keys(config)
+
+
+_SPATIAL_CASES = ["keeps the audio", "silent clip", "cancelled before upscale"]
+
+
+@pytest.mark.parametrize("case", _SPATIAL_CASES)
+def test_spatial_upsampling_replaces_the_file_and_keeps_its_audio(rig, golden, tmp_path, monkeypatch, case) -> None:
+    """The real spatial pass upscales through the chunked function, muxes the original audio back, and replaces
+    the file. A cancel before the first frame leaves the file untouched and still cleans the extracted tracks."""
+    folder = tmp_path / "spatial"
+    folder.mkdir()
+    source = folder / "spatial.mp4"
+    source.write_bytes(b"ORIGINAL")
+    config = rig.server.wgp.server_config
+    notes = _prepare_flashvsr(
+        rig, monkeypatch, fps=8.9, width=16, height=16, frames=8, variant="tiny",
+        expect_ffmpeg=False, stop_at=None,
+    )
+    audio = case != "silent clip"
+    extracted: list = []
+
+    def extract_audio_tracks(_path):
+        extracted.append(Path(_path).name)
+        if audio:
+            return ["guide.aac"], {"codec": "aac"}
+        return [], None
+
+    def combine_video_with_audio_tracks(_video, tracks, dest, audio_metadata=None):
+        notes.setdefault("combine", []).append({"tracks": list(tracks), "metadata": audio_metadata})
+        Path(dest).write_bytes(b"MUXED")
+
+    def cleanup_temp_audio_files(tracks):
+        notes.setdefault("cleaned", []).append(list(tracks) if tracks else [])
+
+    rig.set_wgp("extract_audio_tracks", extract_audio_tracks)
+    rig.set_wgp("combine_video_with_audio_tracks", combine_video_with_audio_tracks)
+    rig.set_wgp("cleanup_temp_audio_files", cleanup_temp_audio_files)
+    job = {"id": "spatial-job", "status": "running", "cancel_requested": case == "cancelled before upscale"}
+    try:
+        error = None
+        try:
+            rig.launch._apply_spatial_upsampling_to_file(str(source), "flashvsr2", job)
+        except RuntimeError as exc:
+            error = str(exc)
+        if case == "keeps the audio":
+            assert error is None and _file_mark(source) == "muxed" and notes["combine"] == [
+                {"tracks": ["guide.aac"], "metadata": {"codec": "aac"}},
+            ]
+        elif case == "silent clip":
+            assert error is None and _file_mark(source) == "segment" and "combine" not in notes
+        else:
+            assert error == "FlashVSR upscale was aborted" and _file_mark(source) == "original"
+            assert notes["reads"] == [] and "combine" not in notes
+        assert extracted == ["spatial.mp4"]
+        assert notes["cleaned"] == [["guide.aac"] if audio else []]
+        assert _extras(folder, source) == []
+        assert notes["releases"] == 1 and config.get("flashvsr_persistence") == 1
+        rig.check(golden, f"spatial upsampling: {case}", {
+            "error": error,
+            "file": _file_mark(source),
+            "extracted": extracted,
+            "combine": notes.get("combine", []),
+            "cleaned": notes["cleaned"],
+            "reads": notes["reads"],
+            "upscales": notes["upscales"],
+            "saves": notes["saves"],
+            "commands": notes["commands"],
+            "messages": notes["messages"],
+            "persistence_after": config.get("flashvsr_persistence"),
+            "released": notes["releases"],
+            "leftovers": _extras(folder, source),
+        })
+    finally:
+        _clear_flash_keys(config)
