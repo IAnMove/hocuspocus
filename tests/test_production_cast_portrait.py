@@ -5,6 +5,7 @@ import pytest
 
 from services.music_production import Production, ProductionError
 from services.production_cast_portrait import PHRASE, frame_references, single_prompt
+from services.production_stage_frames import forget_changed_cast, forget_shots_using_cast
 
 
 def test_the_portrait_prompt_is_derived_and_an_explicit_one_is_kept():
@@ -54,3 +55,82 @@ def test_a_failed_sheet_keeps_its_reason_and_a_failed_portrait_keeps_the_sheet(t
     assert raised.value.code == "cast_incomplete"
     assert production.state["cast"]["solo"] == "/u/solo.png"
     assert "solo" not in production.state.get("cast_single", {})
+
+
+def _cast_production(tmp_path):
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path), mcp=None)
+    requested = []
+    production.image = lambda *args: requested.append(args) or "job"
+    production.wait = lambda jobs: {key: f"{key}.png" for key in jobs}
+    production.upload = lambda name: (name, "/u/" + name)
+    return production, requested
+
+
+def test_a_changed_cast_look_is_drawn_again_and_an_unchanged_one_is_kept(tmp_path):
+    production, requested = _cast_production(tmp_path)
+    spec = {"style": {"image": "riso"}, "cast": [{"id": "hero", "sheet_prompt": "young singer, denim jacket", "seed": 8}]}
+    production.cast(spec)
+    assert [call[0] for call in requested] == ["cast-hero", "cast-single-hero"]
+    production.cast(spec)
+    assert [call[0] for call in requested] == ["cast-hero", "cast-single-hero"], "a resume redoes nothing"
+    production.cast({**spec, "cast": [{**spec["cast"][0], "sheet_prompt": "older singer, leather coat"}]})
+    assert [call[0] for call in requested] == ["cast-hero", "cast-single-hero", "cast-hero", "cast-single-hero"]
+    assert production.state["cast"]["hero"] == "/u/hero.png"
+    assert production.state["cast_single"]["hero"] == "/u/hero.png"
+
+
+def test_a_cast_made_before_its_source_was_recorded_is_kept(tmp_path):
+    production, requested = _cast_production(tmp_path)
+    production.state.update(cast={"hero": "/u/old-sheet.png"}, cast_single={"hero": "/u/old-portrait.png"})
+    production.cast({"style": {"image": "riso"}, "cast": [{"id": "hero", "sheet_prompt": "a singer"}]})
+    assert requested == []
+    assert production.state["cast"]["hero"] == "/u/old-sheet.png"
+    assert production.state["cast_single"]["hero"] == "/u/old-portrait.png"
+
+
+def test_a_changed_cast_look_redraws_the_h3_shots_that_use_it(tmp_path):
+    production, requested = _cast_production(tmp_path)
+    spec = {"style": {"image": "look"}, "cast": [{"id": "hero", "sheet_prompt": "denim"}, {"id": "pal", "sheet_prompt": "suit"}]}
+    production.cast(spec)
+    production.state["frames"] = {"s0": "s0.png", "s1": "s1.png"}
+    production.state["clips"] = {"s0": {"file": "s0.mp4"}, "s1": {"file": "s1.mp4"}}
+    production.cast({**spec, "cast": [{**spec["cast"][0], "sheet_prompt": "leather"}, spec["cast"][1]]})
+    forget_shots_using_cast(production, [
+        {"key": "s0", "kind": "h3", "cast": ["hero"]},
+        {"key": "s1", "kind": "h3", "cast": ["pal"]},
+        {"key": "bg", "kind": "scene2d", "cast": ["hero"]},
+    ])
+    assert "s0" not in production.state["frames"] and production.state["frames"]["s1"] == "s1.png"
+    assert production.state["clips"]["s0"]["obsolete"] and "obsolete" not in production.state["clips"]["s1"]
+
+
+def test_frames_pass_redraws_after_a_cast_look_change(tmp_path):
+    production, requested = _cast_production(tmp_path)
+    spec = {"style": {"image": "look"}, "cast": [{"id": "hero", "sheet_prompt": "denim"}]}
+    production.cast(spec)
+    production.state["frames"] = {"s0": "old.png"}
+    production.state["clips"] = {"s0": {"file": "old.mp4"}}
+    changed = {**spec, "cast": [{**spec["cast"][0], "sheet_prompt": "leather"}]}
+    production.cast(changed)
+    production.wait = lambda jobs: {key: "new.png" for key in jobs}
+    production.frames(changed, [{"key": "s0", "kind": "h3", "frame": "wide", "cast": ["hero"]}])
+    assert production.state["frames"]["s0"] == "new.png"
+    assert production.state["clips"]["s0"]["obsolete"]
+    assert any(call[0] == "frame-s0" for call in requested)
+
+
+def test_a_group_plate_is_composed_again_when_a_member_changes(tmp_path, monkeypatch):
+    production, requested = _cast_production(tmp_path)
+    (tmp_path / "uploads").mkdir()
+    production.uploads = tmp_path / "uploads"
+    composed = []
+    monkeypatch.setattr("services.music_production.compose_group", lambda paths, out: composed.append(out.name) or True)
+    spec = {"style": {}, "cast": [{"id": "a", "sheet_prompt": "red"}, {"id": "b", "sheet_prompt": "blue"},
+                                  {"id": "duo", "group": ["a", "b"]}]}
+    production.cast(spec)
+    assert composed == ["p-group-duo.png"]
+    changed = {**spec, "cast": [{**spec["cast"][0], "sheet_prompt": "green"}, spec["cast"][1], spec["cast"][2]]}
+    production.cast(changed)
+    assert composed == ["p-group-duo.png", "p-group-duo.png"]
+    production.cast(changed)
+    assert composed == ["p-group-duo.png", "p-group-duo.png"] and forget_changed_cast(production, changed) == set()
