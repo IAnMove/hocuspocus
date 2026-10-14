@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 
 import pytest
 
@@ -39,6 +40,7 @@ def test_job_and_task_listings_start_empty(server, golden) -> None:
     server.check(golden, "director pipelines active", "GET", "/api/v1/director/pipelines/active")
     server.check(golden, "director v2 plan jobs", "GET", "/api/v1/director/v2/plan/jobs")
     server.check(golden, "job status missing", "GET", "/api/v1/status/job-does-not-exist")
+    server.check(golden, "jobs recovery resume empty", "POST", "/api/v1/jobs/recovery/resume")
 
 
 def test_favorites_toggle(server, golden) -> None:
@@ -208,6 +210,62 @@ def test_manual_generation_job_is_published_with_its_details(server, golden, mon
     server.check(golden, "cancel the manual job", "POST", "/api/v1/cancel/golden-manual")
 
 
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_recovery_resume_drops_a_leftover_that_cannot_be_a_job(server, golden, tmp_path, monkeypatch) -> None:
+    """A durable row with no model is removed and not started. A row whose id is already live is left alone."""
+    launch = _launch()
+    queue = launch._durable_generation_queue
+    monkeypatch.setattr(queue, "path", str(tmp_path / "queue.json"))
+    queue.upsert({"id": "golden-no-model", "status": "running", "created_at": CREATED,
+                  "params": {"prompt": "no model here"}, "workspace": "default"})
+    server.check(golden, "recovery resume drops a leftover without a model", "POST", "/api/v1/jobs/recovery/resume")
+    server.check(golden, "recovery after a dropped leftover", "GET", "/api/v1/jobs/recovery")
+    assert queue.list() == []
+
+    live = launch._new_generation_job(
+        dict(PARAMS), "default", job_id="golden-already-live", created_at=CREATED, publish_task=False,
+    )
+    monkeypatch.setitem(launch._jobs, "golden-already-live", live)
+    queue.upsert({"id": "golden-already-live", "status": "running", "created_at": CREATED,
+                  "params": dict(PARAMS), "workspace": "default"})
+    missing, created = launch._queue_recovered_generation({"id": "golden-no-model", "params": {}})
+    again, started = launch._queue_recovered_generation(
+        {"id": "golden-already-live", "status": "running", "created_at": CREATED,
+         "params": dict(PARAMS), "workspace": "default"},
+    )
+    assert missing is None and created is False and started is False and again is live
+    kept = launch._prepare_generation_leftovers([
+        {"id": "golden-prepare", "status": "running", "created_at": CREATED, "params": dict(PARAMS), "workspace": "default"},
+    ])
+    queue.upsert({"id": "golden-discard-helper", "status": "running", "created_at": CREATED,
+                  "params": dict(PARAMS), "workspace": "default"})
+    launch._discard_generation_leftover(
+        {"id": "golden-discard-helper", "status": "running", "created_at": CREATED, "params": dict(PARAMS), "workspace": "default"},
+    )
+    started_threads: list[threading.Thread] = []
+    real_thread = threading.Thread
+
+    class _RecordingThread(real_thread):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            started_threads.append(self)
+
+    monkeypatch.setattr(threading, "Thread", _RecordingThread)
+    launch._start_recovered_generation({"id": "golden-start-missing"})
+    assert len(started_threads) == 1
+    started_threads[0].join(5)
+    assert not started_threads[0].is_alive()
+    golden.check("recovery helpers", 200, server.normalise({
+        "kept": [launch._recovery_job_summary(record) for record in kept],
+        "discarded queue": [record["id"] for record in queue.list()],
+        "start thread": {
+            "name": started_threads[0].name,
+            "daemon": started_threads[0].daemon,
+            "alive": started_threads[0].is_alive(),
+        },
+    }))
+
+
 def test_recovery_leftovers_are_read_from_the_durable_queue(server, golden, tmp_path, monkeypatch) -> None:
     """A leftover in the durable queue file shows up in the recovery list and can be discarded."""
     launch = _launch()
@@ -218,6 +276,197 @@ def test_recovery_leftovers_are_read_from_the_durable_queue(server, golden, tmp_
     server.check(golden, "recovery lists the leftover", "GET", "/api/v1/jobs/recovery")
     server.check(golden, "recovery discard", "POST", "/api/v1/jobs/recovery/discard")
     server.check(golden, "recovery is empty again", "GET", "/api/v1/jobs/recovery")
+
+
+def test_the_local_gpu_owner_drops_runtimes_the_next_owner_does_not_use(server, golden, monkeypatch, capsys) -> None:
+    """The prepare hook releases every other engine, and skips the native cache flush after ``release_model``."""
+    import torch
+
+    from services import minimax_h3_service, resource_scheduler
+    import services.llm_service as llm_service
+
+    launch = _launch()
+    calls: list[str] = []
+    status = {"provider": "local", "device": "cuda:0"}
+    monkeypatch.setattr(minimax_h3_service, "cancel_idle_shutdown", lambda: calls.append("cancel h3 idle"))
+    monkeypatch.setattr(minimax_h3_service, "stop_runtime", lambda: calls.append("stop h3"))
+    monkeypatch.setattr(server.wgp, "release_model", lambda: calls.append("release wgp"), raising=False)
+    monkeypatch.setattr(server.wgp, "wan_model", object(), raising=False)
+    monkeypatch.setattr(server.wgp, "offloadobj", None, raising=False)
+    monkeypatch.setattr(llm_service, "get_status", lambda: dict(status))
+    monkeypatch.setattr(llm_service, "unload_model", lambda: calls.append("unload llm"))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: calls.append("empty cache"))
+
+    def run(description: str) -> dict:
+        start = len(calls)
+        launch._prepare_local_gpu_owner(None, "golden-owner", description)
+        return {"calls": calls[start:], "printed": capsys.readouterr().out.strip()}
+
+    observed = {
+        "handing to wgp": run(resource_scheduler.gpu_engine_description(resource_scheduler.GPU_ENGINE_WGP, "video")),
+        "handing to legacy h3": run(resource_scheduler.gpu_engine_description(resource_scheduler.GPU_ENGINE_H3_LEGACY, "legacy")),
+        "handing to a local llm": run(resource_scheduler.gpu_engine_description(resource_scheduler.GPU_ENGINE_LOCAL_LLM, "writer")),
+        "handing to anything else": run("some other owner"),
+    }
+    monkeypatch.setattr(server.wgp, "wan_model", None, raising=False)
+    observed["anything else, wgp not loaded"] = run("some other owner")
+    status["device"] = "cpu"
+    observed["anything else, llm on cpu"] = run("some other owner")
+    status["provider"] = "remote"
+    status["device"] = "cuda:0"
+    observed["anything else, remote llm"] = run("some other owner")
+
+    def broken_status():
+        raise RuntimeError("llm status down")
+
+    monkeypatch.setattr(llm_service, "get_status", broken_status)
+    observed["anything else, llm status fails"] = run("some other owner")
+    golden.check("local gpu owner", 200, server.normalise(observed))
+
+
+def test_h3_idle_release_follows_the_queue(server, golden, monkeypatch, capsys) -> None:
+    """Native and legacy release keep a warm runtime only for the same engine, and the idle callback rechecks the queue."""
+    from services import minimax_h3_service
+
+    launch = _launch()
+    calls: list = []
+    timers: list = []
+
+    class _RecordingTimer:
+        def __init__(self, interval, function) -> None:
+            self.interval = interval
+            self.function = function
+            self.daemon = False
+            self.cancelled = False
+            timers.append(self)
+
+        def start(self) -> None:
+            calls.append(["timer", self.interval, self.daemon])
+
+        def cancel(self) -> None:
+            self.cancelled = True
+            calls.append("timer cancel")
+
+    monkeypatch.setattr(threading, "Timer", _RecordingTimer)
+    monkeypatch.setattr(server.wgp, "release_model", lambda: calls.append("release wgp"), raising=False)
+    monkeypatch.setattr(minimax_h3_service, "cancel_idle_shutdown", lambda: calls.append("cancel legacy idle"))
+    monkeypatch.setattr(minimax_h3_service, "stop_runtime", lambda: calls.append("stop legacy"))
+
+    def schedule(delay, predicate=None) -> None:
+        calls.append(["schedule legacy", delay, bool(predicate and predicate())])
+
+    monkeypatch.setattr(minimax_h3_service, "schedule_idle_shutdown", schedule)
+    inserted: list[str] = []
+
+    def queued(job_id: str, model_type: str) -> None:
+        launch._jobs[job_id] = {"id": job_id, "status": "queued", "params": {"model_type": model_type}}
+        inserted.append(job_id)
+
+    def clear() -> None:
+        for job_id in inserted:
+            launch._jobs.pop(job_id, None)
+        inserted.clear()
+
+    def take(label: str) -> dict:
+        step = {"label": label, "printed": capsys.readouterr().out.strip(), "calls": list(calls)}
+        calls.clear()
+        return step
+
+    steps = []
+    try:
+        queued("golden-h3-wait", "minimax_h3")
+        launch._release_h3_when_queue_allows("golden-finished")
+        steps.append(take("native h3 still queued"))
+        clear()
+        queued("golden-other-wait", "fake_t2v")
+        launch._release_h3_when_queue_allows("golden-finished")
+        steps.append(take("a non-h3 gpu job is queued"))
+        clear()
+        launch._release_h3_when_queue_allows("golden-finished")
+        idle = timers[-1]
+        steps.append(take("native queue idle"))
+        monkeypatch.setattr(server.wgp, "transformer_type", "not-a-model", raising=False)
+        idle.function()
+        steps.append(take("idle callback, model is not h3"))
+        monkeypatch.setattr(server.wgp, "transformer_type", "minimax_h3", raising=False)
+        launch._active_gen_states["golden-active"] = {"abort": False}
+        idle.function()
+        steps.append(take("idle callback, a job is active"))
+        launch._active_gen_states.pop("golden-active", None)
+        queued("golden-late", "fake_t2v")
+        idle.function()
+        steps.append(take("idle callback, a job arrived"))
+        clear()
+        idle.function()
+        steps.append(take("idle callback, still idle and the model is h3"))
+        launch._release_h3_when_queue_allows("golden-finished")
+        queued("golden-h3-again", "minimax_h3")
+        launch._release_h3_when_queue_allows("golden-finished")
+        steps.append(take("a later native job cancels the idle timer"))
+        clear()
+        queued("golden-legacy-wait", minimax_h3_service.MODEL_ID)
+        launch._release_legacy_h3_when_queue_allows("golden-finished")
+        steps.append(take("legacy h3 still queued"))
+        clear()
+        queued("golden-other-wait", "fake_t2v")
+        launch._release_legacy_h3_when_queue_allows("golden-finished")
+        steps.append(take("a non-legacy gpu job is queued"))
+        clear()
+        launch._release_legacy_h3_when_queue_allows("golden-finished")
+        steps.append(take("legacy queue idle"))
+        launch._cancel_h3_idle_release()
+        steps.append(take("cancel when no timer is armed"))
+    finally:
+        clear()
+        launch._active_gen_states.pop("golden-active", None)
+    golden.check("h3 idle release", 200, server.normalise({"steps": steps, "timers": len(timers)}))
+
+
+def test_interrupting_the_wan_model_sets_the_flag_only_when_the_model_has_one(server, golden, monkeypatch) -> None:
+    launch = _launch()
+
+    class _Model:
+        _interrupt = False
+
+    model = _Model()
+    monkeypatch.setattr(server.wgp, "wan_model", model, raising=False)
+    launch._interrupt_wan_model()
+    flagged = model._interrupt
+    monkeypatch.setattr(server.wgp, "wan_model", object(), raising=False)
+    launch._interrupt_wan_model()
+    monkeypatch.setattr(server.wgp, "wan_model", None, raising=False)
+    launch._interrupt_wan_model()
+    golden.check("interrupt wan model", 200, server.normalise({"flagged": flagged, "missing model and flag survived": True}))
+
+
+def test_cached_hardware_probes_once_and_falls_back_when_the_probe_fails(server, golden, monkeypatch, capsys) -> None:
+    import services.hardware_detect as hardware_detect
+
+    launch = _launch()
+    calls: list[str] = []
+
+    def detect() -> dict:
+        calls.append("probe")
+        return {"gpu_vram_gb": 11.0, "gpu_name": "stub"}
+
+    monkeypatch.setattr(hardware_detect, "detect_hardware", detect)
+    monkeypatch.setattr(launch, "_cached_hardware", None)
+    first = launch._get_cached_hardware()
+    second = launch._get_cached_hardware()
+
+    def boom() -> dict:
+        calls.append("fail")
+        raise RuntimeError("probe down")
+
+    monkeypatch.setattr(hardware_detect, "detect_hardware", boom)
+    monkeypatch.setattr(launch, "_cached_hardware", None)
+    fallback = launch._get_cached_hardware()
+    again = launch._get_cached_hardware()
+    golden.check("cached hardware", 200, server.normalise({
+        "first": first, "second is the same object": second is first, "fallback": fallback,
+        "again is the fallback": again is fallback, "calls": calls, "printed": capsys.readouterr().out.strip(),
+    }))
 
 
 def test_the_full_server_builds_one_runtime_context_and_launch_names_its_objects(full_server) -> None:

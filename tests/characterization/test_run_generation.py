@@ -816,6 +816,54 @@ def test_a_recovered_job_says_it_restarts_from_the_beginning(rig, golden) -> Non
     rig.check(golden, "recovered job", rig.observe(job_id))
 
 
+def test_resuming_the_recovery_queue_runs_the_leftover_from_the_beginning(rig, golden) -> None:
+    """``POST /api/v1/jobs/recovery/resume`` requeues a durable leftover and starts the real preparation worker."""
+    launch = rig.launch
+    job_id = "golden-resume"
+    launch._durable_generation_queue.upsert({
+        "id": job_id, "status": "running", "created_at": CREATED, "params": dict(BODY), "workspace": "default",
+    })
+    response = rig.server.client.post("/api/v1/jobs/recovery/resume")
+    assert response.status_code == 200, response.text
+    name = f"recovered-generation-{job_id}"
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        alive = [thread for thread in threading.enumerate() if thread.name == name and thread.is_alive()]
+        job = launch._jobs.get(job_id)
+        if alive:
+            alive[0].join(deadline - time.monotonic())
+            break
+        if isinstance(job, dict) and job.get("status") in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+    else:
+        job = launch._jobs.get(job_id)
+        if isinstance(job, dict):
+            launch.request_cancel(job, job_id=job_id, active_states=launch._active_gen_states)
+        for state in list(launch._active_gen_states.values()):
+            state["abort"] = True
+        for thread in threading.enumerate():
+            if thread.name == name:
+                thread.join(10)
+        raise AssertionError(f"{name} did not finish")
+    job = launch._jobs.get(job_id)
+    assert isinstance(job, dict) and job.get("status") in {"completed", "failed", "cancelled"}
+    rig.job_ids.append(job_id)
+    rig.check(golden, "resumed leftover", {"http": response.json(), **rig.observe(job_id)})
+
+
+def test_the_real_simulated_executor_writes_an_artifact_and_finishes_the_job(rig, golden, monkeypatch) -> None:
+    """The worker's simulated branch calls the real executor. Only the policy flag is replaced."""
+    import services.generation_worker.prepare as prepare
+
+    monkeypatch.setattr(
+        prepare, "execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")),
+    )
+    job_id = rig.direct_job({**BODY, "generation_mode": "image", "video_length": 1, "prompt": "a simulated barn"})
+    rig.call_worker(job_id)
+    rig.check(golden, "real simulated executor", rig.observe(job_id, full=True))
+
+
 # -- post-processing -------------------------------------------------------------------------------------------------
 def test_post_processing_runs_in_a_fixed_order_on_every_video(rig, golden, tmp_path, monkeypatch) -> None:
     media.sound(tmp_path / "uploads" / "audio" / "voice.wav")

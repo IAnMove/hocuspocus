@@ -10207,6 +10207,191 @@
     },
     "status": 200
   },
+  "real simulated executor": {
+    "body": {
+      "engine_calls": [],
+      "files": [
+        "simulated_image_golden-direct.meta.json",
+        "simulated_image_golden-direct.png"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "simulated_image_golden-direct.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "image",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "simulated_image_golden-direct.png",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "image",
+            "model_type": "fake_t2v",
+            "prompt": "a simulated barn",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 1
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct"
+        }
+      },
+      "status": {
+        "asset_id": "asset_<ID>",
+        "canonical_url": "/api/v1/file/simulated_image_golden-direct.png?workspace=default",
+        "created_at": 1700000000.0,
+        "error": null,
+        "finished_at": "<TIME>",
+        "generation_details": {
+          "execution_mode": "real",
+          "frames": 1,
+          "generation_mode": "image",
+          "lora_count": 0,
+          "model_name": "Fake Text to Video",
+          "model_type": "fake_t2v",
+          "prompt": "a simulated barn",
+          "resolution": "64x64",
+          "seed": 42,
+          "simulated": false
+        },
+        "h3_window_plan": null,
+        "job_id": "golden-direct",
+        "message": "Done · simulated artifact",
+        "oom_info": null,
+        "output_files": [
+          "simulated_image_golden-direct.png"
+        ],
+        "outputs": [
+          {
+            "asset_id": "asset_<ID>",
+            "canonical_url": "/api/v1/file/simulated_image_golden-direct.png?workspace=default",
+            "path": "simulated_image_golden-direct.png"
+          }
+        ],
+        "path": "simulated_image_golden-direct.png",
+        "phase": "",
+        "processing_time_sec": "<MASKED>",
+        "progress": 100,
+        "queue_position": null,
+        "root_task_id": "task-generation-golden-direct",
+        "started_at": "<TIME>",
+        "status": "completed",
+        "step": 0,
+        "task_id": "task-generation-golden-direct",
+        "task_timings": [],
+        "token_usage": null,
+        "token_usage_source": "not_measured",
+        "total_steps": 0
+      },
+      "task": {
+        "children": [],
+        "task": {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "golden-direct",
+          "cancelable": false,
+          "completed_at": "<TIME>",
+          "created_at": 1700000000.0,
+          "current": 0,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-generation-golden-direct",
+          "kind": "image",
+          "max_attempts": 1,
+          "message": "Done · simulated artifact",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "generation",
+            "capability": null,
+            "command_id": null,
+            "display_prompt": "a simulated barn",
+            "generation_details": {
+              "execution_mode": "real",
+              "frames": 1,
+              "generation_mode": "image",
+              "lora_count": 0,
+              "model_name": "Fake Text to Video",
+              "model_type": "fake_t2v",
+              "resolution": "64x64",
+              "seed": 42,
+              "simulated": false
+            },
+            "inference_start_step": null,
+            "inference_started_at": null,
+            "output_name_requested": null,
+            "owner_pipeline_id": "",
+            "reference_images": [],
+            "run_id": null,
+            "tool": "studio",
+            "workflow_id": null
+          },
+          "model": "Fake Text to Video",
+          "parent_id": null,
+          "phase": "completed",
+          "pipeline_id": "",
+          "progress": 1.0,
+          "project_id": "",
+          "provider": "local",
+          "queued_at": "<TIME>",
+          "recoverable": true,
+          "resource_requirements": [
+            "local_gpu:0"
+          ],
+          "result_refs": [
+            "simulated_image_golden-direct.png"
+          ],
+          "resumable": false,
+          "root_id": "task-generation-golden-direct",
+          "server_origin": "local",
+          "started_at": "<TIME>",
+          "status": "completed",
+          "title": "Image generation",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 0,
+          "updated_at": "<TIME>",
+          "workflow": "generation",
+          "workspace": "default"
+        }
+      },
+      "timers": [],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Simulated inference' | 'Simulating image inference…' | 8% | step 1/4 | outputs 0",
+        "running | phase 'Simulated inference' | 'Simulating image inference…' | 32% | step 2/4 | outputs 0",
+        "running | phase 'Simulated inference' | 'Simulating image inference…' | 67% | step 3/4 | outputs 0",
+        "running | phase 'Simulated inference' | 'Simulating image inference…' | 92% | step 4/4 | outputs 0",
+        "running | phase 'Simulated inference' | 'Simulating image inference…' | 92% | step 4/4 | outputs 1",
+        "completed | phase '' | 'Done · simulated artifact' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
   "recast protection: cancelled": {
     "body": {
       "calls": [
@@ -11210,6 +11395,137 @@
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "resumed leftover": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "http": {
+        "count": 1,
+        "resumed": [
+          {
+            "created_at": 1700000000.0,
+            "generation_mode": "video",
+            "job_id": "<JOB>",
+            "model_type": "fake_t2v",
+            "previous_status": "running",
+            "prompt_preview": "a calm lake",
+            "workspace": "default"
+          }
+        ]
+      },
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": true
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Restarting recovered job from the beginning…' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
       ]
     },
     "status": 200
