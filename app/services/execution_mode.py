@@ -195,17 +195,16 @@ def result_kind(params: dict[str, Any]) -> str:
 
     ``generation_mode`` alone no longer says "image": the simulation used to write a PNG where WanGP wrote an MP4,
     which hid validation findings gen-01 and N1. The submission door now adds ``image_mode`` to image requests.
+    Audio and 3D come first, as in WanGP, where an audio-only model makes audio whatever ``image_mode`` says.
     """
+    mode = str(params.get("generation_mode") or "video").strip().casefold()
+    if mode in {"audio", "3d", "model3d"}:
+        return "model3d" if mode in {"3d", "model3d"} else mode
     try:
         image_mode = int(params.get("image_mode") or 0)
     except (TypeError, ValueError):
         image_mode = 0
-    if image_mode > 0:
-        return "image"
-    mode = str(params.get("generation_mode") or "video").strip().casefold()
-    if mode in {"audio", "3d", "model3d"}:
-        return "model3d" if mode in {"3d", "model3d"} else mode
-    return "video"
+    return "image" if image_mode > 0 else "video"
 
 
 def _consume_injected_failure(kind: str) -> bool:

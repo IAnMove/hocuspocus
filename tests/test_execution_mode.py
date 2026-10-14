@@ -129,6 +129,9 @@ def test_plan_mode_stops_before_queue(monkeypatch):
         ({"generation_mode": "video"}, "video"),
         ({}, "video"),
         ({"generation_mode": "audio", "image_mode": 0}, "audio"),
+        # An audio-only model makes audio whatever image_mode a body carries (wgp.get_output_type_for_model).
+        ({"generation_mode": "audio", "image_mode": 1}, "audio"),
+        ({"generation_mode": "3d", "image_mode": 1}, "model3d"),
         ({"generation_mode": "AUDIO "}, "audio"),
         ({"generation_mode": "3d"}, "model3d"),
         ({"generation_mode": "model3d"}, "model3d"),
