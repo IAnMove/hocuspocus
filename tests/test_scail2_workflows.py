@@ -26,6 +26,12 @@ _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _REPAINT_PLANNING_PATH = os.path.join(_ROOT, "app", "services", "repaint_planning.py")
 _REPAINT_RUN_PATH = os.path.join(_ROOT, "app", "services", "repaint_run.py")
 _REPAINT_ROUTER_PATH = os.path.join(_ROOT, "app", "routers", "repaint.py")
+_RECAST_SERVICE_PATHS = (
+    os.path.join(_ROOT, "app", "services", "recast_masks.py"),
+    os.path.join(_ROOT, "app", "services", "recast_matte.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"),
+)
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
@@ -109,20 +115,41 @@ def _read(path: str) -> str:
         return handle.read()
 
 
+def _function_defs(path: str) -> dict[str, ast.FunctionDef]:
+    tree = ast.parse(_read(path), filename=os.path.relpath(path, _ROOT))
+    return {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+
+
 def _load_functions(path: str, names: tuple[str, ...], namespace=None) -> dict:
-    source = _read(path)
-    tree = ast.parse(source, filename=os.path.relpath(path, _ROOT))
-    selected = [
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    if len(selected) != len(names):
-        found = {node.name for node in selected}
-        raise AssertionError(f"Missing functions: {set(names) - found}")
-    module = ast.Module(body=selected, type_ignores=[])
-    ast.fix_missing_locations(module)
+    """Exec ``names`` from ``path``, or from the recast service that now defines them.
+
+    A moved helper and the launch functions it calls are executed into one
+    namespace, so the assertions keep supplying the same stubs.
+    """
+    pools = [path]
+    for service in _RECAST_SERVICE_PATHS:
+        if service not in pools and os.path.isfile(service):
+            pools.append(service)
+    parsed = {item: _function_defs(item) for item in pools}
+    grouped: dict[str, list[ast.FunctionDef]] = {}
+    missing = []
+    for name in names:
+        home = next((item for item in pools if name in parsed[item]), None)
+        if home is None:
+            missing.append(name)
+            continue
+        grouped.setdefault(home, []).append(parsed[home][name])
+    if missing:
+        raise AssertionError(f"Missing functions: {set(missing)}")
     loaded = dict(namespace or {})
-    exec(compile(module, os.path.relpath(path, _ROOT), "exec"), loaded)
+    for home, nodes in grouped.items():
+        module = ast.Module(body=nodes, type_ignores=[])
+        ast.fix_missing_locations(module)
+        exec(compile(module, os.path.relpath(home, _ROOT), "exec"), loaded)
     return loaded
 
 
@@ -3752,8 +3779,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         controls = _read(_RECAST_CONTROLS_PATH)
         self.assertIn('body.get("protect_bystanders") is True', launch)
         self.assertIn('"_recast_protect_bystanders": protect_bystanders', launch)
-        self.assertIn('colorkey=0xFFFFFF', launch)
+        masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
+        self.assertIn('colorkey=0xFFFFFF', masks)
         self.assertNotIn('"_recast_mask_background"', launch)
+        self.assertNotIn('"_recast_mask_background"', masks)
         self.assertIn("_build_recast_adaptive_mask(", launch)
         self.assertIn('wgp.release_model()', launch)
         self.assertIn("source_video, adaptive_mask, generated_video", launch)
@@ -3778,8 +3807,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('preserve_bystanders = True', launch)
         self.assertIn("_build_recast_native_people_conditioning(", launch)
         self.assertIn("_compose_recast_group_reference_frame(", launch)
-        self.assertIn("recast_group_ref_", launch)
-        self.assertIn("recast_group_mask_", launch)
+        compose = _read(os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"))
+        self.assertIn("recast_group_ref_", compose)
+        self.assertIn("recast_group_mask_", compose)
         self.assertIn('"scail2_primary_reference_people": 1', launch)
         self.assertIn('"scail2_additional_reference_mask_paths"', launch)
         self.assertIn('job["params"]["image_refs"] = [', launch)
@@ -3792,17 +3822,18 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn("native_people['conditioning_count']", launch)
         self.assertNotIn("recast_bystanders_matted_ref_", launch)
+        self.assertNotIn("recast_bystanders_matted_ref_", compose)
         self.assertIn("_build_recast_source_scene_reference(", launch)
         self.assertIn(
             "_enable_recast_dynamic_source_scene_reference(",
             launch,
         )
-        self.assertIn("recast_source_scene_ref_", launch)
-        self.assertIn("recast_source_scene_mask_", launch)
+        self.assertIn("recast_source_scene_ref_", compose)
+        self.assertIn("recast_source_scene_mask_", compose)
         self.assertIn("_ensure_source_scene_reference(", launch)
         self.assertIn(
             '"edit_recast_source_scene_reference"',
-            launch,
+            compose,
         )
         self.assertIn(
             '"scail2_dynamic_source_scene_reference"',
@@ -3846,14 +3877,17 @@ class TestMultiPersonRecast(unittest.TestCase):
         sam3 = _read(_SAM3_PREPROCESSOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
 
+        masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn("def _detect_recast_shot_ranges(", launch)
-        self.assertIn("tracking_segments=shot_ranges", launch)
+        # The character mask builder moved to recast_masks (C7); the launch
+        # copies of these two strings are Repaint's, pinned by its own test.
+        self.assertIn("tracking_segments=shot_ranges", masks)
         self.assertIn("def _recover_recast_unmapped_shots(", launch)
         self.assertIn(
             "running generic-person appearance recovery",
-            launch,
+            masks,
         )
-        self.assertIn("anywhere in the selected video", launch)
+        self.assertIn("anywhere in the selected video", masks)
         self.assertIn('"edit_recast_timeline_anchors"', launch)
         self.assertIn('"scail2_timeline_source_scene_reference"', launch)
         self.assertIn('"scail2_timeline_source_scene_reference"', scail2)
@@ -3877,9 +3911,10 @@ class TestMultiPersonRecast(unittest.TestCase):
             "propagation_plan = _sam3_segment_propagation_plan(",
             sam3,
         )
+        compose = _read(os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"))
         self.assertIn(
             "def _build_recast_target_group_reference(",
-            launch,
+            compose,
         )
         self.assertIn(
             '"scail2_reference_expected_colors"\n                    ] = [\n                        None,',
@@ -3958,18 +3993,19 @@ class TestMultiPersonRecast(unittest.TestCase):
         controls = _read(_RECAST_CONTROLS_PATH)
         selector = _read(_LORA_SELECTOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
         self.assertIn(
             '_RECAST_RELIGHTING_LORA_FILENAME = "scail2_relighting_lora.safetensors"',
-            launch,
+            prepare,
         )
         self.assertIn(
             '"80d338a7969c1b286c8f5c4996b37eb198d0864837fecb6c87c106ca74571a2b"',
-            launch,
+            prepare,
         )
         self.assertIn('"converter": "scail2_sat_lora"', launch)
         self.assertIn('body.get("use_relighting") is True', launch)
-        self.assertIn("def _normalize_recast_lora_settings(", launch)
-        self.assertIn("single-phase LoRA settings", launch)
+        self.assertIn("def _normalize_recast_lora_settings(", prepare)
+        self.assertIn("single-phase LoRA settings", prepare)
         self.assertIn("editRecastUseRelighting: false", edit_store)
         self.assertIn("use_relighting: state.editRecastUseRelighting", recast)
         self.assertIn("const recastSinglePhase =", _read(_LORAS_PATH))
@@ -3995,7 +4031,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('"scail2_isolate_reference_background": False', launch)
         self.assertIn('"scail2_reference_alpha_path"', launch)
         self.assertIn('"edit_recast_isolate_reference": isolate_reference', launch)
-        self.assertIn("def _prepare_recast_reference_frame", launch)
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
+        self.assertIn("def _prepare_recast_reference_frame", prepare)
+        self.assertIn("isolate_reference=isolate_reference", prepare)
         self.assertIn("isolate_reference=isolate_reference", launch)
         self.assertIn("def _load_reference_alpha", scail2)
         self.assertIn("def _isolate_scail2_reference", scail2)
@@ -4014,8 +4052,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         ))
         wgp = _read(_WGP_PATH)
         client = api_client_source()
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
 
-        self.assertIn('"identity_image": identity_image', launch)
+        self.assertIn('"identity_image": identity_image', prepare)
         self.assertIn('"scail2_clip_reference_path"', launch)
         self.assertIn(
             '"scail2_identity_latent_isolation": isolate_reference',
@@ -4088,8 +4127,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         selector = _read(_SCAIL_RESOLUTION_SELECTOR_PATH)
         client = api_client_source()
 
-        self.assertIn('"512p": (896, 512)', launch)
-        self.assertIn('"704p": (1280, 704)', launch)
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
+        self.assertIn('"512p": (896, 512)', prepare)
+        self.assertIn('"704p": (1280, 704)', prepare)
         self.assertIn('"resolution": recast_resolution', launch)
         self.assertIn('"sliding_window_size": recast_window_size', launch)
         self.assertIn(
@@ -4103,6 +4143,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             launch,
         )
         self.assertNotIn('if resolution_profile == "512p"', launch)
+        self.assertNotIn('if resolution_profile == "512p"', prepare)
         self.assertIn("editRecastResolutionProfile: '480p'", edit_store)
         self.assertIn(
             "resolution_profile: state.editRecastResolutionProfile",
@@ -4233,7 +4274,8 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_postprocess_preserves_and_recovers_resolved_seed(self):
         launch = launch_and_worker_source(_read(_LAUNCH_PATH))
-        self.assertIn('"-map_metadata", "2"', launch)
+        masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
+        self.assertIn('"-map_metadata", "2"', masks)
         self.assertIn('file_sidecar["params"]["seed"] = resolved_seed', launch)
         # The post-processing read of the filename seed is the launch line
         # below. The `name` form is the metadata reader, which moved out of
@@ -4297,7 +4339,8 @@ class TestMultiPersonRecast(unittest.TestCase):
             '"edit_recast_auto_face_detail": auto_face_detail',
             launch,
         )
-        self.assertIn('"auto_face_detail_refs": auto_face_detail_refs', launch)
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
+        self.assertIn('"auto_face_detail_refs": auto_face_detail_refs', prepare)
         self.assertIn("editRecastAutoFaceDetail: true", edit_store)
         self.assertIn("auto_face_detail: true", recast)
         self.assertIn(
@@ -4429,11 +4472,12 @@ class TestMultiPersonRecast(unittest.TestCase):
             self.assertNotIn(phrase, combined)
 
     def test_repaint_semantic_masks_use_native_opposite_backgrounds(self):
-        # The worker that consumes "_repaint_shot_manifest" left launch (services/generation_worker).
-        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         planning = _read(_REPAINT_PLANNING_PATH)
         run = _read(_REPAINT_RUN_PATH)
         router = _read(_REPAINT_ROUTER_PATH)
+        # What launch's text was before Repaint (C6) and the worker that consumes "_repaint_shot_manifest" (#1095)
+        # left it; the Recast copies of these strings left it too (C7).
+        launch = "\n\n".join((launch_and_worker_source(_read(_LAUNCH_PATH)), planning, run, router))
         self.assertIn(
             "def _build_repaint_shot_manifest(",
             planning,
