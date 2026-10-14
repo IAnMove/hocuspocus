@@ -6,7 +6,7 @@ import unittest
 
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_SETTINGS_ROUTER_PATH = os.path.join(_ROOT, "app", "routers", "settings.py")
 _SERVICES_PANEL_PATH = os.path.join(
     _ROOT,
     "ui",
@@ -27,15 +27,15 @@ def _read(path):
 
 class TestVoiceReferenceSettings(unittest.TestCase):
     def test_voice_reference_defaults_on_while_beta_features_default_off(self):
-        launch = _read(_LAUNCH_PATH)
+        services_route = _read(_SETTINGS_ROUTER_PATH)
         self.assertIn(
             '"voice_reference_enabled": services.get('
             '"voice_reference_enabled", True)',
-            launch,
+            services_route,
         )
         self.assertIn(
             '"show_experimental": services.get("show_experimental", False)',
-            launch,
+            services_route,
         )
 
     def test_voice_reference_setting_is_not_behind_beta_feature_gate(self):

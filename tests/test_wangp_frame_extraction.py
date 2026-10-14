@@ -21,6 +21,7 @@ from services.wangp_submission import JsonRequest, prepare_viggle_recast, probe_
 
 
 RUNTIME = Path(__file__).parents[1] / "app" / "_launch_runtime.py"
+DIRECTOR = Path(__file__).parents[1] / "app" / "routers" / "llm_director.py"
 
 
 @pytest.fixture
@@ -31,13 +32,16 @@ def extract(tmp_path, monkeypatch):
     uploads.mkdir()
     workspace.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    names = {"extract_frames_endpoint", "_resolve_wangp_visual_media"}
     selected = []
-    for node in ast.parse(RUNTIME.read_text(encoding="utf-8")).body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
-            node.decorator_list = []
-            selected.append(node)
-    assert len(selected) == len(names)
+    for path, names in (
+        (RUNTIME, {"extract_frames_endpoint"}),
+        (DIRECTOR, {"_resolve_wangp_visual_media"}),
+    ):
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
+                node.decorator_list = []
+                selected.append(node)
+    assert len(selected) == 2
     engine = SimpleNamespace(server_config={"save_path": "outputs", "services": {"active_workspace": "demo"}})
     workspaces = WorkspaceService(ConfigStore(lambda: engine))
     namespace = {
