@@ -135,6 +135,14 @@ SHOT_MODULES = (
 # Repaint (C6): the modules that took their launch objects, which they read under the launch names.
 REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
 
+# Canonical tasks (C10a): a generation publishes its Activity row through them, so a patch of ``time`` (or any other
+# name they hold) has to land on them too, or the task clock diverges from the launch name the test patched.
+CANONICAL_TASK_MODULES = (
+    "services.canonical_task_fields",
+    "services.canonical_task_publishers",
+    "services.canonical_task_sync",
+)
+
 # Collaborators that left the server file and still read names these tests replace. Recovery and the job routes
 # hold ``_cancel_h3_idle_release`` and ``time``, which a rig patch reached in launch before the move.
 COLLABORATOR_MODULES = (
@@ -151,8 +159,9 @@ def worker_modules() -> list:
 
     That is the full server module while any worker function or pass is still in it, each module of
     ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
-    Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5) and each collaborator module
-    the generation-jobs slice moved. A name they read is an attribute of every module that reads it.
+    Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5), each collaborator module
+    the generation-jobs slice moved and each canonical task module (C10a). A name they read is an attribute of every
+    module that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
@@ -162,7 +171,8 @@ def worker_modules() -> list:
     repaint = [sys.modules[name] for name in REPAINT_MODULES if name in sys.modules]
     studio = [sys.modules[name] for name in OUTPAINT_BLEND_MODULES if name in sys.modules]
     collaborators = [sys.modules[name] for name in COLLABORATOR_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *collaborators]
+    canonical = [sys.modules[name] for name in CANONICAL_TASK_MODULES if name in sys.modules]
+    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *collaborators, *canonical]
 
 
 @dataclass
@@ -2461,3 +2471,15 @@ def test_a_rig_patch_reaches_every_recast_module(full_server) -> None:
         importlib.import_module(f"services.{stem}")
     held = {module.__name__ for module in worker_modules()}
     assert {f"services.{stem}" for stem in stems} <= held
+
+
+def test_a_rig_patch_of_time_reaches_the_canonical_task_clock(rig) -> None:
+    """Before C10a the canonical publishers read launch's ``time``, so a Rig patch of ``time`` set the clock a task
+    falls back to when its record has no creation time. The same patch still reaches the publishers in their module."""
+    real = rig.launch.time
+    clock = types.ModuleType("time")
+    clock.__dict__.update({name: getattr(real, name) for name in dir(real) if not name.startswith("__")})
+    clock.time = lambda: 1_600_000_000.0
+    rig.patch("time", clock)
+    task = rig.launch._publish_generic_legacy_task({"id": "rig-clock", "workspace": "default", "status": "queued"}, "rig")
+    assert task["created_at"] == 1_600_000_000.0

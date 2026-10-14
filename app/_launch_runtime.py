@@ -440,23 +440,22 @@ resource_scheduler.coordinator.set_prepare_hook(
 )
 
 
-def _publish_generation_sidecar_for_studio_job(
-    job: dict,
-    output_path: str,
-    sidecar: dict,
-    *,
-    tool: str = "studio",
-) -> None:
-    """Publish one Studio result with its initiating command and real location."""
-    from services.asset_manifest import publish_generation_job_sidecar
-    publish_generation_job_sidecar(
-        job,
-        output_path,
-        sidecar,
-        job_id_key="id",
-        output_folder=job.get("workspace"),
-        tool=tool,
-    )
+from services import canonical_task_publishers
+
+canonical_task_publishers.bind(
+    _task_registry=_task_registry,
+)
+from services.canonical_task_publishers import (
+    _GENERIC_TASK_CONFIG,
+    _observe_generation_job_state,
+    _publish_director_task,
+    _publish_generation_sidecar_for_studio_job,
+    _publish_generation_task,
+    _publish_generic_legacy_task,
+    _publish_moved_studio_task,
+    _publish_series_assembly_task,
+    _publish_series_task,
+)
 
 
 def _is_legacy_h3_model(model_type: str | None) -> bool:
@@ -1097,11 +1096,6 @@ class _LaunchCollectionLookup:
         return globals()["_workspace_collection_registry"].get(key)
 
 
-def _publish_moved_studio_task(record, adapter):
-    """Activity publish stays the launch function, which is defined further down."""
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(record, adapter)
 
 
 def _launch_model3d_engine():
@@ -3860,7 +3854,7 @@ api.include_router(create_comics_router(
     get_active_workspace=_get_active_workspace,
     safe_join=_safe_join,
     get_services_config=lambda: wgp.server_config.get("services") or {},
-    publish_legacy_task=lambda job, adapter: _publish_generic_legacy_task(job, adapter),
+    publish_legacy_task=lambda job, adapter: canonical_task_publishers._publish_generic_legacy_task(job, adapter),
 ))
 
 
@@ -3952,11 +3946,11 @@ from routers.series_plan import (
 
 
 def _forward_series_plan_publish(job, adapter):
-    return _publish_series_task(job, adapter)
+    return canonical_task_publishers._publish_series_task(job, adapter)
 
 
 def _forward_series_plan_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_series_plan_runtime(
@@ -3993,11 +3987,11 @@ from routers.series_render import (
 
 
 def _forward_series_render_publish(job, adapter):
-    return _publish_series_task(job, adapter)
+    return canonical_task_publishers._publish_series_task(job, adapter)
 
 
 def _forward_series_render_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_series_render_runtime(
@@ -4167,11 +4161,11 @@ from routers.story_lab import (
 
 
 def _forward_story_plan_publish(record, adapter):
-    return _publish_generic_legacy_task(record, adapter)
+    return canonical_task_publishers._publish_generic_legacy_task(record, adapter)
 
 
 def _forward_story_plan_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_story_lab_runtime(
@@ -4193,7 +4187,7 @@ _story_music_jobs = bind_story_music_jobs(
     workspace_dir=_workspace_dir,
     list_workspaces=_list_workspaces,
     wgp_module=wgp,
-    publish_legacy_task=lambda record, adapter: _publish_generic_legacy_task(record, adapter),
+    publish_legacy_task=lambda record, adapter: canonical_task_publishers._publish_generic_legacy_task(record, adapter),
 )
 _minimax_music_jobs = _story_music_jobs.minimax_music_jobs
 _minimax_music_jobs_lock = _story_music_jobs.minimax_music_jobs_lock
@@ -4234,8 +4228,8 @@ bind_director_comic_runtime(
     effective_llm_routing=_effective_llm_routing,
     workspace_dir=_workspace_dir,
     get_active_workspace=_get_active_workspace,
-    publish_legacy_task=lambda snapshot, adapter: _publish_generic_legacy_task(snapshot, adapter),
-    reset_task=lambda workspace, task_id: _reset_canonical_task_for_resume(workspace, task_id),
+    publish_legacy_task=lambda snapshot, adapter: canonical_task_publishers._publish_generic_legacy_task(snapshot, adapter),
+    reset_task=lambda workspace, task_id: canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id),
 )
 api.include_router(create_director_comic_router())
 
@@ -4377,8 +4371,8 @@ api.include_router(create_video_editor_router(
     workspace_dir=_workspace_dir,
     get_active_workspace=_get_active_workspace,
     resolve_input_path=_resolve_model3d_input_path,
-    # Defined further down: looked up on each publish, as the inline routes did.
-    publish_legacy_task=lambda snapshot, adapter: _publish_generic_legacy_task(snapshot, adapter),
+    # Looked up on the publishers module at each publish, as the inline routes did.
+    publish_legacy_task=lambda snapshot, adapter: canonical_task_publishers._publish_generic_legacy_task(snapshot, adapter),
     thumbnail_cache_dir=_MEDIA_THUMBNAIL_CACHE_DIR,
 ))
 
@@ -4421,660 +4415,84 @@ api.include_router(create_uploads_router(
 # Canonical task registry and compatibility adapters
 # ============================================================================
 
-def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
-    """Explicitly reopen a terminal adapter task before its worker publishes."""
-    if not task_id:
-        return
-    try:
-        registry = _task_registry(workspace)
-        existing = registry.get(task_id)
-        if existing and str(existing.get("status") or "") in {
-            "failed", "cancelled", "interrupted",
-        }:
-            registry.update(
-                task_id,
-                status="queued",
-                phase="queued",
-                message="Resume requested",
-                error=None,
-                completed_at=None,
-                event_type="task.resume_requested",
-                force=True,
-            )
-    except Exception as exc:
-        print(f"[Task registry] Could not reopen {task_id}: {exc}")
+from services import canonical_task_sync
+
+canonical_task_sync.bind(
+    _comic_plan_jobs=_comic_plan_jobs,
+    _comic_plan_jobs_lock=_comic_plan_jobs_lock,
+    _jobs=_jobs,
+    _minimax_music_jobs=_minimax_music_jobs,
+    _minimax_music_jobs_lock=_minimax_music_jobs_lock,
+    _publish_minimax_music_job=_publish_minimax_music_job,
+    _series_plan_jobs=_series_plan_jobs,
+    _series_plan_jobs_lock=_series_plan_jobs_lock,
+    _series_render_jobs=_series_render_jobs,
+    _series_render_jobs_lock=_series_render_jobs_lock,
+    _story_plan_jobs=_story_plan_jobs,
+    _story_plan_jobs_lock=_story_plan_jobs_lock,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+    cancel_audio_analysis_job=cancel_audio_analysis_job,
+    cancel_comic_minimax_job=cancel_comic_minimax_job,
+    cancel_job=cancel_job,
+    cancel_model3d_job=cancel_model3d_job,
+    cancel_rig_job=cancel_rig_job,
+    cancel_series_episode_plan=cancel_series_episode_plan,
+    cancel_series_render_job=cancel_series_render_job,
+    cancel_story_lab_generation=cancel_story_lab_generation,
+    cancel_story_music_candidates_job=cancel_story_music_candidates_job,
+    cancel_video_editor_export=cancel_video_editor_export,
+    control_quick_video_batch_job=control_quick_video_batch_job,
+    control_series_assembly_job=control_series_assembly_job,
+    director_pipeline_resume=director_pipeline_resume,
+    director_pipeline_stop=director_pipeline_stop,
+    list_minimax_image_jobs=list_minimax_image_jobs,
+    list_video_editor_jobs=list_video_editor_jobs,
+    resume_director_comic_plan=resume_director_comic_plan,
+    resume_series_episode_plan=resume_series_episode_plan,
+    resume_series_render_job=resume_series_render_job,
+    resume_story_lab_generation=resume_story_lab_generation,
+    wgp=wgp,
+)
+from services.canonical_task_sync import (
+    _control_canonical_task,
+    _list_canonical_production_pipelines,
+    _reset_canonical_task_for_resume,
+    _sync_canonical_tasks,
+)
 
 
-def _task_legacy_id(record: dict) -> str:
-    return str(record.get("jobId") or record.get("job_id") or record.get("id") or "")
+from services import canonical_task_fields
 
-
-def _task_status(value: object) -> str:
-    from services.canonical_task_helpers import task_status
-    return task_status(value)
-
-
-def _task_timestamp(record: dict, *keys: str) -> float | None:
-    for key in keys:
-        value = record.get(key)
-        if isinstance(value, (int, float)) and value > 0:
-            return float(value)
-        if isinstance(value, str) and value:
-            try:
-                return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-            except ValueError:
-                continue
-    return None
-
-
-def _canonical_legacy_progress(current: object, total: object, progress: object) -> float:
-    """Convert legacy counters/percentages to the canonical 0..1 scale."""
-    try:
-        total_value = float(total)
-    except (TypeError, ValueError):
-        total_value = 0.0
-    if math.isfinite(total_value) and total_value > 0:
-        try:
-            current_value = float(current)
-        except (TypeError, ValueError):
-            current_value = 0.0
-        value = current_value / total_value if math.isfinite(current_value) else 0.0
-    else:
-        try:
-            percent_value = float(progress)
-        except (TypeError, ValueError):
-            percent_value = 0.0
-        value = percent_value / 100.0 if math.isfinite(percent_value) else 0.0
-    return max(0.0, min(1.0, value))
-
-
-def _upsert_canonical_task(
-    workspace: str,
-    task_id: str,
-    *,
-    event_exclude_fields: set[str] | frozenset[str] | None = None,
-    **fields,
-) -> dict:
-    from services.canonical_task_helpers import upsert_canonical_task
-    return upsert_canonical_task(
-        _task_registry(workspace),
-        workspace,
-        task_id,
-        event_exclude_fields=event_exclude_fields,
-        **fields,
-    )
-
-
-def _generation_task_fields(job: dict) -> dict:
-    from services.activity_media import activity_reference_images
-    legacy_id = str(job.get("id") or "")
-    workspace = str(job.get("workspace") or "default")
-    details = _public_generation_details(job.get("params"))
-    mode = str(details.get("generation_mode") or "generation")
-    model_type = str(details.get("model_type") or "")
-    is_remote = model_type.startswith("minimax:")
-    task_id = f"task-generation-{legacy_id}"
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    owner_id = str(params.get("_director_pipeline_id") or "")
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    from services.generation_provenance import task_fields_from_provenance
-    from services.generation_memory import performance_fields
-
-    task_identity = task_fields_from_provenance(
-        provenance,
-        pipeline_id=owner_id if owner_id and not owner_id.startswith("series:") else None,
-    )
-    task_metadata = {
-        "adapter": "generation", "generation_details": details,
-        "display_prompt": details.get("prompt", ""),
-        "reference_images": activity_reference_images(params, workspace,
-            uploads_dir=os.path.join(os.getcwd(), "uploads"), workspace_dir=_workspace_dir(workspace)),
-        "inference_started_at": job.get("inference_started_at"),
-        "inference_start_step": job.get("inference_start_step"),
-        "owner_pipeline_id": owner_id,
-        "actor": provenance.get("actor") or "unknown",
-        "tool": provenance.get("tool") or "studio",
-        "capability": provenance.get("capability"),
-        "command_id": command.get("command_id"),
-        "workflow_id": command.get("workflow_id"),
-        "run_id": command.get("run_id"),
-        "output_name_requested": params.get("output_filename") or params.get("output_name") or None,
-    }
-    task_metadata.update(task_identity.pop("metadata", {}))
-    task_metadata.update(performance_fields(job.get("performance")))
-    if owner_id.startswith("series:"):
-        series_job_id = owner_id.split(":", 1)[1]
-        parent_task_id = f"task-series-render-{series_job_id}"
-    elif owner_id:
-        parent_task_id = f"task-director-{owner_id}"
-    else:
-        parent_task_id = None
-    root_task_id = parent_task_id or task_id
-    status = _task_status(job.get("status"))
-    current = int(job.get("step") or 0)
-    total = int(job.get("total_steps") or 0)
-    error = job.get("error")
-    if status in {"completed", "failed", "cancelled", "interrupted"}:
-        acquired_resources = []
-    elif "acquired_resources" in job:
-        acquired_resources = list(job.get("acquired_resources") or [])
-    else:
-        # Compatibility for older in-memory tool jobs. Newly-created jobs
-        # always carry the field, which lets planning remain visibly distinct
-        # from actual GPU ownership.
-        acquired_resources = (
-            [] if status in {"created", "queued", "waiting_resource"}
-            else ["remote:https://api.minimax.io" if is_remote else _local_gpu_lane.key]
-        )
-    task_title = {
-        "image": "Image generation", "video": "Video generation",
-        "audio": "Audio generation", "music": "Music generation",
-        "model3d": "3D generation", "avatar": "Video edit",
-    }.get(mode, "Generation job")
-    if str(provenance.get("capability") or "") == "remove_background":
-        task_title = "Tools · Remove background"
-    elif str(provenance.get("capability") or "") in {"upscale", "tools.upscale"}:
-        task_title = "Tools · Upscale"
-    elif str(provenance.get("capability") or "") == "revoice":
-        task_title = "Tools · Revoice"
-    return dict(
-        workspace=workspace,
-        id=task_id,
-        root_id=root_task_id,
-        parent_id=parent_task_id,
-        kind=mode,
-        workflow="generation",
-        title=task_title,
-        status=status,
-        phase=str(job.get("phase") or status),
-        message=str(job.get("message") or status.replace("_", " ").title()),
-        current=current,
-        total=total,
-        progress=_canonical_legacy_progress(current, total, job.get("progress")),
-        created_at=_task_timestamp(job, "created_at") or time.time(),
-        started_at=_task_timestamp(job, "started_at"),
-        completed_at=_task_timestamp(job, "finished_at"),
-        provider="minimax" if is_remote else "local",
-        model=str(details.get("model_name") or model_type),
-        server_origin="https://api.minimax.io" if is_remote else "local",
-        resource_requirements=["remote:https://api.minimax.io" if is_remote else "local_gpu:0"],
-        acquired_resources=acquired_resources,
-        backend_job_id=legacy_id,
-        cancelable=(
-            status in {"created", "queued", "waiting_resource", "running"}
-            and str(job.get("status") or "").lower() != "cancelling"
-        ),
-        recoverable=_is_durable_generation_job(job),
-        error=({"message": str(error), "retryable": True} if error else None),
-        result_refs=list(job.get("output_files") or []),
-        **task_identity,
-        metadata=task_metadata,
-    )
-
-
-def _publish_generation_task(job: dict) -> dict:
-    fields = _generation_task_fields(job)
-    workspace, task_id = fields.pop("workspace"), fields.pop("id")
-    return _upsert_canonical_task(workspace, task_id, **fields)
-
-
-def _observe_generation_job_state(record: dict) -> None:
-    """Forward atomic lifecycle changes to the canonical task event stream."""
-    job = dict(record)
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    if not str(params.get("model_type") or "").strip():
-        return
-    _publish_generation_task(job)
-
+canonical_task_fields.bind(
+    _is_durable_generation_job=_is_durable_generation_job,
+    _local_gpu_lane=_local_gpu_lane,
+    _public_generation_details=_public_generation_details,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+)
+from services.canonical_task_fields import (
+    _canonical_legacy_progress,
+    _generation_task_fields,
+    _task_legacy_id,
+    _task_status,
+    _task_timestamp,
+    _upsert_canonical_task,
+)
 
 set_job_state_observer(_observe_generation_job_state)
-
-
-def _publish_series_task(job: dict, adapter: str) -> dict:
-    legacy_id = _task_legacy_id(job)
-    workspace = str(job.get("workspace") or "default")
-    is_render = adapter == "series-render"
-    is_known = job.get("bootstrapKnownSeries") is True
-    status = _task_status(job.get("status"))
-    provider = job.get("provider") if isinstance(job.get("provider"), dict) else {}
-    request_body = job.get("request") if isinstance(job.get("request"), dict) else {}
-    model = str(job.get("model") or request_body.get("writingModel") or provider.get("videoModel") or "")
-    provider_name = str(request_body.get("writingProvider") or "local")
-    server = "local" if is_render else str(request_body.get("writingBaseUrl") or "")
-    lane = (
-        resource_scheduler.local_gpu_lane(0)
-        if is_render
-        else resource_scheduler.llm_lane(
-            provider_name,
-            base_url=server,
-            device=str(request_body.get("writingDevice") or "cpu"),
-        )
-    )
-    task_id = f"task-{adapter}-{legacy_id}"
-    return _upsert_canonical_task(
-        workspace,
-        task_id,
-        root_id=task_id,
-        kind="video" if is_render else "llm-planning",
-        workflow=adapter,
-        title=("Series Lab · Video generation" if is_render else
-               "Series Lab · Known-series bible" if is_known else
-               "Series Lab · Canon" if job.get("jobType") == "canon" else
-               "Series Lab · Episode planning"),
-        status=status,
-        phase=str(job.get("stage") or status),
-        message=str(job.get("message") or "Series Lab is working…"),
-        detail=str(job.get("validationError") or ""),
-        current=int(job.get("current") or 0),
-        total=int(job.get("total") or 0),
-        created_at=_task_timestamp(job, "createdAt") or time.time(),
-        completed_at=_task_timestamp(job, "finishedAt"),
-        provider="local" if is_render else provider_name,
-        model=model,
-        server_origin=server,
-        resource_requirements=[lane.key],
-        # Parent workflows span parsing/checkpoint phases as well as provider
-        # calls. Only observable child operations publish an acquired lease;
-        # inferring one from the parent's broad "running" state is misleading.
-        acquired_resources=[],
-        attempt=max(1, int(job.get("retryCount") or job.get("validationAttempt") or 0) + 1),
-        project_id=str(job.get("seriesId") or ""),
-        entity_type="episode",
-        entity_id=str(job.get("episodeId") or ""),
-        backend_job_id=legacy_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
-        resumable=True,
-        recoverable=True,
-        error=({"message": str(job.get("error")), "retryable": True} if job.get("error") else None),
-        result_refs=list(job.get("outputAssetIds") or []),
-        metadata={"adapter": adapter, "settings": job.get("settings") or {}},
-    )
-
-
-def _publish_series_assembly_task(job: dict) -> dict:
-    """Publish persisted Series Assembly checkpoints to canonical Activity."""
-    legacy_id = _task_legacy_id(job)
-    if not legacy_id:
-        return {}
-    workspace = str(job.get("workspace") or "default")
-    raw_status = str(job.get("status") or "queued")
-    status = "running" if raw_status == "cancelling" else _task_status(raw_status)
-    task_id = str(job.get("taskId") or f"task-series-assembly-{legacy_id}")
-    return _upsert_canonical_task(
-        workspace, task_id,
-        root_id=task_id,
-        kind="assembly", workflow="series-assembly",
-        title="Series Lab · Episode assembly",
-        status=status, phase=str(job.get("stage") or status),
-        message=str(job.get("message") or "Joining approved Series clips…"),
-        current=int(job.get("current") or 0), total=int(job.get("total") or 0),
-        created_at=_task_timestamp(job, "createdAt") or time.time(),
-        started_at=_task_timestamp(job, "startedAt"),
-        completed_at=_task_timestamp(job, "finishedAt"),
-        provider="local", model="FFmpeg", server_origin="local",
-        resource_requirements=["cpu:ffmpeg"],
-        acquired_resources=["cpu:ffmpeg"] if status == "running" else [],
-        project_id=str(job.get("seriesId") or ""), entity_type="episode",
-        entity_id=str(job.get("episodeId") or ""), backend_job_id=legacy_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
-        resumable=status in {"failed", "cancelled", "interrupted"},
-        recoverable=True,
-        error=({"message": str(job.get("error")), "retryable": True}
-               if job.get("error") else None),
-        result_refs=[str(job["assetId"])] if job.get("assetId") else [],
-        metadata={"adapter": "series-assembly"},
-    )
-
-
-_GENERIC_TASK_CONFIG = {
-    "story-plan": ("Story Lab planning", "llm-planning", True),
-    "comic-plan": ("Comic planning", "llm-planning", True),
-    "video-editor": ("Video editor", "ffmpeg", False),
-    "model3d": ("3D generation", "model3d", False),
-    "rig": ("Character rigging", "rig", False),
-    "minimax-image": ("MiniMax Image-01", "image", False),
-    "audio-analysis": ("Audio analysis", "audio-analysis", False),
-    "minimax-music": ("MiniMax Music", "music", False),
-    "minimax-music-candidate": ("MiniMax Music candidate", "music", False),
-}
-
-
-def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
-    legacy_id = _task_legacy_id(record)
-    if not legacy_id:
-        return None
-    workspace = str(record.get("workspace") or "default")
-    title, kind, resumable = _GENERIC_TASK_CONFIG.get(adapter, (adapter.replace("-", " ").title(), adapter, False))
-    status = _task_status(record.get("status"))
-    phase = str(record.get("stage") or record.get("phase") or record.get("status") or status)
-    task_id = str(
-        record.get("task_id")
-        or record.get("taskId")
-        or f"task-{adapter}-{legacy_id}"
-    )
-    root_task_id = str(
-        record.get("root_task_id")
-        or record.get("rootTaskId")
-        or task_id
-    )
-    parent_task_id = str(
-        record.get("parent_task_id")
-        or record.get("parentTaskId")
-        or ""
-    ) or None
-    request_body = record.get("request") if isinstance(record.get("request"), dict) else {}
-    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    provider = str(
-        record.get("provider")
-        or request_body.get("writingProvider")
-        or "local"
-    )
-    model = str(record.get("model") or record.get("model_id") or record.get("modelId") or "")
-    explicit_lane = str(record.get("resource_lane") or "").strip()
-    if explicit_lane:
-        lane_key = explicit_lane
-    elif adapter == "model3d":
-        lane_key = resource_scheduler.local_gpu_lane(0).key
-    elif adapter == "rig":
-        lane_key = (
-            resource_scheduler.local_gpu_lane(0).key
-            if str(record.get("engine") or request_body.get("engine") or "").lower() == "unirig"
-            else resource_scheduler.cpu_lane("rig").key
-        )
-    elif adapter in {"story-plan", "comic-plan"}:
-        lane_key = resource_scheduler.llm_lane(
-            provider,
-            base_url=str(
-                record.get("writingBaseUrl")
-                or request_body.get("writingBaseUrl")
-                or ""
-            ),
-            device=str(
-                record.get("writingDevice")
-                or request_body.get("writingDevice")
-                or "cpu"
-            ),
-        ).key
-    elif adapter == "video-editor":
-        lane_key = resource_scheduler.cpu_lane("ffmpeg").key
-    else:
-        lane_key = resource_scheduler.cpu_lane(adapter).key
-    current = int(record.get("current") or record.get("step") or 0)
-    total = int(record.get("total") or record.get("total_steps") or 0)
-    return _upsert_canonical_task(
-        workspace, task_id,
-        root_id=root_task_id, parent_id=parent_task_id,
-        kind=kind, workflow=adapter, title=title,
-        status=status, phase=phase,
-        message=str(record.get("message") or phase.replace("_", " ").title()),
-        current=current,
-        total=total,
-        progress=_canonical_legacy_progress(current, total, record.get("progress")),
-        detail_current=int(record.get("detailCurrent") or 0),
-        detail_total=int(record.get("detailTotal") or 0),
-        created_at=_task_timestamp(record, "createdAt", "created_at") or time.time(),
-        started_at=_task_timestamp(record, "startedAt", "started_at"),
-        completed_at=_task_timestamp(record, "finishedAt", "finished_at"),
-        provider=provider, model=model,
-        server_origin=str(record.get("server_origin") or record.get("writingBaseUrl") or "local"),
-        resource_requirements=[lane_key],
-        acquired_resources=list(record.get("acquired_resources") or []),
-        backend_job_id=legacy_id,
-        cancelable=(status in {"created", "queued", "waiting_resource", "running"}
-                    and str(record.get("status") or "").lower() != "cancelling"
-                    and adapter != "comic-plan"),
-        resumable=resumable, recoverable=resumable,
-        error=({"message": str(record.get("error")), "retryable": resumable} if record.get("error") else None),
-        result_refs=list(record.get("output_files") or (
-            [record["output"]] if record.get("output") else
-            [record["filename"]] if record.get("filename") else []
-        )),
-        metadata={
-            "adapter": adapter,
-            "cancel_mode": record.get("cancel_mode"),
-            "safe_boundary": record.get("safe_boundary"),
-            "actor": provenance.get("actor") or "unknown",
-            "tool": provenance.get("tool") or adapter,
-            "capability": provenance.get("capability"),
-            "command_id": (
-                command.get("command_id")
-                or record.get("commandId")
-                or record.get("command_id")
-            ),
-            "workflow_id": command.get("workflow_id"),
-            "run_id": command.get("run_id"),
-            "generation_id": record.get("generationId") or record.get("generation_id"),
-            "candidate_id": record.get("candidateId") or record.get("candidate_id"),
-            "idempotency_key": record.get("idempotencyKey") or record.get("idempotency_key"),
-        },
-    )
-
 
 import services.audio_jobs as _audio_jobs_service
 _audio_jobs_service._publish_generic_legacy_task = _publish_generic_legacy_task
 
 
-def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
-    pipeline_id = str(pipeline.get("id") or pipeline.get("pipeline_id") or "")
-    if not pipeline_id:
-        return None
-    progress = pipeline.get("progress") if isinstance(pipeline.get("progress"), dict) else {}
-    details = pipeline.get("generation_details") if isinstance(pipeline.get("generation_details"), dict) else {}
-    snapshot = pipeline.get("_params_snapshot") if isinstance(pipeline.get("_params_snapshot"), dict) else {}
-    params = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
-    provenance = pipeline.get("provenance") if isinstance(pipeline.get("provenance"), dict) else {}
-    if not provenance:
-        provenance = snapshot.get("provenance") if isinstance(snapshot.get("provenance"), dict) else {}
-    if not provenance:
-        provenance = params.get("provenance") if isinstance(params.get("provenance"), dict) else {}
-    from services.generation_provenance import task_fields_from_provenance
-
-    task_identity = task_fields_from_provenance(
-        provenance,
-        pipeline_id=pipeline_id,
-    )
-    canonical_pipeline_id = task_identity.pop("pipeline_id", pipeline_id)
-    schedule = pipeline.get("resource_schedule") if isinstance(pipeline.get("resource_schedule"), dict) else {}
-    schedule_lanes = schedule.get("lanes") if isinstance(schedule.get("lanes"), dict) else {}
-    resource_requirements = list(dict.fromkeys(
-        str(lane.get("key") or "")
-        for lane in schedule_lanes.values()
-        if isinstance(lane, dict) and str(lane.get("key") or "")
-    ))
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    task_metadata = {
-        "adapter": "director", "generation_details": details,
-        "resource_schedule": schedule,
-        "actor": provenance.get("actor") or "unknown",
-        "tool": provenance.get("tool") or "director",
-        "capability": provenance.get("capability"),
-        "command_id": command.get("command_id"),
-        "workflow_id": command.get("workflow_id"),
-        "run_id": command.get("run_id"),
-    }
-    task_metadata.update(task_identity.pop("metadata", {}))
-    raw_status = str(pipeline.get("status") or "").strip().lower()
-    status = {
-        "crashed": "interrupted",
-        "preview_ready": "completed",
-    }.get(raw_status, _task_status(raw_status))
-    task_id = f"task-director-{pipeline_id}"
-    # Director checkpoints survive Activity dismissal.  Do not recreate a
-    # terminal card on every snapshot just because its source JSON still
-    # exists; an explicit resume creates a new task event and makes it visible
-    # again.
-    if status in {"completed", "failed", "cancelled", "interrupted"}:
-        try:
-            if _task_registry(workspace).is_dismissed(task_id):
-                return None
-        except Exception:
-            # A task registry failure must not hide the underlying pipeline.
-            pass
-    completed_at = _task_timestamp(
-        pipeline,
-        "finished_at",
-        "_completed_at",
-        "completed_at",
-    )
-    if completed_at is None and status in {
-        "completed", "failed", "cancelled", "interrupted",
-    }:
-        completed_at = _task_timestamp(pipeline, "updated_at")
-    return _upsert_canonical_task(
-        workspace, task_id,
-        root_id=task_id, kind="director", workflow="director",
-        title="Music video" if pipeline.get("pipeline_type") == "music_video" else "Director pipeline",
-        status=status, phase=str(pipeline.get("phase") or status),
-        message=str(pipeline.get("error") or progress.get("message") or "Director is working…"),
-        current=int(progress.get("current") or progress.get("step") or 0),
-        total=int(progress.get("total") or progress.get("total_steps") or 0),
-        detail_current=int(progress.get("detail_current") or 0),
-        detail_total=int(progress.get("detail_total") or 0),
-        created_at=_task_timestamp(pipeline, "created_at") or time.time(),
-        started_at=_task_timestamp(pipeline, "phase_started_at", "created_at"),
-        completed_at=completed_at,
-        provider=str(details.get("text_provider") or ""),
-        model=str(details.get("text_model") or details.get("video_model_name") or ""),
-        server_origin=str(details.get("text_server") or ""),
-        resource_requirements=resource_requirements,
-        pipeline_id=canonical_pipeline_id, backend_job_id=pipeline_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
-        resumable=True, recoverable=True,
-        error=({"message": str(pipeline.get("error")), "retryable": True} if pipeline.get("error") else None),
-        result_refs=list(pipeline.get("output_files") or []),
-        **task_identity,
-        metadata=task_metadata,
-    )
 
 
-def _sync_canonical_tasks(workspace: str) -> None:
-    for job in list(_jobs.values()):
-        if str(job.get("workspace") or "default") == workspace:
-            snapshot = snapshot_job(job)
-            if str(job.get("id") or "").startswith("audio-analysis-"):
-                _publish_generic_legacy_task(snapshot, "audio-analysis")
-            else:
-                _publish_generation_task(snapshot)
-    try:
-        from services.director_pipeline import list_recent_pipelines
-        director_base = wgp.server_config.get("save_path", "outputs")
-        for pipeline in list_recent_pipelines(director_base, workspace):
-            _publish_director_task(pipeline, workspace)
-    except Exception:
-        pass
-    with _series_plan_jobs_lock:
-        series_plans = [copy.deepcopy(job) for job in _series_plan_jobs.values()]
-    with _series_render_jobs_lock:
-        series_renders = [copy.deepcopy(job) for job in _series_render_jobs.values()]
-    for job in series_plans:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_series_task(job, "series-plan")
-    for job in series_renders:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_series_task(job, "series-render")
-    try:
-        from services.series_jobs import SeriesJobStore
-        assembly_jobs = SeriesJobStore(_workspace_dir(workspace), "assembly").list()
-    except (OSError, ValueError, json.JSONDecodeError):
-        assembly_jobs = []
-    for job in assembly_jobs:
-        if str(job.get("workspace") or workspace) == workspace:
-            _publish_series_assembly_task(job)
-    with _story_plan_jobs_lock:
-        story_jobs = [copy.deepcopy(job) for job in _story_plan_jobs.values()]
-    with _comic_plan_jobs_lock:
-        comic_jobs = [copy.deepcopy(job) for job in _comic_plan_jobs.values()]
-    for job in story_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "story-plan")
-    for job in comic_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "comic-plan")
-    video_editor_jobs = list_video_editor_jobs()
-    for job in video_editor_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "video-editor")
-    for job in list_minimax_image_jobs():
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "minimax-image")
-    with _minimax_music_jobs_lock:
-        minimax_music_jobs = [copy.deepcopy(job) for job in _minimax_music_jobs.values()]
-    for job in minimax_music_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_minimax_music_job(job)
-    try:
-        with model3d_service._lock:
-            model3d_jobs = [copy.deepcopy(job) for job in model3d_service._jobs.values()]
-        for job in model3d_jobs:
-            if str(job.get("workspace") or "default") == workspace:
-                _publish_generic_legacy_task(job, "model3d")
-    except Exception:
-        pass
-    try:
-        from services import rig_service
-        with rig_service._lock:
-            rig_jobs = [copy.deepcopy(job) for job in rig_service._jobs.values()]
-        for job in rig_jobs:
-            if str(job.get("workspace") or "default") == workspace:
-                _publish_generic_legacy_task(job, "rig")
-    except Exception:
-        pass
 
 
 api.include_router(create_system_resources_router())
 
 
-def _control_canonical_task(task: dict, action: str):
-    adapter = str((task.get("metadata") or {}).get("adapter") or "")
-    legacy_id = str(task.get("backend_job_id") or task.get("pipeline_id") or "")
-    if action == "cancel":
-        if adapter == "generation": return cancel_job(legacy_id)
-        if adapter == "director": return director_pipeline_stop(legacy_id)
-        if adapter == "series-plan": return cancel_series_episode_plan(legacy_id)
-        if adapter == "series-render": return cancel_series_render_job(legacy_id)
-        if adapter == "story-plan": return cancel_story_lab_generation(legacy_id)
-        if adapter == "video-editor": return cancel_video_editor_export(legacy_id)
-        if adapter == "model3d": return cancel_model3d_job(legacy_id)
-        if adapter == "rig": return cancel_rig_job(legacy_id)
-        if adapter == "minimax-image": return cancel_comic_minimax_job(legacy_id)
-        if adapter == "audio-analysis": return cancel_audio_analysis_job(legacy_id)
-        if adapter == "minimax-music": return cancel_story_music_candidates_job(legacy_id)
-        if adapter == "minimax-music-candidate":
-            root_backend_id = str(task.get("root_id") or "").removeprefix(
-                "task-minimax-music-"
-            )
-            return cancel_story_music_candidates_job(root_backend_id)
-        if adapter == "series-assembly":
-            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "cancel")
-        if adapter == "quick-video-batch":
-            return control_quick_video_batch_job(
-                _workspace_dir(str(task.get("workspace") or "default")),
-                legacy_id,
-                "cancel",
-            )
-    if action in {"retry", "resume"}:
-        if adapter == "director": return director_pipeline_resume(legacy_id)
-        if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
-        if adapter == "series-render": return resume_series_render_job(legacy_id)
-        if adapter == "story-plan": return resume_story_lab_generation(legacy_id)
-        if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
-        if adapter == "series-assembly":
-            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "resume")
-        if adapter == "quick-video-batch":
-            return control_quick_video_batch_job(
-                _workspace_dir(str(task.get("workspace") or "default")),
-                legacy_id,
-                "resume",
-            )
-    if action == "discard" and adapter == "series-assembly":
-        return control_series_assembly_job(
-            _workspace_dir(str(task.get("workspace") or "default")),
-            legacy_id,
-            "discard",
-        )
-    raise HTTPException(status_code=409, detail=f"Task does not support {action}")
 
 
 from routers.canonical_tasks import create_canonical_tasks_router
@@ -5121,7 +4539,7 @@ def _start_remove_background_job(job: dict) -> None:
             unregister_abort_state=unregister_abort_state,
             acknowledge_cancel=acknowledge_cancel,
             active_states=_active_gen_states,
-            publish_sidecar=lambda current, path, sidecar: _publish_generation_sidecar_for_studio_job(
+            publish_sidecar=lambda current, path, sidecar: canonical_task_publishers._publish_generation_sidecar_for_studio_job(
                 current,
                 path,
                 sidecar,
@@ -5156,9 +4574,6 @@ api.include_router(create_projects_router(
 
 from routers.productions import create_productions_router
 
-def _list_canonical_production_pipelines(workspace: str):
-    from services.director_pipeline import list_pipeline_states
-    return list_pipeline_states(wgp.server_config.get("save_path", "outputs"), workspace)
 
 api.include_router(create_productions_router(
     list_workspaces=_list_workspaces,
