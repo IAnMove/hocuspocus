@@ -31,6 +31,20 @@
           "status": "queued",
           "workspace": "default"
         },
+        "media": {
+          "image_end": {
+            "size": [
+              64,
+              64
+            ]
+          },
+          "image_start": {
+            "size": [
+              64,
+              64
+            ]
+          }
+        },
         "params": {
           "_blend_clip_a": "<TMP>/a.png",
           "_blend_clip_b": "<TMP>/b.png",
@@ -96,6 +110,20 @@
           "phase": "",
           "status": "queued",
           "workspace": "default"
+        },
+        "media": {
+          "image_end": {
+            "size": [
+              64,
+              32
+            ]
+          },
+          "image_start": {
+            "size": [
+              64,
+              32
+            ]
+          }
         },
         "params": {
           "_blend_clip_a": "<TMP>/a.mp4",
@@ -176,6 +204,20 @@
           "status": "queued",
           "workspace": "default"
         },
+        "media": {
+          "image_end": {
+            "size": [
+              64,
+              64
+            ]
+          },
+          "image_start": {
+            "size": [
+              64,
+              64
+            ]
+          }
+        },
         "params": {
           "_blend_clip_a": "<TMP>/a.png",
           "_blend_clip_b": "<TMP>/b.png",
@@ -252,6 +294,102 @@
           "phase": "",
           "status": "queued",
           "workspace": "default"
+        },
+        "media": {
+          "image_end": {
+            "size": [
+              64,
+              32
+            ]
+          },
+          "image_refs": [
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            }
+          ],
+          "image_start": {
+            "size": [
+              64,
+              32
+            ]
+          },
+          "video_end": {
+            "frames": 16,
+            "shape": [
+              32,
+              64,
+              3
+            ]
+          }
         },
         "params": {
           "_blend_clip_a": "<TMP>/a.mp4",
@@ -337,6 +475,30 @@
           "status": "queued",
           "workspace": "default"
         },
+        "media": {
+          "image_end": {
+            "size": [
+              64,
+              64
+            ]
+          },
+          "video_end": {
+            "frames": 24,
+            "shape": [
+              64,
+              64,
+              3
+            ]
+          },
+          "video_source": {
+            "frames": 24,
+            "shape": [
+              64,
+              64,
+              3
+            ]
+          }
+        },
         "params": {
           "_blend_clip_a": "<TMP>/a.png",
           "_blend_clip_b": "<TMP>/b.png",
@@ -406,6 +568,68 @@
           "phase": "",
           "status": "queued",
           "workspace": "default"
+        },
+        "media": {
+          "image_end": {
+            "size": [
+              64,
+              32
+            ]
+          },
+          "image_refs": [
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            },
+            {
+              "size": [
+                64,
+                32
+              ]
+            }
+          ],
+          "video_end": {
+            "frames": 2,
+            "shape": [
+              32,
+              64,
+              3
+            ]
+          },
+          "video_source": {
+            "frames": 4,
+            "shape": [
+              32,
+              64,
+              3
+            ]
+          }
         },
         "params": {
           "_blend_clip_a": "<TMP>/a.mp4",
@@ -5163,6 +5387,634 @@
     },
     "status": 200
   },
+  "official outpaint shots: the join changes the length": {
+    "body": {
+      "accepted": {
+        "generation_details": {
+          "execution_mode": "real",
+          "frames": 24,
+          "generation_mode": "video",
+          "guidance": 1.0,
+          "lora_count": 0,
+          "model_name": "Fake LTX Dev",
+          "model_type": "fake_ltx",
+          "prompt": "a forest",
+          "resolution": "128x64",
+          "seed": 7,
+          "simulated": false,
+          "steps": 8
+        },
+        "job_id": "<JOB>",
+        "outpainting_dims": "38.88888889 38.88888889 0 100",
+        "output_size": "128x64",
+        "root_task_id": "task-generation-<JOB>",
+        "sliding_window_count": 1,
+        "sliding_window_size": 241,
+        "source_size": "64x36",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>",
+        "total_frames": 24
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<TEMP0>",
+          "image_save_path": "<TEMP0>",
+          "kwargs": {
+            "activated_loras": [],
+            "audio_guide": null,
+            "audio_prompt_type": "",
+            "audio_source": null,
+            "denoising_strength": 1.0,
+            "force_fps": "control",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "",
+            "input_video_strength": 1.0,
+            "loras_multipliers": "",
+            "mode": "",
+            "model_type": "fake_ltx",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "outpaint_shots_<JOB>",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "num_inference_steps": 8,
+            "outpaint_full_resolution_refine": true,
+            "outpaint_lora_strength": 1.0,
+            "outpaint_mask_preserve": true,
+            "outpaint_official_stack": true,
+            "output_filename": "outpaint_<JOB>_shot_1.mp4",
+            "plugin_data": {},
+            "prompt": "a forest",
+            "resolution": "128x64",
+            "seed": 7,
+            "single_stage_pipeline": false,
+            "sliding_window_discard_last_frames": 8,
+            "sliding_window_overlap": 9,
+            "sliding_window_size": 34,
+            "trim_tail_frames": 0,
+            "video_guide": "<TEMP0>/outpaint_<JOB>_shot_1_guide.mp4",
+            "video_guide_outpainting": "38.88888889 38.88888889 0 100",
+            "video_length": 12,
+            "video_prompt_type": "VG"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 64,
+            "_outpaint_canvas_w": 128,
+            "_outpaint_final_out_dir": "<TMP>/outputs",
+            "_outpaint_generation_fps": 8.0,
+            "_outpaint_lock_source_pixels": false,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_overlay_x": 0,
+            "_outpaint_overlay_y": 14,
+            "_outpaint_preserve_audio": false,
+            "_outpaint_shot_bundle": {
+              "fps": 8.0,
+              "frame_count": 24,
+              "preserve_source_audio": true,
+              "published_shots": [
+                {
+                  "end_frame": 12,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 0,
+                  "start_frame": 0,
+                  "trim_tail_frames": 0
+                },
+                {
+                  "end_frame": 24,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 1,
+                  "start_frame": 12,
+                  "trim_tail_frames": 0
+                }
+              ],
+              "resolved_seed": 7,
+              "shots": [
+                {
+                  "end_frame": 12,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 0,
+                  "start_frame": 0,
+                  "trim_tail_frames": 0
+                },
+                {
+                  "end_frame": 24,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 1,
+                  "start_frame": 12,
+                  "trim_tail_frames": 0
+                }
+              ]
+            },
+            "_outpaint_shot_source_video": "<TMP>/two-shots.mp4",
+            "_outpaint_shot_temp_dir": "<TEMP0>",
+            "_outpaint_smear_boundary_frame": 233,
+            "_outpaint_smear_count": 9,
+            "_outpaint_source_frame_count": 24,
+            "_outpaint_source_video": null,
+            "_outpaint_trim_smear": false,
+            "activated_loras": [],
+            "audio_guide": null,
+            "audio_prompt_type": "",
+            "audio_source": null,
+            "denoising_strength": 1.0,
+            "edit_outpaint_detected_shot_ranges": [
+              [
+                0,
+                12
+              ],
+              [
+                12,
+                24
+              ]
+            ],
+            "edit_outpaint_raw_prompt": "a forest",
+            "edit_outpaint_shot_aware": true,
+            "edit_outpaint_shot_plan": [
+              {
+                "end_frame": 12,
+                "frame_count": 12,
+                "generated_frame_count": 12,
+                "mode": "outpaint",
+                "shot_index": 0,
+                "start_frame": 0,
+                "trim_tail_frames": 0
+              },
+              {
+                "end_frame": 24,
+                "frame_count": 12,
+                "generated_frame_count": 12,
+                "mode": "outpaint",
+                "shot_index": 1,
+                "start_frame": 12,
+                "trim_tail_frames": 0
+              }
+            ],
+            "edit_sub_mode": "outpaint",
+            "edit_video_path": "<TMP>/two-shots.mp4",
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "",
+            "input_video_strength": 1.0,
+            "loras_multipliers": "",
+            "model_type": "fake_ltx",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "outpaint_shots_<JOB>",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "num_inference_steps": 8,
+            "outpaint_full_resolution_refine": true,
+            "outpaint_lora_strength": 1.0,
+            "outpaint_lora_strength_ui": 1.0,
+            "outpaint_mask_preserve": true,
+            "outpaint_mask_preserving": true,
+            "outpaint_official_stack": true,
+            "outpaint_pad_bottom": 0,
+            "outpaint_pad_left": 0,
+            "outpaint_pad_right": 64,
+            "outpaint_pad_top": 0,
+            "outpaint_requested_model_type": "fake_ltx",
+            "outpaint_resolution_preset": "auto",
+            "outpaint_source_preservation": 1.0,
+            "output_filename": "outpaint_<JOB>_shot_1.mp4",
+            "prompt": "a forest",
+            "resolution": "128x64",
+            "seed": 7,
+            "settings_version": 2.53,
+            "single_stage_pipeline": false,
+            "sliding_window_discard_last_frames": 8,
+            "sliding_window_overlap": 9,
+            "sliding_window_size": 34,
+            "trim_tail_frames": 0,
+            "video_guide": "<TEMP0>/outpaint_<JOB>_shot_1_guide.mp4",
+            "video_guide_outpainting": "38.88888889 38.88888889 0 100",
+            "video_length": 12,
+            "video_prompt_type": "VG"
+          },
+          "prompt": "a forest",
+          "save_path": "<TEMP0>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<TEMP0>",
+          "image_save_path": "<TEMP0>",
+          "kwargs": {
+            "activated_loras": [],
+            "audio_guide": null,
+            "audio_prompt_type": "",
+            "audio_source": null,
+            "denoising_strength": 1.0,
+            "force_fps": "control",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "",
+            "input_video_strength": 1.0,
+            "loras_multipliers": "",
+            "mode": "",
+            "model_type": "fake_ltx",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "outpaint_shots_<JOB>",
+              "index": 1,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "num_inference_steps": 8,
+            "outpaint_full_resolution_refine": true,
+            "outpaint_lora_strength": 1.0,
+            "outpaint_mask_preserve": true,
+            "outpaint_official_stack": true,
+            "output_filename": "outpaint_<JOB>_shot_2.mp4",
+            "plugin_data": {},
+            "prompt": "a forest",
+            "resolution": "128x64",
+            "seed": 7,
+            "single_stage_pipeline": false,
+            "sliding_window_discard_last_frames": 8,
+            "sliding_window_overlap": 9,
+            "sliding_window_size": 34,
+            "trim_tail_frames": 0,
+            "video_guide": "<TEMP0>/outpaint_<JOB>_shot_2_guide.mp4",
+            "video_guide_outpainting": "38.88888889 38.88888889 0 100",
+            "video_length": 12,
+            "video_prompt_type": "VG"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 64,
+            "_outpaint_canvas_w": 128,
+            "_outpaint_final_out_dir": "<TMP>/outputs",
+            "_outpaint_generation_fps": 8.0,
+            "_outpaint_lock_source_pixels": false,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_overlay_x": 0,
+            "_outpaint_overlay_y": 14,
+            "_outpaint_preserve_audio": false,
+            "_outpaint_shot_bundle": {
+              "fps": 8.0,
+              "frame_count": 24,
+              "preserve_source_audio": true,
+              "published_shots": [
+                {
+                  "end_frame": 12,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 0,
+                  "start_frame": 0,
+                  "trim_tail_frames": 0
+                },
+                {
+                  "end_frame": 24,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 1,
+                  "start_frame": 12,
+                  "trim_tail_frames": 0
+                }
+              ],
+              "resolved_seed": 7,
+              "shots": [
+                {
+                  "end_frame": 12,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 0,
+                  "start_frame": 0,
+                  "trim_tail_frames": 0
+                },
+                {
+                  "end_frame": 24,
+                  "frame_count": 12,
+                  "generated_frame_count": 12,
+                  "mode": "outpaint",
+                  "shot_index": 1,
+                  "start_frame": 12,
+                  "trim_tail_frames": 0
+                }
+              ]
+            },
+            "_outpaint_shot_source_video": "<TMP>/two-shots.mp4",
+            "_outpaint_shot_temp_dir": "<TEMP0>",
+            "_outpaint_smear_boundary_frame": 233,
+            "_outpaint_smear_count": 9,
+            "_outpaint_source_frame_count": 24,
+            "_outpaint_source_video": null,
+            "_outpaint_trim_smear": false,
+            "activated_loras": [],
+            "audio_guide": null,
+            "audio_prompt_type": "",
+            "audio_source": null,
+            "denoising_strength": 1.0,
+            "edit_outpaint_detected_shot_ranges": [
+              [
+                0,
+                12
+              ],
+              [
+                12,
+                24
+              ]
+            ],
+            "edit_outpaint_raw_prompt": "a forest",
+            "edit_outpaint_shot_aware": true,
+            "edit_outpaint_shot_plan": [
+              {
+                "end_frame": 12,
+                "frame_count": 12,
+                "generated_frame_count": 12,
+                "mode": "outpaint",
+                "shot_index": 0,
+                "start_frame": 0,
+                "trim_tail_frames": 0
+              },
+              {
+                "end_frame": 24,
+                "frame_count": 12,
+                "generated_frame_count": 12,
+                "mode": "outpaint",
+                "shot_index": 1,
+                "start_frame": 12,
+                "trim_tail_frames": 0
+              }
+            ],
+            "edit_sub_mode": "outpaint",
+            "edit_video_path": "<TMP>/two-shots.mp4",
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "",
+            "input_video_strength": 1.0,
+            "loras_multipliers": "",
+            "model_type": "fake_ltx",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "outpaint_shots_<JOB>",
+              "index": 1,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "num_inference_steps": 8,
+            "outpaint_full_resolution_refine": true,
+            "outpaint_lora_strength": 1.0,
+            "outpaint_lora_strength_ui": 1.0,
+            "outpaint_mask_preserve": true,
+            "outpaint_mask_preserving": true,
+            "outpaint_official_stack": true,
+            "outpaint_pad_bottom": 0,
+            "outpaint_pad_left": 0,
+            "outpaint_pad_right": 64,
+            "outpaint_pad_top": 0,
+            "outpaint_requested_model_type": "fake_ltx",
+            "outpaint_resolution_preset": "auto",
+            "outpaint_source_preservation": 1.0,
+            "output_filename": "outpaint_<JOB>_shot_2.mp4",
+            "prompt": "a forest",
+            "resolution": "128x64",
+            "seed": 7,
+            "settings_version": 2.53,
+            "single_stage_pipeline": false,
+            "sliding_window_discard_last_frames": 8,
+            "sliding_window_overlap": 9,
+            "sliding_window_size": 34,
+            "trim_tail_frames": 0,
+            "video_guide": "<TEMP0>/outpaint_<JOB>_shot_2_guide.mp4",
+            "video_guide_outpainting": "38.88888889 38.88888889 0 100",
+            "video_length": 12,
+            "video_prompt_type": "VG"
+          },
+          "prompt": "a forest",
+          "save_path": "<TEMP0>",
+          "state_is_the_task_state": true,
+          "task_id": 2,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [],
+      "guides": [
+        [
+          "two-shots.mp4",
+          "outpaint_<JOB>_shot_1_guide.mp4",
+          0,
+          12,
+          0,
+          8.0,
+          true
+        ],
+        [
+          "two-shots.mp4",
+          "outpaint_<JOB>_shot_2_guide.mp4",
+          12,
+          24,
+          0,
+          8.0,
+          true
+        ]
+      ],
+      "joined": [
+        [
+          [
+            "<TIME>_seed7_a_forest.mp4",
+            "<TIME>_seed7_a_forest(2).mp4"
+          ],
+          "<TIME>_seed7_outpaint_shot_aware.mp4",
+          null,
+          {
+            "abort_callback": "callable",
+            "audio_duration_sec": 3.0,
+            "audio_start_sec": 0.0,
+            "pad_audio": false
+          }
+        ]
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<TEMP0>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<TMP>/outputs",
+        "save_path": "<TMP>/outputs",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "out_dir": "<TMP>/outputs",
+      "params": {
+        "_execution_mode": "real",
+        "_outpaint_canvas_h": 64,
+        "_outpaint_canvas_w": 128,
+        "_outpaint_lock_source_pixels": false,
+        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_w": 64,
+        "_outpaint_overlay_x": 0,
+        "_outpaint_overlay_y": 14,
+        "_outpaint_preserve_audio": true,
+        "_outpaint_smear_boundary_frame": 233,
+        "_outpaint_smear_count": 9,
+        "_outpaint_source_video": "<TMP>/two-shots.mp4",
+        "_outpaint_trim_smear": false,
+        "activated_loras": [],
+        "denoising_strength": 1.0,
+        "edit_outpaint_detected_shot_ranges": [
+          [
+            0,
+            12
+          ],
+          [
+            12,
+            24
+          ]
+        ],
+        "edit_outpaint_raw_prompt": "a forest",
+        "edit_outpaint_shot_aware": true,
+        "edit_outpaint_shot_plan": [
+          {
+            "end_frame": 12,
+            "frame_count": 12,
+            "generated_frame_count": 12,
+            "mode": "outpaint",
+            "shot_index": 0,
+            "start_frame": 0,
+            "trim_tail_frames": 0
+          },
+          {
+            "end_frame": 24,
+            "frame_count": 12,
+            "generated_frame_count": 12,
+            "mode": "outpaint",
+            "shot_index": 1,
+            "start_frame": 12,
+            "trim_tail_frames": 0
+          }
+        ],
+        "edit_sub_mode": "outpaint",
+        "edit_video_path": "<TMP>/two-shots.mp4",
+        "force_fps": "control",
+        "generation_mode": "video",
+        "guidance_scale": 1.0,
+        "input_video_strength": 1.0,
+        "loras_multipliers": "",
+        "model_type": "fake_ltx",
+        "negative_prompt": "",
+        "num_inference_steps": 8,
+        "outpaint_full_resolution_refine": true,
+        "outpaint_lora_strength": 1.0,
+        "outpaint_lora_strength_ui": 1.0,
+        "outpaint_mask_preserve": true,
+        "outpaint_mask_preserving": true,
+        "outpaint_official_stack": true,
+        "outpaint_pad_bottom": 0,
+        "outpaint_pad_left": 0,
+        "outpaint_pad_right": 64,
+        "outpaint_pad_top": 0,
+        "outpaint_requested_model_type": "fake_ltx",
+        "outpaint_resolution_preset": "auto",
+        "outpaint_source_preservation": 1.0,
+        "prompt": "a forest",
+        "resolution": "128x64",
+        "seed": 7,
+        "settings_version": 2.53,
+        "single_stage_pipeline": false,
+        "sliding_window_discard_last_frames": 8,
+        "sliding_window_overlap": 9,
+        "sliding_window_size": 34,
+        "video_guide": "<TMP>/two-shots.mp4",
+        "video_guide_outpainting": "38.88888889 38.88888889 0 100",
+        "video_length": 24,
+        "video_prompt_type": "VG"
+      },
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed7_a_forest.mp4",
+          "<TIME>_seed7_a_forest(2).mp4"
+        ]
+      },
+      "returned": true,
+      "sidecars": {},
+      "status": {
+        "error": "Outpaint camera-shot assembly changed the timeline length (20/24 frames).",
+        "message": "Outpaint assembly failed: Outpaint camera-shot assembly changed the timeline length (20/24 frames).",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "Joining camera shots",
+        "progress": 99,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "Outpaint camera-shot assembly changed the timeline length (20/24 frames).",
+          "retryable": true
+        },
+        "message": "Outpaint assembly failed: Outpaint camera-shot assembly changed the timeline length (20/24 frames).",
+        "phase": "Joining camera shots",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "temp folders left": [
+        false
+      ],
+      "timers": [
+        "completed",
+        "completed"
+      ],
+      "transitions": [
+        "running | phase 'Detecting camera shots' | 'Detecting camera cuts for Outpaint...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Preparing camera shots' | 'Preparing 2 Outpaint shots...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Preparing camera shots' | 'Preparing Outpaint shot 1/2...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Preparing camera shots' | 'Preparing Outpaint shot 2/2...' | 0% | step 0/0 | outputs 0",
+        "queued | phase '' | 'Queued (outpaint)' | 0% | step 0/0 | outputs 0",
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 1/2' | 'Shot 1/2' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 1/2: Sampling | 1/2' | 'Shot 1/2: Sampling | 1/2' | 25% | step 1/2 | outputs 0",
+        "running | phase 'Shot 1/2: Sampling | 2/2' | 'Shot 1/2: Sampling | 2/2' | 50% | step 2/2 | outputs 0",
+        "running | phase 'Shot 2/2' | 'Shot 2/2' | 50% | step 2/2 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 2/2: Sampling | 1/2' | 'Shot 2/2: Sampling | 1/2' | 75% | step 1/2 | outputs 0",
+        "running | phase 'Shot 2/2: Sampling | 2/2' | 'Shot 2/2: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Shot 2/2: Sampling | 2/2' | 'Shot 2/2: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining camera shots' | 'Joining Outpaint shots and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "failed | phase 'Joining camera shots' | 'Outpaint assembly failed: Outpaint camera-shot assembly changed the timeline length (20/24 frames).' | 99% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
   "official outpaint shots: the join fails": {
     "body": {
       "accepted": {
@@ -5810,6 +6662,9 @@
             24
           ]
         ]
+      },
+      "one frame short": {
+        "error": "ValueError: Outpaint source ended before its planned timeline (24/25 frames)."
       },
       "only the planned frames": {
         "value": [

@@ -425,6 +425,7 @@ def test_outpaint_camera_cut_detection(full_server, golden, tmp_path) -> None:
         "two shots": _outcome(lambda: helpers._detect_outpaint_video_shot_ranges(str(two_shots), 24)),
         "only the planned frames": _outcome(lambda: helpers._detect_outpaint_video_shot_ranges(str(two_shots), "10")),
         "the source ends early": _outcome(lambda: helpers._detect_outpaint_video_shot_ranges(str(two_shots), 30)),
+        "one frame short": _outcome(lambda: helpers._detect_outpaint_video_shot_ranges(str(two_shots), 25)),
         "a missing source": _outcome(lambda: helpers._detect_outpaint_video_shot_ranges(
             str(tmp_path / "missing.mp4"), 4)),
         "an empty file": _outcome(lambda: helpers._detect_outpaint_video_shot_ranges(
@@ -458,6 +459,26 @@ def _capture_workers(rig) -> list:
     return started
 
 
+def _describe_media(value):
+    """Frame count and size of a video, size of a picture: what the route wrote for the worker to read."""
+    if isinstance(value, list):
+        return [_describe_media(item) for item in value]
+    if not isinstance(value, str) or not Path(value).is_file():
+        return value
+    if value.endswith(".mp4"):
+        import decord
+
+        reader = decord.VideoReader(value)
+        try:
+            return {"frames": len(reader), "shape": list(reader[0].shape)}
+        finally:
+            del reader
+    from PIL import Image
+
+    with Image.open(value) as picture:
+        return {"size": list(picture.size)}
+
+
 def _hand_off(rig, path: str, body: dict, started: list, *, temp=None) -> dict:
     """Post one request; with the worker recorded, return the answer, the worker started and the job's params."""
     before = len(started)
@@ -471,6 +492,10 @@ def _hand_off(rig, path: str, body: dict, started: list, *, temp=None) -> dict:
             "params": json.loads(json.dumps(job.get("params") or {}, default=str, sort_keys=True)),
             "job": {key: job.get(key) for key in ("status", "message", "workspace", "out_dir", "phase")},
         })
+        if path == "/api/v1/blend":
+            params = job.get("params") or {}
+            observed["media"] = {key: _describe_media(params.get(key)) for key in (
+                "image_start", "image_end", "video_source", "video_end", "image_refs") if params.get(key)}
     return _scrub(observed, *(temp.pairs() if temp else ()))
 
 
@@ -769,7 +794,7 @@ def test_blend_cancelled_while_the_transition_renders(rig, golden, tmp_path, mon
     }, (str(tmp_path), "<TMP>"), *temp.pairs()))
 
 
-def _shot_outpaint(rig, tmp_path, monkeypatch, *, shot_frames: int | None, concat=True):
+def _shot_outpaint(rig, tmp_path, monkeypatch, *, shot_frames: int | None, concat=True, timeline_frames=24):
     """An official outpaint of a two-shot clip whose shot guides are written by a recorder; the engine renders each
     shot as a clip of ``shot_frames`` frames and the fake WanGP joins them into the 24-frame timeline."""
     _block_network(monkeypatch)
@@ -798,7 +823,7 @@ def _shot_outpaint(rig, tmp_path, monkeypatch, *, shot_frames: int | None, conca
 
         rig.engine.write_media = write_media
     joined: list = []
-    timeline = _video(tmp_path / "timeline.mp4", frames=24, fps=8)
+    timeline = _video(tmp_path / "timeline.mp4", frames=timeline_frames, fps=8)
 
     def concatenate(paths, output, audio, **kwargs):
         joined.append([[Path(path).name for path in paths], Path(output).name, audio and Path(audio).name,
@@ -827,12 +852,12 @@ def _shot_observation(rig, job_id, temp, tmp_path, guides, joined) -> dict:
 
 
 @pytest.mark.parametrize("case", ["joined", "joined with the source audio", "the audio probe fails",
-                                  "a shot of the wrong length", "the join fails"])
+                                  "a shot of the wrong length", "the join fails", "the join changes the length"])
 def test_official_outpaint_generates_each_camera_shot_then_joins_them(rig, golden, tmp_path, monkeypatch,
                                                                       case) -> None:
     temp, _source, guides, joined, body = _shot_outpaint(
         rig, tmp_path, monkeypatch, shot_frames=None if case == "a shot of the wrong length" else 12,
-        concat=case != "the join fails")
+        concat=case != "the join fails", timeline_frames=20 if case == "the join changes the length" else 24)
     if case == "joined with the source audio":
         rig.patch("_recast_video_has_audio", lambda path: Path(path).name == "two-shots.mp4")
     elif case == "the audio probe fails":
