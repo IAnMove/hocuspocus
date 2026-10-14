@@ -1710,3 +1710,236 @@ def test_spatial_upsampling_replaces_the_file_and_keeps_its_audio(rig, golden, t
         })
     finally:
         _clear_flash_keys(config)
+
+
+# -- the per-job VRAM coefficient, value by value (C4 review) ------------------------------------------------------
+# The worker test above pins that the coefficient is applied for the job and put back, not the value. These call the
+# launch name with one job at a time and record every number it computes, the reason lines it prints and what it
+# leaves on the engine, then put the base back as the worker's ``finally`` block does.
+_LORA_SIZES = {"style.safetensors": 1_610_612_736, "detail.safetensors": 402_653_184}
+_VIDEO = {"model_type": "fake_t2v", "resolution": "1280x720", "video_length": 241}
+_H3_OMNI = {"architecture": "minimax_h3_fake", "omni_reference": True, "minimax_h3_transformer_working_vram_gb": 6.0}
+_H3_REFERENCES = [{"type": "video"}, {"kind": "Video"}, {"type": "image"}, "not a dict"]
+_COEFFICIENT_CASES = {
+    "loras and a progressive pipeline": {
+        "params": {**_VIDEO, "activated_loras": [*_LORA_SIZES, "missing.safetensors", ""], "progressive_pipeline": True}},
+    "image mode": {"params": {"model_type": "fake_t2v", "image_mode": 1, "resolution": "1024x1024", "video_length": 1}},
+    "outpaint refine": {"params": {**_VIDEO, "outpaint_full_resolution_refine": True, "single_stage_pipeline": True}},
+    "single stage": {"params": {**_VIDEO, "single_stage_pipeline": True}},
+    "sliding window clamp": {"params": {**_VIDEO, "video_length": 5400, "sliding_window_size": 241}},
+    "unreadable lengths": {"params": {**_VIDEO, "video_length": "long", "sliding_window_size": "wide"}},
+    "engine lookups fail": {"params": _VIDEO, "engine_fails": True},
+    "scail2 dedicated": {"params": {**_VIDEO, "resolution": "848x480", "video_length": 81}, "base_model": "scail2_14B"},
+    "scail2 shared, unreadable resolution": {"params": {**_VIDEO, "resolution": "widexhigh", "video_length": 81},
+                                             "base_model": "scail2_1.3B", "dedicated": "off"},
+    "h3 video references reload the profile": {
+        "params": {**_VIDEO, "resolution": "960x544", "video_length": 345, "activated_loras": ["style.safetensors"],
+                   "minimax_h3_references": _H3_REFERENCES},
+        "model_def": _H3_OMNI, "loaded": 0.95},
+    "h3 already loaded tighter": {"params": {**_VIDEO, "resolution": "960x544", "video_length": 97},
+                                  "model_def": {"architecture": "minimax_h3_fake"}, "loaded": 0.05},
+    "h3 with no model loaded": {"params": {**_VIDEO, "resolution": "640x352", "video_length": 49},
+                                "model_def": {"architecture": "minimax_h3_fake"}},
+    "sound effect": {"params": {**_VIDEO, "sfx_mode": True}},
+    "no gpu": {"params": _VIDEO, "vram": 0.0},
+    "unreadable probe": {"params": _VIDEO, "vram": "unknown"},
+    "small card": {"params": {**_VIDEO, "resolution": "1920x1088"}, "vram": 8.0},
+    "base not a number": {"params": _VIDEO, "base": "eighty"},
+}
+
+
+@pytest.mark.parametrize("case", list(_COEFFICIENT_CASES))
+def test_the_per_job_coefficient_value_for_each_kind_of_job(rig, golden, tmp_path, monkeypatch, capsys, case) -> None:
+    spec = _COEFFICIENT_CASES[case]
+    wgp = rig.server.wgp
+    loras = tmp_path / "loras"
+    loras.mkdir()
+    for name, size in _LORA_SIZES.items():
+        with open(loras / name, "wb") as handle:
+            handle.truncate(size)  # sparse: the size is what the coefficient reads
+    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": spec.get("vram", 24.0)})
+    monkeypatch.setitem(wgp.server_config, "vram_safety_coefficient", spec.get("base", 0.85))
+    if spec.get("dedicated"):
+        monkeypatch.setenv("MAESTRO_SCAIL2_DEDICATED_MODEL", spec["dedicated"])
+    else:
+        monkeypatch.delenv("MAESTRO_SCAIL2_DEDICATED_MODEL", raising=False)
+    rig.set_wgp("reload_needed", False)
+    if spec.get("engine_fails"):
+        def fail(*_args, **_kwargs):
+            raise RuntimeError("engine lookup failed")
+
+        for name in ("get_lora_dir", "get_base_model_type", "get_model_def"):
+            rig.set_wgp(name, fail)
+    else:
+        rig.set_wgp("get_lora_dir", lambda *_args, **_kwargs: str(loras))
+        rig.set_wgp("get_base_model_type", lambda model_type: spec.get("base_model", model_type))
+        rig.set_wgp("get_model_def", lambda _model_type: dict(spec.get("model_def", {})))
+    if "loaded" in spec:
+        rig.set_wgp("wan_model", SimpleNamespace(_maestro_profile_vram_coefficient=spec["loaded"]))
+    job = {"id": "coefficient-job", "params": dict(spec["params"])}
+    capsys.readouterr()
+    returned = rig.launch._apply_per_job_coefficient(job)
+    applied = wgp.args.vram_safety_coefficient
+    rig.launch._restore_base_coefficient()
+    printed = [line for line in capsys.readouterr().out.splitlines() if line.startswith("[VRAM]")]
+    rig.check(golden, f"vram coefficient value: {case}", {
+        "returned": returned,
+        "adjustment": job.get("vram_adjustment"),
+        "applied": applied,
+        "reload_needed": wgp.reload_needed,
+        "restored": wgp.args.vram_safety_coefficient,
+        "printed": printed,
+    })
+
+
+def test_consecutive_jobs_each_start_from_the_saved_base_coefficient(rig, golden, monkeypatch) -> None:
+    """One coefficient on ``wgp.args`` for the whole process: a heavy job tightens it, the worker puts the saved base
+    back, a light job computes its own value from that base, a sound effect leaves it alone, and the same heavy job
+    gets the same value again."""
+    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.85)
+    seen = _stub_mmaudio(rig, monkeypatch)
+    heavy = {**BODY, "resolution": "1280x720", "video_length": 241}
+    sequence = []
+    for label, body in (("heavy video", heavy),
+                        ("light image", {**BODY, "prompt": "a small still", "generation_mode": "image",
+                                         "video_length": 1, "resolution": "512x512"}),
+                        ("sound effect", SFX_BODY),
+                        ("heavy video again", {**heavy, "prompt": "the lake again"})):
+        engine_calls = len(rig.engine.calls)
+        before = rig.server.wgp.args.vram_safety_coefficient
+        job_id = rig.run(body)
+        record = rig.launch.snapshot_job(rig.launch._jobs[job_id])
+        sequence.append({
+            "job": label,
+            "status": record.get("status"),
+            "before": before,
+            "during": [call["vram_safety_coefficient"] for call in rig.engine.calls[engine_calls:]],
+            "adjustment": record.get("vram_adjustment"),
+            "after": rig.server.wgp.args.vram_safety_coefficient,
+        })
+    rig.check(golden, "vram coefficient across consecutive jobs", {
+        "sequence": sequence, "audio model": seen, "base kept": rig.server.wgp.server_config["vram_safety_coefficient"]})
+
+
+# -- sound-effect paths the Studio job does not take (C4 review) ---------------------------------------------------
+_SFX_CASES = ["video guide sets the duration", "unreadable video guide keeps the asked duration",
+              "missing video guide falls back to text", "out of memory is tagged"]
+
+
+@pytest.mark.parametrize("case", _SFX_CASES)
+def test_sound_effect_paths_through_the_worker(rig, golden, tmp_path, monkeypatch, case) -> None:
+    """A legacy video-guided request reads the guide's duration with decord and remuxes onto it; a guide that is not
+    there falls back to text; an audio model that runs out of memory fails the job with the OOM tag."""
+    seen = _stub_mmaudio(rig, monkeypatch)
+    guide = tmp_path / "guide.mp4"
+    guide.write_bytes(b"GUIDE")
+
+    class _Reader:
+        def __init__(self, path: str) -> None:
+            if case.startswith("unreadable"):
+                raise RuntimeError("cannot decode the guide")
+            seen.setdefault("decoded", []).append(Path(path).name)
+
+        def get_avg_fps(self) -> float:
+            return 24.0
+
+        def __len__(self) -> int:
+            return 60
+
+    monkeypatch.setitem(sys.modules, "decord", SimpleNamespace(VideoReader=_Reader))
+    params = dict(SFX_BODY)
+    if case in ("video guide sets the duration", "unreadable video guide keeps the asked duration"):
+        params["video_guide"] = str(guide)
+    elif case == "missing video guide falls back to text":
+        params["video_guide"] = "never-uploaded-guide.mp4"
+    else:
+        def video_to_audio(**_kwargs) -> None:
+            raise RuntimeError("CUDA out of memory. Tried to allocate 2.00 GiB")
+
+        monkeypatch.setitem(sys.modules, "postprocessing.mmaudio.mmaudio", SimpleNamespace(video_to_audio=video_to_audio))
+    job_id = rig.direct_job(params, job_id="golden-sfx")
+    returned = rig.call_worker(job_id)
+    rig.check(golden, f"sound effect path: {case}", {**rig.observe(job_id), "audio model": seen, "returned": returned})
+
+
+# -- FlashVSR progress and failures (C4 review) --------------------------------------------------------------------
+_FLASH_EDGE_CASES = ["progress reaches the job", "progress goes to the caller", "no frames back", "concat fails",
+                     "full variant keeps uint8"]
+
+
+@pytest.mark.parametrize("case", _FLASH_EDGE_CASES)
+def test_chunked_flashvsr_upscale_forwards_progress_and_cleans_up_a_failure(rig, golden, tmp_path, monkeypatch,
+                                                                           case) -> None:
+    """The model's progress callback becomes job progress (or goes to the caller's callback), a model that returns
+    nothing or a failed concat raises after the persistence is put back and every segment is deleted, and the full
+    variant's uint8 frames are saved without normalising."""
+    import torch
+
+    folder = tmp_path / "flash-edge"
+    folder.mkdir()
+    source = folder / "long.mp4"
+    source.write_bytes(b"SOURCE")
+    config = rig.server.wgp.server_config
+    notes = _prepare_flashvsr(
+        rig, monkeypatch, fps=8.9, width=4000, height=4000, frames=100,
+        variant="full" if case == "full variant keeps uint8" else "tiny",
+        expect_ffmpeg=case != "no frames back", stop_at=None,
+    )
+    flash = rig.server.wgp.flashvsr
+    model = flash.upscale
+    changes: list = []
+    received: list = []
+
+    def update_job(_job, **kwargs):
+        changes.append(kwargs)
+        return True
+
+    rig.patch("update_job", update_job)
+
+    def upscale(seg, method, **kwargs):
+        if case.startswith("progress"):
+            kwargs["progress_callback"]("Denoising", 1, 4)
+            kwargs["progress_callback"]("", None, None)
+            kwargs["progress_callback"]("Decoding", "x", 5)
+        if case == "no frames back":
+            return None, None
+        out, cache = model(seg, method, **kwargs)
+        if case == "full variant keeps uint8":
+            out = out.to(torch.uint8)
+        return out, cache
+
+    flash.upscale = upscale
+    if case == "concat fails":
+        def run(command, *args, **kwargs):
+            notes["commands"].append(_masked_argv(command))
+            return subprocess.CompletedProcess(list(command), 1, "", "concat: invalid data")
+
+        monkeypatch.setattr(subprocess, "run", run)
+    try:
+        error = None
+        result = None
+        try:
+            result = rig.launch._chunked_flashvsr_upscale(
+                str(source), "flashvsr2", job={"id": "flash-edge-job"},
+                progress_callback=(lambda *values: received.append(list(values)))
+                if case == "progress goes to the caller" else None,
+            )
+        except RuntimeError as exc:
+            error = str(exc)
+        rig.check(golden, f"flashvsr edge: {case}", {
+            "error": error,
+            "returned": None if result is None else Path(result).name,
+            "reads": notes["reads"],
+            "upscales": notes["upscales"],
+            "saves": notes["saves"],
+            "job_updates": changes,
+            "caller_progress": received,
+            "commands": notes["commands"],
+            "persistence_after": config.get("flashvsr_persistence"),
+            "released": notes["releases"],
+            "leftovers": _extras(folder, source) if result is None else sorted(
+                name for name in _extras(folder, source) if name != Path(result).name),
+        })
+    finally:
+        _clear_flash_keys(config)
