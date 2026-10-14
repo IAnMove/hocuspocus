@@ -13,8 +13,6 @@ import uuid
 
 from fastapi import HTTPException, Request
 
-from services.request_numbers import number_field, optional_number
-
 # Bound by the router factories. None until the full server mounts the routes.
 _generation_job_acceptance = None
 _get_active_workspace = None
@@ -57,6 +55,8 @@ async def retake_video_endpoint(request: Request):
             video_path = candidate
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
+
+    from services.request_numbers import number_field
 
     start_time = number_field(body, "start_time", 0)
     end_time = number_field(body, "end_time", -1)
@@ -179,6 +179,8 @@ async def extract_frames_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
+    from services.request_numbers import optional_number
+
     start_time = optional_number(body, "start_time")
     end_time = optional_number(body, "end_time")
     if start_time is None and end_time is None:
@@ -290,6 +292,8 @@ async def edit_anything_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="model_type is required")
 
     # Optional time range (default = full video), and the other numbers, before the video is read
+    from services.request_numbers import number_field
+
     start_time = number_field(body, "start_time", 0)
     end_time = number_field(body, "end_time", -1)
     lora_strength = number_field(body, "lora_strength", 1.0)
@@ -462,6 +466,8 @@ async def inpaint_endpoint(request: Request):
         raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
 
     from services.inpaint_service import check_sam_status, parse_inpaint_intent, segment_video, unload_sam, ensure_sam_running, shutdown_sam
+
+    from services.request_numbers import number_field
 
     start_time = number_field(body, "start_time", 0)
     end_time = number_field(body, "end_time", -1)
