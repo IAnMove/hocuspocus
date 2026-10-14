@@ -247,17 +247,23 @@ class EngineCall:
     def send(self, command: str, data: Any = None) -> None:
         self.send_cmd(command, data)
 
-    def save(self, kind: str | None = None, *, suffix: str = "", register: bool = True) -> str:
-        """Write one output where WanGP does: into ``wgp.save_path``, and tell the generation state about it
-        (``register=False`` leaves the file for the worker to find by looking at the folder)."""
+    def save(self, kind: str | None = None, *, suffix: str = "", register: bool | str = True) -> str:
+        """Write one output where WanGP does (a video into ``wgp.save_path``, an image into ``image_save_path``, a
+        sound into ``audio_save_path``) and register it as WanGP does: in ``artifact_list`` right after the write,
+        then in the gallery list (``file_list`` or ``audio_file_list``). ``register="artifact"`` stops after the
+        first (WanGP failed in between); ``register=False`` leaves the file for the worker to find in the folder."""
         kind = kind or self.kind
         seed = self.kwargs.get("seed", -1)
         seed = seed if isinstance(seed, int) and seed >= 0 else self.engine.default_seed
         slug = re.sub(r"[^a-z0-9]+", "_", str(self.kwargs.get("prompt") or "").lower()).strip("_")[:24] or "clip"
         source = f"{GENERATED_STAMP}_seed{seed}_{slug}{suffix}{_EXTENSIONS[kind]}"
-        path = get_available_filename(self.engine.module.save_path, source)
+        module = self.engine.module
+        folder = {"video": module.save_path, "image": module.image_save_path, "audio": module.audio_save_path}[kind]
+        path = get_available_filename(folder, source)
         self.engine.write_media(path, kind)
         if register:
+            self.gen.setdefault("artifact_list", []).append(path)
+        if register is True:
             listing = "audio_file_list" if kind == "audio" else "file_list"
             self.gen.setdefault(listing, []).append(path)
             self.gen.setdefault("audio_file_settings_list" if kind == "audio" else "file_settings_list", []).append({"seed": seed})

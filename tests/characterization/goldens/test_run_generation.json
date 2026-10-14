@@ -3898,6 +3898,336 @@
     },
     "status": 200
   },
+  "multi clip registered only as artifacts": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "plugin_data": {},
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 0,
+            "generation_mode": "video",
+            "image_end": null,
+            "image_start": null,
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
+          "prompt": "first shot",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 17,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_1.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "plugin_data": {},
+            "prompt": "second shot",
+            "resolution": "64x64",
+            "seed": 12,
+            "trim_tail_frames": 0,
+            "video_length": 25
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 17,
+            "generation_mode": "video",
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_1.png",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "prompt": "second shot",
+            "resolution": "64x64",
+            "seed": 12,
+            "trim_tail_frames": 0,
+            "video_length": 25
+          },
+          "prompt": "second shot",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 2,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 42,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "noise",
+            "plugin_data": {},
+            "prompt": "third shot",
+            "resolution": "64x64",
+            "seed": 13,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
+          "params": {
+            "_continuation": true,
+            "_execution_mode": "real",
+            "audio_frame_offset": 42,
+            "generation_mode": "video",
+            "image_end": null,
+            "image_start": null,
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "noise",
+            "prompt": "third shot",
+            "resolution": "64x64",
+            "seed": 13,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
+          "prompt": "third shot",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 3,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed11_first_shot.meta.json",
+        "<TIME>_seed11_first_shot.mp4",
+        "<TIME>_seed13_third_shot.meta.json",
+        "<TIME>_seed13_third_shot.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": {
+          "0": "<TIME>_seed11_first_shot.mp4",
+          "2": "<TIME>_seed13_third_shot.mp4"
+        },
+        "recovered": false
+      },
+      "returned": false,
+      "sidecars": {
+        "<TIME>_seed11_first_shot.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed11_first_shot.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_frames": [
+              17,
+              25,
+              17
+            ],
+            "per_clip_negative_prompts": [
+              "blur",
+              "",
+              "noise"
+            ],
+            "per_clip_seeds": [
+              11,
+              12,
+              13
+            ],
+            "prompt": "first shot\nsecond shot\nthird shot",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 11,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed13_third_shot.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 2,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed13_third_shot.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_frames": [
+              17,
+              25,
+              17
+            ],
+            "per_clip_negative_prompts": [
+              "blur",
+              "",
+              "noise"
+            ],
+            "per_clip_seeds": [
+              11,
+              12,
+              13
+            ],
+            "prompt": "first shot\nsecond shot\nthird shot",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 13,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": "the third clip failed after writing its file",
+        "message": "the third clip failed after writing its file",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed11_first_shot.mp4",
+          "<TIME>_seed13_third_shot.mp4"
+        ],
+        "phase": "",
+        "progress": 0,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "the third clip failed after writing its file",
+          "retryable": true
+        },
+        "message": "the third clip failed after writing its file",
+        "phase": "failed",
+        "progress": 0.0,
+        "result_refs": [
+          "<TIME>_seed11_first_shot.mp4",
+          "<TIME>_seed13_third_shot.mp4"
+        ],
+        "status": "failed"
+      },
+      "timers": [
+        "completed",
+        "failed",
+        "failed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 1/3' | 'Clip 1/3' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 2/3' | 'Clip 2/3' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 2/3' | 'Error: the second clip failed before writing anything' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 3/3' | 'Clip 3/3' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 3/3' | 'Error: the third clip failed after writing its file' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 3/3' | 'Error: the third clip failed after writing its file' | 0% | step 0/0 | outputs 2",
+        "failed | phase '' | 'the third clip failed after writing its file' | 0% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
   "multi clip with a failing clip": {
     "body": {
       "accepted": {
@@ -5436,6 +5766,273 @@
         "running | phase 'Clip 3/3: Sampling | 2/2' | 'Clip 3/3: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
         "running | phase 'Clip 3/3: Sampling | 2/2' | 'Clip 3/3: Sampling | 2/2' | 100% | step 2/2 | outputs 3",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 3"
+      ]
+    },
+    "status": 200
+  },
+  "multi clip, kept SE duration on a latent-multiple lattice": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "walk in",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 0,
+            "video_length": 16
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 0,
+            "generation_mode": "video",
+            "image_end": null,
+            "image_start": null,
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "walk in",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 0,
+            "video_length": 16
+          },
+          "prompt": "walk in",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 16,
+            "image_end": "door.png",
+            "image_prompt_type": "E",
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "stop at the door",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 8,
+            "video_length": 25
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 16,
+            "generation_mode": "video",
+            "image_end": "door.png",
+            "image_prompt_type": "E",
+            "image_start": null,
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "stop at the door",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 8,
+            "video_length": 25
+          },
+          "prompt": "stop at the door",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 2,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_stop_at_the_door.meta.json",
+        "<TIME>_seed42_stop_at_the_door.mp4",
+        "<TIME>_seed42_walk_in.meta.json",
+        "<TIME>_seed42_walk_in.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": {
+          "0": "<TIME>_seed42_walk_in.mp4",
+          "1": "<TIME>_seed42_stop_at_the_door.mp4"
+        },
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_stop_at_the_door.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 1,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_stop_at_the_door.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_se_preserve_duration_per_clip": true,
+            "generation_mode": "video",
+            "image_end": [
+              "",
+              "door.png"
+            ],
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_frames": [
+              16,
+              24
+            ],
+            "prompt": "walk in\nstop at the door",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {
+            "image_end": [
+              "",
+              "door.png"
+            ]
+          }
+        },
+        "<TIME>_seed42_walk_in.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_walk_in.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_se_preserve_duration_per_clip": true,
+            "generation_mode": "video",
+            "image_end": [
+              "",
+              "door.png"
+            ],
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_frames": [
+              16,
+              24
+            ],
+            "prompt": "walk in\nstop at the door",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {
+            "image_end": [
+              "",
+              "door.png"
+            ]
+          }
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_walk_in.mp4",
+          "<TIME>_seed42_stop_at_the_door.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_walk_in.mp4",
+          "<TIME>_seed42_stop_at_the_door.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed",
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 1/2' | 'Clip 1/2' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 1/2: Sampling | 1/2' | 'Clip 1/2: Sampling | 1/2' | 25% | step 1/2 | outputs 0",
+        "running | phase 'Clip 1/2: Sampling | 2/2' | 'Clip 1/2: Sampling | 2/2' | 50% | step 2/2 | outputs 0",
+        "running | phase 'Clip 2/2' | 'Clip 2/2' | 50% | step 2/2 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 2/2: Sampling | 1/2' | 'Clip 2/2: Sampling | 1/2' | 75% | step 1/2 | outputs 0",
+        "running | phase 'Clip 2/2: Sampling | 2/2' | 'Clip 2/2: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Clip 2/2: Sampling | 2/2' | 'Clip 2/2: Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
       ]
     },
     "status": 200

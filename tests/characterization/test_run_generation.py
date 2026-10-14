@@ -925,11 +925,11 @@ def test_a_cancel_reaches_the_engine_through_the_abort_flag_and_interrupts_the_m
 BOUNDARY = "\n---CLIP_BOUNDARY---\n"
 
 
-def _bounded_model(rig) -> None:
-    """fake_t2v as a bounded start/end Director model: a 9..33 frame lattice in steps of 8."""
+def _bounded_model(rig, **lattice: int) -> None:
+    """fake_t2v as a bounded start/end Director model: a 9..33 frame lattice in steps of 8 unless ``lattice`` says."""
     base = rig.server.wgp.get_model_def
     bounded = {"director_video_strategy": "bounded_start_end", "frames_minimum": 9, "frames_steps": 8,
-               "frames_maximum": 33}
+               "frames_maximum": 33, **lattice}
     rig.set_wgp("get_model_def", lambda model_type: {**(base(model_type) or {}), **bounded}
                 if model_type == "fake_t2v" else base(model_type))
 
@@ -956,6 +956,15 @@ def test_a_bounded_clip_off_the_models_frame_lattice_fails_the_job_before_any_mo
     _bounded_model(rig)
     job_id = rig.run({**BODY, "multi_prompts_gen_type": 3, "prompt": "one\ntwo", "per_clip_frames": [17, 20]})
     rig.check(golden, "multi clip, off the frame lattice", rig.observe(job_id))
+
+
+def test_a_kept_se_duration_rounds_up_to_the_models_latent_grid(rig, golden) -> None:
+    """On a lattice that is a multiple of the latent size (16, 24, ...), keeping the visible duration of an SE clip
+    adds one conditioning step and rounds up to the grid: 24 visible frames are generated as 25."""
+    _bounded_model(rig, frames_minimum=16, frames_maximum=40)
+    job_id = rig.run({**BODY, "multi_prompts_gen_type": 3, "prompt": "walk in\nstop at the door", "per_clip_frames": [16, 24],
+                      "image_end": ["", "door.png"], "_se_preserve_duration_per_clip": True})
+    rig.check(golden, "multi clip, kept SE duration on a latent-multiple lattice", rig.observe(job_id))
 
 
 def test_a_single_clip_with_an_end_image_trims_its_tail_and_names_its_uploads(rig, golden) -> None:
@@ -987,6 +996,23 @@ def test_a_director_clip_sidecar_names_its_pipeline_and_the_prompts_the_model_sa
     job_id = rig.direct_job({**BODY, "_director_pipeline_id": "pipeline-golden"})
     rig.call_worker(job_id)
     rig.check(golden, "director clip with model prompts", rig.observe(job_id))
+
+
+def test_clips_registered_only_as_artifacts_are_bound_to_their_own_clips(rig, golden, monkeypatch) -> None:
+    """WanGP lists a file in ``artifact_list`` as soon as it is written and in ``file_list`` only later. A clip whose
+    engine failed in between still owns its file; a clip that wrote nothing gets none of the others'."""
+    _install_fake_decord(monkeypatch)
+
+    def script(call) -> None:
+        if call.index == 1:
+            raise RuntimeError("the second clip failed before writing anything")
+        call.save(register="artifact")
+        if call.index == 2:
+            raise RuntimeError("the third clip failed after writing its file")
+
+    rig.engine.script = script
+    job_id = rig.run(MULTI_CLIP)
+    rig.check(golden, "multi clip registered only as artifacts", rig.observe(job_id))
 
 
 def test_the_legacy_fallback_does_not_claim_a_file_that_was_there_before_the_job(rig, golden, clip) -> None:

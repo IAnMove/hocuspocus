@@ -45,10 +45,15 @@ the skip reason gives the command above. CI runs them in their own step of the
   (`tests/support/fake_wgp.py`) plays `wgp.generate_video`: it sends progress commands, writes a media file into
   `wgp.save_path` and lists it in the generation state, or raises, or blocks (`call.hold`) while the test cancels.
   Each test records one observation of the finished job (every lifecycle write, the status and canonical task,
-  the files and sidecars, what the engine received, what the worker left behind). Branches that HTTP cannot reach
-  call `_run_generation` directly on a job the server's own factory built. Tests named `test_oddity_*` pin
+  the files and sidecars, what the engine received, what the worker left behind). The fake `generate_video`
+  declares WanGP's real parameters (read from `app/wgp.py`), so the worker's own signature filter decides which
+  params reach it; `engine_calls[].kwargs` is what WanGP would receive. Branches that HTTP cannot reach
+  call `_run_generation` directly (`Rig.call_worker`, in a daemon thread with a deadline) on a job the server's
+  own factory built. Tests named `test_oddity_*` pin
   behaviour that looks unintended: a refactor keeps it, and a fix re-records the golden in its own PR. The stubs go
   through `Rig.patch`, which patches `worker_module()`: a PR that moves the worker repoints that one function.
+  A worker that never finishes fails its test; if its thread is still alive when the session ends, `conftest.py`
+  ends the process with exit code 1 instead of letting Python wait for it.
 
 ## The rule for move PRs: goldens first
 
