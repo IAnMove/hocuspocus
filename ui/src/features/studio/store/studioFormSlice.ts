@@ -6,7 +6,7 @@ import { IMAGE_INTENT_PARAMS, emptyImageStudioDraft, imageStudioDraft } from '..
 import { restoreAudioReferences, stashAudioReferences, type AudioReferenceStash } from '../audioReferenceState'
 import type { AspectRatio, GenerateParams, GenerationMode, ResolutionPreset } from '../../../types'
 import { _applyModelDefaults } from '../../../stores/modelOptionsSlice'
-import { _saveSettings, restoreModeParams, snapshotModeParams, type SavedModeParams } from '../../../stores/modeSettingsPersistence'
+import { _saveSettings, restoreModeParams, snapshotModeParams, withLeavingModeEntry, type SavedModeParams } from '../../../stores/modeSettingsPersistence'
 import { _globalModelSelectionModes } from '../../../stores/servicesSlice'
 import { getDefaultModelForMode } from '../../../stores/modelsSlice'
 import { sfxModelTypes } from '../../../stores/modelCatalog'
@@ -252,18 +252,16 @@ export const createStudioFormSlice: SliceCreator<StudioFormSlice, StudioFormSlic
     }
     const { families, models, generationMode: prevMode, params, selectedModelPerMode, savedLoraPerMode, savedParamsPerMode, loraWeights, availableLoras, savedPromptPerMode } = get()
     // Save prompt for the mode we're leaving
-    const savedPrompts = { ...savedPromptPerMode, [prevMode]: params.prompt }
+    const savedPrompts = withLeavingModeEntry(savedPromptPerMode, prevMode, params.prompt)
     // Save current model + LoRA + params state for the mode we're leaving
-    const savedModels = { ...selectedModelPerMode, [prevMode]: params.model_type }
-    const savedLoras = {
-      ...savedLoraPerMode,
-      [prevMode]: {
-        activated_loras: params.activated_loras || [],
-        loras_multipliers: params.loras_multipliers || '',
-        loraWeights,
-        availableLoras,
-      },
-    }
+    // (nothing when that mode is Tools: it owns no model — see withLeavingModeEntry)
+    const savedModels = withLeavingModeEntry(selectedModelPerMode, prevMode, params.model_type)
+    const savedLoras = withLeavingModeEntry(savedLoraPerMode, prevMode, {
+      activated_loras: params.activated_loras || [],
+      loras_multipliers: params.loras_multipliers || '',
+      loraWeights,
+      availableLoras,
+    })
     // Save the FULL params snapshot for the leaving mode. Strip the
     // fields that are tracked separately in their own per-mode state
     // structures (model_type → selectedModelPerMode, prompt →
@@ -274,19 +272,16 @@ export const createStudioFormSlice: SliceCreator<StudioFormSlice, StudioFormSlic
     // captured here so it survives a switch-and-return AND doesn't
     // leak into other modes.
     const paramsSnapshot = snapshotModeParams(params)
-    const savedParams = {
-      ...savedParamsPerMode,
-      [prevMode]: {
-        ...paramsSnapshot,
-        filmGrainIntensity: get().filmGrainIntensity,
-        filmGrainSaturation: get().filmGrainSaturation,
-        // Save durationSeconds per-mode so audio's 600/1800 (Kugel/Scenema
-        // slider max) doesn't leak into video on mode-switch back. Audio
-        // mode's loadModelOptions still overrides with the slider.max on
-        // model select, so this only matters for video/image/avatar.
-        durationSeconds: get().durationSeconds,
-      },
-    }
+    const savedParams = withLeavingModeEntry(savedParamsPerMode, prevMode, {
+      ...paramsSnapshot,
+      filmGrainIntensity: get().filmGrainIntensity,
+      filmGrainSaturation: get().filmGrainSaturation,
+      // Save durationSeconds per-mode so audio's 600/1800 (Kugel/Scenema
+      // slider max) doesn't leak into video on mode-switch back. Audio
+      // mode's loadModelOptions still overrides with the slider.max on
+      // model select, so this only matters for video/image/avatar.
+      durationSeconds: get().durationSeconds,
+    })
     // Restore saved model for target mode, or fall back to default
     const savedModel = savedModels[mode]
     const restoredModel = savedModel && models.some(m => m.model_type === savedModel)
