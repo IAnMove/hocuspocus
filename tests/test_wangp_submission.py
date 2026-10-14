@@ -48,6 +48,38 @@ def test_legacy_references_are_unchanged_without_opt_in_and_video_cannot_opt_in(
                                   {}, 'demo', uploads_dir=tmp_path, workspace_dir=tmp_path)
 
 
+@pytest.mark.parametrize('stated, expected_mode, expected_length', [
+    ({}, 1, 1),                                  # gen-01: the body said only generation_mode=image
+    ({'image_mode': 0, 'video_length': 81}, 1, 1),  # a contradictory 0 is read as the image request it sits in
+    ({'image_mode': None}, 1, 1),
+    ({'image_mode': 1, 'video_length': 1}, 1, 1),
+    ({'image_mode': 2, 'video_length': 3}, 2, 3),   # a stated image mode of 2 is kept as it is
+])
+def test_an_image_request_always_carries_the_selectors_wangp_reads(tmp_path, stated, expected_mode, expected_length):
+    body = {'generation_mode': 'image', 'prompt': 'a barn', **stated}
+    prepare_generation_inputs(body, {}, 'demo', uploads_dir=tmp_path, workspace_dir=tmp_path)
+    assert (body['image_mode'], body['video_length']) == (expected_mode, expected_length)
+
+
+def test_the_image_selectors_are_in_place_before_the_checks_that_read_them(tmp_path):
+    # The prepared-image check refuses image inputs unless image_mode is 1 or 2: it must see the normalised body.
+    body = {'generation_mode': 'image', 'prompt': 'a barn'}
+    prepare_generation_inputs(body, {'wangp_1272': True, 'image_outputs': True}, 'demo', uploads_dir=tmp_path,
+                              workspace_dir=tmp_path, prepared_images=True)
+    assert body['image_mode'] == 1
+
+
+@pytest.mark.parametrize('body', [
+    {'generation_mode': 'video', 'video_length': 49},
+    {'generation_mode': 'audio', 'image_mode': 0, 'video_length': 0},
+    {'prompt': 'no mode stated', 'video_length': 81},
+])
+def test_other_requests_keep_their_own_image_mode_and_length(tmp_path, body):
+    before = dict(body)
+    prepare_generation_inputs(body, {}, 'demo', uploads_dir=tmp_path, workspace_dir=tmp_path)
+    assert body == before
+
+
 def test_viggle_maps_one_edited_frame_and_keeps_source_identity():
     params = viggle_parameters({'prompt': 'Not used', 'num_inference_steps': 99, 'seed': 41}, video='/v.mp4', reference='/edited.png', width=1920, height=1080, duration=9.625)
     assert params['video_length'] == 231

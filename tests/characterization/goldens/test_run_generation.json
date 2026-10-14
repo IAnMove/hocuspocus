@@ -4138,6 +4138,7 @@
           "image_save_path": "<OUTPUTS>",
           "kwargs": {
             "film_grain_intensity": 0.3,
+            "image_mode": 1,
             "mode": "",
             "model_type": "fake_t2v",
             "plugin_data": {},
@@ -4150,6 +4151,7 @@
             "_execution_mode": "real",
             "film_grain_intensity": 0.3,
             "generation_mode": "image",
+            "image_mode": 1,
             "model_type": "fake_t2v",
             "prompt": "a red barn",
             "resolution": "64x64",
@@ -4198,6 +4200,7 @@
             "_execution_mode": "real",
             "film_grain_intensity": 0.3,
             "generation_mode": "image",
+            "image_mode": 1,
             "model_type": "fake_t2v",
             "prompt": "a red barn",
             "provider": "local",
@@ -10244,6 +10247,7 @@
           "params": {
             "_execution_mode": "real",
             "generation_mode": "image",
+            "image_mode": 1,
             "model_type": "fake_t2v",
             "prompt": "a simulated barn",
             "provider": "local",
@@ -16798,21 +16802,20 @@
             "ceilinged": false,
             "compute_penalty": -0.0291320987654321,
             "compute_ratio": 0.0011851851851851852,
-            "effective_coef": 0.7957987654320987,
+            "effective_coef": 0.8791320987654321,
             "floored": false,
             "lora_penalty": 0.0,
             "lora_total_gb": 0.0,
-            "pass_penalty": 0.08333333333333333,
+            "pass_penalty": 0.0,
             "reasons": [
-              "-0.083 for 1 extra pipeline stage(s) (2.0 GB)",
               "+0.029 bonus for 0.00× compute vs baseline (512×512 × 1 frames, lighter than baseline)"
             ],
-            "stage_count": 2
+            "stage_count": 1
           },
           "after": 0.85,
           "before": 0.85,
           "during": [
-            0.7957987654320987
+            0.8791320987654321
           ],
           "job": "light image",
           "status": "completed"

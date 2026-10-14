@@ -191,11 +191,20 @@ def _write_glb(path: Path) -> None:
 
 
 def result_kind(params: dict[str, Any]) -> str:
-    mode = str(params.get("generation_mode") or "video").strip().casefold()
-    if mode in {"image", "audio", "video", "3d", "model3d"}:
-        return "model3d" if mode in {"3d", "model3d"} else mode
-    if params.get("image_mode"):
+    """The file kind the real engine would save: WanGP writes a picture only when ``image_mode > 0``.
+
+    ``generation_mode`` alone no longer says "image": the simulation used to write a PNG where WanGP wrote an MP4,
+    which hid validation findings gen-01 and N1. The submission door now adds ``image_mode`` to image requests.
+    """
+    try:
+        image_mode = int(params.get("image_mode") or 0)
+    except (TypeError, ValueError):
+        image_mode = 0
+    if image_mode > 0:
         return "image"
+    mode = str(params.get("generation_mode") or "video").strip().casefold()
+    if mode in {"audio", "3d", "model3d"}:
+        return "model3d" if mode in {"3d", "model3d"} else mode
     return "video"
 
 

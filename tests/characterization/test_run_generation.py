@@ -481,6 +481,8 @@ def test_an_image_job_and_a_random_seed(rig, golden) -> None:
     """An image keeps its film grain in the params; seed -1 comes back as the seed the file name carries."""
     job_id = rig.run({**BODY, "prompt": "a red barn", "generation_mode": "image", "seed": -1,
                       "film_grain_intensity": 0.3, "video_length": 1})
+    # gen-01: the body never said image_mode; the submission door adds it, so the engine saves a picture.
+    assert [call["kwargs"]["image_mode"] for call in rig.engine.calls] == [1]
     rig.check(golden, "image job", rig.observe(job_id, full=True))
 
 
@@ -961,7 +963,9 @@ def test_the_real_simulated_executor_writes_an_artifact_and_finishes_the_job(rig
     monkeypatch.setattr(
         prepare, "execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")),
     )
-    job_id = rig.direct_job({**BODY, "generation_mode": "image", "video_length": 1, "prompt": "a simulated barn"})
+    # direct_job skips POST /generate, which is where an image request gets its image_mode: say it here.
+    job_id = rig.direct_job({**BODY, "generation_mode": "image", "image_mode": 1, "video_length": 1,
+                             "prompt": "a simulated barn"})
     rig.call_worker(job_id)
     rig.check(golden, "real simulated executor", rig.observe(job_id, full=True))
 
