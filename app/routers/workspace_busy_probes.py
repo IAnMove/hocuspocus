@@ -10,7 +10,8 @@ list of families one server runs, so a server only imports and checks what it mo
 core never loads ``model3d_service`` or the Series render queue just to be asked about them.
 
 Families whose state lives in an object the server builds (the game and Series produce,
-native render and voice services, and the Series assembly router) cannot be named here.
+native render and voice services, the World3D and Video 2D export services, and the tables
+the Series assembly and Quick Video batch routers keep) cannot be named here.
 The router factory that receives the object registers its probe itself, which is why
 those kinds are in :data:`REGISTERED_BY_THE_ROUTER` and not in a profile.
 """
