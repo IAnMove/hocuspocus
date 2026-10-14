@@ -16,7 +16,8 @@ the paper default, so a series and a shot that never chose one keep their digest
 The series frame (``provider.videoSettings.orientation``) counts only when it is portrait: a landscape series
 keeps the digest it had, and turning the series to portrait (or back) is a new picture. A line counts as spoken
 (``spoken``) only when its speaker's pronunciation dictionary changes it, as the text sent to the voice, so a
-dictionary entry no line uses renders nothing again.
+dictionary entry no line uses renders nothing again. A line's ``castIndex`` (which copy of a kit speaks) counts only
+when the line names one.
 A take saved before an input joined the fingerprint (``renderInputsVersion`` below ``INPUTS_VERSION``) is compared
 with the digest of the version it was saved at, so adding an input never marks an existing production out of date.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
@@ -44,8 +45,9 @@ _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId
 _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance", "revision")
 # Version 2 hashes the number of frames the planner will render for a silent shot.
 # Version 1 stored the raw ``durationSeconds``, which the render then rewrote, so the next pass looked stale.
-# Version 3 adds the series frame when it is portrait. A take saved at version 2 or 1 has no frame to compare,
-# so it is read as made for the series it has: ``_legacy_inputs`` offers its older digests.
+# Version 3 adds the series frame when it is portrait, the spoken text of the lines a pronunciation dictionary
+# rewrites and a line's ``castIndex``. A take saved at version 2 or 1 never recorded them, so it is read as it was
+# saved: ``_legacy_inputs`` offers its older digests.
 INPUTS_VERSION = 3
 _PLANNED_LENGTH_VERSION = 2
 # The inputs below are hashed only from this version on; an older take never recorded them.
@@ -62,9 +64,9 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
     ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches. A portrait
-    series frame and the spoken text are part of the digest from version 3 on; versions 1 and 2 never hashed them."""
-    beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
-             for beat in shot.get("dialogueBeats") or []]
+    series frame, the spoken text and a line's ``castIndex`` are part of the digest from version 3 on; versions 1 and 2
+    never hashed them."""
+    beats = [_beat_row(beat, version) for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
     characters = {item.get("id"): item for item in series.get("characters") or []}
     kit_ids = {cid: (kit_ref(series, cid) or {}).get("id") for cid in people}
@@ -81,6 +83,18 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     }
     payload.update(_extra_inputs(series, shot, root, version))
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def _beat_row(beat: dict[str, Any], version: int) -> list[Any]:
+    """Id, speaker, text, emotion, delivery and, from version 3, ``castIndex`` when the line names a copy.
+
+    ``castIndex`` picks which on-screen copy of a kit moves its mouth (``series_shot_plan._speaker_index``). Only a
+    whole number counts (a bool does not, as there), so a line that never named a copy keeps its digest."""
+    row = [beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
+    index = beat.get("castIndex")
+    if version >= _EXTRA_INPUTS_VERSION and type(index) is int:
+        row.append(index)
+    return row
 
 
 def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
