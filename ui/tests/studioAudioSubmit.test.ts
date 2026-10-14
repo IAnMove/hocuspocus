@@ -17,6 +17,17 @@ test('SFX submit uses MMAudio prompt and does not keep leftover lyrics', () => {
   assert.equal(params.duration_seconds, 8)
 })
 
+test('text-only SFX submit sends the 1-20 s its slider can show', () => {
+  const submit = (durationSeconds: number, extra: Record<string, unknown> = {}) => applyStudioSfxSubmitParams(
+    { model_type: 'mmaudio_v2', MMAudio_prompt: 'whoosh', ...extra },
+    { generationMode: 'audio', audioSubMode: 'sfx', durationSeconds },
+  ).duration_seconds
+  assert.equal(submit(60), 20, 'a Speech duration left over in the store')
+  assert.equal(submit(0), 1, 'a DramaBox "auto" duration left over in the store')
+  assert.equal(submit(8), 8)
+  assert.equal(submit(60, { video_guide: '/api/v1/uploads/clip.mp4' }), 60, 'with a video guide the clip sets the length')
+})
+
 test('Speech submit maps character names to Speaker N and keeps guides', () => {
   const params = applyStudioSpeechSubmitParams(
     { prompt: 'Alice: hello\nBob: hi', model_type: 'multitalk' },
