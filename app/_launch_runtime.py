@@ -2203,7 +2203,6 @@ from services.recast_masks import (
     _recast_mask_region,
     _build_recast_character_mask,
     _recolor_recast_reference_mask,
-    bind as _bind_recast_masks,
 )
 from services.recast_matte import bind as _bind_recast_matte
 from services.recast_reference_prepare import bind as _bind_recast_reference_prepare
@@ -2221,42 +2220,8 @@ from services.recast_reference_compose import (
 )
 
 
-# The Recast character mask calls these shot helpers, which are defined below.
-# Each forwarder looks the launch name up when the mask builder calls it.
-def _forward_recast_detect_shot_ranges(*args, **kwargs):
-    return _detect_recast_shot_ranges(*args, **kwargs)
-
-
-def _forward_recast_find_unmapped_shots(*args, **kwargs):
-    return _find_recast_unmapped_shots(*args, **kwargs)
-
-
-def _forward_recast_normalize_tracking_target(*args, **kwargs):
-    return _normalize_recast_tracking_target(*args, **kwargs)
-
-
-def _forward_recast_recover_unmapped_shots(*args, **kwargs):
-    return _recover_recast_unmapped_shots(*args, **kwargs)
-
-
-def _forward_recast_select_timeline_anchor(*args, **kwargs):
-    return _select_recast_timeline_anchor(*args, **kwargs)
-
-
-def _forward_recast_summarize_mapping_mask(*args, **kwargs):
-    return _summarize_recast_mapping_mask(*args, **kwargs)
-
-
-# Recast masks, mattes and reference preparation each receive the launch
-# objects they read once, here.
-_bind_recast_masks(
-    detect_recast_shot_ranges=_forward_recast_detect_shot_ranges,
-    find_recast_unmapped_shots=_forward_recast_find_unmapped_shots,
-    normalize_recast_tracking_target=_forward_recast_normalize_tracking_target,
-    recover_recast_unmapped_shots=_forward_recast_recover_unmapped_shots,
-    select_recast_timeline_anchor=_forward_recast_select_timeline_anchor,
-    summarize_recast_mapping_mask=_forward_recast_summarize_mapping_mask,
-)
+# Recast mattes and reference preparation each receive the launch object they
+# read once, here.
 _bind_recast_matte(app_dir=_app_dir)
 _bind_recast_reference_prepare(workspace_dir=_workspace_dir)
 

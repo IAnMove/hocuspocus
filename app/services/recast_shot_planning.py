@@ -1,21 +1,12 @@
 """Recast shot ranges, unmapped shots, and the tracking timeline.
 
 The bodies are the launch module's, moved verbatim. Launch keeps the names
-the recast endpoints and the mask helper call. Collaborators that already
-live in the recast services are imported from those modules.
+the recast endpoints call. Collaborators that already live in the recast
+services are imported from those modules at the bottom of this file:
+``recast_masks`` imports six of these helpers back, so whichever of the two is
+imported first, every name the other takes from it is defined by then.
 """
 
-from services.recast_masks import (
-    _RECAST_MASK_COLORS,
-    _RECAST_PROTECTION_COLORS,
-    _recast_mask_region,
-)
-from services.recast_reference_compose import (
-    _build_recast_mapping_appearance_prototypes,
-    _compose_recast_native_people_masks,
-    _recast_appearance_descriptor,
-)
-from services.recast_reference_prepare import _normalize_recast_person_count
 
 def _recast_probe_needs_bystander_tracking(
     probe_frame, target_probe_mask, selected_count,
@@ -658,3 +649,17 @@ def _plan_recast_shot_segments(
                 ),
             })
     return plans
+
+
+# --- helpers from the other recast services ---
+from services.recast_masks import (
+    _RECAST_MASK_COLORS,
+    _RECAST_PROTECTION_COLORS,
+    _recast_mask_region,
+)
+from services.recast_reference_compose import (
+    _build_recast_mapping_appearance_prototypes,
+    _compose_recast_native_people_masks,
+    _recast_appearance_descriptor,
+)
+from services.recast_reference_prepare import _normalize_recast_person_count

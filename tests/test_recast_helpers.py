@@ -558,6 +558,9 @@ def test_video_frame_count_is_the_decoded_length(monkeypatch):
 
 
 RECAST_SERVICES = ("recast_masks", "recast_matte", "recast_reference_compose", "recast_reference_prepare")
+# The Recast shot modules (C8a). recast_masks imports six shot helpers from recast_shot_planning; their bind is
+# checked by test_recast_shot_modules_bind_exactly_the_names_their_functions_read.
+SHOT_SERVICES = ("recast_shot_planning", "recast_shot_manifest", "recast_shot_run")
 
 
 def test_each_recast_service_binds_exactly_its_free_launch_names():
@@ -592,6 +595,13 @@ def test_each_recast_service_binds_exactly_its_free_launch_names():
                     else:
                         assert target.id not in defined, f"{target.id} is defined twice in the slice"
                         defined[target.id] = stem
+    # A name the slice imports from a shot module must be defined there.
+    for stem in SHOT_SERVICES:
+        shot_tree = ast.parse((services / f"{stem}.py").read_text(encoding="utf-8"), filename=f"{stem}.py")
+        for node in shot_tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name != "bind":
+                assert node.name not in defined, f"{node.name} is defined twice in the recast services"
+                defined[node.name] = stem
 
     launch_tree = ast.parse(LAUNCH.read_text(encoding="utf-8"))
     launch_names: set[str] = set()
@@ -789,6 +799,27 @@ def test_recast_shot_modules_bind_exactly_the_names_their_functions_read():
         stripped = ast.unparse(ast.Module(body=kept, type_ignores=[]))
         assert _undefined_globals(stripped, str(path)) == set(params)
         assert launch.count(f"_bind_{stem}(") == 1
+        # bind writes each keyword into the slot of the same name, and nothing else.
+        update = bind.body[-1].value
+        assert isinstance(update, ast.Call) and ast.unparse(update.func) == "globals().update"
+        assert {keyword.arg: ast.unparse(keyword.value) for keyword in update.keywords} == {p: p for p in params}
+        # Launch passes each slot its own name, or a forwarder whose body calls that launch name when it runs.
+        launch_tree = ast.parse(launch, filename=str(LAUNCH))
+        launch_functions = {node.name: node for node in launch_tree.body if isinstance(node, ast.FunctionDef)}
+        (call,) = [
+            node for node in ast.walk(launch_tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == f"_bind_{stem}"
+        ]
+        assert not call.args and sorted(keyword.arg for keyword in call.keywords) == sorted(params)
+        for keyword in call.keywords:
+            assert isinstance(keyword.value, ast.Name), keyword.arg
+            if keyword.value.id == keyword.arg:
+                continue
+            forwarder = launch_functions[keyword.value.id]
+            body = [node for node in forwarder.body if not isinstance(node, ast.Expr)]
+            assert len(body) == 1 and isinstance(body[0], ast.Return), forwarder.name
+            assert ast.unparse(body[0].value) == f"{keyword.arg}(*args, **kwargs)", forwarder.name
+            assert ast.unparse(forwarder.args) == "*args, **kwargs", forwarder.name
 
 
 def test_timeline_preview_blends_the_anchor_and_returns_the_first_frame_when_nothing_is_found():
