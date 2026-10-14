@@ -1,13 +1,21 @@
 """Recast reference mattes: cutout, edge cleanup, and the one U2Net session.
 
 Function bodies are the launch module's, except the two session helpers,
-which now store the session on the single state holder below.
+which now store the session on the single state holder below. Launch hands
+this module its ``_app_dir`` once, through :func:`bind`.
 """
 
 import os
 import threading
 
-from services.recast_launch_binding import bindable
+# Bound by bind(); None until the full server binds it.
+_app_dir = None
+
+
+def bind(*, app_dir):
+    """Take the launch app folder the U2Net model home lives under. Launch calls this once."""
+    globals().update(_app_dir=app_dir)
+
 
 # --- moved verbatim ---
 _RECAST_U2NET_CACHE_LIMIT = 8
@@ -495,6 +503,3 @@ def _refine_recast_reference_cutout(
             f"{mask_source} + local edge cleanup",
             fallback_rgb,
         )
-
-# --- collaborators ---
-_app_dir = bindable("_app_dir")

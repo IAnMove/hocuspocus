@@ -1,12 +1,42 @@
 """Recast masks: palette colors, character masks, and the mask-locked video.
 
-Function bodies are the launch module's, moved verbatim. A name that still
-lives in launch is read through the launch binding when the function runs.
+Function bodies are the launch module's, moved verbatim. The shot helpers the
+character mask calls still live in launch, below the point where launch binds
+this module, so launch hands over forwarders that look each one up when it is
+called (:func:`bind`). Helpers that moved with this slice are imported from
+their modules at the bottom of this file.
 """
 
 import os
 
-from services.recast_launch_binding import bindable
+# Bound by bind(); None until the full server binds them.
+_detect_recast_shot_ranges = None
+_find_recast_unmapped_shots = None
+_normalize_recast_tracking_target = None
+_recover_recast_unmapped_shots = None
+_select_recast_timeline_anchor = None
+_summarize_recast_mapping_mask = None
+
+
+def bind(
+    *,
+    detect_recast_shot_ranges,
+    find_recast_unmapped_shots,
+    normalize_recast_tracking_target,
+    recover_recast_unmapped_shots,
+    select_recast_timeline_anchor,
+    summarize_recast_mapping_mask,
+):
+    """Take the launch shot helpers the character mask calls. Launch calls this once."""
+    globals().update(
+        _detect_recast_shot_ranges=detect_recast_shot_ranges,
+        _find_recast_unmapped_shots=find_recast_unmapped_shots,
+        _normalize_recast_tracking_target=normalize_recast_tracking_target,
+        _recover_recast_unmapped_shots=recover_recast_unmapped_shots,
+        _select_recast_timeline_anchor=select_recast_timeline_anchor,
+        _summarize_recast_mapping_mask=summarize_recast_mapping_mask,
+    )
+
 
 # --- moved verbatim ---
 _RECAST_MASK_COLORS = [
@@ -733,13 +763,9 @@ def _recolor_recast_reference_mask(
     output[region] = local_color
     return output
 
-# --- collaborators ---
-_detect_recast_shot_ranges = bindable("_detect_recast_shot_ranges")
-_find_recast_unmapped_shots = bindable("_find_recast_unmapped_shots")
-_normalize_recast_tracking_target = bindable("_normalize_recast_tracking_target")
-_recover_recast_unmapped_shots = bindable("_recover_recast_unmapped_shots")
-_select_recast_timeline_anchor = bindable("_select_recast_timeline_anchor")
-_summarize_recast_mapping_mask = bindable("_summarize_recast_mapping_mask")
+# --- helpers that moved with this slice ---
+# Imported last: recast_reference_prepare imports this module back, and every
+# name it takes from here is defined above by then.
 from services.recast_reference_prepare import (
     _resolve_recast_media,
     _recast_video_has_audio,

@@ -1,11 +1,20 @@
 """Recast reference preparation: media, profiles, prompts, crops, and conditioning.
 
-Function bodies are the launch module's, moved verbatim.
+Function bodies are the launch module's, moved verbatim. Launch hands this
+module its ``_workspace_dir`` once, through :func:`bind`. Helpers that moved
+with this slice are imported from their modules at the bottom of this file.
 """
 
 import os
 
-from services.recast_launch_binding import bindable
+# Bound by bind(); None until the full server binds it.
+_workspace_dir = None
+
+
+def bind(*, workspace_dir):
+    """Take the launch workspace-folder lookup media paths resolve under. Launch calls this once."""
+    globals().update(_workspace_dir=workspace_dir)
+
 
 # --- moved verbatim ---
 # Official replacement-specific SCAIL-2 Relighting LoRA. Upstream publishes a
@@ -1005,8 +1014,9 @@ def _recast_video_frame_count(video_path):
     finally:
         del reader
 
-# --- collaborators ---
-_workspace_dir = bindable("_workspace_dir")
+# --- helpers that moved with this slice ---
+# Imported last: these modules import this one back, and every name they take
+# from here is defined above by then.
 from services.recast_masks import (
     _RECAST_MASK_COLORS,
     _align_recast_reference_mask,

@@ -10,13 +10,14 @@ import types
 import unittest
 from unittest import mock
 
+from tests.support.launch_ast import generation_source
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 _APP = _ROOT / "app"
 _SERVICE_PATH = _APP / "services" / "managed_preprocessors.py"
 _FILES_LOCATOR_PATH = _APP / "shared" / "utils" / "files_locator.py"
 _WGP_PATH = _APP / "wgp.py"
-_LAUNCH_PATH = _APP / "_launch_runtime.py"
 _GITIGNORE_PATH = _ROOT / ".gitignore"
 _VENDOR_ROOT = _APP / "preprocessing" / "video_depth_anything"
 
@@ -243,12 +244,12 @@ class TestTemporalDepthDownloadSafety(unittest.TestCase):
 
 class TestTemporalDepthWiring(unittest.TestCase):
     def test_preflight_runs_before_managed_loras_and_model_generation(self):
-        launch = _LAUNCH_PATH.read_text(encoding="utf-8")
-        preflight = launch.index("ensure_video_depth_checkpoint(")
-        managed_lora = launch.index(
+        worker = generation_source()
+        preflight = worker.index("ensure_video_depth_checkpoint(")
+        managed_lora = worker.index(
             "_ensure_managed_loras_present(", preflight,
         )
-        generation = launch.index("wgp.generate_video(", managed_lora)
+        generation = worker.index("wgp.generate_video(", managed_lora)
         self.assertLess(preflight, managed_lora)
         self.assertLess(managed_lora, generation)
 
@@ -263,9 +264,9 @@ class TestTemporalDepthWiring(unittest.TestCase):
         )
 
     def test_h3_lora_affine_preflight_runs_before_managed_lora_download(self):
-        launch = _LAUNCH_PATH.read_text(encoding="utf-8")
-        affine = launch.index("ensure_minimax_h3_lora_affine_maps(")
-        managed_lora = launch.index(
+        worker = generation_source()
+        affine = worker.index("ensure_minimax_h3_lora_affine_maps(")
+        managed_lora = worker.index(
             "_ensure_managed_loras_present(", affine,
         )
         self.assertLess(affine, managed_lora)

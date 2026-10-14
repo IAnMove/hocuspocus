@@ -25,6 +25,7 @@ from services.director.prompt_polish import (  # noqa: E402
     should_polish_director_video_prompts,
 )
 from tests.api_client_source import api_client_source  # noqa: E402
+from tests.support.launch_ast import launch_and_worker_source  # noqa: E402
 from services.director.planners.short_film import (  # noqa: E402
     ShortFilmPlanner,
     _route_video_pass2_guide,
@@ -1920,7 +1921,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         with open(lora_selector_path, encoding="utf-8") as handle:
             lora_selector = handle.read()
         with open(launch_path, encoding="utf-8") as handle:
-            launch = handle.read()
+            launch = launch_and_worker_source(handle.read())
         with open(options_path, encoding="utf-8") as handle:
             options = handle.read()
         with open(pipeline_path, encoding="utf-8") as handle:

@@ -14,6 +14,7 @@ if APP not in sys.path:
     sys.path.insert(0, APP)
 
 from services import safe_download  # noqa: E402
+from tests.support.launch_ast import launch_and_worker_source
 
 
 class TestCancellableDownloads(unittest.TestCase):
@@ -74,7 +75,7 @@ class TestCancellableDownloads(unittest.TestCase):
 
     def test_generation_worker_and_ui_are_wired_to_cooperative_cancel(self):
         with open(os.path.join(APP, "_launch_runtime.py"), "r", encoding="utf-8") as handle:
-            launch = handle.read()
+            launch = launch_and_worker_source(handle.read())
         with open(
             os.path.join(ROOT, "ui", "src", "stores", "jobsSlice.ts"),
             "r",

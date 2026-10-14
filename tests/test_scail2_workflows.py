@@ -12,6 +12,7 @@ import unittest
 import numpy as np
 
 from tests.api_client_source import api_client_source
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _requires_torch = unittest.skipUnless(
@@ -3656,7 +3657,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('background_color=(255, 255, 255)', source)
 
     def test_strict_pixel_lock_is_an_opt_in_fallback(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -3665,6 +3666,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn('colorkey=0xFFFFFF', masks)
         self.assertNotIn('"_recast_mask_background"', launch)
+        self.assertNotIn('"_recast_mask_background"', masks)
         self.assertIn("_build_recast_adaptive_mask(", launch)
         self.assertIn('wgp.release_model()', launch)
         self.assertIn("source_video, adaptive_mask, generated_video", launch)
@@ -3704,6 +3706,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn("native_people['conditioning_count']", launch)
         self.assertNotIn("recast_bystanders_matted_ref_", launch)
+        self.assertNotIn("recast_bystanders_matted_ref_", compose)
         self.assertIn("_build_recast_source_scene_reference(", launch)
         self.assertIn(
             "_enable_recast_dynamic_source_scene_reference(",
@@ -3749,7 +3752,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
 
     def test_recast_discovers_mappings_across_the_selected_timeline(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -3761,15 +3764,17 @@ class TestMultiPersonRecast(unittest.TestCase):
         planning = _read(os.path.join(
             _ROOT, "app", "services", "recast_shot_planning.py",
         ))
-        self.assertIn("def _detect_recast_shot_ranges(", planning)
-        self.assertIn("tracking_segments=shot_ranges", launch)
-        self.assertIn("def _recover_recast_unmapped_shots(", planning)
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
+        self.assertIn("def _detect_recast_shot_ranges(", planning)
+        # The character mask builder moved to recast_masks (C7); the launch
+        # copies of these two strings are Repaint's, pinned by its own test.
+        self.assertIn("tracking_segments=shot_ranges", masks)
+        self.assertIn("def _recover_recast_unmapped_shots(", planning)
         self.assertIn(
             "running generic-person appearance recovery",
             masks,
         )
-        self.assertIn("anywhere in the selected video", launch)
+        self.assertIn("anywhere in the selected video", masks)
         self.assertIn('"edit_recast_timeline_anchors"', launch)
         self.assertIn('"scail2_timeline_source_scene_reference"', launch)
         self.assertIn('"scail2_timeline_source_scene_reference"', scail2)
@@ -4031,6 +4036,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             launch,
         )
         self.assertNotIn('if resolution_profile == "512p"', launch)
+        self.assertNotIn('if resolution_profile == "512p"', prepare)
         self.assertIn("editRecastResolutionProfile: '480p'", edit_store)
         self.assertIn(
             "resolution_profile: state.editRecastResolutionProfile",
@@ -4157,7 +4163,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("m.model_type === 'scail2_14B'", form)
 
     def test_recast_postprocess_preserves_and_recovers_resolved_seed(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn('"-map_metadata", "2"', masks)
         self.assertIn('file_sidecar["params"]["seed"] = resolved_seed', launch)
