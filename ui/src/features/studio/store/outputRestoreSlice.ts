@@ -53,6 +53,7 @@ function _inferOutpaintAspect(width: number, height: number): OutpaintAspect | n
 
 export type OutputRestoreSlice = {
   loadSettingsFromOutput: (source?: OutputSettingsSource) => Promise<boolean | void>
+  wangpRestoreError: string
 }
 
 /** loadSettingsFromOutput passes get and set into beginWangpRestore, which is typed as AppState. */
@@ -805,4 +806,5 @@ export const createOutputRestoreSlice: SliceCreator<OutputRestoreSlice, OutputRe
     return restore.isCurrent() && restored
   },
 
+  wangpRestoreError: '',
 })
