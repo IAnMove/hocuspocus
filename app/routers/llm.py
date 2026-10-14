@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from services.lyrics_language import detect_language
 
@@ -422,6 +423,9 @@ def create_llm_router(
                                            lambda value: resolve_visual_media(value, body.get("workspace")))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        except llm_service.LLMProviderError as e:
+            # The provider failed (a rejected key is its 401/403), not this server.
+            return JSONResponse(status_code=502, content={"detail": str(e), "code": e.code})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

@@ -96,6 +96,24 @@ def test_generate_returns_llm_text_without_loading_wgp():
     generate.assert_called_once()
 
 
+def test_generate_reports_a_provider_failure_as_502_with_a_stable_code_and_keeps_500_for_the_rest():
+    from services.llm_service import LLMProviderError
+
+    app = FastAPI()
+    app.include_router(_core_router())
+    client = TestClient(app)
+    message = 'OpenAI-compatible request failed: {"type":"authorized_error","http_code":"401"}'
+    with patch("services.llm_service.generate", side_effect=LLMProviderError(message, status=401)):
+        response = client.post("/api/v1/llm/generate", json={"prompt": "Say hi"})
+    assert response.status_code == 502
+    assert response.json() == {"detail": message, "code": "provider_auth_failed"}
+    with patch("services.llm_service.generate", side_effect=LLMProviderError("down", status=503)):
+        assert client.post("/api/v1/llm/generate", json={"prompt": "Say hi"}).json()["code"] == "provider_failed"
+    with patch("services.llm_service.generate", side_effect=RuntimeError("boom")):
+        response = client.post("/api/v1/llm/generate", json={"prompt": "Say hi"})
+    assert response.status_code == 500 and response.json() == {"detail": "boom"}
+
+
 def test_generate_can_use_scoped_series_writer_without_changing_the_global_model():
     app = FastAPI()
     loaded = []
