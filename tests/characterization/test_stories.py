@@ -65,7 +65,7 @@ def _assert_story_lab_is_bound_to_the_server(launch, monkeypatch) -> None:
     # The Activity controller calls these two through the launch names.
     assert launch.cancel_story_lab_generation is lab_router.cancel_story_lab_generation
     assert launch.resume_story_lab_generation is lab_router.resume_story_lab_generation
-    # The storyboard check calls the comic page check that the full server assigns onto the schema module.
+    # The storyboard check calls the comic page check that the schema module imports from the comic helpers.
     assert lab_schema._comic_page_problem is launch._comic_page_problem
     assert lab_schema._storyboard_page_problem({}, 1) == launch._comic_page_problem({}, 1) is not None
     # The publish and resume hooks are read at call time (the first with globals().get, so a name

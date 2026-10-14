@@ -23858,10 +23858,6 @@ from services.comic_director_json import (
 )
 
 
-import services.story_lab_schema as _story_lab_schema_module
-
-_story_lab_schema_module._comic_page_problem = _comic_page_problem
-
 
 
 _series_library_lock = threading.RLock()
