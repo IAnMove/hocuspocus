@@ -740,3 +740,460 @@ def test_video_has_audio_follows_the_ffprobe_answer(monkeypatch):
     answers["without.mp4"] = False
     assert has_audio("with.mp4") is True
     assert has_audio("without.mp4") is False
+
+
+# -- review additions (C7 review, Opus): the blocks no test reached, recorded on 7a58ddf1b before the move ------------
+def _digest(array) -> str:
+    import hashlib
+
+    import numpy as np
+
+    array = np.ascontiguousarray(array)
+    return f"{array.dtype}{list(array.shape)}:" + hashlib.sha256(array.tobytes()).hexdigest()[:16]
+
+
+# Outputs recorded on 7a58ddf1b (the helpers still in launch), then checked unchanged after the move.
+_RECORDED: dict = {
+    ("character mask", True): (
+        ["uint8[6, 8, 10, 3]:219cd850c2bd05b7", "uint8[6, 8, 10, 3]:f92c5edf9645656f"],
+        "uint8[6, 8, 10, 3]:608ada8554651d3f", [0.0, 0.117647],
+    ),
+    ("character mask", False): (
+        ["uint8[6, 8, 10, 3]:9d081652c6444daf", "uint8[6, 8, 10, 3]:47ba80d45375a428"],
+        "uint8[6, 8, 10, 3]:69f343454c417bff", [0.0, 0.25],
+    ),
+    ("native people target masks", False): "uint8[4, 6, 8, 3]:fe2a3ec02e3405f9",
+    ("native people target masks", True): "uint8[4, 6, 8, 3]:b7ff4960c773edaf",
+}
+
+
+def _recorded(key, observed) -> None:
+    assert key in _RECORDED, f"record {key!r}: {observed!r}"
+    assert observed == _RECORDED[key], key
+
+
+def _fake_magic_mask(monkeypatch, **functions):
+    import sys
+    import types
+
+    fake = types.SimpleNamespace(**functions)
+    shared = types.ModuleType("shared")
+    shared.magic_mask = fake
+    monkeypatch.setitem(sys.modules, "shared", shared)
+    monkeypatch.setitem(sys.modules, "shared.magic_mask", fake)
+    return fake
+
+
+@pytest.mark.parametrize("recovered", [True, False])
+def test_character_mask_recovers_shots_no_mapping_was_grounded_in(tmp_path, monkeypatch, capsys, recovered):
+    import numpy as np
+
+    colors = [(0, 0, 255), (255, 0, 0)]
+    source = np.zeros((6, 8, 10, 3), dtype=np.uint8)
+    for index in range(6):
+        source[index] = index * 10
+    calls: list = []
+
+    def generate(frames, target, **kwargs):
+        calls.append(("generate", target, [int(frame[0, 0, 0]) for frame in frames], kwargs["color_palette"],
+                      kwargs["max_colored_objects"], kwargs["tracking_segments"], kwargs["no_hole"],
+                      kwargs["colorize_objects"]))
+        kwargs["progress_callback"](1, 2)
+        painted = np.zeros_like(frames)
+        if target == "hero":
+            painted[0:2, 1:4, 1:4] = colors[0]
+        elif target == "sidekick":
+            painted[0:2, 5:7, 5:8] = colors[1]
+            painted[1, 2:4, 2:4] = colors[1]
+        else:
+            painted[:, 2:5, 2:5] = colors[0]
+        return painted
+
+    def save(source_path, merged, fps, labels, **kwargs):
+        calls.append(("save", source_path, _digest(merged), fps, labels, sorted(kwargs)))
+        return "merged.mp4"
+
+    _fake_magic_mask(monkeypatch, prepare_video_mask_input=lambda path: ("src.mp4", source, 12.0),
+                     generate_keyword_masks=generate, save_mask_video=save)
+    summaries = {"count": 0}
+
+    def summarize(mask, fps):
+        summaries["count"] += 1
+        if summaries["count"] == 4:
+            return None
+        frames = [index for index in range(len(mask)) if mask[index].any()]
+        return {"first_frame_index": frames[0], "frames": len(frames), "fps": fps, "call": summaries["count"]}
+
+    def find_unmapped(masks, shot_ranges):
+        calls.append(("find", [_digest(mask) for mask in masks], shot_ranges))
+        return [{"shot_index": 1, "start_frame": 2, "end_frame": 4},
+                {"shot_index": 2, "start_frame": 4, "end_frame": 6}]
+
+    def recover(frames, masks, shot_ranges, unresolved, people, compact_ranges):
+        calls.append(("recover", _digest(frames), [_digest(mask) for mask in masks], shot_ranges, unresolved,
+                      _digest(people), compact_ranges))
+        if not recovered:
+            return masks, []
+        output = [mask.copy() for mask in masks]
+        output[0][2:4, 2:5, 2:5] = colors[0]
+        output[1][4:6, 2:5, 2:5] = colors[1]
+        return output, [{"shot_index": 1, "mapping_index": 0, "similarity": 0.91},
+                        {"shot_index": 2, "mapping_index": 1, "similarity": 0.8}]
+
+    aborts: list = []
+    progress: list = []
+    build = _load(
+        ("_build_recast_character_mask", "_compose_recast_character_masks", "_recast_mask_region"),
+        {
+            "_RECAST_MASK_COLORS": colors,
+            "_detect_recast_shot_ranges": lambda frames: [(0, 2), (2, 4), (4, 6)],
+            "_normalize_recast_tracking_target": lambda target: target.strip().lower(),
+            "_summarize_recast_mapping_mask": summarize,
+            "_find_recast_unmapped_shots": find_unmapped,
+            "_recover_recast_unmapped_shots": recover,
+            "_select_recast_timeline_anchor": lambda masks: (None, 4),
+        },
+    )["_build_recast_character_mask"]
+
+    result = build("source.mp4", [{"target": " Hero "}, {"target": "sidekick"}], str(tmp_path),
+                   progress_callback=lambda *args: progress.append(args), abort_callback=lambda: aborts.append(1))
+
+    printed = capsys.readouterr().out.splitlines()
+    assert printed[:3] == [
+        "[Recast] Detected 3 camera shots; reacquiring mapped characters after cuts at 0.17s, 0.33s.",
+        "[Recast] SAM3 tracking wording normalized: ' Hero ' -> 'hero'.",
+        "[Recast] No mapped target was grounded in camera shots 2, 3; running generic-person appearance recovery.",
+    ]
+    assert progress == [(0, 2, 1, 2), (1, 2, 1, 2)]
+    assert len(aborts) == 5
+    assert calls[0] == ("generate", "hero", [0, 10, 20, 30, 40, 50], [(0, 0, 255)], 1, [(0, 2), (2, 4), (4, 6)],
+                        True, True)
+    assert calls[1][1] == "sidekick" and calls[1][3] == [(255, 0, 0)]
+    assert calls[3] == ("generate", "person", [20, 30, 40, 50], colors, 2, [(0, 2), (2, 4)], True, True)
+    assert calls[4][3:] == ([(0, 2), (2, 4), (4, 6)],
+                            [{"shot_index": 1, "start_frame": 2, "end_frame": 4},
+                             {"shot_index": 2, "start_frame": 4, "end_frame": 6}],
+                            calls[4][5], [(0, 2), (2, 4)])
+    assert calls[-1][0] == "save" and calls[-1][1] == "src.mp4" and calls[-1][3] == 12.0
+    assert calls[-1][4] == [" Hero ", "sidekick"] and calls[-1][5] == ["abort_callback", "background_color", "output_dir"]
+    assert result["video_mask"] == "merged.mp4"
+    assert result["shot_ranges"] == [[0, 2], [2, 4], [4, 6]] and result["shot_count"] == 3
+    assert (result["common_frame_index"], result["scene_anchor_index"], result["timeline_aware"]) == (None, 4, True)
+    assert result["fps"] == 12.0 and result["source_frames"] is source
+    if recovered:
+        assert printed[3:] == ["[Recast] Appearance recovery accepted shot 2 -> character A (0.91), "
+                               "shot 3 -> character B (0.80)."]
+        assert result["recovered_shots"][1] == {"shot_index": 2, "mapping_index": 1, "similarity": 0.8}
+        assert result["mapping_summaries"] == [
+            {"first_frame_index": 0, "frames": 4, "fps": 12.0, "call": 3, "mapping_index": 0, "target": " Hero ",
+             "tracking_target": "hero", "color": [0, 0, 255], "recovered_shot_indices": [1],
+             "overlap_fraction": result["overlaps"][0]},
+            {"first_frame_index": 0, "frames": 2, "fps": 12.0, "call": 2, "mapping_index": 1, "target": "sidekick",
+             "tracking_target": "sidekick", "color": [255, 0, 0], "recovered_shot_indices": [2],
+             "overlap_fraction": result["overlaps"][1]},
+        ]
+    else:
+        assert printed[3:] == ["[Recast] Generic-person recovery found no sufficiently distinct identity match; "
+                               "unresolved shots remain unchanged."]
+        assert result["recovered_shots"] == []
+        assert [summary["call"] for summary in result["mapping_summaries"]] == [1, 2]
+        assert "recovered_shot_indices" not in result["mapping_summaries"][0]
+    _recorded(("character mask", recovered), (
+        [_digest(mask) for mask in result["mapping_masks"]], _digest(result["mask_frames"]),
+        [round(float(overlap), 6) for overlap in result["overlaps"]],
+    ))
+
+
+def test_target_group_reference_uses_the_shared_frame_and_falls_back_to_a_cast_sheet(tmp_path, capsys):
+    import numpy as np
+    from PIL import Image
+
+    image = tmp_path / "target.png"
+    mask = tmp_path / "target-mask.png"
+    pixels = np.zeros((4, 6, 3), dtype=np.uint8)
+    pixels[1:3, 2:4] = (200, 120, 40)
+    Image.fromarray(pixels).save(image)
+    semantic = np.zeros((4, 6, 3), dtype=np.uint8)
+    semantic[1:3, 2:4] = (0, 0, 255)
+    Image.fromarray(semantic).save(mask)
+    calls: list = []
+    fail = {"group": False}
+
+    def group(source_frame, semantic_mask, layers, selected_count):
+        calls.append(("group", _digest(source_frame), _digest(semantic_mask),
+                      [(_digest(rgb), _digest(sem)) for rgb, sem in layers], selected_count))
+        if fail["group"]:
+            raise ValueError("nobody to place")
+        return np.full((8, 8, 3), 7, dtype=np.uint8), np.full((8, 8, 3), 9, dtype=np.uint8)
+
+    def cast(layers, selected_count, canvas):
+        calls.append(("cast", [(_digest(rgb), _digest(sem)) for rgb, sem in layers], selected_count, canvas))
+        return np.full((4, 4, 3), 3, dtype=np.uint8), np.full((4, 4, 3), 5, dtype=np.uint8)
+
+    build = _load(
+        ("_build_recast_target_group_reference",),
+        {
+            "os": os,
+            "_compose_recast_group_reference_frame": group,
+            "_compose_recast_cast_reference_frame": cast,
+            "_normalize_recast_person_count": lambda value: max(1, min(5, int(value))),
+        },
+    )["_build_recast_target_group_reference"]
+    refs = {"primary_target_refs": [{"image": str(image), "mask": str(mask)}], "reference_canvas": [64, 32]}
+    frame = np.full((8, 8, 3), 1, dtype=np.uint8)
+    frame_mask = np.full((8, 8, 3), 2, dtype=np.uint8)
+
+    shared = build(refs, str(tmp_path / "out"), "job-1", 2, shared_source_frame=frame, shared_semantic_mask=frame_mask)
+    assert shared == {
+        "image": str(tmp_path / "out" / "recast_cast_ref_job-1.png"),
+        "mask": str(tmp_path / "out" / "recast_cast_mask_job-1.png"),
+        "mode": "shared_timeline_frame",
+        "character_count": 2,
+    }
+    assert np.asarray(Image.open(shared["image"])).max() == 7 and np.asarray(Image.open(shared["mask"])).max() == 9
+    layer = (_digest(pixels), _digest(semantic))
+    assert calls == [("group", _digest(frame), _digest(frame_mask), [layer], 2)]
+
+    calls.clear()
+    fail["group"] = True
+    fallback = build(refs, str(tmp_path / "out"), "job-2", 7, shared_source_frame=frame, shared_semantic_mask=frame_mask)
+    assert fallback["mode"] == "cast_sheet" and fallback["character_count"] == 5
+    assert calls == [("group", _digest(frame), _digest(frame_mask), [layer], 7), ("cast", [layer], 7, [64, 32])]
+    assert capsys.readouterr().out == (
+        "[Recast] Shared-frame cast layout was unavailable; using a neutral cast sheet: nobody to place\n"
+    )
+    assert np.asarray(Image.open(fallback["image"])).max() == 3
+
+    calls.clear()
+    assert build(refs, str(tmp_path / "out"), "job-3", 1, shared_source_frame=frame)["mode"] == "cast_sheet"
+    assert calls == [("cast", [layer], 1, [64, 32])]
+    with pytest.raises(ValueError, match="needs prepared target image/mask pairs"):
+        build({"primary_target_refs": [{"image": str(image)}]}, str(tmp_path / "out"), "job-4", 1)
+
+
+@pytest.mark.parametrize("resize", [False, True])
+def test_native_people_conditioning_keeps_bystanders_in_a_group_reference(tmp_path, monkeypatch, resize):
+    import numpy as np
+    from PIL import Image
+
+    source = np.zeros((4, 6, 8, 3), dtype=np.uint8)
+    for index in range(4):
+        source[index] = 40 + index
+    target_masks = np.zeros((2, 3, 4, 3) if resize else (2, 6, 8, 3), dtype=np.uint8)
+    target_masks[1, 1:2, 1:3] = (0, 0, 255)
+    calls: list = []
+
+    def prepare(path):
+        return (path, source, 10.0) if path == "source.mp4" else (path, target_masks, 10.0)
+
+    def people(frames, target, **kwargs):
+        calls.append(("people", _digest(frames), target, kwargs["color_palette"], kwargs["max_colored_objects"],
+                      kwargs["progress_callback"]))
+        return np.full_like(frames, 11)
+
+    def save(source_path, driving, fps, labels, **kwargs):
+        calls.append(("save", source_path, _digest(driving), fps, labels, kwargs))
+        return str(tmp_path / "driving.mp4")
+
+    _fake_magic_mask(monkeypatch, prepare_video_mask_input=prepare, generate_keyword_masks=people,
+                     save_mask_video=save)
+
+    def native(masks, all_people, selected_count, reference_frame_index=0):
+        calls.append(("native", _digest(masks), _digest(all_people), selected_count, reference_frame_index))
+        return np.full_like(masks, 21), np.full((6, 8, 3), 22, dtype=np.uint8), 3, [{"kept": True}]
+
+    def group(frame, semantic, layers, selected_count):
+        calls.append(("group", _digest(frame), _digest(semantic), [(_digest(a), _digest(b)) for a, b in layers],
+                      selected_count))
+        return np.full((6, 8, 3), 31, dtype=np.uint8), np.full((6, 8, 3), 32, dtype=np.uint8)
+
+    image = tmp_path / "target.png"
+    mask = tmp_path / "mask.png"
+    Image.fromarray(np.full((2, 2, 3), 61, dtype=np.uint8)).save(image)
+    Image.fromarray(np.full((2, 2, 3), 62, dtype=np.uint8)).save(mask)
+    build = _load(
+        ("_build_recast_native_people_conditioning",),
+        {
+            "os": os,
+            "_RECAST_PROTECTION_COLORS": [(0, 0, 255), (255, 0, 0), (0, 255, 0)],
+            "_normalize_recast_person_count": lambda value: int(value),
+            "_compose_recast_native_people_masks": native,
+            "_compose_recast_group_reference_frame": group,
+        },
+    )["_build_recast_native_people_conditioning"]
+    progress = lambda *_args: None  # noqa: E731
+
+    result = build("source.mp4", "mask.mp4", 1, str(tmp_path / "out"), "job",
+                   target_references=[{"image": str(image), "mask": str(mask)}], progress_callback=progress,
+                   reference_frame_index=2)
+    assert result == {
+        "video_mask": str(tmp_path / "driving.mp4"),
+        "reference_image": str(tmp_path / "out" / "recast_group_ref_job.png"),
+        "reference_mask": str(tmp_path / "out" / "recast_group_mask_job.png"),
+        "conditioning_count": 3,
+        "assignments": [{"kept": True}],
+    }
+    assert np.asarray(Image.open(result["reference_image"])).max() == 31
+    assert np.asarray(Image.open(result["reference_mask"])).max() == 32
+    assert calls[0] == ("people", _digest(source), "person", [(0, 0, 255), (255, 0, 0), (0, 255, 0)], 3, progress)
+    assert calls[1][2:] == (_digest(np.full_like(source, 11)), 1, 2)
+    assert calls[2] == ("save", "source.mp4", _digest(np.full((4, 6, 8, 3), 21, dtype=np.uint8)), 10.0,
+                        ["recast people"], {"output_dir": str(tmp_path / "out")})
+    assert calls[3] == ("group", _digest(source[2]), _digest(np.full((6, 8, 3), 22, dtype=np.uint8)),
+                        [(_digest(np.full((2, 2, 3), 61, dtype=np.uint8)),
+                          _digest(np.full((2, 2, 3), 62, dtype=np.uint8)))], 1)
+    # The two-frame target mask was stretched to the four source frames (and resized to the source size).
+    _recorded(("native people target masks", resize), calls[1][1])
+
+    with pytest.raises(ValueError, match="needs prepared target image/mask pairs"):
+        build("source.mp4", "mask.mp4", 1, str(tmp_path / "out"), "job", target_references=["not a pair"])
+
+
+def _conditioning(monkeypatch, calls, detail_size, subject):
+    import numpy as np
+    from PIL import Image
+
+    _fake_magic_mask(monkeypatch, generate_keyword_masks=lambda *args, **kwargs: calls.append(("sam", args, kwargs)))
+
+    def prepare_frame(reference_path, color, *, isolate_reference, aligned_semantic_mask, subject_conditioning,
+                      spatial_background, width, height):
+        calls.append(("prepare", Path(reference_path).name, color, isolate_reference, aligned_semantic_mask,
+                      None if subject_conditioning is None else _digest(subject_conditioning[0]),
+                      spatial_background, width, height))
+        shade = 40 + len(calls)
+        return {
+            "image": Image.new("RGB", (width, height), (shade, 0, 0)),
+            "mask": Image.new("RGB", (width, height), tuple(color)),
+            "identity_image": Image.new("RGB", (4, 4), (0, shade, 0)),
+            "mask_source": "stub matte",
+            "source_size": (12, 10),
+            "prepared_size": (width, height),
+        }
+
+    def derive(reference_path, output_path, *, refine_cutout):
+        calls.append(("derive", Path(reference_path).name, Path(output_path).name, refine_cutout))
+        Path(output_path).write_bytes(b"detail")
+        detail = np.zeros((10, 10), dtype=bool)
+        detail[3:6, 3:6] = True
+        return {
+            "source_conditioning": (subject, None),
+            "detail_conditioning": (detail, None),
+            "metadata": {"crop_box": [1, 2, 7, 8], "detail_size": list(detail_size), "detail_source": "stub",
+                         "ignored": True},
+        }
+
+    return _load(
+        (
+            "_prepare_recast_reference_conditioning",
+            "_recast_should_add_auto_face_detail",
+            "_recast_face_detail_upscale_factor",
+            "_recast_region_bbox_aspect",
+            "_recast_reference_preview_payload",
+            "_recast_image_data_uri",
+        ),
+        {
+            "os": os,
+            "_RECAST_MASK_COLORS": [(0, 0, 255), (255, 0, 0)],
+            "_prepare_recast_reference_frame": prepare_frame,
+            "_derive_recast_face_detail_reference": derive,
+            "_recast_reference_canvas_size": lambda frame: calls.append(("canvas", _digest(frame))) or (96, 64),
+            "_build_recast_source_scene_layers": lambda *args, **kwargs: calls.append(("scene", kwargs)) or {
+                "image": "scene"},
+            "_align_recast_reference_mask": lambda *args: (_ for _ in ()).throw(AssertionError("not aligned")),
+        },
+    )["_prepare_recast_reference_conditioning"]
+
+
+@pytest.mark.parametrize("case", ["enlarged too far", "full body", "kept"])
+def test_reference_conditioning_drops_a_face_detail_view_it_will_not_use(tmp_path, monkeypatch, capsys, case):
+    import numpy as np
+
+    reference = tmp_path / "hero.png"
+    reference.write_bytes(b"png")
+    wide = np.zeros((10, 10), dtype=bool)
+    wide[2:5, 0:10] = True
+    probe = np.zeros((10, 10, 3), dtype=np.uint8)
+    probe[0:10, 4:6] = (0, 0, 255)
+    calls: list = []
+    prepare = _conditioning(monkeypatch, calls, [100, 100] if case == "enlarged too far" else [600, 400], wide)
+    output = tmp_path / "out"
+
+    result = prepare(
+        [{"target": "hero", "ref_image_path": str(reference)}],
+        None if case == "kept" else probe,
+        str(output), "job", isolate_reference=True, selected_count=1, reference_canvas=[640, 352],
+    )
+
+    detail = output / "recast_auto_face_detail_job_1.png"
+    assert calls[0] == ("derive", "hero.png", detail.name, True)
+    assert calls[1] == ("prepare", "hero.png", (0, 0, 255), True, None, _digest(wide), None, 640, 352)
+    assert result["reference_canvas"] == [640, 352]
+    assert result["clip_identity_ref"] == str(output / "recast_clip_identity_ref_job_1_1.png")
+    assert Path(result["clip_identity_ref"]).is_file()
+    assert result["primary_target_refs"] == [{"mapping_index": 0, "image": str(output / "recast_prepared_ref_job_1_1.png"),
+                                              "mask": str(output / "recast_prepared_mask_job_1_1.png"),
+                                              "color": [0, 0, 255]}]
+    printed = capsys.readouterr().out
+    if case == "kept":
+        assert detail.read_bytes() == b"detail"
+        assert printed == ""
+        assert calls[2] == ("prepare", detail.name, (0, 0, 255), True, None, _digest(_detail_mask()), None, 640, 352)
+        assert result["image_refs"] == [str(output / "recast_prepared_ref_job_1_1.png"),
+                                        str(output / "recast_prepared_ref_job_1_2.png")]
+        assert result["auto_face_detail_refs"] == [{"mapping_index": 0, "crop_box": [1, 2, 7, 8],
+                                                    "detail_size": [600, 400], "detail_source": "stub",
+                                                    "ignored": True, "detail_upscale_factor": 0.88}]
+        assert [preview["kind"] for preview in result["previews"]] == ["primary", "auto_face_detail"]
+        assert {key: result["previews"][1][key] for key in ("crop_box", "detail_size", "detail_upscale_factor")} == {
+            "crop_box": [1, 2, 7, 8], "detail_size": [600, 400], "detail_upscale_factor": 0.88}
+        assert "ignored" not in result["previews"][1] and "clip_identity_image" in result["previews"][0]
+        assert result["expected_colors"] == [[0, 0, 255], [0, 0, 255]]
+        assert result["additional_masks"] == [str(output / "recast_prepared_mask_job_1_2.png")]
+    else:
+        assert not detail.exists()
+        reason = ("the crop would require 3.52x enlargement" if case == "enlarged too far" else
+                  "the source target is full-body while the identity reference is already a tighter upper-body view")
+        assert printed == f"[Recast] Skipped automatic face-detail spatial view for mapping 1: {reason}.\n"
+        assert len(calls) == 2 and result["auto_face_detail_refs"] == []
+        assert result["image_refs"] == [str(output / "recast_prepared_ref_job_1_1.png")]
+        assert [preview["kind"] for preview in result["previews"]] == ["primary"]
+
+
+def _detail_mask():
+    import numpy as np
+
+    detail = np.zeros((10, 10), dtype=bool)
+    detail[3:6, 3:6] = True
+    return detail
+
+
+def test_reference_conditioning_checks_an_explicit_canvas_and_falls_back_to_the_anchor_frame(tmp_path, monkeypatch):
+    import numpy as np
+
+    reference = tmp_path / "hero.png"
+    reference.write_bytes(b"png")
+    calls: list = []
+    prepare = _conditioning(monkeypatch, calls, [600, 400], np.ones((4, 4), dtype=bool))
+    mappings = [{"target": "hero", "ref_image_path": str(reference), "additional_ref_image_paths": [str(reference)]}]
+    for canvas, message in (([640], "must contain width and height"), (("wide", 64), "must contain width and height"),
+                            ([100, 64], "divisible by 32"), ([0, 64], "divisible by 32"), ([-64, 64], "divisible")):
+        with pytest.raises(ValueError, match=message):
+            prepare(mappings, None, str(tmp_path / "out"), "job", isolate_reference=False, selected_count=1,
+                    reference_canvas=canvas)
+    assert calls == []
+
+    anchor = np.full((5, 7, 3), 9, dtype=np.uint8)
+    mask = np.zeros((5, 7, 3), dtype=np.uint8)
+    result = prepare(mappings, None, str(tmp_path / "out"), "job", isolate_reference=False, selected_count=2,
+                     mapping_anchors=[{"source_frame": anchor, "source_mask": mask}])
+    assert calls[0] == ("canvas", _digest(anchor))
+    assert calls[1] == ("scene", {"output_size": (96, 64)})
+    assert [call[:3] + call[6:] for call in calls[2:]] == [
+        ("prepare", "hero.png", (0, 0, 255), "scene", 96, 64),
+        ("prepare", "hero.png", (0, 0, 255), "scene", 96, 64),
+    ]
+    assert result["reference_canvas"] == [96, 64]
+    assert result["clip_identity_ref"] == result["image_refs"][0]
+    assert [preview["kind"] for preview in result["previews"]] == ["primary", "additional"]
+    with pytest.raises(ValueError, match="needs at least one prepared reference"):
+        prepare([], None, str(tmp_path / "out"), "job", isolate_reference=False, selected_count=1)
