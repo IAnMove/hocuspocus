@@ -335,15 +335,15 @@ def test_tool_sidecar_publishes_canonical_manifest_without_invented_actor(tmp_pa
 
 
 @pytest.mark.parametrize(
-    ("writer_name", "tool", "private_key"),
+    ("writer_name", "tool", "private_key", "relative"),
     [
-        ("_write_recast_shot_aware_sidecar", "recast", "_recast_shot_temp_dir"),
-        ("_write_repaint_shot_aware_sidecar", "repaint", "_repaint_shot_temp_dir"),
-        ("_write_outpaint_shot_aware_sidecar", "outpaint", "_outpaint_shot_temp_dir"),
+        ("_write_recast_shot_aware_sidecar", "recast", "_recast_shot_temp_dir", "app/_launch_runtime.py"),
+        ("_write_repaint_shot_aware_sidecar", "repaint", "_repaint_shot_temp_dir", "app/_launch_runtime.py"),
+        ("_write_outpaint_shot_aware_sidecar", "outpaint", "_outpaint_shot_temp_dir", "app/services/outpaint_run.py"),
     ],
 )
 def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
-    tmp_path, writer_name, tool, private_key,
+    tmp_path, writer_name, tool, private_key, relative,
 ):
     artifact = tmp_path / "clip.mp4"
     artifact.write_bytes(b"video")
@@ -354,6 +354,7 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
             "time": time,
             "publish_generation_sidecar": publish_generation_sidecar,
         },
+        relative=relative,
     )
     job = {
         "id": f"{tool}-job",
@@ -529,14 +530,17 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
+    outpaint_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "outpaint.py"
+    ).read_text(encoding="utf-8")
     specialist_routes = (
-        ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
-        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
-        ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation"),
+        ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint", source),
+        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", source),
+        ("async def outpaint_endpoint", "def create_outpaint_router", "_prepare_and_run_outpaint", outpaint_source),
+        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation", source),
     )
-    for start, end, real_worker in specialist_routes:
-        route = source.split(start, 1)[1].split(end, 1)[0]
+    for start, end, real_worker, route_source in specialist_routes:
+        route = route_source.split(start, 1)[1].split(end, 1)[0]
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
@@ -566,11 +570,20 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_run_sfx_generation",
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
-        "_write_outpaint_shot_aware_sidecar",
     ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    outpaint_run_source = (
+        Path(__file__).parents[1] / "app" / "services" / "outpaint_run.py"
+    ).read_text(encoding="utf-8")
+    outpaint_sidecar = function_source(
+        "_write_outpaint_shot_aware_sidecar",
+        outpaint_run_source,
+        ast.parse(outpaint_run_source),
+    )
+    assert "publish_generation_sidecar" in outpaint_sidecar
+    assert "json.dump" not in outpaint_sidecar
     animatic_source = (
         Path(__file__).parents[1] / "app" / "services" / "comic_animatic.py"
     ).read_text(encoding="utf-8")

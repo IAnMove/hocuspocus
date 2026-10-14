@@ -884,3 +884,41 @@ def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monke
     assert studio_generate._get_cached_hardware() == {"gpu_vram_gb": 7.0}
     monkeypatch.setattr(launch, "_workspace_collection_registry", SimpleNamespace(get=lambda key: ("found", key)))
     assert studio_generate._workspace_collection_registry.get("c-1") == ("found", "c-1")
+
+
+def test_outpaint_slots_are_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    """Each outpaint module is bound once, and every slot is the launch object at call time."""
+    import routers.outpaint as outpaint_router
+    import services.outpaint_planning as planning
+    import services.outpaint_run as outpaint_run
+
+    launch = worker_module()
+    assert launch.outpaint_endpoint is outpaint_router.outpaint_endpoint
+    assert launch._prepare_and_run_outpaint is outpaint_run._prepare_and_run_outpaint
+    assert launch._run_outpaint_shot_generation is outpaint_run._run_outpaint_shot_generation
+    assert launch._resolve_outpaint_sampling is planning._resolve_outpaint_sampling
+    assert launch._OUTPAINT_PIXEL_BUDGETS is planning._OUTPAINT_PIXEL_BUDGETS
+    assert launch._OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS is planning._OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS
+    assert launch._OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES is planning._OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES
+    for module in (planning, outpaint_run, outpaint_router):
+        assert module.LAUNCH_NAMES, module.__name__
+        for name in module.LAUNCH_NAMES:
+            slot = getattr(module, name)
+            assert slot.value() is getattr(launch, name), f"{module.__name__}.{name}"
+
+    calls = []
+
+    def _run_generation(*args, **kwargs):
+        calls.append(args)
+        return "ran"
+
+    monkeypatch.setattr(launch, "_run_generation", _run_generation)
+    assert outpaint_router._run_generation("job") == "ran"
+    assert outpaint_run._run_generation("job-2") == "ran"
+    assert calls == [("job",), ("job-2",)]
+    # Python names the worker thread from the live target, so a patched worker keeps its own name.
+    assert outpaint_router._run_generation.__name__ == "_run_generation"
+    assert outpaint_run._run_generation.__name__ == "_run_generation"
+    monkeypatch.setattr(launch, "_jobs", {"job-1": {"id": "job-1"}})
+    assert outpaint_run._jobs["job-1"]["id"] == "job-1"
+    assert "job-1" in outpaint_run._jobs

@@ -375,3 +375,74 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
     # route tables and to every test that extracts launch functions.
     for server in (MAIN, CORE):
         assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
+
+
+def _bind_calls(path: Path, function_name: str) -> list[ast.Call]:
+    tree = _parse(path)
+    scope = tree.body
+    if function_name:
+        scope = [
+            node for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name
+        ]
+        assert len(scope) == 1, function_name
+        scope = scope[0].body
+    found = []
+    for node in scope:
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in {
+                "bind", "bind_launch_names",
+            }:
+                found.append(child)
+    return found
+
+
+def test_outpaint_modules_bind_every_free_name_once() -> None:
+    """The bind list is the free names of the written source, and each module is bound once.
+
+    This does not call bind on the imported modules. Doing that would replace the slots the
+    running server tests read.
+    """
+    from services.studio_launch_names import LaunchName, free_launch_names
+
+    modules = {
+        "outpaint_planning": APP / "services" / "outpaint_planning.py",
+        "outpaint_run": APP / "services" / "outpaint_run.py",
+        "outpaint": APP / "routers" / "outpaint.py",
+    }
+    for name, path in modules.items():
+        source = path.read_text(encoding="utf-8")
+        assert "from __future__ import annotations" not in source, name
+        assert "LAUNCH_NAMES" not in source, name
+        independent = tuple(sorted(_undefined_global_names(path)))
+        assert independent == free_launch_names(source), name
+        assert independent, name
+
+    launch_binds = _bind_calls(MAIN, "")
+    bound = [call.args[0].id for call in launch_binds if call.args and isinstance(call.args[0], ast.Name)]
+    assert bound.count("outpaint_planning") == 1
+    assert bound.count("outpaint_run") == 1
+    assert bound.count("outpaint") == 0
+    router_binds = _bind_calls(modules["outpaint"], "create_outpaint_router")
+    assert len(router_binds) == 1
+    assert isinstance(router_binds[0].args[0], ast.Subscript)
+    created = [
+        node for node in ast.walk(_parse(MAIN))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "create_outpaint_router"
+    ]
+    assert len(created) == 1
+
+    def _run_generation(job):
+        return job
+
+    namespace = {"_jobs": {"a": 1}, "_run_generation": _run_generation}
+    jobs = LaunchName(namespace, "_jobs")
+    runner = LaunchName(namespace, "_run_generation")
+    assert jobs["a"] == 1
+    namespace["_jobs"] = {"a": 2}
+    assert jobs["a"] == 2
+    assert "a" in jobs
+    assert runner("job") == "job"
+    assert runner.__name__ == "_run_generation"
+    namespace["_run_generation"] = lambda job: "later"
+    assert runner(job="x") == "later"
