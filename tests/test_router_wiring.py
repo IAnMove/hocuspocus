@@ -377,9 +377,15 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
         assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
 
 
-# Outpaint and blend (C5): each module takes the launch objects it reads from one keyword-only function, bind() for
-# a service and the router factory for a router, which launch calls once. Launch's call is the bind list, and the
-# list is the module's free names; nothing here is written by hand.
+# Repaint (C6): each module takes the launch objects it reads from one keyword-only function, bind() for a service and
+# the router factory for the router, which launch calls once. Launch's call is the bind list, and the list is the
+# module's free names; nothing here is written by hand.
+C6_BINDERS = {
+    APP / "services" / "repaint_planning.py": ("bind", "_bind_repaint_planning"),
+    APP / "services" / "repaint_run.py": ("bind", "_bind_repaint_run"),
+    APP / "routers" / "repaint.py": ("create_repaint_router", "create_repaint_router"),
+}
+# Outpaint and blend (C5), the same way.
 C5_BINDERS = {
     APP / "services" / "outpaint_planning.py": ("bind", "_bind_outpaint_planning"),
     APP / "services" / "outpaint_run.py": ("bind", "_bind_outpaint_run"),
@@ -429,12 +435,45 @@ def _module_bindings(tree: ast.Module) -> dict[str, list[int]]:
     return lines
 
 
+def _forwarded_name(function: ast.FunctionDef) -> str | None:
+    """``NAME`` when the def only calls it: ``def f(*args, **kwargs): return NAME(*args, **kwargs)``, or
+    ``def f(): return NAME()``, with an optional docstring."""
+    body = [node for node in function.body
+            if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))]
+    arguments = function.args
+    if (len(body) != 1 or not isinstance(body[0], ast.Return) or not isinstance(body[0].value, ast.Call)
+            or not isinstance(body[0].value.func, ast.Name)
+            or arguments.posonlyargs or arguments.args or arguments.kwonlyargs):
+        return None
+    call = body[0].value
+    if not arguments.vararg and not arguments.kwarg:
+        passes_through = not call.args and not call.keywords
+    else:
+        passes_through = (
+            arguments.vararg is not None and arguments.kwarg is not None
+            and len(call.args) == 1 and isinstance(call.args[0], ast.Starred)
+            and getattr(call.args[0].value, "id", "") == arguments.vararg.arg
+            and len(call.keywords) == 1 and call.keywords[0].arg is None
+            and getattr(call.keywords[0].value, "id", "") == arguments.kwarg.arg
+        )
+    return call.func.id if passes_through else None
+
+
+def test_repaint_modules_take_every_launch_object_once() -> None:
+    _assert_each_module_takes_every_launch_object_once(C6_BINDERS)
+
+
 def test_outpaint_and_blend_modules_take_every_launch_object_once() -> None:
+    _assert_each_module_takes_every_launch_object_once(C5_BINDERS)
+
+
+def _assert_each_module_takes_every_launch_object_once(binders: dict) -> None:
     launch = _parse(MAIN)
     launch_lines = _module_bindings(launch)
+    launch_defs = {node.name: node for node in launch.body if isinstance(node, ast.FunctionDef)}
     # A name a launch function rebinds with ``global`` would leave the module holding the old object.
     rebound = {name for node in ast.walk(launch) if isinstance(node, ast.Global) for name in node.names}
-    for path, (binder_name, launch_name) in C5_BINDERS.items():
+    for path, (binder_name, launch_name) in binders.items():
         source = path.read_text(encoding="utf-8")
         # String annotations can change how FastAPI reads a route's body.
         assert "from __future__ import annotations" not in source, path.name
@@ -463,8 +502,24 @@ def test_outpaint_and_blend_modules_take_every_launch_object_once() -> None:
         assert len(calls) == 1, launch_name
         call = calls[0]
         assert not call.args and {keyword.arg for keyword in call.keywords} == params, launch_name
+        slot_of = {param: slot for slot, param in slots.items()}
         for keyword in call.keywords:
             assert isinstance(keyword.value, ast.Name), (launch_name, keyword.arg)
+            value = keyword.value.id
             # Defined above the call and never bound again; a later name needs a forwarder.
-            assert max(launch_lines[keyword.value.id]) < call.lineno, (launch_name, keyword.value.id)
-            assert keyword.value.id not in rebound, (launch_name, keyword.value.id)
+            assert max(launch_lines[value]) < call.lineno, (launch_name, value)
+            assert value not in rebound, (launch_name, value)
+            # The slot holds launch's object of the same name, or a forwarder that calls that name.
+            slot = slot_of[keyword.arg]
+            if value != slot:
+                assert value in launch_defs and _forwarded_name(launch_defs[value]) == slot, (launch_name, value)
+
+
+def test_repaint_forwarders_only_forward() -> None:
+    """Every Repaint forwarder in launch passes its arguments to the launch name it is named after."""
+    launch = _parse(MAIN)
+    forwarders = [node for node in launch.body
+                  if isinstance(node, ast.FunctionDef) and node.name.startswith("_forward_repaint_")]
+    assert forwarders
+    for node in forwarders:
+        assert _forwarded_name(node) == node.name[len("_forward_repaint"):], node.name

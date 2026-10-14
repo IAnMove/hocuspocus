@@ -186,6 +186,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "retake_video_endpoint": edit_requests,
             "edit_anything_endpoint": edit_requests,
             "inpaint_endpoint": edit_requests,
+            "repaint_endpoint": _parse("app/routers/repaint.py"),
             "outpaint_endpoint": _parse("app/routers/outpaint.py"),
             "blend_endpoint": _parse("app/routers/blend.py"),
         }

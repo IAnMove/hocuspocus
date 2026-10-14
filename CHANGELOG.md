@@ -10,6 +10,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Outpaint left the launch module.** Extending a picture or a clip, including the official LTX-2 path and a clip with several camera shots, still answers the same way. The generation worker still does the outpaint audio and pixel pass itself.
 
+**Repaint planning left the launch module.** Checking region mappings, the edited frame's aspect, the prepared frame, the preview image, and the shot prompt, conditioning and manifest still works the same way. The Repaint routes call those same functions.
+
+**Repaint shot assembly left the launch module.** Writing the shot sidecar and assembling the shot videos still work the same way. The Repaint route calls that same assembly.
+
+**The Repaint routes left the launch module.** Previewing changed regions and starting a Repaint still answer the same way, including a request the server refuses before any model work.
+
 **Recast masks, mattes, and reference pictures left the launch module.** A character mask, a mask-locked video, a cut-out reference, and the prepared reference a replacement uses are still built the same way. The background-removal model still loads once, on CPU, and its cache stays one object. The relighting LoRA is still the same file with the same hash, and a job still waits for that download.
 
 **The generation worker left the main server file, split into small steps (no behaviour change).** One function used to run every picture, video, speech and sound job on the full server, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits into `app/services/generation_worker/`, so a job does the same things in the same order and ends the same way on a cancel or an error, and every route that starts a job still calls the same `_run_generation`. The main server file is about 1,800 lines shorter. The server hands the new package its own objects once, at start-up.
