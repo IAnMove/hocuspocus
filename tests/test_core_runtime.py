@@ -621,6 +621,27 @@ class CoreRuntimeTests(unittest.TestCase):
         guards = ("protect_cross_origin_mutations", "CORSMiddleware", "guard_host")
         self.assertEqual([name for name in names if name in guards], list(guards))
 
+    def test_core_answers_the_full_servers_origin_matrix(self):
+        """The characterization test drives the same cases through the full server; the two must stay equal."""
+        from tests.support.origin_cases import ORIGIN_CASES, REFUSED, answer, refused_by_origin
+
+        client = TestClient(api, raise_server_exceptions=False)
+        self.assertEqual(refused_by_origin(client), list(ORIGIN_CASES))
+        evil = {"origin": "http://evil.example", "host": "127.0.0.1:42003"}
+        form = 'name=x'
+        multipart = '--b\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n\r\nx\r\n--b--\r\n'
+        for label, headers, body in (
+            ("urlencoded form", {**evil, "content-type": "application/x-www-form-urlencoded"}, form),
+            ("multipart upload", {**evil, "content-type": "multipart/form-data; boundary=b"}, multipart),
+            ("agent token with a page origin", {**evil, "authorization": "Bearer agent"}, None),
+        ):
+            self.assertEqual(answer(client.post("/api/v1/upload", headers=headers, content=body)), REFUSED, label)
+        referer_only = client.post("/api/v1/__guard_probe__", headers={"referer": "http://evil.example/"})
+        self.assertEqual(referer_only.status_code, 404)  # no Origin: a script or MCP client, as on the full server
+        rebound = client.post("/api/v1/__guard_probe__", headers={"origin": "http://evil.example:42003",
+                                                                  "host": "evil.example:42003"})
+        self.assertEqual(rebound.status_code, 421)  # DNS rebinding passes the origin check; the Host guard stops it
+
     def test_settings_token_gates_core_mcp_and_closes_when_disabled(self):
         folder = tempfile.TemporaryDirectory()
         original_path = core_runtime._mcp_access.path
