@@ -93,6 +93,20 @@ def test_the_server_keeps_temp_files_and_libraries_in_its_state_folder(full_serv
 def test_settings_reads(server, golden) -> None:
     server.check(golden, "services config", "GET", "/api/v1/services-config")
     server.check(golden, "presets", "GET", "/api/v1/presets")
+    server.check(
+        golden,
+        "services config empty update",
+        "PUT",
+        "/api/v1/services-config",
+        json={},
+    )
+    server.check(
+        golden,
+        "system config empty update",
+        "PUT",
+        "/api/v1/system-config",
+        json={},
+    )
     server.check(golden, "mcp settings", "GET", "/api/v1/settings/mcp")
     server.check(golden, "llm status", "GET", "/api/v1/llm/status")
     server.check(golden, "lan auth status", "GET", "/api/v1/auth/lan/status")

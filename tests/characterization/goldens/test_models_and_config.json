@@ -774,6 +774,18 @@
     },
     "status": 200
   },
+  "services config empty update": {
+    "body": {
+      "detail": "No valid fields to update"
+    },
+    "status": 400
+  },
+  "system config empty update": {
+    "body": {
+      "detail": "No valid fields to update"
+    },
+    "status": 400
+  },
   "system detect": {
     "body": {
       "auto_enabled": false,
