@@ -335,6 +335,26 @@ class TestJobLifecycleWiring(unittest.TestCase):
             check_at = source.rfind("abort_check()", 0, replace_at)
             self.assertGreaterEqual(check_at, 0)
 
+    def test_generation_owns_abort_state_only_after_registration(self):
+        generation = _function(self.launch, "_run_generation")
+        with open(
+            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
+        ) as handle:
+            launch_source = handle.read()
+        source = ast.get_source_segment(launch_source, generation)
+        self.assertIsNotNone(source)
+        before_register, after_register = source.split("if not register_abort_state(", 1)
+        assignments = [
+            line.strip() for line in before_register.splitlines()
+            if "abort_state =" in line
+        ]
+        self.assertEqual(assignments, ["abort_state = None"])
+        self.assertIn("abort_state = pending_abort", after_register)
+        self.assertLess(
+            after_register.index("return False"),
+            after_register.index("abort_state = pending_abort"),
+        )
+
     def test_generation_stamps_partial_outputs_before_cancel_return(self):
         generation = _function(self.launch, "_run_generation")
         with open(

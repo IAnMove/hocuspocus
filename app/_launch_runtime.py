@@ -20943,7 +20943,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
 
             # Register the exact state before any model work. Legacy owns a
             # Comfy prompt interrupt; native models use WGP's interrupt flag.
-            abort_state = state["gen"]
+            # Keep abort_state None until registration succeeds: finally treats
+            # a non-None value as owned, and unregister of an unregistered dict
+            # does not acknowledge a cancel that landed after try_start.
+            pending_abort = state["gen"]
             if legacy_h3_job:
                 interrupt_model = minimax_h3_service.cancel
             else:
@@ -20954,10 +20957,11 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 job,
                 job_id,
                 _active_gen_states,
-                abort_state,
+                pending_abort,
                 interrupt_model=interrupt_model,
             ):
                 return False
+            abort_state = pending_abort
 
             # The quality route is the proven previous-Maestro implementation:
             # fixed INT8 ConvRot pair, isolated ComfyUI, 20 steps, no Turbo/cache.

@@ -414,6 +414,26 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertTrue(state["abort"])
         self.assertNotIn(job["id"], states)
 
+    def test_unregister_of_unregistered_state_does_not_settle_cancel(self):
+        """A cancel that wins after try_start stays Cancelling until the worker
+        acknowledges. Unregistering a dict that never entered active_states is
+        a no-op — the worker must call acknowledge_cancel instead."""
+        job = _job()
+        states: dict = {}
+        abort_state = {"abort": False}
+        self.assertTrue(try_start(job))
+        request_cancel(job, job_id=job["id"], active_states=states)
+        self.assertEqual(job["status"], "cancelling")
+        self.assertFalse(register_abort_state(
+            job, job["id"], states, abort_state, interrupt_model=Mock(),
+        ))
+        unregister_abort_state(job["id"], states, abort_state)
+        self.assertEqual(job["status"], "cancelling")
+        self.assertEqual(job["message"], "Cancelling…")
+        self.assertTrue(acknowledge_cancel(job))
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(job["message"], "Cancelled")
+
     def test_requeue_after_cancel_is_refused(self):
         job = _job()
         self.assertTrue(try_start(job))
