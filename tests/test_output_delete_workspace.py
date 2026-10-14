@@ -277,6 +277,25 @@ def _seed_comic_plan(_tmp_path):
     )
 
 
+def _director_plan_claims(*, folder, claim=True):
+    """A Director v2 planning checkpoint in ``folder``; claimed by a worker unless ``claim`` is false."""
+    from services import director_plan_jobs as plans
+
+    def reset():
+        with plans._STORE_LOCK:
+            plans._ACTIVE_JOB_IDS.clear()
+
+    reset()
+    job = plans.DirectorPlanJobStore(str(folder)).create({"clips": []}, workspace=folder.name, skill_type="music_video", total=3)
+    if claim:
+        assert plans.claim_director_plan_job(job["jobId"])
+    return reset
+
+
+def _seed_director_plan(tmp_path):
+    return _director_plan_claims(folder=tmp_path / "film")
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
@@ -287,6 +306,7 @@ BUSY_FAMILIES = [
     pytest.param("model3d", "full", _seed_model3d, id="model3d"),
     pytest.param("story-plan", "full", _seed_story_plan, id="story-plan"),
     pytest.param("comic-plan", "full", _seed_comic_plan, id="comic-plan"),
+    pytest.param("director-plan", "full", _seed_director_plan, id="director-plan"),
 ]
 
 
@@ -497,4 +517,29 @@ def test_a_comic_plan_without_a_claim_does_not_block(tmp_path):
     finally:
         with comic._comic_plan_jobs_lock:
             comic._comic_plan_jobs.clear()
+    assert deleted.status_code == 200, deleted.text
+
+
+def test_a_director_plan_blocks_only_the_workspace_that_holds_its_checkpoint(tmp_path):
+    client = _workspace_client(tmp_path, profile="full")
+    release = _director_plan_claims(folder=tmp_path / "other")  # the claim set holds ids only
+    try:
+        film = client.delete("/api/v1/workspaces/film")
+        other = client.delete("/api/v1/workspaces/other")
+    finally:
+        release()
+    assert film.status_code == 200, film.text
+    assert other.status_code == 409, other.text
+    assert other.json()["blocking"][0] == {
+        "kind": "director-plan", "jobId": other.json()["blocking"][0]["jobId"], "status": "running", "workspace": "other",
+    }
+
+
+def test_a_director_plan_checkpoint_without_a_claim_does_not_block(tmp_path):
+    client = _workspace_client(tmp_path, profile="full")
+    release = _director_plan_claims(folder=tmp_path / "film", claim=False)
+    try:
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        release()
     assert deleted.status_code == 200, deleted.text

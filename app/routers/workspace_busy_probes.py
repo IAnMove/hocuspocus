@@ -34,6 +34,7 @@ FULL_ONLY: tuple[tuple[str, str], ...] = (
     ("model3d", "services.model3d_service"),
     ("story-plan", "services.story_lab_jobs"),
     ("comic-plan", "services.director_comic_jobs"),
+    ("director-plan", "services.director_plan_jobs"),
 )
 # The core server (Apple Silicon / remote providers) only.
 CORE_ONLY: tuple[tuple[str, str], ...] = (
