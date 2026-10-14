@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { cancelJob } from '../../api/client'
 import { fetchCharacterKitLibrary, rigFlatCharacter, saveCharacterKit, type FlatRigResult } from '../../api/characters'
+import { generateImageAsset } from '../../lib/imageGeneration'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../../lib/characterKit'
 import type { CharacterStyle } from '../../lib/characterStyles'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
@@ -9,13 +10,15 @@ import { randomUuid } from '../../lib/uuid'
 import { CANDIDATE_COUNT, candidateCount, generateKeyedCandidates, keyCandidate, type CandidateDependencies, type KeyedCandidate } from './characterCandidates'
 
 export type RigShown = Pick<FlatRigResult, 'review' | 'unwipedPoses' | 'warnings'>
-export type Step = 'options' | 'keying' | 'rig' | 'pose' | 'addPose'
+export type Step = 'options' | 'keying' | 'rig' | 'pose' | 'addPose' | 'generate' | 'save'
 /** The options of the character, or the options of a new pose of it. */
 export type Lane = 'candidates' | 'poseCandidates'
 
 /** Why an option has no picture, when the reason is not an error of the server: the view says it in the person's language. */
-export const INTERRUPTED = 'interrupted'
 export const CANCELLED = 'cancelled'
+
+/** The creator with no style: one image from a description, reviewed, then saved. */
+export type FreeDraft = { name: string; description: string; draft?: CharacterKit; saved: boolean }
 
 /** What the person has done in the creator. It outlives the screen (a tab change must not stop or forget the work) and is kept in the browser. */
 export type CreatorDraft = {
@@ -26,15 +29,23 @@ export type CreatorDraft = {
   candidates: KeyedCandidate[]; picked?: string
   kit?: CharacterKit; rig?: RigShown
   pose: string; poseCandidates: KeyedCandidate[]; pickedPose?: string
+  free: FreeDraft
 }
 /** What the creator tells the person after a step, as the translation key the view says it with. */
-export type CreatorMessage = 'styleCreator.pick' | 'styleCreator.noneReady' | 'styleCreator.ready' | 'styleCreator.poseAdded' | 'imageCreator.cancelled'
+export type CreatorMessage = 'styleCreator.pick' | 'styleCreator.noneReady' | 'styleCreator.ready' | 'styleCreator.poseAdded' | 'imageCreator.cancelled' | 'imageCreator.review' | 'imageCreator.saved'
 type Run = { busy: '' | Step; error: string; message: '' | CreatorMessage }
 export type CreatorView = CreatorDraft & Run
 /** What a run needs from the screen: the style and model chosen, and what to do once pictures exist. */
 export type CreatorContext = { style: CharacterStyle; model: string; onPictures?: () => void }
 
 const storageKey = (workspace: string) => `hocuspocus.characterCreator.v1:${workspace}`
+
+/** A page that is being closed or reloaded fails every request in flight. Those failures are not the picture's: what was saved before stays. */
+let leaving = false
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('pagehide', () => { leaving = true })
+  window.addEventListener('pageshow', () => { leaving = false })
+}
 
 export const poseId = (description: string) => description.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-')
   .replace(/^-+|-+$/g, '').slice(0, 40) || `pose-${randomUuid().slice(0, 6)}`
@@ -43,19 +54,26 @@ function keyedAsset(id: string, name: string, source: string, workspace: string,
   return { id, name, source, kind: 'image', alphaStatus: 'transparent', reviewState: 'approved', workspace, prompt, model }
 }
 
-function fresh(carry?: Partial<Pick<CreatorDraft, 'styleId' | 'model' | 'count' | 'name' | 'description'>>): CreatorDraft {
+const emptyFree = (): FreeDraft => ({ name: '', description: '', saved: false })
+
+function fresh(carry?: Partial<Pick<CreatorDraft, 'styleId' | 'model' | 'count' | 'name' | 'description' | 'free'>>): CreatorDraft {
   return { styleId: carry?.styleId ?? '', model: carry?.model ?? '', name: carry?.name ?? '', description: carry?.description ?? '',
-    count: candidateCount(carry?.count), draftId: `character-${randomUuid()}`, candidates: [], pose: '', poseCandidates: [] }
+    count: candidateCount(carry?.count), draftId: `character-${randomUuid()}`, candidates: [], pose: '', poseCandidates: [], free: carry?.free ?? emptyFree() }
 }
 
 const STATUSES = new Set(['generating', 'drawn', 'keying', 'ready', 'failed'])
 const isCandidate = (item: unknown): item is KeyedCandidate => Boolean(item) && typeof item === 'object'
   && typeof (item as KeyedCandidate).id === 'string' && typeof (item as KeyedCandidate).seed === 'number' && STATUSES.has((item as KeyedCandidate).status)
-/** A picture that was being drawn without an image job to follow again was lost with the page. */
-const settled = (items: unknown): KeyedCandidate[] => (Array.isArray(items) ? items.filter(isCandidate) : [])
-  .map(item => item.status === 'generating' && !item.jobId ? { ...item, status: 'failed' as const, error: INTERRUPTED } : item)
+/** What a saved list holds. A picture that was still being drawn is followed by its job when it has one, and drawn again (same seed) when the page
+ * closed before the job was known. */
+const settled = (items: unknown): KeyedCandidate[] => Array.isArray(items) ? items.filter(isCandidate) : []
 const text = (value: unknown, limit: number) => typeof value === 'string' ? value.slice(0, limit) : ''
 const object = <T>(value: unknown): T | undefined => value && typeof value === 'object' && !Array.isArray(value) ? value as T : undefined
+
+function reviveFree(value: unknown): FreeDraft {
+  const free = object<Record<string, unknown>>(value)
+  return free ? { name: text(free.name, 80), description: text(free.description, 2000), draft: object<CharacterKit>(free.draft), saved: free.saved === true } : emptyFree()
+}
 
 function readDraft(workspace: string): CreatorDraft {
   try {
@@ -70,7 +88,8 @@ function readDraft(workspace: string): CreatorDraft {
     draftId: text(saved.draftId, 160) || `character-${randomUuid()}`,
     candidates, picked: has(candidates, saved.picked),
     kit: object<CharacterKit>(saved.kit), rig: object<RigShown>(saved.rig),
-    pose: text(saved.pose, 200), poseCandidates, pickedPose: has(poseCandidates, saved.pickedPose) }
+    pose: text(saved.pose, 200), poseCandidates, pickedPose: has(poseCandidates, saved.pickedPose),
+    free: reviveFree(saved.free) }
   } catch { return fresh() }
 }
 
@@ -105,6 +124,7 @@ export class CharacterCreatorSession {
     this.listeners.forEach(listener => listener())
   }
   private save() {
+    if (leaving) return
     try { if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey(this.workspace), JSON.stringify({ version: 1, draft: this.draft })) } catch { /* private mode or full: the draft lives on in memory */ }
   }
   private commit(patch?: Partial<CreatorDraft>, run?: Partial<Run>) {
@@ -133,7 +153,7 @@ export class CharacterCreatorSession {
   /** A new character: the options, the saved one and its poses are let go (the pictures stay in the workspace). */
   reset() {
     this.cancel()
-    this.draft = fresh({ styleId: this.draft.styleId, model: this.draft.model, count: this.draft.count }); this.save()
+    this.draft = fresh({ styleId: this.draft.styleId, model: this.draft.model, count: this.draft.count, free: this.draft.free }); this.save()
     this.run = { busy: '', error: '', message: '' }; this.publish()
   }
 
@@ -242,6 +262,51 @@ export class CharacterCreatorSession {
     const saved = await saveCharacterKit(this.workspace, library, { ...current, voice: current.voice ?? voice,
       voicesByLanguage: { ...current.voicesByLanguage, [language]: voice } })
     this.commit({ kit: saved.kits[kit.id] })
+  }
+
+  // --- With no style: one image from a description, reviewed, then saved ---------------------------------------------
+
+  editFree(patch: Partial<Pick<FreeDraft, 'name' | 'description'>>) {
+    this.commit({ free: { ...this.draft.free, ...patch } })
+  }
+  /** A new character with no style: the image and what was typed are let go (the picture stays in the workspace). */
+  resetFree() {
+    this.cancel()
+    this.commit({ free: emptyFree() }, { error: '', message: '' })
+  }
+
+  generateFree(context: { model: string; onPictures?: () => void }) {
+    return this.execute('generate', async signal => {
+      const { name, description } = this.draft.free
+      const prompt = `Create a single character illustration. ${description.trim()}. Clear front-facing face, relaxed expression and closed mouth, coherent anatomy, uncluttered background. Follow the described appearance and art style. One character only, no text, watermark, grid or turnaround sheet.`
+      const generate = this.dependencies.generate ?? generateImageAsset
+      const result = await generate('maestro', prompt, context.model, undefined, 'text, watermark, multiple characters, sprite sheet, grid, cropped face', {
+        workspace: this.workspace, signal, cleanModelDefaults: true, resolution: '1024x1024', aspectRatio: '1:1', comicPanel: false,
+        onJobSubmitted: id => { if (signal.aborted) void cancelJob(id).catch(() => {}); else this.operation?.jobs.push(id) },
+      })
+      signal.throwIfAborted()
+      const kit = createCharacterKit(name.trim()); kit.id = `character-${randomUuid()}`
+      kit.base = { id: `${kit.id}-base`, name: kit.name, source: result.source, kind: 'image', reviewState: 'pending',
+        alphaStatus: 'unknown', model: result.model || context.model, prompt, workspace: this.workspace }
+      kit.identityReference = { ...kit.base }; kit.lookNotes = description.trim()
+      kit.provenance = [{ method: 'character-description-generate', source: result.source, model: kit.base.model,
+        prompt, workspace: this.workspace, jobId: result.metadata?.jobId }]
+      this.commit({ free: { ...this.draft.free, draft: kit, saved: false } }, { message: 'imageCreator.review' })
+      context.onPictures?.()
+    })
+  }
+
+  saveFree() {
+    return this.execute('save', async signal => {
+      const { draft, name } = this.draft.free
+      if (!draft?.base) return
+      const library = await fetchCharacterKitLibrary(this.workspace); signal.throwIfAborted()
+      const kit: CharacterKit = { ...draft, name: name.trim(),
+        base: { ...draft.base, name: name.trim(), reviewState: 'approved' },
+        identityReference: { ...draft.base, name: name.trim(), reviewState: 'approved' } }
+      const result = await saveCharacterKit(this.workspace, library, kit); signal.throwIfAborted()
+      this.commit({ free: { ...this.draft.free, draft: result.kits[kit.id], saved: true } }, { message: 'imageCreator.saved' })
+    })
   }
 
   /** Once per page: reads the saved character again and follows the pictures that were still being drawn or keyed. */

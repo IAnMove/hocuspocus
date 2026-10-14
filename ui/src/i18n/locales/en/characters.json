@@ -619,7 +619,6 @@
     "createOptions_other": "Create {{count}} options",
     "count": "Options",
     "drawn": "Drawn · background still on",
-    "interrupted": "interrupted when the page was closed. Create the options again",
     "cancelledOption": "cancelled",
     "startOver": "Start over",
     "peekHint": "Hover an option (or press and hold it) to see it large.",

@@ -130,7 +130,7 @@ test('the draft is kept in the browser: a reloaded page has the name, the option
   assert.equal(new CharacterCreatorSession('other').snapshot().name, '', 'each workspace has its own')
 })
 
-test('a reloaded page follows the picture that was still being drawn, and says so for one that had no job to follow', async t => {
+test('a reloaded page follows the picture that was still being drawn by its job, and draws again the one whose job it never learned', async t => {
   const { CharacterCreatorSession } = await sessions()
   const server = stubServer(); t.after(server.restore)
   localStorage.setItem('hocuspocus.characterCreator.v1:cast', JSON.stringify({ version: 1, draft: {
@@ -142,14 +142,30 @@ test('a reloaded page follows the picture that was still being drawn, and says s
     ], pose: '', poseCandidates: [] } }))
   const log: string[] = []
   const session = new CharacterCreatorSession('cast', fakes(log))
-  assert.equal(session.snapshot().candidates[2].status, 'failed')
-  assert.equal(session.snapshot().candidates[2].error, 'interrupted')
+  assert.deepEqual(session.snapshot().candidates.map(item => item.status), ['drawn', 'generating', 'generating'])
 
   session.resume({ style, model: 'qwen_image_21' })
   const { waitFor } = await import('@testing-library/react')
-  await waitFor(() => assert.equal(session.snapshot().busy, '') )
-  assert.deepEqual(log.filter(line => line.startsWith('draw')), ['draw:2:resumed img-9'])
-  assert.deepEqual(session.snapshot().candidates.map(item => item.status), ['ready', 'ready', 'failed'])
+  await waitFor(() => assert.equal(session.snapshot().busy, ''))
+  assert.deepEqual(log.filter(line => line.startsWith('draw')), ['draw:2:resumed img-9', 'draw:3'])
+  assert.deepEqual(session.snapshot().candidates.map(item => item.status), ['ready', 'ready', 'ready'])
+})
+
+test('requests that fail because the page is being closed are not saved as failed pictures', async t => {
+  const { CharacterCreatorSession } = await sessions()
+  const { waitFor } = await import('@testing-library/react')
+  const server = stubServer(); t.after(() => { server.restore(); window.dispatchEvent(new window.Event('pageshow')) })
+  let fail: (reason: Error) => void = () => {}
+  const session = new CharacterCreatorSession('cast', fakes([], new Promise<void>((_, reject) => { fail = reject })))
+  session.edit({ name: 'John', description: 'Un conquistador', count: 2 })
+  const running = session.createOptions({ style, model: 'qwen_image_21' })
+  await waitFor(() => assert.equal(session.snapshot().candidates.length, 2))
+
+  window.dispatchEvent(new window.Event('pagehide')) // a reload: every request in flight now fails
+  fail(new TypeError('Failed to fetch')); await running
+  assert.deepEqual(session.snapshot().candidates.map(item => item.status), ['failed', 'failed'], 'this page, about to go, shows them failed')
+  const saved = JSON.parse(localStorage.getItem('hocuspocus.characterCreator.v1:cast') ?? '{}').draft.candidates as KeyedCandidate[]
+  assert.deepEqual(saved.map(item => [item.status, item.jobId]), [['generating', 'job-1'], ['generating', 'job-2']], 'what is saved is what the next page follows')
 })
 
 test('picking a drawn option removes only its background; Cancel stops the jobs and keeps what was drawn', async t => {
@@ -181,6 +197,38 @@ test('picking a drawn option removes only its background; Cancel stops the jobs 
   assert.deepEqual(running.snapshot().candidates, [])
   assert.equal(running.snapshot().name, '', 'a new character: the name and the description are cleared')
   assert.equal(running.snapshot().count, 3)
+})
+
+test('with no style the image, the name and the saved mark are kept for the next visit, and Start over begins another character', async t => {
+  const { CharacterCreatorSession } = await sessions()
+  const requests: string[] = []
+  const original = globalThis.fetch; t.after(() => { globalThis.fetch = original })
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input), method = init?.method ?? 'GET'
+    requests.push(`${method} ${url}`)
+    const body = init?.body ? JSON.parse(String(init.body)) as { kit?: { id: string } } : undefined
+    const reply = url.includes('/character-kits/library') ? { version: 1, revision: 4, activeKitId: null, kits: {} }
+      : method === 'PATCH' ? { version: 1, revision: 5, kits: { [body!.kit!.id]: body!.kit } } : { outputs: [], total: 0 }
+    return new Response(JSON.stringify(reply), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }) as typeof fetch
+  const session = new CharacterCreatorSession('cast', fakes())
+  session.editFree({ name: 'Ana', description: 'Una marinera pelirroja' })
+  await session.generateFree({ model: 'qwen_image_21' })
+  assert.match(session.snapshot().free.draft?.base?.source ?? '', /^\/api\/v1\/file\/raw-/)
+  assert.equal(session.snapshot().message, 'imageCreator.review')
+  await session.saveFree()
+  assert.equal(session.snapshot().free.saved, true)
+  assert.ok(requests.some(call => call.startsWith('PATCH ')), 'it was saved in the library')
+
+  const next = new CharacterCreatorSession('cast').snapshot().free
+  assert.deepEqual([next.name, next.saved, next.draft?.base?.source], ['Ana', true, session.snapshot().free.draft?.base?.source])
+  assert.equal(new CharacterCreatorSession('cast').snapshot().styleId, '', 'the free mode is the one it was left in')
+
+  session.resetFree()
+  assert.deepEqual(session.snapshot().free, { name: '', description: '', saved: false })
+  session.setStyle('graphic-novel'); session.edit({ name: 'John' })
+  session.resetFree()
+  assert.equal(session.snapshot().styleId, 'graphic-novel', 'starting over the free character does not change the style')
 })
 
 test('the options to make are chosen from one to three', async t => {

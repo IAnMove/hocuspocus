@@ -619,7 +619,6 @@
     "createOptions_other": "Crear {{count}} opciones",
     "count": "Opciones",
     "drawn": "Dibujada · fondo sin quitar",
-    "interrupted": "interrumpida al cerrar la página. Crea las opciones otra vez",
     "cancelledOption": "cancelada",
     "startOver": "Empezar de nuevo",
     "peekHint": "Pasa el ratón por una opción (o mantenla pulsada) para verla en grande.",

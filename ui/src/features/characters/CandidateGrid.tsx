@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
-import { CANCELLED, INTERRUPTED } from './characterCreatorSession'
+import { CANCELLED } from './characterCreatorSession'
 import type { KeyedCandidate } from './characterCandidates'
 
 const checker = 'bg-[conic-gradient(#e5e7eb_25%,#f9fafb_0_50%,#e5e7eb_0_75%,#f9fafb_0)] bg-[length:16px_16px]'
@@ -78,7 +78,7 @@ function Tile({ candidate, index, picked, locked, onPick }: {
     face_too_light: t('styleCreator.rigReasons.face_too_light'),
     face_keyed_out: t('styleCreator.rigReasons.face_keyed_out'),
   }
-  const failure = candidate.error === INTERRUPTED ? t('styleCreator.interrupted') : candidate.error === CANCELLED ? t('styleCreator.cancelledOption') : candidate.error
+  const failure = candidate.error === CANCELLED ? t('styleCreator.cancelledOption') : candidate.error
   const pickable = !locked && (candidate.status === 'drawn' || candidate.status === 'keying' || candidate.status === 'ready')
   return <>
     <button type="button" disabled={!pickable} onClick={() => onPick(candidate)} aria-pressed={picked} aria-label={t('styleCreator.option', { number: index + 1 })}

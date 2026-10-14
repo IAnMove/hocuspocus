@@ -55,7 +55,7 @@ function NewPose({ pose, onPose, candidates, picked, pickedReady, onPick, blocke
 function Status({ busy, message, error }: { busy: '' | Step; message: '' | CreatorMessage; error: string }) {
   const { t } = useUiTranslation('characters')
   return <>
-    {busy && <p role="status" className="text-sm text-text-muted">{t(`styleCreator.busy.${busy}`)}</p>}
+    {busy && <p role="status" className="text-sm text-text-muted">{t(busy === 'generate' ? 'imageCreator.generating' : busy === 'save' ? 'lips.saving' : `styleCreator.busy.${busy}`)}</p>}
     {message && <p role="status" className="text-sm text-emerald-200">{t(message)}</p>}
     {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
   </>
