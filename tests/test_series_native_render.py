@@ -805,6 +805,39 @@ def test_a_spoken_shot_leaves_its_length_out_of_the_fingerprint():
     assert render_inputs(series, shot, {}, version=1) == render_inputs(series, shot, {})
 
 
+def test_a_line_cast_index_change_makes_the_shot_stale():
+    """Produce skips shots whose ``renderInputs`` still match. The compiler moves the mouth of
+    the copy at ``castIndex`` when the same kit is on screen twice, so a take recorded before
+    the line named a copy, or after it named the other one, must remake."""
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series = {
+        "spokenLanguage": "es",
+        "characters": [
+            {"id": "kevin", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
+            {"id": "kevin-b", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
+        ],
+        "locations": [],
+        "assets": {},
+    }
+    shot = {
+        "id": "s1", "order": 0, "productionMethod": "animation_2d",
+        "visibleCharacterIds": ["kevin", "kevin-b"],
+        "dialogueBeats": [{"id": "b", "characterId": "kevin", "text": "Hola."}],
+        "layout2d": {"cast": [{"characterId": "kevin"}, {"characterId": "kevin-b"}]},
+    }
+    digest = render_inputs(series, shot, {})
+    ignored = {**shot, "dialogueBeats": [{**shot["dialogueBeats"][0], "castIndex": True}]}
+    assert render_inputs(series, ignored, {}) == digest, "a bool is no index: existing takes stay current"
+    _approve(series, shot, digest, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["dialogueBeats"][0]["castIndex"] = 1
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    _approve(series, shot, render_inputs(series, shot, {}), INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["dialogueBeats"][0]["castIndex"] = 0
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
 def test_a_series_3d_export_uses_the_episode_frame():
     from services.series_shot3d import series_frame_document
     from services.series_take_sound import episode_frame, needs_conform

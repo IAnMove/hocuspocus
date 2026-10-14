@@ -1,10 +1,11 @@
 """What a Series shot's render depends on, kept on its take, so a production renders again only what changed.
 
 ``render_inputs`` fingerprints a shot in one language: its layout and lines, the location, the sound design, the
-kits of the people seen or heard and, for a shot with lines in a room (``series_voice_rooms``), the room each line is
-heard in and the version of the rooms' processing. A series without rooms, or a shot whose lines are all dry, keeps
-the digest it had. ``series_native_render`` stores it in the take's metadata (``renderInputs``)
-and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
+kits of the people seen or heard, which on-screen copy says each line (``castIndex``) when the same kit appears
+twice, and, for a shot with lines in a room (``series_voice_rooms``), the room each line is heard in and the version
+of the rooms' processing. A series without rooms, or a shot whose lines are all dry, keeps the digest it had. A
+shot whose lines do not name a copy keeps the digest it had. ``series_native_render`` stores it in the take's
+metadata (``renderInputs``) and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
 (``soundDesign.ambienceMode: "episode"``, ``ambienceDuckDb``) and the episode's score (``episode.score``) are not
 part of a shot, so changing them renders nothing again. A shot's ``foley`` is, so a new prompt or volume renders
 that shot again; a shot without one keeps the digest it had before foley existed. A location's ``layout2d.layers``
@@ -49,9 +50,9 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint.
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
-    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches."""
-    beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
-             for beat in shot.get("dialogueBeats") or []]
+    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches.
+    ``castIndex`` is hashed only when it is an int, so a line that never named a copy keeps its digest."""
+    beats = [_beat_row(beat) for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
     characters = {item.get("id"): item for item in series.get("characters") or []}
     kit_ids = {cid: (kit_ref(series, cid) or {}).get("id") for cid in people}
@@ -68,6 +69,15 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     }
     payload.update(_extra_inputs(series, shot, root))
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def _beat_row(beat: dict[str, Any]) -> list[Any]:
+    """Id, speaker, text, emotion, delivery, and ``castIndex`` only when the line names a copy."""
+    row = [beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
+    index = beat.get("castIndex")
+    if type(index) is int:
+        row.append(index)
+    return row
 
 
 def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
