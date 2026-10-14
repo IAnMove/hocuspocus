@@ -1004,6 +1004,10 @@ export const createDirectorMusicVideoSlice: SliceCreator<DirectorMusicVideoSlice
       slidingWindowSeconds: maxClipFrames / fps,
       audioGuideFilename: directorAudioName,
       sidebarMode: 'studio' as const,
+      // startGeneration reads generationMode, not Director intent. Leave Edit
+      // or Mixer in place and Generate becomes a retake, a silent no-op, or
+      // "audio is not generative" after the clips were staged.
+      generationMode: 'video' as const,
     }))
   },
 
@@ -1101,6 +1105,9 @@ export const createDirectorMusicVideoSlice: SliceCreator<DirectorMusicVideoSlice
       spatialUpsampling: get().directorVideoSpatialUpsampling,
       filmGrainIntensity: get().directorVideoFilmGrainIntensity,
       filmGrainSaturation: get().directorVideoFilmGrainSaturation,
+      // startGeneration branches on generationMode (image, audio, Edit)
+      // before it reads these clips; a previous Edit mode must not win.
+      generationMode: 'video' as const,
     }))
 
     setTimeout(() => get().startGeneration(), 200)

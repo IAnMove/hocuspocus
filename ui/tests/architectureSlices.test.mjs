@@ -468,6 +468,57 @@ test('composed slices bind without as-never casts at the useStore call site', as
   assert.doesNotMatch(composition, /as never/)
 })
 
+test('Music Video Director Generate leaves Studio on video so Edit cannot swallow the request', async () => {
+  const { createDirectorMusicVideoSlice } = await import('../src/features/director/store/directorMusicVideoSlice.ts')
+  const originalSetTimeout = globalThis.setTimeout
+  globalThis.setTimeout = () => 0
+  let state = {
+    generationMode: 'avatar',
+    directorClipPlans: [{ video_prompt: 'a dancer in the chorus', image_prompt: '' }],
+    directorPlannedClips: [{ duration_frames: 80, section_label: 'chorus' }],
+    directorAnalysis: { duration: 12 },
+    directorClipImages: [],
+    directorAudioPath: 'song.wav',
+    directorAudioName: 'song.wav',
+    directorSeamless: false,
+    directorResolution: '720p',
+    directorAspectRatio: '16:9',
+    selectedModelPerMode: { video: 'ltx2_22B_distilled_1_1' },
+    savedParamsPerMode: {},
+    savedLoraPerMode: {},
+    directorMusicVideoTreatment: { generation_mode: 'image_guided' },
+    directorVideoInferenceStepsByModel: {},
+    modelOptions: { fps: 16, model_type: 'retake-model' },
+    shortFilmPath: '',
+    directorVideoSelfRefiner: 0,
+    directorVideoSpatialUpsampling: '',
+    directorVideoFilmGrainIntensity: 0,
+    directorVideoFilmGrainSaturation: 0.5,
+    params: { model_type: 'retake-model', image_mode: 0 },
+    clips: [],
+    startGeneration: () => {},
+  }
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  try {
+    state = { ...state, ...createDirectorMusicVideoSlice(set, () => state) }
+    state.directorGenerate()
+    assert.equal(state.generationMode, 'video')
+    assert.equal(state.params.image_mode, 2)
+    assert.equal(state.clips.length, 1)
+    assert.equal(state.clips[0].prompt, 'a dancer in the chorus')
+
+    state.generationMode = 'audio'
+    state.directorApplyToClips()
+    assert.equal(state.generationMode, 'video')
+    assert.equal(state.sidebarMode, 'studio')
+  } finally {
+    globalThis.setTimeout = originalSetTimeout
+  }
+})
+
 test('Studio music slice owns song-writer state without owning startGeneration', async () => {
   const { createStudioMusicSlice } = await import('../src/stores/studioMusicSlice.ts')
   let state = { musicDescription: '', musicInstrumental: false }
