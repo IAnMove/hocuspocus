@@ -597,6 +597,63 @@ def test_a_dictionary_entry_added_after_the_recording_records_that_line_again(tm
     assert after["s03_d1"]["key"] == before["s03_d1"]["key"] and after["s03_d1"]["reused"]
 
 
+def _dictionary_series():
+    return {
+        "spokenLanguage": "Español de España",
+        "characters": [
+            {"id": "gary", "voiceProfile": {"characterKitRef": {"id": "kit-gary"}}},
+            {"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}},
+        ],
+        "locations": [],
+        "assets": {},
+    }
+
+
+def _dictionary_shot():
+    return {
+        "id": "s1", "order": 0, "productionMethod": "animation_2d",
+        "visibleCharacterIds": ["gary", "ana"],
+        "dialogueBeats": [{"id": "s1_d0", "characterId": "gary", "text": "El Peugeot espera."}],
+        "layout2d": {},
+    }
+
+
+def test_a_pronunciation_dictionary_entry_that_changes_a_line_makes_the_shot_stale():
+    """Produce skips shots whose ``renderInputs`` still match. The dictionary is not in the written line, so a take
+    recorded before an entry existed stayed current and the cut kept the old speech. Only an entry that changes a
+    word of this shot's lines counts: the recording is named by the spoken text, not by the whole dictionary."""
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series, shot = _dictionary_series(), _dictionary_shot()
+    digest = render_inputs(series, shot, {})
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {}
+    assert render_inputs(series, shot, {}) == digest, "an empty dictionary keeps takes rendered before it existed"
+    series["characters"][1]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert render_inputs(series, shot, {}) == digest, "a mute extra's dictionary does not remake the shot"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Renault": "Reno"}
+    assert render_inputs(series, shot, {}) == digest, "an entry no word of the lines matches changes nothing"
+    _approve(series, shot, digest, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó", "Renault": "Reno"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    said = render_inputs(series, shot, {})
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"peugeot": "Pejó", "Renault": "Reno"}
+    assert render_inputs(series, shot, {}) == said, "the same spoken text, the same digest"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+
+
+def test_a_take_saved_before_the_dictionary_counted_stays_current():
+    """Version 2 never hashed the spoken text; a take that old is read as it was saved, not as out of date."""
+    from services.series_take_inputs import render_inputs, stale_shot_ids
+    series, shot = _dictionary_series(), _dictionary_shot()
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    saved = render_inputs(series, shot, {}, version=2)
+    assert saved != render_inputs(series, shot, {})
+    _approve(series, shot, saved, 2)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+
+
 def test_a_spanish_short_line_may_miss_one_word_but_a_one_word_line_may_not(tmp_path):
     tools, compiled = Tools(tmp_path), []
     project = library()

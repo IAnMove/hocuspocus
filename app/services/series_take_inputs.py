@@ -14,7 +14,9 @@ depends only on a ``deaf`` one, which drops its lines and sounds, and on the roo
 ``ringing`` shot or default renders nothing again. A 2D shot's finish (``series_finish``) counts only when it is not
 the paper default, so a series and a shot that never chose one keep their digests.
 The series frame (``provider.videoSettings.orientation``) counts only when it is portrait: a landscape series
-keeps the digest it had, and turning the series to portrait (or back) is a new picture.
+keeps the digest it had, and turning the series to portrait (or back) is a new picture. A line counts as spoken
+(``spoken``) only when its speaker's pronunciation dictionary changes it, as the text sent to the voice, so a
+dictionary entry no line uses renders nothing again.
 A take saved before an input joined the fingerprint (``renderInputsVersion`` below ``INPUTS_VERSION``) is compared
 with the digest of the version it was saved at, so adding an input never marks an existing production out of date.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
@@ -33,6 +35,7 @@ from services.series_shot_extras import pauses, timing_args
 from services.series_scene_inputs import scene_source_digest
 from services.series_shot_plan import FPS, frame_size, kit_ref, plan_timing
 from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
+from services.speech_text_es import dictionary_map, pronounce
 
 # What a shot's picture and sound depend on, besides the render code itself.
 _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId", "visibleCharacterIds", "scene3d")
@@ -59,7 +62,7 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
     ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches. A portrait
-    series frame is part of the digest from version 3 on; versions 1 and 2 never hashed it."""
+    series frame and the spoken text are part of the digest from version 3 on; versions 1 and 2 never hashed them."""
     beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
              for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
@@ -92,8 +95,8 @@ def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
 def _extra_inputs(series: dict, shot: dict, root: str | None, version: int = INPUTS_VERSION) -> dict:
     """Omit absent additions so existing dry, unpaused 2D takes keep their fingerprints."""
     payload = {}
-    if version >= _EXTRA_INPUTS_VERSION and _portrait(series):
-        payload["orientation"] = "portrait"
+    if version >= _EXTRA_INPUTS_VERSION:
+        payload.update(_version_three_inputs(series, shot))
     rooms = line_rooms(series, shot)
     if rooms:
         payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
@@ -110,6 +113,35 @@ def _extra_inputs(series: dict, shot: dict, root: str | None, version: int = INP
     if source is not None:
         payload["sceneSource"] = source
     return payload
+
+
+def _version_three_inputs(series: dict, shot: dict) -> dict:
+    """What a take saved at version 2 never recorded: the portrait frame and the lines the dictionary rewrites."""
+    payload = {}
+    if _portrait(series):
+        payload["orientation"] = "portrait"
+    spoken = _spoken_lines(series, shot)
+    if spoken:
+        payload["spoken"] = spoken
+    return payload
+
+
+def _spoken_lines(series: dict[str, Any], shot: dict[str, Any]) -> list[list[Any]]:
+    """``[beat id, text sent to the voice]`` for each line its speaker's pronunciation dictionary changes.
+
+    The recording is named by that spoken text (``SeriesNativeRender.line_voice``), so this is what the voice
+    receives; a line the dictionary leaves alone adds nothing and an entry no line uses changes nothing."""
+    profiles = {item.get("id"): (item.get("voiceProfile") or {}) for item in series.get("characters") or []
+                if isinstance(item, dict)}
+    spoken = []
+    for beat in shot.get("dialogueBeats") or []:
+        text = str(beat.get("text") or "").strip() if isinstance(beat, dict) else ""
+        profile = profiles.get(beat.get("characterId")) if text else None
+        dictionary = dictionary_map(profile.get("pronunciationDictionary")) if isinstance(profile, dict) else None
+        said = pronounce(text, dictionary) if dictionary else text
+        if said != text:
+            spoken.append([beat.get("id"), said])
+    return spoken
 
 
 def _portrait(series: dict[str, Any]) -> bool:
