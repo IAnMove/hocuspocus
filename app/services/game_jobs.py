@@ -14,6 +14,9 @@ from typing import Any
 
 JOBS_DIR = ".game-jobs-v1"
 KIND = "produce"
+# A live produce still writes the library after its GPU children finish
+# (style QA, archive). Delete must refuse these the same way Series does.
+ACTIVE_STATUSES = frozenset({"queued", "running", "cancelling"})
 # Jobs a restart can pick up again: still active, or stopped before every step finished.
 _RECOVERABLE = {"queued", "running", "cancelling", "failed", "cancelled", "interrupted"}
 
@@ -86,3 +89,13 @@ class GameJobStore:
             return False
         os.remove(path)
         return True
+
+
+def active_produce_jobs(workspace_dir: str) -> list[dict]:
+    """Checkpoints still queued, running or cancelling in this workspace folder."""
+    return [
+        job
+        for job in GameJobStore(workspace_dir).list()
+        if str(job.get("status") or "").strip().lower() in ACTIVE_STATUSES
+        and str(job.get("jobId") or "").strip()
+    ]

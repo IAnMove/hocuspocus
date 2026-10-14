@@ -117,6 +117,16 @@ def create_workspace_router(
                 raise HTTPException(status_code=409, detail="A Director pipeline is running or paused. Stop it before deleting a workspace.")
         except ImportError:
             pass
+        # Game produce lives in .game-jobs-v1 and keeps writing after each
+        # GPU child exits (style QA, archive_raw_outputs). jobs() and
+        # generation_idle() miss that window; _workspace_dir() would then
+        # recreate an empty folder around the leftover worker.
+        from services.game_jobs import active_produce_jobs
+        if active_produce_jobs(ws_dir):
+            raise HTTPException(
+                status_code=409,
+                detail="A game produce job is queued or running. Wait for it to finish before deleting a workspace.",
+            )
 
         # Deleting the active workspace switches to default first. Safe to write
         # wgp.save_path directly here: nothing is generating (guards above).
