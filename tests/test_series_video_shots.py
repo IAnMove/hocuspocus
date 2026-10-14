@@ -599,6 +599,81 @@ def test_a_named_start_that_cannot_be_read_does_not_make_the_clip_again(tmp_path
     assert _take_matches(series, shot, root=str(tmp_path))
 
 
+def _named_end(tmp_path):
+    _png(tmp_path / "start.png", (10, 20, 30))
+    return _png(tmp_path / "end.png", (40, 50, 60)), _request(start="start.png", end="end.png")
+
+
+def test_replacing_a_named_end_image_is_a_new_take(tmp_path):
+    """H3 interpolates to video.end; an in-place remake of that file must not keep the old clip."""
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    _named_end(tmp_path)
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request(start="start.png", end="end.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    _attach_take(series, shot, first)
+    sent = _video_calls(tools, "generation.video")
+    assert sent[0]["input"]["params"]["image_end"] != sent[0]["input"]["params"]["image_start"]
+    assert _take_matches(series, shot, root=str(tmp_path))
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 1, "the same end image is the same take"
+    _png(tmp_path / "end.png", (200, 10, 10))
+    assert not _take_matches(series, shot, root=str(tmp_path))
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 2
+    assert tools.imports[1]["metadata"]["videoInputs"] != first["videoInputs"]
+    assert tools.imports[1]["metadata"]["videoRequest"] == first["videoRequest"]
+
+
+def test_replacing_a_plan_shot_end_image_is_a_new_take(tmp_path):
+    """Default start is the composed plan; overwriting only the named end still needs a new clip."""
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    _png(tmp_path / "end.png", (40, 50, 60))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request(end="end.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    _attach_take(series, shot, first)
+    assert _take_matches(series, shot, root=str(tmp_path))
+    _png(tmp_path / "end.png", (200, 10, 10))
+    assert not _take_matches(series, shot, root=str(tmp_path)), "the last frame changed; the old clip does not fit"
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 2
+    assert tools.imports[1]["metadata"]["videoInputs"] != first["videoInputs"]
+
+
+def test_a_named_end_take_made_before_video_inputs_existed_is_not_made_again(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    _named_end(tmp_path)
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request(start="start.png", end="end.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    _attach_take(series, shot, {"videoRequest": _legacy_digest(series, shot)})
+    _png(tmp_path / "end.png", (200, 10, 10))
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == []
+
+
+def test_a_named_end_that_cannot_be_read_does_not_make_the_clip_again(tmp_path):
+    """Remaking on a read that failed would spend a generation for nothing: the take is compared on its request."""
+    _named_end(tmp_path)
+    library, episode = _episode(_request(start="start.png", end="end.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    os.replace(tmp_path / "end.png", tmp_path / "moved-end.png")
+    assert _take_matches(series, shot, root=str(tmp_path))
+
+
 def _editor_series(shot):
     series = normalize_series_project({
         "id": "uv", "spokenLanguage": "Español de España", "allowedProductionMethods": ["imported_video"],
