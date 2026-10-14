@@ -490,6 +490,39 @@ def _seed_music_production(_tmp_path):
     return release
 
 
+def _seed_quick_video_batch(tmp_path):
+    """A batch started through its real route, queued behind the shared execution lock until released."""
+    import threading
+    import time
+
+    from routers.quick_video_batches import _EXECUTION_LOCK, QuickVideoBatchStartRequest
+    from tests.test_quick_video_batches import _app, _endpoint, _payload
+
+    router, _started = _app(tmp_path, {})
+    start = _endpoint(router, "/api/v1/stories/quick-video-batches/start", "POST")
+    get_batch = _endpoint(router, "/api/v1/stories/quick-video-batches/{job_id}", "GET")
+    _EXECUTION_LOCK.acquire()
+    held = [True]
+    try:
+        job_id = start(QuickVideoBatchStartRequest.model_validate({**_payload(["Una idea"]), "workspace": "film"}))["jobId"]
+    except BaseException:
+        _EXECUTION_LOCK.release()
+        raise
+
+    def release():
+        if held:
+            held.clear()
+            _EXECUTION_LOCK.release()
+        deadline = time.time() + 5
+        while time.time() < deadline and get_batch(job_id, "film")["status"] not in {"completed", "failed", "cancelled"}:
+            time.sleep(0.02)
+        for thread in threading.enumerate():
+            if thread.name.startswith("quick-video-batch-"):
+                thread.join(5)
+
+    return release
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
@@ -512,6 +545,7 @@ BUSY_FAMILIES = [
     pytest.param("series-assembly", "core", _seed_series_assembly, id="series-assembly-core"),
     pytest.param("music-production", "full", _seed_music_production, id="music-production-full"),
     pytest.param("music-production", "core", _seed_music_production, id="music-production-core"),
+    pytest.param("quick-video-batch", "full", _seed_quick_video_batch, id="quick-video-batch"),
 ]
 
 
@@ -682,7 +716,9 @@ FULL_BUSY_KINDS = {
 CORE_BUSY_KINDS = {
     "video-editor", "minimax-music", "minimax-image", "rig", "series-plan", "music-production", "core-3d", "core-image",
 }
-ROUTER_BUSY_KINDS = {"game-produce", "series-produce", "series-native", "series-voice", "series-assembly"}
+ROUTER_BUSY_KINDS = {
+    "game-produce", "series-produce", "series-native", "series-voice", "series-assembly", "quick-video-batch",
+}
 
 
 def test_the_busy_profiles_name_real_probes_and_core_runs_only_what_it_mounts():

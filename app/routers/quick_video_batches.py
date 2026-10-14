@@ -15,6 +15,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from services import workspace_busy
 from services.task_manager import get_task_registry
 
 
@@ -145,6 +146,16 @@ def create_quick_video_batch_router(
     jobs: dict[str, dict[str, Any]] = {}
     active: set[str] = set()
     lock = threading.RLock()
+
+    def busy_jobs(_workspace: str, _folder: str) -> list[dict[str, Any]]:
+        """Batches with a worker, also one queued behind another batch (``services.workspace_busy`` probe).
+
+        Between two Director pipelines no pipeline is active, but the batch is about to start the next one.
+        """
+        with lock:
+            return workspace_busy.claimed(active, jobs)
+
+    workspace_busy.register("quick-video-batch", busy_jobs)
 
     def directory(workspace: str) -> str:
         return os.path.join(workspace_dir(workspace), STORE_DIR)

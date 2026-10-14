@@ -57,6 +57,7 @@ REGISTERED_BY_THE_ROUTER: dict[str, str] = {
     "series-native": "routers.series_native_render",
     "series-voice": "routers.series_shot_inspector",
     "series-assembly": "routers.series_assembly",
+    "quick-video-batch": "routers.quick_video_batches",
 }
 
 
