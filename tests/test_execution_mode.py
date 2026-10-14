@@ -534,7 +534,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
     specialist_routes = (
-        ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
         ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
         ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
         ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation"),
@@ -544,6 +543,12 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
+    repaint_route = (
+        Path(__file__).parents[1] / "app" / "routers" / "repaint.py"
+    ).read_text(encoding="utf-8").split("async def repaint_endpoint", 1)[1]
+    assert "execution_mode.policy().simulated" in repaint_route
+    assert "_run_repaint" in repaint_route
+    assert "_run_generation" in repaint_route
     tools_source = (
         Path(__file__).parents[1] / "app" / "routers" / "tools.py"
     ).read_text(encoding="utf-8")

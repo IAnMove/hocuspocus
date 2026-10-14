@@ -1,12 +1,12 @@
-"""Cheap answers of the Repaint routes, recorded before they leave launch.
+"""Cheap answers of the Repaint routes, recorded before they left launch.
 
-``POST /api/v1/repaint/preview`` and ``POST /api/v1/repaint`` still live in
-``_launch_runtime``. These cases drive the validation and error paths, one
-preview that draws semantic masks from a stub (never SAM), and the no-mapping
-jobs the C0 fake engine finishes. A mapped Repaint that tracks regions, writes
-shot videos and restores the source audio needs a GPU and is not here; the one
-mapped case stubs Magic Mask so the request thread records the failure without
-downloading a model.
+``POST /api/v1/repaint/preview`` and ``POST /api/v1/repaint`` now live in
+``app/routers/repaint.py`` and answer the same way. These cases drive the
+validation and error paths, one preview that draws semantic masks from a stub
+(never SAM), and the no-mapping jobs the C0 fake engine finishes. A mapped
+Repaint that tracks regions, writes shot videos and restores the source audio
+needs a GPU and is not here; the one mapped case stubs Magic Mask so the
+request thread records the failure without downloading a model.
 """
 from __future__ import annotations
 
@@ -375,3 +375,20 @@ def test_repaint_modules_read_the_objects_launch_gave_them(full_server, monkeypa
     with pytest.raises(RuntimeError, match="already bound"):
         run.bind_repaint_run({})
     assert run._NAMESPACE[0] is vars(launch)
+
+    router = next(module for module in modules if module.__name__ == "routers.repaint")
+    for name in ("create_repaint_router", "repaint_preview_endpoint", "repaint_endpoint"):
+        assert getattr(launch, name) is getattr(router, name), name
+    assert router._run_generation("job-9") == ("generation", ("job-9",), {})
+    assert router._run_generation.__name__ == "_generation"
+    holder: dict = {}
+    monkeypatch.setattr(launch, "_active_gen_states", holder)
+    states = router._active_gen_states
+    states["job-9"] = {"abort": False}
+    assert holder == {"job-9": {"abort": False}}
+    assert "job-9" in states
+    del states["job-9"]
+    assert holder == {}
+    with pytest.raises(RuntimeError, match="already bound"):
+        router.bind_repaint_routes({})
+    assert router._NAMESPACE[0] is vars(launch)

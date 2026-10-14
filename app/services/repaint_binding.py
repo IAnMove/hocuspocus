@@ -5,7 +5,9 @@ holder from the dict launch passes (its ``globals()``) and refuses a later
 bind to a different dict, so a second call cannot hide a wrong first one.
 A ``LaunchName`` reads the name when the moved function uses it, which is
 after launch has finished defining the later collaborators and after a test
-has patched the launch name.
+has patched the launch name. Item access writes through as well: a moved
+function passes the proxy into helpers that assign into the mapping, and
+those helpers see the proxy, not the resolved object.
 """
 
 
@@ -32,6 +34,15 @@ class LaunchName:
 
     def __getitem__(self, item):
         return self.resolve()[item]
+
+    def __setitem__(self, key, value) -> None:
+        self.resolve()[key] = value
+
+    def __delitem__(self, key) -> None:
+        del self.resolve()[key]
+
+    def __contains__(self, item) -> bool:
+        return item in self.resolve()
 
     def __len__(self) -> int:
         return len(self.resolve())

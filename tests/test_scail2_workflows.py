@@ -24,6 +24,7 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _REPAINT_PLANNING_PATH = os.path.join(_ROOT, "app", "services", "repaint_planning.py")
 _REPAINT_RUN_PATH = os.path.join(_ROOT, "app", "services", "repaint_run.py")
+_REPAINT_ROUTER_PATH = os.path.join(_ROOT, "app", "routers", "repaint.py")
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
@@ -4029,7 +4030,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("sliding_window_size?: number", client)
 
     def test_repaint_shares_resolution_profiles_and_adaptive_windows(self):
-        launch = _read(_LAUNCH_PATH)
+        router = _read(_REPAINT_ROUTER_PATH)
         store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         restyle = _read(_RESTYLE_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
@@ -4037,16 +4038,16 @@ class TestMultiPersonRecast(unittest.TestCase):
 
         self.assertIn(
             "output_width, output_height = _recast_resolution_for_source(",
-            launch,
+            router,
         )
         self.assertIn(
             "repaint_window_size = _recast_window_size_for_profile(",
-            launch,
+            router,
         )
-        self.assertIn('"sliding_window_size": repaint_window_size', launch)
+        self.assertIn('"sliding_window_size": repaint_window_size', router)
         self.assertIn(
             '"edit_repaint_resolution_profile": resolution_profile',
-            launch,
+            router,
         )
         self.assertIn("editRepaintResolutionProfile: '480p'", edit_store)
         self.assertIn(
@@ -4100,6 +4101,9 @@ class TestMultiPersonRecast(unittest.TestCase):
             launch.count('"guidance_scale": guidance_scale'),
             2,
         )
+        router = _read(_REPAINT_ROUTER_PATH)
+        self.assertIn('"num_inference_steps": inference_steps', router)
+        self.assertIn('"guidance_scale": guidance_scale', router)
         self.assertIn(
             "num_inference_steps: (state.params.num_inference_steps as number)",
             recast,
@@ -4238,7 +4242,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertNotIn("Add Maestro identity and scene guidance", controls)
 
     def test_repaint_reuses_scail_animate_and_is_a_first_class_edit_mode(self):
-        launch = _read(_LAUNCH_PATH)
+        router = _read(_REPAINT_ROUTER_PATH)
         restyle = _read(_RESTYLE_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_REPAINT_CONTROLS_PATH)
@@ -4246,17 +4250,19 @@ class TestMultiPersonRecast(unittest.TestCase):
         client = api_client_source()
         studio = json.loads(_read(_STUDIO_EN_PATH))
 
-        self.assertIn('@api.post("/api/v1/repaint")', launch)
-        self.assertIn('@api.post("/api/v1/repaint/preview")', launch)
-        self.assertIn('model_type == "scail2_14B_fast"', launch)
-        self.assertIn('"video_prompt_type": process_type', launch)
-        self.assertIn('process_type = f"V{region_count}A"', launch)
-        self.assertIn('"image_prompt_type": "S"', launch)
-        self.assertIn('"image_start": prepared_target_path', launch)
-        self.assertIn('"scail2_animate_preprocessing": "raw"', launch)
-        self.assertIn('"audio_prompt_type": "R"', launch)
-        self.assertIn('"input_video_strength": 1', launch)
-        self.assertIn('"edit_sub_mode": "restyle"', launch)
+        self.assertIn('"/api/v1/repaint/preview"', router)
+        self.assertIn('"/api/v1/repaint"', router)
+        self.assertIn("repaint_preview_endpoint", router)
+        self.assertIn("repaint_endpoint", router)
+        self.assertIn('model_type == "scail2_14B_fast"', router)
+        self.assertIn('"video_prompt_type": process_type', router)
+        self.assertIn('process_type = f"V{region_count}A"', router)
+        self.assertIn('"image_prompt_type": "S"', router)
+        self.assertIn('"image_start": prepared_target_path', router)
+        self.assertIn('"scail2_animate_preprocessing": "raw"', router)
+        self.assertIn('"audio_prompt_type": "R"', router)
+        self.assertIn('"input_video_strength": 1', router)
+        self.assertIn('"edit_sub_mode": "restyle"', router)
         self.assertIn("submitRepaint({", restyle)
         self.assertIn("target_frame_path: state.editRepaintFramePath", restyle)
         self.assertIn("editRepaintMappings: RepaintRegionMapping[]", edit_store)
@@ -4325,6 +4331,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         planning = _read(_REPAINT_PLANNING_PATH)
         run = _read(_REPAINT_RUN_PATH)
+        router = _read(_REPAINT_ROUTER_PATH)
         self.assertIn(
             "def _build_repaint_shot_manifest(",
             planning,
@@ -4372,7 +4379,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn(
             '"edit_repaint_native_scene_preservation": True',
-            launch,
+            router,
         )
         self.assertIn(
             "tracking_segments=shot_ranges",

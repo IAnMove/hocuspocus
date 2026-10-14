@@ -176,6 +176,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "retake_video_endpoint": edit_requests,
             "edit_anything_endpoint": edit_requests,
             "inpaint_endpoint": edit_requests,
+            "repaint_endpoint": _parse("app/routers/repaint.py"),
         }
         for endpoint_name in (
             "retake_video_endpoint",
