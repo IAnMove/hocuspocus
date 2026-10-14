@@ -23,15 +23,37 @@ from services.asset_manifest import (
 
 
 def _load_launch_function(name, namespace, *, relative="app/_launch_runtime.py"):
-    path = Path(__file__).parents[1] / relative
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=relative)
-    function = next(
-        node for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
-    )
+    """Exec ``name`` from ``relative``, or from the recast service that now defines it."""
+    root = Path(__file__).parents[1]
+    relatives = [relative]
+    if relative == "app/_launch_runtime.py":
+        relatives.extend((
+            "app/services/recast_shot_manifest.py",
+            "app/services/recast_shot_planning.py",
+            "app/services/recast_shot_run.py",
+        ))
+    function = None
+    chosen = None
+    for item in relatives:
+        path = root / item
+        if not path.is_file():
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=item)
+        function = next(
+            (
+                node for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+            ),
+            None,
+        )
+        if function is not None:
+            chosen = item
+            break
+    if function is None:
+        raise AssertionError(name)
     exec(
-        compile(ast.Module(body=[function], type_ignores=[]), relative, "exec"),
+        compile(ast.Module(body=[function], type_ignores=[]), chosen, "exec"),
         namespace,
     )
     return namespace[name]
@@ -560,17 +582,25 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
                 return ast.get_source_segment(text, node)
         raise AssertionError(name)
 
+    manifest_source = (
+        Path(__file__).parents[1] / "app" / "services" / "recast_shot_manifest.py"
+    ).read_text(encoding="utf-8")
+    manifest_tree = ast.parse(manifest_source)
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
         "_run_sfx_generation",
-        "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
     ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    recast_sidecar = function_source(
+        "_write_recast_shot_aware_sidecar", manifest_source, manifest_tree,
+    )
+    assert "publish_generation_sidecar" in recast_sidecar
+    assert "json.dump" not in recast_sidecar
     animatic_source = (
         Path(__file__).parents[1] / "app" / "services" / "comic_animatic.py"
     ).read_text(encoding="utf-8")

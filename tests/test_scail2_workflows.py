@@ -3806,9 +3806,12 @@ class TestMultiPersonRecast(unittest.TestCase):
             "_select_scail2_window_reference_indices(",
             scail2,
         )
+        manifest = _read(os.path.join(
+            _ROOT, "app", "services", "recast_shot_manifest.py",
+        ))
         self.assertIn(
             "def _build_recast_shot_manifest(",
-            launch,
+            manifest,
         )
         self.assertIn(
             "def _run_recast_shot_generation(",
