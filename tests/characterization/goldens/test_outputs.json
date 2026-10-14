@@ -68,6 +68,31 @@
     },
     "status": 200
   },
+  "list edits": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000002.0,
+          "completion_time_source": "file",
+          "created_at": 1760000002.0,
+          "edit_sub_mode": "retake",
+          "favorite": false,
+          "height": 8,
+          "mode": "image",
+          "name": "retake.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/retake.png?v=1760000002000000-<SIZE>",
+          "type": "image",
+          "url": "/api/v1/file/retake.png",
+          "width": 8
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
   "list favorites": {
     "body": {
       "outputs": [
@@ -112,6 +137,34 @@
           "type": "image",
           "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
           "width": 8
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
+  "list multiclip": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000001.0,
+          "completion_time_source": "file",
+          "created_at": 1760000001.0,
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "harbour_multiclip.mp4",
+          "origin": {
+            "actor": "wizard",
+            "capability": "generation.video"
+          },
+          "result_kind": "chapter",
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/harbour_multiclip.mp4?v=1760000001000000-<SIZE>",
+          "type": "video",
+          "url": "/api/v1/file/harbour_multiclip.mp4",
+          "width": 64
         }
       ],
       "total": 1
@@ -175,6 +228,34 @@
     },
     "status": 200
   },
+  "list origin wizard": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000001.0,
+          "completion_time_source": "file",
+          "created_at": 1760000001.0,
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "harbour_multiclip.mp4",
+          "origin": {
+            "actor": "wizard",
+            "capability": "generation.video"
+          },
+          "result_kind": "chapter",
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/harbour_multiclip.mp4?v=1760000001000000-<SIZE>",
+          "type": "video",
+          "url": "/api/v1/file/harbour_multiclip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
   "list page": {
     "body": {
       "outputs": [
@@ -197,6 +278,34 @@
         }
       ],
       "total": 3
+    },
+    "status": 200
+  },
+  "list result kind chapter": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000001.0,
+          "completion_time_source": "file",
+          "created_at": 1760000001.0,
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "harbour_multiclip.mp4",
+          "origin": {
+            "actor": "wizard",
+            "capability": "generation.video"
+          },
+          "result_kind": "chapter",
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/harbour_multiclip.mp4?v=1760000001000000-<SIZE>",
+          "type": "video",
+          "url": "/api/v1/file/harbour_multiclip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 1
     },
     "status": 200
   },

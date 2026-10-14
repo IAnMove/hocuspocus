@@ -86,13 +86,24 @@ def test_http_route_reports_invalid_command(tmp_path):
 
 
 def test_uploaded_animations_stay_out_of_the_gallery_and_keep_one_copy(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
     from routers.model3d_animate import IMPORT_FOLDER, store_import
-    from services import core_workspace
+    from services import output_listing
 
     (tmp_path / "hero.glb").write_bytes(b"glb")
     first = store_import(tmp_path, "Mixamo Walk (2).glb", b"glb-bytes")
-    monkeypatch.setattr(core_workspace, "workspace_dir", lambda _workspace=None: str(tmp_path))
-    assert [row["name"] for row in core_workspace.list_outputs("movie")["outputs"]] == ["hero.glb"]
+    # The gallery lister is one module for both servers. Restore its bindings
+    # so a later test in this process still sees the server that configured it.
+    monkeypatch.setattr(output_listing, "_workspace_dir", lambda _workspace=None: str(tmp_path))
+    monkeypatch.setattr(output_listing, "_load_favorites", lambda: set())
+    monkeypatch.setattr(output_listing, "_safe_join", lambda base, *parts: str(tmp_path.joinpath(*parts)))
+    monkeypatch.setattr(output_listing, "wgp", SimpleNamespace(server_config={"save_path": str(tmp_path)}))
+
+    class _Response:
+        headers: dict = {}
+
+    assert [row["name"] for row in output_listing.list_outputs(_Response(), workspace="movie")["outputs"]] == ["hero.glb"]
     again = store_import(tmp_path, "other name.glb", b"glb-bytes")
     assert first.startswith(f"{IMPORT_FOLDER}/Mixamo-Walk-2-") and first.endswith(".glb")
     assert (tmp_path / first).read_bytes() == b"glb-bytes"
