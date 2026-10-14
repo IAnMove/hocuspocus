@@ -18,6 +18,8 @@ NOT_STARTED = {"dispatch_uncertain", "admission_recovery_needed"}
 NOT_STARTED_MESSAGE = "The server could not start the picture (the GPU may be busy with another job); nothing was made, try again in a moment"
 TERMINAL = {"completed", "failed", "cancelled", "discarded", "error"}
 FAILED = {"failed", "cancelled", "discarded", "error"}
+# A wait that is still open: keep polling. Anything else that is not terminal is a tool error, not another 110s wait.
+OPEN = {"", "queued", "running", "pending", "started", "cancelling"}
 WAIT_SECONDS = 110
 
 
@@ -37,16 +39,32 @@ def raise_if_error(reply: dict[str, Any]) -> None:
         raise ToolError(str(error.get("code") or "tool_error"), str(error.get("message") or reply.get("error") or reply)[:300])
 
 
+def _job_payload(value: Any) -> dict[str, Any] | None:
+    """A live or finished generation job. HTTP error envelopes also have ``status`` (an integer code) and must not win."""
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    if isinstance(status, bool) or isinstance(status, (int, float)):
+        return None
+    if value.get("job_id") or value.get("output_files") or value.get("timed_out"):
+        return value
+    text = str(status or "")
+    if text and text in TERMINAL | OPEN | {"interrupted"}:
+        return value
+    return None
+
+
 def payload_of(reply: dict[str, Any]) -> dict[str, Any]:
-    """What a tool answered: the live job when a wait timed out (it comes in ``error``), else the ``result``."""
-    error = reply.get("error")
-    if isinstance(error, dict) and ("status" in error or "job_id" in error or "output_files" in error):
-        return error
+    """What a tool answered: the live job, or ``result`` (a keyed file, a wait, a receipt)."""
+    # A wait that timed out used to arrive as ``error`` with the live job inside. ``jobs.wait`` now returns that
+    # job as the result with ``timed_out``. LocalMcp HTTP errors also put a numeric ``status`` on ``error``; those
+    # are failures, not a running generation.
+    found = _job_payload(reply.get("error"))
+    if found is not None and found.get("job_id"):
+        return found
     raise_if_error(reply)
     inner = reply.get("result")
-    if isinstance(inner, dict) and any(key in inner for key in ("status", "output_files", "filename", "file", "job_id", "url")):
-        return inner
-    return reply
+    return _job_payload(inner) or _job_payload(reply) or (inner if isinstance(inner, dict) else reply)
 
 
 def job_id_of(submitted: dict[str, Any]) -> str:
@@ -106,6 +124,10 @@ class LocalTools:
                     raise ToolError("interrupted", "the generation stopped when the server restarted")
                 resumed = True
                 raise_if_error(self.call("jobs.resume", {"version": 1, "input": {"intent_id": intent_id}}))
+                continue
+            if payload.get("timed_out") or status in OPEN:
+                continue
+            raise ToolError("no_status", "jobs.wait returned no terminal status")
 
     def image(self, intent_id: str, params: dict[str, Any], output_name: str) -> str:
         """One picture made with ``generation.image``: the workspace file name of the first output."""

@@ -14,6 +14,7 @@ from PIL import Image
 from routers.character_animation_jobs import create_character_animation_jobs_router
 from services.character_animation_job import AnimationJobDeps, AnimationJobError, CharacterAnimationJobs, reference_of
 from services.character_kit_library import patch_character_kit, read_character_kit_library, write_character_kit_library
+from services.local_generation import ToolError, payload_of
 
 WS = "demo"
 
@@ -164,6 +165,53 @@ def test_a_character_with_no_persistent_picture_cannot_make_poses(world, monkeyp
     with pytest.raises(AnimationJobError) as error:
         jobs.start(WS, "hero", "wave")
     assert error.value.code == "no_reference" and not server.calls
+
+
+def test_a_wait_http_error_is_not_a_live_job_and_does_not_hang(world):
+    """LocalMcp puts the HTTP status on error.status. Treating that as a generation status used to wait forever."""
+    root, server, jobs = world
+    original = server.call
+
+    def call(tool, arguments):
+        if tool == "jobs.wait":
+            server.calls.append((tool, arguments))
+            return {"_is_error": True, "error": {"code": "invalid_status", "message": "Status payload must be an object.", "status": 502}}
+        return original(tool, arguments)
+
+    jobs.deps.call = call
+    failed = jobs.start(WS, "hero", "nod")
+    assert failed["status"] == "failed" and failed["errorCode"] == "invalid_status"
+    assert "Status payload" in failed["error"]
+    assert [take["status"] for take in failed["takes"]][0] == "failed"
+    assert len(server.of("jobs.wait")) == 1, "one wait error stops the pose; it does not poll again"
+
+
+def test_a_wait_that_times_out_with_the_live_job_is_asked_again(world):
+    root, server, jobs = world
+    original = server.call
+    waits = {"n": 0}
+
+    def call(tool, arguments):
+        if tool == "jobs.wait":
+            waits["n"] += 1
+            if waits["n"] == 1:
+                return {"status": "running", "job_id": "gen-1", "timed_out": True, "code": "timeout"}
+        return original(tool, arguments)
+
+    jobs.deps.call = call
+    assert jobs.start(WS, "hero", "nod")["status"] == "completed"
+    assert waits["n"] >= 2
+
+
+def test_payload_of_does_not_treat_an_http_error_status_as_a_running_job():
+    with pytest.raises(ToolError) as error:
+        payload_of({"_is_error": True, "error": {"code": "invalid_status", "message": "Status payload must be an object.", "status": 502}})
+    assert error.value.code == "invalid_status"
+    live = payload_of({"status": "running", "job_id": "gen-1", "timed_out": True})
+    assert live["status"] == "running" and live["timed_out"] is True
+    assert payload_of({"result": {"url": "/api/v1/file/a.png", "file": "a.png"}}) == {"url": "/api/v1/file/a.png", "file": "a.png"}
+    # The old timeout envelope still names the job.
+    assert payload_of({"_is_error": True, "error": {"job_id": "gen-1", "status": "running", "timed_out": True}})["job_id"] == "gen-1"
 
 
 def test_a_picture_the_server_could_not_start_is_discarded_from_the_queue_and_the_job_says_to_try_again(world):
