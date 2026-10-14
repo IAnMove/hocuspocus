@@ -220,6 +220,28 @@ class CoreRuntimeTests(unittest.TestCase):
         workflows = [item.get("workflow") for item in tasks.json()["tasks"]]
         self.assertIn("model3d", workflows)
 
+    def test_core_model3d_unload_cancels_the_queued_remote_jobs(self):
+        """The shared Model3D router brings ``POST /api/v1/model3d/unload`` to core: it cancels the Meshy and Hi3D jobs."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.core_remote_3d.threading.Thread"), patch(
+                "services.execution_mode.validate_remote_provider",
+            ):
+                started = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            unloaded = self.client.post("/api/v1/model3d/unload")
+            after = self.client.get(f"/api/v1/model3d/status/{started.json()['job_id']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(started.json()["status"], "queued")
+        self.assertEqual(unloaded.status_code, 200, unloaded.text)
+        self.assertGreaterEqual(unloaded.json()["cancelled_jobs"], 1)
+        self.assertIs(unloaded.json()["model_loaded"], False)
+        self.assertEqual(after.json()["status"], "cancelled")
+
     def test_hi3d_text_prompt_uses_a_minimax_still(self):
         folder, previous = self._in_temp_workspace()
         try:
