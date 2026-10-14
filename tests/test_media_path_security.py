@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.launch_ast import generation_module
 from services.media_paths import (
     MediaPathNotAllowed,
     resolve_permitted_media_path,
@@ -247,12 +248,7 @@ def test_story_cover_jobs_use_the_shared_cover_resolver():
 
 
 def test_generation_resolves_voice_clone_refs_before_seedvc():
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    run = next(
-        node for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "_run_generation"
-    )
+    run = generation_module()
     calls = [
         node.func.id
         for node in ast.walk(run)
