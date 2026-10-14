@@ -18,6 +18,7 @@ from services.series_library import (
 from services.series_render import (
     SERIES_RESOLUTIONS, build_h3_generation_params, normalize_series_resolution, shot_render_settings,
 )
+from services.series_produce import ProduceDeps, SeriesProduce
 from services.series_review import content_digest
 from services.series_script import ScriptError, apply_script
 from services.series_shot_edit import ShotEditError
@@ -28,7 +29,9 @@ from services.series_video_shots import (
 from tests.test_series_render import inputs
 from tests.test_series_script_produce import FILES, KITS, Series, finished
 from tests.test_series_shot_edit import edit, library
-from tests.test_series_video_shots import _episode, _produce, _request, _Server, _video_calls, _png
+from tests.test_series_video_shots import (  # noqa: F401  (the autouse fixture unbinds the series router's library)
+    _episode, _png, _produce, _request, _Server, _unbound_series_router, _video_calls,
+)
 
 # Digests of the fixtures below before this change.
 OLD_VIDEO_REQUEST = "5d0a932a4a79774a"
@@ -126,6 +129,82 @@ def test_a_take_made_before_sizes_existed_is_not_made_again(tmp_path):
     assert tools.imports[0]["metadata"]["videoRequest"] == _video_digest(series, shot) != OLD_VIDEO_REQUEST
     shot["resolution"] = "480p"
     assert _take_matches(series, shot), "back to 480p, the old take fits again"
+
+
+def test_a_series_turned_portrait_is_a_new_clip_and_the_request_digest_stays(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, _episode_body = _episode(_request())
+    series = library["seriesById"]["uv"]
+    series["videoShotResolution"] = "720p"
+    series["provider"] = {"videoSettings": {"orientation": "landscape"}}
+    shot = series["episodesById"]["ep1"]["shots"][0]
+    landscape = _video_digest(series, shot)
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert _video_calls(tools, "generation.video")[0]["input"]["params"]["resolution"] == "1280x704"
+    first = tools.imports[0]["metadata"]
+    shot["attempts"] = [{"id": "att-land", "status": "completed", "outputAssetIds": ["asset_land"]}]
+    shot["approvedAttemptId"] = "att-land"
+    series["assets"] = {"asset_land": {"id": "asset_land", "kind": "video", "uri": "outputs/land.mp4", "metadata": first}}
+    assert _take_matches(series, shot)
+    series["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    assert _video_digest(series, shot) == landscape, "the request digest never held the frame"
+    assert not _take_matches(series, shot), "the clip is 1280x704; the series is 704x1280 now"
+    tools.calls.clear()
+    tools.imports.clear()
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video")[0]["input"]["params"]["resolution"] == "704x1280"
+    second = tools.imports[0]["metadata"]
+    assert second["videoRequest"] == first["videoRequest"] and second["videoInputs"] != first["videoInputs"]
+    series["provider"] = {"videoSettings": {"orientation": "landscape"}}
+    assert _take_matches(series, shot), "back to landscape, the first clip fits again"
+
+
+# ``videoRequest`` of ``_request(start=...)`` at 720p, as development 844565b83 stored it.
+LEGACY_REQUESTS = {"plan": "623e211a97883a28", "start.png": "3eb31eccc69efc40", "pose:ana/wave": "bd53272e8be611aa"}
+
+
+def _legacy_video_episode(tmp_path):
+    """A portrait 720p episode produced before ``videoInputs``: one take per kind of start frame, each approved."""
+    _png(tmp_path / "start.png", (10, 20, 30))
+    _png(tmp_path / "ana-wave.png", (30, 20, 10))
+    shots = []
+    for index, start in enumerate(LEGACY_REQUESTS):
+        shot = _request(start=start)
+        shot["id"] = f"s0{index}"
+        shots.append(shot)
+    library, episode = _episode(*shots)
+    series = library["seriesById"]["uv"]
+    series["videoShotResolution"] = "720p"
+    series["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    series["locations"] = [{"id": "garage", "layout2d": {"plateAssetId": "plate_1"}}]
+    series["assets"] = {"plate_1": {"id": "plate_1", "uri": "assets/garage.png"}}
+    shots[0].update(locationId="garage", layout2d={"cast": [{"characterId": "ana", "poseId": "wave", "x": 30}]})
+    for shot in shots:
+        asset = f"asset_{shot['id']}"
+        shot["attempts"] = [{"id": f"att-{shot['id']}", "status": "completed", "outputAssetIds": [asset]}]
+        shot["approvedAttemptId"] = f"att-{shot['id']}"
+        series["assets"][asset] = {"id": asset, "kind": "video", "uri": f"outputs/{asset}.mp4",
+                                   "metadata": {"videoRequest": LEGACY_REQUESTS[shot["video"]["start"]]}}
+    return library, {"kit-ana": {"poses": {"wave": {"source": "ana-wave.png"}}}}
+
+
+def test_an_episode_made_before_video_inputs_makes_no_clip_on_the_first_produce(tmp_path):
+    """Plan, file and pose starts, a portrait series and a 720p size: nothing is generated and nothing is approved again."""
+    library, kits = _legacy_video_episode(tmp_path)
+    before = copy.deepcopy(library)
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = SeriesProduce(ProduceDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: library,
+                                        read_kits=lambda _ws: kits, import_take=tools.imports.append,
+                                        sleep=lambda _s: None, poll_seconds=0))
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and _video_calls(tools, "media.compose") == []
+    assert tools.imports == []
+    assert library == before, "the stored library is as it was"
 
 
 def test_a_480p_take_asks_for_the_same_clip_plate_and_intent_as_before(tmp_path):
