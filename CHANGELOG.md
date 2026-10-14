@@ -10,6 +10,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Outpaint left the launch module.** Extending a picture or a clip, including the official LTX-2 path and a clip with several camera shots, still answers the same way. The generation worker still does the outpaint audio and pixel pass itself.
 
+**Sound-effect generation left the launch module.** A sound-effect job still prepares MMAudio, writes the clip, and publishes the same sidecar.
+
+**FlashVSR chunked upscaling left the launch module.** A long clip is still upscaled in memory-bounded chunks, and the tools upscale still uses that same function.
+
+**Film grain and spatial upsampling left the launch module.** A finished video is still grained in place, and a spatial upscale still replaces the file and keeps its audio.
+
+**The per-job VRAM coefficient left the launch module.** A job still tightens the safety coefficient for its own weights and puts the saved base value back when the job finishes.
+
 **Hugging Face LoRA import left the launch module.** An empty import, a URL the server does not recognize, and a target directory that leaves the folder still answer the same way. The download registry that import writes is the same object the CivitAI downloads use.
 
 **CivitAI browsing, CivitAI downloads, and checkpoint import left the launch module.** The filter list, the architecture picker, a cached search, a cached model, a refused download, and an empty download list still answer the same way. Installed checkpoints, an update check on an empty folder, and a guide for an unknown checkpoint still answer the same way. The download registry and the CivitAI response cache stay one object each.
