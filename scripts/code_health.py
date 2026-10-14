@@ -676,13 +676,31 @@ def _carved_from(child: str, parent: str) -> bool:
     return following == "_" or following.isupper() or following.isdigit()
 
 
+def _name_scope(name: str) -> str:
+    return name.rsplit(".", 1)[0] if "." in name else ""
+
+
 def _split_parent(child: dict, parents: dict[tuple[bool, str], list[dict]]) -> tuple[bool, str] | None:
+    """The one base function a piece is credited against (see ``_carved_from``).
+
+    A def nested in a candidate (``outer.inner_audio``, ``outer.inner.audio``)
+    comes from the innermost candidate it is nested in, or from a candidate
+    nested there too (``outer.inner``): a nested def never counts towards the
+    function it is defined in. Then the longest last name part wins
+    (``_run_generation``, not ``Router.run``, for ``_run_generation_prepare``),
+    then a parent in the piece's own scope, then the longest qualified name.
+    """
     python = _is_python(child)
-    candidates = [
-        key for key in parents
-        if key[0] == python and _carved_from(child["name"], key[1])
-    ]
-    return max(candidates, key=lambda key: (len(_split_stem(key[1])), len(key[1]))) if candidates else None
+    name = child["name"]
+    candidates = [key for key in parents if key[0] == python and _carved_from(name, key[1])]
+    enclosing = [key for key in candidates if name.startswith(key[1] + ".")]
+    if enclosing:
+        scope = max(enclosing, key=lambda key: len(key[1]))
+        candidates = [key for key in candidates if key[1].startswith(scope[1] + ".")] or [scope]
+    return max(
+        candidates,
+        key=lambda key: (len(_split_stem(key[1])), _name_scope(key[1]) == _name_scope(name), len(key[1])),
+    ) if candidates else None
 
 
 def _added_decisions(current: dict, baseline: dict) -> int | None:
@@ -709,7 +727,7 @@ def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
 
     A piece is a named function at COMPLEXITY_WARNING+ whose name is not in
     the base records, named after a base function at COMPLEXITY_WARNING+
-    (see ``_carved_from``; the parent with the longest last name part wins). The pieces of
+    (see ``_carved_from``; ``_split_parent`` picks one when several match). The pieces of
     one parent are credited only when the parent's complexity, summed over
     every function of that name, drops by at least the pieces' decisions
     (complexity - 1 each): extracting a block with d decisions lowers the

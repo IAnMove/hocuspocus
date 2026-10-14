@@ -229,9 +229,22 @@ that budget when both of these are true:
   - `startGeneration` → `startGenerationAudio`, but not `startGenerations`.
 
   The parent must be at complexity 15+ in the base. The piece's name must not
-  be in the base records. The parent with the longest last name part wins,
-  so a piece is never taken from a parent whose last name part is merely a
-  prefix of it (`Router.run` is not the parent of `_run_generation_prepare`).
+  be in the base records. When several parents match, one is chosen:
+  1. A def nested in a parent comes from the innermost parent it is nested
+     in, or from a parent nested there too. A nested def never counts towards
+     the function it is defined in, so `outer.inner_audio` and
+     `outer.inner.audio` come from `outer.inner`, not from `outer`.
+  2. Then the parent with the longest last name part wins, so a piece is
+     never taken from a parent whose last name part is merely a prefix of it
+     (`Router.run` is not the parent of `_run_generation_prepare`).
+  3. Then the parent in the piece's own scope: `MusicVideoPlanner.plan_audio`
+     comes from `MusicVideoPlanner.plan`, not from `ComicMoviePlanner.plan`.
+  4. Then the longest qualified name.
+
+  A suffix that extends another complex function's last name part makes that
+  function the parent: `VideoPipeline.render_audio_mix` comes from
+  `render_audio`, not from `VideoPipeline.render`. Name such a piece
+  differently.
 - **Complexity rule.** The parent's complexity, summed over every function of
   that name, must drop by at least the sum of the pieces' **decisions**, which
   is their complexity minus one each. Extracting a block with *d* decisions
