@@ -141,7 +141,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 self.assertTrue(required <= calls, required - calls)
 
     def test_cancel_endpoint_routes_through_shared_helper(self):
-        cancel = _function(self.launch, "cancel_job")
+        cancel = _function(_parse("app/services/generation_jobs.py"), "cancel_job")
         self.assertIn("request_cancel", _called_names(cancel))
         self.assertIn("_remove_persisted_generation_job", _called_names(cancel))
         self.assertFalse(any(

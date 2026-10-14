@@ -80,3 +80,59 @@ def test_every_injected_name_is_bound_to_the_servers_object(full_server, monkeyp
             )
             checked += 1
     assert checked > 0
+
+
+# One bind() per moved service. The injected names come from each module's source.
+BOUND_SERVICES = (
+    "services.generation_jobs",
+    "services.generation_recovery",
+    "services.generation_preparation",
+    "services.generation_h3_release",
+)
+
+
+def test_every_bound_service_name_is_the_servers_object(full_server, monkeypatch) -> None:
+    """Every global a moved service binds is the full server's object. A forwarder follows a patched name."""
+    launch = importlib.import_module("_launch_runtime")
+    checked = 0
+    for module_name in BOUND_SERVICES:
+        module = importlib.import_module(module_name)
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        injected = _injected(ast.parse(source))
+        assert injected, module_name
+        for name in injected:
+            value = getattr(module, name)
+            assert value is not None, f"{module_name}.{name} was never bound"
+            assert hasattr(launch, name), f"{module_name}.{name}: the full server has no {name}"
+            checked += 1
+            if _is_forwarder(value, launch):
+                assert name in value.__code__.co_names, f"{module_name}.{name} forwards to {value.__code__.co_names}"
+                calls = []
+                monkeypatch.setattr(launch, name, lambda *args, **kwargs: calls.append((args, kwargs)) or "forwarded")
+                assert value("probe", flag=True) == "forwarded" and calls == [(("probe",), {"flag": True})]
+                monkeypatch.undo()
+                continue
+            assert value is getattr(launch, name), f"{module_name}.{name} is not the server's object"
+    assert checked > 0
+
+
+def test_the_hardware_probe_and_the_h3_lock_are_the_servers_objects(full_server) -> None:
+    """The probe is one function object, and the idle-release lock is the holder's one RLock."""
+    launch = importlib.import_module("_launch_runtime")
+    probe = importlib.import_module("services.hardware_probe")
+    release = importlib.import_module("services.generation_h3_release")
+    coefficients = importlib.import_module("services.generation_coefficients")
+    director_router = importlib.import_module("routers.director")
+    director = importlib.import_module("services.director_pipeline")
+    assert launch._get_cached_hardware is probe._get_cached_hardware
+    assert coefficients._get_cached_hardware is probe._get_cached_hardware
+    # The director router holds the probe from import and hands it to the pipeline when the pipeline first starts,
+    # which only an earlier director test (or request) does. Check the pipeline's copy once it exists.
+    assert director_router._get_cached_hardware is probe._get_cached_hardware
+    if director_router._pipeline_init_state.initialized:
+        assert director._get_cached_hardware is probe._get_cached_hardware
+    assert launch._h3_idle_release_lock is release._h3_idle_release.lock
+    assert launch._cancel_h3_idle_release is release._cancel_h3_idle_release
+    assert launch._interrupt_wan_model is release._interrupt_wan_model
+    assert launch._release_h3_when_queue_allows is release._release_h3_when_queue_allows
+    assert launch._release_legacy_h3_when_queue_allows is release._release_legacy_h3_when_queue_allows

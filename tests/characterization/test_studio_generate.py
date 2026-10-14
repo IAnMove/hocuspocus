@@ -20,6 +20,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from services.hardware_probe import hardware_cache
+
 from tests.characterization import media
 from tests.characterization.test_run_generation import (
     RECAST_MODULES, SHOT_MODULES, BODY, Rig, _media_writer, worker_module,
@@ -159,7 +161,7 @@ def generation(server, tmp_path, monkeypatch):
     for name, value in {**catalog_attributes(), **generation_attributes(engine, server.wgp)}.items():
         monkeypatch.setattr(server.wgp, name, value, raising=False)
     monkeypatch.setattr(launch._durable_generation_queue, "path", str(tmp_path / "queue.json"))
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 0.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
     state = Rig(server=server, engine=engine, monkeypatch=monkeypatch)
     known = set(launch._jobs)
 

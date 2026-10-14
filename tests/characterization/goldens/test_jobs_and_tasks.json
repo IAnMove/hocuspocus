@@ -1,4 +1,23 @@
 {
+  "cached hardware": {
+    "body": {
+      "again is the fallback": true,
+      "calls": [
+        "probe",
+        "fail"
+      ],
+      "fallback": {
+        "gpu_vram_gb": 0.0
+      },
+      "first": {
+        "gpu_name": "stub",
+        "gpu_vram_gb": 11.0
+      },
+      "printed": "[VRAM] hardware probe failed (probe down); per-job adjustment disabled",
+      "second is the same object": true
+    },
+    "status": 200
+  },
   "cancel a job that does not exist": {
     "body": {
       "detail": "Job not found"
@@ -176,6 +195,108 @@
     },
     "status": 200
   },
+  "h3 idle release": {
+    "body": {
+      "steps": [
+        {
+          "calls": [],
+          "label": "native h3 still queued",
+          "printed": "[MiniMax H3] Keeping runtime warm for a queued H3 job."
+        },
+        {
+          "calls": [
+            "release wgp"
+          ],
+          "label": "a non-h3 gpu job is queued",
+          "printed": "[MiniMax H3] Releasing native runtime for a queued non-H3 GPU job."
+        },
+        {
+          "calls": [
+            [
+              "timer",
+              10.0,
+              true
+            ]
+          ],
+          "label": "native queue idle",
+          "printed": "[MiniMax H3] Queue idle; releasing native runtime in 10s unless another job arrives."
+        },
+        {
+          "calls": [],
+          "label": "idle callback, model is not h3",
+          "printed": ""
+        },
+        {
+          "calls": [],
+          "label": "idle callback, a job is active",
+          "printed": ""
+        },
+        {
+          "calls": [],
+          "label": "idle callback, a job arrived",
+          "printed": ""
+        },
+        {
+          "calls": [
+            "release wgp"
+          ],
+          "label": "idle callback, still idle and the model is h3",
+          "printed": "[MiniMax H3] Native WGP runtime released after idle grace period."
+        },
+        {
+          "calls": [
+            [
+              "timer",
+              10.0,
+              true
+            ],
+            "timer cancel"
+          ],
+          "label": "a later native job cancels the idle timer",
+          "printed": "[MiniMax H3] Queue idle; releasing native runtime in 10s unless another job arrives.\n[MiniMax H3] Keeping runtime warm for a queued H3 job."
+        },
+        {
+          "calls": [
+            "cancel legacy idle"
+          ],
+          "label": "legacy h3 still queued",
+          "printed": "[H3 Legacy] Keeping ConvRot runtime warm for a queued Legacy job."
+        },
+        {
+          "calls": [
+            "stop legacy"
+          ],
+          "label": "a non-legacy gpu job is queued",
+          "printed": "[H3 Legacy] Releasing ConvRot runtime for a queued non-Legacy GPU job."
+        },
+        {
+          "calls": [
+            [
+              "schedule legacy",
+              10.0,
+              false
+            ]
+          ],
+          "label": "legacy queue idle",
+          "printed": "[H3 Legacy] Queue idle; releasing ConvRot runtime in 10s."
+        },
+        {
+          "calls": [],
+          "label": "cancel when no timer is armed",
+          "printed": ""
+        }
+      ],
+      "timers": 2
+    },
+    "status": 200
+  },
+  "interrupt wan model": {
+    "body": {
+      "flagged": true,
+      "missing model and flag survived": true
+    },
+    "status": 200
+  },
   "job status missing": {
     "body": {
       "detail": "Job not found"
@@ -191,6 +312,84 @@
   "jobs recovery": {
     "body": {
       "jobs": []
+    },
+    "status": 200
+  },
+  "jobs recovery resume empty": {
+    "body": {
+      "count": 0,
+      "resumed": []
+    },
+    "status": 200
+  },
+  "local gpu owner": {
+    "body": {
+      "anything else, llm on cpu": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "empty cache"
+        ],
+        "printed": ""
+      },
+      "anything else, llm status fails": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "empty cache"
+        ],
+        "printed": "[Resources] Local CUDA LLM cleanup skipped: llm status down"
+      },
+      "anything else, remote llm": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "empty cache"
+        ],
+        "printed": ""
+      },
+      "anything else, wgp not loaded": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "unload llm",
+          "empty cache"
+        ],
+        "printed": ""
+      },
+      "handing to a local llm": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "release wgp"
+        ],
+        "printed": "[Resources] Releasing WGP runtime before [gpu-engine:local-llm] writer"
+      },
+      "handing to anything else": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "release wgp",
+          "unload llm"
+        ],
+        "printed": "[Resources] Releasing WGP runtime before some other owner"
+      },
+      "handing to legacy h3": {
+        "calls": [
+          "release wgp",
+          "unload llm"
+        ],
+        "printed": "[Resources] Releasing WGP runtime before [gpu-engine:h3-legacy] legacy"
+      },
+      "handing to wgp": {
+        "calls": [
+          "cancel h3 idle",
+          "stop h3",
+          "unload llm",
+          "empty cache"
+        ],
+        "printed": ""
+      }
     },
     "status": 200
   },
@@ -508,9 +707,39 @@
     },
     "status": 200
   },
+  "recovery after a dropped leftover": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
   "recovery discard": {
     "body": {
       "discarded": 1
+    },
+    "status": 200
+  },
+  "recovery helpers": {
+    "body": {
+      "discarded queue": [
+        "golden-already-live"
+      ],
+      "kept": [
+        {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "job_id": "golden-prepare",
+          "model_type": "golden_model",
+          "previous_status": "running",
+          "prompt_preview": "a golden prompt",
+          "workspace": "default"
+        }
+      ],
+      "start thread": {
+        "alive": false,
+        "daemon": false,
+        "name": "recovered-generation-golden-start-missing"
+      }
     },
     "status": 200
   },
@@ -533,6 +762,13 @@
           "workspace": "default"
         }
       ]
+    },
+    "status": 200
+  },
+  "recovery resume drops a leftover without a model": {
+    "body": {
+      "count": 0,
+      "resumed": []
     },
     "status": 200
   },

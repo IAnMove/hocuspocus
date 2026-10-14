@@ -423,55 +423,16 @@ from services.job_lifecycle import (
 from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
 from services import resource_scheduler
 
-_H3_IDLE_RELEASE_SECONDS = 10.0
-_h3_idle_release_timer: threading.Timer | None = None
-_h3_idle_release_lock = threading.RLock()
 
-
-def _prepare_local_gpu_owner(
-    _lane: resource_scheduler.ResourceLane,
-    _task_id: str,
-    description: str,
-) -> None:
-    """Hand GPU 0 to one engine without retaining incompatible runtimes."""
-    owner_kind = resource_scheduler.gpu_engine_kind(description)
-    is_legacy_h3 = owner_kind == resource_scheduler.GPU_ENGINE_H3_LEGACY
-    is_wgp_generation = owner_kind == resource_scheduler.GPU_ENGINE_WGP
-    is_local_llm = owner_kind == resource_scheduler.GPU_ENGINE_LOCAL_LLM
-
-    if not is_legacy_h3:
-        minimax_h3_service.cancel_idle_shutdown()
-        minimax_h3_service.stop_runtime()
-    released_wgp = False
-    if not is_wgp_generation and (
-        getattr(wgp, "wan_model", None) is not None
-        or getattr(wgp, "offloadobj", None) is not None
-    ):
-        print(
-            f"[Resources] Releasing WGP runtime before "
-            f"{description or 'the next local GPU owner'}"
-        )
-        wgp.release_model()
-        released_wgp = True
-    if not is_local_llm:
-        try:
-            from services import llm_service
-            llm_status = llm_service.get_status()
-            if (
-                llm_status.get("provider") == "local"
-                and str(llm_status.get("device") or "").startswith("cuda")
-            ):
-                llm_service.unload_model()
-        except Exception as exc:
-            print(f"[Resources] Local CUDA LLM cleanup skipped: {exc}")
-    # release_model() already flushes Torch caches and performs collection.
-    # Repeating that native teardown immediately was both redundant and, when
-    # handing ACE-Step to isolated H3 ConvRot, could finalize extension-owned
-    # objects twice at the exact boundary where the process previously died.
-    if not released_wgp:
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+# Preparation, simulation and the local GPU handoff live in
+# services/generation_preparation.py. The hook is installed here; bind() runs
+# after the image-command service exists, before any request.
+from services.generation_preparation import (
+    _prepare_local_gpu_owner,
+    _run_generation_with_preparation,
+    _run_simulated_generation,
+    bind as bind_generation_preparation,
+)
 
 
 resource_scheduler.coordinator.set_prepare_hook(
@@ -525,94 +486,25 @@ def _is_minimax_h3_model(model_type: str | None) -> bool:
     )
 
 
-def _cancel_h3_idle_release() -> None:
-    """Prevent a delayed native-model release from racing newly queued work."""
-    global _h3_idle_release_timer
-    with _h3_idle_release_lock:
-        timer = _h3_idle_release_timer
-        _h3_idle_release_timer = None
-        if timer is not None:
-            timer.cancel()
+# Native and legacy H3 release, and the Wan interrupt, live in
+# services/generation_h3_release.py. The lock alias is the holder's one RLock.
+from services.generation_h3_release import (
+    _cancel_h3_idle_release,
+    _h3_idle_release,
+    _interrupt_wan_model,
+    _release_h3_when_queue_allows,
+    _release_legacy_h3_when_queue_allows,
+    bind as bind_generation_h3_release,
+)
 
-
-def _release_h3_when_queue_allows(job_id: str) -> None:
-    """Keep native H3 warm for its queue, then release WGP-owned memory."""
-    global _h3_idle_release_timer
-    pending = _pending_gpu_jobs(exclude_job_id=job_id)
-    h3_pending = any(
-        _is_minimax_h3_model(candidate.get("params", {}).get("model_type"))
-        and not _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
-        for candidate in pending
-    )
-    if h3_pending:
-        _cancel_h3_idle_release()
-        print("[MiniMax H3] Keeping runtime warm for a queued H3 job.")
-        return
-
-    _cancel_h3_idle_release()
-    if pending:
-        print("[MiniMax H3] Releasing native runtime for a queued non-H3 GPU job.")
-        wgp.release_model()
-        return
-
-    print(
-        f"[MiniMax H3] Queue idle; releasing native runtime in "
-        f"{int(_H3_IDLE_RELEASE_SECONDS)}s unless another job arrives."
-    )
-
-    def _release_if_still_idle() -> None:
-        global _h3_idle_release_timer
-        with _h3_idle_release_lock:
-            _h3_idle_release_timer = None
-            if _pending_gpu_jobs(exclude_job_id=job_id) or _active_gen_states:
-                return
-            if not _is_minimax_h3_model(getattr(wgp, "transformer_type", None)):
-                return
-            wgp.release_model()
-            print("[MiniMax H3] Native WGP runtime released after idle grace period.")
-
-    with _h3_idle_release_lock:
-        timer = threading.Timer(_H3_IDLE_RELEASE_SECONDS, _release_if_still_idle)
-        timer.daemon = True
-        _h3_idle_release_timer = timer
-        timer.start()
-
-
-def _release_legacy_h3_when_queue_allows(job_id: str) -> None:
-    """Keep the isolated ConvRot runtime only for adjacent Legacy jobs."""
-    pending = _pending_gpu_jobs(exclude_job_id=job_id)
-    legacy_pending = any(
-        _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
-        for candidate in pending
-    )
-    if legacy_pending:
-        minimax_h3_service.cancel_idle_shutdown()
-        print("[H3 Legacy] Keeping ConvRot runtime warm for a queued Legacy job.")
-        return
-
-    if pending:
-        print("[H3 Legacy] Releasing ConvRot runtime for a queued non-Legacy GPU job.")
-        minimax_h3_service.stop_runtime()
-        return
-
-    print(
-        f"[H3 Legacy] Queue idle; releasing ConvRot runtime in "
-        f"{int(minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS)}s."
-    )
-    minimax_h3_service.schedule_idle_shutdown(
-        minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS,
-        lambda: any(
-            _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
-            for candidate in _pending_gpu_jobs(exclude_job_id=job_id)
-        ),
-    )
-
-
-def _interrupt_wan_model() -> None:
-    """Interrupt only the Wan run bound to the active lifecycle state."""
-    model = wgp.wan_model
-    if model is not None and hasattr(model, "_interrupt"):
-        model._interrupt = True
+bind_generation_h3_release(
+    _active_gen_states=_active_gen_states,
+    _is_legacy_h3_model=_is_legacy_h3_model,
+    _is_minimax_h3_model=_is_minimax_h3_model,
+    _pending_gpu_jobs=_pending_gpu_jobs,
+    wgp=wgp,
+)
+_h3_idle_release_lock = _h3_idle_release.lock
 
 # Director pipeline init lives with the planner routes. Music generation and
 # quick-video batches call this same function.
@@ -1692,180 +1584,6 @@ bind_director_v2_plan(
     public_llm_providers=_PUBLIC_LLM_PROVIDERS,
 )
 api.include_router(create_director_v2_router())
-
-
-
-def _run_generation_with_preparation(job_id: str) -> bool:
-    """Finish deferred, non-GPU preparation before entering generation FIFO.
-
-    H3 window planning may load an LLM or call a remote provider.  It must not
-    block ``POST /generate`` and it must not reserve the scarce video lane
-    while doing so.  The pending request is persisted inside the job params so
-    crash recovery can replay this same worker before starting inference.
-    """
-    job = _jobs.get(job_id)
-    if not isinstance(job, dict):
-        return False
-    try:
-        native_worker = _image_generation_commands.native_worker(job)
-    except HTTPException as error:
-        finish_job(job, "failed", error=str(error.detail), message="Command recovery could not be verified")
-        return False
-    if native_worker is not None:
-        return bool(native_worker(job_id))
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    pending = params.get("_h3_window_plan_pending")
-    if not isinstance(pending, dict):
-        return bool(_run_generation(job_id))
-    if is_cancel_requested(job):
-        _remove_persisted_generation_job(job)
-        return False
-    if not try_start(
-        job,
-        phase="planning",
-        message="Planning H3 window-by-window prompts with the writing model…",
-        acquired_resources=[],
-    ):
-        if is_cancel_requested(job):
-            _remove_persisted_generation_job(job)
-        return False
-
-    _persist_generation_job(job)
-    planner_llm = None
-    try:
-        from services import llm_service as planner_llm
-        from services.h3_window_planner import plan_h3_sliding_windows
-
-        def _plan_windows():
-            try:
-                _ensure_llm_loaded()
-            except Exception as load_error:
-                # The planner has a deterministic fallback, so a missing
-                # optional LLM must not make an otherwise valid H3 job fail.
-                print(
-                    "[MiniMax H3] Planner LLM unavailable; using fallback: "
-                    f"{load_error}"
-                )
-            services = wgp.server_config.get("services", {})
-            provider = _effective_llm_routing(services)[0]
-            nsfw = (
-                services.get("nsfw_mode", False)
-                and provider not in _PUBLIC_LLM_PROVIDERS
-            )
-            expected_count = int(pending.get("expected_count") or 0)
-            if expected_count <= 0:
-                raise RuntimeError("H3 window plan has no target windows")
-            print(
-                f"[MiniMax H3] Planning {expected_count} window-local prompts "
-                "after VRAM-safe geometry "
-                f"({int(pending.get('window_frames') or 0)} frames/window)."
-            )
-            result = plan_h3_sliding_windows(
-                str(params.get("prompt") or ""),
-                model_type=str(pending.get("model_type") or ""),
-                resolution=str(pending.get("resolution") or ""),
-                total_frames=int(pending.get("total_frames") or 0),
-                window_frames=int(pending.get("window_frames") or 0),
-                overlap_frames=int(pending.get("overlap_frames") or 0),
-                discard_frames=int(pending.get("discard_frames") or 0),
-                fps=float(pending.get("fps") or 24),
-                has_start_image=bool(pending.get("has_start_image")),
-                has_end_image=bool(pending.get("has_end_image")),
-                image_paths=list(pending.get("image_paths") or []) or None,
-                nsfw=bool(nsfw),
-                planning_style=str(pending.get("planning_style") or "faithful"),
-                h3_audio_policy=str(pending.get("h3_audio_policy") or "native"),
-                reference_context=str(pending.get("reference_context") or ""),
-            )
-            prompts = result.get("window_prompts") if isinstance(result, dict) else None
-            if (
-                not isinstance(prompts, list)
-                or len(prompts) != expected_count
-                or not all(isinstance(item, str) and item.strip() for item in prompts)
-            ):
-                raise RuntimeError(
-                    "H3 window planner returned an incomplete prompt plan "
-                    f"({len(prompts) if isinstance(prompts, list) else 0}/"
-                    f"{expected_count})"
-                )
-            return result, list(prompts)
-
-        # Correlate any child LLM call with the visible generation root.  The
-        # fallback keeps model-free tests and older embedded callers working.
-        try:
-            from services.task_manager import task_context_scope
-        except Exception:
-            planned, window_prompts = _plan_windows()
-        else:
-            with task_context_scope(
-                task_id=job.get("task_id"),
-                root_id=job.get("root_task_id") or job.get("task_id"),
-                workspace=job.get("workspace") or "default",
-                workspace_dir=job.get("out_dir")
-                or _workspace_dir(job.get("workspace") or "default"),
-            ):
-                planned, window_prompts = _plan_windows()
-
-        if is_cancel_requested(job):
-            _remove_persisted_generation_job(job)
-            return False
-        prepared_params = copy.deepcopy(params)
-        prepared_params.pop("_h3_window_plan_pending", None)
-        prepared_params["minimax_h3_window_storyboard"] = True
-        prepared_params["h3_window_prompts"] = window_prompts
-        prepared_params["h3_window_plan_signature"] = str(
-            pending.get("signature") or ""
-        )
-        prepared_params["h3_window_plan"] = planned
-        if not update_job(
-            job,
-            params=prepared_params,
-            phase="planning",
-            message=(
-                f"H3 prompt plan ready ({len(window_prompts)} windows); "
-                "queuing video generation…"
-            ),
-        ):
-            _remove_persisted_generation_job(job)
-            return False
-        _persist_generation_job(job)
-        if not try_requeue(
-            job,
-            phase="waiting_resource",
-            message="H3 prompt plan ready · waiting for the local video GPU…",
-            started_at=None,
-        ):
-            _remove_persisted_generation_job(job)
-            return False
-        _persist_generation_job(job)
-        return bool(_run_generation(job_id))
-    except Exception as error:
-        traceback.print_exc()
-        if not is_cancel_requested(job):
-            finish_job(
-                job,
-                "failed",
-                error=str(error),
-                message=f"H3 window planning failed: {error}",
-                phase="planning",
-            )
-        _remove_persisted_generation_job(job)
-        return False
-    finally:
-        # A local writing model cannot remain beside H3's 20B/33B runtime.
-        if planner_llm is not None:
-            try:
-                if (
-                    planner_llm.is_loaded()
-                    and planner_llm.get_status().get("provider") == "local"
-                ):
-                    planner_llm.unload_model()
-            except Exception as unload_error:
-                print(f"[MiniMax H3] Planner LLM unload skipped: {unload_error}")
-        # Deferred planning has no abort-state registration. Confirm terminal
-        # cancellation only after the planner call and its model cleanup have
-        # both returned.
-        acknowledge_cancel(job)
 
 
 from routers.studio_generate import create_studio_generate_router
@@ -3908,22 +3626,9 @@ api.include_router(create_studio_inpaint_router(
 from services.studio_edit_requests import inpaint_endpoint
 
 
-# The hardware probe (for total VRAM) is cached at module level — the
-# answer doesn't change at runtime and detect_hardware() touches torch
-# which we'd rather not call per-job.
-_cached_hardware: dict | None = None
-
-
-def _get_cached_hardware() -> dict:
-    global _cached_hardware
-    if _cached_hardware is None:
-        try:
-            from services.hardware_detect import detect_hardware
-            _cached_hardware = detect_hardware()
-        except Exception as e:
-            print(f"[VRAM] hardware probe failed ({e}); per-job adjustment disabled")
-            _cached_hardware = {"gpu_vram_gb": 0.0}
-    return _cached_hardware
+# The hardware probe lives in services/hardware_probe.py. This is the same
+# function the coefficient pass and the director pipeline receive.
+from services.hardware_probe import _get_cached_hardware
 
 
 # Post-processing passes the generation worker calls by these names: the per-job
@@ -4004,87 +3709,6 @@ tools_upscale = create_tools_post_router.tools_upscale
 tools_revoice = create_tools_post_router.tools_revoice
 
 
-
-
-def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
-    """Replace only expensive inference while retaining the real job path."""
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-
-    def publish_progress(message: str, value: int, step: int, total: int) -> None:
-        update_job(
-            job,
-            message=message,
-            progress=value,
-            step=step,
-            total_steps=total,
-            phase="Simulated inference",
-        )
-
-    try:
-        generated_path = execution_mode.create_artifact(
-            params,
-            job["out_dir"],
-            str(job["id"]),
-            progress=publish_progress,
-            cancelled=lambda: is_cancel_requested(job),
-        )
-    except InterruptedError:
-        # Cancellation is settled by _run_generation's finally block, after
-        # the simulated executor has stopped and shared cleanup has completed.
-        return False
-    output_name = os.path.basename(generated_path)
-    record_job_outputs(job, [output_name])
-    tool_job = str(params.get("_non_durable_tool") or "") in {"upscale", "revoice"}
-    sidecar_params = params
-    if tool_job:
-        # Simulation still exercises the real queue/task/manifest path, but
-        # host filesystem paths and uploaded voice references must never enter
-        # the durable sidecar.
-        sidecar_params = {
-            key: value
-            for key, value in params.items()
-            if not str(key).startswith("_")
-            and key not in {"source_path", "video_path", "voice_ref_paths"}
-        }
-    sidecar = {
-        "params": sidecar_params,
-        "generation_mode": params.get("generation_mode"),
-        "tool": "tools" if tool_job else None,
-        "capability": params.get("capability") if tool_job else None,
-        "job_id": job.get("id"),
-        "task_id": job.get("task_id"),
-        "root_task_id": job.get("root_task_id") or job.get("task_id"),
-        "output_filename": output_name,
-        "generation_time": 0,
-        "created_at": time.time(),
-        "simulated": True,
-        "execution_mode": "simulate",
-    }
-    if tool_job:
-        sidecar["inputs"] = params.get("inputs") or []
-        sidecar["parents"] = params.get("parents") or []
-        sidecar["transformations"] = params.get("transformations") or []
-    _publish_generation_sidecar_for_studio_job(job, generated_path, sidecar)
-    if not finalize:
-        return update_job(
-            job,
-            progress=99,
-            step=0,
-            total_steps=0,
-            phase="Finalizing",
-            message="Simulated inference complete · finalizing…",
-        )
-    return finish_job(
-        job,
-        "completed",
-        progress=100,
-        step=0,
-        total_steps=0,
-        phase="",
-        message="Done · simulated artifact",
-    )
-
-
 # --- generation worker: moved to app/services/generation_worker (generated bind list) ---
 from services.generation_worker import bind_generation_worker, run_generation as _run_generation
 
@@ -4145,240 +3769,26 @@ _bind_recast_shot_run(
 
 
 
-@api.get("/api/v1/status/{job_id}")
-def get_status(job_id: str):
-    """Get generation job status."""
-    if job_id not in _jobs:
-        leftovers = globals().get("_job_leftovers")
-        if leftovers is not None:
-            found = leftovers.status_for(job_id)
-            if found is not None:
-                return found
-        raise HTTPException(status_code=404, detail="Job not found")
-    j = snapshot_job(_jobs[job_id])
-    started_at = j.get("started_at")
-    finished_at = j.get("finished_at")
-    processing_time = (
-        max(0.0, float(finished_at or time.time()) - float(started_at))
-        if started_at else None
-    )
-    payload = {
-        "job_id": j["id"],
-        "task_id": j.get("task_id"),
-        "root_task_id": j.get("root_task_id") or j.get("task_id"),
-        "status": j["status"],
-        "progress": j["progress"],
-        "step": j.get("step", 0),
-        "total_steps": j.get("total_steps", 0),
-        "phase": j.get("phase", ""),
-        "message": j["message"],
-        "output_files": j["output_files"],
-        "error": j["error"],
-        "task_timings": j.get("task_timings", []),
-        "created_at": j.get("created_at"),
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "processing_time_sec": (
-            round(processing_time, 2) if processing_time is not None else None
-        ),
-        "queue_position": (
-            generation_queue_position(_gen_lock, _jobs[job_id])
-            if j.get("status") == "queued" else None
-        ),
-        "generation_details": _public_generation_details(j.get("params")),
-        "h3_window_plan": (
-            (j.get("params") or {}).get("h3_window_plan")
-            if isinstance(j.get("params"), dict)
-            else None
-        ),
-        # Present only on failed jobs that look like CUDA OOMs. UI
-        # renders the OOM recovery banner when this is non-null.
-        "oom_info": j.get("oom_info"),
-    }
-    from services.generation_output_name import status_output_fields
-    from services.generation_memory import include_performance
-    from services.output_names import annotate_generation_view
-    payload.update(status_output_fields(
-        payload.get("output_files"),
-        workspace=str(j.get("workspace") or ""),
-        workspace_dir=str(j.get("out_dir") or ""),
-    ))
-    return annotate_generation_view(include_performance(payload, j), j)
+# bind_generation_jobs runs once, below, after _job_leftovers exists (no request arrives during import).
+from services.generation_jobs import bind as bind_generation_jobs
+from services.generation_jobs import cancel_job, get_status, list_jobs
+from routers.generation_jobs import create_generation_jobs_router
+
+api.include_router(create_generation_jobs_router())
 
 
-@api.post("/api/v1/cancel/{job_id}")
-def cancel_job(job_id: str):
-    """Cancel a queued or running generation job."""
-    if job_id not in _jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+from services.generation_recovery import (
+    _discard_generation_leftover,
+    _prepare_generation_leftovers,
+    _queue_recovered_generation,
+    _recovery_job_summary,
+    _release_intermediates_at_startup,
+    _start_recovered_generation,
+    bind as bind_generation_recovery,
+)
+from routers.generation_jobs import create_generation_recovery_router
 
-    if job_id.startswith("audio-analysis-"):
-        return cancel_audio_analysis_job(job_id)
-
-    job = _jobs[job_id]
-    result = request_cancel(
-        job,
-        job_id=job_id,
-        active_states=_active_gen_states,
-    )
-    if result.abort_signalled:
-        print(f"[Cancel] Signalling abort for job {job_id}")
-    if not result.was_running and job.get("status") == "cancelled":
-        _remove_persisted_generation_job(job)
-    return {
-        "job_id": job_id,
-        "status": job.get("status"),
-        "was_running": result.was_running,
-    }
-
-
-@api.get("/api/v1/jobs")
-def list_jobs():
-    """List all active/recent jobs for reconnection after browser refresh."""
-    active = []
-    for job in list(_jobs.values()):
-        j = snapshot_job(job)
-        if j["status"] in ("queued", "waiting_resource", "running", "cancelling"):
-            active.append({
-                "job_id": j["id"],
-                "task_id": j.get("task_id"),
-                "root_task_id": j.get("root_task_id") or j.get("task_id"),
-                "status": j["status"],
-                "progress": j["progress"],
-                "step": j.get("step", 0),
-                "total_steps": j.get("total_steps", 0),
-                "phase": j.get("phase", ""),
-                "message": j["message"],
-                "output_files": j["output_files"],
-                "error": j["error"],
-                "oom_info": j.get("oom_info"),
-                "task_timings": j.get("task_timings", []),
-                "created_at": j.get("created_at", 0),
-                "started_at": j.get("started_at"),
-                "finished_at": j.get("finished_at"),
-                "queue_position": (
-                    generation_queue_position(_gen_lock, job)
-                    if j.get("status") == "queued" else None
-                ),
-                "generation_details": _public_generation_details(
-                    j.get("params")
-                ),
-                # Lets a refreshed browser restore the exact H3 prompts that
-                # are already driving an in-flight sliding-window job. This is
-                # planning metadata only; model paths and unrelated params stay
-                # private.
-                "h3_window_plan": (
-                    (j.get("params") or {}).get("h3_window_plan")
-                    if isinstance(j.get("params"), dict)
-                    else None
-                ),
-            })
-    active.sort(key=lambda x: x["created_at"])
-    return {"jobs": active}
-
-
-def _recovery_job_summary(record: dict) -> dict:
-    params = record.get("params") if isinstance(record.get("params"), dict) else {}
-    prompt = str(params.get("prompt") or params.get("lyrics") or "").strip()
-    return {
-        "job_id": str(record.get("id") or ""),
-        "previous_status": str(record.get("status") or "queued"),
-        "created_at": float(record.get("created_at") or 0),
-        "workspace": str(record.get("workspace") or "default"),
-        "model_type": str(params.get("model_type") or ""),
-        "generation_mode": str(params.get("generation_mode") or ""),
-        "prompt_preview": prompt[:240],
-    }
-
-
-@api.get("/api/v1/jobs/recovery")
-def get_generation_queue_recovery():
-    """Return crash leftovers that are not active in this server process."""
-    with _queue_recovery_lock:
-        _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-        candidates = _image_generation_commands.filter_recovery(
-            _durable_generation_queue.list(exclude_ids=_jobs.keys()))
-    return {"jobs": [_recovery_job_summary(record) for record in candidates]}
-
-
-def _queue_recovered_generation(record: dict):
-    """Put one durable leftover back on the live queue without starting it.
-
-    Returns ``(job, created)``. ``created`` is false when that id is already
-    live, so resume cannot start a second worker for the same leftover.
-    """
-    job_id = str(record.get("id") or "").strip()
-    params = record.get("params")
-    if not job_id or not isinstance(params, dict) or not params.get("model_type"):
-        if job_id:
-            _durable_generation_queue.remove(job_id)
-        return None, False
-    existing = _jobs.get(job_id)
-    if existing is not None:
-        return existing, False
-    workspace = str(record.get("workspace") or "default")
-    _reset_canonical_task_for_resume(
-        workspace,
-        f"task-generation-{job_id}",
-    )
-    job = _new_generation_job(
-        params,
-        workspace,
-        job_id=job_id,
-        created_at=float(record.get("created_at") or time.time()),
-        recovered=True,
-        reserve_generation=not isinstance(
-            params.get("_h3_window_plan_pending"), dict,
-        ),
-        provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
-    )
-    _jobs[job_id] = job
-    _persist_generation_job(job)
-    _cancel_h3_idle_release()
-    return job, True
-
-
-@api.post("/api/v1/jobs/recovery/resume")
-def resume_generation_queue():
-    """Requeue persisted requests in their original submission order.
-
-    An interrupted running request restarts from its beginning: model runtimes
-    do not expose a portable mid-diffusion checkpoint.
-    """
-    resumed: list[dict] = []
-    threads: list[threading.Thread] = []
-    with _queue_recovery_lock:
-        _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-        candidates = _image_generation_commands.filter_recovery(
-            _durable_generation_queue.list(exclude_ids=_jobs.keys()))
-        for record in candidates:
-            job, created = _queue_recovered_generation(record)
-            if not created or job is None:
-                continue
-            threads.append(threading.Thread(
-                target=_run_generation_with_preparation,
-                args=(job["id"],),
-                name=f"recovered-generation-{job['id']}",
-                daemon=False,
-            ))
-            resumed.append(_recovery_job_summary(record))
-
-        # Populate the complete in-memory queue before any worker can finish,
-        # then start in saved order so the existing GPU mutex serialises it.
-        for thread in threads:
-            thread.start()
-    return {"resumed": resumed, "count": len(resumed)}
-
-
-@api.post("/api/v1/jobs/recovery/discard")
-def discard_generation_queue():
-    """Clear only inactive recovery candidates; never cancel live work."""
-    with _queue_recovery_lock:
-        _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-        _image_generation_commands.discard_recovery(
-            _durable_generation_queue.list(exclude_ids=_jobs.keys()))
-        removed = _durable_generation_queue.discard(exclude_ids=_jobs.keys())
-    return {"discarded": removed}
+api.include_router(create_generation_recovery_router())
 
 
 # ============================================================================
@@ -5931,6 +5341,20 @@ api.include_router(create_music_productions_router(
 ))
 
 _image_generation_commands = create_image_generation_commands(globals())
+bind_generation_preparation(
+    _PUBLIC_LLM_PROVIDERS=_PUBLIC_LLM_PROVIDERS,
+    _effective_llm_routing=_effective_llm_routing,
+    _ensure_llm_loaded=_ensure_llm_loaded,
+    _image_generation_commands=_image_generation_commands,
+    _jobs=_jobs,
+    _persist_generation_job=_persist_generation_job,
+    _publish_generation_sidecar_for_studio_job=_publish_generation_sidecar_for_studio_job,
+    _remove_persisted_generation_job=_remove_persisted_generation_job,
+    # Tests replace this name on the server module after import.
+    _run_generation=lambda *args, **kwargs: _run_generation(*args, **kwargs),
+    _workspace_dir=_workspace_dir,
+    wgp=wgp,
+)
 api.include_router(create_image_generation_commands_router(_image_generation_commands))
 from routers.wizard_workflow_executor import create_wizard_workflow_executor_router
 from services.wizard_workflow_executor import WizardWorkflowExecutor, catalog as wizard_workflow_catalog, command_handlers as wizard_workflow_command_handlers
@@ -6011,25 +5435,6 @@ from services.montage_preview import command_handlers as montage_preview_handler
 _montage_preview_handlers = montage_preview_handlers(_montage_store, lambda: _scene2d_export.app_url)
 
 
-def _prepare_generation_leftovers(records):
-    _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-    return _image_generation_commands.filter_recovery(records)
-
-
-def _start_recovered_generation(job):
-    threading.Thread(
-        target=_run_generation_with_preparation,
-        args=(job["id"],),
-        name=f"recovered-generation-{job['id']}",
-        daemon=False,
-    ).start()
-
-
-def _discard_generation_leftover(record):
-    _image_generation_commands.discard_recovery([record])
-    _durable_generation_queue.remove(str(record.get("id") or ""))
-
-
 from services.scene_export_leftovers import SceneExportLeftovers
 
 _job_leftovers = JobLeftovers(
@@ -6048,15 +5453,34 @@ _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
 # generate() reads _job_leftovers from its own module globals.
 import services.studio_generate as _studio_generate
 _studio_generate._job_leftovers = _job_leftovers
+bind_generation_jobs(
+    _active_gen_states=_active_gen_states,
+    _gen_lock=_gen_lock,
+    _job_leftovers=_job_leftovers,
+    _jobs=_jobs,
+    _public_generation_details=_public_generation_details,
+    _remove_persisted_generation_job=_remove_persisted_generation_job,
+    cancel_audio_analysis_job=cancel_audio_analysis_job,
+)
 
 
-def _release_intermediates_at_startup() -> None:
-    """Frames of published exports, raw voice takes and stale temp folders go; live and resumable work is kept."""
-    from services.workspace_cleanup import startup_cleanup
-    from services.world3d_export import staging_token
-    names = [item.get("name") for item in _list_workspaces() if isinstance(item, dict) and item.get("name")]
-    startup_cleanup(names, _workspace_dir, _task_registry, {_world3d_export.operation, _scene2d_export.operation}, staging_token)
-
+bind_generation_recovery(
+    _cancel_h3_idle_release=_cancel_h3_idle_release,
+    _durable_generation_queue=_durable_generation_queue,
+    _image_generation_commands=_image_generation_commands,
+    _jobs=_jobs,
+    _list_workspaces=_list_workspaces,
+    _new_generation_job=_new_generation_job,
+    _persist_generation_job=_persist_generation_job,
+    _queue_recovery_lock=_queue_recovery_lock,
+    # Tests replace this name on the server module after import.
+    _reset_canonical_task_for_resume=lambda *args, **kwargs: _reset_canonical_task_for_resume(*args, **kwargs),
+    _run_generation_with_preparation=_run_generation_with_preparation,
+    _scene2d_export=_scene2d_export,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+    _world3d_export=_world3d_export,
+)
 
 threading.Thread(target=_release_intermediates_at_startup, name="workspace-cleanup", daemon=True).start()
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)
