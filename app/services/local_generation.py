@@ -12,6 +12,10 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
+# The server admitted a picture but its worker did not start (the GPU is often taken by another job): the request waits in the
+# queue for a person to recover it, which nobody is watching for here, so it is discarded and the caller is told to try again.
+NOT_STARTED = {"dispatch_uncertain", "admission_recovery_needed"}
+NOT_STARTED_MESSAGE = "The server could not start the picture (the GPU may be busy with another job); nothing was made, try again in a moment"
 TERMINAL = {"completed", "failed", "cancelled", "discarded", "error"}
 FAILED = {"failed", "cancelled", "discarded", "error"}
 WAIT_SECONDS = 110
@@ -108,7 +112,13 @@ class LocalTools:
         self._check()
         submitted = self.call("generation.image", {"version": 2, "intent_id": intent_id, "input": {
             "workspace": self.workspace, "output_name": output_name, "params": params}})
-        job_id = job_id_of(submitted)
+        try:
+            job_id = job_id_of(submitted)
+        except ToolError as error:
+            if error.code not in NOT_STARTED:
+                raise
+            self.call("jobs.discard", {"version": 1, "input": {"intent_id": intent_id}})
+            raise ToolError(error.code, NOT_STARTED_MESSAGE) from error
         self.on_job(job_id)
         try:
             payload = self._wait(job_id, intent_id)

@@ -71,16 +71,21 @@ def _custom_pose(custom: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]
     return {"view": view, "resolution": CUSTOM_VIEWS[view]}, {"prompt": text if text.endswith((".", "!", "?")) else text + "."}
 
 
+def _pose_source(animation_id: str, pose_id: str, custom: dict[str, Any] | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The animation (its view and size) and the pose to make: the catalog's, or the words the author gave."""
+    if custom is not None:
+        return _custom_pose(custom)
+    item = animation(animation_id)
+    pose = next((candidate for candidate in item["poses"] if candidate["id"] == pose_id), None)
+    if pose is None:
+        raise KeyError(pose_id)
+    return item, pose
+
+
 def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id: str | None = None,
                 screen: str | None = None, custom: dict[str, Any] | None = None) -> dict[str, str]:
     """Prompt, negative prompt, screen colour and resolution to generate one pose with the character as its reference."""
-    if custom is not None:
-        item, pose = _custom_pose(custom)
-    else:
-        item = animation(animation_id)
-        pose = next((candidate for candidate in item["poses"] if candidate["id"] == pose_id), None)
-    if pose is None:
-        raise KeyError(pose_id)
+    item, pose = _pose_source(animation_id, pose_id, custom)
     style = character_style(style_id) if style_id else None
     fragment = (style or {}).get("animation") or {}
     words = " ".join(str(description or "").split())
@@ -93,6 +98,37 @@ def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id
     return {"prompt": prompt, "negative": negative, "screen": screen, "resolution": item["resolution"]}
 
 
+def _custom_def(animation_id: str, title: str, view: Any, poses: list[tuple[str, str, str]], loop: str, fps: Any) -> dict[str, Any]:
+    """A definition of the author's own: ``poses`` are (id, label, words)."""
+    spec = catalog()["custom"]
+    if view not in spec["views"] or not 1 <= len(poses) <= MAX_CUSTOM_POSES or any(not text or len(text) > MAX_CUSTOM_TEXT for _id, _label, text in poses):
+        raise CharacterAnimationError(f"A custom animation needs a view ({', '.join(spec['views'])}) and 1 to {MAX_CUSTOM_POSES} poses "
+                                      f"of up to {MAX_CUSTOM_TEXT} characters each")
+    by_view = spec["views"][view]
+    return {"id": animation_id, "group": "custom", "view": view, "scaleBy": by_view["scaleBy"], "facing": by_view["facing"], "template": spec["template"],
+            "resolution": by_view["resolution"], "title": {"es": title, "en": title}, "custom": True, "loop": loop, "fps": fps,
+            "poses": [{"id": pose_id, "label": {"es": label, "en": label}, "prompt": text} for pose_id, label, text in poses]}
+
+
+def _described_def(animation_id: str, custom: dict[str, Any]) -> dict[str, Any]:
+    """The animation the author describes now: a title, a view and one text per pose."""
+    spec = catalog()["custom"]
+    texts = [" ".join(str(text or "").split()) for text in custom.get("poses") or []]
+    title = _text(custom.get("title"), "Title", 80, required=True)
+    return _custom_def(animation_id, title, custom.get("view"), [(f"pose-{number}", text[:40], text) for number, text in enumerate(texts, 1)], spec["loop"], spec["fps"])
+
+
+def _kept_def(animation_id: str, made: dict[str, Any]) -> dict[str, Any]:
+    """The animation the kit already has, from the words it kept with each pose."""
+    spec = catalog()["custom"]
+    frames = [frame for frame in made.get("frames") or [] if isinstance(frame, dict)]
+    if any(not str(frame.get("prompt") or "").strip() for frame in frames):
+        raise CharacterAnimationError(f"{animation_id} was made without the words of its poses; describe it again with custom")
+    view = made.get("view") if made.get("view") in spec["views"] else "bust"
+    poses = [(frame["id"], str(frame.get("label") or frame["id"]), str(frame["prompt"])) for frame in frames]
+    return _custom_def(animation_id, str(made.get("title") or animation_id), view, poses, made.get("loop", spec["loop"]), made.get("fps", spec["fps"]))
+
+
 def animation_def(animation_id: str, *, made: dict[str, Any] | None = None, custom: dict[str, Any] | None = None) -> dict[str, Any]:
     """What one animation is made from: the catalog's definition, the words the author gives now (``custom``: title, view and one
     text per pose), or the words the kit kept with the animation it already has (``made``, so one pose can be made again alone)."""
@@ -102,35 +138,15 @@ def animation_def(animation_id: str, *, made: dict[str, Any] | None = None, cust
         listed = animation(animation_id)
     except KeyError:
         listed = None
+    if listed is not None and custom is not None:
+        raise CharacterAnimationError(f"{animation_id} is in the catalog; custom is for an animation of your own")
     if listed is not None:
-        if custom is not None:
-            raise CharacterAnimationError(f"{animation_id} is in the catalog; custom is for an animation of your own")
         return listed
-    spec = catalog()["custom"]
     if custom is not None:
-        view, texts = custom.get("view"), [" ".join(str(text or "").split()) for text in custom.get("poses") or []]
-        title = _text(custom.get("title"), "Title", 80, required=True)
-        base: dict[str, Any] = {"loop": spec["loop"], "fps": spec["fps"]}
-    elif made is not None:
-        view = made.get("view") if made.get("view") in spec["views"] else "bust"
-        frames = [frame for frame in made.get("frames") or [] if isinstance(frame, dict)]
-        if any(not str(frame.get("prompt") or "").strip() for frame in frames):
-            raise CharacterAnimationError(f"{animation_id} was made without the words of its poses; describe it again with custom")
-        title, texts = str(made.get("title") or animation_id), [str(frame["prompt"]) for frame in frames]
-        base = {"loop": made.get("loop", spec["loop"]), "fps": made.get("fps", spec["fps"]),
-                "poseIds": [frame["id"] for frame in frames], "poseLabels": [frame.get("label") or frame["id"] for frame in frames]}
-    else:
-        raise CharacterAnimationError(f"Unknown animation {animation_id}; to make one of your own give custom (title, view, poses)")
-    if view not in spec["views"] or not 1 <= len(texts) <= MAX_CUSTOM_POSES or any(not text or len(text) > MAX_CUSTOM_TEXT for text in texts):
-        raise CharacterAnimationError(f"A custom animation needs a view ({', '.join(spec['views'])}) and 1 to {MAX_CUSTOM_POSES} poses "
-                                      f"of up to {MAX_CUSTOM_TEXT} characters each")
-    by_view = spec["views"][view]
-    ids = base.pop("poseIds", None) or [f"pose-{number}" for number in range(1, len(texts) + 1)]
-    labels = base.pop("poseLabels", None) or [text[:40] for text in texts]
-    poses = [{"id": pose_id, "label": {"es": label, "en": label}, "prompt": text} for pose_id, label, text in zip(ids, labels, texts)]
-    return {"id": animation_id, "group": "custom", "view": view, "scaleBy": by_view["scaleBy"], "facing": by_view["facing"],
-            "template": spec["template"], "resolution": by_view["resolution"], "title": {"es": title, "en": title}, "poses": poses,
-            "custom": True, **base}
+        return _described_def(animation_id, custom)
+    if made is not None:
+        return _kept_def(animation_id, made)
+    raise CharacterAnimationError(f"Unknown animation {animation_id}; to make one of your own give custom (title, view, poses)")
 
 
 def _text(value: Any, label: str, maximum: int, *, required: bool = False) -> str:

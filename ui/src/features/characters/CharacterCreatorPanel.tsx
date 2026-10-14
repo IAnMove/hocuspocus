@@ -601,9 +601,9 @@ function CharacterCreatorWorkshop() {
           setKind('character'); setAPrompt(description); setShowAPrompt(true)
           setRefs(current => [{ id: newId(), role: 'subject', preview: asset.source, path: uploaded.path, filename: uploaded.filename, url: uploaded.url }, ...current.filter(ref => ref.role !== 'subject').slice(0, MAX_REFS - 1)])
         }} />
+        <CharacterAnimationsEntry workspace={activeWorkspace} />
         <CharacterFacePackMaker />
         <CharacterSpeechWorkshopEntry workspace={activeWorkspace} />
-        <CharacterAnimationsEntry workspace={activeWorkspace} />
         <Character3DLibraryEntry workspace={activeWorkspace} />
         <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <div className="space-y-3">

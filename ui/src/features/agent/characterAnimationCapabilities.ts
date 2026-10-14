@@ -2,7 +2,6 @@ import type { defineCapability } from './capabilityRegistry'
 import i18n from '../../i18n'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { startAnimationJob, type CustomAnimationRequest } from '../../api/characterAnimationJobs'
-import { useStore } from '../../stores/useStore'
 import { animationDef, customViews, MAX_CUSTOM_POSES, MAX_CUSTOM_TEXT } from '../../lib/characterAnimations'
 import type { CharacterKit } from '../../lib/characterKit'
 
@@ -29,11 +28,11 @@ function customOf(raw: unknown): CustomAnimationRequest | undefined | null {
   if (raw === undefined || raw === null) return undefined
   if (typeof raw !== 'object' || Array.isArray(raw)) return null
   const { title, view, poses } = raw as Record<string, unknown>
-  // The model fills the fields it does not use with empty values: those name no custom animation.
-  if (!text(title, 80) && !text(view, 20) && (!Array.isArray(poses) || !poses.some(pose => text(pose, 4)))) return undefined
   const words = Array.isArray(poses) ? poses.map(pose => text(pose, MAX_CUSTOM_TEXT)).filter(Boolean) : []
+  // The model fills the fields it does not use with empty values: those name no custom animation.
+  if (!text(title, 80) && !text(view, 20) && !words.length) return undefined
   const framing = (customViews as string[]).includes(String(view)) ? view as CustomAnimationRequest['view'] : undefined
-  return text(title, 80) && framing && words.length >= 1 && words.length <= MAX_CUSTOM_POSES ? { title: text(title, 80), view: framing, poses: words } : null
+  return text(title, 80) && framing && words.length <= MAX_CUSTOM_POSES ? { title: text(title, 80), view: framing, poses: words } : null
 }
 
 /** The character the user named: by id or name, or the only one, or the active one. */
@@ -48,7 +47,7 @@ export function findAnimationKit(kits: Record<string, CharacterKit>, activeId: s
 }
 
 export async function executeMakeCharacterAnimation(action: AgentMakeCharacterAnimationAction, workspace?: string) {
-  const space = workspace || useStore.getState().activeWorkspace
+  const space = workspace || 'default' // executeAgentActions always passes the workspace it runs in
   const library = await fetchCharacterKitLibrary(space)
   const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
   const job = await startAnimationJob({ workspace: space, kitId: kit.id, animation: action.animation,

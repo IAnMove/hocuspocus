@@ -393,11 +393,11 @@ def test_native_thread_start_failure_removes_job_and_marks_task_interrupted(tmp_
             raise RuntimeError("thread start failed")
 
     monkeypatch.setattr("services.image_generation_runtime.threading.Thread", FailingThread)
+    monkeypatch.setattr("services.image_generation_runtime.register_generation_job", lambda _lock, current: registered.append(current))
     service = create_image_generation_commands({
         "_durable_generation_queue": object(),
         "_run_generation_with_preparation": lambda _job_id: None,
         "_jobs": {},
-        "register_generation_job": lambda _lock, current: registered.append(current),
         "_gen_lock": object(),
         "_cancel_h3_idle_release": lambda: cancelled_idle_release.append(True),
         "_active_gen_states": {},

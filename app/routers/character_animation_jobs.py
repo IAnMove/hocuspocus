@@ -44,7 +44,7 @@ class JobAction(BaseModel):
 
 
 def create_character_animation_jobs_router(jobs: CharacterAnimationJobs, *, bind_loop: Callable[[asyncio.AbstractEventLoop], Any] | None = None) -> APIRouter:
-    router = APIRouter(prefix="/api/v1/character-kits/animations", tags=["Character kits"])
+    router = APIRouter(prefix="/animations", tags=["Character kits"])  # mounted under /api/v1/character-kits
 
     async def run(function, *args: Any, **kwargs: Any) -> Any:
         try:

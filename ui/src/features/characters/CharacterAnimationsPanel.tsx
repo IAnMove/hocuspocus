@@ -67,12 +67,23 @@ function MadeAnimation({ def, made, actions }: { def: AnimationDef; made: KitAni
   </div>
 }
 
+/** Crear, or Reintentar after a stop (keeping the poses made), and Cancelar while it runs. */
+function MakeButtons({ def, run, actions }: { def: AnimationDef; run?: AnimationJob; actions: Actions }) {
+  const { t } = useUiTranslation('characters')
+  const working = run ? isActiveJob(run) : false
+  return <div className="flex gap-2">
+    <button type="button" disabled={actions.busy} className={`${small} text-cyan-200`} onClick={() => actions.make(def, run?.remake ?? undefined)}>
+      {working ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
+      {t(run ? (working ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
+    {run && working && run.status !== 'cancelling' && <button type="button" className={small} onClick={() => actions.cancel(run.jobId)}>{t('animations.cancel')}</button>}
+  </div>
+}
+
 function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: CharacterKit; actions: Actions }) {
   const { t, i18n } = useUiTranslation('characters')
   const state = animationState(kit, def.id)
   const made = kitAnimations(kit)[def.id]
   const run = actions.runs[def.id]
-  const working = run ? isActiveJob(run) : false
   return <article data-testid={`animation-${def.id}`} className="space-y-2 rounded-lg border border-border bg-bg-secondary p-3">
     <header className="flex items-start justify-between gap-2">
       <div className="min-w-0 flex-1">
@@ -82,14 +93,9 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
       <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
     </header>
     {run && <RunProgress def={def} run={run} />}
-    {made && !working && <MadeAnimation def={def} made={made} actions={actions} />}
+    {made && !(run && isActiveJob(run)) && <MadeAnimation def={def} made={made} actions={actions} />}
     {!made && !run && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
-    {(!made || run) && <div className="flex gap-2">
-      <button type="button" disabled={actions.busy} className={`${small} text-cyan-200`} onClick={() => actions.make(def, run?.remake ?? undefined)}>
-        {working ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
-        {t(run ? (working ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
-      {working && run.status !== 'cancelling' && <button type="button" className={small} onClick={() => actions.cancel(run.jobId)}>{t('animations.cancel')}</button>}
-    </div>}
+    {(!made || run) && <MakeButtons def={def} run={run} actions={actions} />}
   </article>
 }
 

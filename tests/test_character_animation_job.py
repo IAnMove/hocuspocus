@@ -166,6 +166,27 @@ def test_a_character_with_no_persistent_picture_cannot_make_poses(world, monkeyp
     assert error.value.code == "no_reference" and not server.calls
 
 
+def test_a_picture_the_server_could_not_start_is_discarded_from_the_queue_and_the_job_says_to_try_again(world):
+    root, server, jobs = world
+    original = server.call
+
+    def call(tool, arguments):
+        if tool == "generation.image" and arguments["input"]["output_name"].find("-passing-") >= 0:
+            server.calls.append((tool, arguments))
+            return {"_is_error": True, "error": {"code": "dispatch_uncertain", "status": 503, "message": "Admission is durable; inspect its task before explicitly recovering"}}
+        return original(tool, arguments)
+
+    jobs.deps.call = call
+    failed = jobs.start(WS, "hero", "walk")
+    assert failed["status"] == "failed" and failed["errorCode"] == "dispatch_uncertain" and "GPU may be busy" in failed["error"]
+    assert "Admission" not in failed["error"] and [take["status"] for take in failed["takes"]][:2] == ["ready", "failed"]
+    discarded = server.of("jobs.discard")
+    assert len(discarded) == 1 and discarded[0]["intent_id"].startswith(failed["jobId"]) and discarded[0]["intent_id"].endswith("-passing-image")
+    jobs.deps.call = original
+    retry = jobs.start(WS, "hero", "walk")
+    assert retry["status"] == "completed" and retry["takes"][0]["status"] == "reused", "the pose that was made is kept"
+
+
 def test_a_distilled_model_runs_its_few_steps_without_a_negative_prompt(world):
     root, server, jobs = world
     assert jobs.start(WS, "hero", "nod", model="qwen_image_21_turbo")["status"] == "completed"
@@ -231,7 +252,7 @@ def test_a_request_for_an_animation_being_made_returns_that_job_and_a_restart_ma
 def test_the_http_routes_start_follow_and_cancel_a_job_and_say_why_they_refuse(world):
     root, server, jobs = world
     app = FastAPI()
-    app.include_router(create_character_animation_jobs_router(jobs))
+    app.include_router(create_character_animation_jobs_router(jobs), prefix="/api/v1/character-kits")
     client = TestClient(app)
     reply = client.post("/api/v1/character-kits/animations/make", json={"workspace": WS, "kitId": "hero", "animation": "cheer"})
     assert reply.status_code == 200 and reply.json()["job"]["status"] == "completed"

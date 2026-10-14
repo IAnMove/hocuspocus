@@ -272,7 +272,7 @@ pose (*bust, head and shoulders*) for close dialogue.
 
 ### 4.7 Animations: walk, gestures and anime expressions
 
-**Characters › Animaciones del personaje** (a drawer under the speech workshop; the character just saved is the one it opens on) makes small animations of a saved
+**Characters › Animaciones del personaje** (a drawer right under "Crear personaje desde una descripción"; the character just saved is the one it opens on) makes small animations of a saved
 character. Each one is a few poses of the same figure joined into a sprite sheet that the Video 2D cards play. The list is
 `app/shared/character_animations.json` (MCP `characters.animations`):
 

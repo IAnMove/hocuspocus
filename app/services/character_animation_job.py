@@ -156,40 +156,49 @@ class CharacterAnimationJobs:
         latest = next((job for job in self._store(workspace).list() if job.get("kitId") == kit["id"] and job.get("animationId") == animation_id), None)
         if not latest or latest.get("status") not in RESUMABLE or latest.get("remake"):
             return {}
-        return {take["id"]: take["keyed"] for take in latest.get("takes") or [] if take.get("keyed") and take["status"] in ("ready", "reused") and take["id"] in ids}
+        made = [take for take in latest.get("takes") or [] if take.get("keyed") and take["status"] in ("ready", "reused")]
+        return {take["id"]: take["keyed"] for take in made if take["id"] in ids}
 
-    def start(self, workspace: str, kit_id: str, animation_id: str, *, custom: dict[str, Any] | None = None, pose: str | None = None,
-              model: str | None = None) -> dict[str, Any]:
-        """Make (or, with ``pose``, make one pose again of) an animation of a saved character. Returns the job; a request for an
-        animation that is already being made returns that job."""
-        kit = self._kit(workspace, kit_id)
+    def _definition(self, kit: dict[str, Any], animation_id: str, custom: dict[str, Any] | None, pose: str | None) -> dict[str, Any]:
+        """What to make, or why it cannot be made: nothing is asked of the model before this passes."""
         made = (kit.get("animations") or {}).get(animation_id)
         try:
             definition = animation_def(animation_id, made=made, custom=custom)
         except CharacterAnimationError as error:
             raise AnimationJobError("invalid_animation", str(error)) from error
-        ids = [item["id"] for item in definition["poses"]]
-        if pose and (pose not in ids or not made):
+        if pose and (pose not in [item["id"] for item in definition["poses"]] or not made):
             raise AnimationJobError("pose_not_found", f"{animation_id} has no made pose {pose} to make again", 404)
-        reference = reference_of(kit)
-        if not reference:
-            raise AnimationJobError("no_reference", f"Character Kit {kit.get('name') or kit_id} has no persistent picture to make poses from")
+        if not reference_of(kit):
+            raise AnimationJobError("no_reference", f"Character Kit {kit.get('name') or kit['id']} has no persistent picture to make poses from")
+        return definition
+
+    def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None) -> dict[str, Any]:
+        ids = [item["id"] for item in definition["poses"]]
+        kept = self._kept(workspace, kit, definition["id"], pose, ids)
+        takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
+                 {"id": item, "status": "waiting", "seed": random.randrange(2_000_000_000)} for item in ids]
+        job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit["id"], "animationId": definition["id"],
+               "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
+               "remake": pose, "createdAt": _now(), "updatedAt": _now(), "definition": definition, "reference": reference_of(kit),
+               "description": (kit.get("lookNotes") or "").strip() or kit.get("name") or kit["id"], "style": style_of(kit)}
+        if definition.get("custom"):
+            # What the author wrote stays visible on the job, so an animation that is not on the kit yet can be shown and tried again.
+            job["custom"] = {"title": definition["title"]["es"], "view": definition["view"], "poses": [item["prompt"] for item in definition["poses"]]}
+        return job
+
+    def start(self, workspace: str, kit_id: str, animation_id: str, *, custom: dict[str, Any] | None = None, pose: str | None = None,
+              model: str | None = None) -> dict[str, Any]:
+        """Make (or, with ``pose``, make one pose again of) an animation of a saved character. Returns the job; a request for an
+        animation that is already being made returns that job."""
         if model and not _MODEL.fullmatch(model):
             raise AnimationJobError("invalid_model", "model is the id of an image model")
+        kit = self._kit(workspace, kit_id)
+        definition = self._definition(kit, animation_id, custom, pose)
         with self._guard:
-            for job in self.jobs(workspace, kit_id):
-                if job.get("animationId") == animation_id and job.get("status") in ACTIVE:
-                    return job
-            kept = self._kept(workspace, kit, animation_id, pose, ids)
-            takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
-                     {"id": item, "status": "waiting", "seed": random.randrange(2_000_000_000)} for item in ids]
-            job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit_id, "animationId": animation_id,
-                   "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
-                   "remake": pose, "createdAt": _now(), "updatedAt": _now(), "definition": definition, "reference": reference,
-                   # What the author wrote stays visible on the job, so an animation that is not on the kit yet can be shown and tried again.
-                   **({"custom": {"title": definition["title"]["es"], "view": definition["view"], "poses": [item["prompt"] for item in definition["poses"]]}}
-                      if definition.get("custom") else {}),
-                   "description": (kit.get("lookNotes") or "").strip() or kit.get("name") or kit_id, "style": style_of(kit)}
+            running = next((job for job in self.jobs(workspace, kit_id) if job.get("animationId") == animation_id and job.get("status") in ACTIVE), None)
+            if running:
+                return running
+            job = self._new_job(workspace, kit, definition, pose, model)
             self._store(workspace).save(job)
             thread = threading.Thread(target=self._run, args=(workspace, job["jobId"]), name=f"character-animation-{job['jobId']}", daemon=True)
             self._threads[job["jobId"]] = thread
