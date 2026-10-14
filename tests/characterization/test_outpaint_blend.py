@@ -564,6 +564,26 @@ def test_outpaint_hands_the_worker_each_mode(rig, golden, tmp_path, monkeypatch)
         },
     }
     answers = {case: _hand_off(rig, "/api/v1/outpaint", body, started) for case, body in cases.items()}
+    # A distilled request with an installed Dev checkpoint switches to that checkpoint.
+    from shared.utils import files_locator
+
+    real_def = rig.server.wgp.get_model_def
+    rig.set_wgp("get_model_def", lambda model_type: (
+        {**FAKE_LTX, "URLs": ["https://host/ltx-1.1-dev.safetensors"], "name": "Fake LTX 1.1 Dev"}
+        if model_type == "ltx2_22B_1_1" else real_def(model_type)))
+    rig.set_wgp("get_model_recursive_prop", lambda model_type, prop, return_list=False: (
+        ["https://host/ltx-1.1-dev.safetensors"] if model_type == "ltx2_22B_1_1" else []))
+    monkeypatch.setattr(files_locator, "locate_file", lambda filename, error_if_none=True: (
+        f"/models/{filename}" if filename == "ltx-1.1-dev.safetensors" else None))
+    answers["video, official, a distilled request with Dev installed"] = _hand_off(rig, "/api/v1/outpaint", {
+        "video_path": str(clip_path), "model_type": "fake_ltx_distilled", "pad_left": 64}, started)
+
+    def broken(model_type):
+        raise RuntimeError(f"no settings for {model_type}")
+
+    rig.set_wgp("get_default_settings", broken)
+    answers["image, settings that cannot be read"] = _hand_off(rig, "/api/v1/outpaint", {
+        "video_path": str(still), "model_type": "fake_t2v", "pad_right": 8}, started)
     rig.patch("execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")))
     answers["video, official, simulated"] = _hand_off(rig, "/api/v1/outpaint", {
         "video_path": str(clip_path), "model_type": "fake_ltx", "pad_right": 64}, started)
@@ -582,7 +602,7 @@ def test_outpaint_trims_a_video_range_first(rig, golden, tmp_path, monkeypatch) 
     def run(command, *args, **kwargs):
         if command and command[0] == "ffmpeg" and "-ss" in command:
             commands.append([list(command), kwargs.get("timeout")])
-            if "fail" in str(command[4]):
+            if Path(str(command[3])).name == "fail.mp4":
                 return subprocess.CompletedProcess(command, 1, "", "fake ffmpeg: no such encoder " * 20)
             shutil.copyfile(short, command[-1])
             return subprocess.CompletedProcess(command, 0, "", "")

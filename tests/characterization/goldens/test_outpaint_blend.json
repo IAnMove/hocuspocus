@@ -6452,6 +6452,97 @@
           "_run_generation"
         ]
       },
+      "image, settings that cannot be read": {
+        "answer": {
+          "generation_details": {
+            "execution_mode": "real",
+            "frames": 1,
+            "generation_mode": "image",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "Fake Text to Video",
+            "model_type": "fake_t2v",
+            "prompt": "the scene continues naturally beyond the original frame, consistent style and lighting; seamlessly extend the scene into the empty margins, matching the existing content.",
+            "resolution": "64x64",
+            "seed": -1,
+            "simulated": false,
+            "steps": 8
+          },
+          "job_id": "<JOB>",
+          "outpainting_dims": "25.58139535 23.25581395 0 12.28070175",
+          "output_size": "64x64",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_count": 1,
+          "sliding_window_size": 241,
+          "source_size": "64x48",
+          "status": "queued",
+          "task_id": "task-generation-<JOB>",
+          "total_frames": 1
+        },
+        "job": {
+          "message": "Queued (outpaint)",
+          "out_dir": "<TMP>/outputs",
+          "phase": "",
+          "status": "queued",
+          "workspace": "default"
+        },
+        "params": {
+          "_execution_mode": "real",
+          "_outpaint_canvas_h": 64,
+          "_outpaint_canvas_w": 64,
+          "_outpaint_lock_source_pixels": false,
+          "_outpaint_overlay_h": 43,
+          "_outpaint_overlay_w": 56,
+          "_outpaint_overlay_x": 0,
+          "_outpaint_overlay_y": 11,
+          "_outpaint_preserve_audio": false,
+          "_outpaint_smear_boundary_frame": 233,
+          "_outpaint_smear_count": 9,
+          "_outpaint_trim_smear": false,
+          "activated_loras": [],
+          "denoising_strength": 1.0,
+          "edit_outpaint_raw_prompt": "",
+          "edit_sub_mode": "outpaint",
+          "edit_video_path": "<TMP>/still.png",
+          "force_fps": "auto",
+          "generation_mode": "image",
+          "guidance_scale": 1.0,
+          "image_start": "<TMP>/still.png",
+          "input_video_strength": 1.0,
+          "loras_multipliers": "",
+          "model_type": "fake_t2v",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "outpaint_full_resolution_refine": false,
+          "outpaint_lora_strength": 1.0,
+          "outpaint_lora_strength_ui": 1.0,
+          "outpaint_mask_preserve": false,
+          "outpaint_mask_preserving": false,
+          "outpaint_official_stack": false,
+          "outpaint_pad_bottom": 0,
+          "outpaint_pad_left": 0,
+          "outpaint_pad_right": 8,
+          "outpaint_pad_top": 0,
+          "outpaint_requested_model_type": "fake_t2v",
+          "outpaint_resolution_preset": "auto",
+          "outpaint_source_preservation": 1.0,
+          "prompt": "the scene continues naturally beyond the original frame, consistent style and lighting; seamlessly extend the scene into the empty margins, matching the existing content.",
+          "resolution": "64x64",
+          "seed": -1,
+          "settings_version": 2.53,
+          "single_stage_pipeline": false,
+          "sliding_window_discard_last_frames": 8,
+          "sliding_window_overlap": 9,
+          "sliding_window_size": 17,
+          "video_guide_outpainting": "25.58139535 23.25581395 0 12.28070175",
+          "video_length": 1,
+          "video_prompt_type": "G"
+        },
+        "status": 200,
+        "worker": [
+          "_run_generation"
+        ]
+      },
       "image, the default prompt, saved settings": {
         "answer": {
           "generation_details": {
@@ -7206,6 +7297,100 @@
         "status": 200,
         "worker": [
           "_run_generation"
+        ]
+      },
+      "video, official, a distilled request with Dev installed": {
+        "answer": {
+          "generation_details": {
+            "execution_mode": "real",
+            "frames": 24,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "Fake LTX 1.1 Dev",
+            "model_type": "ltx2_22B_1_1",
+            "prompt": ".",
+            "resolution": "128x64",
+            "seed": -1,
+            "simulated": false,
+            "steps": 8
+          },
+          "job_id": "<JOB>",
+          "outpainting_dims": "38.88888889 38.88888889 100 0",
+          "output_size": "128x64",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_count": 1,
+          "sliding_window_size": 241,
+          "source_size": "64x36",
+          "status": "queued",
+          "task_id": "task-generation-<JOB>",
+          "total_frames": 24
+        },
+        "job": {
+          "message": "Queued (outpaint)",
+          "out_dir": "<TMP>/outputs",
+          "phase": "",
+          "status": "queued",
+          "workspace": "default"
+        },
+        "params": {
+          "_execution_mode": "real",
+          "_outpaint_canvas_h": 64,
+          "_outpaint_canvas_w": 128,
+          "_outpaint_generation_fps": 8.0,
+          "_outpaint_lock_source_pixels": false,
+          "_outpaint_overlay_h": 36,
+          "_outpaint_overlay_w": 64,
+          "_outpaint_overlay_x": 64,
+          "_outpaint_overlay_y": 14,
+          "_outpaint_preserve_audio": true,
+          "_outpaint_smear_boundary_frame": 233,
+          "_outpaint_smear_count": 9,
+          "_outpaint_source_frame_count": 24,
+          "_outpaint_source_video": "<TMP>/clip.mp4",
+          "_outpaint_trim_smear": false,
+          "activated_loras": [],
+          "denoising_strength": 1.0,
+          "edit_outpaint_raw_prompt": "",
+          "edit_sub_mode": "outpaint",
+          "edit_video_path": "<TMP>/clip.mp4",
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "input_video_strength": 1.0,
+          "loras_multipliers": "",
+          "model_type": "ltx2_22B_1_1",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "outpaint_full_resolution_refine": true,
+          "outpaint_lora_strength": 1.0,
+          "outpaint_lora_strength_ui": 1.0,
+          "outpaint_mask_preserve": true,
+          "outpaint_mask_preserving": true,
+          "outpaint_official_stack": true,
+          "outpaint_pad_bottom": 0,
+          "outpaint_pad_left": 64,
+          "outpaint_pad_right": 0,
+          "outpaint_pad_top": 0,
+          "outpaint_requested_model_type": "fake_ltx_distilled",
+          "outpaint_resolution_preset": "auto",
+          "outpaint_source_preservation": 1.0,
+          "prompt": ".",
+          "resolution": "128x64",
+          "seed": -1,
+          "settings_version": 2.53,
+          "single_stage_pipeline": false,
+          "sliding_window_discard_last_frames": 8,
+          "sliding_window_overlap": 9,
+          "sliding_window_size": 34,
+          "video_guide": "<TMP>/clip.mp4",
+          "video_guide_outpainting": "38.88888889 38.88888889 100 0",
+          "video_length": 24,
+          "video_prompt_type": "VG"
+        },
+        "status": 200,
+        "worker": [
+          "_prepare_and_run_outpaint"
         ]
       },
       "video, official, a distilled request with nothing installed": {
@@ -8813,7 +8998,7 @@
             "source_size": "64x36",
             "status": "queued",
             "task_id": "task-generation-<JOB>",
-            "total_frames": 12
+            "total_frames": 16
           },
           "job": {
             "message": "Queued (outpaint)",
@@ -8835,14 +9020,14 @@
             "_outpaint_preserve_audio": true,
             "_outpaint_smear_boundary_frame": 233,
             "_outpaint_smear_count": 9,
-            "_outpaint_source_frame_count": 12,
-            "_outpaint_source_video": "<TMP>/uploads/outpaint_trim_<HEX8>.mp4",
+            "_outpaint_source_frame_count": 16,
+            "_outpaint_source_video": "<TMP>/fail.mp4",
             "_outpaint_trim_smear": false,
             "activated_loras": [],
             "denoising_strength": 1.0,
             "edit_outpaint_raw_prompt": "",
             "edit_sub_mode": "outpaint",
-            "edit_video_path": "<TMP>/uploads/outpaint_trim_<HEX8>.mp4",
+            "edit_video_path": "<TMP>/fail.mp4",
             "force_fps": "control",
             "generation_mode": "video",
             "guidance_scale": 1.0,
@@ -8874,7 +9059,7 @@
             "sliding_window_discard_last_frames": 8,
             "sliding_window_overlap": 9,
             "sliding_window_size": 27,
-            "video_guide": "<TMP>/uploads/outpaint_trim_<HEX8>.mp4",
+            "video_guide": "<TMP>/fail.mp4",
             "video_guide_outpainting": "0 0 0 12.28070175",
             "video_length": 17,
             "video_prompt_type": "VG"
@@ -9030,7 +9215,7 @@
           120
         ]
       ],
-      "trimmed files": 2
+      "trimmed files": 1
     },
     "status": 200
   },
