@@ -2,12 +2,6 @@
   "version": 1,
   "entries": [
     {
-      "file": "tests/test_activity_generation_details.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
       "file": "tests/test_api_workspace_security.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -24,12 +18,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
       "reason": "Tests the static graph extractor against synthetic launch-source fixtures, without importing runtime."
-    },
-    {
-      "file": "tests/test_audio_analysis_jobs.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
       "file": "tests/test_cancellable_model_downloads.py",

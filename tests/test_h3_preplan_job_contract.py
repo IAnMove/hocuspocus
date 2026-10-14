@@ -32,6 +32,7 @@ import services.generation_output_name  # noqa: E402,F401
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
 GENERATE = ROOT / "app" / "services" / "studio_generate.py"
+JOBS = ROOT / "app" / "services" / "generation_jobs.py"
 
 
 class _HTTPException(Exception):
@@ -483,4 +484,4 @@ def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
     assert "_reset_canonical_task_for_resume" in calls
     assert calls["_reset_canonical_task_for_resume"] < calls["_new_generation_job"]
     assert "duplicate_for_submit" in ast.unparse(_function("generate", GENERATE))
-    assert "status_for" in ast.unparse(_function("get_status"))
+    assert "status_for" in ast.unparse(_function("get_status", JOBS))

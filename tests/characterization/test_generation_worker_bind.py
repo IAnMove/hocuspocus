@@ -80,3 +80,32 @@ def test_every_injected_name_is_bound_to_the_servers_object(full_server, monkeyp
             )
             checked += 1
     assert checked > 0
+
+
+# One bind() per moved service. The injected names come from each module's source.
+BOUND_SERVICES = ("services.generation_jobs",)
+
+
+def test_every_bound_service_name_is_the_servers_object(full_server, monkeypatch) -> None:
+    """Every global a moved service binds is the full server's object. A forwarder follows a patched name."""
+    launch = importlib.import_module("_launch_runtime")
+    checked = 0
+    for module_name in BOUND_SERVICES:
+        module = importlib.import_module(module_name)
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        injected = _injected(ast.parse(source))
+        assert injected, module_name
+        for name in injected:
+            value = getattr(module, name)
+            assert value is not None, f"{module_name}.{name} was never bound"
+            assert hasattr(launch, name), f"{module_name}.{name}: the full server has no {name}"
+            checked += 1
+            if _is_forwarder(value, launch):
+                assert name in value.__code__.co_names, f"{module_name}.{name} forwards to {value.__code__.co_names}"
+                calls = []
+                monkeypatch.setattr(launch, name, lambda *args, **kwargs: calls.append((args, kwargs)) or "forwarded")
+                assert value("probe", flag=True) == "forwarded" and calls == [(("probe",), {"flag": True})]
+                monkeypatch.undo()
+                continue
+            assert value is getattr(launch, name), f"{module_name}.{name} is not the server's object"
+    assert checked > 0

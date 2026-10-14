@@ -124,6 +124,68 @@ def test_the_package_binds_every_worker_module() -> None:
     assert bound == {path.stem for path in worker_files()}
 
 
+# Services this slice binds once from launch. The names are read from each module, not listed here.
+BOUND_SERVICES = (
+    (ROOT / "app" / "services" / "generation_jobs.py", "bind_generation_jobs"),
+)
+
+
+def _service_tree(path: Path) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"))
+
+
+def test_every_global_a_bound_service_reads_is_defined_imported_or_injected() -> None:
+    for path, _bind_name in BOUND_SERVICES:
+        source = path.read_text(encoding="utf-8")
+        table = symtable.symtable(source, str(path), "exec")
+        known = module_scope_names(table) | set(dir(builtins))
+        missing = {name: reader for name, reader in read_globals(table).items() if name not in known}
+        assert not missing, f"{path.name} reads names nothing defines: {missing}"
+
+
+def test_each_bound_service_assigns_exactly_its_injected_names() -> None:
+    for path, _bind_name in BOUND_SERVICES:
+        tree = _service_tree(path)
+        injected = injected_names(tree)
+        assert injected, path.name
+        assert bound_keys(tree) == injected, (
+            f"{path.name}: names declared None but not bound, or bound but not declared: "
+            f"{sorted(injected ^ bound_keys(tree))}"
+        )
+        assert injected <= declared_global(tree), (
+            f"{path.name}: bind assigns without `global`: {sorted(injected - declared_global(tree))}"
+        )
+
+
+def test_the_full_server_passes_every_name_a_bound_service_injects() -> None:
+    launch = ast.parse(LAUNCH.read_text(encoding="utf-8"))
+    for path, bind_name in BOUND_SERVICES:
+        wanted = bound_keys(_service_tree(path))
+        calls = [
+            node for node in ast.walk(launch)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == bind_name
+        ]
+        assert len(calls) == 1, f"app/_launch_runtime.py must call {bind_name} exactly once"
+        passed = {keyword.arg for keyword in calls[0].keywords}
+        assert wanted <= passed, f"{bind_name} is not given: {sorted(wanted - passed)}"
+        defined_after: set[str] = set()
+        call = calls[0]
+        for node in launch.body:
+            if node.lineno <= call.lineno:
+                continue
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                defined_after.add(node.name)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                defined_after |= {(alias.asname or alias.name).split(".")[0] for alias in node.names}
+            elif isinstance(node, ast.Assign):
+                defined_after |= {target.id for target in node.targets if isinstance(target, ast.Name)}
+        for keyword in call.keywords:
+            if keyword.arg in defined_after:
+                assert isinstance(keyword.value, ast.Lambda), (
+                    f"{keyword.arg} is defined after {bind_name}; pass a forwarder"
+                )
+
+
 def test_a_name_defined_after_the_bind_call_is_passed_as_a_forwarder() -> None:
     """A direct value would be captured before the name exists; the module would fail to import."""
     launch = ast.parse(LAUNCH.read_text(encoding="utf-8"))
