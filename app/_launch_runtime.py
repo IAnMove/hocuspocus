@@ -21378,7 +21378,31 @@ def _run_generation_manifest(st):
 
     # Multi-clip mode: split single request into per-clip tasks
     elif raw_params.get("multi_prompts_gen_type") == 3:
-        manifest = _run_generation_multiclip_manifest(raw_params)
+        (_mc_bounded_director, _mc_fs, _mc_latent, _mc_min_f, _mc_model_def, _mc_trim_end_frames,
+         clip_count, cumulative_offset, group_id, image_ends, image_starts, last_se_clip_end_image,
+         manifest, multi_clip_audio_start_sec, multi_clip_concat_audio, per_clip_continuations,
+         per_clip_frames, per_clip_h3_references, per_clip_keyframes, per_clip_negative_prompts,
+         per_clip_seeds, preserve_se_duration_per_clip, prompt_lines, sw_size,
+         total_trimmed_frames) = _run_generation_multiclip_plan(
+                raw_params)
+        for i in range(clip_count):
+            clip_end, clip_params, has_end = _run_generation_clip_params(
+                    _mc_bounded_director, i, image_ends, image_starts, per_clip_continuations,
+                    per_clip_h3_references, per_clip_negative_prompts, per_clip_seeds, prompt_lines,
+                    raw_params)
+            (cumulative_offset, last_se_clip_end_image,
+             total_trimmed_frames) = _run_generation_clip_frames(
+                    _mc_bounded_director, _mc_fs, _mc_latent, _mc_min_f, _mc_model_def,
+                    _mc_trim_end_frames, clip_count, clip_end, clip_params, cumulative_offset,
+                    group_id, has_end, i, last_se_clip_end_image, manifest,
+                    multi_clip_audio_start_sec, multi_clip_concat_audio, per_clip_frames,
+                    per_clip_keyframes, preserve_se_duration_per_clip, sw_size,
+                    total_trimmed_frames)
+
+        _run_generation_tail_clip(
+                _mc_trim_end_frames, clip_count, cumulative_offset, group_id,
+                last_se_clip_end_image, manifest, multi_clip_audio_start_sec,
+                multi_clip_concat_audio, prompt_lines, raw_params, total_trimmed_frames)
     else:
         wgp.task_id += 1
         # SE trim: if end image is set, mark tail frames for trimming
@@ -21416,8 +21440,8 @@ def _run_generation_manifest(st):
     return _run_generation_queue(st)
 
 
-def _run_generation_multiclip_manifest(raw_params):
-    """Split a multi-clip request into one task per clip, plus a tail clip when the SE trim removed frames."""
+def _run_generation_multiclip_plan(raw_params):
+    """Read the multi-clip request: prompts, images, per-clip lists, frame lattice."""
     prompt_text = raw_params.get("prompt", "")
     # Use clip boundary separator if present (Director v2 with sliding window support),
     # otherwise fall back to newline split (Studio mode / legacy Director)
@@ -21497,126 +21521,155 @@ def _run_generation_multiclip_manifest(raw_params):
         multi_clip_audio_start_sec = 0.0
     total_trimmed_frames = 0
     last_se_clip_end_image = None  # track last clip's end image for tail compensation
-    for i in range(clip_count):
-        wgp.task_id += 1
-        clip_params = raw_params.copy()
-        if per_clip_seeds and i < len(per_clip_seeds):
-            try:
-                clip_params["seed"] = int(per_clip_seeds[i])
-            except (TypeError, ValueError):
-                pass
-        if (
-            isinstance(per_clip_negative_prompts, list)
-            and i < len(per_clip_negative_prompts)
-        ):
-            clip_params["negative_prompt"] = str(
-                per_clip_negative_prompts[i] or ""
-            )
-        clip_params["prompt"] = prompt_lines[i] if i < len(prompt_lines) else (prompt_lines[-1] if prompt_lines else "")
-        clip_params["image_start"] = image_starts[i] if i < len(image_starts) else None
-        clip_end = image_ends[i] if i < len(image_ends) else None
-        clip_params["image_end"] = clip_end if clip_end else None
-        if per_clip_h3_references is not None:
-            if i >= len(per_clip_h3_references):
-                raise ValueError(
-                    f"Missing MiniMax H3 reference manifest for clip {i + 1}."
-                )
-            clip_params["minimax_h3_references"] = (
-                per_clip_h3_references[i]
-            )
-        # Set per-clip image_prompt_type based on which images are present
-        has_start = bool(clip_params.get("image_start"))
-        has_end = bool(clip_end)
-        if has_start and has_end:
-            clip_params["image_prompt_type"] = "SE"
-        elif has_start:
-            clip_params["image_prompt_type"] = "S"
-        elif has_end:
-            clip_params["image_prompt_type"] = "E"
-        # Rolling-window multi-clip keeps its historic automatic
-        # continuation. Bounded models opt in per clip: Director
-        # uses this for duration-split FL2VA segments or an
-        # explicitly planned literal continuation, never across
-        # an ordinary editorial cut.
-        if not has_start and i > 0:
-            bounded_continuation = bool(
-                per_clip_continuations
-                and i < len(per_clip_continuations)
-                and per_clip_continuations[i]
-            )
-            if not _mc_bounded_director or bounded_continuation:
-                clip_params["_continuation"] = True
-                if bounded_continuation:
-                    clip_params["_continuation_tail_skip"] = 0
-        clip_frames = per_clip_frames[i] if per_clip_frames and i < len(per_clip_frames) else sw_size
-        if _mc_bounded_director:
-            clip_frames = int(clip_frames)
-            _mc_max_f = int(
-                _mc_model_def.get("frames_maximum") or clip_frames
-            )
-            if not (
-                _mc_min_f <= clip_frames <= _mc_max_f
-                and (clip_frames - _mc_min_f) % max(1, _mc_fs) == 0
-            ):
-                raise ValueError(
-                    f"Clip {i + 1} has {clip_frames} frames, outside "
-                    f"the selected model's {_mc_min_f}-{_mc_max_f} "
-                    f"frame lattice (step {_mc_fs})."
-                )
-        else:
-            # Quantize to valid frame count (same formula as wgp.py)
-            clip_frames = (clip_frames - 1) // _mc_latent * _mc_latent + 1
-            clip_frames = max(clip_frames, _mc_min_f)
-        # SE mode: mark tail frames for trimming (removes end-frame
-        # conditioning distortion at tensor level before saving)
-        trim_tail = 0
-        if has_end and _mc_trim_end_frames:
-            trim_tail = _mc_fs
-            last_se_clip_end_image = clip_end
-            if preserve_se_duration_per_clip:
-                # `clip_frames` is the requested visible duration.
-                # Generate one conditioning step more so removing
-                # the distorted SE tail leaves that duration intact.
-                clip_frames = (
-                    (clip_frames + trim_tail - 1)
-                    // _mc_latent
-                    * _mc_latent
-                    + 1
-                )
-        clip_params["video_length"] = clip_frames
-        clip_params["trim_tail_frames"] = trim_tail
-        clip_params["audio_frame_offset"] = cumulative_offset
-        cumulative_offset += clip_frames - trim_tail  # advance by post-trim frames for audio sync
-        if not preserve_se_duration_per_clip:
-            total_trimmed_frames += trim_tail
-        clip_params["multi_clip_info"] = {
-            "group_id": group_id,
-            "index": i,
-            "total": clip_count,
-            "cumulative_offset": True,
-            "audio_start_sec": multi_clip_audio_start_sec,
-            "concat_audio_path": multi_clip_concat_audio,
-        }
-        # If the clip prompt has newlines (window_prompts), use mode 1 (per-window)
-        # Otherwise mode 0 (single task)
-        clip_prompt = clip_params.get("prompt", "")
-        clip_params["multi_prompts_gen_type"] = 1 if "\n" in clip_prompt else 0
-        # Keyframe injection: add image_refs and frames_positions for this clip
-        if per_clip_keyframes and i < len(per_clip_keyframes) and per_clip_keyframes[i]:
-            kf_paths = per_clip_keyframes[i]
-            clip_params["image_refs"] = kf_paths
-            # Position each keyframe at "L" (last frame of each window)
-            clip_params["frames_positions"] = " ".join(["L"] * len(kf_paths))
-            # Enable frames injection mode
-            existing_vpt = clip_params.get("video_prompt_type", "")
-            if "KFI" not in existing_vpt:
-                clip_params["video_prompt_type"] = existing_vpt + "KFI"
-        manifest.append({
-            "id": wgp.task_id,
-            "params": clip_params,
-            "plugin_data": {},
-        })
+    return (_mc_bounded_director, _mc_fs, _mc_latent, _mc_min_f, _mc_model_def, _mc_trim_end_frames,
+            clip_count, cumulative_offset, group_id, image_ends, image_starts,
+            last_se_clip_end_image, manifest, multi_clip_audio_start_sec, multi_clip_concat_audio,
+            per_clip_continuations, per_clip_frames, per_clip_h3_references, per_clip_keyframes,
+            per_clip_negative_prompts, per_clip_seeds, preserve_se_duration_per_clip, prompt_lines,
+            sw_size, total_trimmed_frames)
 
+
+def _run_generation_clip_params(
+        _mc_bounded_director, i, image_ends, image_starts, per_clip_continuations,
+        per_clip_h3_references, per_clip_negative_prompts, per_clip_seeds, prompt_lines,
+        raw_params):
+    """Parameters of clip `i`: seed, prompts, images, continuation."""
+    wgp.task_id += 1
+    clip_params = raw_params.copy()
+    if per_clip_seeds and i < len(per_clip_seeds):
+        try:
+            clip_params["seed"] = int(per_clip_seeds[i])
+        except (TypeError, ValueError):
+            pass
+    if (
+        isinstance(per_clip_negative_prompts, list)
+        and i < len(per_clip_negative_prompts)
+    ):
+        clip_params["negative_prompt"] = str(
+            per_clip_negative_prompts[i] or ""
+        )
+    clip_params["prompt"] = prompt_lines[i] if i < len(prompt_lines) else (prompt_lines[-1] if prompt_lines else "")
+    clip_params["image_start"] = image_starts[i] if i < len(image_starts) else None
+    clip_end = image_ends[i] if i < len(image_ends) else None
+    clip_params["image_end"] = clip_end if clip_end else None
+    if per_clip_h3_references is not None:
+        if i >= len(per_clip_h3_references):
+            raise ValueError(
+                f"Missing MiniMax H3 reference manifest for clip {i + 1}."
+            )
+        clip_params["minimax_h3_references"] = (
+            per_clip_h3_references[i]
+        )
+    # Set per-clip image_prompt_type based on which images are present
+    has_start = bool(clip_params.get("image_start"))
+    has_end = bool(clip_end)
+    if has_start and has_end:
+        clip_params["image_prompt_type"] = "SE"
+    elif has_start:
+        clip_params["image_prompt_type"] = "S"
+    elif has_end:
+        clip_params["image_prompt_type"] = "E"
+    # Rolling-window multi-clip keeps its historic automatic
+    # continuation. Bounded models opt in per clip: Director
+    # uses this for duration-split FL2VA segments or an
+    # explicitly planned literal continuation, never across
+    # an ordinary editorial cut.
+    if not has_start and i > 0:
+        bounded_continuation = bool(
+            per_clip_continuations
+            and i < len(per_clip_continuations)
+            and per_clip_continuations[i]
+        )
+        if not _mc_bounded_director or bounded_continuation:
+            clip_params["_continuation"] = True
+            if bounded_continuation:
+                clip_params["_continuation_tail_skip"] = 0
+    return clip_end, clip_params, has_end
+
+
+def _run_generation_clip_frames(
+        _mc_bounded_director, _mc_fs, _mc_latent, _mc_min_f, _mc_model_def, _mc_trim_end_frames,
+        clip_count, clip_end, clip_params, cumulative_offset, group_id, has_end, i,
+        last_se_clip_end_image, manifest, multi_clip_audio_start_sec, multi_clip_concat_audio,
+        per_clip_frames, per_clip_keyframes, preserve_se_duration_per_clip, sw_size,
+        total_trimmed_frames):
+    """Frame count, tail trim and audio offset of clip `i`; add it to the manifest."""
+    clip_frames = per_clip_frames[i] if per_clip_frames and i < len(per_clip_frames) else sw_size
+    if _mc_bounded_director:
+        clip_frames = int(clip_frames)
+        _mc_max_f = int(
+            _mc_model_def.get("frames_maximum") or clip_frames
+        )
+        if not (
+            _mc_min_f <= clip_frames <= _mc_max_f
+            and (clip_frames - _mc_min_f) % max(1, _mc_fs) == 0
+        ):
+            raise ValueError(
+                f"Clip {i + 1} has {clip_frames} frames, outside "
+                f"the selected model's {_mc_min_f}-{_mc_max_f} "
+                f"frame lattice (step {_mc_fs})."
+            )
+    else:
+        # Quantize to valid frame count (same formula as wgp.py)
+        clip_frames = (clip_frames - 1) // _mc_latent * _mc_latent + 1
+        clip_frames = max(clip_frames, _mc_min_f)
+    # SE mode: mark tail frames for trimming (removes end-frame
+    # conditioning distortion at tensor level before saving)
+    trim_tail = 0
+    if has_end and _mc_trim_end_frames:
+        trim_tail = _mc_fs
+        last_se_clip_end_image = clip_end
+        if preserve_se_duration_per_clip:
+            # `clip_frames` is the requested visible duration.
+            # Generate one conditioning step more so removing
+            # the distorted SE tail leaves that duration intact.
+            clip_frames = (
+                (clip_frames + trim_tail - 1)
+                // _mc_latent
+                * _mc_latent
+                + 1
+            )
+    clip_params["video_length"] = clip_frames
+    clip_params["trim_tail_frames"] = trim_tail
+    clip_params["audio_frame_offset"] = cumulative_offset
+    cumulative_offset += clip_frames - trim_tail  # advance by post-trim frames for audio sync
+    if not preserve_se_duration_per_clip:
+        total_trimmed_frames += trim_tail
+    clip_params["multi_clip_info"] = {
+        "group_id": group_id,
+        "index": i,
+        "total": clip_count,
+        "cumulative_offset": True,
+        "audio_start_sec": multi_clip_audio_start_sec,
+        "concat_audio_path": multi_clip_concat_audio,
+    }
+    # If the clip prompt has newlines (window_prompts), use mode 1 (per-window)
+    # Otherwise mode 0 (single task)
+    clip_prompt = clip_params.get("prompt", "")
+    clip_params["multi_prompts_gen_type"] = 1 if "\n" in clip_prompt else 0
+    # Keyframe injection: add image_refs and frames_positions for this clip
+    if per_clip_keyframes and i < len(per_clip_keyframes) and per_clip_keyframes[i]:
+        kf_paths = per_clip_keyframes[i]
+        clip_params["image_refs"] = kf_paths
+        # Position each keyframe at "L" (last frame of each window)
+        clip_params["frames_positions"] = " ".join(["L"] * len(kf_paths))
+        # Enable frames injection mode
+        existing_vpt = clip_params.get("video_prompt_type", "")
+        if "KFI" not in existing_vpt:
+            clip_params["video_prompt_type"] = existing_vpt + "KFI"
+    manifest.append({
+        "id": wgp.task_id,
+        "params": clip_params,
+        "plugin_data": {},
+    })
+    return cumulative_offset, last_se_clip_end_image, total_trimmed_frames
+
+
+def _run_generation_tail_clip(
+        _mc_trim_end_frames, clip_count, cumulative_offset, group_id, last_se_clip_end_image,
+        manifest, multi_clip_audio_start_sec, multi_clip_concat_audio, prompt_lines, raw_params,
+        total_trimmed_frames):
+    """Add the tail clip that makes up the frames the SE trim removed."""
     # Compensation tail clip: if SE trimming removed frames, generate a
     # short extra clip (start-frame only, no SE distortion) to fill the gap
     # so the final video matches the full audio duration.
@@ -21662,7 +21715,6 @@ def _run_generation_multiclip_manifest(raw_params):
             "plugin_data": {},
         })
         print(f"[Multi-Clip] SE trim compensation: lost {total_trimmed_frames} frames across {clip_count} clips, adding tail clip of {tail_frames} frames")
-    return manifest
 
 
 def _run_generation_queue(st):
@@ -21863,288 +21915,21 @@ def _run_generation_tasks(st):
                 skipped += 1
                 continue
 
-            gen["prompt_no"] = task_no
-            gen["prompts_max"] = total_tasks
+            task_error = _run_generation_task_stream(
+                    AsyncStream, active_task_timer, async_run, gen, inspect, is_multiclip, job,
+                    job_id, state, task, task_idx, task_no, total_tasks, validated_params)
 
-            params = validated_params.copy()
-            params['state'] = state
-
-            com_stream = AsyncStream()
-            send_cmd = com_stream.output_queue.push
-
-            def make_error_handler(task, params, send_cmd):
-                def error_handler():
-                    try:
-                        expected_args = set(inspect.signature(wgp.generate_video).parameters.keys())
-                        filtered_params = {k: v for k, v in params.items() if k in expected_args}
-                        # A cloned voice hears its reference with long pauses shortened
-                        # (a cached copy; the job and the user's file keep the original).
-                        from services.speech_reference_pauses import tighten_clone_references
-                        tighten_clone_references(filtered_params, base_model_type=wgp.get_base_model_type)
-                        plugin_data = task.get('plugin_data', {})
-                        # Model downloads are blocking inside hf-hub. Bind
-                        # their byte-progress loop to this exact job's
-                        # durable abort state so Cancel works before the
-                        # model has finished downloading or loading.
-                        from services.generation_memory import prepare_queued_params
-                        prepare_queued_params(params)
-                        with safe_download.cancellable_downloads(
-                            lambda: is_cancel_requested(job)
-                            or bool(gen.get("abort")),
-                        ):
-                            wgp.generate_video(task, send_cmd, plugin_data=plugin_data, **filtered_params)
-                    except Exception as e:
-                        if is_cancel_requested(job) or gen.get("abort"):
-                            print(f"\n  [Cancel] Generation worker acknowledged job {job_id}")
-                        else:
-                            print(f"\n  [ERROR] {e}")
-                            traceback.print_exc()
-                            send_cmd("error", str(e))
-                    finally:
-                        send_cmd("exit", None)
-                return error_handler
-
-            async_run(make_error_handler(task, params, send_cmd))
-
-            # Process stream — update job dict with live progress
-            task_error = False
-            last_msg_len = 0
-            in_status_line = False
-            while True:
-                cmd, data = com_stream.output_queue.next()
-                if is_cancel_requested(job) and cmd != "exit":
-                    continue
-                if cmd == "exit":
-                    if in_status_line:
-                        print()
-                    break
-                elif cmd == "error":
-                    print(f"\n  [ERROR] {data}")
-                    in_status_line = False
-                    task_error = True
-                    update_job(job, error=str(data), message=f"Error: {data}")
-                elif cmd == "progress":
-                    job["last_progress_at"] = time.time()
-                    if isinstance(data, list) and len(data) >= 2:
-                        progress_updates = {}
-                        if isinstance(data[0], tuple):
-                            step, total = data[0]
-                            msg = data[1] if len(data) > 1 else ""
-                            # For TTS: extract progress from message
-                            # Multi-speaker: "Segment 26/51" — use segment count
-                            # Single-speaker: "45/600 s" — show seconds, use indeterminate progress
-                            import re as _re
-                            seg_match = _re.search(r'Segment\s+(\d+)/(\d+)', msg)
-                            sec_match = _re.search(r'(\d+)/(\d+)\s*s\b', msg) if not seg_match else None
-                            if sec_match:
-                                # Single/text mode: show seconds generated as a pulsing progress
-                                sec_current = int(sec_match.group(1))
-                                progress_updates.update(
-                                    progress=min(95, sec_current * 3),
-                                    step=sec_current,
-                                    total_steps=0,
-                                    message=f"Generating audio... {sec_current}s",
-                                )
-                            if seg_match:
-                                seg_current = int(seg_match.group(1))
-                                seg_total = int(seg_match.group(2))
-                                progress_updates.update(
-                                    progress=int((seg_current / seg_total) * 100) if seg_total > 0 else 0,
-                                    step=seg_current,
-                                    total_steps=seg_total,
-                                )
-                            elif is_multiclip and total > 0:
-                                # Aggregate: each clip contributes 1/total_tasks of overall progress
-                                clip_progress = step / total
-                                progress_updates["progress"] = int(((task_idx + clip_progress) / total_tasks) * 100)
-                                progress_info = (
-                                    (task.get("params") or {}).get(
-                                        "multi_clip_info",
-                                    )
-                                    or {}
-                                )
-                                progress_label = str(
-                                    progress_info.get(
-                                        "progress_label",
-                                    )
-                                    or "Clip"
-                                )
-                                msg = (
-                                    f"{progress_label} "
-                                    f"{task_no}/{total_tasks}: {msg}"
-                                )
-                                progress_updates.update(step=step, total_steps=total)
-                            else:
-                                progress_updates.update(
-                                    progress=int((step / total) * 100) if total > 0 else 0,
-                                    step=step,
-                                    total_steps=total,
-                                )
-                        else:
-                            step = 0
-                            msg = data[1] if len(data) > 1 else str(data[0])
-                            total = 0
-                            progress_updates.update(step=0, total_steps=0)
-                        from shared.utils.generation_timing import inference_progress_clock
-                        from services.generation_memory import note_inference_step
-                        progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
-                        progress_updates.update(note_inference_step(
-                            job, step=step, now=time.time(), message=msg,
-                        ))
-                        progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
-                        if not update_job(job, **progress_updates):
-                            continue
-                        active_task_timer.phase(msg)
-                        status_line = f"\r  [{step}/{total}] {msg}" if total > 0 else f"\r  {msg}"
-                        print(status_line.ljust(max(last_msg_len, len(status_line))), end="", flush=True)
-                        last_msg_len = len(status_line)
-                        in_status_line = True
-                elif cmd == "status":
-                    active_task_timer.phase(data)
-                    if not update_job(
-                        job,
-                        message=str(data),
-                        phase=str(data),
-                        step=0,
-                        total_steps=0,
-                        progress=0,
-                        last_progress_at=time.time(),
-                    ):
-                        continue
-                    if "Loading" in str(data):
-                        print(data)
-                        in_status_line = False
-                        last_msg_len = 0
-                    else:
-                        status_line = f"\r  {data}"
-                        print(status_line.ljust(max(last_msg_len, len(status_line))), end="", flush=True)
-                        last_msg_len = len(status_line)
-                        in_status_line = True
-                elif cmd == "info":
-                    job["last_progress_at"] = time.time()
-                    print(f"\n  [INFO] {data}")
-                    in_status_line = False
-
-            # WGP may emit several cumulative sliding-window files for a
-            # single clip. Bind only the latest file from this task to its
-            # explicit multi-clip index; filename ordering is ambiguous.
-            task_files = []
-            for output_path in (
-                (gen.get("artifact_list") or [])[task_artifact_start:]
-                + (gen.get("file_list") or [])[task_file_start:]
-            ):
-                if output_path not in task_files:
-                    task_files.append(output_path)
-            clip_info = (task.get("params") or {}).get("multi_clip_info")
-            if isinstance(clip_info, dict) and "index" in clip_info:
-                latest_clip_file = None
-                for output_path in reversed(task_files):
-                    filename = os.path.basename(output_path)
-                    stem, extension = os.path.splitext(filename)
-                    if extension.lower() not in {
-                        ".mp4", ".webm", ".mkv", ".mov",
-                    }:
-                        continue
-                    if "_multiclip" in stem.lower():
-                        if join_output_file is None:
-                            join_output_file = filename
-                    elif latest_clip_file is None:
-                        latest_clip_file = filename
-                if latest_clip_file:
-                    try:
-                        clip_output_files[
-                            int(clip_info["index"])
-                        ] = latest_clip_file
-                    except (TypeError, ValueError):
-                        pass
+            join_output_file, task_files = _run_generation_task_files(
+                    clip_output_files, gen, join_output_file, task, task_artifact_start,
+                    task_file_start)
 
             if is_cancel_requested(job) or gen.get("abort"):
                 cancelled = True
                 break
 
-            if not task_error:
-                completed += 1
-                active_task_timer.finish("completed")
-                job["last_progress_at"] = time.time()
-                current_after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
-                task_outputs = sorted(
-                    filename
-                    for filename in current_after - task_before
-                    if os.path.splitext(filename)[1].lower() in {".mp4", ".webm", ".mkv", ".mov"}
-                    and "_tmp." not in filename
-                    and "_multiclip." not in filename
-                )
-                if task_outputs:
-                    job["clip_output_files"][task_idx] = task_outputs[-1]
-                print(f"\n  Task {task_no} completed")
-
-                # Free VRAM between clips to prevent OOM on long pipelines
-                if is_multiclip and task_idx + 1 < total_tasks:
-                    gc.collect()
-                    torch.cuda.empty_cache()
-
-                # Multi-clip continuation: if next clip has no start image,
-                # extract last frame from this clip's output as its start image
-                if is_multiclip and task_idx + 1 < total_tasks:
-                    next_task = queue[task_idx + 1]
-                    next_params = next_task.get('params', {})
-                    if next_params.pop("_continuation", False):
-                        try:
-                            continuation_tail_skip = max(
-                                0,
-                                int(next_params.pop(
-                                    "_continuation_tail_skip", 8,
-                                )),
-                            )
-                        except (TypeError, ValueError):
-                            continuation_tail_skip = 8
-                        # Find the latest video explicitly registered by
-                        # this task; a shared-folder diff can pick up a
-                        # concurrent dashboard operation's media.
-                        video_exts = {".mp4", ".webm", ".mkv", ".mov"}
-                        latest_video = None
-                        for output_path in reversed(task_files):
-                            if os.path.splitext(output_path)[1].lower() in video_exts:
-                                latest_video = output_path
-                                if not os.path.isabs(latest_video):
-                                    latest_video = os.path.join(
-                                        out_dir, latest_video,
-                                    )
-                                latest_video = os.path.realpath(latest_video)
-                                if (
-                                    os.path.normcase(os.path.dirname(latest_video))
-                                    != os.path.normcase(os.path.realpath(out_dir))
-                                    or not os.path.isfile(latest_video)
-                                ):
-                                    latest_video = None
-                                    continue
-                                break
-                        if latest_video:
-                            try:
-                                from PIL import Image as PILImage
-                                import decord
-                                vr = decord.VideoReader(latest_video)
-                                # LTX-2 skips its distortion-prone tail;
-                                # bounded H3 continuations use the true
-                                # final frame (the model does not trim one).
-                                safe_idx = max(
-                                    0,
-                                    len(vr) - continuation_tail_skip - 1,
-                                )
-                                last_frame = vr[safe_idx].asnumpy()
-                                del vr
-                                frame_img = PILImage.fromarray(last_frame)
-                                # Save as temp file for the next task
-                                cont_path = os.path.join(out_dir, f"_continuation_{task_no}.png")
-                                frame_img.save(cont_path)
-                                next_params["image_start"] = cont_path
-                                next_params["image_prompt_type"] = "S" + (next_params.get("image_prompt_type", "") or "")
-                                next_task["start_image_data"] = frame_img
-                                print(f"  [Continuation] Extracted last frame for clip {task_no + 1}")
-                            except Exception as e:
-                                print(f"  [Continuation] Failed to extract frame: {e}")
-            else:
-                active_task_timer.finish("failed")
+            completed = _run_generation_task_done(
+                    active_task_timer, completed, is_multiclip, job, out_dir, queue, task_before,
+                    task_error, task_files, task_idx, task_no, total_tasks)
             active_task_timer = None
 
         elapsed = time.time() - start_time
@@ -22158,6 +21943,309 @@ def _run_generation_tasks(st):
         st.active_task_timer = active_task_timer
     st.cancelled, st.join_output_file, st.success = cancelled, join_output_file, success
     return _run_generation_collect(st)
+
+
+def _run_generation_task_stream(
+        AsyncStream, active_task_timer, async_run, gen, inspect, is_multiclip, job, job_id, state,
+        task, task_idx, task_no, total_tasks, validated_params):
+    """Start the engine for one task and relay its progress until it exits."""
+    gen["prompt_no"] = task_no
+    gen["prompts_max"] = total_tasks
+
+    params = validated_params.copy()
+    params['state'] = state
+
+    com_stream = AsyncStream()
+    send_cmd = com_stream.output_queue.push
+
+    def make_error_handler(task, params, send_cmd):
+        def error_handler():
+            try:
+                expected_args = set(inspect.signature(wgp.generate_video).parameters.keys())
+                filtered_params = {k: v for k, v in params.items() if k in expected_args}
+                # A cloned voice hears its reference with long pauses shortened
+                # (a cached copy; the job and the user's file keep the original).
+                from services.speech_reference_pauses import tighten_clone_references
+                tighten_clone_references(filtered_params, base_model_type=wgp.get_base_model_type)
+                plugin_data = task.get('plugin_data', {})
+                # Model downloads are blocking inside hf-hub. Bind
+                # their byte-progress loop to this exact job's
+                # durable abort state so Cancel works before the
+                # model has finished downloading or loading.
+                from services.generation_memory import prepare_queued_params
+                prepare_queued_params(params)
+                with safe_download.cancellable_downloads(
+                    lambda: is_cancel_requested(job)
+                    or bool(gen.get("abort")),
+                ):
+                    wgp.generate_video(task, send_cmd, plugin_data=plugin_data, **filtered_params)
+            except Exception as e:
+                if is_cancel_requested(job) or gen.get("abort"):
+                    print(f"\n  [Cancel] Generation worker acknowledged job {job_id}")
+                else:
+                    print(f"\n  [ERROR] {e}")
+                    traceback.print_exc()
+                    send_cmd("error", str(e))
+            finally:
+                send_cmd("exit", None)
+        return error_handler
+
+    async_run(make_error_handler(task, params, send_cmd))
+
+    # Process stream — update job dict with live progress
+    task_error = False
+    last_msg_len = 0
+    in_status_line = False
+    while True:
+        cmd, data = com_stream.output_queue.next()
+        if is_cancel_requested(job) and cmd != "exit":
+            continue
+        if cmd == "exit":
+            if in_status_line:
+                print()
+            break
+        elif cmd == "error":
+            print(f"\n  [ERROR] {data}")
+            in_status_line = False
+            task_error = True
+            update_job(job, error=str(data), message=f"Error: {data}")
+        elif cmd == "progress":
+            job["last_progress_at"] = time.time()
+            if isinstance(data, list) and len(data) >= 2:
+                (msg, progress_updates, step, total) = _run_generation_task_progress(
+                        data, is_multiclip, job, task, task_idx, task_no, total_tasks)
+                if not update_job(job, **progress_updates):
+                    continue
+                active_task_timer.phase(msg)
+                status_line = f"\r  [{step}/{total}] {msg}" if total > 0 else f"\r  {msg}"
+                print(status_line.ljust(max(last_msg_len, len(status_line))), end="", flush=True)
+                last_msg_len = len(status_line)
+                in_status_line = True
+        elif cmd == "status":
+            active_task_timer.phase(data)
+            if not update_job(
+                job,
+                message=str(data),
+                phase=str(data),
+                step=0,
+                total_steps=0,
+                progress=0,
+                last_progress_at=time.time(),
+            ):
+                continue
+            if "Loading" in str(data):
+                print(data)
+                in_status_line = False
+                last_msg_len = 0
+            else:
+                status_line = f"\r  {data}"
+                print(status_line.ljust(max(last_msg_len, len(status_line))), end="", flush=True)
+                last_msg_len = len(status_line)
+                in_status_line = True
+        elif cmd == "info":
+            job["last_progress_at"] = time.time()
+            print(f"\n  [INFO] {data}")
+            in_status_line = False
+    return task_error
+
+
+def _run_generation_task_progress(data, is_multiclip, job, task, task_idx, task_no, total_tasks):
+    """Turn one engine progress report into a job update."""
+    progress_updates = {}
+    if isinstance(data[0], tuple):
+        step, total = data[0]
+        msg = data[1] if len(data) > 1 else ""
+        # For TTS: extract progress from message
+        # Multi-speaker: "Segment 26/51" — use segment count
+        # Single-speaker: "45/600 s" — show seconds, use indeterminate progress
+        import re as _re
+        seg_match = _re.search(r'Segment\s+(\d+)/(\d+)', msg)
+        sec_match = _re.search(r'(\d+)/(\d+)\s*s\b', msg) if not seg_match else None
+        if sec_match:
+            # Single/text mode: show seconds generated as a pulsing progress
+            sec_current = int(sec_match.group(1))
+            progress_updates.update(
+                progress=min(95, sec_current * 3),
+                step=sec_current,
+                total_steps=0,
+                message=f"Generating audio... {sec_current}s",
+            )
+        if seg_match:
+            seg_current = int(seg_match.group(1))
+            seg_total = int(seg_match.group(2))
+            progress_updates.update(
+                progress=int((seg_current / seg_total) * 100) if seg_total > 0 else 0,
+                step=seg_current,
+                total_steps=seg_total,
+            )
+        elif is_multiclip and total > 0:
+            # Aggregate: each clip contributes 1/total_tasks of overall progress
+            clip_progress = step / total
+            progress_updates["progress"] = int(((task_idx + clip_progress) / total_tasks) * 100)
+            progress_info = (
+                (task.get("params") or {}).get(
+                    "multi_clip_info",
+                )
+                or {}
+            )
+            progress_label = str(
+                progress_info.get(
+                    "progress_label",
+                )
+                or "Clip"
+            )
+            msg = (
+                f"{progress_label} "
+                f"{task_no}/{total_tasks}: {msg}"
+            )
+            progress_updates.update(step=step, total_steps=total)
+        else:
+            progress_updates.update(
+                progress=int((step / total) * 100) if total > 0 else 0,
+                step=step,
+                total_steps=total,
+            )
+    else:
+        step = 0
+        msg = data[1] if len(data) > 1 else str(data[0])
+        total = 0
+        progress_updates.update(step=0, total_steps=0)
+    from shared.utils.generation_timing import inference_progress_clock
+    from services.generation_memory import note_inference_step
+    progress_updates.update(inference_progress_clock(job, msg, step, time.time()))
+    progress_updates.update(note_inference_step(
+        job, step=step, now=time.time(), message=msg,
+    ))
+    progress_updates.update(message=msg, phase=msg, last_progress_at=time.time())
+    return msg, progress_updates, step, total
+
+
+def _run_generation_task_files(
+        clip_output_files, gen, join_output_file, task, task_artifact_start, task_file_start):
+    """Collect the files one task registered and bind its clip file."""
+    # WGP may emit several cumulative sliding-window files for a
+    # single clip. Bind only the latest file from this task to its
+    # explicit multi-clip index; filename ordering is ambiguous.
+    task_files = []
+    for output_path in (
+        (gen.get("artifact_list") or [])[task_artifact_start:]
+        + (gen.get("file_list") or [])[task_file_start:]
+    ):
+        if output_path not in task_files:
+            task_files.append(output_path)
+    clip_info = (task.get("params") or {}).get("multi_clip_info")
+    if isinstance(clip_info, dict) and "index" in clip_info:
+        latest_clip_file = None
+        for output_path in reversed(task_files):
+            filename = os.path.basename(output_path)
+            stem, extension = os.path.splitext(filename)
+            if extension.lower() not in {
+                ".mp4", ".webm", ".mkv", ".mov",
+            }:
+                continue
+            if "_multiclip" in stem.lower():
+                if join_output_file is None:
+                    join_output_file = filename
+            elif latest_clip_file is None:
+                latest_clip_file = filename
+        if latest_clip_file:
+            try:
+                clip_output_files[
+                    int(clip_info["index"])
+                ] = latest_clip_file
+            except (TypeError, ValueError):
+                pass
+    return join_output_file, task_files
+
+
+def _run_generation_task_done(
+        active_task_timer, completed, is_multiclip, job, out_dir, queue, task_before, task_error,
+        task_files, task_idx, task_no, total_tasks):
+    """Close a finished task: timer, outputs, memory and continuation frame."""
+    if not task_error:
+        completed += 1
+        active_task_timer.finish("completed")
+        job["last_progress_at"] = time.time()
+        current_after = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
+        task_outputs = sorted(
+            filename
+            for filename in current_after - task_before
+            if os.path.splitext(filename)[1].lower() in {".mp4", ".webm", ".mkv", ".mov"}
+            and "_tmp." not in filename
+            and "_multiclip." not in filename
+        )
+        if task_outputs:
+            job["clip_output_files"][task_idx] = task_outputs[-1]
+        print(f"\n  Task {task_no} completed")
+
+        # Free VRAM between clips to prevent OOM on long pipelines
+        if is_multiclip and task_idx + 1 < total_tasks:
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        # Multi-clip continuation: if next clip has no start image,
+        # extract last frame from this clip's output as its start image
+        if is_multiclip and task_idx + 1 < total_tasks:
+            next_task = queue[task_idx + 1]
+            next_params = next_task.get('params', {})
+            if next_params.pop("_continuation", False):
+                try:
+                    continuation_tail_skip = max(
+                        0,
+                        int(next_params.pop(
+                            "_continuation_tail_skip", 8,
+                        )),
+                    )
+                except (TypeError, ValueError):
+                    continuation_tail_skip = 8
+                # Find the latest video explicitly registered by
+                # this task; a shared-folder diff can pick up a
+                # concurrent dashboard operation's media.
+                video_exts = {".mp4", ".webm", ".mkv", ".mov"}
+                latest_video = None
+                for output_path in reversed(task_files):
+                    if os.path.splitext(output_path)[1].lower() in video_exts:
+                        latest_video = output_path
+                        if not os.path.isabs(latest_video):
+                            latest_video = os.path.join(
+                                out_dir, latest_video,
+                            )
+                        latest_video = os.path.realpath(latest_video)
+                        if (
+                            os.path.normcase(os.path.dirname(latest_video))
+                            != os.path.normcase(os.path.realpath(out_dir))
+                            or not os.path.isfile(latest_video)
+                        ):
+                            latest_video = None
+                            continue
+                        break
+                if latest_video:
+                    try:
+                        from PIL import Image as PILImage
+                        import decord
+                        vr = decord.VideoReader(latest_video)
+                        # LTX-2 skips its distortion-prone tail;
+                        # bounded H3 continuations use the true
+                        # final frame (the model does not trim one).
+                        safe_idx = max(
+                            0,
+                            len(vr) - continuation_tail_skip - 1,
+                        )
+                        last_frame = vr[safe_idx].asnumpy()
+                        del vr
+                        frame_img = PILImage.fromarray(last_frame)
+                        # Save as temp file for the next task
+                        cont_path = os.path.join(out_dir, f"_continuation_{task_no}.png")
+                        frame_img.save(cont_path)
+                        next_params["image_start"] = cont_path
+                        next_params["image_prompt_type"] = "S" + (next_params.get("image_prompt_type", "") or "")
+                        next_task["start_image_data"] = frame_img
+                        print(f"  [Continuation] Extracted last frame for clip {task_no + 1}")
+                    except Exception as e:
+                        print(f"  [Continuation] Failed to extract frame: {e}")
+    else:
+        active_task_timer.finish("failed")
+    return completed
 
 
 def _run_generation_collect(st):
@@ -22264,27 +22352,7 @@ def _run_generation_outpaint(st):
     if success and (_do_audio or _do_overlay or _do_trim) and raw_params.get("_outpaint_source_video"):
         src_video = raw_params.get("_outpaint_source_video")
         if src_video and os.path.isfile(src_video):
-            video_exts = {".mp4", ".webm", ".mkv", ".mov"}
-            # Sliding-window outpaint produces ONE complete cumulative mp4
-            # per window (e.g. 4 windows → 4 timestamped saves: 473→937→1401→1424
-            # frames). The post-process should only run on the FINAL save,
-            # not every per-window intermediate. Pick the last canonical mp4
-            # by sorted order — wgp prefixes filenames with timestamps so
-            # alphabetic sort = chronological. Skip _tmp.mp4 (intermediate
-            # save_path_tmp leftover) and our own _with_source_audio.mp4
-            # (in case of re-runs).
-            _candidates = []
-            for fname in sorted(new_files):
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in video_exts:
-                    continue
-                if fname.endswith("_tmp" + ext):
-                    continue
-                if "_with_source_audio" in fname or fname.endswith("_post" + ext):
-                    continue
-                _candidates.append(fname)
-            if not _candidates:
-                print(f"  [Outpaint] No canonical video output to post-process")
+            _candidates = _run_generation_outpaint_candidates(new_files)
                 # Allow the surrounding 'if' chain to fall through
             # Process only the final (latest-timestamp) canonical save.
             # Iterate the single-element list so the existing per-fname logic
@@ -22307,114 +22375,9 @@ def _run_generation_outpaint(st):
 
                     muxed_path = out_video.rsplit(".", 1)[0] + "_post." + out_video.rsplit(".", 1)[1]
 
-                    # Build ffmpeg command. Three modes:
-                    #   - overlay+audio: scale source, overlay on output, mux source audio
-                    #   - overlay only: scale source, overlay on output, keep generated audio
-                    #   - audio only: copy video, mux source audio
-                    cmd = ["ffmpeg", "-y", "-i", out_video, "-i", src_video]
-                    if _do_overlay:
-                        ow = int(raw_params.get("_outpaint_overlay_w", 0))
-                        oh = int(raw_params.get("_outpaint_overlay_h", 0))
-                        ox = int(raw_params.get("_outpaint_overlay_x", 0))
-                        oy = int(raw_params.get("_outpaint_overlay_y", 0))
-                        if ow <= 0 or oh <= 0:
-                            # Bad coords — fall through to audio-only path
-                            _do_overlay = False
-
-                    # Decide what filter graph we need. Modes:
-                    #
-                    #   smear-trim only: cut N frames at boundary 1 of
-                    #     output video, mux source audio (no cuts —
-                    #     source audio aligns with the trimmed video
-                    #     because the smear lag was constant from that
-                    #     point onward).
-                    #
-                    #   audio mux only: copy video, replace audio with
-                    #     source audio.
-                    #
-                    #   overlay (legacy/opt-in): scale source video,
-                    #     feathered alpha-overlay onto output, mux
-                    #     source audio.
-                    #
-                    # Trim takes priority over overlay if both are on,
-                    # since trim is what fixes the actual lip-sync bug.
-                    if _do_trim and _trim_boundary > 0 and _trim_count > 0:
-                        # Read fps from output to compute timestamps.
-                        fps_probe = subprocess.run(
-                            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
-                             "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", out_video],
-                            capture_output=True, text=True, timeout=10,
-                        )
-                        _fps = 25.0
-                        _fps_str = fps_probe.stdout.strip()
-                        if "/" in _fps_str:
-                            _num, _den = _fps_str.split("/")
-                            if _den and float(_den) != 0:
-                                _fps = float(_num) / float(_den)
-                        cut_start = _trim_boundary / _fps
-                        cut_end = (_trim_boundary + _trim_count) / _fps
-                        # ffmpeg trim+concat: keep [0, cut_start) and [cut_end, end).
-                        # asetpts on source audio resets PTS so it starts at 0
-                        # in the output timeline; -shortest will clamp the audio
-                        # to the (now shorter by N frames) trimmed video duration.
-                        filter_str = (
-                            f"[0:v]trim=0:{cut_start:.6f},setpts=PTS-STARTPTS[v0];"
-                            f"[0:v]trim={cut_end:.6f},setpts=PTS-STARTPTS[v1];"
-                            f"[v0][v1]concat=n=2:v=1[outv]"
-                        )
-                        cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
-                        cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
-                        if _do_audio and src_has_audio:
-                            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
-                        else:
-                            cmd += ["-an"]  # drop audio if we can't replace it
-                    elif _do_overlay:
-                        cw = int(raw_params.get("_outpaint_canvas_w", 0)) or (ox + ow)
-                        ch = int(raw_params.get("_outpaint_canvas_h", 0)) or (oy + oh)
-                        fade_top = oy > 0
-                        fade_bottom = (oy + oh) < ch
-                        fade_left = ox > 0
-                        fade_right = (ox + ow) < cw
-                        feather = 24
-                        distances = []
-                        if fade_top: distances.append("Y")
-                        if fade_bottom: distances.append("(H-Y)")
-                        if fade_left: distances.append("X")
-                        if fade_right: distances.append("(W-X)")
-                        if distances:
-                            d_min = distances[0]
-                            for d in distances[1:]:
-                                d_min = f"min({d_min},{d})"
-                            alpha_expr = (
-                                f"if(gt({d_min},{feather}),255,"
-                                f"255*{d_min}/{feather})"
-                            )
-                            filter_str = (
-                                f"[1:v]scale={ow}:{oh}:flags=lanczos,setsar=1,format=yuva420p,"
-                                f"geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':"
-                                f"a='{alpha_expr}'[s];"
-                                f"[0:v][s]overlay={ox}:{oy}:shortest=1:format=auto[outv]"
-                            )
-                        else:
-                            filter_str = (
-                                f"[1:v]scale={ow}:{oh}:flags=lanczos,setsar=1[s];"
-                                f"[0:v][s]overlay={ox}:{oy}:shortest=1[outv]"
-                            )
-                        cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
-                        cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
-                        if _do_audio and src_has_audio:
-                            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
-                        else:
-                            cmd += ["-map", "0:a?", "-c:a", "copy"]
-                    else:
-                        # Audio mux only — no video filter
-                        cmd += ["-map", "0:v:0", "-c:v", "copy"]
-                        if _do_audio and src_has_audio:
-                            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
-                        else:
-                            cmd += ["-map", "0:a?", "-c:a", "copy"]
-
-                    cmd += ["-shortest", muxed_path]
+                    _do_overlay, cmd = _run_generation_outpaint_command(
+                            _do_audio, _do_overlay, _do_trim, _trim_boundary, _trim_count,
+                            muxed_path, out_video, raw_params, src_has_audio, src_video, subprocess)
 
                     # Skip if there's truly nothing to do
                     if not _do_trim and not _do_overlay and not (_do_audio and src_has_audio):
@@ -22490,6 +22453,147 @@ def _run_generation_outpaint(st):
                     print(f"  [Outpaint] Post-process error (non-fatal): {outpaint_post_err}")
     st.new_files = new_files
     return _run_generation_recast(st)
+
+
+def _run_generation_outpaint_candidates(new_files):
+    """Pick the canonical video to post-process."""
+    video_exts = {".mp4", ".webm", ".mkv", ".mov"}
+    # Sliding-window outpaint produces ONE complete cumulative mp4
+    # per window (e.g. 4 windows → 4 timestamped saves: 473→937→1401→1424
+    # frames). The post-process should only run on the FINAL save,
+    # not every per-window intermediate. Pick the last canonical mp4
+    # by sorted order — wgp prefixes filenames with timestamps so
+    # alphabetic sort = chronological. Skip _tmp.mp4 (intermediate
+    # save_path_tmp leftover) and our own _with_source_audio.mp4
+    # (in case of re-runs).
+    _candidates = []
+    for fname in sorted(new_files):
+        ext = os.path.splitext(fname)[1].lower()
+        if ext not in video_exts:
+            continue
+        if fname.endswith("_tmp" + ext):
+            continue
+        if "_with_source_audio" in fname or fname.endswith("_post" + ext):
+            continue
+        _candidates.append(fname)
+    if not _candidates:
+        print(f"  [Outpaint] No canonical video output to post-process")
+    return _candidates
+
+
+def _run_generation_outpaint_command(
+        _do_audio, _do_overlay, _do_trim, _trim_boundary, _trim_count, muxed_path, out_video,
+        raw_params, src_has_audio, src_video, subprocess):
+    """Build the ffmpeg command for the outpaint cleanup."""
+    # Build ffmpeg command. Three modes:
+    #   - overlay+audio: scale source, overlay on output, mux source audio
+    #   - overlay only: scale source, overlay on output, keep generated audio
+    #   - audio only: copy video, mux source audio
+    cmd = ["ffmpeg", "-y", "-i", out_video, "-i", src_video]
+    if _do_overlay:
+        ow = int(raw_params.get("_outpaint_overlay_w", 0))
+        oh = int(raw_params.get("_outpaint_overlay_h", 0))
+        ox = int(raw_params.get("_outpaint_overlay_x", 0))
+        oy = int(raw_params.get("_outpaint_overlay_y", 0))
+        if ow <= 0 or oh <= 0:
+            # Bad coords — fall through to audio-only path
+            _do_overlay = False
+
+    # Decide what filter graph we need. Modes:
+    #
+    #   smear-trim only: cut N frames at boundary 1 of
+    #     output video, mux source audio (no cuts —
+    #     source audio aligns with the trimmed video
+    #     because the smear lag was constant from that
+    #     point onward).
+    #
+    #   audio mux only: copy video, replace audio with
+    #     source audio.
+    #
+    #   overlay (legacy/opt-in): scale source video,
+    #     feathered alpha-overlay onto output, mux
+    #     source audio.
+    #
+    # Trim takes priority over overlay if both are on,
+    # since trim is what fixes the actual lip-sync bug.
+    if _do_trim and _trim_boundary > 0 and _trim_count > 0:
+        # Read fps from output to compute timestamps.
+        fps_probe = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", out_video],
+            capture_output=True, text=True, timeout=10,
+        )
+        _fps = 25.0
+        _fps_str = fps_probe.stdout.strip()
+        if "/" in _fps_str:
+            _num, _den = _fps_str.split("/")
+            if _den and float(_den) != 0:
+                _fps = float(_num) / float(_den)
+        cut_start = _trim_boundary / _fps
+        cut_end = (_trim_boundary + _trim_count) / _fps
+        # ffmpeg trim+concat: keep [0, cut_start) and [cut_end, end).
+        # asetpts on source audio resets PTS so it starts at 0
+        # in the output timeline; -shortest will clamp the audio
+        # to the (now shorter by N frames) trimmed video duration.
+        filter_str = (
+            f"[0:v]trim=0:{cut_start:.6f},setpts=PTS-STARTPTS[v0];"
+            f"[0:v]trim={cut_end:.6f},setpts=PTS-STARTPTS[v1];"
+            f"[v0][v1]concat=n=2:v=1[outv]"
+        )
+        cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
+        cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
+        if _do_audio and src_has_audio:
+            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+        else:
+            cmd += ["-an"]  # drop audio if we can't replace it
+    elif _do_overlay:
+        cw = int(raw_params.get("_outpaint_canvas_w", 0)) or (ox + ow)
+        ch = int(raw_params.get("_outpaint_canvas_h", 0)) or (oy + oh)
+        fade_top = oy > 0
+        fade_bottom = (oy + oh) < ch
+        fade_left = ox > 0
+        fade_right = (ox + ow) < cw
+        feather = 24
+        distances = []
+        if fade_top: distances.append("Y")
+        if fade_bottom: distances.append("(H-Y)")
+        if fade_left: distances.append("X")
+        if fade_right: distances.append("(W-X)")
+        if distances:
+            d_min = distances[0]
+            for d in distances[1:]:
+                d_min = f"min({d_min},{d})"
+            alpha_expr = (
+                f"if(gt({d_min},{feather}),255,"
+                f"255*{d_min}/{feather})"
+            )
+            filter_str = (
+                f"[1:v]scale={ow}:{oh}:flags=lanczos,setsar=1,format=yuva420p,"
+                f"geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':"
+                f"a='{alpha_expr}'[s];"
+                f"[0:v][s]overlay={ox}:{oy}:shortest=1:format=auto[outv]"
+            )
+        else:
+            filter_str = (
+                f"[1:v]scale={ow}:{oh}:flags=lanczos,setsar=1[s];"
+                f"[0:v][s]overlay={ox}:{oy}:shortest=1[outv]"
+            )
+        cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
+        cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
+        if _do_audio and src_has_audio:
+            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+        else:
+            cmd += ["-map", "0:a?", "-c:a", "copy"]
+    else:
+        # Audio mux only — no video filter
+        cmd += ["-map", "0:v:0", "-c:v", "copy"]
+        if _do_audio and src_has_audio:
+            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+        else:
+            cmd += ["-map", "0:a?", "-c:a", "copy"]
+
+    cmd += ["-shortest", muxed_path]
+    return _do_overlay, cmd
 
 
 def _run_generation_recast(st):
