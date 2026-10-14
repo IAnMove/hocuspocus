@@ -53,6 +53,20 @@ def test_wizard_persistence_round_trip(server, golden) -> None:
     server.check(golden, "wizard workflows loaded", "GET", "/api/v1/wizard/workflows")
 
 
+def test_storage_usage_reads_sidecars_and_workspace_sizes(server, golden) -> None:
+    """Storage usage joins generation sidecars with the bytes in each workspace."""
+    (server.outputs / "clip.meta.json").write_text(
+        json.dumps({
+            "created_at": 10,
+            "params": {"model_type": "fake_t2v", "activated_loras": ["look.safetensors"]},
+        }),
+        encoding="utf-8",
+    )
+    (server.outputs / "lab").mkdir()
+    (server.outputs / "lab" / "note.txt").write_text("hi", encoding="utf-8")
+    server.check(golden, "storage usage", "GET", "/api/v1/storage/usage")
+
+
 def test_workspace_names_are_validated(server, golden) -> None:
     server.check(golden, "create without name", "POST", "/api/v1/workspaces", json={})
     server.check(golden, "create with a path", "POST", "/api/v1/workspaces", json={"name": "../escape"})

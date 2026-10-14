@@ -9,6 +9,28 @@ from typing import Any, Callable
 from services.generation import get_wgp
 
 
+def write_private_json(path: str, payload: str) -> None:
+    """Replace ``path`` with ``payload`` atomically and leave it mode 0600.
+
+    A unique temporary file is created with owner-only permissions, fsynced,
+    then renamed over the destination. The temporary name is removed if the
+    rename does not consume it, including when the rename fails.
+    """
+    folder = os.path.dirname(os.path.abspath(path)) or "."
+    temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
+
+
 class ConfigStore:
     """``wgp.server_config`` and the one place that writes it back to disk.
 
@@ -38,17 +60,4 @@ class ConfigStore:
         and the next start failed to import wgp.
         """
         wgp = self._wgp_provider()
-        path = wgp.server_config_filename
-        folder = os.path.dirname(os.path.abspath(path)) or "."
-        temporary = os.path.join(folder, f".{os.path.basename(path)}.{uuid.uuid4().hex}.tmp")
-        try:
-            with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
-                handle.write(json.dumps(wgp.server_config, indent=4))
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        finally:
-            try:
-                os.remove(temporary)
-            except OSError:
-                pass
+        write_private_json(wgp.server_config_filename, json.dumps(wgp.server_config, indent=4))

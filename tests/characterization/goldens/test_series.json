@@ -47,6 +47,12 @@
     },
     "status": 404
   },
+  "cancel missing render job": {
+    "body": {
+      "detail": "Series render job not found"
+    },
+    "status": 404
+  },
   "canon commit without a revision": {
     "body": {
       "detail": "baseRevision is required"
@@ -192,6 +198,12 @@
   "discard missing plan job": {
     "body": {
       "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "discard missing render job": {
+    "body": {
+      "detail": "Series render job not found"
     },
     "status": 404
   },
@@ -466,6 +478,12 @@
   "get missing plan job": {
     "body": {
       "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "get missing render job": {
+    "body": {
+      "detail": "Series render job not found"
     },
     "status": 404
   },
@@ -814,9 +832,39 @@
     },
     "status": 200
   },
+  "render start of a missing episode": {
+    "body": {
+      "detail": "Series episode not found"
+    },
+    "status": 404
+  },
+  "render start of a missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "render start with an unknown mode": {
+    "body": {
+      "detail": "Render mode must be selected, failed, missing, or all"
+    },
+    "status": 400
+  },
+  "render start with no generated shots": {
+    "body": {
+      "detail": "No permitted unapproved generated-video shots match this request. Prepare animation shots in their editor or import a completed take."
+    },
+    "status": 400
+  },
   "resume missing plan job": {
     "body": {
       "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "resume missing render job": {
+    "body": {
+      "detail": "Series render job not found"
     },
     "status": 404
   },

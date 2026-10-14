@@ -1386,69 +1386,29 @@ _model_downloads_lock = threading.Lock()
 def _download_model_files(model_type: str):
     """Resolve and fetch every file load_models() would download.
 
-    Mirrors the file-resolution block at the top of wgp.load_models()
-    (wgp.py:4041-4143) — keep the two in sync.
+    The file list is ``services.engine.model_files.resolve_model_files``, the
+    mirror of the file-resolution block of ``wgp.load_models``. ``wgp.py`` is
+    vendored and is not edited. This name stays so the pre-download route
+    keeps calling it.
     """
-    if _is_legacy_h3_model(model_type):
-        minimax_h3_service.ensure_quality_assets(
-            lambda message: print(f"[H3 Legacy] {message}")
-        )
-        if not minimax_h3_service.is_model_downloaded():
-            raise RuntimeError(
-                "Legacy download finished but the exact ConvRot files are still missing."
-            )
-        return
+    from services.engine.model_files import download_model_files
 
-    model_def = wgp.get_model_def(model_type)
-    quantization = wgp.transformer_quantization
-    dtype_policy = wgp.transformer_dtype_policy
-    transformer_dtype = wgp.get_transformer_dtype(model_type, dtype_policy)
-
-    model_file_list = [wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy)]
-    source_type_list = [0]
-    submodel_no_list = [1]
-    if "URLs2" in model_def:
-        model_file_list.append(wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy, submodel_no=2))
-        source_type_list.append(0)
-        submodel_no_list.append(2)
-    modules = wgp.get_model_recursive_prop(model_type, "modules", return_list=True)
-    modules = [wgp.get_model_recursive_prop(module, "modules", sub_prop_name="_list", return_list=True) if isinstance(module, str) else module for module in modules]
-    for module_type in modules:
-        if isinstance(module_type, dict):
-            for urls_key, submodel_no in (("URLs", 1), ("URLs2", 2)):
-                urls = module_type.get(urls_key, None)
-                if urls is None:
-                    raise Exception(f"No {urls_key} defined for Module {module_type}")
-                model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, URLs=urls))
-                source_type_list.append(1)
-                submodel_no_list.append(submodel_no)
-        else:
-            model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, module_type=module_type))
-            source_type_list.append(1)
-            submodel_no_list.append(0)
-
-    fetched = False
-    for filename, source_type, submodel_no in zip(model_file_list, source_type_list, submodel_no_list):
-        if len(filename) == 0:
-            continue
-        wgp.download_models(filename, model_type, source_type, submodel_no)
-        fetched = True
-    if not fetched:
-        # No main file: the handler's own file list is the whole download (load_models does the same).
-        wgp.download_models("", model_type, 0, -1)
-
-    text_encoder_URLs = wgp.get_model_recursive_prop(model_type, "text_encoder_URLs", return_list=True)
-    if text_encoder_URLs is not None:
-        te_quant = (model_def.get("text_encoder_quantization", None) if model_def else None) or wgp.text_encoder_quantization
-        text_encoder_filename = wgp.get_model_filename(model_type=model_type, quantization=te_quant, dtype_policy=dtype_policy, URLs=text_encoder_URLs)
-        if text_encoder_filename is not None and len(text_encoder_filename):
-            text_encoder_folder = model_def.get("text_encoder_folder", None)
-            wgp.download_models(text_encoder_filename, model_type, 2, -1, force_path=text_encoder_folder)
-            if wgp.get_local_model_filename(text_encoder_filename, extra_paths=text_encoder_folder) is None:
-                raise Exception(f"Text encoder '{os.path.basename(text_encoder_filename)}' could not be located after download.")
-
-    if not _check_model_downloaded(model_type):
-        raise Exception("Download finished but the checkpoint could not be located — check disk space and earlier terminal output.")
+    download_model_files(
+        model_type,
+        is_legacy_h3_model=_is_legacy_h3_model,
+        ensure_quality_assets=minimax_h3_service.ensure_quality_assets,
+        is_h3_downloaded=minimax_h3_service.is_model_downloaded,
+        get_model_def=wgp.get_model_def,
+        transformer_quantization=wgp.transformer_quantization,
+        transformer_dtype_policy=wgp.transformer_dtype_policy,
+        get_transformer_dtype=wgp.get_transformer_dtype,
+        get_model_filename=wgp.get_model_filename,
+        get_model_recursive_prop=wgp.get_model_recursive_prop,
+        download_models=wgp.download_models,
+        get_local_model_filename=wgp.get_local_model_filename,
+        text_encoder_quantization=wgp.text_encoder_quantization,
+        check_model_downloaded=_check_model_downloaded,
+    )
 
 
 @api.post("/api/v1/models/{model_type}/download")
@@ -6925,283 +6885,64 @@ async def wangp_capabilities():
     return {"revision": "362c3467a70e1136ceb52eec95907205a8f88543", "processors": processors}
 
 
-@api.get("/api/v1/model3d/capabilities")
-def model3d_capabilities():
-    from services import model3d_service
-    return model3d_service.capabilities()
+class _LaunchCollectionLookup:
+    """The collections registry is created later in this module; look it up per request."""
+
+    def get(self, key):
+        return globals()["_workspace_collection_registry"].get(key)
 
 
-@api.post("/api/v1/model3d/generate")
-async def generate_model3d(request: Request):
-    from services import model3d_service
-    from services.generation_provenance import normalize_submission_provenance
-
-    body = await request.json()
-    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
-    collection_id = body["provenance"].get("workspace_id")
-    if collection_id and not _workspace_collection_registry.get(collection_id):
-        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    try:
-        execution_mode.validate_generation(workspace)
-    except execution_mode.ExecutionModeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raw_images = body.get("images") or {}
-    if not isinstance(raw_images, dict):
-        raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
-    # Backward-compatible single-image input becomes the front view.
-    if body.get("image_path") and not raw_images.get("front"):
-        raw_images["front"] = body["image_path"]
-    image_paths = {}
-    for view, value in raw_images.items():
-        if view not in {"front", "left", "right", "back"} or not value:
-            continue
-        resolved = _resolve_model3d_input_path(str(value), workspace)
-        if not resolved or not os.path.isfile(resolved):
-            raise HTTPException(status_code=400, detail=f"3D {view} image not found")
-        image_paths[view] = resolved
-    source_mesh_path = None
-    if str(body.get("operation") or "generate").lower() == "retexture":
-        source_mesh_path = _resolve_model3d_input_path(
-            str(body.get("source_model") or ""), workspace,
-        )
-        if not source_mesh_path or not os.path.isfile(source_mesh_path):
-            raise HTTPException(status_code=400, detail="Source GLB not found")
-    try:
-        job = model3d_service.start_job(
-            body=body,
-            image_paths=image_paths,
-            output_dir=_workspace_dir(workspace),
-            source_mesh_path=source_mesh_path,
-            workspace=workspace,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "model3d")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/model3d/status/{job_id}")
-def model3d_job_status(job_id: str):
-    from services import model3d_service
-    job = model3d_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
+def _publish_moved_studio_task(record, adapter):
+    """Activity publish stays the launch function, which is defined further down."""
     publisher = globals().get("_publish_generic_legacy_task")
     if callable(publisher):
-        publisher(job, "model3d")
-    return job
+        publisher(record, adapter)
 
 
-@api.post("/api/v1/model3d/jobs/{job_id}/cancel")
-def cancel_model3d_job(job_id: str):
+def _launch_model3d_engine():
     from services import model3d_service
-    job = model3d_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "model3d")
-    return job
+    return model3d_service
 
 
-@api.post("/api/v1/model3d/unload")
-def unload_model3d():
-    """Stop active workers. Completed jobs already release all Hunyuan VRAM."""
-    from services import model3d_service
-    cancelled = model3d_service.cancel_all_jobs()
-    return {"status": "ok", "cancelled_jobs": cancelled, "model_loaded": False}
+from routers.model3d import create_model3d_router
+from routers.rig import create_rig_router
 
-
-# ============================================================================
-# API Routes: Rig & Animate (procedural skeletons for 3D outputs)
-# ============================================================================
-
-@api.get("/api/v1/rig/capabilities")
-def rig_capabilities():
-    from services import rig_service
-    return rig_service.capabilities()
-
-
-@api.post("/api/v1/rig/generate")
-async def generate_rig(request: Request):
-    from services import rig_service
-    from services.generation_provenance import normalize_submission_provenance
-    body = await request.json()
-    raw_provenance, trusted = body.pop("provenance", None), getattr(request, "trusted_tool", None)
-    # A UI rig keeps its historical "rig" origin; an agent or Wizard request carries who asked.
-    provenance = normalize_submission_provenance(raw_provenance, trusted_tool=trusted) if raw_provenance or trusted else None
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    source_name = str(body.get("source") or "").strip()
-    if not source_name:
-        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
-    if not source_name.lower().endswith(".glb"):
-        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = _safe_join(_workspace_dir(workspace), source_name)
-    if not source_path or not os.path.isfile(source_path):
-        # Also accept absolute/upload paths through the shared 3D resolver.
-        source_path = _resolve_model3d_input_path(source_name, workspace)
-    if not source_path or not os.path.isfile(source_path):
-        raise HTTPException(status_code=400, detail="Source 3D model not found")
-    try:
-        job = rig_service.start_job(
-            body=body,
-            source_path=source_path,
-            output_dir=_workspace_dir(workspace),
-            workspace=workspace,
-            provenance=provenance,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "rig")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/rig/status/{job_id}")
-def rig_job_status(job_id: str):
-    from services import rig_service
-    job = rig_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
-
-
-@api.post("/api/v1/rig/jobs/{job_id}/cancel")
-def cancel_rig_job(job_id: str):
-    from services import rig_service
-    job = rig_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
+api.include_router(create_model3d_router(
+    engine=_launch_model3d_engine,
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    validate_generation=lambda workspace: execution_mode.validate_generation(workspace),
+    collection_registry=_LaunchCollectionLookup(),
+    publish_task=_publish_moved_studio_task,
+))
+from routers.model3d import cancel_model3d_job, generate_model3d, model3d_job_status
+api.include_router(create_rig_router(
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    safe_join=_safe_join,
+    publish_task=_publish_moved_studio_task,
+))
+from routers.rig import cancel_rig_job, generate_rig, rig_job_status
 
 
 # ============================================================================
 # API Routes: Workspaces
 # ============================================================================
 
-@api.get("/api/v1/workspaces")
-def list_workspaces_endpoint():
-    """List all workspaces and the active one."""
-    return {
-        "workspaces": _list_workspaces(),
-        "active": _get_active_workspace(),
-    }
+from routers.workspace_outputs import create_workspace_router
 
-
-@api.put("/api/v1/workspaces/active")
-async def set_active_workspace(request: Request):
-    """Switch to a different workspace."""
-    body = await request.json()
-    name = body.get("name", "default")
-
-    # Validate name (alphanumeric, hyphens, underscores)
-    import re
-    if name != "default" and not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name. Use letters, numbers, hyphens, underscores.")
-
-    # Persist the switch; only touch wgp.save_path when idle. If a job is
-    # in progress it has locked wgp.save_path to its target workspace —
-    # overwriting mid-generation scatters clips across workspaces. The
-    # config is saved either way, so the next job or restart picks it up.
-    idle = not _active_gen_states
-    ws_dir = _persist_active_workspace(name, apply_save_paths=idle)
-    if idle:
-        print(f"[Workspace] Switched to: {name} ({ws_dir})")
-    else:
-        print(f"[Workspace] Config switched to: {name} (save_path deferred — generation in progress)")
-    return {"status": "ok", "active": name, "path": ws_dir}
-
-
-@api.post("/api/v1/workspaces")
-async def create_workspace(request: Request):
-    """Create a new workspace."""
-    body = await request.json()
-    name = body.get("name", "").strip()
-
-    if not name:
-        raise HTTPException(status_code=400, detail="Workspace name is required")
-
-    import re
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name. Use letters, numbers, hyphens, underscores.")
-
-    ws_dir = _workspace_dir(name)
-    os.makedirs(ws_dir, exist_ok=True)
-
-    return {"status": "ok", "name": name, "path": ws_dir}
-
-
-@api.delete("/api/v1/workspaces/{name}")
-def delete_workspace(name: str):
-    """Delete a workspace folder and every asset inside it.
-
-    Refused while anything is queued or generating: jobs capture their
-    workspace at submit time and _workspace_dir() recreates folders on
-    demand, so a mid-generation delete would silently resurrect the
-    workspace and scatter files into it.
-    """
-    import re
-    if name == "default":
-        raise HTTPException(status_code=400, detail="The default workspace is the outputs folder itself and cannot be deleted.")
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name.")
-    base = os.path.abspath(wgp.server_config.get("save_path", "outputs"))
-    # _safe_join resolves symlinks/junctions before the containment check —
-    # the regex blocks traversal but not a junction inside outputs/.
-    ws_dir = _safe_join(base, name)
-    if ws_dir is None:
-        raise HTTPException(status_code=400, detail="Invalid workspace path.")
-    if not os.path.isdir(ws_dir):
-        raise HTTPException(status_code=404, detail=f"Workspace not found: {name}")
-
-    busy = any(j.get("status") in ("queued", "running") for j in _jobs.values())
-    if busy or _active_gen_states:
-        raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
-    # Director pipelines are alive between their generation jobs (LLM
-    # planning, review pauses) with no _jobs entry — but their next step
-    # would resurrect the folder via _workspace_dir().
-    try:
-        from services.director_pipeline import any_pipeline_active
-        if any_pipeline_active():
-            raise HTTPException(status_code=409, detail="A Director pipeline is running or paused. Stop it before deleting a workspace.")
-    except ImportError:
-        pass
-
-    # Deleting the active workspace switches to default first. Safe to write
-    # wgp.save_path directly here: nothing is generating (guards above).
-    switched = False
-    if _get_active_workspace() == name:
-        _persist_active_workspace("default")
-        switched = True
-        print(f"[Workspace] Active workspace deleted — switched to default")
-
-    from services.win_safe_files import safe_delete_dir
-    result = safe_delete_dir(ws_dir)
-    print(f"[Workspace] Deleted '{name}': {result['files_deleted']} files removed, "
-          f"{result['files_deferred']} deferred, dir_removed={result['removed']}")
-    return {
-        "status": "ok", "name": name,
-        "files_deleted": result["files_deleted"], "files_deferred": result["files_deferred"],
-        "dir_removed": result["removed"], "switched_to_default": switched, "errors": result["errors"],
-    }
+api.include_router(create_workspace_router(
+    list_workspaces=_list_workspaces,
+    get_active_workspace=_get_active_workspace,
+    persist_active=_persist_active_workspace,
+    workspace_dir=_workspace_dir,
+    generation_idle=lambda: not _active_gen_states,
+    jobs=lambda: _jobs.values(),
+    safe_join=_safe_join,
+    save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+))
 
 
 # ============================================================================
@@ -7464,153 +7205,18 @@ async def storage_remove_linked(request: Request):
     return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
 
 
-@api.get("/api/v1/storage/usage")
-def storage_usage():
-    """Usage analytics backfilled from generation sidecars: every job ever
-    run left a .meta.json with model_type, activated_loras, and created_at.
-    Joined with on-disk sizes so 'largest, least used' is one sort away."""
-    base = wgp.server_config.get("save_path", "outputs")
-    scan_dirs = [w["path"] for w in _list_workspaces()]
-    model_usage: dict = {}
-    lora_usage: dict = {}
-    sidecars = 0
-    for d in scan_dirs:
-        try:
-            entries = os.listdir(d)
-        except OSError:
-            continue
-        for n in entries:
-            if not n.endswith(".meta.json"):
-                continue
-            try:
-                with open(os.path.join(d, n), "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            except Exception:
-                continue
-            sidecars += 1
-            params = meta.get("params") or {}
-            created = meta.get("created_at") or 0
-            mt = params.get("model_type")
-            if mt:
-                agg = model_usage.setdefault(mt, {"count": 0, "last_used": 0})
-                agg["count"] += 1
-                agg["last_used"] = max(agg["last_used"], created)
-            for lora in params.get("activated_loras") or []:
-                if isinstance(lora, str) and lora:
-                    agg = lora_usage.setdefault(lora, {"count": 0, "last_used": 0})
-                    agg["count"] += 1
-                    agg["last_used"] = max(agg["last_used"], created)
+from services.storage_usage import configure as _configure_storage_usage
+from routers.workspace_outputs import create_storage_usage_router
 
-    models = []
-    # Shared weights (pointer-resolved base transformers, common text
-    # encoders) appear in MANY models' groups — per-model sizes overlap by
-    # design, so the dashboard's total comes from this global dedupe, not
-    # from summing rows.
-    global_seen = set()
-    models_total_bytes = 0
-    for mt in wgp.displayed_model_types:
-        md = wgp.get_model_def(mt)
-        if md is None:
-            continue
-        total = 0
-        primary_bytes = 0
-        seen_paths = set()
-        try:
-            for group in _model_weight_groups(mt):
-                for fname in _variant_group_filenames(group):
-                    p = wgp.fl.locate_file(fname, error_if_none=False)
-                    if not p:
-                        continue
-                    key = os.path.normcase(os.path.abspath(p))
-                    if key in seen_paths:
-                        continue
-                    seen_paths.add(key)
-                    try:
-                        size = os.path.getsize(p)
-                    except OSError:
-                        continue
-                    total += size
-                    if key not in global_seen:
-                        global_seen.add(key)
-                        models_total_bytes += size
-            # What the row's Delete actually frees: DELETE /models/{mt}
-            # removes owned files only (a finetune's alias never deletes
-            # the shared base) — mirror that here or the button lies.
-            for group in _model_weight_groups(mt, owned_only=True):
-                for fname in _variant_group_filenames(group):
-                    p = wgp.fl.locate_file(fname, error_if_none=False)
-                    if p and not wgp.fl.is_protected_path(p):
-                        try:
-                            primary_bytes += os.path.getsize(p)
-                        except OSError:
-                            pass
-        except Exception:
-            pass
-        usage = model_usage.get(mt, {})
-        # Rows without deletable bytes need to say WHY: a finetune whose
-        # def aliases another model's weights frees nothing when deleted
-        # (delete the base row instead), and weights living only in
-        # linked installs are read-only here.
-        _raw_urls = md.get("URLs")
-        _alias_of = None
-        if isinstance(_raw_urls, str):
-            _alias_md = wgp.get_model_def(_raw_urls)
-            _alias_of = (_alias_md or {}).get("name", _raw_urls)
-        models.append({
-            "model_type": mt, "name": md.get("name", mt),
-            "size_bytes": total, "primary_bytes": primary_bytes,
-            "alias_of": _alias_of,
-            "use_count": usage.get("count", 0),
-            "last_used": usage.get("last_used") or None,
-        })
-
-    loras = []
-    lora_root = _resolve_lora_root()
-    walk_roots = ([(lora_root, False)] if lora_root else []) + [(r, True) for r in _linked_lora_roots()]
-    seen_keys = set()
-    for root, linked in walk_roots:
-        for dirpath, _dn, fns in os.walk(root):
-            for f in fns:
-                if not f.endswith((".safetensors", ".sft")):
-                    continue
-                rel_dir = os.path.relpath(dirpath, root)
-                key = os.path.normcase(os.path.normpath(os.path.join(rel_dir, f)))
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                try:
-                    size = os.path.getsize(os.path.join(dirpath, f))
-                except OSError:
-                    size = 0
-                usage = lora_usage.get(f, {})
-                loras.append({
-                    "filename": f, "directory": rel_dir, "linked": linked, "size_bytes": size,
-                    "use_count": usage.get("count", 0),
-                    "last_used": usage.get("last_used") or None,
-                })
-
-    workspaces = []
-    for w in _list_workspaces():
-        ws_bytes = 0
-        try:
-            with os.scandir(w["path"]) as it:
-                for e in it:
-                    if e.is_file() and not e.name.startswith("."):
-                        try:
-                            ws_bytes += e.stat().st_size
-                        except OSError:
-                            pass
-        except OSError:
-            pass
-        workspaces.append({"name": w["name"], "file_count": w.get("file_count", 0), "size_bytes": ws_bytes})
-
-    return {
-        "models": sorted(models, key=lambda m: -m["size_bytes"]),
-        "models_total_bytes": models_total_bytes,
-        "loras": sorted(loras, key=lambda l: -l["size_bytes"]),
-        "workspaces": workspaces,
-        "scanned_sidecars": sidecars,
-    }
+_configure_storage_usage(
+    engine=wgp,
+    list_workspaces=_list_workspaces,
+    model_weight_groups=_model_weight_groups,
+    variant_group_filenames=_variant_group_filenames,
+    resolve_lora_root=_resolve_lora_root,
+    linked_lora_roots=_linked_lora_roots,
+)
+api.include_router(create_storage_usage_router())
 
 
 # ============================================================================
@@ -27265,861 +26871,53 @@ api.include_router(create_series_shot_duration_router())
 api.include_router(create_series_plan_apply_router())
 
 
-_series_render_jobs: dict[str, dict] = {}
-_series_render_jobs_lock = threading.RLock()
-_series_render_active_jobs: set[str] = set()
+from services.series_render_jobs import (
+    _series_asset_local_path,
+    _series_render_active_jobs,
+    _series_render_jobs,
+    _series_render_jobs_lock,
+    series_render_task_adapter,
+)
+from routers.series_render import (
+    _bind_series_render_runtime,
+    cancel_series_render_job,
+    create_series_render_router,
+    resume_series_render_job,
+)
 
 
+def _forward_series_render_publish(job, adapter):
+    return _publish_series_task(job, adapter)
 
 
-def _series_render_store(workspace: str):
-    from services.series_jobs import SeriesJobStore
-
-    return SeriesJobStore(_workspace_dir(workspace), "render")
+def _forward_series_render_reset(workspace, task_id):
+    return _reset_canonical_task_for_resume(workspace, task_id)
 
 
-def _active_series_render_for_episode(
-    workspace: str, series_id: str, episode_id: str,
-) -> dict | None:
-    """Return the one queue that owns an episode, including after restart."""
-    active_statuses = {"queued", "running", "cancelling"}
-    with _series_render_jobs_lock:
-        cached = [copy.deepcopy(job) for job in _series_render_jobs.values()]
-    try:
-        persisted = _series_render_store(workspace).list()
-    except (OSError, ValueError, json.JSONDecodeError):
-        persisted = []
-    by_id = {
-        str(job.get("jobId")): job
-        for job in [*persisted, *cached]
-        if isinstance(job, dict) and job.get("jobId")
-    }
-    return next((
-        job for job in by_id.values()
-        if job.get("workspace") == workspace
-        and job.get("seriesId") == series_id
-        and job.get("episodeId") == episode_id
-        and job.get("status") in active_statuses
-    ), None)
+_bind_series_render_runtime(
+    resolve_workspace=_series_library_workspace,
+    library_lock=_series_library_lock,
+    read_library=_read_series_workspace,
+    write_library=_write_series_workspace,
+    project_or_404=_series_project_or_404,
+    workspace_dir=_workspace_dir,
+    list_workspaces=_list_workspaces,
+    iso_now=_series_iso_now,
+    jobs=_jobs,
+    new_generation_job=_new_generation_job,
+    request_generation_cancel=_request_generation_cancel,
+    run_generation=_run_generation,
+    is_legacy_h3_model=_is_legacy_h3_model,
+    is_minimax_h3_model=_is_minimax_h3_model,
+    release_legacy_h3=_release_legacy_h3_when_queue_allows,
+    release_h3=_release_h3_when_queue_allows,
+    publish_task=_forward_series_render_publish,
+    reset_task=_forward_series_render_reset,
+)
+ctx.tasks.register_adapter("series-render", series_render_task_adapter)
+api.include_router(create_series_render_router())
 
 
-def _load_series_render_job(job_id: str) -> dict | None:
-    with _series_render_jobs_lock:
-        cached = _series_render_jobs.get(job_id)
-        if cached:
-            return copy.deepcopy(cached)
-    for item in _list_workspaces():
-        try:
-            job = _series_render_store(item["name"]).load(job_id)
-        except (OSError, ValueError, json.JSONDecodeError):
-            continue
-        if job:
-            with _series_render_jobs_lock:
-                _series_render_jobs[job_id] = job
-            return copy.deepcopy(job)
-    return None
-
-
-def _series_render_update(job_id: str, **patch) -> dict | None:
-    with _series_render_jobs_lock:
-        job = _series_render_jobs.get(job_id)
-        if not job:
-            return None
-        if (
-            job.get("status") == "cancelling"
-            and patch.get("status") not in {"cancelling", "cancelled"}
-        ):
-            return copy.deepcopy(job)
-        job.update(copy.deepcopy(patch))
-        job["updatedAt"] = time.time()
-        snapshot = copy.deepcopy(job)
-        _series_render_store(str(job["workspace"])).save(snapshot)
-        if snapshot.get("productionId") and "status" in patch:
-            from services.production_project_link import note_production_status
-            note_production_status(_workspace_dir(snapshot["workspace"]), snapshot["productionId"], snapshot["status"])
-        publisher = globals().get("_publish_series_task")
-        if callable(publisher):
-            try:
-                publisher(snapshot, "series-render")
-            except Exception as exc:
-                print(f"[Task registry] Could not publish Series render {job_id}: {exc}")
-        return snapshot
-
-
-def _series_render_update_item(job_id: str, item_index: int, **patch) -> dict | None:
-    with _series_render_jobs_lock:
-        job = _series_render_jobs.get(job_id)
-        if not job:
-            return None
-        items = job.get("items") if isinstance(job.get("items"), list) else []
-        if item_index < 0 or item_index >= len(items):
-            return None
-        items[item_index].update(copy.deepcopy(patch))
-        job["items"] = items
-        job["current"] = sum(1 for item in items if item.get("status") == "completed")
-        job["updatedAt"] = time.time()
-        snapshot = copy.deepcopy(job)
-        _series_render_store(str(job["workspace"])).save(snapshot)
-        return snapshot
-
-
-def _series_asset_local_path(workspace: str, asset: dict) -> str:
-    from services.series_asset_path import series_asset_local_path
-
-    return series_asset_local_path(
-        workspace,
-        asset,
-        workspace_dir=_workspace_dir,
-        remote_purpose="local H3 rendering",
-        on_missing="raise",
-    )
-
-
-def _series_render_context(job: dict, item: dict) -> tuple[dict, dict, dict, dict]:
-    from services.series_library import series_for_episode_snapshot
-    from services.series_production import series_shot_method
-    workspace = str(job["workspace"])
-    with _series_library_lock:
-        library = _read_series_workspace(workspace)
-        series = _series_project_or_404(library, str(job["seriesId"]))
-        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
-        if not isinstance(episode, dict):
-            raise ValueError("Series episode no longer exists")
-        shot = next((
-            value for value in episode.get("shots", [])
-            if isinstance(value, dict) and value.get("id") == item.get("shotId")
-        ), None)
-        if not isinstance(shot, dict):
-            raise ValueError("Series shot no longer exists")
-        if series_shot_method(series, shot) != "generated_video":
-            raise ValueError("This shot no longer permits model video generation")
-        attempt = next((
-            value for value in shot.get("attempts", [])
-            if isinstance(value, dict) and value.get("id") == item.get("attemptId")
-        ), None)
-        if not isinstance(attempt, dict):
-            raise ValueError("Series render attempt no longer exists")
-        frozen_series = series_for_episode_snapshot(series, episode)
-        return frozen_series, copy.deepcopy(episode), copy.deepcopy(shot), copy.deepcopy(attempt)
-
-
-def _series_patch_attempt(
-    job: dict,
-    item: dict,
-    patch: dict,
-    *,
-    output_assets: list[dict] | None = None,
-) -> dict:
-    from services.series_library import update_shot_render_attempt
-
-    workspace = str(job["workspace"])
-    with _series_library_lock:
-        library = _read_series_workspace(workspace)
-        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
-        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
-        if not isinstance(episode, dict):
-            raise ValueError("Series episode no longer exists")
-        shot_index = next((
-            index for index, value in enumerate(episode.get("shots", []))
-            if isinstance(value, dict) and value.get("id") == item.get("shotId")
-        ), None)
-        if shot_index is None:
-            raise ValueError("Series shot no longer exists")
-        episode["shots"][shot_index] = update_shot_render_attempt(
-            episode["shots"][shot_index], str(item["attemptId"]), **patch,
-        )
-        for asset in output_assets or []:
-            series.setdefault("assets", {})[asset["id"]] = copy.deepcopy(asset)
-        now = _series_iso_now()
-        episode["updatedAt"] = now
-        series["updatedAt"] = now
-        series["revision"] = int(series.get("revision") or 1) + 1
-        library["seriesById"][series["id"]] = series
-        stored = _write_series_workspace(workspace, library)
-        return stored["seriesById"][series["id"]]["episodesById"][episode["id"]]["shots"][shot_index]
-
-
-def _series_settle_episode_render_status(job: dict) -> str:
-    """Leave an episode in a truthful terminal state after a render job settles."""
-    workspace = str(job["workspace"])
-    with _series_library_lock:
-        library = _read_series_workspace(workspace)
-        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
-        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
-        if not isinstance(episode, dict):
-            raise ValueError("Series episode no longer exists")
-        shots = [item for item in episode.get("shots", []) if isinstance(item, dict)]
-        all_rendered = bool(shots) and all(
-            any(
-                isinstance(attempt, dict)
-                and attempt.get("status") == "completed"
-                and bool(attempt.get("outputAssetIds"))
-                for attempt in shot.get("attempts", [])
-            )
-            for shot in shots
-        )
-        status = "completed" if all_rendered else "shot_plan"
-        if episode.get("status") == status:
-            return status
-        now = _series_iso_now()
-        episode["status"] = status
-        episode["updatedAt"] = now
-        series["updatedAt"] = now
-        series["revision"] = int(series.get("revision") or 1) + 1
-        library["seriesById"][series["id"]] = series
-        _write_series_workspace(workspace, library)
-        return status
-
-
-def _run_series_render_job_inner(job_id: str) -> None:
-    from services.series_render import build_h3_generation_params
-
-    job = _load_series_render_job(job_id)
-    if not job:
-        return
-    items = job.get("items") if isinstance(job.get("items"), list) else []
-    any_failed = False
-    try:
-        for item_index, item in enumerate(items):
-            latest = _load_series_render_job(job_id)
-            if not latest or latest.get("status") in {"cancelling", "cancelled"}:
-                return
-            current_item = latest.get("items", [])[item_index]
-            if current_item.get("status") == "completed":
-                continue
-            series, _episode, shot, attempt = _series_render_context(latest, current_item)
-            submitted_at = _series_iso_now()
-            _series_patch_attempt(
-                latest, current_item,
-                {"status": "running", "submittedAt": submitted_at, "error": ""},
-            )
-            _series_render_update_item(
-                job_id, item_index, status="running", submittedAt=submitted_at, error=None,
-            )
-            _series_render_update(
-                job_id, status="running", stage="rendering", activeShotId=current_item["shotId"],
-                message=f"Rendering shot {item_index + 1}/{len(items)}…",
-            )
-            latest = _load_series_render_job(job_id) or latest
-            if latest.get("status") in {"cancelling", "cancelled"}:
-                completed_at = _series_iso_now()
-                _series_patch_attempt(
-                    latest,
-                    current_item,
-                    {
-                        "status": "cancelled",
-                        "completedAt": completed_at,
-                        "error": "Cancelled by user",
-                    },
-                )
-                _series_render_update_item(
-                    job_id,
-                    item_index,
-                    status="cancelled",
-                    completedAt=completed_at,
-                    error="Cancelled by user",
-                )
-                return
-            started = time.time()
-            child_job_id = ""
-            try:
-                assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
-                resolved = {}
-                for reference in attempt.get("referenceManifest", {}).get("selected", []):
-                    if not isinstance(reference, dict):
-                        continue
-                    asset_id = str(reference.get("assetId") or "")
-                    asset = assets.get(asset_id)
-                    if not isinstance(asset, dict):
-                        raise ValueError(f"Routed Series asset no longer exists: {asset_id}")
-                    resolved[asset_id] = _series_asset_local_path(str(latest["workspace"]), asset)
-                params = build_h3_generation_params(series, shot, attempt, resolved)
-                params["_director_pipeline_id"] = f"series:{job_id}"
-                cancellation_check = _load_series_render_job(job_id) or latest
-                if cancellation_check.get("status") in {"cancelling", "cancelled"}:
-                    raise RuntimeError("Cancelled by user before model execution")
-                request_hash = "sha256:" + hashlib.sha256(
-                    json.dumps(params, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
-                ).hexdigest()
-                child_job_id = f"sr{uuid.uuid4().hex[:10]}"
-                child = _new_generation_job(
-                    params, str(latest["workspace"]), job_id=child_job_id,
-                )
-                _jobs[child_job_id] = child
-                _series_render_update_item(
-                    job_id, item_index, childJobId=child_job_id,
-                    requestPayloadHash=request_hash,
-                )
-                cancellation_check = _load_series_render_job(job_id) or latest
-                if cancellation_check.get("status") in {"cancelling", "cancelled"}:
-                    _request_generation_cancel(child_job_id)
-                    raise RuntimeError("Cancelled by user before model execution")
-                _series_patch_attempt(
-                    latest, current_item,
-                    {"providerTaskId": child_job_id, "requestPayloadHash": request_hash},
-                )
-                _run_generation(child_job_id)
-                child_result = snapshot_job(_jobs[child_job_id])
-                if child_result.get("status") != "completed" or not child_result.get("output_files"):
-                    raise RuntimeError(child_result.get("error") or "H3 returned no video output")
-                completed_at = _series_iso_now()
-                elapsed_ms = max(0, round((time.time() - started) * 1000))
-                output_asset_ids = []
-                output_assets = []
-                for output_index, filename in enumerate(child_result["output_files"]):
-                    basename = os.path.basename(str(filename))
-                    asset_id = f"asset_{attempt['id']}_{output_index + 1}"
-                    output_asset_ids.append(asset_id)
-                    output_assets.append({
-                        "id": asset_id, "workspaceId": latest["workspace"], "kind": "video",
-                        "uri": f"outputs/{basename}", "ownerType": "attempt", "ownerId": attempt["id"],
-                        "isDerivedThumbnail": False,
-                        "metadata": {
-                            "seriesId": latest["seriesId"], "episodeId": latest["episodeId"],
-                            "shotId": current_item["shotId"], "attemptId": attempt["id"],
-                            "prompt": attempt.get("prompt"), "negativePrompt": attempt.get("negativePrompt"),
-                            "model": params["model_type"], "seed": params["seed"],
-                            "settings": attempt.get("settings"),
-                            "referenceManifest": attempt.get("referenceManifest"),
-                            "createdAt": attempt.get("createdAt"), "submittedAt": submitted_at,
-                            "completedAt": completed_at, "elapsedMs": elapsed_ms,
-                            "generationJobId": child_job_id, "requestPayloadHash": request_hash,
-                            "taskId": child_result.get("task_id"),
-                            "rootTaskId": (
-                                child_result.get("root_task_id")
-                                or child_result.get("task_id")
-                            ),
-                        },
-                    })
-                _series_patch_attempt(
-                    latest, current_item,
-                    {
-                        "status": "completed", "completedAt": completed_at,
-                        "elapsedMs": elapsed_ms, "outputAssetIds": output_asset_ids,
-                        "providerTaskId": child_job_id, "requestPayloadHash": request_hash, "error": "",
-                    },
-                    output_assets=output_assets,
-                )
-                _series_render_update_item(
-                    job_id, item_index, status="completed", completedAt=completed_at,
-                    elapsedMs=elapsed_ms, outputAssetIds=output_asset_ids, error=None,
-                )
-            except Exception as exc:
-                any_failed = True
-                error = str(exc)
-                completed_at = _series_iso_now()
-                elapsed_ms = max(0, round((time.time() - started) * 1000))
-                current = _load_series_render_job(job_id)
-                if current and current.get("status") in {"cancelling", "cancelled"}:
-                    try:
-                        _series_patch_attempt(
-                            current, current["items"][item_index],
-                            {"status": "cancelled", "completedAt": completed_at, "elapsedMs": elapsed_ms, "error": "Cancelled"},
-                        )
-                    except Exception:
-                        pass
-                    return
-                try:
-                    _series_patch_attempt(
-                        current or latest, (current or latest)["items"][item_index],
-                        {"status": "failed", "completedAt": completed_at, "elapsedMs": elapsed_ms, "error": error},
-                    )
-                except Exception as patch_exc:
-                    error = f"{error}; could not persist attempt state: {patch_exc}"
-                _series_render_update_item(
-                    job_id, item_index, status="failed", completedAt=completed_at,
-                    elapsedMs=elapsed_ms, error=error, childJobId=child_job_id,
-                )
-        latest = _load_series_render_job(job_id) or job
-        if latest.get("status") in {"cancelling", "cancelled"}:
-            return
-        finished = time.time()
-        failures = [item for item in latest.get("items", []) if item.get("status") == "failed"]
-        _series_render_update(
-            job_id,
-            status="failed" if failures or any_failed else "completed",
-            stage="completed", activeShotId=None, finishedAt=finished,
-            error=(f"{len(failures)} shot(s) failed; completed attempts were preserved." if failures else None),
-            message=(
-                "Render finished with failures. Retry only failed shots when ready."
-                if failures else "All requested Series shots completed."
-            ),
-        )
-        _series_settle_episode_render_status(latest)
-    except Exception as exc:
-        _series_render_update(
-            job_id, status="failed", error=str(exc), finishedAt=time.time(),
-            message="Series render stopped. Completed attempts were preserved.",
-        )
-        try:
-            _series_settle_episode_render_status(job)
-        except Exception:
-            pass
-
-
-def _run_series_render_job(job_id: str) -> None:
-    with _series_render_jobs_lock:
-        if job_id in _series_render_active_jobs:
-            return
-        _series_render_active_jobs.add(job_id)
-    try:
-        _run_series_render_job_inner(job_id)
-    finally:
-        with _series_render_jobs_lock:
-            _series_render_active_jobs.discard(job_id)
-        settling = _load_series_render_job(job_id) or {}
-        if settling.get("status") == "cancelling":
-            settled_items = copy.deepcopy(settling.get("items") or [])
-            for item in settled_items:
-                if item.get("status") in {"queued", "running", "cancelling"}:
-                    item.update({
-                        "status": "cancelled",
-                        "completedAt": item.get("completedAt") or _series_iso_now(),
-                        "error": item.get("error") or "Cancelled by user",
-                        "updatedAt": time.time(),
-                    })
-            _series_render_update(
-                job_id,
-                items=settled_items,
-                status="cancelled",
-                stage="cancelled",
-                activeShotId=None,
-                finishedAt=time.time(),
-                message=(
-                    "Series render cancelled after the active model thread "
-                    "reached a safe boundary. Completed attempts remain available."
-                ),
-            )
-        # Series deliberately marks child generations as one Director-like
-        # group so H3 stays warm between adjacent shots. Once the parent job
-        # settles, restore the ordinary idle-release policy; otherwise the
-        # isolated ConvRot process can retain roughly 50 GB of host RAM forever.
-        finished = _load_series_render_job(job_id) or {}
-        model_type = str(finished.get("model") or "")
-        if _is_legacy_h3_model(model_type):
-            _release_legacy_h3_when_queue_allows(job_id)
-        elif _is_minimax_h3_model(model_type):
-            _release_h3_when_queue_allows(job_id)
-
-
-def _series_render_candidates(episode: dict, body: dict) -> list[dict]:
-    shots = [item for item in episode.get("shots", []) if isinstance(item, dict)]
-    mode = str(body.get("mode") or "missing")
-    selected_ids = {str(item) for item in body.get("shotIds", []) if isinstance(item, str)}
-    if mode == "selected":
-        shots = [item for item in shots if item.get("id") in selected_ids]
-        if not shots:
-            raise ValueError("Select at least one Series shot")
-        # Append a new alternative in the same slot while retaining the older
-        # approved cut until the user explicitly approves the replacement.
-        return shots
-    elif mode == "failed":
-        shots = [
-            item for item in shots
-            if item.get("attempts") and item["attempts"][-1].get("status") == "failed"
-        ]
-    elif mode == "all":
-        pass
-    elif mode == "missing":
-        shots = [item for item in shots if not item.get("approvedAttemptId")]
-    else:
-        raise ValueError("Render mode must be selected, failed, missing, or all")
-    # Bulk generation never spends compute on approved shots. Only explicit
-    # per-slot regeneration may append an alternative attempt.
-    return [item for item in shots if not item.get("approvedAttemptId")]
-
-
-@api.post("/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
-def start_series_episode_render(series_id: str, episode_id: str, body: dict):
-    from services.series_production import is_series_generated_shot
-    from services.series_library import append_shot_render_attempt, series_for_episode_snapshot
-    from services.series_reference_router import route_shot_references
-    from services.series_render import (
-        apply_series_h3_model_settings, apply_series_shot_duration, model_for_manifest,
-        normalize_series_resolution, quantize_h3_frames, series_dialogue_preflight_issues,
-        shot_generation_prompt, shot_render_settings,
-    )
-
-    workspace = _series_library_workspace(body.get("workspace"))
-    from services.production_shot_regeneration import guard_shared_regeneration
-    if body.get("shared_review") is not None:
-        guard_shared_regeneration(_workspace_dir(workspace), workspace, body,
-                                  f"/api/v1/series/{series_id}/episodes/{episode_id}/render/start")
-    with _series_library_lock:
-        library = _read_series_workspace(workspace)
-        series = copy.deepcopy(_series_project_or_404(library, series_id))
-        episode = series.get("episodesById", {}).get(episode_id)
-        if not isinstance(episode, dict):
-            raise HTTPException(status_code=404, detail="Series episode not found")
-        active_job = _active_series_render_for_episode(workspace, series_id, episode_id)
-        if active_job:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"Series episode already has active render {active_job.get('jobId')}; "
-                    "resume or cancel that queue instead of creating duplicate attempts"
-                ),
-            )
-        routing_series = series_for_episode_snapshot(series, episode)
-        try:
-            candidates = _series_render_candidates(episode, body)
-            candidates = [shot for shot in candidates if is_series_generated_shot(series, shot)]
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if not candidates:
-            raise HTTPException(status_code=400, detail="No permitted unapproved generated-video shots match this request. Prepare animation shots in their editor or import a completed take.")
-        if any(bool(shot.get("dialogueBeats")) for shot in candidates) and not series.get(
-            "bestEffortLipSyncAcknowledged"
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Dialogue rendering is blocked until best-effort native lip sync is acknowledged. "
-                    "Use ‘I understand · enable dialogue rendering’ in Shots or enable it in Series setup."
-                ),
-            )
-        for shot in candidates:
-            apply_series_shot_duration(routing_series, shot)
-        dialogue_issues = [
-            (shot.get("order"), issue)
-            for shot in candidates
-            for issue in series_dialogue_preflight_issues(shot, routing_series)
-        ]
-        if dialogue_issues:
-            summary = "; ".join(
-                f"shot {order}: {issue}" for order, issue in dialogue_issues[:8]
-            )
-            if len(dialogue_issues) > 8:
-                summary += f"; and {len(dialogue_issues) - 8} more"
-            raise HTTPException(
-                status_code=400,
-                detail=f"Fix dialogue timing/format before rendering: {summary}",
-            )
-        provider = routing_series.get("provider") if isinstance(routing_series.get("provider"), dict) else {}
-        provider_settings = provider.get("videoSettings") if isinstance(provider.get("videoSettings"), dict) else {}
-        settings = {**copy.deepcopy(provider_settings), **(
-            copy.deepcopy(body.get("settings")) if isinstance(body.get("settings"), dict) else {}
-        )}
-        resolution, orientation = normalize_series_resolution(
-            settings.get("resolution"), settings.get("orientation"),
-            provider.get("videoModel") or "minimax_h3",
-        )
-        settings["resolution"] = resolution
-        settings["orientation"] = orientation
-        settings["numInferenceSteps"] = max(1, min(50, int(settings.get("numInferenceSteps") or 20)))
-        settings["guidanceScale"] = float(settings.get("guidanceScale") or 1)
-        settings["flowShift"] = float(settings.get("flowShift") or 12)
-        settings["audioShift"] = float(settings.get("audioShift") or 3)
-        settings["modelProfile"] = str(settings.get("modelProfile") or "quality")
-        settings["fps"] = 24
-        try:
-            base_seed = int(body.get("seed")) if body.get("seed") is not None else int(uuid.uuid4().hex[:8], 16)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Seed must be an integer") from exc
-        items = []
-        candidate_ids = {item["id"] for item in candidates}
-        for shot_index, shot in enumerate(episode.get("shots", [])):
-            if not isinstance(shot, dict) or shot.get("id") not in candidate_ids:
-                continue
-            manifest = route_shot_references(routing_series, episode, shot, body.get("capabilities"))
-            if manifest.get("errors"):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Shot {shot.get('order')} reference routing must be fixed: {'; '.join(manifest['errors'])}",
-                )
-            model = model_for_manifest(str(provider.get("videoModel") or "minimax_h3"), manifest)
-            retry_count = len(shot.get("attempts", []))
-            apply_series_shot_duration(routing_series, shot)
-            duration_contract = shot.get("dialogueDuration") \
-                if isinstance(shot.get("dialogueDuration"), dict) else {}
-            shot_settings = apply_series_h3_model_settings(model, {
-                **shot_render_settings(settings, shot),
-                "requestedDurationSeconds": float(shot.get("durationSeconds") or 0),
-                "dialogueDuration": copy.deepcopy(duration_contract),
-                "videoLengthFrames": int(duration_contract.get("effectiveFrames"))
-                if duration_contract.get("effectiveFrames") is not None
-                else quantize_h3_frames(
-                    shot.get("durationSeconds"), reference_mode=manifest.get("strategy") == "references",
-                ),
-            })
-            updated_shot, attempt = append_shot_render_attempt(
-                shot, manifest=manifest, model=model, settings=shot_settings,
-                seed=(base_seed + int(shot.get("order") or shot_index)) & 0x7FFFFFFF,
-                retry_count=retry_count, prompt=shot_generation_prompt(
-                    routing_series, shot, manifest,
-                ),
-            )
-            episode["shots"][shot_index] = updated_shot
-            items.append({
-                "shotId": shot["id"], "attemptId": attempt["id"], "status": "queued",
-                "childJobId": None, "providerTaskId": None,
-                "requestPayloadHash": None, "outputAssetIds": [], "retryCount": retry_count,
-                "createdAt": time.time(), "updatedAt": time.time(), "error": None,
-            })
-        now_iso = _series_iso_now()
-        from services.production_generation_link import attach_episode
-        from services.production_project_link import LinkError
-        try:
-            registered = attach_episode(_workspace_dir(workspace), workspace, episode, body)
-        except LinkError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-        episode["status"] = "rendering"
-        episode["updatedAt"] = now_iso
-        series["episodesById"][episode_id] = episode
-        series["revision"] = int(series.get("revision") or 1) + 1
-        series["updatedAt"] = now_iso
-        library["seriesById"][series_id] = series
-        _write_series_workspace(workspace, library)
-        # Persist the episode attempts and their owning job before releasing
-        # the library lock. A concurrent start therefore observes this queue
-        # and cannot append a second set of attempts for the same episode.
-        job_id = f"series-render-{uuid.uuid4().hex[:12]}"
-        task_id = f"task-series-render-{job_id}"
-        now = time.time()
-        job = {
-            "jobId": job_id, "kind": "render", "workspace": workspace,
-            "productionId": registered["production_id"],
-            "seriesId": series_id, "episodeId": episode_id, "status": "queued",
-            "stage": "queued", "current": 0, "total": len(items), "items": items,
-            "activeShotId": None, "message": "Series shot render queued.",
-            "settings": settings, "model": str(provider.get("videoModel") or "minimax_h3"),
-            "seed": base_seed, "outputAssetIds": [], "retryCount": 0,
-            "createdAt": now, "updatedAt": now, "error": None,
-            "taskId": task_id, "rootTaskId": task_id,
-        }
-        with _series_render_jobs_lock:
-            _series_render_jobs[job_id] = job
-            _series_render_store(workspace).save(job)
-    publisher = globals().get("_publish_series_task")
-    task = publisher(job, "series-render") if callable(publisher) else None
-    if isinstance(task, dict):
-        job["taskId"] = task.get("id")
-        job["rootTaskId"] = task.get("root_id") or task.get("id")
-        with _series_render_jobs_lock:
-            _series_render_jobs[job_id] = copy.deepcopy(job)
-            _series_render_store(workspace).save(job)
-    threading.Thread(
-        target=_run_series_render_job, args=(job_id,),
-        name=f"series-render-{job_id[-6:]}", daemon=False,
-    ).start()
-    return {key: job[key] for key in (
-        "jobId", "taskId", "rootTaskId", "workspace", "seriesId", "episodeId",
-        "status", "stage", "current",
-        "total", "message", "settings", "seed", "createdAt",
-    )}
-
-
-@api.get("/api/v1/series/render/jobs/{job_id}")
-def get_series_render_job(job_id: str):
-    job = _load_series_render_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Series render job not found")
-    return {key: job.get(key) for key in (
-        "jobId", "workspace", "seriesId", "episodeId", "status", "stage", "current", "total",
-        "items", "activeShotId", "message", "settings", "model", "seed", "error",
-        "createdAt", "updatedAt", "finishedAt",
-        "taskId", "rootTaskId",
-    )}
-
-
-@api.post("/api/v1/series/render/jobs/{job_id}/cancel")
-def cancel_series_render_job(job_id: str):
-    job = _load_series_render_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Series render job not found")
-    if job.get("status") in {"completed", "failed", "cancelled"}:
-        return {"jobId": job_id, "status": job.get("status"), "message": job.get("message")}
-    cancelled_at = _series_iso_now()
-    with _series_render_jobs_lock:
-        worker_active = job_id in _series_render_active_jobs
-    active_child = next((
-        str(item.get("childJobId")) for item in job.get("items", [])
-        if item.get("status") == "running" and item.get("childJobId")
-    ), "")
-    # A persisted child id can outlive its process after an app restart. Only
-    # defer cancellation when there is an in-memory worker that can actually
-    # reach a safe boundary; otherwise settle the orphaned checkpoint now.
-    active_child_known = bool(active_child and active_child in _jobs)
-    deferred = bool(worker_active or active_child_known)
-    items = copy.deepcopy(job.get("items") or [])
-    cancellable = {"queued", "running"}
-    for item in items:
-        if item.get("status") in cancellable:
-            item.update({
-                "status": (
-                    "cancelling"
-                    if deferred and item.get("status") == "running"
-                    else "cancelled"
-                ),
-                "completedAt": (
-                    None
-                    if deferred and item.get("status") == "running"
-                    else cancelled_at
-                ),
-                "error": "Cancellation requested", "updatedAt": time.time(),
-            })
-    updated_job = _series_render_update(
-        job_id,
-        items=items,
-        status="cancelling" if deferred else "cancelled",
-        stage="cancelling" if deferred else "cancelled",
-        activeShotId=job.get("activeShotId") if deferred else None,
-        finishedAt=None if deferred else time.time(),
-        message=(
-            "Series render cancellation requested; waiting for the active "
-            "model thread to reach a safe boundary."
-            if deferred else
-            "Series render cancelled before model execution."
-        ),
-    ) or job
-    # Persist cancellation for every queued/running attempt too. This keeps
-    # recovery honest and guarantees resume appends a fresh attempt instead
-    # of rewriting the immutable request metadata of an interrupted one.
-    from services.series_library import update_shot_render_attempt
-    with _series_library_lock:
-        library = _read_series_workspace(str(job["workspace"]))
-        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
-        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
-        if isinstance(episode, dict):
-            changed = False
-            for item in items:
-                if item.get("status") != "cancelled":
-                    continue
-                shot_index = next((
-                    index for index, shot in enumerate(episode.get("shots", []))
-                    if isinstance(shot, dict) and shot.get("id") == item.get("shotId")
-                ), None)
-                if shot_index is None:
-                    continue
-                try:
-                    episode["shots"][shot_index] = update_shot_render_attempt(
-                        episode["shots"][shot_index], str(item.get("attemptId")),
-                        status="cancelled", completedAt=cancelled_at,
-                        error="Cancelled by user",
-                    )
-                    changed = True
-                except ValueError:
-                    continue
-            if changed:
-                episode["updatedAt"] = cancelled_at
-                series["episodesById"][episode["id"]] = episode
-                series["revision"] = int(series.get("revision") or 1) + 1
-                series["updatedAt"] = cancelled_at
-                library["seriesById"][series["id"]] = series
-                _write_series_workspace(str(job["workspace"]), library)
-    if active_child and active_child in _jobs:
-        _request_generation_cancel(active_child)
-    return {
-        "jobId": job_id,
-        "status": updated_job.get("status"),
-        "message": updated_job.get("message") or (
-            "Cancellation requested; the active model thread may take a "
-            "moment to release."
-        ),
-    }
-
-
-@api.get("/api/v1/series/render/recovery")
-def list_series_render_recovery(workspace: str | None = None):
-    target_workspace = _series_library_workspace(workspace)
-    jobs = _series_render_store(target_workspace).recoverable()
-    return {"jobs": [{key: job.get(key) for key in (
-        "jobId", "seriesId", "episodeId", "status", "stage", "current", "total",
-        "activeShotId", "message", "error", "createdAt", "updatedAt",
-    )} for job in jobs]}
-
-
-@api.post("/api/v1/series/render/jobs/{job_id}/resume")
-def resume_series_render_job(job_id: str):
-    from services.series_library import append_shot_render_attempt, update_shot_render_attempt
-
-    job = _load_series_render_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Series render job not found")
-    with _series_render_jobs_lock:
-        if job_id in _series_render_active_jobs:
-            return {"jobId": job_id, "status": job.get("status"), "message": "Series render is already running."}
-    items = copy.deepcopy(job.get("items") or [])
-    # A local diffusion process cannot resume mid-step. On explicit recovery,
-    # Interrupted/failed/cancelled items get a new append-only attempt;
-    # completed items remain untouched and truly queued items retain theirs.
-    with _series_library_lock:
-        library = _read_series_workspace(str(job["workspace"]))
-        series = copy.deepcopy(_series_project_or_404(library, str(job["seriesId"])))
-        episode = series.get("episodesById", {}).get(str(job["episodeId"]))
-        if not isinstance(episode, dict):
-            raise HTTPException(status_code=404, detail="Series episode not found")
-        changed = False
-        for item_index, item in enumerate(items):
-            if item.get("status") in {"completed", "queued"}:
-                continue
-            shot_index = next((
-                index for index, shot in enumerate(episode.get("shots", []))
-                if isinstance(shot, dict) and shot.get("id") == item.get("shotId")
-            ), None)
-            if shot_index is None:
-                continue
-            shot = episode["shots"][shot_index]
-            previous = next((
-                value for value in shot.get("attempts", []) if value.get("id") == item.get("attemptId")
-            ), None)
-            if not isinstance(previous, dict):
-                continue
-            if previous.get("status") in {"queued", "running"}:
-                shot = update_shot_render_attempt(
-                    shot, str(previous["id"]), status="cancelled",
-                    completedAt=_series_iso_now(), error="Interrupted before recovery",
-                )
-            resumed_shot, attempt = append_shot_render_attempt(
-                shot, manifest=previous.get("referenceManifest") or {},
-                model=str(previous.get("model") or job.get("model") or "minimax_h3"),
-                settings=previous.get("settings") or job.get("settings") or {},
-                seed=previous.get("seed"), retry_count=int(previous.get("retryCount") or 0) + 1,
-                prompt=str(previous.get("prompt") or shot.get("prompt") or ""),
-            )
-            episode["shots"][shot_index] = resumed_shot
-            items[item_index] = {
-                **item, "attemptId": attempt["id"], "status": "queued", "childJobId": None,
-                "providerTaskId": None, "requestPayloadHash": None, "outputAssetIds": [],
-                "retryCount": attempt["retryCount"], "error": None, "updatedAt": time.time(),
-            }
-            changed = True
-        if changed:
-            now_iso = _series_iso_now()
-            episode["updatedAt"] = now_iso
-            series["episodesById"][episode["id"]] = episode
-            series["revision"] = int(series.get("revision") or 1) + 1
-            series["updatedAt"] = now_iso
-            library["seriesById"][series["id"]] = series
-            _write_series_workspace(str(job["workspace"]), library)
-        # Publish the resumed checkpoint before releasing the same lock used
-        # by deletion, closing the terminal-job resume/delete race.
-        _reset_canonical_task_for_resume(
-            str(job.get("workspace") or "default"),
-            str(job.get("taskId") or f"task-series-render-{job_id}"),
-        )
-        _series_render_update(
-            job_id, items=items, status="queued", stage="queued", error=None, finishedAt=None,
-            message="Resuming Series render; completed shots will be reused.",
-        )
-    threading.Thread(
-        target=_run_series_render_job, args=(job_id,),
-        name=f"series-render-{job_id[-6:]}", daemon=False,
-    ).start()
-    return {"jobId": job_id, "status": "queued", "message": "Series render resumed."}
-
-
-@api.delete("/api/v1/series/render/jobs/{job_id}")
-def discard_series_render_job(job_id: str):
-    job = _load_series_render_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Series render job not found")
-    with _series_render_jobs_lock:
-        if job_id in _series_render_active_jobs:
-            raise HTTPException(status_code=409, detail="Cancel the active render before discarding its checkpoint")
-        _series_render_store(str(job["workspace"])).discard(job_id)
-        _series_render_jobs.pop(job_id, None)
-    return {"discarded": True, "jobId": job_id, "outputsPreserved": True}
 
 
 api.include_router(create_series_attempt_approval_router())
@@ -30257,9 +29055,20 @@ def get_latest_completed_director_comic_plan():
     return max(completed, key=lambda job: job.get("finishedAt") or job.get("updatedAt") or 0)
 
 
-_output_scan_cache_lock = threading.Lock()
-_output_scan_cache: dict[str, dict] = {}
-_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+from services.output_listing import (
+    _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS,
+    _output_scan_cache,
+    _output_scan_cache_lock,
+    _resolve_output_file,
+    configure as _configure_output_listing,
+    serve_file,
+)
+_configure_output_listing(
+    workspace_dir=_workspace_dir,
+    load_favorites=_load_favorites,
+    safe_join=_safe_join,
+    engine=wgp,
+)
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
@@ -30267,375 +29076,9 @@ from services.media_dimensions import configure as _configure_media_facts, note_
 
 _configure_media_facts(_MEDIA_THUMBNAIL_CACHE_DIR)
 
+from routers.workspace_outputs import create_list_outputs_router
 
-def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
-    """Resolve one output only inside its explicit or active workspace."""
-    root = _workspace_dir(workspace)
-    candidate = _safe_join(root, filename)
-    return candidate if candidate and os.path.isfile(candidate) else None
-
-
-@api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = "", origin: str = ""):
-    """List generated output files (newest first) from the active workspace.
-
-    Each row carries ``origin`` ({actor: agent | wizard, capability}) when an agent or the Wizard asked for the file,
-    and ``origin=agent`` keeps only those (``mcp`` or ``wizard`` one of them; services/output_origin.py).
-
-    Supports pagination via limit/offset query params.
-    Returns {outputs, total} where total is the full count before pagination.
-    When limit=0 (default), returns all items (backwards compatible).
-
-    workspace="__uploads__" lists the uploads folder instead (the gallery's
-    virtual "Uploads" view) so user-supplied media can be previewed and
-    reused. Browse-only: the server-side active workspace is untouched and
-    generations never save here. Uploads have no sidecars, so the metadata
-    passes below fall through naturally.
-    """
-    response.headers["Cache-Control"] = "no-store"
-    if workspace == "__uploads__":
-        out_dir = os.path.join(os.getcwd(), "uploads")
-    else:
-        out_dir = _workspace_dir(workspace or None)
-    workspace_suffix = (
-        f"?workspace={quote(workspace, safe='')}" if workspace else ""
-    )
-    workspace_extra = (
-        f"&workspace={quote(workspace, safe='')}" if workspace else ""
-    )
-    if not os.path.isdir(out_dir):
-        return {"outputs": [], "total": 0}
-
-    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
-    video_exts = {".mp4", ".webm", ".gif"}
-    audio_exts = {".wav", ".mp3"}
-    model3d_exts = {".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
-
-    def model3d_thumbnail_url(name: str, params: dict) -> str | None:
-        """Return a cheap static image preview for a 3D output card.
-
-        The gallery must never instantiate a second ``model-viewer`` for its
-        80px history cards: parsing many GLB files there is surprisingly
-        expensive.  The Hunyuan3D worker saves the normalized front view as a
-        ``<output>.preview.png`` sibling (for text-only jobs that is the
-        generated conditioning image), so prefer it.  Older outputs fall back
-        to the input views recorded in the sidecar; when neither exists the
-        client renders a lightweight 3D icon instead.
-        """
-        preview_name = os.path.splitext(name)[0] + ".preview.png"
-        if os.path.isfile(os.path.join(out_dir, preview_name)):
-            return f"/api/v1/file/{preview_name}{workspace_suffix}"
-        images = params.get("images")
-        if not isinstance(images, dict):
-            return None
-        front = images.get("front")
-        if not isinstance(front, str) or not front:
-            return None
-        try:
-            source = os.path.realpath(front)
-            if not os.path.isfile(source):
-                return None
-            uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
-            outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
-            filename = os.path.basename(source)
-            if source.startswith(uploads_root + os.sep):
-                return f"/api/v1/uploads/{filename}"
-            if source.startswith(outputs_root + os.sep):
-                return f"/api/v1/file/{filename}{workspace_suffix}"
-        except OSError:
-            pass
-        return None
-
-    favs = _load_favorites()
-
-    # Building the gallery index requires stat'ing every media file and
-    # parsing every metadata sidecar. The UI polls while a generation is
-    # active, so doing that work on each heartbeat caused unnecessary disk
-    # load and visible layout churn. Reuse a workspace snapshot while the
-    # directory is unchanged, with a short TTL as a safety net for in-place
-    # metadata edits that do not update the directory mtime.
-    try:
-        directory_signature = os.stat(out_dir).st_mtime_ns
-    except OSError:
-        return {"outputs": [], "total": 0}
-    now = time.monotonic()
-    with _output_scan_cache_lock:
-        cached_snapshot = _output_scan_cache.get(out_dir)
-        cache_is_fresh = (
-            cached_snapshot is not None
-            and cached_snapshot.get("signature") == directory_signature
-            and now - float(cached_snapshot.get("created_at", 0)) < _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS
-        )
-
-    if cache_is_fresh:
-        raw_entries = cached_snapshot["raw_entries"]
-        sidecar_cache = cached_snapshot["sidecar_cache"]
-        clip_groups = cached_snapshot["clip_groups"]
-    else:
-        raw_entries = []
-        for name in os.listdir(out_dir):
-            # Director's historical H3 builds wrote soundtrack slices beside
-            # user assets. They are private model inputs, not generated songs.
-            # New runs use the hidden .director-tmp directory; retain these
-            # prefix guards so scratch files left by an interrupted old run do
-            # not displace the real soundtrack in the media library.
-            if name.startswith((
-                ".trash_",
-                ".",
-                "_director_h3_audio_",
-                "_rerun_audio_",
-            )):
-                continue
-            # 3D preview sidecars are served as card thumbnails, not gallery items.
-            if name.endswith(".preview.png"):
-                continue
-            # Atomic image writes keep a media extension for PIL. They are
-            # incomplete until renamed and must never become gallery tiles.
-            if re.search(r"\.tmp_[0-9a-f]{8}\.[^.]+$", name):
-                continue
-            filepath = os.path.join(out_dir, name)
-            if not os.path.isfile(filepath):
-                continue
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in media_exts and not name.endswith(".scene.json") and not name.endswith(".comic.json"):
-                continue
-            try:
-                raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
-            except OSError:
-                continue
-
-        # Sort by creation time (newest first) before any filtering.
-        raw_entries.sort(key=lambda e: e[3], reverse=True)
-
-        # Read each sidecar once per snapshot and retain only the fields used
-        # by the gallery. Favorites remain outside the cache so toggles are
-        # reflected immediately.
-        sidecar_cache: dict[str, dict] = {}
-        clip_groups: dict[str, dict] = {}
-        try:
-            from services.output_result_kind import classify_output_result_kind, production_cuts, production_result_kind
-            cuts = production_cuts(out_dir)
-        except Exception:
-            def classify_output_result_kind(name, params=None, metadata=None):
-                return None
-            def production_result_kind(name, params, cuts):
-                return None
-            cuts = {}
-        from services.output_origin import output_origin
-        for name, filepath, ext, mtime in raw_entries:
-            meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
-            if not os.path.isfile(meta_path):
-                continue
-            try:
-                with open(meta_path, "r", encoding="utf-8") as mf:
-                    meta = json.load(mf)
-            except Exception:
-                continue
-            params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-            sidecar_cache[name] = {
-                "origin": output_origin(meta),
-                "mode": meta.get("generation_mode"),
-                "edit_sub_mode": params.get("edit_sub_mode"),
-                "multi_clip_info": params.get("multi_clip_info"),
-                "resolution": params.get("resolution"),
-                "result_kind": classify_output_result_kind(name, params, meta) or production_result_kind(name, params, cuts),
-                "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
-                # Output sidecars are written only after the generated asset
-                # has been published.  Their historical ``created_at`` field
-                # therefore represents completion time, despite the old name.
-                # Prefer an explicit completion field when newer producers
-                # provide one and retain mtime as the legacy/import fallback.
-                "completed_at": next((
-                    float(meta[key])
-                    for key in ("completed_at", "finished_at", "created_at")
-                    if isinstance(meta.get(key), (int, float)) and float(meta[key]) > 0
-                ), None),
-            }
-            mci = sidecar_cache[name]["multi_clip_info"]
-            if mci and mci.get("group_id"):
-                gid = mci["group_id"]
-                if gid not in clip_groups:
-                    clip_groups[gid] = {"total": mci.get("total", 0), "highest_index": -1, "has_final": False}
-                clip_groups[gid]["highest_index"] = max(clip_groups[gid]["highest_index"], mci.get("index", 0))
-
-        for info in clip_groups.values():
-            if info["highest_index"] >= info["total"] - 1:
-                info["has_final"] = True
-
-        with _output_scan_cache_lock:
-            if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
-                oldest = min(
-                    _output_scan_cache,
-                    key=lambda key: float(_output_scan_cache[key].get("created_at", 0)),
-                )
-                _output_scan_cache.pop(oldest, None)
-            _output_scan_cache[out_dir] = {
-                "signature": directory_signature,
-                "created_at": now,
-                "raw_entries": raw_entries,
-                "sidecar_cache": sidecar_cache,
-                "clip_groups": clip_groups,
-            }
-
-    # Second pass: build the file list using the cached sidecar data.
-    from services.media_dimensions import listing_fields as media_listing_fields
-    files = []
-    for name, filepath, ext, mtime in raw_entries:
-        is_scene = name.endswith(".scene.json")
-        is_comic = name.endswith(".comic.json")
-        ftype = "comic" if is_comic else ("scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))))
-        cached = sidecar_cache.get(name) or {}
-        mode = cached.get("mode")
-        edit_sub_mode = cached.get("edit_sub_mode")
-        metadata_completed_at = cached.get("completed_at")
-        mci = cached.get("multi_clip_info")
-        is_intermediate_clip = False
-        if mci and mci.get("group_id"):
-            gid = mci["group_id"]
-            group = clip_groups.get(gid, {})
-            if group.get("has_final"):
-                is_intermediate_clip = True
-            elif mci.get("index", 0) < group.get("highest_index", 0):
-                is_intermediate_clip = True
-
-        if is_intermediate_clip:
-            continue
-        # The file may vanish between os.scandir() and here (temp files renamed
-        # mid-generation, etc.). Skip the entry rather than crashing the endpoint.
-        try:
-            size = os.path.getsize(filepath)
-        except (FileNotFoundError, OSError):
-            continue
-        files.append({
-            "name": name,
-            "type": ftype,
-            "mode": mode,
-            # Surface edit_sub_mode so the gallery's Edits filter can
-            # identify retake/inpaint/outpaint/restyle/edit_anything outputs.
-            "edit_sub_mode": edit_sub_mode,
-            "result_kind": cached.get("result_kind"),
-            "origin": cached.get("origin"),
-            "favorite": name in favs,
-            "size": size,
-            "created_at": mtime,
-            "completed_at": metadata_completed_at or mtime,
-            "completion_time_source": "metadata" if metadata_completed_at else "file",
-            "url": f"/api/v1/file/{name}{workspace_suffix}",
-            "thumbnail_url": (
-                f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
-                if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
-                else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png{workspace_suffix}"
-                      if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
-                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}{workspace_extra}"
-                            if ftype in {"image", "video"}
-                            else cached.get("thumbnail_url")))
-            ),
-        })
-
-    def listed_result(selected, total):
-        # Read image headers and schedule colour/size work only for this page,
-        # not the entire workspace on every gallery heartbeat.
-        for item in selected:
-            item.update(media_listing_fields(
-                item["type"], os.path.join(out_dir, item["name"]),
-                item["size"], item["created_at"],
-                (sidecar_cache.get(item["name"]) or {}).get("resolution"),
-            ))
-        return {"outputs": selected, "total": total}
-
-    if media_type:
-        files = [item for item in files if item["type"] == media_type]
-    from services.output_origin import filter_by_origin
-    files = filter_by_origin(files, origin)
-    # Ordered before paging so every page follows the gallery's chosen order.
-    if order == "oldest":
-        files.reverse()
-    elif order == "favorites":
-        files.sort(key=lambda item: not item["favorite"])
-
-    wanted_kind = str(result_kind or "").strip()
-    if wanted_kind:
-        try:
-            from services.output_result_kind import result_kind_matches_filter
-        except Exception:
-            def result_kind_matches_filter(kind, wanted):
-                return str(kind or "") == str(wanted or "")
-        files = [
-            item for item in files
-            if item.get("type") == "video"
-            and result_kind_matches_filter(item.get("result_kind"), wanted_kind)
-        ]
-        return listed_result(files, len(files))
-
-    # Special filters: return ALL matches, bypass pagination
-    if edits_only:
-        files = [
-            item for item in files
-            if item.get("edit_sub_mode") or item.get("mode") == "avatar"
-        ]
-        return listed_result(files, len(files))
-    if favorites_only:
-        files = [f for f in files if f["favorite"]]
-        return listed_result(files, len(files))
-    if multiclip_only:
-        # 1. Explicit multiclip files
-        multiclips = [f for f in files if "multiclip" in f["name"].lower() and f["type"] == "video"]
-        multiclip_names = {f["name"] for f in multiclips}
-
-        # 2. Sliding window final outputs: group videos by seed+prompt, keep only the largest
-        # Filename pattern: datetime_seedNNNN_prompt_text.mp4
-        import re as _re_mc
-        seed_pattern = _re_mc.compile(r'^\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m\d{2}s_(seed\d+_.+)\.(mp4|webm|mkv)$', _re_mc.IGNORECASE)
-        groups: dict[str, list[dict]] = {}
-        for f in files:
-            if f["type"] != "video" or f["name"] in multiclip_names:
-                continue
-            # Skip tmp files
-            if "_tmp." in f["name"]:
-                continue
-            m = seed_pattern.match(f["name"])
-            if m:
-                group_key = m.group(1)  # seed123_prompt text
-                groups.setdefault(group_key, []).append(f)
-
-        # From groups with multiple files (sliding window), keep only the largest
-        sw_finals = []
-        print(f"[Multiclip] Found {len(groups)} seed+prompt groups from {len(files)} total files")
-        for group_key, group_files in groups.items():
-            if len(group_files) > 1:
-                # Verify files are close in time (within 2 hours)
-                times = [f["created_at"] for f in group_files]
-                time_span = max(times) - min(times)
-                if time_span < 7200:
-                    largest = max(group_files, key=lambda f: f["size"])
-                    print(f"[Multiclip] SW group '{group_key[:60]}': {len(group_files)} files, span={time_span:.0f}s, largest={largest['name'][:60]}")
-                    sw_finals.append(largest)
-                else:
-                    print(f"[Multiclip] SW group '{group_key[:60]}': {len(group_files)} files, SKIPPED (time span {time_span:.0f}s > 7200)")
-
-        combined = multiclips + sw_finals
-        combined.sort(key=lambda f: f["created_at"], reverse=True)
-        print(f"[Multiclip] Result: {len(multiclips)} multiclips + {len(sw_finals)} sliding window finals = {len(combined)} total")
-        return listed_result(combined, len(combined))
-    if search:
-        from services.search_index import get_search_index
-        idx = get_search_index()
-        matching_names = idx.search(search, out_dir)
-        # Combine index results with filename fallback (in case index missed
-        # a file that was created between index builds)
-        query_lower = search.lower()
-        # The index is keyed by sidecar stem ("clip" for clip.mp4 and
-        # clip.meta.json); comparing full names never matched a prompt.
-        files = [
-            f for f in files
-            if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
-        ]
-        return listed_result(files, len(files))
-
-    total = len(files)
-    if limit > 0:
-        files = files[offset:offset + limit]
-    return listed_result(files, total)
+api.include_router(create_list_outputs_router())
 
 
 def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
@@ -30681,29 +29124,9 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None, size: st
     )
 
 
-@api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
-    """Serve an output file from the explicit or active workspace.
+from routers.workspace_outputs import create_serve_file_router
 
-    Uses share_delete_file_response so that on Windows the file can be
-    deleted/renamed by the gallery delete button even while the browser
-    is actively streaming it (e.g. mid-video playback). Without share-
-    delete, Python's default open() locks the file for delete and the
-    user has to close the entire app to clean up.
-    """
-    from services.win_safe_files import share_delete_file_response
-    filepath = _resolve_output_file(filename, workspace)
-    if filepath:
-        return share_delete_file_response(filepath, expected_sha256=sha256)
-    # Uploads folder — the gallery's virtual "Uploads" view lists these
-    #    files with the same /api/v1/file/ URLs every other gallery flow
-    #    builds (thumbnails, playback, send-to-input). Upload names are
-    #    hash-uniquified at upload time, and outputs are checked first, so
-    #    an output name can never be shadowed by an upload.
-    filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
-    if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath, expected_sha256=sha256)
-    raise HTTPException(status_code=404, detail="File not found")
+api.include_router(create_serve_file_router())
 
 
 @api.get("/api/v1/outputs/{name}/metadata")
