@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app_identity import read_app_version
+from services.kernel.config import write_private_json
 from services.kernel.paths import safe_join
 from services.media_refs import parse_media_ref
 
@@ -82,11 +83,10 @@ def load_config() -> dict[str, Any]:
 
 
 def save_config(data: dict[str, Any]) -> None:
+    """Write core_config.json atomically, mode 0600. The file holds API keys."""
     path = settings_path()
-    temporary = path.with_suffix(".tmp")
     with _LOCK:
-        temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        temporary.replace(path)
+        write_private_json(str(path), json.dumps(data, indent=2))
 
 
 def active_workspace() -> str:
@@ -135,46 +135,6 @@ def list_workspaces() -> list[dict[str, Any]]:
         if full.is_dir() and not name.startswith(("_", ".")):
             rows.append({"name": name, "path": str(full), "file_count": _file_count(str(full))})
     return rows
-
-
-def list_outputs(
-    workspace: str = "",
-    media_type: str = "",
-    limit: int = 0,
-    offset: int = 0,
-) -> dict[str, Any]:
-    folder = Path(uploads_dir()) if workspace == "__uploads__" else Path(workspace_dir(workspace or None))
-    if not folder.is_dir():
-        return {"outputs": [], "total": 0}
-    wanted = str(media_type or "").strip()
-    items = []
-    for entry in folder.iterdir():
-        if not entry.is_file() or entry.name.startswith("."):
-            continue
-        kind = classify_output_type(entry.name)
-        if kind is None or (wanted and kind != wanted):
-            continue
-        try:
-            stat = entry.stat()
-        except OSError:
-            continue
-        suffix = f"?workspace={workspace}" if workspace else ""
-        items.append({
-            "name": entry.name,
-            "type": kind,
-            "mode": None,
-            "size": stat.st_size,
-            "created_at": stat.st_mtime,
-            "completed_at": stat.st_mtime,
-            "completion_time_source": "file",
-            "url": f"/api/v1/file/{entry.name}{suffix}",
-        })
-    items.sort(key=lambda row: row["created_at"], reverse=True)
-    total = len(items)
-    start = max(0, int(offset or 0))
-    if limit and int(limit) > 0:
-        items = items[start:start + int(limit)]
-    return {"outputs": items, "total": total}
 
 
 def system_config() -> dict[str, Any]:

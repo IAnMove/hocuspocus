@@ -285,52 +285,52 @@ def cancel_job(job_id: str):
     return job
 
 
-@api.get("/api/v1/workspaces")
-def list_workspaces_endpoint():
-    return {"workspaces": core.list_workspaces(), "active": core.active_workspace()}
-
-
-@api.put("/api/v1/workspaces/active")
-async def set_active_workspace(request: Request):
-    body = await request.json()
-    name = str(body.get("name") or "default")
-    try:
-        path = core.workspace_dir(name)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+def _core_persist_active(name, apply_save_paths=True):
+    """Save the active workspace in core_config.json. Core has no WanGP save paths."""
+    del apply_save_paths
+    path = core.workspace_dir(name)
     data = core.load_config()
     data.setdefault("services", {})["active_workspace"] = name
     core.save_config(data)
-    return {"status": "ok", "active": name, "path": path}
+    return path
 
 
-@api.post("/api/v1/workspaces")
-async def create_workspace(request: Request):
-    body = await request.json()
-    name = str(body.get("name") or "").strip()
-    try:
-        path = core.workspace_dir(name)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"status": "ok", "name": name, "path": path}
+def _core_workspace_jobs():
+    """Image and 3D jobs that should keep a workspace from being deleted."""
+    from services import core_remote_3d, core_remote_image
+    return [
+        *core_remote_image.list_active(),
+        *(job for job in core_remote_3d._JOBS.values() if isinstance(job, dict)),
+    ]
 
 
-@api.get("/api/v1/outputs")
-def list_outputs(workspace: str = "", media_type: str = "", limit: int = 0, offset: int = 0):
-    try:
-        return core.list_outputs(workspace, media_type=media_type, limit=limit, offset=offset)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+from types import SimpleNamespace
 
+from services.output_listing import configure as _configure_output_listing, serve_file
+from routers.workspace_outputs import (
+    create_list_outputs_router,
+    create_serve_file_router,
+    create_workspace_router,
+)
 
-@api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
-    from services.win_safe_files import share_delete_file_response
-    folder = core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace)
-    path = core.safe_join(folder, filename)
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Output file not found")
-    return share_delete_file_response(path, expected_sha256=sha256)
+_configure_output_listing(
+    workspace_dir=lambda workspace=None: core.workspace_dir(workspace),
+    load_favorites=lambda: set(),
+    safe_join=core.safe_join,
+    engine=SimpleNamespace(server_config={"save_path": "outputs"}),
+)
+api.include_router(create_workspace_router(
+    list_workspaces=core.list_workspaces,
+    get_active_workspace=core.active_workspace,
+    persist_active=_core_persist_active,
+    workspace_dir=core.workspace_dir,
+    generation_idle=lambda: True,
+    jobs=_core_workspace_jobs,
+    safe_join=core.safe_join,
+    save_path=lambda: str(core.outputs_root()),
+))
+api.include_router(create_list_outputs_router())
+api.include_router(create_serve_file_router())
 
 
 @api.get("/api/v1/system-config")

@@ -1548,6 +1548,83 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(models.json()["total"], 1)
         self.assertEqual(models.json()["outputs"][0]["type"], "model3d")
 
+    def test_core_outputs_filter_by_search_and_oldest_order(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            older = Path("outputs", "older-blue.png")
+            newer = Path("outputs", "newer-red.png")
+            older.write_bytes(b"png")
+            newer.write_bytes(b"png")
+            os.utime(older, (10, 10))
+            os.utime(newer, (20, 20))
+            searched = self.client.get("/api/v1/outputs", params={"search": "blue"})
+            ordered = self.client.get("/api/v1/outputs", params={"order": "oldest"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(searched.status_code, 200, searched.text)
+        self.assertEqual([item["name"] for item in searched.json()["outputs"]], ["older-blue.png"])
+        self.assertEqual(
+            [item["name"] for item in ordered.json()["outputs"]],
+            ["older-blue.png", "newer-red.png"],
+        )
+
+    def test_core_outputs_include_image_dimensions(self):
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Image.new("RGB", (8, 6), (1, 2, 3)).save(Path("outputs", "card.png"))
+            listed = self.client.get("/api/v1/outputs")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        row = listed.json()["outputs"][0]
+        self.assertEqual((row.get("width"), row.get("height")), (8, 6))
+
+    def test_core_outputs_filter_by_origin_and_result_kind(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("outputs", "harbour_multiclip.mp4").write_bytes(b"mp4")
+            Path("outputs", "harbour_multiclip.meta.json").write_text(json.dumps({
+                "origin": {"actor": "wizard", "tool": "wizard", "capability": "generation.video"},
+                "params": {},
+            }), encoding="utf-8")
+            Path("outputs", "plain.mp4").write_bytes(b"mp4")
+            origin = self.client.get("/api/v1/outputs", params={"origin": "wizard"})
+            kind = self.client.get("/api/v1/outputs", params={"result_kind": "chapter"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(origin.status_code, 200, origin.text)
+        self.assertEqual([item["name"] for item in origin.json()["outputs"]], ["harbour_multiclip.mp4"])
+        self.assertEqual(origin.json()["outputs"][0]["origin"]["actor"], "wizard")
+        self.assertEqual(kind.status_code, 200, kind.text)
+        self.assertEqual([item["name"] for item in kind.json()["outputs"]], ["harbour_multiclip.mp4"])
+        self.assertEqual(kind.json()["outputs"][0]["result_kind"], "chapter")
+
+    def test_core_config_save_is_private_and_atomic(self):
+        import stat
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            switched = self.client.put("/api/v1/workspaces/active", json={"name": "saved-lab"})
+            settings = Path("app", "settings")
+            path = settings / "core_config.json"
+            mode = stat.S_IMODE(path.stat().st_mode) if path.is_file() else None
+            leftovers = [item.name for item in settings.iterdir() if item.name != "core_config.json"]
+            text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(switched.status_code, 200, switched.text)
+        self.assertEqual(mode, 0o600)
+        self.assertEqual(leftovers, [])
+        self.assertIn('"active_workspace": "saved-lab"', text)
+        # indent=2: services is one level down, the workspace name two levels down.
+        self.assertIn("\n  \"services\"", text)
+        self.assertIn("\n    \"active_workspace\"", text)
+
     def test_wizard_image_executor_fails_when_minimax_job_fails(self):
         from services import core_generation_commands
 
