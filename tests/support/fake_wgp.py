@@ -269,7 +269,7 @@ class EngineCall:
             self.gen.setdefault("audio_file_settings_list" if kind == "audio" else "file_settings_list", []).append({"seed": seed})
         return path
 
-    def hold(self, release: threading.Event, *, timeout: float = 30.0, ignore_abort: bool = False) -> bool:
+    def hold(self, release: threading.Event, *, timeout: float = 60.0, ignore_abort: bool = False) -> bool:
         """Block like a long denoising loop until ``release`` is set, or the job is aborted unless ``ignore_abort``
         (a model that takes a while to notice). Returns whether the job was aborted."""
         self.engine.entered.set()

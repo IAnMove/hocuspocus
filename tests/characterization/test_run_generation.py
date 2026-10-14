@@ -49,6 +49,9 @@ BODY = {"model_type": "fake_t2v", "prompt": "a calm lake", "generation_mode": "v
 MASKED = ("processing_time_sec", "total_seconds", "seconds", "generation_time", "inference_ms", "queue_ms",
           "total_ms", "app", "size_bytes", "performance")
 WORKER = "_run_generation_with_preparation"
+# How long a test waits for the worker to reach a state. Generous: a loaded CI machine is slow, and the wait only
+# ends early when the state is reached.
+WAIT = 30.0
 STATUS_KEYS = ("status", "progress", "step", "total_steps", "phase", "message", "error", "output_files",
                "oom_info", "queue_position")
 TASK_KEYS = ("status", "phase", "message", "progress", "result_refs", "error", "cancelable", "acquired_resources")
@@ -172,7 +175,7 @@ class Rig:
                              f"still running after a cancel: {still}")
 
     def wait_until(self, condition: Callable[[], bool], what: str) -> None:
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + WAIT
         while not condition():
             assert time.monotonic() < deadline, f"never saw: {what}"
             time.sleep(0.01)
@@ -193,11 +196,15 @@ class Rig:
         return job_id
 
     def wait_for(self, job_id: str, **expected: Any) -> dict:
-        """Poll the live job until it shows ``expected``; the engine is held, so the state is stable."""
-        deadline = time.monotonic() + 10
+        """Poll the live job until it shows ``expected`` and the lifecycle observer has received that write; the
+        engine is held, so the state is stable. The observer runs after the lifecycle lock is released, so without the
+        second condition a cancel sent from the test thread could reach the recorded transitions first."""
+        deadline = time.monotonic() + WAIT
         while True:
             record = self.launch.snapshot_job(self.launch._jobs[job_id])
-            if all(record.get(key) == value for key, value in expected.items()):
+            observed = [event for event in list(self.events) if event.get("id") == job_id][-1:]
+            if all(record.get(key) == value and observed and observed[0].get(key) == value
+                   for key, value in expected.items()):
                 return record
             assert time.monotonic() < deadline, f"job {job_id} never showed {expected}; last: {record.get('status')} {record.get('message')}"
             time.sleep(0.01)
@@ -525,7 +532,7 @@ def test_a_queued_job_cancelled_before_it_starts_never_reaches_the_engine(rig, g
     release = rig.event()
     rig.engine.script = hold_then(lambda call: call.save(), release=release)
     first = rig.post({**BODY, "resolution": "1280x720", "video_length": 241})["job_id"]
-    assert rig.engine.entered.wait(10)
+    assert rig.engine.entered.wait(WAIT)
     rig.wait_for(first, message="Sampling | 1/2")
     coefficient = rig.server.wgp.args.vram_safety_coefficient
     second = rig.post({**BODY, "prompt": "never started"})["job_id"]
@@ -550,7 +557,7 @@ def test_a_running_job_is_cancelled_through_its_abort_state(rig, golden) -> None
     release = rig.event()
     rig.engine.script = hold_then(release=release, ignore_abort=True)
     job_id = rig.post(BODY)["job_id"]
-    assert rig.engine.entered.wait(10)
+    assert rig.engine.entered.wait(WAIT)
     rig.wait_for(job_id, message="Sampling | 1/2")
     cancelled = rig.cancel(job_id)
     aborting = {"status": rig.get(f"/api/v1/status/{job_id}"),
@@ -571,7 +578,7 @@ def test_a_cancel_after_an_output_keeps_that_output(rig, golden) -> None:
 
     rig.engine.script = script
     job_id = rig.post(BODY)["job_id"]
-    assert rig.engine.entered.wait(10)
+    assert rig.engine.entered.wait(WAIT)
     rig.wait_for(job_id, message="Sampling | 1/2")
     cancelled = rig.cancel(job_id)
     release.set()
@@ -674,7 +681,7 @@ def test_a_cancel_during_the_second_clip_keeps_the_first(rig, golden, monkeypatc
 
     rig.engine.script = script
     job_id = rig.post(MULTI_CLIP)["job_id"]
-    assert rig.engine.entered.wait(10)
+    assert rig.engine.entered.wait(WAIT)
     rig.wait_for(job_id, message="Clip 2/3: Sampling | 1/2")
     cancelled = rig.cancel(job_id)
     release.set()
@@ -903,19 +910,23 @@ def test_a_cancel_reaches_the_engine_through_the_abort_flag_and_interrupts_the_m
     by itself (this engine does not ignore it, unlike the cancel tests above), and the native model interrupt runs."""
     interrupts: list = []
     stopped: list = []
+    cancel_answered = rig.event()
     rig.patch("_interrupt_wan_model", lambda: interrupts.append("interrupt"))
 
     def script(call) -> None:
         call.send("progress", [(1, 2), "Sampling | 1/2"])
-        stopped.append(call.hold(rig.event(), timeout=10))
+        stopped.append(call.hold(rig.event()))
+        # Return only after the cancel route has answered (and notified), so the recorded order is the real one.
+        cancel_answered.wait(WAIT)
         if not stopped[-1]:
             call.save()
 
     rig.engine.script = script
     job_id = rig.post(BODY)["job_id"]
-    assert rig.engine.entered.wait(10)
+    assert rig.engine.entered.wait(WAIT)
     rig.wait_for(job_id, message="Sampling | 1/2")
     cancelled = rig.cancel(job_id)
+    cancel_answered.set()
     rig.join()
     rig.check(golden, "cancel stops the engine", {"cancel": cancelled, "engine stopped by the abort flag": stopped,
                                                   "model interrupts": interrupts, **rig.observe(job_id)})
@@ -1245,7 +1256,7 @@ def test_oddity_a_cancelled_task_keeps_its_timer_running(rig) -> None:
     release = rig.event()
     rig.engine.script = hold_then(release=release, ignore_abort=True)
     job_id = rig.post(BODY)["job_id"]
-    assert rig.engine.entered.wait(10)
+    assert rig.engine.entered.wait(WAIT)
     rig.wait_for(job_id, message="Sampling | 1/2")
     rig.cancel(job_id)
     release.set()
