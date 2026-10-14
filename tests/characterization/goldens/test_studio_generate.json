@@ -2891,6 +2891,1143 @@
     },
     "status": 200
   },
+  "preview allows at most five mappings": {
+    "body": {
+      "detail": "SCAIL-2 supports at most five character mappings."
+    },
+    "status": 400
+  },
+  "preview cannot read a broken video": {
+    "body": {
+      "detail": "Cannot read video: unreadable clip"
+    },
+    "status": 400
+  },
+  "preview mapping must be an object": {
+    "body": {
+      "detail": "Character mapping 1 is invalid."
+    },
+    "status": 400
+  },
+  "preview mapping needs a target": {
+    "body": {
+      "detail": "Character mapping 1 needs a source-person description."
+    },
+    "status": 400
+  },
+  "preview rejections create no job": {
+    "body": {
+      "jobs created": 0
+    },
+    "status": 200
+  },
+  "preview rejects a bad end time": {
+    "body": {
+      "detail": "Cannot read video: could not convert string to float: 'nope'"
+    },
+    "status": 400
+  },
+  "preview segmentation crash": {
+    "body": {
+      "detail": "Segmentation failed: mask exploded"
+    },
+    "status": 500
+  },
+  "preview segmentation value error": {
+    "body": {
+      "detail": "Segmentation failed: no person"
+    },
+    "status": 400
+  },
+  "preview video must exist": {
+    "body": {
+      "detail": "Video not found: None"
+    },
+    "status": 400
+  },
+  "recast finds nobody": {
+    "body": {
+      "answer": {
+        "frames": 17,
+        "generation_details": {
+          "execution_mode": "real",
+          "flow_shift": 3,
+          "frames": 17,
+          "generation_mode": "video",
+          "guidance": 5.0,
+          "lora_count": 0,
+          "model_name": "Fake Text to Video",
+          "model_type": "fake_t2v",
+          "prompt": "a calm lake",
+          "resolution": "704x480",
+          "seed": 7,
+          "simulated": false,
+          "steps": 40
+        },
+        "guidance_scale": 5.0,
+        "job_id": "<JOB>",
+        "num_inference_steps": 40,
+        "person_count": 1,
+        "resolution": "704x480",
+        "resolution_profile": "480p",
+        "root_task_id": "task-generation-<JOB>",
+        "sliding_window_size": 81,
+        "status": "queued",
+        "target": "person",
+        "task_id": "task-generation-<JOB>"
+      },
+      "job": {
+        "accepted": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 3,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 5.0,
+            "lora_count": 0,
+            "model_name": "Fake Text to Video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "704x480",
+            "seed": 7,
+            "simulated": false,
+            "steps": 40
+          },
+          "guidance_scale": 5.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 40,
+          "person_count": 1,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person",
+          "task_id": "task-generation-<JOB>"
+        },
+        "engine_calls": [],
+        "files": [
+          "recast-source.mp4"
+        ],
+        "left_behind": {
+          "abort_states": [],
+          "audio_save_path": "<OUTPUTS>",
+          "durable_queue": [],
+          "gpu_lock_free": true,
+          "image_save_path": "<OUTPUTS>",
+          "save_path": "<OUTPUTS>",
+          "vram_coefficient": 0.8
+        },
+        "listed": [],
+        "params": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": ""
+          },
+          "edit_end_time": 2.125,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "recast-1",
+              "ref_image_path": "<STATE>/uploads/hero.png",
+              "reference_aligned_to_source": false,
+              "target": "person"
+            }
+          ],
+          "edit_recast_conditioning": "native_replace",
+          "edit_recast_conditioning_people": 1,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            704,
+            480
+          ],
+          "edit_recast_person_count": 1,
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "a calm lake",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero.png",
+          "edit_recast_resolution_profile": "480p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_target": "person",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 3,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 5.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "fake_t2v",
+          "negative_prompt": "",
+          "num_inference_steps": 40,
+          "prompt": "a calm lake",
+          "resolution": "704x480",
+          "sample_solver": "unipc",
+          "seed": 7,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<OUTPUTS>/recast-source.mp4",
+          "video_length": 17,
+          "video_prompt_type": "V01AI"
+        },
+        "record": {
+          "acquired_resources": []
+        },
+        "returned": null,
+        "sidecars": {},
+        "status": {
+          "error": "Found 0 of 1 requested 'person' subjects in the first frame. Try another description, lower the person count, or adjust the trim start.",
+          "message": "Not enough targets found",
+          "oom_info": null,
+          "output_files": [],
+          "phase": "Detecting target",
+          "progress": 0,
+          "queue_position": null,
+          "status": "failed",
+          "step": 0,
+          "total_steps": 0
+        },
+        "task": {
+          "acquired_resources": [],
+          "cancelable": false,
+          "error": {
+            "message": "Found 0 of 1 requested 'person' subjects in the first frame. Try another description, lower the person count, or adjust the trim start.",
+            "retryable": true
+          },
+          "message": "Not enough targets found",
+          "phase": "Detecting target",
+          "progress": 0.0,
+          "result_refs": [],
+          "status": "failed"
+        },
+        "timers": [],
+        "transitions": [
+          "running | phase 'Detecting target' | \"Finding 1 'person' subject in the video...\" | 0% | step 0/0 | outputs 0",
+          "failed | phase 'Detecting target' | 'Not enough targets found' | 0% | step 0/0 | outputs 0"
+        ]
+      },
+      "status": 200
+    },
+    "status": 200
+  },
+  "recast legacy job": {
+    "body": {
+      "answer": {
+        "frames": 17,
+        "generation_details": {
+          "execution_mode": "real",
+          "flow_shift": 3,
+          "frames": 17,
+          "generation_mode": "video",
+          "guidance": 20.0,
+          "lora_count": 0,
+          "model_name": "Fake Text to Video",
+          "model_type": "fake_t2v",
+          "prompt": "a calm lake",
+          "resolution": "768x512",
+          "seed": 7,
+          "simulated": false,
+          "steps": 50
+        },
+        "guidance_scale": 20.0,
+        "job_id": "<JOB>",
+        "num_inference_steps": 50,
+        "person_count": 1,
+        "resolution": "768x512",
+        "resolution_profile": "512p",
+        "root_task_id": "task-generation-<JOB>",
+        "sliding_window_size": 81,
+        "status": "queued",
+        "target": "person",
+        "task_id": "task-generation-<JOB>"
+      },
+      "job": {
+        "accepted": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 3,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 20.0,
+            "lora_count": 0,
+            "model_name": "Fake Text to Video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "768x512",
+            "seed": 7,
+            "simulated": false,
+            "steps": 50
+          },
+          "guidance_scale": 20.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 50,
+          "person_count": 1,
+          "resolution": "768x512",
+          "resolution_profile": "512p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person",
+          "task_id": "task-generation-<JOB>"
+        },
+        "engine_calls": [
+          {
+            "audio_save_path": "<OUTPUTS>",
+            "image_save_path": "<OUTPUTS>",
+            "kwargs": {
+              "activated_loras": [],
+              "audio_prompt_type": "R",
+              "custom_settings": {
+                "image_ref_keyword_content": "human character",
+                "scail2_additional_reference_mask_paths": [],
+                "scail2_animate_preprocessing": "raw",
+                "scail2_clip_reference_path": "<STATE>/uploads/hero.png",
+                "scail2_identity_latent_isolation": true,
+                "scail2_identity_latent_reference_index": 0,
+                "scail2_isolate_reference_background": false,
+                "scail2_primary_only_continuations": true,
+                "scail2_primary_reference_people": 1,
+                "scail2_recast_conditioning": "native_replace",
+                "scail2_recast_warmup_frames": 8,
+                "scail2_reference_alpha_path": "",
+                "scail2_reference_expected_colors": [
+                  [
+                    0,
+                    0,
+                    255
+                  ]
+                ],
+                "scail2_reference_mask_path": "<STATE>/uploads/hero.png"
+              },
+              "flow_shift": 3,
+              "force_fps": "control",
+              "guidance_scale": 20.0,
+              "image_prompt_type": "",
+              "image_refs": [
+                "<STATE>/uploads/hero.png"
+              ],
+              "loras_multipliers": "",
+              "mode": "",
+              "model_type": "fake_t2v",
+              "negative_prompt": "",
+              "num_inference_steps": 50,
+              "plugin_data": {},
+              "prompt": "a calm lake",
+              "resolution": "768x512",
+              "sample_solver": "unipc",
+              "seed": 7,
+              "sliding_window_overlap": 5,
+              "sliding_window_size": 81,
+              "video_guide": "<OUTPUTS>/recast-source.mp4",
+              "video_length": 17,
+              "video_mask": "<STATE>/uploads/recast-mask.mp4",
+              "video_prompt_type": "V01AI"
+            },
+            "params": {
+              "_duration_seconds": 2.125,
+              "_execution_mode": "real",
+              "_recast_protect_bystanders": false,
+              "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+              "activated_loras": [],
+              "audio_prompt_type": "R",
+              "custom_settings": {
+                "image_ref_keyword_content": "human character",
+                "scail2_additional_reference_mask_paths": [],
+                "scail2_animate_preprocessing": "raw",
+                "scail2_clip_reference_path": "<STATE>/uploads/hero.png",
+                "scail2_identity_latent_isolation": true,
+                "scail2_identity_latent_reference_index": 0,
+                "scail2_isolate_reference_background": false,
+                "scail2_primary_only_continuations": true,
+                "scail2_primary_reference_people": 1,
+                "scail2_recast_conditioning": "native_replace",
+                "scail2_recast_warmup_frames": 8,
+                "scail2_reference_alpha_path": "",
+                "scail2_reference_expected_colors": [
+                  [
+                    0,
+                    0,
+                    255
+                  ]
+                ],
+                "scail2_reference_mask_path": "<STATE>/uploads/hero.png"
+              },
+              "edit_end_time": 2.125,
+              "edit_recast_auto_face_detail": true,
+              "edit_recast_auto_face_detail_refs": [],
+              "edit_recast_bystander_tracking": "not_needed",
+              "edit_recast_character_mappings": [
+                {
+                  "additional_ref_image_paths": [],
+                  "id": "recast-1",
+                  "ref_image_path": "<STATE>/uploads/hero.png",
+                  "reference_aligned_to_source": false,
+                  "target": "person"
+                }
+              ],
+              "edit_recast_clip_identity_ref": "<STATE>/uploads/hero.png",
+              "edit_recast_conditioning": "native_replace",
+              "edit_recast_conditioning_people": 1,
+              "edit_recast_enhance_prompt": false,
+              "edit_recast_isolate_reference": true,
+              "edit_recast_output_resolution": [
+                768,
+                512
+              ],
+              "edit_recast_person_count": 1,
+              "edit_recast_prepared_refs": [
+                "<STATE>/uploads/hero.png"
+              ],
+              "edit_recast_preserve_bystanders": true,
+              "edit_recast_protect_bystanders": false,
+              "edit_recast_raw_prompt": "a calm lake",
+              "edit_recast_ref_aligned": false,
+              "edit_recast_ref_path": "<STATE>/uploads/hero.png",
+              "edit_recast_reference_canvas": [
+                96,
+                64
+              ],
+              "edit_recast_resolution_profile": "512p",
+              "edit_recast_sliding_window_size": 81,
+              "edit_recast_source_scene_reference_reason": "no separate bystander pass needed",
+              "edit_recast_target": "person",
+              "edit_recast_use_relighting": false,
+              "edit_recast_warmup_frames": 8,
+              "edit_start_time": 0.0,
+              "edit_sub_mode": "recast",
+              "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+              "flow_shift": 3,
+              "force_fps": "control",
+              "generation_mode": "video",
+              "guidance_scale": 20.0,
+              "image_prompt_type": "",
+              "image_refs": [
+                "<STATE>/uploads/hero.png"
+              ],
+              "loras_multipliers": "",
+              "model_type": "fake_t2v",
+              "negative_prompt": "",
+              "num_inference_steps": 50,
+              "prompt": "a calm lake",
+              "resolution": "768x512",
+              "sample_solver": "unipc",
+              "seed": 7,
+              "settings_version": 2.57,
+              "sliding_window_overlap": 5,
+              "sliding_window_size": 81,
+              "video_guide": "<OUTPUTS>/recast-source.mp4",
+              "video_length": 17,
+              "video_mask": "<STATE>/uploads/recast-mask.mp4",
+              "video_prompt_type": "V01AI"
+            },
+            "prompt": "a calm lake",
+            "save_path": "<OUTPUTS>",
+            "state_is_the_task_state": true,
+            "task_id": 1,
+            "vram_safety_coefficient": 0.8
+          }
+        ],
+        "files": [
+          "<TIME>_seed7_a_calm_lake.meta.json",
+          "<TIME>_seed7_a_calm_lake.mp4",
+          "recast-source.mp4"
+        ],
+        "left_behind": {
+          "abort_states": [],
+          "audio_save_path": "<OUTPUTS>",
+          "durable_queue": [],
+          "gpu_lock_free": true,
+          "image_save_path": "<OUTPUTS>",
+          "save_path": "<OUTPUTS>",
+          "vram_coefficient": 0.8
+        },
+        "listed": [],
+        "params": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_additional_reference_mask_paths": [],
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "<STATE>/uploads/hero.png",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": "",
+            "scail2_reference_expected_colors": [
+              [
+                0,
+                0,
+                255
+              ]
+            ],
+            "scail2_reference_mask_path": "<STATE>/uploads/hero.png"
+          },
+          "edit_end_time": 2.125,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_auto_face_detail_refs": [],
+          "edit_recast_bystander_tracking": "not_needed",
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "recast-1",
+              "ref_image_path": "<STATE>/uploads/hero.png",
+              "reference_aligned_to_source": false,
+              "target": "person"
+            }
+          ],
+          "edit_recast_clip_identity_ref": "<STATE>/uploads/hero.png",
+          "edit_recast_conditioning": "native_replace",
+          "edit_recast_conditioning_people": 1,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            768,
+            512
+          ],
+          "edit_recast_person_count": 1,
+          "edit_recast_prepared_refs": [
+            "<STATE>/uploads/hero.png"
+          ],
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "a calm lake",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero.png",
+          "edit_recast_reference_canvas": [
+            96,
+            64
+          ],
+          "edit_recast_resolution_profile": "512p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_source_scene_reference_reason": "no separate bystander pass needed",
+          "edit_recast_target": "person",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 3,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 20.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "fake_t2v",
+          "negative_prompt": "",
+          "num_inference_steps": 50,
+          "prompt": "a calm lake",
+          "resolution": "768x512",
+          "sample_solver": "unipc",
+          "seed": 7,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<OUTPUTS>/recast-source.mp4",
+          "video_length": 17,
+          "video_mask": "<STATE>/uploads/recast-mask.mp4",
+          "video_prompt_type": "V01AI"
+        },
+        "record": {
+          "acquired_resources": [
+            "local_gpu:0"
+          ],
+          "clip_output_files": [
+            "<TIME>_seed7_a_calm_lake.mp4"
+          ]
+        },
+        "returned": true,
+        "sidecars": {
+          "<TIME>_seed7_a_calm_lake.meta.json": {
+            "created_at": "<TIME>",
+            "generation_mode": "video",
+            "generation_time": "<MASKED>",
+            "job_id": "<JOB>",
+            "output_filename": "<TIME>_seed7_a_calm_lake.mp4",
+            "params": {
+              "_duration_seconds": 2.125,
+              "_execution_mode": "real",
+              "_recast_protect_bystanders": false,
+              "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+              "activated_loras": [],
+              "audio_prompt_type": "R",
+              "custom_settings": {
+                "image_ref_keyword_content": "human character",
+                "scail2_additional_reference_mask_paths": [],
+                "scail2_animate_preprocessing": "raw",
+                "scail2_clip_reference_path": "<STATE>/uploads/hero.png",
+                "scail2_identity_latent_isolation": true,
+                "scail2_identity_latent_reference_index": 0,
+                "scail2_isolate_reference_background": false,
+                "scail2_primary_only_continuations": true,
+                "scail2_primary_reference_people": 1,
+                "scail2_recast_conditioning": "native_replace",
+                "scail2_recast_warmup_frames": 8,
+                "scail2_reference_alpha_path": "",
+                "scail2_reference_expected_colors": [
+                  [
+                    0,
+                    0,
+                    255
+                  ]
+                ],
+                "scail2_reference_mask_path": "<STATE>/uploads/hero.png"
+              },
+              "edit_end_time": 2.125,
+              "edit_recast_auto_face_detail": true,
+              "edit_recast_auto_face_detail_refs": [],
+              "edit_recast_bystander_tracking": "not_needed",
+              "edit_recast_character_mappings": [
+                {
+                  "additional_ref_image_paths": [],
+                  "id": "recast-1",
+                  "ref_image_path": "<STATE>/uploads/hero.png",
+                  "reference_aligned_to_source": false,
+                  "target": "person"
+                }
+              ],
+              "edit_recast_clip_identity_ref": "<STATE>/uploads/hero.png",
+              "edit_recast_conditioning": "native_replace",
+              "edit_recast_conditioning_people": 1,
+              "edit_recast_enhance_prompt": false,
+              "edit_recast_isolate_reference": true,
+              "edit_recast_output_resolution": [
+                768,
+                512
+              ],
+              "edit_recast_person_count": 1,
+              "edit_recast_prepared_refs": [
+                "<STATE>/uploads/hero.png"
+              ],
+              "edit_recast_preserve_bystanders": true,
+              "edit_recast_protect_bystanders": false,
+              "edit_recast_raw_prompt": "a calm lake",
+              "edit_recast_ref_aligned": false,
+              "edit_recast_ref_path": "<STATE>/uploads/hero.png",
+              "edit_recast_reference_canvas": [
+                96,
+                64
+              ],
+              "edit_recast_resolution_profile": "512p",
+              "edit_recast_sliding_window_size": 81,
+              "edit_recast_source_scene_reference_reason": "no separate bystander pass needed",
+              "edit_recast_target": "person",
+              "edit_recast_use_relighting": false,
+              "edit_recast_warmup_frames": 8,
+              "edit_start_time": 0.0,
+              "edit_sub_mode": "recast",
+              "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+              "flow_shift": 3,
+              "force_fps": "control",
+              "generation_mode": "video",
+              "guidance_scale": 20.0,
+              "image_prompt_type": "",
+              "image_refs": [
+                "<STATE>/uploads/hero.png"
+              ],
+              "loras_multipliers": "",
+              "model_type": "fake_t2v",
+              "negative_prompt": "",
+              "num_inference_steps": 50,
+              "prompt": "a calm lake",
+              "provider": "local",
+              "resolution": "768x512",
+              "sample_solver": "unipc",
+              "seed": 7,
+              "settings_version": 2.57,
+              "sliding_window_overlap": 5,
+              "sliding_window_size": 81,
+              "video_guide": "<OUTPUTS>/recast-source.mp4",
+              "video_length": 17,
+              "video_mask": "<STATE>/uploads/recast-mask.mp4",
+              "video_prompt_type": "V01AI"
+            },
+            "root_task_id": "task-generation-<JOB>",
+            "task_id": "task-generation-<JOB>",
+            "upload_filenames": {
+              "video_guide": "recast-source.mp4"
+            }
+          }
+        },
+        "status": {
+          "error": null,
+          "message": "Done",
+          "oom_info": null,
+          "output_files": [
+            "<TIME>_seed7_a_calm_lake.mp4"
+          ],
+          "phase": "",
+          "progress": 100,
+          "queue_position": null,
+          "status": "completed",
+          "step": 0,
+          "total_steps": 0
+        },
+        "task": {
+          "acquired_resources": [],
+          "cancelable": false,
+          "error": null,
+          "message": "Done",
+          "phase": "completed",
+          "progress": 1.0,
+          "result_refs": [
+            "<TIME>_seed7_a_calm_lake.mp4"
+          ],
+          "status": "completed"
+        },
+        "timers": [
+          "completed"
+        ],
+        "transitions": [
+          "running | phase 'Detecting target' | \"Finding 1 'person' subject in the video...\" | 0% | step 0/0 | outputs 0",
+          "running | phase 'Preparing references' | 'Preparing exact SCAIL-2 reference crops and masks...' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Tracking targets' | \"Tracking 'person' across 17 frames...\" | 0% | step 0/0 | outputs 0",
+          "queued | phase '' | 'Queued (recast)' | 0% | step 0/0 | outputs 0",
+          "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+          "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+          "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+          "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+        ]
+      },
+      "status": 200
+    },
+    "status": 200
+  },
+  "recast openapi": {
+    "body": {
+      "POST /api/v1/recast": {
+        "description": "Submit a Recast job: replace a person in an existing video with the\ncharacter from a reference image (SCAIL-2 Replace mode). The colored\nperson mask is built automatically with SAM3 keyword tracking as a\npre-step INSIDE the job thread — tracking a 10s clip takes about a\nminute, so the endpoint returns a job_id immediately and the job's\nmessage reflects detection progress.\n\nBody: {\n    video_path: str, ref_image_path?: str,\n    character_mappings?: [{\n        target: str, ref_image_path: str,\n        additional_ref_image_paths?: list[str],\n    }],\n    target?: str (\"who to replace\" keyword, default \"person\"),\n    person_count?: int (legacy grouped replacement count, 1-5),\n    additional_ref_image_paths?: list[str] (legacy same-character views),\n    reference_aligned_to_source?: bool (reference is an edited first frame),\n    auto_face_detail?: bool (derive a tighter identity view when no\n        additional view is supplied; default true),\n    protect_bystanders?: bool (strict post-composite; default false),\n    preserve_bystanders?: bool (single-reference native multi-person\n        identity conditioning; default true),\n    isolate_reference?: bool (neutralize unrelated reference background;\n        default true),\n    enhance_prompt?: bool (rewrite and append identity/scene continuity\n        guidance; default false),\n    use_relighting?: bool (optional official SCAIL-2 Relighting LoRA;\n        default false),\n    resolution_profile?: str (\"480p\", \"512p\", or \"704p\"; changes spatial\n        resolution and, at 704p, the adaptive window size; never model or\n        step schedule),\n    prompt?: str (describe the completed video, not an edit command),\n    start_time?: float, end_time?: float  (optional trim),\n    model_type?: str (default scail2_14B_recast_fast),\n    negative_prompt?: str, seed?: int,\n    num_inference_steps?: int, guidance_scale?: float,\n    activated_loras?: list, loras_multipliers?: str,\n    workspace?: str,\n}",
+        "operationId": "recast_endpoint_api_v1_recast_post",
+        "parameters": [],
+        "summary": "Recast Endpoint"
+      },
+      "POST /api/v1/recast/preview": {
+        "description": "Preview mapped people across the selected Recast timeline.\n\nBody: { video_path: str, target?: str, person_count?: int,\n        character_mappings?: list, ref_image_path?: str,\n        time?: float, end_time?: float, workspace?: str }",
+        "operationId": "recast_preview_endpoint_api_v1_recast_preview_post",
+        "parameters": [],
+        "summary": "Recast Preview Endpoint"
+      }
+    },
+    "status": 200
+  },
+  "recast preview": {
+    "body": {
+      "one mapped person": {
+        "body": {
+          "found": true,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 0,
+              "anchor_sample_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            }
+          ],
+          "matched_people": 1,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              88
+            ]
+          },
+          "reference_previews": [],
+          "requested_people": 1,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 17,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "status": 200
+      },
+      "one person": {
+        "body": {
+          "found": true,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            }
+          ],
+          "matched_people": 1,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "reference_previews": [],
+          "requested_people": 1,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 1,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "status": 200
+      },
+      "reference preview crash": {
+        "body": {
+          "detail": "Reference preview failed: encoder broke"
+        },
+        "status": 500
+      },
+      "reference preview value error": {
+        "body": {
+          "detail": "Reference preview failed: missing crop"
+        },
+        "status": 400
+      },
+      "reference previews pass through": {
+        "body": {
+          "found": true,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            }
+          ],
+          "matched_people": 1,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "reference_previews": [
+            {
+              "kind": "primary"
+            }
+          ],
+          "requested_people": 1,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 1,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "status": 200
+      }
+    },
+    "status": 200
+  },
+  "recast rejections": {
+    "body": {
+      "704p below 16 GB": {
+        "body": {
+          "detail": "704p Recast currently requires at least 16 GB of VRAM. Detected 8.0 GB; select 512p or 480p."
+        },
+        "status": 400
+      },
+      "a legacy fast model migrates to the dedicated model": {
+        "body": {
+          "detail": "Unknown model: scail2_14B_recast_fast"
+        },
+        "status": 400
+      },
+      "a mapping must be an object": {
+        "body": {
+          "detail": "Character mapping 1 is invalid."
+        },
+        "status": 400
+      },
+      "a mapping needs a reference": {
+        "body": {
+          "detail": "Character mapping 1 reference was not found: None"
+        },
+        "status": 400
+      },
+      "additional views must be a list": {
+        "body": {
+          "detail": "Additional reference views must be a list."
+        },
+        "status": 400
+      },
+      "enhancement off rejects an empty prompt": {
+        "body": {
+          "detail": "Unknown model: fake_t2v"
+        },
+        "status": 400
+      },
+      "jobs created": 0,
+      "reference must exist": {
+        "body": {
+          "detail": "Reference image not found: None"
+        },
+        "status": 400
+      },
+      "the default model is the dedicated recast model": {
+        "body": {
+          "detail": "Unknown model: scail2_14B_recast_fast"
+        },
+        "status": 400
+      },
+      "the video must be readable": {
+        "body": {
+          "detail": "Cannot read video: unreadable clip"
+        },
+        "status": 400
+      },
+      "video must exist": {
+        "body": {
+          "detail": "Video not found: None"
+        },
+        "status": 400
+      },
+      "viggle needs a video and a frame": {
+        "body": {
+          "detail": "A media reference is required"
+        },
+        "status": 400
+      }
+    },
+    "status": 200
+  },
+  "recast viggle": {
+    "body": {
+      "accepted": {
+        "answer": {
+          "job_id": "<JOB>",
+          "root_task_id": "task-generation-<JOB>",
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "job": {
+          "accepted": {
+            "job_id": "<JOB>",
+            "root_task_id": "task-generation-<JOB>",
+            "status": "queued",
+            "task_id": "task-generation-<JOB>"
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "mode": "",
+                "model_type": "fake_t2v",
+                "plugin_data": {},
+                "prompt": "a calm lake",
+                "resolution": "64x64",
+                "seed": 42,
+                "video_length": 17
+              },
+              "params": {
+                "_execution_mode": "real",
+                "generation_mode": "video",
+                "model_type": "fake_t2v",
+                "prompt": "a calm lake",
+                "resolution": "64x64",
+                "seed": 42,
+                "video_length": 17
+              },
+              "prompt": "a calm lake",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 1,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed42_a_calm_lake.meta.json",
+            "<TIME>_seed42_a_calm_lake.mp4"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed42_a_calm_lake.mp4"
+            ],
+            "recovered": false
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed42_a_calm_lake.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+              "params": {
+                "_execution_mode": "real",
+                "generation_mode": "video",
+                "model_type": "fake_t2v",
+                "prompt": "a calm lake",
+                "provider": "local",
+                "resolution": "64x64",
+                "seed": 42,
+                "video_length": 17
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {}
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed42_a_calm_lake.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed42_a_calm_lake.mp4"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200
+      },
+      "rejected": {
+        "body": {
+          "detail": "A media reference is required"
+        },
+        "status": 400
+      }
+    },
+    "status": 200
+  },
   "retake and edit anything": {
     "body": {
       "edit anything": {
