@@ -83,12 +83,12 @@ from services.director_model_compat import (
     assess_director_model,
 )
 from services.director.policies import (
-    TYPED_PROMPTS_KEY,
     enforce_direct_video_on_clip_plans,
     enforce_visual_style_on_clip_plans,
     mark_typed_prompt_edits,
     no_visible_text_lock_applies,
 )
+from services.director.typed_prompts import typed_in_saved_state, write_workspace_prompt
 from services.director.music_video_coverage import (
     treatment_chorus_set,
     treatment_coverage,
@@ -992,10 +992,8 @@ def _approved_review_plans(provided: Any) -> Optional[list[dict]]:
 
 
 def _typed_at_review(state: Mapping[str, Any], clip_index: int, field: str) -> bool:
-    """Whether the user typed this saved prompt at the review pause (see ``continue_pipeline``)."""
-    plans = state.get("clip_plans")
-    plan = plans[clip_index] if isinstance(plans, list) and 0 <= clip_index < len(plans) else None
-    return isinstance(plan, dict) and field in (plan.get(TYPED_PROMPTS_KEY) or ())
+    """Whether the user typed this saved prompt: at the review pause (see ``continue_pipeline``) or in Workspaces."""
+    return typed_in_saved_state(state, clip_index, field)
 
 
 def _h3_segment_typed_at_review(state: Mapping[str, Any], clip_index: int) -> bool:
@@ -2509,24 +2507,14 @@ def update_clip_prompts(
             raise ValueError("Clip not found")
         if video_prompt is not None:
             text = str(video_prompt)
-            if clip_index < len(clips) and isinstance(clips[clip_index], dict):
-                clips[clip_index]["video_prompt"] = text
-                clips[clip_index]["_director_h3_source_prompt"] = text
-            if clip_index < len(plans) and isinstance(plans[clip_index], dict):
-                plans[clip_index]["video_prompt"] = text
-                plans[clip_index]["_director_h3_source_prompt"] = text
-            if clip_index < len(planned) and isinstance(planned[clip_index], dict):
-                planned[clip_index]["_director_h3_source_prompt"] = text
-                if "video_prompt" in planned[clip_index]:
-                    planned[clip_index]["video_prompt"] = text
+            write_workspace_prompt(
+                clips, plans, planned, clip_index, "video_prompt", text,
+                extras={"_director_h3_source_prompt": text},
+            )
         if image_prompt is not None:
-            text = str(image_prompt)
-            if clip_index < len(clips) and isinstance(clips[clip_index], dict):
-                clips[clip_index]["image_prompt"] = text
-            if clip_index < len(plans) and isinstance(plans[clip_index], dict):
-                plans[clip_index]["image_prompt"] = text
-            if clip_index < len(planned) and isinstance(planned[clip_index], dict):
-                planned[clip_index]["image_prompt"] = text
+            write_workspace_prompt(
+                clips, plans, planned, clip_index, "image_prompt", str(image_prompt),
+            )
         if soundtrack_drive is not None:
             wants = bool(soundtrack_drive)
             audio = {

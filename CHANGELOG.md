@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: text you write in Workspaces survives Regenerate and Repeat.** A shot prompt edited in Workspaces (typed by hand, or a rewrite you accepted) was not remembered as yours, so Regenerate and Repeat put the "no visible text" lock back on and stripped any lettering you had added (sung projects only). The edit is now marked as typed, like text typed at the review pause; saving the same wording again changes nothing.
+
 **Fixed: Inpaint and its mask preview find a clip picked from the gallery.** Picking a workspace clip in Inpaint sent its file name and workspace, but both the mask preview and the inpaint job only looked in the uploads folder and answered "Video not found". They now look in the clip's workspace first, like Retake and Edit Anything, and fall back to uploads for a dropped file.
 
 **Fixed: cancelling a generation at the very start no longer leaves it on "Cancelling..." forever.** A cancel that arrived after the job took the GPU slot but before the worker registered its stop handle was never acknowledged, so the job (and its task in Activity) stayed Cancelling. The worker now settles it as Cancelled and releases the slot and the saved request. Outpaint, repaint, revoice and Blend have the same short window and are not changed yet.
