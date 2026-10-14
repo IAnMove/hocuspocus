@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from tests.support.launch_ast import generation_module, generation_source
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -65,7 +68,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_worker_stream_error_survives_final_failure_message(self):
         from services.job_lifecycle import update_job, finish_job
 
-        generation = _function(self.launch, "_run_generation")
+        generation = generation_module()
         error_branch = next(node for node in ast.walk(generation)
                             if isinstance(node, ast.If)
                             and ast.unparse(node.test) == "cmd == 'error'")
@@ -124,7 +127,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 else:
                     tree = self.launch
                 lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name
-                function = _function(tree, lookup_name)
+                function = (generation_module() if function_name == "_run_generation"
+                            else _function(tree, lookup_name))
                 functions = [function]
                 if function_name == "_run_tool_upscale":
                     functions.append(_function(tree, "_publish_upscale_outputs"))
@@ -205,11 +209,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         )
 
     def test_generation_timer_starts_from_lifecycle_active_timestamp(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            source = ast.get_source_segment(handle.read(), generation)
+        source = generation_source()
         self.assertIsNotNone(source)
         transition_at = source.index("if not try_start(")
         timer_at = source.index('start_time = float(job.get("started_at")', transition_at)
@@ -343,14 +343,9 @@ class TestJobLifecycleWiring(unittest.TestCase):
             self.assertGreaterEqual(check_at, 0)
 
     def test_generation_stamps_partial_outputs_before_cancel_return(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            launch_source = handle.read()
-        source = ast.get_source_segment(launch_source, generation)
+        source = generation_source()
         self.assertIsNotNone(source)
-        publish_at = source.index("record_job_outputs(\n                    job,")
+        publish_at = re.search(r"record_job_outputs\(\n\s+job,", source).start()
         stamp_at = source.index("_write_output_sidecars(new_files)", publish_at)
         cancel_at = source.index("if cancelled or is_cancel_requested(job):", stamp_at)
         cancel_return = source.index("return False", cancel_at)
@@ -359,7 +354,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         self.assertLess(cancel_at, cancel_return)
 
     def test_director_sidecars_cover_every_supported_media_extension(self):
-        generation = _function(self.launch, "_run_generation")
+        generation = generation_module()
         sidecar_writer = next(
             node for node in ast.walk(generation)
             if isinstance(node, ast.FunctionDef)
@@ -377,12 +372,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         })
 
     def test_continuation_accepts_all_generated_video_containers(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            launch_source = handle.read()
-        source = ast.get_source_segment(launch_source, generation)
+        source = generation_source()
         continuation = source.split(
             "# Find the latest video explicitly registered by", 1,
         )[1].split("if latest_video:", 1)[0]
@@ -541,11 +531,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             self.assertIn("-shortest", command)
 
     def test_multiclip_dispatch_preserves_audio_origin(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            source = ast.get_source_segment(handle.read(), generation)
+        source = generation_source()
         self.assertIn('raw_params.get("audio_frame_offset", 0)', source)
         self.assertGreaterEqual(source.count(
             '"audio_start_sec": multi_clip_audio_start_sec'
