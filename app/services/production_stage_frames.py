@@ -66,10 +66,36 @@ def cast_sheets(production: Any, spec: dict) -> None:
         raise host.ProductionError("cast_incomplete", "no reference sheet for " + ", ".join(f"{cid} ({production.failures.get(cid, 'no output')})" for cid in absent))
 
 
+def _clip_window(window: dict) -> list[float] | None:
+    """The audio window this clip was (or will be) shot against. Missing t0/t1 means the caller did not
+    time the shot, so a resume cannot say the window moved."""
+    if "t0" not in window and "t1" not in window:
+        return None
+    try:
+        return [round(float(window.get("t0") or 0), 3), round(float(window.get("t1") or 0), 3)]
+    except (TypeError, ValueError):
+        return None
+
+
+def _clip_window_moved(stored: Any, current: list[float] | None) -> bool:
+    """Same 0.3 s bar as ``production.song.use``. A source recorded before the window was stored is not a move."""
+    if current is None or not isinstance(stored, (list, tuple)) or len(stored) != 2:
+        return False
+    try:
+        old = (float(stored[0]), float(stored[1]))
+    except (TypeError, ValueError):
+        return False
+    from services.production_song_switch import WINDOW_MOVE
+    return (
+        round(abs(old[0] - current[0]), 3) > WINDOW_MOVE
+        or round(abs(old[1] - current[1]), 3) > WINDOW_MOVE
+    )
+
+
 def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> None:
     """An H3 shot whose spec changed is shot again: a new frame prompt drops its frame and its clip, a new action,
-    camera or singing only its clip (a scene2d background is redrawn the same way). A shot seen for the first time
-    (or made before this was recorded) keeps what it has."""
+    camera, singing or audio window (moved more than 0.3 s) only its clip (a scene2d background is redrawn the same
+    way). A shot seen for the first time (or made before this was recorded) keeps what it has."""
     import hashlib
     import json
 
@@ -85,12 +111,17 @@ def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> No
         frame = digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
         clip = digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
         known = sources.get(key) or {"frame": frame, "clip": clip}
+        timing = _clip_window(window)
+        moved = _clip_window_moved(known.get("window"), timing)
         if known["frame"] != frame and frames.pop(key, None):
             production.log(f"frame {key}: the shot's picture changed, drawing it again")
-        if known["clip"] != clip and isinstance(clips.get(key), dict):
+        if (known["clip"] != clip or moved) and isinstance(clips.get(key), dict):
             clips[key]["obsolete"] = True
             production.log(f"clip {key}: the shot changed, shooting it again")
-        sources[key] = {"frame": frame, "clip": clip}
+        recorded = {"frame": frame, "clip": clip}
+        if timing is not None:
+            recorded["window"] = timing
+        sources[key] = recorded
 
 
 def _draws_frame(window: dict) -> bool:

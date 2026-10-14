@@ -518,6 +518,21 @@ def test_a_changed_h3_shot_is_drawn_or_shot_again_and_an_unchanged_one_is_kept(t
     assert production.state["clips"]["a"]["obsolete"] and production.state["clips"]["b"]["obsolete"], "both are shot again"
 
 
+def test_a_moved_h3_window_is_shot_again_and_a_0_3s_shift_is_kept(tmp_path):
+    """Moving the shot onto another lyric (or stretching it) must remake the clip; song.use's 0.3 s bar still keeps."""
+    production, calls = _image_production(tmp_path, [("a1.png", None)])
+    spec = {"style": {}, "cast": []}
+    first = {"key": "a", "kind": "h3", "frame": "wide shot", "action": "sings", "t0": 1.0, "t1": 4.0}
+    production.frames(spec, [first])
+    production.state["clips"] = {"a": {"file": "a.mp4"}}
+    assert len(calls) == 1
+    production.frames(spec, [{**first, "t0": 1.3, "t1": 4.3}])
+    assert len(calls) == 1 and "obsolete" not in production.state["clips"]["a"], "0.3 s is still the same window"
+    production.frames(spec, [{**first, "t0": 5.0, "t1": 8.0}])
+    assert len(calls) == 1 and production.state["clips"]["a"]["obsolete"], "a new lyric line must remake the clip"
+    assert production.state["h3_sources"]["a"]["window"] == [5.0, 8.0]
+
+
 def test_frames_made_before_their_source_was_recorded_are_kept(tmp_path):
     production, calls = _image_production(tmp_path, [])
     production.state.update(frames={"a": "old.png"}, clips={"a": {"file": "old.mp4"}})
