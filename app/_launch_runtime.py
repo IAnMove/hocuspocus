@@ -839,7 +839,6 @@ from routers.rig import cancel_rig_job, generate_rig, rig_job_status
 # ============================================================================
 
 from routers.workspace_outputs import create_workspace_router
-
 api.include_router(create_workspace_router(
     list_workspaces=_list_workspaces,
     get_active_workspace=_get_active_workspace,
@@ -849,6 +848,7 @@ api.include_router(create_workspace_router(
     jobs=lambda: _jobs.values(),
     safe_join=_safe_join,
     save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+    busy_profile="full",
 ))
 
 

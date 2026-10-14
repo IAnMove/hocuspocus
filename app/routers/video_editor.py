@@ -22,7 +22,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from services import resource_scheduler
+from services import resource_scheduler, workspace_busy
 from services.agent_activity import agent_attribution, requested_by as export_requested_by
 from services.asset_manifest import publish_generation_sidecar
 from services.media_refs import parse_media_ref
@@ -126,6 +126,20 @@ def list_video_editor_jobs() -> list[dict]:
     """Snapshot editor jobs for Activity's canonical sync."""
     with _video_editor_jobs_lock:
         return [copy.deepcopy(job) for job in _video_editor_jobs.values()]
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Exports, remounts and animatics that still write into their workspace (``services.workspace_busy`` probe).
+
+    The registry is in memory only and nothing reloads it from disk, so an entry that is not
+    finished is a job of this process. Cancelling jobs count until FFmpeg reaches its safe boundary.
+    """
+    with _video_editor_jobs_lock:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _video_editor_jobs.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
 
 
 def _public_video_editor_job(job: dict) -> dict:
