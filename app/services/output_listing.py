@@ -431,4 +431,3 @@ def serve_file(filename: str, workspace: str | None = None, sha256: str | None =
     if filepath and os.path.isfile(filepath):
         return share_delete_file_response(filepath, expected_sha256=sha256)
     raise HTTPException(status_code=404, detail="File not found")
-
