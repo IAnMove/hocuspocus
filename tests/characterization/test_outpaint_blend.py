@@ -371,12 +371,16 @@ def test_outpaint_shot_guide_is_one_ffmpeg_call(rig, golden, tmp_path, monkeypat
     helpers = worker_module()
     source = _video(tmp_path / "source.mp4", frames=16)
     commands: list = []
+    stubbed: set = set()
     real_run = subprocess.run
 
     def run(command, *args, **kwargs):
         if command and Path(str(command[0])).name.startswith("ffmpeg") and "-vf" in command:
             commands.append([[str(part).replace(str(tmp_path), "<TMP>") for part in command],
                              kwargs.get("timeout")])
+            if str(command[-1]) in stubbed:
+                Path(str(command[-1])).write_bytes(b"")
+                return subprocess.CompletedProcess(command, 0, "", "")
         return real_run(command, *args, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", run)
@@ -391,6 +395,11 @@ def test_outpaint_shot_guide_is_one_ffmpeg_call(rig, golden, tmp_path, monkeypat
         **_scrub(answer, (str(tmp_path), "<TMP>")), "frames": helpers._recast_video_frame_count(str(guide)),
         "abort checks": len(checks)}
     long_guide = tmp_path / "long.mp4"
+    # This case pins the command and the timeout. At 0.1 fps ffmpeg 6.1 (the CI build) repeats frames to a constant
+    # rate (1279 of them) where ffmpeg 7 and later keep 16, so the binary and the frame count are stood in for here;
+    # the case was recorded with ffmpeg 8.1.2 and its answer is unchanged.
+    stubbed.add(str(long_guide))
+    rig.patch("_recast_video_frame_count", lambda path: 16)
     answer = _outcome(lambda: helpers._write_outpaint_shot_guide(
         str(source), str(long_guide), start_frame=0, end_frame=16, pad_frames=-4, fps=0.1))
     answers["a slow rate stretches the timeout"] = {**_scrub(answer, (str(tmp_path), "<TMP>")),
