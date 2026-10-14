@@ -31,11 +31,11 @@ def _read_blend_numbers(body):
     A value that is not a number, or ``base_params`` that is not an object, answers 422 here; they used to raise
     in the middle of the route and answer 500 (validation edit-03).
     """
-    from services.request_numbers import number_field
+    from services.request_numbers import NOT_A_NUMBER_STATUS, number_field
 
     base = body.get("base_params")
     if base is not None and not isinstance(base, dict):
-        raise HTTPException(status_code=422, detail="base_params must be an object")
+        raise HTTPException(status_code=NOT_A_NUMBER_STATUS, detail="base_params must be an object")
     base = base or {}
     return {
         "overlap_sec": number_field(body, "overlap_sec", 3),
