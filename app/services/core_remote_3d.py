@@ -63,7 +63,11 @@ def _resolve_image(value: str, workspace: str | None) -> str:
     return core.resolve_media(str(value or ""), workspace)
 
 
-def _front_image(body: dict[str, Any], workspace: str) -> str | None:
+def _front_image(body: dict[str, Any], workspace: str, resolved: dict[str, str] | None = None) -> str | None:
+    for view in ("front", "left", "right", "back"):
+        path = (resolved or {}).get(view)
+        if path and os.path.isfile(path):
+            return path
     images = body.get("images") if isinstance(body.get("images"), dict) else {}
     if body.get("image_path") and not images.get("front"):
         images = {**images, "front": body["image_path"]}
@@ -161,13 +165,15 @@ def _remote_provider(body: dict[str, Any], profile: dict[str, Any]) -> str:
     return provider
 
 
-def start_job(body: dict[str, Any], *, workspace: str, output_dir: str) -> dict[str, Any]:
+def start_job(
+    body: dict[str, Any], *, workspace: str, output_dir: str, resolved_images: dict[str, str] | None = None,
+) -> dict[str, Any]:
     from services import execution_mode
     from services.core_production import production_profile_response
 
     profile = production_profile_response()["profile"]
     provider = _remote_provider(body, profile)
-    image_path = _front_image(body, workspace)
+    image_path = _front_image(body, workspace, resolved_images)
     prompt = str((body.get("prompt") or "")).strip()
     if provider == "hi3d" and not image_path and not _hi3d_can_draw_a_still(profile):
         raise ValueError("Hi3D needs a reference image")

@@ -220,6 +220,48 @@ class CoreRuntimeTests(unittest.TestCase):
         workflows = [item.get("workflow") for item in tasks.json()["tasks"]]
         self.assertIn("model3d", workflows)
 
+    def _meshy_job_request(self, images):
+        """POST a Meshy job with the worker thread stubbed; return the response and the job's stored request."""
+        from services import core_remote_3d
+
+        with patch("services.core_remote_3d.threading.Thread"), patch("services.execution_mode.validate_remote_provider"):
+            response = self.client.post("/api/v1/model3d/generate", json={
+                "provider": "meshy", "images": images, "workspace": "default",
+            })
+        job = core_remote_3d._JOBS.get(response.json().get("job_id")) if response.status_code == 200 else {}
+        return response, (job or {}).get("_request", {})
+
+    def test_core_model3d_keeps_a_nested_reference_the_router_accepted(self):
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            nested = Path("outputs", "refs", "deep", "front.png")
+            nested.parent.mkdir(parents=True)
+            Image.new("RGB", (4, 4), (1, 2, 3)).save(nested)
+            response, request = self._meshy_job_request({"front": "refs/deep/front.png"})
+            expected = os.path.realpath(nested)
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(os.path.realpath(request["image_path"]), expected)
+
+    def test_core_model3d_uses_the_upload_the_router_picked_over_a_workspace_file_of_the_same_name(self):
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("uploads").mkdir()
+            Image.new("RGB", (4, 4), (200, 0, 0)).save(Path("outputs", "front.png"))
+            Image.new("RGB", (4, 4), (0, 0, 200)).save(Path("uploads", "front.png"))
+            response, request = self._meshy_job_request({"front": "/api/v1/uploads/front.png"})
+            expected = os.path.realpath(Path("uploads", "front.png"))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(os.path.realpath(request["image_path"]), expected)
+
     def test_core_model3d_unload_cancels_the_queued_remote_jobs(self):
         """The shared Model3D router brings ``POST /api/v1/model3d/unload`` to core: it cancels the Meshy and Hi3D jobs."""
         folder, previous = self._in_temp_workspace()
