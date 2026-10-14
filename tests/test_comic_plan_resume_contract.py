@@ -247,3 +247,35 @@ def test_storyboard_page_check_works_without_the_full_server():
     )
     assert result.returncode == 0, result.stderr[-800:]
     assert result.stdout.strip() == _comic_page_problem({}, 1) == "the panels field is not an array"
+
+
+def test_resuming_a_cancelled_story_generation_is_a_409_that_leaves_the_activity_task_alone(monkeypatch):
+    """_story_job_update ignores every patch to a cancelled (or cancelling) job, so the resume used to answer 200
+    "Story generation resumed", reopen the Activity task as queued, and then run nothing."""
+    import copy
+
+    import pytest
+    from fastapi import HTTPException
+
+    import routers.story_lab as lab
+
+    job_id = "story-plan-aaaaaaaaaaaa"
+    job = {"jobId": job_id, "status": "cancelled", "workspace": "film", "taskId": "task-story-plan-1",
+           "request": {"premise": "A harbour."}}
+    reopened, updates, started = [], [], []
+    monkeypatch.setattr(lab, "_load_story_plan_job", lambda _job_id: copy.deepcopy(job))
+    monkeypatch.setattr(lab, "_story_plan_active_jobs", set())
+    monkeypatch.setattr(lab, "_story_resume_request", lambda request, _body: request)
+    monkeypatch.setattr(lab, "_reset_canonical_task_for_resume", lambda *args: reopened.append(args))
+    monkeypatch.setattr(lab, "_story_job_update", lambda *args, **patch: updates.append((args, patch)))
+    monkeypatch.setattr(lab, "_start_story_plan_worker", lambda *args, **kwargs: started.append(args) or True)
+    for status in ("cancelled", "cancelling"):
+        job["status"] = status
+        with pytest.raises(HTTPException) as refused:
+            lab.resume_story_lab_generation(job_id, {})
+        assert refused.value.status_code == 409 and "cancelled" in refused.value.detail
+    assert reopened == [] and updates == [] and started == [], "nothing was touched"
+    job["status"] = "failed"
+    answered = lab.resume_story_lab_generation(job_id, {})
+    assert answered["status"] == "queued" and reopened == [("film", "task-story-plan-1")] and started == [(job_id,)]
+
