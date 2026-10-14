@@ -222,7 +222,9 @@ def test_simulated_worker_returns_cleanly_when_artifact_creation_is_cancelled(tm
         "update_job": lambda *_args, **_kwargs: True,
         "is_cancel_requested": lambda _job: True,
     }
-    worker = _load_launch_function("_run_simulated_generation", namespace)
+    worker = _load_launch_function(
+        "_run_simulated_generation", namespace, relative="app/services/generation_preparation.py",
+    )
     job = {
         "id": "cancelled-simulation",
         "out_dir": str(tmp_path),
@@ -256,7 +258,9 @@ def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
         "_publish_generation_sidecar_for_studio_job", namespace,
         relative="app/services/canonical_task_publishers.py",
     )
-    worker = _load_launch_function("_run_simulated_generation", namespace)
+    worker = _load_launch_function(
+        "_run_simulated_generation", namespace, relative="app/services/generation_preparation.py",
+    )
     job = {
         "id": "sim-job-1",
         "created_at": 1_700_000_000.0,
@@ -614,9 +618,16 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_run_simulated_generation",
         "_write_output_sidecars",
     ):
-        # _write_output_sidecars is nested in a phase of the generation worker
-        body = (function_source(name, worker_text, worker_tree) if name == "_write_output_sidecars"
-                else function_source(name))
+        # _write_output_sidecars is nested in a phase of the generation worker.
+        # _run_simulated_generation moved to services/generation_preparation.py.
+        if name == "_write_output_sidecars":
+            body = function_source(name, worker_text, worker_tree)
+        elif name == "_run_simulated_generation":
+            prep_path = Path(__file__).parents[1] / "app" / "services" / "generation_preparation.py"
+            prep_text = prep_path.read_text(encoding="utf-8")
+            body = function_source(name, prep_text, ast.parse(prep_text))
+        else:
+            body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
     recast_sidecar = function_source(
