@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Film grain and spatial upsampling left the launch module.** A finished video is still grained in place, and a spatial upscale still replaces the file and keeps its audio.
+
 **The per-job VRAM coefficient left the launch module.** A job still tightens the safety coefficient for its own weights and puts the saved base value back when the job finishes.
 
 **SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.

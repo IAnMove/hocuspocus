@@ -321,15 +321,14 @@ class TestJobLifecycleWiring(unittest.TestCase):
             self.assertLess(cleanup, abort_return)
 
     def test_flashvsr_checks_cancel_before_replacing_source_video(self):
-        upscale = _function(
-            self.launch, "_apply_spatial_upsampling_to_file",
-        )
+        relative = "app/services/generation_postprocess.py"
+        module = _parse(relative)
+        upscale = _function(module, "_apply_spatial_upsampling_to_file")
         with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"),
-            "r", encoding="utf-8",
+            os.path.join(_ROOT, relative), "r", encoding="utf-8",
         ) as handle:
-            launch_source = handle.read()
-        source = ast.get_source_segment(launch_source, upscale)
+            module_source = handle.read()
+        source = ast.get_source_segment(module_source, upscale)
         self.assertIsNotNone(source)
         for replacement in (
             "os.replace(tmp_muxed, video_path)",
