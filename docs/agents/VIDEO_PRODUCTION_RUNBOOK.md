@@ -607,6 +607,7 @@ sloping down at its ends. A piece far above the floor (an arch's lintel, a
 tree's crown) keeps its opening, and the key colour is taken out of each
 piece's rim where it meets the band.
 
+<a id="ground-styles"></a>
 **Ground styles.** A floor the scene draws itself, in the look of a Nintendo 64 /
 GameCube field: `grass`, `meadow` (with flowers), `sand`, `asphalt`, `dirt`,
 `snow`, `cobble`. Each is a seamless painted tile with its large patches inside
