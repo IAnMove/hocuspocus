@@ -5,8 +5,6 @@ Function bodies are the launch module's, moved verbatim.
 
 import os
 
-from services.recast_launch_binding import bindable
-
 # --- moved verbatim ---
 def _recast_reference_canvas_size(
     source_frame, base_width=832, base_height=480, block_size=32,
@@ -1074,11 +1072,13 @@ def _fit_recast_reference_layers(
     return rgb_canvas, mask_canvas
 
 # --- collaborators ---
-_normalize_recast_person_count = bindable("_normalize_recast_person_count")
-_recast_subject_crop_box = bindable("_recast_subject_crop_box")
 from services.recast_masks import (
     _RECAST_MASK_COLORS,
     _RECAST_PROTECTION_COLORS,
     _recast_color_region,
     _recast_mask_region,
+)
+from services.recast_reference_prepare import (
+    _normalize_recast_person_count,
+    _recast_subject_crop_box,
 )

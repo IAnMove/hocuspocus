@@ -737,8 +737,10 @@ def _recolor_recast_reference_mask(
 _detect_recast_shot_ranges = bindable("_detect_recast_shot_ranges")
 _find_recast_unmapped_shots = bindable("_find_recast_unmapped_shots")
 _normalize_recast_tracking_target = bindable("_normalize_recast_tracking_target")
-_recast_video_has_audio = bindable("_recast_video_has_audio")
 _recover_recast_unmapped_shots = bindable("_recover_recast_unmapped_shots")
-_resolve_recast_media = bindable("_resolve_recast_media")
 _select_recast_timeline_anchor = bindable("_select_recast_timeline_anchor")
 _summarize_recast_mapping_mask = bindable("_summarize_recast_mapping_mask")
+from services.recast_reference_prepare import (
+    _resolve_recast_media,
+    _recast_video_has_audio,
+)

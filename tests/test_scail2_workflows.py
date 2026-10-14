@@ -3869,18 +3869,19 @@ class TestMultiPersonRecast(unittest.TestCase):
         controls = _read(_RECAST_CONTROLS_PATH)
         selector = _read(_LORA_SELECTOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
         self.assertIn(
             '_RECAST_RELIGHTING_LORA_FILENAME = "scail2_relighting_lora.safetensors"',
-            launch,
+            prepare,
         )
         self.assertIn(
             '"80d338a7969c1b286c8f5c4996b37eb198d0864837fecb6c87c106ca74571a2b"',
-            launch,
+            prepare,
         )
         self.assertIn('"converter": "scail2_sat_lora"', launch)
         self.assertIn('body.get("use_relighting") is True', launch)
-        self.assertIn("def _normalize_recast_lora_settings(", launch)
-        self.assertIn("single-phase LoRA settings", launch)
+        self.assertIn("def _normalize_recast_lora_settings(", prepare)
+        self.assertIn("single-phase LoRA settings", prepare)
         self.assertIn("editRecastUseRelighting: false", edit_store)
         self.assertIn("use_relighting: state.editRecastUseRelighting", recast)
         self.assertIn("const recastSinglePhase =", _read(_LORAS_PATH))
@@ -3906,7 +3907,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('"scail2_isolate_reference_background": False', launch)
         self.assertIn('"scail2_reference_alpha_path"', launch)
         self.assertIn('"edit_recast_isolate_reference": isolate_reference', launch)
-        self.assertIn("def _prepare_recast_reference_frame", launch)
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
+        self.assertIn("def _prepare_recast_reference_frame", prepare)
+        self.assertIn("isolate_reference=isolate_reference", prepare)
         self.assertIn("isolate_reference=isolate_reference", launch)
         self.assertIn("def _load_reference_alpha", scail2)
         self.assertIn("def _isolate_scail2_reference", scail2)
@@ -3925,8 +3928,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         ))
         wgp = _read(_WGP_PATH)
         client = api_client_source()
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
 
-        self.assertIn('"identity_image": identity_image', launch)
+        self.assertIn('"identity_image": identity_image', prepare)
         self.assertIn('"scail2_clip_reference_path"', launch)
         self.assertIn(
             '"scail2_identity_latent_isolation": isolate_reference',
@@ -3999,8 +4003,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         selector = _read(_SCAIL_RESOLUTION_SELECTOR_PATH)
         client = api_client_source()
 
-        self.assertIn('"512p": (896, 512)', launch)
-        self.assertIn('"704p": (1280, 704)', launch)
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
+        self.assertIn('"512p": (896, 512)', prepare)
+        self.assertIn('"704p": (1280, 704)', prepare)
         self.assertIn('"resolution": recast_resolution', launch)
         self.assertIn('"sliding_window_size": recast_window_size', launch)
         self.assertIn(
@@ -4206,7 +4211,8 @@ class TestMultiPersonRecast(unittest.TestCase):
             '"edit_recast_auto_face_detail": auto_face_detail',
             launch,
         )
-        self.assertIn('"auto_face_detail_refs": auto_face_detail_refs', launch)
+        prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
+        self.assertIn('"auto_face_detail_refs": auto_face_detail_refs', prepare)
         self.assertIn("editRecastAutoFaceDetail: true", edit_store)
         self.assertIn("auto_face_detail: true", recast)
         self.assertIn(
