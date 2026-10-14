@@ -3,6 +3,7 @@
 // (minimax_h3_extended_duration=false, frames_positions='', ...) that the Speech and Music
 // projections refuse, so every audio reroll failed client side without posting anything.
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { JSDOM } from 'jsdom'
 
@@ -47,6 +48,7 @@ async function withAudio(sidecar: Record<string, unknown>, run: (calls: Call[]) 
         { model_type: 'kugelaudio_0_open', name: 'Kugel', family: 'tts', is_downloaded: true },
         { model_type: 'ace_step_v1_5_xl_sft_lm_4b', name: 'ACE', family: 'tts', is_downloaded: true },
         { model_type: 'mmaudio_v2', name: 'MMAudio', family: 'tts', is_downloaded: true },
+        { model_type: 'voxcpm2_voicedesign', name: 'VoxCPM2 voice design', family: 'tts', is_downloaded: true },
       ] as typeof before.models,
       selectedOutputMeta: { params: sidecar } as never,
       loadModelOptions: async () => {}, loadLoras: async () => {} })
@@ -117,8 +119,28 @@ function mountAudioPanel(subMode: 'speech' | 'music') {
   return () => { window.removeEventListener(event, onPresent); panel.remove() }
 }
 
+// What the server really stores for a Studio-made Speech/Music output: its full settings dump (~135 keys),
+// with video values such as model_switch_phase 1, denoising_strength 0.5 or stg_scale 1 that the restore copies.
+const SERVER_SIDECARS = JSON.parse(readFileSync(new URL('./fixtures/studioAudioSidecars.json', import.meta.url), 'utf8')) as
+  { speech: Record<string, unknown>; music: Record<string, unknown> }
+
+test('a server-written VoxCPM2 Speech sidecar restores to a valid generation.speech command', async () => {
+  const projected = projectStudioSpeechFormParams(await restoredAudioForm(SERVER_SIDECARS.speech)).params
+  assert.doesNotThrow(() => createStudioSpeechGenerationCommand(projected, 'audio-restore-speech-server'))
+  assert.equal(projected.audio_guidance_scale, 4, 'a field of the speech catalog is still restored')
+})
+
+test('a server-written ACE-Step Music sidecar restores to a valid generation.music command', async () => {
+  const projected = projectStudioMusicFormParams(await restoredAudioForm(SERVER_SIDECARS.music)).params
+  assert.doesNotThrow(() => createStudioMusicGenerationCommand(projected, 'audio-restore-music-server'))
+  assert.equal(projected.alt_prompt, SERVER_SIDECARS.music.alt_prompt)
+})
+
 // SFX is left out of the reroll loop: its closed builder was never affected (covered by the projection test above).
-for (const [label, subMode, sidecar] of [['Speech', 'speech', SPEECH], ['Music', 'music', MUSIC]] as const) {
+for (const [label, subMode, sidecar] of [
+  ['Speech', 'speech', SPEECH], ['Music', 'music', MUSIC],
+  ['server-written Speech', 'speech', SERVER_SIDECARS.speech], ['server-written Music', 'music', SERVER_SIDECARS.music],
+] as const) {
   test(`${label}: reroll reaches the submission`, async () => {
     const unmount = mountAudioPanel(subMode)
     try {

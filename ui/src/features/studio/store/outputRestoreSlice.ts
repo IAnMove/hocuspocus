@@ -25,11 +25,18 @@ import { audioSubModeForModel, captureVideoSubModeStash } from './studioFormHelp
 
 type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 
-/** Video/H3 form keys the restore always writes, even for a Speech, Music or SFX sidecar. */
+/**
+ * Video/H3 form keys the restore always writes, even for a Speech, Music or SFX sidecar. The
+ * second row comes from the server's full settings dump in a real sidecar (model_switch_phase 1,
+ * denoising_strength 0.5, stg_scale 1...); none of them is in the speech, music or sfx catalog.
+ */
 const AUDIO_RESTORE_VIDEO_RESIDUE = [
   'minimax_h3_extended_duration', 'minimax_h3_planning_style', 'minimax_h3_audio_policy',
   'minimax_h3_semantic_bridge_alpha', 'minimax_h3_semantic_bridge_magnitude',
   'frames_positions', 'image_start', 'image_end',
+  'model_switch_phase', 'denoising_strength', 'video_guide_outpainting', 'input_video_strength',
+  'override_attention', 'remove_background_images_ref', 'stg_scale', 'modality_scale', 'ge_gamma',
+  'keyframe_conditioning_mode', 'keyframe_inject_mode',
 ] as const
 
 const _OUTPAINT_ASPECT_RATIOS: Array<[Exclude<OutpaintAspect, 'source'>, number]> = [
@@ -374,6 +381,8 @@ export const createOutputRestoreSlice: SliceCreator<OutputRestoreSlice, OutputRe
     // `undefined` is how the form itself clears these keys.
     if (get().generationMode === 'audio') {
       for (const key of AUDIO_RESTORE_VIDEO_RESIDUE) (newParams as Record<string, unknown>)[key] = undefined
+      // A Speech field (in its catalog); generation.music and generation.sfx refuse it.
+      if (get().audioSubMode !== 'speech') (newParams as Record<string, unknown>).audio_guidance_scale = undefined
     }
 
     // Rebuild lora weights from multipliers string
