@@ -108,4 +108,3 @@ def test_series_reads_stay_200_after_a_silent_assembly_record(tmp_path):
             resolve_workspace=before["_resolve_workspace"], library_lock=before["_library_lock"],
             read_library=before["_read_library"], write_library=before["_write_library"],
             project_or_404=before["_project_or_404"], workspace_dir=before["_workspace_dir"], safe_join=before["_safe_join"])
-

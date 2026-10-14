@@ -226,4 +226,3 @@ def test_real_silence_gives_a_result_that_json_can_carry(tmp_path):
     result = normalize_loudness(str(clip), ffmpeg="ffmpeg")
     assert result["applied"] is False
     json.dumps(result, allow_nan=False)
-

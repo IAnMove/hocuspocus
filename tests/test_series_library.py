@@ -577,4 +577,3 @@ def test_a_non_finite_number_is_never_saved_and_never_breaks_a_read(tmp_path):
     assert before["lufs"] is None and before["rangeLu"] == 0.0
     JSONResponse(stored)
     write_series_library(str(tmp_path), stored, "default")
-

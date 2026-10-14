@@ -278,4 +278,3 @@ def test_resuming_a_cancelled_story_generation_is_a_409_that_leaves_the_activity
     job["status"] = "failed"
     answered = lab.resume_story_lab_generation(job_id, {})
     assert answered["status"] == "queued" and reopened == [("film", "task-story-plan-1")] and started == [(job_id,)]
-

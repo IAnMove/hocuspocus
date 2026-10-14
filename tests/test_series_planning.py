@@ -504,4 +504,3 @@ def test_known_series_bootstrap_gives_colliding_ids_distinct_ones_so_its_draft_c
     normalize_series_project(merged, merged["id"], "default")
     owners = {item["name"]: item["id"] for item in proposal["characters"]}
     assert proposal["relationships"][0]["fromCharacterId"] == owners["Loof"] and proposal["relationships"][0]["toCharacterId"] == owners["Twin"]
-

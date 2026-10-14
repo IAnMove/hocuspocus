@@ -682,4 +682,3 @@ def test_a_draft_the_library_refuses_completes_with_its_proposal_and_an_apply_er
     assert "duplicate id L_OOF" in job["applyError"] and job["error"] is None
     assert job["seriesResult"]["characters"], "the proposal stays reviewable"
     assert "could not be applied" in job["message"]
-

@@ -981,4 +981,3 @@ def test_a_wrongly_typed_plan_field_is_a_422_that_names_it_before_any_job_or_act
             asyncio.run(plan._director_v2_plan_body(body))
         assert raised.value.status_code == 422 and field in str(raised.value.detail), (field, raised.value.detail)
     assert list(tmp_path.iterdir()) == [] and tracked == [], "no job directory and no Activity row were made"
-
