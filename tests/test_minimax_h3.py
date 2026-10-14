@@ -14,6 +14,7 @@ import types
 import typing
 import unittest
 from unittest import mock
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -298,7 +299,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
                 model_def=model_def,
             )
 
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         self.assertIn("minimax_h3_service.generate(", launch)
         self.assertIn("def _is_legacy_h3_model", launch)
         self.assertIn("_release_legacy_h3_when_queue_allows", launch)
@@ -1031,7 +1032,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("dialogue", guide)
 
     def test_omni_reference_request_and_ui_are_wired_end_to_end(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         main = _read(_MAIN_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_GENERATION_SLICE_PATH)

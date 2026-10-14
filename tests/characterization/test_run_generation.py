@@ -14,7 +14,7 @@ the model is the legacy H3 route, the slot is taken a moment before a cancel).
 Those tests build the job with the server's own factory and call
 ``_run_generation`` directly, with the collaborators that need a GPU stubbed.
 Every stub goes through :meth:`Rig.patch`, so a PR that moves the worker only
-repoints ``worker_module``.
+repoints ``worker_modules``.
 
 The goldens pin today's behaviour, including its oddities. Tests whose names
 start with ``test_oddity_`` pin behaviour that looks unintended; a refactor must
@@ -96,9 +96,12 @@ def _install_fake_decord(monkeypatch) -> list:
 
 
 def worker_module():
-    """The module whose globals ``_run_generation`` reads. A move PR repoints this one function."""
+    """The full server module: the jobs, the locks and ``request_cancel`` the worker and the tests share live here."""
     return sys.modules["_launch_runtime"]
 
+
+# The modules of the generation worker package, in the order the worker runs them.
+WORKER_PACKAGE = ("prepare", "tasks", "finalize")
 
 # The post-processing passes the worker calls by their launch names (C4), and the launch functions each module took.
 POSTFX_MODULES = {
@@ -113,11 +116,18 @@ OUTPAINT_BLEND_MODULES = ("services.outpaint_planning", "services.outpaint_run",
 
 
 def worker_modules() -> list:
-    """The modules whose globals the worker and the code it runs read: the full server module, and each module the
-    post-processing passes (C4) and the outpaint and blend code (C5) moved to once it exists. A name they read is an
-    attribute of every module that reads it."""
-    moved = (*POSTFX_MODULES, *OUTPAINT_BLEND_MODULES)
-    return [worker_module(), *[sys.modules[name] for name in moved if name in sys.modules]]
+    """The modules whose globals the worker functions, the post-processing passes and the outpaint and blend code
+    read. A move PR repoints this one function.
+
+    That is the full server module while any worker function or pass is still in it, each module of
+    ``services.generation_worker`` that exists, each module a pass moved to (C4), and each module the outpaint and
+    blend code moved to (C5). A name they read is an attribute of every module that reads it.
+    """
+    package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
+               if f"services.generation_worker.{name}" in sys.modules]
+    passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
+    studio = [sys.modules[name] for name in OUTPAINT_BLEND_MODULES if name in sys.modules]
+    return [worker_module(), *package, *passes, *studio]
 
 
 @dataclass
@@ -369,8 +379,12 @@ def rig(server, clip, tmp_path, monkeypatch):
         state.returned[job_id] = result
         return result
 
-    # Every module that holds the worker sees the wrapper, so a route that starts it names the thread after it.
-    state.patch("_run_generation", run_generation)
+    monkeypatch.setattr(launch, "_run_generation", run_generation)
+    # The outpaint and blend modules (C5) start the worker from their own slot: they see the wrapper too, so the
+    # thread a route starts is named after it, as it was when the routes read launch's name.
+    for name in OUTPAINT_BLEND_MODULES:
+        if hasattr(sys.modules.get(name), "_run_generation"):
+            monkeypatch.setattr(sys.modules[name], "_run_generation", run_generation)
     clear_queue()
     job_lifecycle.set_job_state_observer(record)
     yield state
@@ -475,6 +489,35 @@ def test_the_vram_coefficient_is_tightened_for_the_job_and_restored(rig, golden,
     observed["coefficient"] = {"adjusted_keys": sorted(adjustment), "applied_during_the_job": during == adjustment["effective_coef"],
                                "tighter_than_base": during < 0.8, "restored_after": observed["left_behind"]["vram_coefficient"] == 0.8}
     rig.check(golden, "vram coefficient", observed)
+
+
+def test_a_native_job_starts_up_in_a_fixed_order_before_its_abort_handle_is_registered(rig, monkeypatch) -> None:
+    """Between taking the slot and reaching the engine, a native (WanGP) job cancels a pending H3 idle release, stops
+    the isolated H3 runtime, tightens its VRAM coefficient and only then registers its abort handle. The first two
+    recorded steps belong to the GPU slot's hand-off (``_coordinated_generation_slot``), not to the worker: a change
+    to that hand-off moves them."""
+    from services import minimax_h3_service
+
+    launch = rig.launch
+    steps: list = []
+    real_coefficient, real_register = launch._apply_per_job_coefficient, launch.register_abort_state
+
+    def register(*args, **kwargs):
+        steps.append("register abort state")
+        return real_register(*args, **kwargs)
+
+    rig.patch("_cancel_h3_idle_release", lambda: steps.append("cancel H3 idle release"))
+    monkeypatch.setattr(minimax_h3_service, "stop_runtime", lambda *args, **kwargs: steps.append("stop H3 runtime"))
+    monkeypatch.setattr(minimax_h3_service, "cancel_idle_shutdown",
+                        lambda *args, **kwargs: steps.append("keep H3 runtime"))
+    rig.patch("_apply_per_job_coefficient", lambda job: (steps.append("VRAM coefficient"), real_coefficient(job))[1])
+    rig.patch("register_abort_state", register)
+    rig.engine.script = lambda call: (steps.append("engine"), call.save())
+    job_id = rig.direct_job(BODY)
+    assert rig.call_worker(job_id) is True
+    # The first two are the GPU slot's hand-off from an isolated H3 runtime, before the worker's own steps.
+    assert steps == ["keep H3 runtime", "stop H3 runtime", "cancel H3 idle release", "stop H3 runtime",
+                     "VRAM coefficient", "register abort state", "engine"]
 
 
 # -- a job that fails ---------------------------------------------------------------------------------
@@ -1142,6 +1185,49 @@ def test_a_cancel_during_post_processing_stops_the_remaining_passes(rig, golden)
     rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: order.append(["film grain", Path(path).name]))
     job_id = rig.run({**BODY, "repeat_generation": 2, "spatial_upsampling": "flashvsr_x2", "film_grain_intensity": 0.4})
     rig.check(golden, "cancel during post-processing", {**rig.observe(job_id), "order": order})
+
+
+def test_a_failed_job_runs_no_finishing_pass_on_the_outputs_it_keeps(rig, clip, tmp_path, monkeypatch) -> None:
+    """The engine saves a video and a sound, then fails: the job fails (it is not cancelled) and keeps both files.
+    Every finishing pass (outpaint, Recast protection, FlashVSR, film grain, voice clone, audio normalisation) runs
+    only for a job that succeeded, so none of them touches the kept files."""
+    media.sound(tmp_path / "uploads" / "audio" / "voice.wav")
+    source = tmp_path / "finishing-source.mp4"
+    shutil.copyfile(clip, source)
+    ran: list = []
+
+    def script(call) -> None:
+        call.save()
+        call.save("audio", suffix="_soundtrack")
+        raise RuntimeError("fake engine died after saving")
+
+    real_run = subprocess.run
+
+    def media_tools(command, *args, **kwargs):
+        if list(command)[0] in ("ffmpeg", "ffprobe"):
+            ran.append(list(command)[0])
+            return subprocess.CompletedProcess(command, 1, "", "the test runs no media tool")
+        return real_run(command, *args, **kwargs)
+
+    rig.engine.script = script
+    monkeypatch.setattr(subprocess, "run", media_tools)
+    rig.set_wgp("wan_model", SimpleNamespace(name="resident model"))
+    rig.set_wgp("release_model", lambda: ran.append("release model"))
+    rig.patch("_build_recast_adaptive_mask", lambda *args, **kwargs: ran.append("trace"))
+    rig.patch("_render_recast_mask_locked_video", lambda *args, **kwargs: ran.append("render"))
+    rig.patch("_apply_spatial_upsampling_to_file", lambda path, method, job=None: ran.append("upscale"))
+    rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: ran.append("film grain"))
+    _voice_clone_stub(monkeypatch, ran)
+    job_id = rig.direct_job({**BODY, "_outpaint_source_video": str(source), "_outpaint_preserve_audio": True,
+                             "_recast_protect_bystanders": True, "_recast_source_video": str(source),
+                             "video_mask": "uploads/recast-mask.mp4", "spatial_upsampling": "flashvsr_x2",
+                             "film_grain_intensity": 0.4, "voice_clone_enabled": True,
+                             "voice_clone_refs": ["audio/voice.wav"], "tts_dynaudnorm": True})
+    assert rig.call_worker(job_id) is False
+    job = rig.launch._jobs[job_id]
+    assert job["status"] == "failed" and not job.get("cancel_requested")
+    assert len(job["output_files"]) == 2
+    assert ran == []
 
 
 def _instant_retries(rig) -> None:

@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.launch_ast import generation_source
+
 import routers.video_editor as editor_router
 from services import execution_mode
 from services.asset_manifest import (
@@ -526,7 +528,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     )
     ast.parse(source)
     assert "@api.exception_handler(execution_mode.ExecutionModeError)" in source
-    worker = source.split("def _run_generation(job_id:", 1)[1]
+    worker = generation_source()
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
@@ -567,13 +569,17 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
                 return ast.get_source_segment(text, node)
         raise AssertionError(name)
 
+    worker_text = generation_source()
+    worker_tree = ast.parse(worker_text)
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
     ):
-        body = function_source(name)
+        # _write_output_sidecars is nested in a phase of the generation worker
+        body = (function_source(name, worker_text, worker_tree) if name == "_write_output_sidecars"
+                else function_source(name))
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
     outpaint_run_source = (
@@ -622,6 +628,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         body = ast.get_source_segment(editor_source, node)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
-    h3_slice = source.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
+    h3_slice = worker.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
     assert "publish_generation_sidecar" in h3_slice
     assert "json.dump" not in h3_slice
