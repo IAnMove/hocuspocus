@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 from services.music_production import Production, scene_fingerprint, segments
 from services.production_shot_sources import changed_parts, moved_since_shot, recipe_parts, stale_reasons
@@ -280,3 +281,77 @@ def test_the_recipe_parts_do_not_change_the_legacy_digests(tmp_path, monkeypatch
     record = run.production.state["h3_sources"]["a"]
     frame = _legacy(run.production.frame_prompt(spec, windows[0]), None, [])
     assert record["frame"] == frame and record["clip"] == _legacy(frame, "waves", "camera-dolly", False)
+
+
+SAVED = Path(__file__).resolve().parent / "fixtures" / "production_saved_by_development_844565b83.json"
+_GPU = ("generation.image", "generate", "image.remove_background")
+
+
+class _Saved:
+    """The production development 844565b83 saved (two H3 shots with cast; scene2d cards on a URL background, on a set,
+    on a drawn plate and one with a leftover H3 take; a still), resumed by ``production.run`` on this code."""
+
+    def __init__(self, tmp_path, monkeypatch):
+        from PIL import Image
+        saved = json.loads(SAVED.read_text(encoding="utf-8"))
+        for name in saved["files"]:
+            Image.new("RGB", (16, 16), (90, 40, 20)).save(tmp_path / name) if name.endswith(".png") else (tmp_path / name).write_bytes(b"\0" * 64)
+        (tmp_path / "s.score.json").write_text(json.dumps(saved["score"]))
+        (tmp_path / "p.montage.json").write_text(json.dumps(saved["montage"]))
+        (tmp_path / "p.production.json").write_text(json.dumps(saved["state"]))
+        self.raw, self.root, self.sent = saved["spec"], tmp_path, []
+        for module in ("services.production_stage_clips", "services.production_stage_scenes"):
+            monkeypatch.setattr(f"{module}.subprocess.run", lambda args, **_kwargs: None)
+        monkeypatch.setattr("services.production_clip_qa.clip_qa", lambda *args: {"verdict": "ok", "best_r": 0.7})
+        monkeypatch.setattr("services.music_production.make_frames_sheet", lambda root, frames, name: name)
+        monkeypatch.setattr("services.music_production.time.sleep", lambda _seconds: None)
+
+    def _mcp(self, tool, arguments):
+        self.sent.append((tool, arguments))
+        data, n = arguments.get("input") or {}, len(self.sent)
+        if tool == "scenes.video2d.export":
+            return {"receipt": {"commandId": f"exp{n}"}}
+        if tool == "scenes.video2d.export.receipt":
+            (self.root / f"{data['intent_id']}.mp4").write_bytes(b"\0")
+            return {"receipt": {"status": "completed", "artifacts": [{"name": f"{data['intent_id']}.mp4"}]}, "task": {"status": "completed"}}
+        if tool in ("scenes.video2d.edit", "montages.get"):
+            return {"result": {"document": data.get("document"), "revision": 1}}
+        if tool == "montages.save":
+            return {"result": {"file": data.get("file"), "revision": 2}}
+        if tool == "montages.export":
+            return {"result": {"job": {"job_id": "m1"}}}
+        if tool == "montages.export.status":
+            return {"result": {"job": {"status": "completed", "filename": "final.mp4"}}}
+        if tool in _GPU:
+            raise AssertionError(f"a resume with the same spec sent {tool}")
+        return {"result": {}}
+
+    def resume(self) -> list[str]:
+        from services.music_production import validate_spec
+        production = Production("ws", "p", workspace_dir=lambda _: str(self.root), uploads_dir=lambda: str(self.root), mcp=self._mcp)
+        production.subject_detector, production.frame_times = None, lambda path: None
+        self.sent.clear()
+        production.run(validate_spec(self.raw))
+        self.state = production.state
+        return sorted(arguments["input"]["document"]["name"] for tool, arguments in self.sent if tool == "scenes.video2d.export")
+
+
+def test_a_production_saved_by_development_resumes_without_a_new_picture_clip_or_cutout(tmp_path, monkeypatch):
+    """Upgrade guard on a state written by development's own code, not built by hand. Only the two documented CPU
+    re-exports happen once: the card that names a set (its key now holds the set) and the card that still carries a
+    leftover H3 take (its key is now what the card is made of). A second resume exports nothing."""
+    run = _Saved(tmp_path, monkeypatch)
+    exported = run.resume()
+    state = run.state
+    assert state["status"] == "completed", state.get("error")
+    assert exported == ["c2", "lf"]
+    assert [tool for tool, _arguments in run.sent if tool in (*_GPU, "scenes.template.compile")] == []
+    assert state["frames"] == {"h1": "dev-img11.png", "h2": "dev-img12.png", "c3": "dev-img13.png"}
+    assert {key: clip["file"] for key, clip in state["clips"].items()} == {"h1": "dev-vid17.mp4", "h2": "dev-vid18.mp4", "lf": "old-h3-lf.mp4"}
+    assert not any(clip.get("obsolete") for clip in state["clips"].values())
+    assert set(state["h3_sources"]["h1"]["parts"]) == {"image", "frame_size", "video_look", "clip_size"}
+    assert set(state["h3_sources"]["c3"]["parts"]) == {"image", "frame_size"}
+    assert state["clips"]["h1"]["window"] == [0.75, 3.7] and set(state["cast_sources"]) == {"hero", "pal"}
+    assert {key: scene.get("tempo") for key, scene in state["scenes"].items() if key.startswith(("c", "lf"))} == \
+        {"c1": 120.0, "c2": 120.0, "c3": 120.0, "lf": 120.0}
+    assert run.resume() == [] and state["status"] == "completed"

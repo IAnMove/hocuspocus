@@ -1,0 +1,986 @@
+{
+ "_about": "A production saved by development 844565b83 (production.run through a recording MCP; W2 review, 2026-10-14). Resumed with the same spec, the recipe-parts code must draw, shoot and cut out nothing.",
+ "files": [
+  "cover.png",
+  "dev-cut21.png",
+  "dev-cut22.png",
+  "dev-exp24.mp4",
+  "dev-exp26.mp4",
+  "dev-exp29.mp4",
+  "dev-exp32.mp4",
+  "dev-exp34.mp4",
+  "dev-exp36.mp4",
+  "dev-exp38.mp4",
+  "dev-final.mp4",
+  "dev-img1.png",
+  "dev-img11.png",
+  "dev-img12.png",
+  "dev-img13.png",
+  "dev-img2.png",
+  "dev-img5.png",
+  "dev-img6.png",
+  "dev-img9.png",
+  "dev-vid17.mp4",
+  "dev-vid18.mp4",
+  "old-h3-lf.mp4",
+  "p-contact.jpg",
+  "plaza.png",
+  "song.wav"
+ ],
+ "montage": {
+  "audioCues": [],
+  "clips": [
+   {
+    "fit": "fill",
+    "id": "h1",
+    "lyric": "one",
+    "muted": true,
+    "name": "h1",
+    "origin": {
+     "kind": "scene2d",
+     "note": "the singer sways",
+     "productionId": "p",
+     "scene": "p-h1.scene.json",
+     "shotId": "h1"
+    },
+    "source": "/api/v1/file/dev-exp24.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 4.25,
+    "trimStart": 0
+   },
+   {
+    "fit": "fill",
+    "id": "h2",
+    "lyric": "two",
+    "muted": true,
+    "name": "h2",
+    "origin": {
+     "kind": "scene2d",
+     "note": "the drummer plays",
+     "productionId": "p",
+     "scene": "p-h2.scene.json",
+     "shotId": "h2"
+    },
+    "source": "/api/v1/file/dev-exp26.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 3.75,
+    "trimStart": 0
+   },
+   {
+    "fit": "fill",
+    "id": "c1",
+    "lyric": "three",
+    "muted": true,
+    "name": "c1",
+    "origin": {
+     "kind": "scene2d",
+     "productionId": "p",
+     "scene": "p-c1.scene.json",
+     "shotId": "c1"
+    },
+    "source": "/api/v1/file/dev-exp29.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 4.0,
+    "trimStart": 0
+   },
+   {
+    "fit": "fill",
+    "id": "c2",
+    "lyric": "four",
+    "muted": true,
+    "name": "c2",
+    "origin": {
+     "kind": "scene2d",
+     "productionId": "p",
+     "scene": "p-c2.scene.json",
+     "shotId": "c2"
+    },
+    "source": "/api/v1/file/dev-exp32.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 3.0,
+    "trimStart": 0
+   },
+   {
+    "fit": "fill",
+    "id": "c3",
+    "muted": true,
+    "name": "c3",
+    "origin": {
+     "kind": "scene2d",
+     "productionId": "p",
+     "scene": "p-c3.scene.json",
+     "shotId": "c3"
+    },
+    "source": "/api/v1/file/dev-exp34.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 3.0,
+    "trimStart": 0
+   },
+   {
+    "fit": "fill",
+    "id": "lf",
+    "muted": true,
+    "name": "lf",
+    "origin": {
+     "kind": "scene2d",
+     "productionId": "p",
+     "scene": "p-lf.scene.json",
+     "shotId": "lf"
+    },
+    "source": "/api/v1/file/dev-exp36.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 3.0,
+    "trimStart": 0
+   },
+   {
+    "fit": "fill",
+    "id": "st",
+    "muted": true,
+    "name": "st",
+    "origin": {
+     "kind": "scene2d",
+     "productionId": "p",
+     "scene": "p-st.scene.json",
+     "shotId": "st"
+    },
+    "source": "/api/v1/file/dev-exp38.mp4?workspace=ws",
+    "transition": "none",
+    "trimEnd": 3.0,
+    "trimStart": 0
+   }
+  ],
+  "fps": 24,
+  "height": 1080,
+  "name": "Upgrade probe",
+  "overlays": [],
+  "revision": 1,
+  "soundtrack": {
+   "loop": false,
+   "source": "/api/v1/file/song.wav?workspace=ws",
+   "trimEnd": 24.0,
+   "trimStart": 0,
+   "volume": 1.0
+  },
+  "version": 1,
+  "width": 1920
+ },
+ "score": {
+  "beat": 0.5,
+  "bpm": 120,
+  "duration": 24.0,
+  "lines": [
+   {
+    "t0": 1.0,
+    "t1": 3.5,
+    "text": "one",
+    "words": []
+   },
+   {
+    "t0": 4.5,
+    "t1": 7.0,
+    "text": "two",
+    "words": []
+   },
+   {
+    "t0": 8.5,
+    "t1": 11.0,
+    "text": "three",
+    "words": []
+   },
+   {
+    "t0": 12.5,
+    "t1": 15.0,
+    "text": "four",
+    "words": []
+   }
+  ],
+  "vocals_file": null
+ },
+ "spec": {
+  "cast": [
+   {
+    "id": "hero",
+    "sheet_prompt": "a young singer, denim jacket"
+   },
+   {
+    "id": "pal",
+    "sheet_prompt": "a drummer, red cap"
+   }
+  ],
+  "sets": {
+   "alley": {
+    "prompt": "a narrow alley at night"
+   }
+  },
+  "shots": [
+   {
+    "action": "the singer sways",
+    "camera": "camera-push-in",
+    "cast": [
+     "hero"
+    ],
+    "frame": "wide shot of the singer on a rooftop",
+    "key": "h1",
+    "kind": "h3",
+    "line": 0,
+    "sing": true
+   },
+   {
+    "action": "the drummer plays",
+    "camera": "camera-dolly",
+    "cast": [
+     "pal"
+    ],
+    "frame": "the drummer in a garage",
+    "key": "h2",
+    "kind": "h3",
+    "line": 1
+   },
+   {
+    "key": "c1",
+    "kind": "scene2d",
+    "scene2d": {
+     "background": "/api/v1/file/plaza.png?workspace=ws",
+     "cast": {
+      "subject_1": "hero"
+     },
+     "template": "music-pinball"
+    },
+    "t0": 8.0
+   },
+   {
+    "key": "c2",
+    "kind": "scene2d",
+    "scene2d": {
+     "background": "alley",
+     "cast": {
+      "subject_1": "pal"
+     },
+     "template": "music-pinball"
+    },
+    "t0": 12.0
+   },
+   {
+    "frame": "an empty plaza at dusk",
+    "key": "c3",
+    "kind": "scene2d",
+    "scene2d": {
+     "cast": {
+      "subject_1": "hero"
+     },
+     "template": "music-pinball"
+    },
+    "t0": 15.0
+   },
+   {
+    "key": "lf",
+    "kind": "scene2d",
+    "scene2d": {
+     "background": "/api/v1/file/plaza.png?workspace=ws",
+     "cast": {
+      "subject_1": "pal"
+     },
+     "template": "music-pinball"
+    },
+    "t0": 18.0
+   },
+   {
+    "key": "st",
+    "kind": "still",
+    "still": "/api/v1/file/cover.png?workspace=ws",
+    "t0": 21.0
+   }
+  ],
+  "song": {
+   "bpm": 120,
+   "caption": "synth pop",
+   "duration": 24,
+   "lyrics": "one\ntwo\nthree\nfour"
+  },
+  "style": {
+   "image": "risograph look",
+   "image_model": "qwen_image_21",
+   "image_steps": 40,
+   "video": "painterly motion"
+  },
+  "title": "Upgrade probe"
+ },
+ "state": {
+  "cast": {
+   "hero": "/api/v1/uploads/fe8b25bfc39d4d93ab36e02f0736c073.png",
+   "pal": "/api/v1/uploads/85de2fa4cf1d4e7db1a514646e54513d.png"
+  },
+  "cast_attempts": {
+   "hero": 0,
+   "pal": 0
+  },
+  "cast_cutouts": {
+   "hero": {
+    "file": "dev-cut21.png",
+    "source": "/api/v1/uploads/e86f205a43da4c1480f2681d4fe90baf.png",
+    "url": "/api/v1/file/dev-cut21.png?workspace=ws"
+   },
+   "pal": {
+    "file": "dev-cut22.png",
+    "source": "/api/v1/uploads/593ece8f149c4ac79cde969b7f617257.png",
+    "url": "/api/v1/file/dev-cut22.png?workspace=ws"
+   }
+  },
+  "cast_single": {
+   "hero": "/api/v1/uploads/e86f205a43da4c1480f2681d4fe90baf.png",
+   "pal": "/api/v1/uploads/593ece8f149c4ac79cde969b7f617257.png"
+  },
+  "cast_single_attempts": {
+   "hero": 0,
+   "pal": 0
+  },
+  "clip_failures": {},
+  "clip_lost": {},
+  "clip_seconds": {
+   "h1": 0.0,
+   "h2": 0.0
+  },
+  "clip_takes": {
+   "h1": 1,
+   "h2": 1
+  },
+  "clips": {
+   "h1": {
+    "file": "dev-vid17.mp4",
+    "model": "minimax_h3_fused_turbo",
+    "qa": {
+     "best_r": 0.7,
+     "verdict": "ok"
+    },
+    "steps": 4,
+    "url": "/api/v1/uploads/dbf6213b417b4cfabaf9a79c00d2c36e.mp4"
+   },
+   "h2": {
+    "file": "dev-vid18.mp4",
+    "model": "minimax_h3_fused_turbo",
+    "qa": {
+     "best_r": 0.7,
+     "verdict": "ok"
+    },
+    "steps": 4,
+    "url": "/api/v1/uploads/20df03579fef4f588fe5b949a7fa0dc6.mp4"
+   },
+   "lf": {
+    "file": "old-h3-lf.mp4",
+    "qa": {
+     "best_r": 0.6,
+     "verdict": "ok"
+    },
+    "url": "/api/v1/file/old-h3-lf.mp4?workspace=ws"
+   }
+  },
+  "contact_sheet": "p-contact.jpg",
+  "discarded": [
+   "p-slice-h1-0.wav",
+   "p-slice-h2-0.wav"
+  ],
+  "error": null,
+  "final": "dev-final.mp4",
+  "finished": 1791992326.656328,
+  "frame_attempts": {
+   "c3": 1,
+   "h1": 1,
+   "h2": 1
+  },
+  "frame_failures": {},
+  "frames": {
+   "c3": "dev-img13.png",
+   "h1": "dev-img11.png",
+   "h2": "dev-img12.png"
+  },
+  "frames_sheet": "p-frames.jpg",
+  "h3_sources": {
+   "c3": {
+    "clip": "a951470c84e56e22",
+    "frame": "236e35339ccf60f1"
+   },
+   "h1": {
+    "clip": "63763a19ce1b1671",
+    "frame": "1df05ca9aad9d1cc"
+   },
+   "h2": {
+    "clip": "4e7b6c7a347acb36",
+    "frame": "7cd4b0badecd0fdf"
+   }
+  },
+  "kept_clips": [
+   "lf"
+  ],
+  "log": [
+   "cast: 2",
+   "frames: 3",
+   "subject count needs pose/yolox_l.onnx; no count invented",
+   "clip h1 take 1 (mix): ok r=0.7",
+   "clip h2 take 1 (mix): ok r=0.7",
+   "scene2d: cutouts of hero, pal",
+   "scenes: 7/7",
+   "package: 7 scene documents, manifest p.shots.json",
+   "montage: completed"
+  ],
+  "models": {},
+  "montage_file": "p.montage.json",
+  "package": {
+   "manifest": "p.shots.json",
+   "montage": "p.montage.json",
+   "scene_docs": 7,
+   "warnings": 0
+  },
+  "runs": [
+   {
+    "finished": 1791992326.656328,
+    "retake": [],
+    "started": 1791992326.6331203,
+    "timing": {
+     "analyze": 0.0,
+     "cast": 0.001,
+     "clips": 0.002,
+     "frames": 0.001,
+     "models": 0.0,
+     "montage": 0.007,
+     "scenes": 0.009,
+     "song": 0.0
+    }
+   }
+  ],
+  "scene2d": {
+   "c1": {
+    "card": "music-pinball",
+    "document": {
+     "duration": 4.0,
+     "fps": 24,
+     "height": 1080,
+     "layers": [
+      {
+       "id": "background",
+       "name": "background",
+       "source": "/api/v1/file/plaza.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 0
+      },
+      {
+       "id": "subject_1",
+       "name": "subject_1",
+       "source": "/api/v1/file/dev-cut21.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 1
+      }
+     ],
+     "name": "card",
+     "narrative": {
+      "templateId": "music-pinball"
+     },
+     "texts": [],
+     "version": 1,
+     "width": 1920
+    },
+    "fingerprint": "ae80f405f04a866a",
+    "warnings": []
+   },
+   "c2": {
+    "card": "music-pinball",
+    "document": {
+     "duration": 3.0,
+     "fps": 24,
+     "height": 1080,
+     "layers": [
+      {
+       "id": "background",
+       "name": "background",
+       "source": "/api/v1/uploads/6f2ad07d4a244e1fb3dd2c9c42403151.png",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 0
+      },
+      {
+       "id": "subject_1",
+       "name": "subject_1",
+       "source": "/api/v1/file/dev-cut22.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 1
+      }
+     ],
+     "name": "card",
+     "narrative": {
+      "templateId": "music-pinball"
+     },
+     "texts": [],
+     "version": 1,
+     "width": 1920
+    },
+    "fingerprint": "605e83b8ea541324",
+    "warnings": []
+   },
+   "c3": {
+    "card": "music-pinball",
+    "document": {
+     "duration": 3.0,
+     "fps": 24,
+     "height": 1080,
+     "layers": [
+      {
+       "id": "background",
+       "name": "background",
+       "source": "/api/v1/file/dev-img13.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 0
+      },
+      {
+       "id": "subject_1",
+       "name": "subject_1",
+       "source": "/api/v1/file/dev-cut21.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 1
+      }
+     ],
+     "name": "card",
+     "narrative": {
+      "templateId": "music-pinball"
+     },
+     "texts": [],
+     "version": 1,
+     "width": 1920
+    },
+    "fingerprint": "f3be8b3056f201d9",
+    "warnings": []
+   },
+   "lf": {
+    "card": "music-pinball",
+    "document": {
+     "duration": 3.0,
+     "fps": 24,
+     "height": 1080,
+     "layers": [
+      {
+       "id": "background",
+       "name": "background",
+       "source": "/api/v1/file/plaza.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 0
+      },
+      {
+       "id": "subject_1",
+       "name": "subject_1",
+       "source": "/api/v1/file/dev-cut22.png?workspace=ws",
+       "transform": {
+        "opacity": 1,
+        "rotation": 0,
+        "scale": 1,
+        "x": 50,
+        "y": 50
+       },
+       "type": "image",
+       "visible": true,
+       "z": 1
+      }
+     ],
+     "name": "card",
+     "narrative": {
+      "templateId": "music-pinball"
+     },
+     "texts": [],
+     "version": 1,
+     "width": 1920
+    },
+    "fingerprint": "65cb4bf12c20c74c",
+    "warnings": []
+   }
+  },
+  "scene_docs": {
+   "c1": {
+    "digest": "953996c7ae6d",
+    "lyric": "three",
+    "note": "",
+    "scene": "p-c1.scene.json",
+    "warnings": []
+   },
+   "c2": {
+    "digest": "0bbe1707e55d",
+    "lyric": "four",
+    "note": "",
+    "scene": "p-c2.scene.json",
+    "warnings": []
+   },
+   "c3": {
+    "digest": "fc8cf3b431bb",
+    "lyric": "",
+    "note": "",
+    "scene": "p-c3.scene.json",
+    "warnings": []
+   },
+   "h1": {
+    "digest": "995014bbea5e",
+    "lyric": "one",
+    "note": "the singer sways",
+    "scene": "p-h1.scene.json",
+    "warnings": []
+   },
+   "h2": {
+    "digest": "405a04328763",
+    "lyric": "two",
+    "note": "the drummer plays",
+    "scene": "p-h2.scene.json",
+    "warnings": []
+   },
+   "lf": {
+    "digest": "f16e3c1daa6b",
+    "lyric": "",
+    "note": "",
+    "scene": "p-lf.scene.json",
+    "warnings": []
+   },
+   "st": {
+    "digest": "645b158a55af",
+    "lyric": "",
+    "note": "",
+    "scene": "p-st.scene.json",
+    "warnings": []
+   }
+  },
+  "scenes": {
+   "c1": {
+    "clip": "scene2d:464618ade6ee14c5",
+    "dur": 4.0,
+    "file": "dev-exp29.mp4",
+    "fingerprint": "27ee89878fca61e7",
+    "intent": "dev-exp29"
+   },
+   "c2": {
+    "clip": "scene2d:96563af0141c6258",
+    "dur": 3.0,
+    "file": "dev-exp32.mp4",
+    "fingerprint": "b64016ceaca99ee5",
+    "intent": "dev-exp32"
+   },
+   "c3": {
+    "clip": "scene2d:9ee2cc9711bc5054",
+    "dur": 3.0,
+    "file": "dev-exp34.mp4",
+    "fingerprint": "dd6e94a3e9bc1ed2",
+    "intent": "dev-exp34"
+   },
+   "h1": {
+    "clip": "dev-vid17.mp4",
+    "dur": 4.25,
+    "file": "dev-exp24.mp4",
+    "fingerprint": "7c3a80a2c5e71ebc",
+    "intent": "dev-exp24"
+   },
+   "h2": {
+    "clip": "dev-vid18.mp4",
+    "dur": 3.75,
+    "file": "dev-exp26.mp4",
+    "fingerprint": "de772a6f7c572380",
+    "intent": "dev-exp26"
+   },
+   "lf": {
+    "clip": "old-h3-lf.mp4",
+    "dur": 3.0,
+    "file": "dev-exp36.mp4",
+    "fingerprint": "28adba9ddd01b37a",
+    "intent": "dev-exp36"
+   },
+   "st": {
+    "clip": null,
+    "dur": 3.0,
+    "file": "dev-exp38.mp4",
+    "fingerprint": "3235180d6866ddd7",
+    "intent": "dev-exp38"
+   }
+  },
+  "score": "s.score.json",
+  "seed_base": 1629733661,
+  "segments": [
+   [
+    "h1",
+    0.0,
+    4.25
+   ],
+   [
+    "h2",
+    4.25,
+    8.0
+   ],
+   [
+    "c1",
+    8.0,
+    12.0
+   ],
+   [
+    "c2",
+    12.0,
+    15.0
+   ],
+   [
+    "c3",
+    15.0,
+    18.0
+   ],
+   [
+    "lf",
+    18.0,
+    21.0
+   ],
+   [
+    "st",
+    21.0,
+    24.0
+   ]
+  ],
+  "set_attempts": {
+   "alley": 1
+  },
+  "sets": {
+   "alley": {
+    "fingerprint": "c4e2f4685fd5d015",
+    "staging": "floor",
+    "url": "/api/v1/uploads/6f2ad07d4a244e1fb3dd2c9c42403151.png"
+   }
+  },
+  "smoothness": {
+   "blame": [],
+   "clip": {},
+   "scene": {}
+  },
+  "song": {
+   "file": "song.wav"
+  },
+  "spec": {
+   "cast": [
+    {
+     "id": "hero",
+     "sheet_prompt": "a young singer, denim jacket"
+    },
+    {
+     "id": "pal",
+     "sheet_prompt": "a drummer, red cap"
+    }
+   ],
+   "sets": {
+    "alley": {
+     "prompt": "a narrow alley at night"
+    }
+   },
+   "shots": [
+    {
+     "action": "the singer sways",
+     "camera": "camera-push-in",
+     "cast": [
+      "hero"
+     ],
+     "frame": "wide shot of the singer on a rooftop",
+     "key": "h1",
+     "kind": "h3",
+     "line": 0,
+     "sing": true
+    },
+    {
+     "action": "the drummer plays",
+     "camera": "camera-dolly",
+     "cast": [
+      "pal"
+     ],
+     "frame": "the drummer in a garage",
+     "key": "h2",
+     "kind": "h3",
+     "line": 1
+    },
+    {
+     "key": "c1",
+     "kind": "scene2d",
+     "scene2d": {
+      "background": "/api/v1/file/plaza.png?workspace=ws",
+      "cast": {
+       "subject_1": "hero"
+      },
+      "template": "music-pinball"
+     },
+     "t0": 8.0
+    },
+    {
+     "key": "c2",
+     "kind": "scene2d",
+     "scene2d": {
+      "background": "alley",
+      "cast": {
+       "subject_1": "pal"
+      },
+      "template": "music-pinball"
+     },
+     "t0": 12.0
+    },
+    {
+     "frame": "an empty plaza at dusk",
+     "key": "c3",
+     "kind": "scene2d",
+     "scene2d": {
+      "cast": {
+       "subject_1": "hero"
+      },
+      "template": "music-pinball"
+     },
+     "t0": 15.0
+    },
+    {
+     "key": "lf",
+     "kind": "scene2d",
+     "scene2d": {
+      "background": "/api/v1/file/plaza.png?workspace=ws",
+      "cast": {
+       "subject_1": "pal"
+      },
+      "template": "music-pinball"
+     },
+     "t0": 18.0
+    },
+    {
+     "key": "st",
+     "kind": "still",
+     "still": "/api/v1/file/cover.png?workspace=ws",
+     "t0": 21.0
+    }
+   ],
+   "song": {
+    "bpm": 120,
+    "caption": "synth pop",
+    "duration": 24,
+    "lyrics": "one\ntwo\nthree\nfour"
+   },
+   "style": {
+    "image": "risograph look",
+    "image_model": "qwen_image_21",
+    "image_steps": 40,
+    "video": "painterly motion"
+   },
+   "title": "Upgrade probe"
+  },
+  "stage": "montage",
+  "started": 1791992326.6331203,
+  "status": "completed",
+  "subject_count_detector": "missing: pose/yolox_l.onnx",
+  "takes": {
+   "h1": [
+    {
+     "drive": "mix",
+     "file": "dev-vid17.mp4",
+     "model": "minimax_h3_fused_turbo",
+     "r": 0.7,
+     "steps": 4,
+     "take": 1,
+     "verdict": "ok"
+    }
+   ],
+   "h2": [
+    {
+     "drive": "mix",
+     "file": "dev-vid18.mp4",
+     "model": "minimax_h3_fused_turbo",
+     "r": 0.7,
+     "steps": 4,
+     "take": 1,
+     "verdict": "ok"
+    }
+   ]
+  },
+  "through": "all",
+  "timing": {
+   "analyze": 0.0,
+   "cast": 0.001,
+   "clips": 0.002,
+   "frames": 0.001,
+   "models": 0.0,
+   "montage": 0.007,
+   "scenes": 0.009,
+   "shots": [
+    {
+     "key": "h1",
+     "seconds": 0.0,
+     "takes": 1
+    },
+    {
+     "key": "h2",
+     "seconds": 0.0,
+     "takes": 1
+    }
+   ],
+   "song": 0.0
+  },
+  "uploads": [
+   "fe8b25bfc39d4d93ab36e02f0736c073.png",
+   "85de2fa4cf1d4e7db1a514646e54513d.png",
+   "e86f205a43da4c1480f2681d4fe90baf.png",
+   "593ece8f149c4ac79cde969b7f617257.png",
+   "6f2ad07d4a244e1fb3dd2c9c42403151.png",
+   "dbf6213b417b4cfabaf9a79c00d2c36e.mp4",
+   "20df03579fef4f588fe5b949a7fa0dc6.mp4"
+  ],
+  "usage": {
+   "mcp_calls": 67,
+   "response_bytes": 8667
+  },
+  "video_model": {
+   "model": "minimax_h3_fused_turbo",
+   "source": "default",
+   "steps": 4
+  }
+ }
+}
