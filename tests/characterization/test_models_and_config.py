@@ -608,6 +608,200 @@ def test_lora_nsfw_override_validation(lora_library, golden, monkeypatch, tmp_pa
     )
 
 
+class _CivitaiResponse:
+    """One canned CivitAI reply. Search and model detail read status, text and json."""
+
+    def __init__(self, payload: dict, status_code: int = 200) -> None:
+        self.status_code = status_code
+        self._payload = payload
+        self.text = json.dumps(payload)
+        self.headers: dict = {}
+
+    def json(self) -> dict:
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise OSError(f"status {self.status_code}")
+
+
+def _civitai_get(search_payloads: list[dict], detail_payloads: list[dict]):
+    """Return a ``requests.get`` whose second reply differs, so a cache miss shows up."""
+    search_calls = {"n": 0}
+    detail_calls = {"n": 0}
+
+    def get(url, **_kwargs):
+        text = str(url)
+        if text.rstrip("/").endswith("/models"):
+            index = min(search_calls["n"], len(search_payloads) - 1)
+            search_calls["n"] += 1
+            return _CivitaiResponse(search_payloads[index])
+        if "/models/" in text:
+            index = min(detail_calls["n"], len(detail_payloads) - 1)
+            detail_calls["n"] += 1
+            return _CivitaiResponse(detail_payloads[index])
+        raise AssertionError(f"unexpected CivitAI URL {url}")
+
+    return get
+
+
+def test_civitai_filters_and_checkpoint_architectures(server, golden) -> None:
+    """The browser filter list, and the architecture picker with and without a base model."""
+    server.check(golden, "civitai base models", "GET", "/api/v1/civitai/base-models")
+    server.check(
+        golden,
+        "civitai checkpoint architectures",
+        "GET",
+        "/api/v1/civitai/checkpoint-architectures",
+    )
+    server.check(
+        golden,
+        "civitai checkpoint architectures for a base",
+        "GET",
+        "/api/v1/civitai/checkpoint-architectures",
+        params={"base_model": "LTXV2"},
+    )
+
+
+def test_civitai_search_and_detail_hit_the_cache(server, golden, monkeypatch) -> None:
+    """A fake search and a fake model, each asked twice. The second answer is the cached first one."""
+    import sys
+
+    launch = sys.modules["_launch_runtime"]
+    launch._CIVITAI_CACHE.clear()
+    search_first = {
+        "items": [{
+            "id": 7,
+            "name": "Cached LoRA",
+            "modelVersions": [{
+                "id": 70,
+                "baseModel": "Wan Video 14B t2v",
+                "images": [{"url": "abc123uuid", "type": "image"}],
+            }],
+        }],
+        "metadata": {"nextCursor": ""},
+    }
+    search_second = {
+        "items": [{"id": 8, "name": "Uncached LoRA", "modelVersions": []}],
+        "metadata": {},
+    }
+    detail_first = {
+        "id": 4242,
+        "name": "Cached Detail",
+        "modelVersions": [{
+            "id": 90,
+            "baseModel": "Wan Video 14B t2v",
+            "images": [{"url": "detailuuid", "type": "video"}],
+        }],
+    }
+    detail_second = {"id": 4242, "name": "Uncached Detail", "modelVersions": []}
+    monkeypatch.setattr(
+        launch.requests,
+        "get",
+        _civitai_get([search_first, search_second], [detail_first, detail_second]),
+    )
+    server.check(
+        golden,
+        "civitai search",
+        "GET",
+        "/api/v1/civitai/search",
+        params={"query": "slice19", "limit": 2},
+    )
+    server.check(
+        golden,
+        "civitai search cached",
+        "GET",
+        "/api/v1/civitai/search",
+        params={"query": "slice19", "limit": 2},
+    )
+    server.check(golden, "civitai model detail", "GET", "/api/v1/civitai/model/4242")
+    server.check(golden, "civitai model detail cached", "GET", "/api/v1/civitai/model/4242")
+
+
+def test_civitai_download_rejects_a_bad_target(server, golden) -> None:
+    """A missing URL, a foreign host, and an empty download list. No file is fetched."""
+    server.check(golden, "civitai downloads empty", "GET", "/api/v1/civitai/downloads")
+    server.check(
+        golden,
+        "civitai download missing url",
+        "POST",
+        "/api/v1/civitai/download",
+        json={"filename": "model.safetensors"},
+    )
+    server.check(
+        golden,
+        "civitai download rejected host",
+        "POST",
+        "/api/v1/civitai/download",
+        json={"download_url": "http://127.0.0.1/secret", "filename": "model.safetensors"},
+    )
+    server.check(
+        golden,
+        "civitai download rejected scheme",
+        "POST",
+        "/api/v1/civitai/download",
+        json={"download_url": "file:///etc/passwd", "filename": "model.safetensors"},
+    )
+
+
+def test_checkpoints_installed_on_a_temp_tree(server, golden, monkeypatch, tmp_path) -> None:
+    """Installed checkpoints come from a temp finetunes folder, including an empty one."""
+    import sys
+
+    finetunes = tmp_path / "finetunes"
+    finetunes.mkdir()
+    launch = sys.modules["_launch_runtime"]
+    monkeypatch.setattr(launch, "_FINETUNES_DIR", str(finetunes))
+    server.check(golden, "checkpoints installed empty", "GET", "/api/v1/checkpoints/installed")
+    server.check(golden, "checkpoints check updates empty", "POST", "/api/v1/checkpoints/check-updates")
+    (finetunes / "example_checkpoint.json").write_text(
+        json.dumps({
+            "model": {
+                "name": "Example Checkpoint",
+                "architecture": "ltx2",
+                "civitai": {
+                    "modelId": 77,
+                    "versionId": 88,
+                    "baseModel": "LTXV2",
+                    "filename": "",
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    server.check(golden, "checkpoints installed one", "GET", "/api/v1/checkpoints/installed")
+    server.check(
+        golden,
+        "checkpoint guide unknown",
+        "POST",
+        "/api/v1/checkpoints/not_a_checkpoint/generate-guide",
+        json={},
+    )
+
+
+def test_huggingface_import_rejects_a_bad_body(server, golden) -> None:
+    """A body that is not a Hugging Face or CivitAI URL is refused before any download.
+
+    A body that is not JSON at all raises inside ``request.json()`` and never
+    becomes a response. That path is left as it is.
+    """
+    server.check(golden, "hf import empty body", "POST", "/api/v1/huggingface/import-lora", json={})
+    server.check(
+        golden,
+        "hf import bad url",
+        "POST",
+        "/api/v1/huggingface/import-lora",
+        json={"url": "https://example.invalid/not-a-repo"},
+    )
+    server.check(
+        golden,
+        "hf import bad target dir",
+        "POST",
+        "/api/v1/huggingface/import-lora",
+        json={"url": "https://huggingface.co/someone/repo", "target_dir": "../etc"},
+    )
+
+
 def test_lora_guide_reads(lora_library, golden) -> None:
     """A missing scan, a missing guide, and a guide that is already on disk."""
     lora_library.check(golden, "lora scan missing", "GET", "/api/v1/loras/scan-status/missing-scan")

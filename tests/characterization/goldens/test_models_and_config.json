@@ -5,6 +5,1696 @@
     },
     "status": 200
   },
+  "checkpoint guide unknown": {
+    "body": {
+      "detail": "Unknown checkpoint model type"
+    },
+    "status": 404
+  },
+  "checkpoints check updates empty": {
+    "body": {
+      "checked": 0,
+      "errors": 0,
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 0
+    },
+    "status": 200
+  },
+  "checkpoints installed empty": {
+    "body": {
+      "checkpoints": [],
+      "manifest_last_check_at": null
+    },
+    "status": 200
+  },
+  "checkpoints installed one": {
+    "body": {
+      "checkpoints": [
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 77,
+          "current_version_id": 88,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_type": "example_checkpoint",
+          "name": "Example Checkpoint",
+          "preview_url": null,
+          "update_status": "unknown"
+        }
+      ],
+      "manifest_last_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "civitai base models": {
+    "body": {
+      "filters": [
+        {
+          "civitai_base": "MiniMax H3",
+          "default_dir": "minimax_h3",
+          "label": "MiniMax H3"
+        },
+        {
+          "civitai_base": "LTXV,LTXV2,LTXV 2.3",
+          "default_dir": "ltx2",
+          "label": "LTX (All)"
+        },
+        {
+          "civitai_base": "LTXV 2.3",
+          "default_dir": "ltx2",
+          "label": "LTX-2.3"
+        },
+        {
+          "civitai_base": "LTXV2",
+          "default_dir": "ltx2",
+          "label": "LTX-2"
+        },
+        {
+          "civitai_base": "Wan Video 14B t2v",
+          "default_dir": "wan",
+          "label": "Wan 14B t2v"
+        },
+        {
+          "civitai_base": "Wan Video 14B i2v 480p",
+          "default_dir": "wan_i2v",
+          "label": "Wan 14B i2v 480p"
+        },
+        {
+          "civitai_base": "Wan Video 14B i2v 720p",
+          "default_dir": "wan_i2v",
+          "label": "Wan 14B i2v 720p"
+        },
+        {
+          "civitai_base": "Wan Video 1.3B t2v",
+          "default_dir": "wan_1.3B",
+          "label": "Wan 1.3B t2v"
+        },
+        {
+          "civitai_base": "Wan Video 2.2 T2V-A14B",
+          "default_dir": "wan",
+          "label": "Wan 2.2 T2V"
+        },
+        {
+          "civitai_base": "Wan Video 2.2 I2V-A14B",
+          "default_dir": "wan",
+          "label": "Wan 2.2 I2V"
+        },
+        {
+          "civitai_base": "Wan Video 2.2 TI2V-5B",
+          "default_dir": "wan_5B",
+          "label": "Wan 2.2 TI2V 5B"
+        },
+        {
+          "civitai_base": "Wan Video 2.5 T2V",
+          "default_dir": "wan",
+          "label": "Wan 2.5 T2V"
+        },
+        {
+          "civitai_base": "Wan Video 2.5 I2V",
+          "default_dir": "wan_i2v",
+          "label": "Wan 2.5 I2V"
+        },
+        {
+          "civitai_base": "Hunyuan Video",
+          "default_dir": "hunyuan_1_5",
+          "label": "Hunyuan Video"
+        },
+        {
+          "civitai_base": "CogVideoX",
+          "default_dir": "cogvideox",
+          "label": "CogVideoX"
+        },
+        {
+          "civitai_base": "Mochi",
+          "default_dir": "mocha",
+          "label": "Mochi"
+        },
+        {
+          "civitai_base": "Flux.1 D",
+          "default_dir": "flux",
+          "label": "Flux.1 Dev"
+        },
+        {
+          "civitai_base": "Flux.1 S",
+          "default_dir": "flux",
+          "label": "Flux.1 Schnell"
+        },
+        {
+          "civitai_base": "Flux.1 Kontext",
+          "default_dir": "flux_dev_kontext",
+          "label": "Flux.1 Kontext"
+        },
+        {
+          "civitai_base": "Flux.2 D",
+          "default_dir": "flux2",
+          "label": "Flux.2 Dev"
+        },
+        {
+          "civitai_base": "Flux.2 Klein 9B,Flux.2 Klein 9B-base",
+          "default_dir": "flux2_klein_9b",
+          "label": "Flux.2 Klein 9B"
+        },
+        {
+          "civitai_base": "Flux.2 Klein 4B,Flux.2 Klein 4B-base",
+          "default_dir": "flux2_klein_4b",
+          "label": "Flux.2 Klein 4B"
+        },
+        {
+          "civitai_base": "Qwen",
+          "default_dir": "qwen",
+          "label": "Qwen"
+        },
+        {
+          "civitai_base": "Krea 2",
+          "default_dir": "krea2",
+          "label": "Krea 2"
+        },
+        {
+          "civitai_base": "ZImageTurbo",
+          "default_dir": "z_image",
+          "label": "ZImageTurbo"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "civitai checkpoint architectures": {
+    "body": {
+      "architectures": [
+        {
+          "architecture": "ace_step_v1",
+          "family": "",
+          "name": "ACE-Step v1.0 3.5B",
+          "template_model_type": "ace_step_v1"
+        },
+        {
+          "architecture": "ace_step_v1_5",
+          "family": "",
+          "name": "ACE-Step v1.5 Turbo 2B",
+          "template_model_type": "ace_step_v1_5"
+        },
+        {
+          "architecture": "ace_step_v1_5_xl",
+          "family": "",
+          "name": "ACE-Step v1.5 XL Turbo 4B",
+          "template_model_type": "ace_step_v1_5_xl"
+        },
+        {
+          "architecture": "vace_ditto_14B",
+          "family": "",
+          "name": "Ditto 14B",
+          "template_model_type": "vace_ditto_14B"
+        },
+        {
+          "architecture": "dramabox_audio",
+          "family": "",
+          "name": "DramaBox Audio",
+          "template_model_type": "dramabox_audio"
+        },
+        {
+          "architecture": "fantasy",
+          "family": "",
+          "name": "Fantasy Talking 720p 14B",
+          "template_model_type": "fantasy"
+        },
+        {
+          "architecture": "flf2v_720p",
+          "family": "",
+          "name": "First Last Frame to Video 720p (FLF2V) 14B",
+          "template_model_type": "flf2v_720p"
+        },
+        {
+          "architecture": "flux_chroma",
+          "family": "",
+          "name": "Flux 1 Chroma 1 HD 8.9B",
+          "template_model_type": "flux_chroma"
+        },
+        {
+          "architecture": "flux_chroma_radiance",
+          "family": "",
+          "name": "Flux 1 Chroma Radiance 8.9B",
+          "template_model_type": "flux_chroma_radiance"
+        },
+        {
+          "architecture": "flux",
+          "family": "",
+          "name": "Flux 1 Dev 12B",
+          "template_model_type": "flux"
+        },
+        {
+          "architecture": "flux_dev_kontext",
+          "family": "",
+          "name": "Flux 1 Dev Kontext 12B",
+          "template_model_type": "flux_dev_kontext"
+        },
+        {
+          "architecture": "flux_dev_kontext_dreamomni2",
+          "family": "",
+          "name": "Flux 1 DreamOmni2 12B",
+          "template_model_type": "flux_dev_kontext_dreamomni2"
+        },
+        {
+          "architecture": "flux_schnell",
+          "family": "",
+          "name": "Flux 1 Schnell 12B",
+          "template_model_type": "flux_schnell"
+        },
+        {
+          "architecture": "flux_dev_umo",
+          "family": "",
+          "name": "Flux 1 UMO 12B",
+          "template_model_type": "flux_dev_umo"
+        },
+        {
+          "architecture": "flux_dev_uso",
+          "family": "",
+          "name": "Flux 1 USO Dev 12B",
+          "template_model_type": "flux_dev_uso"
+        },
+        {
+          "architecture": "flux2_dev",
+          "family": "",
+          "name": "Flux 2 Dev 32B",
+          "template_model_type": "flux2_dev"
+        },
+        {
+          "architecture": "flux2_klein_4b",
+          "family": "",
+          "name": "Flux 2 Klein 4B",
+          "template_model_type": "flux2_klein_4b"
+        },
+        {
+          "architecture": "flux2_klein_9b",
+          "family": "",
+          "name": "Flux 2 Klein 9B",
+          "template_model_type": "flux2_klein_9b"
+        },
+        {
+          "architecture": "fun_inp_1.3B",
+          "family": "",
+          "name": "Fun InP image2video 1.3B",
+          "template_model_type": "fun_inp_1.3B"
+        },
+        {
+          "architecture": "fun_inp",
+          "family": "",
+          "name": "Fun InP image2video 14B",
+          "template_model_type": "fun_inp"
+        },
+        {
+          "architecture": "h3_advanced_fl2va",
+          "family": "",
+          "name": "H3 Advanced FL2VA 33B",
+          "template_model_type": "h3_advanced_fl2va"
+        },
+        {
+          "architecture": "h3_advanced_fl2va_pruned",
+          "family": "",
+          "name": "H3 Advanced FL2VA Pruned 20B",
+          "template_model_type": "h3_advanced_fl2va_pruned"
+        },
+        {
+          "architecture": "h3_advanced_ref2va",
+          "family": "",
+          "name": "H3 Advanced Ref2VA 33B",
+          "template_model_type": "h3_advanced_ref2va"
+        },
+        {
+          "architecture": "h3_advanced_ref2va_pruned",
+          "family": "",
+          "name": "H3 Advanced Ref2VA Pruned 20B",
+          "template_model_type": "h3_advanced_ref2va_pruned"
+        },
+        {
+          "architecture": "minimax_h3_full",
+          "family": "",
+          "name": "H3 First / Last — Full",
+          "template_model_type": "minimax_h3_full"
+        },
+        {
+          "architecture": "minimax_h3",
+          "family": "",
+          "name": "H3 First / Last — Pruned",
+          "template_model_type": "minimax_h3"
+        },
+        {
+          "architecture": "minimax_h3_legacy",
+          "family": "",
+          "name": "H3 Legacy Quality — ConvRot",
+          "template_model_type": "minimax_h3_legacy"
+        },
+        {
+          "architecture": "minimax_h3_ref2va_full",
+          "family": "",
+          "name": "H3 Omni — Full",
+          "template_model_type": "minimax_h3_ref2va_full"
+        },
+        {
+          "architecture": "minimax_h3_ref2va",
+          "family": "",
+          "name": "H3 Omni — Pruned",
+          "template_model_type": "minimax_h3_ref2va"
+        },
+        {
+          "architecture": "heartmula_oss_3b",
+          "family": "",
+          "name": "HeartMuLa OSS 3B",
+          "template_model_type": "heartmula_oss_3b"
+        },
+        {
+          "architecture": "hidream_o1_dev",
+          "family": "",
+          "name": "HiDream O1 Image Dev 10B",
+          "template_model_type": "hidream_o1_dev"
+        },
+        {
+          "architecture": "hidream_o1",
+          "family": "",
+          "name": "HiDream O1 Image Full 10B",
+          "template_model_type": "hidream_o1"
+        },
+        {
+          "architecture": "hunyuan_1_5_t2v",
+          "family": "",
+          "name": "Hunyuan Video 1.5  Text2video 720p 8B",
+          "template_model_type": "hunyuan_1_5_t2v"
+        },
+        {
+          "architecture": "hunyuan_1_5_upsampler",
+          "family": "",
+          "name": "Hunyuan Video 1.5  Upsampler 720p 8B",
+          "template_model_type": "hunyuan_1_5_upsampler"
+        },
+        {
+          "architecture": "hunyuan_1_5_i2v",
+          "family": "",
+          "name": "Hunyuan Video 1.5 Image2video 720p 8B",
+          "template_model_type": "hunyuan_1_5_i2v"
+        },
+        {
+          "architecture": "hunyuan_avatar",
+          "family": "",
+          "name": "Hunyuan Video Avatar 720p 13B",
+          "template_model_type": "hunyuan_avatar"
+        },
+        {
+          "architecture": "hunyuan_custom",
+          "family": "",
+          "name": "Hunyuan Video Custom 720p 13B",
+          "template_model_type": "hunyuan_custom"
+        },
+        {
+          "architecture": "hunyuan_custom_audio",
+          "family": "",
+          "name": "Hunyuan Video Custom Audio 720p 13B",
+          "template_model_type": "hunyuan_custom_audio"
+        },
+        {
+          "architecture": "hunyuan_custom_edit",
+          "family": "",
+          "name": "Hunyuan Video Custom Edit 720p 13B",
+          "template_model_type": "hunyuan_custom_edit"
+        },
+        {
+          "architecture": "hunyuan_i2v",
+          "family": "",
+          "name": "Hunyuan Video Image2video 720p 13B",
+          "template_model_type": "hunyuan_i2v"
+        },
+        {
+          "architecture": "hunyuan",
+          "family": "",
+          "name": "Hunyuan Video Text2video 720p 13B",
+          "template_model_type": "hunyuan"
+        },
+        {
+          "architecture": "infinitetalk",
+          "family": "",
+          "name": "Infinitetalk Single Speaker 480p 14B",
+          "template_model_type": "infinitetalk"
+        },
+        {
+          "architecture": "k5_lite_i2v",
+          "family": "",
+          "name": "Kandinsky 5 Lite I2V SFT 5s 2B",
+          "template_model_type": "k5_lite_i2v"
+        },
+        {
+          "architecture": "k5_lite_t2v",
+          "family": "",
+          "name": "Kandinsky 5 Lite T2V SFT 5s 2B",
+          "template_model_type": "k5_lite_t2v"
+        },
+        {
+          "architecture": "k5_pro_i2v",
+          "family": "",
+          "name": "Kandinsky 5 Pro I2V SFT 5s 19B",
+          "template_model_type": "k5_pro_i2v"
+        },
+        {
+          "architecture": "k5_pro_t2v",
+          "family": "",
+          "name": "Kandinsky 5 Pro T2V SFT 5s 19B",
+          "template_model_type": "k5_pro_t2v"
+        },
+        {
+          "architecture": "kiwi_edit",
+          "family": "",
+          "name": "Kiwi Edit Instruct-Reference 5B",
+          "template_model_type": "kiwi_edit"
+        },
+        {
+          "architecture": "krea2_raw",
+          "family": "",
+          "name": "Krea 2 RAW",
+          "template_model_type": "krea2_raw"
+        },
+        {
+          "architecture": "krea2_raw_edit",
+          "family": "",
+          "name": "Krea 2 RAW Identity Edit v1.2",
+          "template_model_type": "krea2_raw_edit"
+        },
+        {
+          "architecture": "krea2_turbo",
+          "family": "",
+          "name": "Krea 2 Turbo",
+          "template_model_type": "krea2_turbo"
+        },
+        {
+          "architecture": "krea2_turbo_edit",
+          "family": "",
+          "name": "Krea 2 Turbo Identity Edit v1.2",
+          "template_model_type": "krea2_turbo_edit"
+        },
+        {
+          "architecture": "ltxv_13B",
+          "family": "",
+          "name": "LTX Video 0.9.8 13B",
+          "template_model_type": "ltxv_13B"
+        },
+        {
+          "architecture": "ltx2_19B",
+          "family": "",
+          "name": "LTX-2.0 Dev 19B",
+          "template_model_type": "ltx2_19B"
+        },
+        {
+          "architecture": "ltx2_22B",
+          "family": "",
+          "name": "LTX-2.3 Dev 22B",
+          "template_model_type": "ltx2_22B"
+        },
+        {
+          "architecture": "longcat_avatar",
+          "family": "",
+          "name": "LongCat Avatar Single 13.6B",
+          "template_model_type": "longcat_avatar"
+        },
+        {
+          "architecture": "longcat_video",
+          "family": "",
+          "name": "LongCat Video 13.6B",
+          "template_model_type": "longcat_video"
+        },
+        {
+          "architecture": "minimax_music3",
+          "family": "",
+          "name": "MiniMax-Music3",
+          "template_model_type": "minimax_music3"
+        },
+        {
+          "architecture": "multitalk",
+          "family": "",
+          "name": "Multitalk 480p 14B",
+          "template_model_type": "multitalk"
+        },
+        {
+          "architecture": "yue2",
+          "family": "",
+          "name": "Music YuE2 3B",
+          "template_model_type": "yue2"
+        },
+        {
+          "architecture": "phantom_1.3B",
+          "family": "",
+          "name": "Phantom 1.3B",
+          "template_model_type": "phantom_1.3B"
+        },
+        {
+          "architecture": "phantom_14B",
+          "family": "",
+          "name": "Phantom 14B",
+          "template_model_type": "phantom_14B"
+        },
+        {
+          "architecture": "qwen_image_21",
+          "family": "",
+          "name": "Qwen Image 2.1 INT8 ConvRot 7B",
+          "template_model_type": "qwen_image_21"
+        },
+        {
+          "architecture": "qwen_image_20B",
+          "family": "",
+          "name": "Qwen Image 20B",
+          "template_model_type": "qwen_image_20B"
+        },
+        {
+          "architecture": "qwen_image_edit_20B",
+          "family": "",
+          "name": "Qwen Image Edit 20B",
+          "template_model_type": "qwen_image_edit_20B"
+        },
+        {
+          "architecture": "qwen_image_edit_plus_20B",
+          "family": "",
+          "name": "Qwen Image Edit Plus (2509) 20B",
+          "template_model_type": "qwen_image_edit_plus_20B"
+        },
+        {
+          "architecture": "qwen_image_edit_plus2_20B",
+          "family": "",
+          "name": "Qwen Image Edit Plus (2511) 20B",
+          "template_model_type": "qwen_image_edit_plus2_20B"
+        },
+        {
+          "architecture": "qwen_image_layered_20B",
+          "family": "",
+          "name": "Qwen Image Layered 20B",
+          "template_model_type": "qwen_image_layered_20B"
+        },
+        {
+          "architecture": "recam_1.3B",
+          "family": "",
+          "name": "ReCamMaster 1.3B",
+          "template_model_type": "recam_1.3B"
+        },
+        {
+          "architecture": "scail",
+          "family": "",
+          "name": "SCAIL Preview 14B",
+          "template_model_type": "scail"
+        },
+        {
+          "architecture": "scail2_14B",
+          "family": "",
+          "name": "SCAIL-2 14B",
+          "template_model_type": "scail2_14B"
+        },
+        {
+          "architecture": "scenema_audio",
+          "family": "",
+          "name": "Scenema Audio",
+          "template_model_type": "scenema_audio"
+        },
+        {
+          "architecture": "sensenova_u1_5_8b_mot",
+          "family": "",
+          "name": "SenseNova U1.5 8B MoT",
+          "template_model_type": "sensenova_u1_5_8b_mot"
+        },
+        {
+          "architecture": "sky_df_1.3B",
+          "family": "",
+          "name": "SkyReels2 Diffusion Forcing 1.3B",
+          "template_model_type": "sky_df_1.3B"
+        },
+        {
+          "architecture": "sky_df_14B",
+          "family": "",
+          "name": "SkyReels2 Diffusion Forcing 540p 14B",
+          "template_model_type": "sky_df_14B"
+        },
+        {
+          "architecture": "auk",
+          "family": "",
+          "name": "Speech AuK",
+          "template_model_type": "auk"
+        },
+        {
+          "architecture": "chatterbox",
+          "family": "",
+          "name": "TTS Chatterbox Multilingual",
+          "template_model_type": "chatterbox"
+        },
+        {
+          "architecture": "index_tts2",
+          "family": "",
+          "name": "TTS Index TTS 2",
+          "template_model_type": "index_tts2"
+        },
+        {
+          "architecture": "kugelaudio_0_open",
+          "family": "",
+          "name": "TTS KugelAudio 0 Open 7B",
+          "template_model_type": "kugelaudio_0_open"
+        },
+        {
+          "architecture": "qwen3_tts_base",
+          "family": "",
+          "name": "TTS Qwen3 Base (12Hz) 1.7B",
+          "template_model_type": "qwen3_tts_base"
+        },
+        {
+          "architecture": "qwen3_tts_customvoice",
+          "family": "",
+          "name": "TTS Qwen3 Custom Voice (12Hz) 1.7B",
+          "template_model_type": "qwen3_tts_customvoice"
+        },
+        {
+          "architecture": "qwen3_tts_voicedesign",
+          "family": "",
+          "name": "TTS Qwen3 Voice Design (12Hz) 1.7B",
+          "template_model_type": "qwen3_tts_voicedesign"
+        },
+        {
+          "architecture": "voxcpm2_base",
+          "family": "",
+          "name": "TTS VoxCPM2 Voice Clone 2B",
+          "template_model_type": "voxcpm2_base"
+        },
+        {
+          "architecture": "voxcpm2_voicedesign",
+          "family": "",
+          "name": "TTS VoxCPM2 Voice Design 2B",
+          "template_model_type": "voxcpm2_voicedesign"
+        },
+        {
+          "architecture": "vace_1.3B",
+          "family": "",
+          "name": "Vace 1.3B",
+          "template_model_type": "vace_1.3B"
+        },
+        {
+          "architecture": "vace_14B",
+          "family": "",
+          "name": "Vace 14B",
+          "template_model_type": "vace_14B"
+        },
+        {
+          "architecture": "vace_lynx_14B",
+          "family": "",
+          "name": "Vace Lynx 14B",
+          "template_model_type": "vace_lynx_14B"
+        },
+        {
+          "architecture": "vace_multitalk_14B",
+          "family": "",
+          "name": "Vace Multitalk FusioniX 14B",
+          "template_model_type": "vace_multitalk_14B"
+        },
+        {
+          "architecture": "vace_standin_14B",
+          "family": "",
+          "name": "Vace Standin 14B",
+          "template_model_type": "vace_standin_14B"
+        },
+        {
+          "architecture": "viggle_animate",
+          "family": "",
+          "name": "Viggle-Animate Pruned 20B",
+          "template_model_type": "viggle_animate"
+        },
+        {
+          "architecture": "alpha",
+          "family": "",
+          "name": "Wan2.1 Alpha v1.0 14B",
+          "template_model_type": "alpha"
+        },
+        {
+          "architecture": "alpha2",
+          "family": "",
+          "name": "Wan2.1 Alpha v2.0 14B",
+          "template_model_type": "alpha2"
+        },
+        {
+          "architecture": "chrono_edit",
+          "family": "",
+          "name": "Wan2.1 Chrono Edit 14B",
+          "template_model_type": "chrono_edit"
+        },
+        {
+          "architecture": "i2v",
+          "family": "",
+          "name": "Wan2.1 Image2video 480p 14B",
+          "template_model_type": "i2v"
+        },
+        {
+          "architecture": "lynx",
+          "family": "",
+          "name": "Wan2.1 Lynx 14B",
+          "template_model_type": "lynx"
+        },
+        {
+          "architecture": "mocha",
+          "family": "",
+          "name": "Wan2.1 MoCha 14B",
+          "template_model_type": "mocha"
+        },
+        {
+          "architecture": "standin",
+          "family": "",
+          "name": "Wan2.1 Standin 14B",
+          "template_model_type": "standin"
+        },
+        {
+          "architecture": "steadydancer",
+          "family": "",
+          "name": "Wan2.1 Steady Dancer 14B",
+          "template_model_type": "steadydancer"
+        },
+        {
+          "architecture": "t2v_1.3B",
+          "family": "",
+          "name": "Wan2.1 Text2video 1.3B",
+          "template_model_type": "t2v_1.3B"
+        },
+        {
+          "architecture": "t2v",
+          "family": "",
+          "name": "Wan2.1 Text2video 14B",
+          "template_model_type": "t2v"
+        },
+        {
+          "architecture": "wanmove",
+          "family": "",
+          "name": "Wan2.1 Wan-Move 480p 14B",
+          "template_model_type": "wanmove"
+        },
+        {
+          "architecture": "animate",
+          "family": "",
+          "name": "Wan2.2 Animate 14B",
+          "template_model_type": "animate"
+        },
+        {
+          "architecture": "i2v_2_2",
+          "family": "",
+          "name": "Wan2.2 Image2video 14B",
+          "template_model_type": "i2v_2_2"
+        },
+        {
+          "architecture": "i2v_2_2_svi2pro",
+          "family": "",
+          "name": "Wan2.2 Image2video SVI 2 Pro 14B",
+          "template_model_type": "i2v_2_2_svi2pro"
+        },
+        {
+          "architecture": "lucy_edit",
+          "family": "",
+          "name": "Wan2.2 Lucy Edit v1 5B",
+          "template_model_type": "lucy_edit"
+        },
+        {
+          "architecture": "i2v_2_2_multitalk",
+          "family": "",
+          "name": "Wan2.2 Multitalk 14B",
+          "template_model_type": "i2v_2_2_multitalk"
+        },
+        {
+          "architecture": "ovi",
+          "family": "",
+          "name": "Wan2.2 Ovi v1.0 5s 10B",
+          "template_model_type": "ovi"
+        },
+        {
+          "architecture": "t2v_2_2",
+          "family": "",
+          "name": "Wan2.2 Text2video 14B",
+          "template_model_type": "t2v_2_2"
+        },
+        {
+          "architecture": "ti2v_2_2",
+          "family": "",
+          "name": "Wan2.2 TextImage2video 5B",
+          "template_model_type": "ti2v_2_2"
+        },
+        {
+          "architecture": "vace_14B_2_2",
+          "family": "",
+          "name": "Wan2.2 Vace 14B",
+          "template_model_type": "vace_14B_2_2"
+        },
+        {
+          "architecture": "z_image_base",
+          "family": "",
+          "name": "Z-Image Base 6B",
+          "template_model_type": "z_image_base"
+        },
+        {
+          "architecture": "z_image",
+          "family": "",
+          "name": "Z-Image Turbo 6B",
+          "template_model_type": "z_image"
+        },
+        {
+          "architecture": "z_image_control",
+          "family": "",
+          "name": "Z-Image Turbo Fun ControlNet v1 6B",
+          "template_model_type": "z_image_control"
+        },
+        {
+          "architecture": "z_image_control2",
+          "family": "",
+          "name": "Z-Image Turbo Fun ControlNet v2 6B",
+          "template_model_type": "z_image_control2"
+        },
+        {
+          "architecture": "z_image_control2_1",
+          "family": "",
+          "name": "Z-Image Turbo Fun ControlNet v2.1 6B",
+          "template_model_type": "z_image_control2_1"
+        },
+        {
+          "architecture": "pi_flux2",
+          "family": "",
+          "name": "pi-FLUX.2 Dev 32B",
+          "template_model_type": "pi_flux2"
+        }
+      ],
+      "suggested_architecture": null
+    },
+    "status": 200
+  },
+  "civitai checkpoint architectures for a base": {
+    "body": {
+      "architectures": [
+        {
+          "architecture": "ace_step_v1",
+          "family": "",
+          "name": "ACE-Step v1.0 3.5B",
+          "template_model_type": "ace_step_v1"
+        },
+        {
+          "architecture": "ace_step_v1_5",
+          "family": "",
+          "name": "ACE-Step v1.5 Turbo 2B",
+          "template_model_type": "ace_step_v1_5"
+        },
+        {
+          "architecture": "ace_step_v1_5_xl",
+          "family": "",
+          "name": "ACE-Step v1.5 XL Turbo 4B",
+          "template_model_type": "ace_step_v1_5_xl"
+        },
+        {
+          "architecture": "vace_ditto_14B",
+          "family": "",
+          "name": "Ditto 14B",
+          "template_model_type": "vace_ditto_14B"
+        },
+        {
+          "architecture": "dramabox_audio",
+          "family": "",
+          "name": "DramaBox Audio",
+          "template_model_type": "dramabox_audio"
+        },
+        {
+          "architecture": "fantasy",
+          "family": "",
+          "name": "Fantasy Talking 720p 14B",
+          "template_model_type": "fantasy"
+        },
+        {
+          "architecture": "flf2v_720p",
+          "family": "",
+          "name": "First Last Frame to Video 720p (FLF2V) 14B",
+          "template_model_type": "flf2v_720p"
+        },
+        {
+          "architecture": "flux_chroma",
+          "family": "",
+          "name": "Flux 1 Chroma 1 HD 8.9B",
+          "template_model_type": "flux_chroma"
+        },
+        {
+          "architecture": "flux_chroma_radiance",
+          "family": "",
+          "name": "Flux 1 Chroma Radiance 8.9B",
+          "template_model_type": "flux_chroma_radiance"
+        },
+        {
+          "architecture": "flux",
+          "family": "",
+          "name": "Flux 1 Dev 12B",
+          "template_model_type": "flux"
+        },
+        {
+          "architecture": "flux_dev_kontext",
+          "family": "",
+          "name": "Flux 1 Dev Kontext 12B",
+          "template_model_type": "flux_dev_kontext"
+        },
+        {
+          "architecture": "flux_dev_kontext_dreamomni2",
+          "family": "",
+          "name": "Flux 1 DreamOmni2 12B",
+          "template_model_type": "flux_dev_kontext_dreamomni2"
+        },
+        {
+          "architecture": "flux_schnell",
+          "family": "",
+          "name": "Flux 1 Schnell 12B",
+          "template_model_type": "flux_schnell"
+        },
+        {
+          "architecture": "flux_dev_umo",
+          "family": "",
+          "name": "Flux 1 UMO 12B",
+          "template_model_type": "flux_dev_umo"
+        },
+        {
+          "architecture": "flux_dev_uso",
+          "family": "",
+          "name": "Flux 1 USO Dev 12B",
+          "template_model_type": "flux_dev_uso"
+        },
+        {
+          "architecture": "flux2_dev",
+          "family": "",
+          "name": "Flux 2 Dev 32B",
+          "template_model_type": "flux2_dev"
+        },
+        {
+          "architecture": "flux2_klein_4b",
+          "family": "",
+          "name": "Flux 2 Klein 4B",
+          "template_model_type": "flux2_klein_4b"
+        },
+        {
+          "architecture": "flux2_klein_9b",
+          "family": "",
+          "name": "Flux 2 Klein 9B",
+          "template_model_type": "flux2_klein_9b"
+        },
+        {
+          "architecture": "fun_inp_1.3B",
+          "family": "",
+          "name": "Fun InP image2video 1.3B",
+          "template_model_type": "fun_inp_1.3B"
+        },
+        {
+          "architecture": "fun_inp",
+          "family": "",
+          "name": "Fun InP image2video 14B",
+          "template_model_type": "fun_inp"
+        },
+        {
+          "architecture": "h3_advanced_fl2va",
+          "family": "",
+          "name": "H3 Advanced FL2VA 33B",
+          "template_model_type": "h3_advanced_fl2va"
+        },
+        {
+          "architecture": "h3_advanced_fl2va_pruned",
+          "family": "",
+          "name": "H3 Advanced FL2VA Pruned 20B",
+          "template_model_type": "h3_advanced_fl2va_pruned"
+        },
+        {
+          "architecture": "h3_advanced_ref2va",
+          "family": "",
+          "name": "H3 Advanced Ref2VA 33B",
+          "template_model_type": "h3_advanced_ref2va"
+        },
+        {
+          "architecture": "h3_advanced_ref2va_pruned",
+          "family": "",
+          "name": "H3 Advanced Ref2VA Pruned 20B",
+          "template_model_type": "h3_advanced_ref2va_pruned"
+        },
+        {
+          "architecture": "minimax_h3_full",
+          "family": "",
+          "name": "H3 First / Last — Full",
+          "template_model_type": "minimax_h3_full"
+        },
+        {
+          "architecture": "minimax_h3",
+          "family": "",
+          "name": "H3 First / Last — Pruned",
+          "template_model_type": "minimax_h3"
+        },
+        {
+          "architecture": "minimax_h3_legacy",
+          "family": "",
+          "name": "H3 Legacy Quality — ConvRot",
+          "template_model_type": "minimax_h3_legacy"
+        },
+        {
+          "architecture": "minimax_h3_ref2va_full",
+          "family": "",
+          "name": "H3 Omni — Full",
+          "template_model_type": "minimax_h3_ref2va_full"
+        },
+        {
+          "architecture": "minimax_h3_ref2va",
+          "family": "",
+          "name": "H3 Omni — Pruned",
+          "template_model_type": "minimax_h3_ref2va"
+        },
+        {
+          "architecture": "heartmula_oss_3b",
+          "family": "",
+          "name": "HeartMuLa OSS 3B",
+          "template_model_type": "heartmula_oss_3b"
+        },
+        {
+          "architecture": "hidream_o1_dev",
+          "family": "",
+          "name": "HiDream O1 Image Dev 10B",
+          "template_model_type": "hidream_o1_dev"
+        },
+        {
+          "architecture": "hidream_o1",
+          "family": "",
+          "name": "HiDream O1 Image Full 10B",
+          "template_model_type": "hidream_o1"
+        },
+        {
+          "architecture": "hunyuan_1_5_t2v",
+          "family": "",
+          "name": "Hunyuan Video 1.5  Text2video 720p 8B",
+          "template_model_type": "hunyuan_1_5_t2v"
+        },
+        {
+          "architecture": "hunyuan_1_5_upsampler",
+          "family": "",
+          "name": "Hunyuan Video 1.5  Upsampler 720p 8B",
+          "template_model_type": "hunyuan_1_5_upsampler"
+        },
+        {
+          "architecture": "hunyuan_1_5_i2v",
+          "family": "",
+          "name": "Hunyuan Video 1.5 Image2video 720p 8B",
+          "template_model_type": "hunyuan_1_5_i2v"
+        },
+        {
+          "architecture": "hunyuan_avatar",
+          "family": "",
+          "name": "Hunyuan Video Avatar 720p 13B",
+          "template_model_type": "hunyuan_avatar"
+        },
+        {
+          "architecture": "hunyuan_custom",
+          "family": "",
+          "name": "Hunyuan Video Custom 720p 13B",
+          "template_model_type": "hunyuan_custom"
+        },
+        {
+          "architecture": "hunyuan_custom_audio",
+          "family": "",
+          "name": "Hunyuan Video Custom Audio 720p 13B",
+          "template_model_type": "hunyuan_custom_audio"
+        },
+        {
+          "architecture": "hunyuan_custom_edit",
+          "family": "",
+          "name": "Hunyuan Video Custom Edit 720p 13B",
+          "template_model_type": "hunyuan_custom_edit"
+        },
+        {
+          "architecture": "hunyuan_i2v",
+          "family": "",
+          "name": "Hunyuan Video Image2video 720p 13B",
+          "template_model_type": "hunyuan_i2v"
+        },
+        {
+          "architecture": "hunyuan",
+          "family": "",
+          "name": "Hunyuan Video Text2video 720p 13B",
+          "template_model_type": "hunyuan"
+        },
+        {
+          "architecture": "infinitetalk",
+          "family": "",
+          "name": "Infinitetalk Single Speaker 480p 14B",
+          "template_model_type": "infinitetalk"
+        },
+        {
+          "architecture": "k5_lite_i2v",
+          "family": "",
+          "name": "Kandinsky 5 Lite I2V SFT 5s 2B",
+          "template_model_type": "k5_lite_i2v"
+        },
+        {
+          "architecture": "k5_lite_t2v",
+          "family": "",
+          "name": "Kandinsky 5 Lite T2V SFT 5s 2B",
+          "template_model_type": "k5_lite_t2v"
+        },
+        {
+          "architecture": "k5_pro_i2v",
+          "family": "",
+          "name": "Kandinsky 5 Pro I2V SFT 5s 19B",
+          "template_model_type": "k5_pro_i2v"
+        },
+        {
+          "architecture": "k5_pro_t2v",
+          "family": "",
+          "name": "Kandinsky 5 Pro T2V SFT 5s 19B",
+          "template_model_type": "k5_pro_t2v"
+        },
+        {
+          "architecture": "kiwi_edit",
+          "family": "",
+          "name": "Kiwi Edit Instruct-Reference 5B",
+          "template_model_type": "kiwi_edit"
+        },
+        {
+          "architecture": "krea2_raw",
+          "family": "",
+          "name": "Krea 2 RAW",
+          "template_model_type": "krea2_raw"
+        },
+        {
+          "architecture": "krea2_raw_edit",
+          "family": "",
+          "name": "Krea 2 RAW Identity Edit v1.2",
+          "template_model_type": "krea2_raw_edit"
+        },
+        {
+          "architecture": "krea2_turbo",
+          "family": "",
+          "name": "Krea 2 Turbo",
+          "template_model_type": "krea2_turbo"
+        },
+        {
+          "architecture": "krea2_turbo_edit",
+          "family": "",
+          "name": "Krea 2 Turbo Identity Edit v1.2",
+          "template_model_type": "krea2_turbo_edit"
+        },
+        {
+          "architecture": "ltxv_13B",
+          "family": "",
+          "name": "LTX Video 0.9.8 13B",
+          "template_model_type": "ltxv_13B"
+        },
+        {
+          "architecture": "ltx2_19B",
+          "family": "",
+          "name": "LTX-2.0 Dev 19B",
+          "template_model_type": "ltx2_19B"
+        },
+        {
+          "architecture": "ltx2_22B",
+          "family": "",
+          "name": "LTX-2.3 Dev 22B",
+          "template_model_type": "ltx2_22B"
+        },
+        {
+          "architecture": "longcat_avatar",
+          "family": "",
+          "name": "LongCat Avatar Single 13.6B",
+          "template_model_type": "longcat_avatar"
+        },
+        {
+          "architecture": "longcat_video",
+          "family": "",
+          "name": "LongCat Video 13.6B",
+          "template_model_type": "longcat_video"
+        },
+        {
+          "architecture": "minimax_music3",
+          "family": "",
+          "name": "MiniMax-Music3",
+          "template_model_type": "minimax_music3"
+        },
+        {
+          "architecture": "multitalk",
+          "family": "",
+          "name": "Multitalk 480p 14B",
+          "template_model_type": "multitalk"
+        },
+        {
+          "architecture": "yue2",
+          "family": "",
+          "name": "Music YuE2 3B",
+          "template_model_type": "yue2"
+        },
+        {
+          "architecture": "phantom_1.3B",
+          "family": "",
+          "name": "Phantom 1.3B",
+          "template_model_type": "phantom_1.3B"
+        },
+        {
+          "architecture": "phantom_14B",
+          "family": "",
+          "name": "Phantom 14B",
+          "template_model_type": "phantom_14B"
+        },
+        {
+          "architecture": "qwen_image_21",
+          "family": "",
+          "name": "Qwen Image 2.1 INT8 ConvRot 7B",
+          "template_model_type": "qwen_image_21"
+        },
+        {
+          "architecture": "qwen_image_20B",
+          "family": "",
+          "name": "Qwen Image 20B",
+          "template_model_type": "qwen_image_20B"
+        },
+        {
+          "architecture": "qwen_image_edit_20B",
+          "family": "",
+          "name": "Qwen Image Edit 20B",
+          "template_model_type": "qwen_image_edit_20B"
+        },
+        {
+          "architecture": "qwen_image_edit_plus_20B",
+          "family": "",
+          "name": "Qwen Image Edit Plus (2509) 20B",
+          "template_model_type": "qwen_image_edit_plus_20B"
+        },
+        {
+          "architecture": "qwen_image_edit_plus2_20B",
+          "family": "",
+          "name": "Qwen Image Edit Plus (2511) 20B",
+          "template_model_type": "qwen_image_edit_plus2_20B"
+        },
+        {
+          "architecture": "qwen_image_layered_20B",
+          "family": "",
+          "name": "Qwen Image Layered 20B",
+          "template_model_type": "qwen_image_layered_20B"
+        },
+        {
+          "architecture": "recam_1.3B",
+          "family": "",
+          "name": "ReCamMaster 1.3B",
+          "template_model_type": "recam_1.3B"
+        },
+        {
+          "architecture": "scail",
+          "family": "",
+          "name": "SCAIL Preview 14B",
+          "template_model_type": "scail"
+        },
+        {
+          "architecture": "scail2_14B",
+          "family": "",
+          "name": "SCAIL-2 14B",
+          "template_model_type": "scail2_14B"
+        },
+        {
+          "architecture": "scenema_audio",
+          "family": "",
+          "name": "Scenema Audio",
+          "template_model_type": "scenema_audio"
+        },
+        {
+          "architecture": "sensenova_u1_5_8b_mot",
+          "family": "",
+          "name": "SenseNova U1.5 8B MoT",
+          "template_model_type": "sensenova_u1_5_8b_mot"
+        },
+        {
+          "architecture": "sky_df_1.3B",
+          "family": "",
+          "name": "SkyReels2 Diffusion Forcing 1.3B",
+          "template_model_type": "sky_df_1.3B"
+        },
+        {
+          "architecture": "sky_df_14B",
+          "family": "",
+          "name": "SkyReels2 Diffusion Forcing 540p 14B",
+          "template_model_type": "sky_df_14B"
+        },
+        {
+          "architecture": "auk",
+          "family": "",
+          "name": "Speech AuK",
+          "template_model_type": "auk"
+        },
+        {
+          "architecture": "chatterbox",
+          "family": "",
+          "name": "TTS Chatterbox Multilingual",
+          "template_model_type": "chatterbox"
+        },
+        {
+          "architecture": "index_tts2",
+          "family": "",
+          "name": "TTS Index TTS 2",
+          "template_model_type": "index_tts2"
+        },
+        {
+          "architecture": "kugelaudio_0_open",
+          "family": "",
+          "name": "TTS KugelAudio 0 Open 7B",
+          "template_model_type": "kugelaudio_0_open"
+        },
+        {
+          "architecture": "qwen3_tts_base",
+          "family": "",
+          "name": "TTS Qwen3 Base (12Hz) 1.7B",
+          "template_model_type": "qwen3_tts_base"
+        },
+        {
+          "architecture": "qwen3_tts_customvoice",
+          "family": "",
+          "name": "TTS Qwen3 Custom Voice (12Hz) 1.7B",
+          "template_model_type": "qwen3_tts_customvoice"
+        },
+        {
+          "architecture": "qwen3_tts_voicedesign",
+          "family": "",
+          "name": "TTS Qwen3 Voice Design (12Hz) 1.7B",
+          "template_model_type": "qwen3_tts_voicedesign"
+        },
+        {
+          "architecture": "voxcpm2_base",
+          "family": "",
+          "name": "TTS VoxCPM2 Voice Clone 2B",
+          "template_model_type": "voxcpm2_base"
+        },
+        {
+          "architecture": "voxcpm2_voicedesign",
+          "family": "",
+          "name": "TTS VoxCPM2 Voice Design 2B",
+          "template_model_type": "voxcpm2_voicedesign"
+        },
+        {
+          "architecture": "vace_1.3B",
+          "family": "",
+          "name": "Vace 1.3B",
+          "template_model_type": "vace_1.3B"
+        },
+        {
+          "architecture": "vace_14B",
+          "family": "",
+          "name": "Vace 14B",
+          "template_model_type": "vace_14B"
+        },
+        {
+          "architecture": "vace_lynx_14B",
+          "family": "",
+          "name": "Vace Lynx 14B",
+          "template_model_type": "vace_lynx_14B"
+        },
+        {
+          "architecture": "vace_multitalk_14B",
+          "family": "",
+          "name": "Vace Multitalk FusioniX 14B",
+          "template_model_type": "vace_multitalk_14B"
+        },
+        {
+          "architecture": "vace_standin_14B",
+          "family": "",
+          "name": "Vace Standin 14B",
+          "template_model_type": "vace_standin_14B"
+        },
+        {
+          "architecture": "viggle_animate",
+          "family": "",
+          "name": "Viggle-Animate Pruned 20B",
+          "template_model_type": "viggle_animate"
+        },
+        {
+          "architecture": "alpha",
+          "family": "",
+          "name": "Wan2.1 Alpha v1.0 14B",
+          "template_model_type": "alpha"
+        },
+        {
+          "architecture": "alpha2",
+          "family": "",
+          "name": "Wan2.1 Alpha v2.0 14B",
+          "template_model_type": "alpha2"
+        },
+        {
+          "architecture": "chrono_edit",
+          "family": "",
+          "name": "Wan2.1 Chrono Edit 14B",
+          "template_model_type": "chrono_edit"
+        },
+        {
+          "architecture": "i2v",
+          "family": "",
+          "name": "Wan2.1 Image2video 480p 14B",
+          "template_model_type": "i2v"
+        },
+        {
+          "architecture": "lynx",
+          "family": "",
+          "name": "Wan2.1 Lynx 14B",
+          "template_model_type": "lynx"
+        },
+        {
+          "architecture": "mocha",
+          "family": "",
+          "name": "Wan2.1 MoCha 14B",
+          "template_model_type": "mocha"
+        },
+        {
+          "architecture": "standin",
+          "family": "",
+          "name": "Wan2.1 Standin 14B",
+          "template_model_type": "standin"
+        },
+        {
+          "architecture": "steadydancer",
+          "family": "",
+          "name": "Wan2.1 Steady Dancer 14B",
+          "template_model_type": "steadydancer"
+        },
+        {
+          "architecture": "t2v_1.3B",
+          "family": "",
+          "name": "Wan2.1 Text2video 1.3B",
+          "template_model_type": "t2v_1.3B"
+        },
+        {
+          "architecture": "t2v",
+          "family": "",
+          "name": "Wan2.1 Text2video 14B",
+          "template_model_type": "t2v"
+        },
+        {
+          "architecture": "wanmove",
+          "family": "",
+          "name": "Wan2.1 Wan-Move 480p 14B",
+          "template_model_type": "wanmove"
+        },
+        {
+          "architecture": "animate",
+          "family": "",
+          "name": "Wan2.2 Animate 14B",
+          "template_model_type": "animate"
+        },
+        {
+          "architecture": "i2v_2_2",
+          "family": "",
+          "name": "Wan2.2 Image2video 14B",
+          "template_model_type": "i2v_2_2"
+        },
+        {
+          "architecture": "i2v_2_2_svi2pro",
+          "family": "",
+          "name": "Wan2.2 Image2video SVI 2 Pro 14B",
+          "template_model_type": "i2v_2_2_svi2pro"
+        },
+        {
+          "architecture": "lucy_edit",
+          "family": "",
+          "name": "Wan2.2 Lucy Edit v1 5B",
+          "template_model_type": "lucy_edit"
+        },
+        {
+          "architecture": "i2v_2_2_multitalk",
+          "family": "",
+          "name": "Wan2.2 Multitalk 14B",
+          "template_model_type": "i2v_2_2_multitalk"
+        },
+        {
+          "architecture": "ovi",
+          "family": "",
+          "name": "Wan2.2 Ovi v1.0 5s 10B",
+          "template_model_type": "ovi"
+        },
+        {
+          "architecture": "t2v_2_2",
+          "family": "",
+          "name": "Wan2.2 Text2video 14B",
+          "template_model_type": "t2v_2_2"
+        },
+        {
+          "architecture": "ti2v_2_2",
+          "family": "",
+          "name": "Wan2.2 TextImage2video 5B",
+          "template_model_type": "ti2v_2_2"
+        },
+        {
+          "architecture": "vace_14B_2_2",
+          "family": "",
+          "name": "Wan2.2 Vace 14B",
+          "template_model_type": "vace_14B_2_2"
+        },
+        {
+          "architecture": "z_image_base",
+          "family": "",
+          "name": "Z-Image Base 6B",
+          "template_model_type": "z_image_base"
+        },
+        {
+          "architecture": "z_image",
+          "family": "",
+          "name": "Z-Image Turbo 6B",
+          "template_model_type": "z_image"
+        },
+        {
+          "architecture": "z_image_control",
+          "family": "",
+          "name": "Z-Image Turbo Fun ControlNet v1 6B",
+          "template_model_type": "z_image_control"
+        },
+        {
+          "architecture": "z_image_control2",
+          "family": "",
+          "name": "Z-Image Turbo Fun ControlNet v2 6B",
+          "template_model_type": "z_image_control2"
+        },
+        {
+          "architecture": "z_image_control2_1",
+          "family": "",
+          "name": "Z-Image Turbo Fun ControlNet v2.1 6B",
+          "template_model_type": "z_image_control2_1"
+        },
+        {
+          "architecture": "pi_flux2",
+          "family": "",
+          "name": "pi-FLUX.2 Dev 32B",
+          "template_model_type": "pi_flux2"
+        }
+      ],
+      "suggested_architecture": "ltx2_22B"
+    },
+    "status": 200
+  },
+  "civitai download missing url": {
+    "body": {
+      "detail": "download_url is required"
+    },
+    "status": 400
+  },
+  "civitai download rejected host": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
+  "civitai download rejected scheme": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
+  "civitai downloads empty": {
+    "body": {
+      "downloads": []
+    },
+    "status": 200
+  },
+  "civitai model detail": {
+    "body": {
+      "id": 4242,
+      "modelVersions": [
+        {
+          "baseModel": "Wan Video 14B t2v",
+          "id": 90,
+          "images": [
+            {
+              "type": "video",
+              "url": "https://imagecache.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/detailuuid/width=450/preview.mp4"
+            }
+          ],
+          "localArch": "t2v"
+        }
+      ],
+      "name": "Cached Detail"
+    },
+    "status": 200
+  },
+  "civitai model detail cached": {
+    "body": {
+      "id": 4242,
+      "modelVersions": [
+        {
+          "baseModel": "Wan Video 14B t2v",
+          "id": 90,
+          "images": [
+            {
+              "type": "video",
+              "url": "https://imagecache.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/detailuuid/width=450/preview.mp4"
+            }
+          ],
+          "localArch": "t2v"
+        }
+      ],
+      "name": "Cached Detail"
+    },
+    "status": 200
+  },
+  "civitai search": {
+    "body": {
+      "items": [
+        {
+          "id": 7,
+          "modelVersions": [
+            {
+              "baseModel": "Wan Video 14B t2v",
+              "id": 70,
+              "images": [
+                {
+                  "type": "image",
+                  "url": "https://imagecache.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123uuid/width=450/preview.jpg"
+                }
+              ]
+            }
+          ],
+          "name": "Cached LoRA"
+        }
+      ],
+      "metadata": {
+        "nextCursor": ""
+      }
+    },
+    "status": 200
+  },
+  "civitai search cached": {
+    "body": {
+      "items": [
+        {
+          "id": 7,
+          "modelVersions": [
+            {
+              "baseModel": "Wan Video 14B t2v",
+              "id": 70,
+              "images": [
+                {
+                  "type": "image",
+                  "url": "https://imagecache.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123uuid/width=450/preview.jpg"
+                }
+              ]
+            }
+          ],
+          "name": "Cached LoRA"
+        }
+      ],
+      "metadata": {
+        "nextCursor": ""
+      }
+    },
+    "status": 200
+  },
   "debug text to video": {
     "body": {
       "ckpts_dir": "unknown",
@@ -83,6 +1773,24 @@
   "generate music empty": {
     "body": {
       "detail": "Unknown model: ace_step_v1_5_xl_sft_lm_4b"
+    },
+    "status": 400
+  },
+  "hf import bad target dir": {
+    "body": {
+      "error": "Invalid target_dir"
+    },
+    "status": 400
+  },
+  "hf import bad url": {
+    "body": {
+      "error": "Unrecognized URL. Expected a HuggingFace repo (https://huggingface.co/user/repo) or a CivitAI model (https://civitai.com/models/<id>)."
+    },
+    "status": 400
+  },
+  "hf import empty body": {
+    "body": {
+      "error": "Unrecognized URL. Expected a HuggingFace repo (https://huggingface.co/user/repo) or a CivitAI model (https://civitai.com/models/<id>)."
     },
     "status": 400
   },
