@@ -1,5 +1,6 @@
 {
   "settingsUnavailable": "No se pudieron recuperar los ajustes guardados. Selecciona el archivo de nuevo.",
+  "extendBlendRestoreUnavailable": "Las salidas de Extender y Fusión aún no se pueden restaurar, así que Cargar ajustes y Regenerar están desactivados. Usa Extender este vídeo, o empieza un Extender o una Fusión nuevos.",
   "title": "Actividad",
   "openHistory": "Mostrar el historial canónico de tareas",
   "panelTitle": "Tareas de HocusPocus",
