@@ -40,6 +40,7 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
     without giving the model room to alter neighboring people.
     """
     import json
+    import math
     import subprocess
 
     probe = subprocess.run(
@@ -93,12 +94,15 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
     elif _recast_video_has_audio(source_video):
         # Re-encoded source audio may be shorter than the picture: pad it,
         # and let ``-shortest`` only bound a longer track to the picture.
-        # ``-t`` fixes that bound at the generated picture's length: with an
-        # endless pad ffmpeg 7+ lets the audio run on for up to its 10 s
-        # ``-shortest`` buffer when the machine is busy.
+        # ``-t`` fixes that bound just after the generated picture ends: with
+        # an endless pad ffmpeg 7+ lets the audio run on for up to its 10 s
+        # ``-shortest`` buffer when the machine is busy. It is rounded UP to
+        # the next millisecond: audio that ends even a fraction of one before
+        # the last frame ends makes ``-shortest`` drop that frame (81 frames
+        # at 16 fps last 5.0625 s, and "5.062" cost the file its last frame).
         command += ["-map", "0:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
         if picture_seconds > 0:
-            command += ["-t", f"{picture_seconds:.3f}"]
+            command += ["-t", f"{(math.floor(round(picture_seconds * 1000, 6)) + 1) / 1000:.3f}"]
     else:
         command += ["-an"]
     return command + ["-movflags", "+faststart", output_path]

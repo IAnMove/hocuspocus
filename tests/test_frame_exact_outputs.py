@@ -28,8 +28,8 @@ FRAMES = 49  # 1.96 s of picture: one LTX 8n+1 clip
 
 
 def _make_clip(path: Path, frames: int, *, audio_seconds: float | None = None, size: str = "320x240",
-               source: str = "testsrc") -> str:
-    command = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"{source}=size={size}:rate={FPS}"]
+               source: str = "testsrc", rate: int = FPS) -> str:
+    command = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"{source}=size={size}:rate={rate}"]
     if audio_seconds is not None:
         command += ["-f", "lavfi", "-t", f"{audio_seconds}", "-i", "sine=frequency=440:sample_rate=48000"]
     command += ["-frames:v", str(frames), "-c:v", "libx264", "-pix_fmt", "yuv420p"]
@@ -39,9 +39,9 @@ def _make_clip(path: Path, frames: int, *, audio_seconds: float | None = None, s
     return str(path)
 
 
-def _mask_clip(path: Path, frames: int) -> str:
+def _mask_clip(path: Path, frames: int, rate: int = FPS) -> str:
     subprocess.run([
-        "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=white:size=320x240:rate={FPS}",
+        "ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=white:size=320x240:rate={rate}",
         "-vf", "drawbox=x=100:y=60:w=80:h=120:color=red:t=fill",
         "-frames:v", str(frames), "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path),
     ], check=True, capture_output=True)
@@ -119,8 +119,8 @@ def test_recast_protection_command_uses_shortest_only_with_padded_source_audio(t
     reencoded = _build_recast_mask_lock_command(source, mask, silent, out)
     assert reencoded[reencoded.index("-af") + 1] == "apad"
     assert reencoded.index("-af") < reencoded.index("-shortest")
-    # The padded track is also cut at the generated picture's length (9 frames at 25 fps).
-    assert reencoded[reencoded.index("-t") + 1] == "0.360"
+    # The padded track is also cut just after the generated picture ends (9 frames at 25 fps: 0.360 s).
+    assert reencoded[reencoded.index("-t") + 1] == "0.361"
 
     plain = _build_recast_mask_lock_command(
         _make_clip(tmp_path / "mute-source.mp4", 9), mask, silent, out,
@@ -176,9 +176,36 @@ def test_outpaint_finishing_pass_uses_shortest_only_with_padded_source_audio(tmp
         command, _muxed = _outpaint_command(tmp_path, **kwargs)
         assert command[command.index("-af") + 1] == "apad"
         assert command.count("-shortest") == 1 and command.index("-af") < command.index("-shortest")
-        # ... and cut at the picture's length: 49 frames at 25 fps, minus the 5 trimmed frames in the trim case.
-        expected = "1.760" if kwargs.get("trim") else "1.960"
+        # ... and cut just after the picture ends: 49 frames at 25 fps, minus the 5 trimmed frames in the trim case.
+        expected = "1.761" if kwargs.get("trim") else "1.961"
         assert command[command.index("-t") + 1] == expected
     for kwargs in ({"audio": False}, {"overlay": True, "audio": False}):
         command, _muxed = _outpaint_command(tmp_path, **kwargs)
         assert "-shortest" not in command and "-af" not in command
+
+
+@pytest.mark.parametrize("rate, frames", [(16, 81), (30, 100)])
+def test_the_audio_bound_never_ends_before_the_last_frame(tmp_path, rate, frames):
+    """81 frames at 16 fps last 5.0625 s and 100 frames at 30 fps 3.3333 s: not a whole millisecond.
+
+    A ``-t`` rounded to the nearest millisecond (5.062, 3.333) ended the padded audio just before the last frame
+    ended, and ``-shortest`` then dropped that frame (re-encoded picture) or the last four (copied picture).
+    """
+    from services.generation_worker.finalize import _run_generation_outpaint_command
+    from services.recast_masks import _build_recast_mask_lock_command
+
+    source = _make_clip(tmp_path / "source.mp4", frames, audio_seconds=frames / rate - 0.4, source="testsrc2",
+                        rate=rate)
+    generated = _make_clip(tmp_path / "generated.mp4", frames, rate=rate)
+    protected = str(tmp_path / "protected.mp4")
+    _run(_build_recast_mask_lock_command(source, _mask_clip(tmp_path / "mask.mp4", frames, rate), generated,
+                                         protected))
+    assert _frames(protected) == frames, "Recast protection with padded source audio"
+
+    muxed = str(tmp_path / "generated_post.mp4")
+    _did_overlay, command = _run_generation_outpaint_command(
+        True, False, False, 0, 0, muxed, generated, {}, True, source, subprocess,
+    )
+    _run(command)
+    assert _frames(muxed) == frames, "Outpaint audio mux (picture copied) with padded source audio"
+    assert _audio_seconds(muxed) == pytest.approx(frames / rate, abs=0.1)

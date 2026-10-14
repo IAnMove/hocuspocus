@@ -8,6 +8,7 @@ the same objects the rest of the server uses; this module does not import WanGP,
 """
 
 import gc
+import math
 import os
 import time
 import traceback
@@ -26,13 +27,16 @@ def _source_audio_args(picture_seconds):
 
     It is re-encoded, so it can be shorter than the picture: pad it, and let
     ``-shortest`` bound only a longer track. A bare ``-shortest`` cut the last
-    frames of the picture instead. ``-t`` (the picture's length, when known)
-    makes that bound exact: with an endless pad ffmpeg 7+ lets the audio run on
-    for up to its 10 s ``-shortest`` buffer when the machine is busy.
+    frames of the picture instead. ``-t`` (just after the picture ends, when its
+    length is known) bounds the pad: with an endless pad ffmpeg 7+ lets the
+    audio run on for up to its 10 s ``-shortest`` buffer when the machine is
+    busy. The bound is rounded UP to the next millisecond: audio that ends even
+    a fraction of one before the last frame ends makes ``-shortest`` drop it
+    (100 frames at 30 fps last 3.3333 s; "3.333" cost a copied picture 2 frames).
     """
     args = ["-map", "1:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
     if picture_seconds > 0:
-        args += ["-t", f"{picture_seconds:.3f}"]
+        args += ["-t", f"{(math.floor(round(picture_seconds * 1000, 6)) + 1) / 1000:.3f}"]
     return args
 
 

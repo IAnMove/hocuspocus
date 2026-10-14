@@ -228,11 +228,12 @@ def test_mask_lock_command_keeps_generated_audio_then_source_audio_then_none(tmp
     assert "-shortest" not in silent and "-shortest" not in with_generated
     assert "-t" not in with_source  # the probe gave no duration: nothing to bound the padded audio with
 
-    # With the generated picture's length the padded source audio is bounded exactly (ffmpeg 7+ may otherwise let
+    # With the generated picture's length the padded source audio is bounded just after it, rounded up to the next
+    # millisecond so it never ends before the last frame (ffmpeg 7+ may otherwise let
     # an endless pad run for up to 10 s past the picture on a busy machine).
     _probe(64, 48, monkeypatch, duration="1.960000")
     timed = build("source.mp4", "mask.mp4", "generated.mp4", output)
-    assert timed[timed.index("-shortest") + 1:timed.index("-shortest") + 3] == ["-t", "1.960"]
+    assert timed[timed.index("-shortest") + 1:timed.index("-shortest") + 3] == ["-t", "1.961"]
     _probe(64, 48, monkeypatch, duration="N/A")
     assert "-t" not in build("source.mp4", "mask.mp4", "generated.mp4", output)
 
