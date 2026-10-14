@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: Inpaint and its mask preview find a clip picked from the gallery.** Picking a workspace clip in Inpaint sent its file name and workspace, but both the mask preview and the inpaint job only looked in the uploads folder and answered "Video not found". They now look in the clip's workspace first, like Retake and Edit Anything, and fall back to uploads for a dropped file.
+
 **Fixed: cancelling a generation at the very start no longer leaves it on "Cancelling..." forever.** A cancel that arrived after the job took the GPU slot but before the worker registered its stop handle was never acknowledged, so the job (and its task in Activity) stayed Cancelling. The worker now settles it as Cancelled and releases the slot and the saved request. Outpaint, repaint, revoice and Blend have the same short window and are not changed yet.
 
 **Fixed: an H3 video started by a command no longer holds the GPU queue while its prompts are being planned.** When a video asked for through the Wizard or MCP still had to have its window prompts written by the language model, the job took the head of the GPU queue at once and made every later Studio job wait on an idle GPU. It now stays off the queue while the prompts are planned, like a job started from the Studio, and joins the queue when they are ready.

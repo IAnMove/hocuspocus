@@ -1458,7 +1458,7 @@ api.include_router(create_blend_router(
 
 from routers.studio_segmentation import create_studio_segmentation_router
 
-api.include_router(create_studio_segmentation_router())
+api.include_router(create_studio_segmentation_router(get_active_workspace=_get_active_workspace, workspace_dir=_workspace_dir))
 from services.studio_segmentation import sam_status_endpoint, segment_preview_endpoint
 
 
