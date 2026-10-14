@@ -751,11 +751,11 @@ def test_dynamic_audio_normalisation_runs_ffmpeg_on_audio_outputs(rig, golden, m
 
 # -- other engines -------------------------------------------------------------------------------------------------------
 def _stub_mmaudio(rig, monkeypatch, *, enabled: bool = True) -> dict:
-    wgp = rig.server.wgp
     seen: dict = {"downloads": [], "synthesis": []}
-    wgp.get_mmaudio_settings = lambda config, variant_override=None: (enabled, None, 2, "fake-mmaudio", "ckpts/fake-mmaudio")
-    wgp.download_mmaudio = lambda variant_override=None: seen["downloads"].append(variant_override)
-    wgp.MMAUDIO_PERSIST_RAM = 2
+    rig.set_wgp("get_mmaudio_settings",
+                lambda config, variant_override=None: (enabled, None, 2, "fake-mmaudio", "ckpts/fake-mmaudio"))
+    rig.set_wgp("download_mmaudio", lambda variant_override=None: seen["downloads"].append(variant_override))
+    rig.set_wgp("MMAUDIO_PERSIST_RAM", 2)
 
     def video_to_audio(**kwargs) -> None:
         seen["synthesis"].append({key: kwargs[key] for key in ("prompt", "negative_prompt", "seed", "duration",
@@ -818,3 +818,18 @@ def test_simulated_execution_replaces_only_the_inference(rig, golden) -> None:
     job_id = rig.direct_job(BODY)
     rig.launch._run_generation(job_id)
     rig.check(golden, "simulated", {**rig.observe(job_id), "simulated calls": seen})
+
+
+def test_a_cancelled_simulated_job_is_settled_by_the_worker(rig, golden) -> None:
+    """The simulated executor only returns False when it is cancelled; the worker's ``finally`` block settles the job."""
+    launch = rig.launch
+
+    def cancelled_executor(job, finalize):
+        launch.request_cancel(job, job_id=job["id"], active_states=launch._active_gen_states)
+        return False
+
+    rig.patch("execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")))
+    rig.patch("_run_simulated_generation", cancelled_executor)
+    job_id = rig.direct_job(BODY)
+    launch._run_generation(job_id)
+    rig.check(golden, "simulated and cancelled", rig.observe(job_id))
