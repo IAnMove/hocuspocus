@@ -99,11 +99,17 @@ SHOT_MODULES = (
     "services.recast_shot_manifest",
     "services.recast_shot_run",
 )
+# Recast route modules (C8b). The preview handler imports its collaborators, so a stub has to
+# land on that module too, not only on launch.
+ROUTE_MODULES = (
+    "services.recast_preview",
+)
 
 
 def worker_modules() -> list:
-    """Launch, plus each shot module already imported. The assembler reads its own globals."""
-    return [worker_module(), *[sys.modules[name] for name in SHOT_MODULES if name in sys.modules]]
+    """Launch, plus each moved recast module already imported. Each reads its own globals."""
+    names = (*SHOT_MODULES, *ROUTE_MODULES)
+    return [worker_module(), *[sys.modules[name] for name in names if name in sys.modules]]
 
 
 @dataclass

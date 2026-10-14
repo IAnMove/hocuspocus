@@ -773,6 +773,32 @@ def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypa
         assert forwarded == set()
 
 
+def test_recast_preview_reads_the_objects_launch_holds(full_server) -> None:
+    """The preview handler's collaborators are the objects launch holds.
+
+    The served function is the router wrapper. Launch's ``recast_preview_endpoint``
+    is that same wrapper, which is what the route calls.
+    """
+    import builtins
+    import importlib
+
+    from routers.recast_preview import recast_preview_endpoint as served
+
+    launch = worker_module()
+    module = importlib.import_module("services.recast_preview")
+    assert launch.recast_preview_endpoint is served
+    assert served is not module.recast_preview_endpoint
+    reads = _global_reads(module.recast_preview_endpoint)
+    compared = set()
+    for name in sorted(reads):
+        if name.startswith("__") or hasattr(builtins, name):
+            continue
+        assert getattr(module, name) is getattr(launch, name), name
+        compared.add(name)
+    assert "_resolve_recast_media" in compared
+    assert "HTTPException" in compared
+
+
 # -- Recast routes (recorded while both handlers still live in launch) --------------------------------
 # ``POST /api/v1/recast`` starts its worker and then builds the HTTP body from the same params object.
 # The worker can mutate those params as soon as it takes the generation slot, so a golden that reads
