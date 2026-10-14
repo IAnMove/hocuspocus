@@ -165,7 +165,7 @@
         "answer": {
           "detail": "base_params must be an object"
         },
-        "status": 422
+        "status": 400
       },
       "clip A too small": {
         "answer": {
@@ -272,7 +272,7 @@
         "answer": {
           "detail": "overlap_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "the body beats inherited settings": {
         "answer": {
@@ -701,92 +701,92 @@
         "answer": {
           "detail": "guidance_scale must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "anchor_frames": {
         "answer": {
           "detail": "anchor_frames must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "anchor_frames fraction as text": {
         "answer": {
           "detail": "anchor_frames must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "base_params is a list": {
         "answer": {
           "detail": "base_params must be an object"
         },
-        "status": 422
+        "status": 400
       },
       "base_params is text": {
         "answer": {
           "detail": "base_params must be an object"
         },
-        "status": 422
+        "status": 400
       },
       "guidance_scale": {
         "answer": {
           "detail": "guidance_scale must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "injection_strength": {
         "answer": {
           "detail": "injection_strength must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "input_video_strength": {
         "answer": {
           "detail": "input_video_strength must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "jobs registered": [],
       "motion_prefix_sec": {
         "answer": {
           "detail": "motion_prefix_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "motion_prefix_sec not a number": {
         "answer": {
           "detail": "motion_prefix_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "motion_suffix_sec": {
         "answer": {
           "detail": "motion_suffix_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "num_inference_steps": {
         "answer": {
           "detail": "num_inference_steps must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "overlap_sec": {
         "answer": {
           "detail": "overlap_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "overlap_sec infinity": {
         "answer": {
           "detail": "overlap_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "overlap_sec null": {
         "answer": {
           "detail": "overlap_sec must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "temp folders made": 0,
       "workers started": []

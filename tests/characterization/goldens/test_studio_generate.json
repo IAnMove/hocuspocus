@@ -290,104 +290,104 @@
         "answer": {
           "detail": "guidance_scale must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "edit anything lora_strength": {
         "answer": {
           "detail": "lora_strength must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "edit anything num_inference_steps": {
         "answer": {
           "detail": "num_inference_steps must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "edit anything retake_strength": {
         "answer": {
           "detail": "retake_strength must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "edit anything start_time": {
         "answer": {
           "detail": "start_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "extract frames end_time": {
         "answer": {
           "detail": "end_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "extract frames start_time": {
         "answer": {
           "detail": "start_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "inpaint guidance_scale": {
         "answer": {
           "detail": "guidance_scale must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "inpaint mask_padding": {
         "answer": {
           "detail": "mask_padding must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "inpaint num_inference_steps": {
         "answer": {
           "detail": "num_inference_steps must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "inpaint retake_strength": {
         "answer": {
           "detail": "retake_strength must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "inpaint start_time": {
         "answer": {
           "detail": "start_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "jobs registered": [],
       "recast end_time alone": {
         "answer": {
           "detail": "end_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "recast start_time": {
         "answer": {
           "detail": "start_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "retake end_time": {
         "answer": {
           "detail": "end_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "retake retake_strength": {
         "answer": {
           "detail": "retake_strength must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "retake start_time": {
         "answer": {
           "detail": "start_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "uploads": []
     },
@@ -12240,7 +12240,7 @@
           "detail": "start_time must be a number"
         },
         "ffmpeg": [],
-        "status": 422
+        "status": 400
       }
     },
     "status": 200
@@ -13571,7 +13571,7 @@
         "body": {
           "detail": "end_time must be a number"
         },
-        "status": 422
+        "status": 400
       },
       "full video": {
         "body": {
@@ -13606,7 +13606,7 @@
         "body": {
           "detail": "mask_padding must be a whole number"
         },
-        "status": 422
+        "status": 400
       },
       "other error": {
         "body": {
@@ -13654,7 +13654,7 @@
         "body": {
           "detail": "start_time must be a number"
         },
-        "status": 422
+        "status": 400
       }
     },
     "status": 200

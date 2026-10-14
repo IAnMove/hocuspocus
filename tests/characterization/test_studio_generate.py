@@ -427,7 +427,7 @@ def test_retake_and_edit_anything_jobs(rig, golden, monkeypatch, tmp_path) -> No
 
 
 def test_edit_routes_refuse_a_value_that_is_not_a_number(rig, golden, monkeypatch) -> None:
-    """Retake, Edit Anything, Inpaint, frame extraction and Recast answer 422 and name the field, before the
+    """Retake, Edit Anything, Inpaint, frame extraction and Recast answer 400 and name the field, before the
     video is read, SAM runs or a job is registered (they answered 500)."""
     from services import inpaint_service
 
@@ -626,7 +626,7 @@ def test_segment_preview_and_sam_status_with_sam_stubbed(server, golden, monkeyp
     post("other error", {"video_path": "shot.mp4", "text": "the boat"})
     outcome["ready"] = False
     post("sam not available", {"video_path": "shot.mp4", "text": "the boat"})
-    # The numbers are read before SAM is asked for: a value that is not a number is a 422, never a 503 or a 500.
+    # The numbers are read before SAM is asked for: a value that is not a number is a 400, never a 503 or a 500.
     post("start time that is not a number", {"video_path": "shot.mp4", "text": "the boat", "start_time": "abc"})
     post("end time that is not a number", {"video_path": "shot.mp4", "text": "the boat", "end_time": [1]})
     post("mask padding that is not a number, full video",

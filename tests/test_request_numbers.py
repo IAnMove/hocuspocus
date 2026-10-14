@@ -15,10 +15,10 @@ def test_a_missing_field_takes_the_default_and_text_that_holds_a_number_still_pa
 
 
 @pytest.mark.parametrize("value", ["abc", "", None, [], {}, [1], "nan", "inf", "-inf", float("inf"), float("nan")])
-def test_a_value_that_is_not_a_finite_number_answers_422_naming_the_field(value):
+def test_a_value_that_is_not_a_finite_number_answers_400_naming_the_field(value):
     with pytest.raises(HTTPException) as refused:
         number_field({"overlap_sec": value}, "overlap_sec", 3)
-    assert refused.value.status_code == NOT_A_NUMBER_STATUS == 422
+    assert refused.value.status_code == NOT_A_NUMBER_STATUS == 400
     assert refused.value.detail == "overlap_sec must be a number"
 
 
@@ -26,7 +26,7 @@ def test_a_value_that_is_not_a_finite_number_answers_422_naming_the_field(value)
 def test_a_whole_number_field_names_what_it_wants(value):
     with pytest.raises(HTTPException) as refused:
         number_field({"anchor_frames": value}, "anchor_frames", 0, int)
-    assert (refused.value.status_code, refused.value.detail) == (422, "anchor_frames must be a whole number")
+    assert (refused.value.status_code, refused.value.detail) == (400, "anchor_frames must be a whole number")
 
 
 def test_a_default_is_read_through_the_same_check():

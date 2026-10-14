@@ -713,7 +713,7 @@ def test_blend_hands_the_worker_each_mode(rig, golden, tmp_path, monkeypatch) ->
     answers["simulated"] = _hand_off(rig, "/api/v1/blend", {
         "clip_a_path": str(still_a), "clip_b_path": str(still_b), "model_type": "fake_t2v", "motion_prefix_sec": 0,
         "motion_suffix_sec": 0}, started, temp=temp)
-    # A value that is not a number answers 422 before any clip is read (it used to raise inside the route: a 500).
+    # A value that is not a number answers 400 before any clip is read (it used to raise inside the route: a 500).
     for case, extra in (("text overlap", {"overlap_sec": "long"}),
                         ("base params that are not a dict", {"base_params": "not a dict"})):
         refused = rig.server.client.post("/api/v1/blend", json={
@@ -724,7 +724,7 @@ def test_blend_hands_the_worker_each_mode(rig, golden, tmp_path, monkeypatch) ->
 
 
 def test_blend_refuses_a_value_that_is_not_a_number(rig, golden, tmp_path, monkeypatch) -> None:
-    """Every numeric field answers 422 and names itself; no clip is read, no temp folder made, no job started."""
+    """Every numeric field answers 400 and names itself; no clip is read, no temp folder made, no job started."""
     _block_network(monkeypatch)
     temp = _TempDirs(monkeypatch)
     started = _capture_workers(rig)

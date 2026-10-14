@@ -28,7 +28,7 @@ _run_generation = None
 def _read_blend_numbers(body):
     """Every number the request may carry, read before any clip is decoded.
 
-    A value that is not a number, or ``base_params`` that is not an object, answers 422 here; they used to raise
+    A value that is not a number, or ``base_params`` that is not an object, answers 400 here; they used to raise
     in the middle of the route and answer 500 (validation edit-03).
     """
     from services.request_numbers import NOT_A_NUMBER_STATUS, number_field
