@@ -374,6 +374,8 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
     relative = "app/_launch_runtime.py"
     if writer_name == "_write_repaint_shot_aware_sidecar":
         relative = "app/services/repaint_run.py"
+    elif writer_name == "_write_outpaint_shot_aware_sidecar":
+        relative = "app/services/outpaint_run.py"
     write = _load_launch_function(
         writer_name,
         {
@@ -557,13 +559,19 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
+    outpaint_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "outpaint.py"
+    ).read_text(encoding="utf-8")
+    blend_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "blend.py"
+    ).read_text(encoding="utf-8")
     specialist_routes = (
-        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
-        ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "def _get_cached_hardware", "_run_blend_generation"),
+        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", source),
+        ("async def outpaint_endpoint", "def create_outpaint_router", "_prepare_and_run_outpaint", outpaint_source),
+        ("async def blend_endpoint", "def create_blend_router", "_run_blend_generation", blend_source),
     )
-    for start, end, real_worker in specialist_routes:
-        route = source.split(start, 1)[1].split(end, 1)[0]
+    for start, end, real_worker, route_source in specialist_routes:
+        route = route_source.split(start, 1)[1].split(end, 1)[0]
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
@@ -602,7 +610,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
-        "_write_outpaint_shot_aware_sidecar",
     ):
         # _write_output_sidecars is nested in a phase of the generation worker
         body = (function_source(name, worker_text, worker_tree) if name == "_write_output_sidecars"
@@ -624,6 +631,16 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     )
     assert "publish_generation_sidecar" in repaint_sidecar
     assert "json.dump" not in repaint_sidecar
+    outpaint_run_source = (
+        Path(__file__).parents[1] / "app" / "services" / "outpaint_run.py"
+    ).read_text(encoding="utf-8")
+    outpaint_sidecar = function_source(
+        "_write_outpaint_shot_aware_sidecar",
+        outpaint_run_source,
+        ast.parse(outpaint_run_source),
+    )
+    assert "publish_generation_sidecar" in outpaint_sidecar
+    assert "json.dump" not in outpaint_sidecar
     sfx_path = Path(__file__).parents[1] / "app" / "services" / "generation_sfx.py"
     sfx_text = sfx_path.read_text(encoding="utf-8")
     sfx_body = function_source("_run_sfx_generation", sfx_text, ast.parse(sfx_text))

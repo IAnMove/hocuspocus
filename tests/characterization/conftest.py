@@ -25,7 +25,16 @@ from tests.support.golden import GoldenBook, normalise
 PACKAGE = Path(__file__).resolve().parent
 RUN_ALONE = "python -m pytest tests/characterization -p no:cacheprovider"
 # Thread names (Python names a thread "Thread-N (target)") of the generation workers the routes start.
-GENERATION_WORKERS = ("(_run_generation_with_preparation)", "(_run_generation)", "(run_generation)")
+# Outpaint's shot preparation and blend's assembly thread are not the
+# generation worker. They are non-daemon too, and a stuck one would hold the
+# process open after the session has reported.
+GENERATION_WORKERS = (
+    "(_run_generation_with_preparation)",
+    "(_run_generation)",
+    "(run_generation)",
+    "(_prepare_and_run_outpaint)",
+    "(_run_blend_generation)",
+)
 
 
 def _inside_package(item: pytest.Item) -> bool:
