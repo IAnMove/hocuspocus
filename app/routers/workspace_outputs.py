@@ -108,6 +108,17 @@ def create_workspace_router(
         busy = any(j.get("status") in ("queued", "running") for j in jobs())
         if busy or not generation_idle():
             raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        # Story Lab MiniMax songs write WAV candidates and checkpoints into
+        # the workspace from `_minimax_music_jobs`, which is neither jobs()
+        # nor `_active_gen_states`. Deleting mid-request wipes those files
+        # and lets workspace_dir resurrect an empty folder for the leftover
+        # worker.
+        try:
+            from services.story_music_jobs import any_minimax_music_job_active
+            if any_minimax_music_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
         # Director pipelines are alive between their generation jobs (LLM
         # planning, review pauses) with no _jobs entry — but their next step
         # would resurrect the folder via _workspace_dir().

@@ -24,6 +24,28 @@ _minimax_music_jobs_lock = threading.RLock()
 _MINIMAX_MUSIC_TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
 
 
+def any_minimax_music_job_active() -> bool:
+    """True while a Story Lab MiniMax song still writes into the workspace.
+
+    These jobs live in ``_minimax_music_jobs``, not ``jobs()`` or
+    ``_active_gen_states``. Queued, waiting and running ones persist under
+    ``.minimax-music-jobs`` and write WAV candidates into ``workspace_dir``;
+    completed/failed/cancelled/interrupted ones do not. Workspace delete must
+    treat the first group as busy.
+    """
+    with _minimax_music_jobs_lock:
+        return any(
+            str(job.get("status") or "") not in _MINIMAX_MUSIC_TERMINAL
+            for job in _minimax_music_jobs.values()
+        )
+
+
+def reset_minimax_music_jobs() -> None:
+    """Drop in-memory MiniMax Music jobs. Tests use this; production does not."""
+    with _minimax_music_jobs_lock:
+        _minimax_music_jobs.clear()
+
+
 def _minimax_music_checkpoint_dir(workspace: str | None = None) -> str:
     path = os.path.join(_workspace_dir(workspace), ".minimax-music-jobs")
     os.makedirs(path, exist_ok=True)
