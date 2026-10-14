@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: joining two clips with a generated transition (Blend) works again on ffmpeg 6.x.** The final join used the `-/filter_complex` option, which only exists in ffmpeg 7 and later, so every real join failed on ffmpeg 6.1 (the version Ubuntu 24.04 and the CI image ship). It now uses `-filter_complex_script`, which works on 4.x to 8.x.
+
 **Fixed: Meshy and Hi3D no longer start a paid new model when asked to retexture a GLB.** Those two providers only generate a new mesh, so a "Retexture" request used to ignore the source GLB and quietly queue a generation. The 3D panel now disables the Retexture button for them, and a retexture request sent through the API, the Wizard or MCP is refused with a clear message (retexture a GLB with local Hunyuan3D instead).
 
 **Fixed: the LoRA guide can no longer be written outside the LoRA folder.** Asking for a guide with a file name such as `../../other/real.safetensors` or an absolute path used to write the guide and its CivitAI sidecar next to that path. Generating or reading a guide now answers 400 "Invalid filename" for any name that is not a plain file name, the same rule the LoRA delete already uses.

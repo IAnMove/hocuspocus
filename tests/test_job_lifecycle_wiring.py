@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -307,6 +308,51 @@ class TestJobLifecycleWiring(unittest.TestCase):
         )
         self.assertIsInstance(finalize, ast.Constant)
         self.assertIs(finalize.value, False)
+
+    def test_blend_concat_uses_filter_complex_script(self):
+        """`-/filter_complex` is ffmpeg 7+ only; CI and Ubuntu 24.04 ship 6.1.1."""
+        blend = _function(self.blend_run, "_run_blend_generation")
+        flags = {
+            node.value
+            for node in ast.walk(blend)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            and node.value.startswith("-") and "filter_complex" in node.value
+        }
+        self.assertEqual(flags, {"-filter_complex_script"})
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg"), "needs an ffmpeg with libx264 on PATH",
+    )
+    def test_blend_concat_script_flag_is_accepted_by_ffmpeg(self):
+        """The worker's script flag must load a filter graph on this machine's ffmpeg."""
+        with tempfile.TemporaryDirectory() as tmp:
+            clip = os.path.join(tmp, "src.mp4")
+            script = os.path.join(tmp, "concat_filter.txt")
+            out = os.path.join(tmp, "out.mp4")
+            make = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=red:s=32x32:r=8:d=0.5",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", clip,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(make.returncode, 0, make.stderr[-400:])
+            with open(script, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(
+                    "[0:v]scale=w=32:h=32,setsar=1,fps=8,format=yuv420p[outv];"
+                    "anullsrc=channel_layout=stereo:sample_rate=48000:d=0.500[outa]"
+                )
+            concat = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", clip,
+                    "-filter_complex_script", script,
+                    "-map", "[outv]", "-map", "[outa]",
+                    "-c:v", "libx264", "-c:a", "aac", "-shortest", out,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(concat.returncode, 0, concat.stderr[-400:])
+            self.assertTrue(os.path.isfile(out))
 
     def test_wan_checks_abort_before_resetting_interrupt(self):
         wgp = _parse("app/wgp.py")
