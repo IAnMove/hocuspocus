@@ -23,6 +23,7 @@ from services.job_lifecycle import snapshot_job
 _series_render_jobs: dict[str, dict] = {}
 _series_render_jobs_lock = threading.RLock()
 _series_render_active_jobs: set[str] = set()
+INTERRUPTED = "The server restarted during this render; resume to continue"
 
 
 def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
@@ -69,6 +70,29 @@ def _series_render_store(workspace: str):
 
     return SeriesJobStore(_workspace_dir(workspace), "render")
 
+
+def _reconcile_series_render_job(job: dict) -> dict:
+    """A checkpoint that says running without a worker in this process was cut by a restart: interrupted, once.
+
+    A render this process started is in ``_series_render_jobs`` and, while it works, in ``_series_render_active_jobs``;
+    anything else read from disk is dead. Its running items become ``interrupted`` (not ``queued``): a resume
+    (``routers.series_render.resume_series_render_job``) gives those a new attempt instead of reusing a dead child."""
+    job_id = str(job.get("jobId") or "")
+    if job.get("status") != "running":
+        return job
+    with _series_render_jobs_lock:
+        if job_id in _series_render_active_jobs or job_id in _series_render_jobs:
+            return job
+    settled = copy.deepcopy(job)
+    for item in settled.get("items") or []:
+        if isinstance(item, dict) and item.get("status") == "running":
+            item["status"] = "interrupted"
+    now = time.time()
+    settled.update(status="interrupted", stage="interrupted", activeShotId=None, message=INTERRUPTED,
+                   finishedAt=now, updatedAt=now)
+    _series_render_store(str(settled.get("workspace") or "default")).save(settled)
+    return settled
+
 def _active_series_render_for_episode(
     workspace: str, series_id: str, episode_id: str,
 ) -> dict | None:
@@ -77,7 +101,7 @@ def _active_series_render_for_episode(
     with _series_render_jobs_lock:
         cached = [copy.deepcopy(job) for job in _series_render_jobs.values()]
     try:
-        persisted = _series_render_store(workspace).list()
+        persisted = [_reconcile_series_render_job(job) for job in _series_render_store(workspace).list()]
     except (OSError, ValueError, json.JSONDecodeError):
         persisted = []
     by_id = {
@@ -104,6 +128,7 @@ def _load_series_render_job(job_id: str) -> dict | None:
         except (OSError, ValueError, json.JSONDecodeError):
             continue
         if job:
+            job = _reconcile_series_render_job(job)
             with _series_render_jobs_lock:
                 _series_render_jobs[job_id] = job
             return copy.deepcopy(job)

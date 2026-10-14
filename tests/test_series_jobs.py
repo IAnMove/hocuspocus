@@ -179,6 +179,8 @@ def test_active_render_guard_is_scoped_to_workspace_series_and_episode(monkeypat
         },
     })
     monkeypatch.setattr(render_jobs, "_series_render_store", lambda _workspace: Store())
+    # The persisted running job has a worker in this process; one without it is a restart's leftover (below).
+    monkeypatch.setattr(render_jobs, "_series_render_active_jobs", {"persisted-active"})
 
     active = render_jobs._active_series_render_for_episode("default", "series-1", "episode-1")
 
@@ -543,4 +545,58 @@ def test_two_runs_of_the_same_shot_never_share_a_clip_name(monkeypatch, tmp_path
     first = _drive_series_render(monkeypatch, tmp_path, _wangp_name)[1][0]["output_filename"]
     second = _drive_series_render(monkeypatch, tmp_path, _wangp_name)[1][0]["output_filename"]
     assert first != second, "WanGP would call the second one name(2).mp4, which the asset path refuses"
+
+
+def _stale_render_checkpoint(monkeypatch, tmp_path, *, claimed=False, cached=False):
+    """A render checkpoint on disk that says running, as a server restart leaves it: no worker, an empty cache."""
+    import services.series_render_jobs as render_jobs
+
+    job = {"jobId": "series-render-stale", "kind": "render", "workspace": "default", "seriesId": "series-1",
+           "episodeId": "episode-1", "status": "running", "stage": "rendering", "activeShotId": "s1", "createdAt": 1,
+           "updatedAt": 2, "items": [
+               {"shotId": "s1", "attemptId": "attempt_1", "status": "running", "childJobId": "sr-dead"},
+               {"shotId": "s2", "attemptId": "attempt_2", "status": "queued", "childJobId": None}]}
+    store = SeriesJobStore(str(tmp_path), "render")
+    store.save(job)
+    monkeypatch.setattr(render_jobs, "_workspace_dir", lambda _workspace=None: str(tmp_path))
+    monkeypatch.setattr(render_jobs, "_list_workspaces", lambda: [{"name": "default"}])
+    monkeypatch.setattr(render_jobs, "_series_render_jobs_lock", threading.RLock())
+    monkeypatch.setattr(render_jobs, "_series_render_jobs", {"series-render-stale": copy.deepcopy(job)} if cached else {})
+    monkeypatch.setattr(render_jobs, "_series_render_active_jobs", {"series-render-stale"} if claimed else set())
+    return render_jobs, store
+
+
+def test_a_render_checkpoint_left_running_by_a_restart_is_loaded_as_interrupted(monkeypatch, tmp_path):
+    render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path)
+    loaded = render_jobs._load_series_render_job("series-render-stale")
+    assert loaded["status"] == "interrupted" and loaded["activeShotId"] is None and "restarted" in loaded["message"]
+    assert [item["status"] for item in loaded["items"]] == ["interrupted", "queued"], "a resume gives the dead one a new attempt"
+    assert store.load("series-render-stale")["status"] == "interrupted", "once: the checkpoint itself is settled"
+    assert [item["jobId"] for item in store.recoverable()] == ["series-render-stale"], "and recovery still lists it"
+
+
+def test_a_render_a_worker_of_this_process_owns_is_left_running(monkeypatch, tmp_path):
+    render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path, claimed=True)
+    assert render_jobs._load_series_render_job("series-render-stale")["status"] == "running"
+    assert store.load("series-render-stale")["status"] == "running"
+    render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path, cached=True)
+    assert render_jobs._load_series_render_job("series-render-stale")["status"] == "running", "this process started it"
+
+
+def test_a_stale_running_render_no_longer_blocks_the_next_render_of_the_episode(monkeypatch, tmp_path):
+    render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path)
+    assert render_jobs._active_series_render_for_episode("default", "series-1", "episode-1") is None
+    assert store.load("series-render-stale")["status"] == "interrupted"
+    render_jobs, store = _stale_render_checkpoint(monkeypatch, tmp_path, claimed=True)
+    assert render_jobs._active_series_render_for_episode("default", "series-1", "episode-1")["jobId"] == "series-render-stale"
+
+
+def test_the_recovery_list_reports_a_stale_render_as_interrupted(monkeypatch, tmp_path):
+    import routers.series_render as routes
+
+    render_jobs, _store = _stale_render_checkpoint(monkeypatch, tmp_path)
+    monkeypatch.setattr(routes, "_series_library_workspace", lambda workspace: workspace or "default")
+    monkeypatch.setattr(routes, "_series_render_store", render_jobs._series_render_store)
+    jobs = routes.list_series_render_recovery("default")["jobs"]
+    assert [(job["jobId"], job["status"]) for job in jobs] == [("series-render-stale", "interrupted")]
 
