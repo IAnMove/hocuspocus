@@ -9,7 +9,9 @@ from services.series_lifecycle import (
     ACTIVE_SERIES_JOB_STATUSES,
     ActiveSeriesJobsError,
     list_active_series_jobs,
+    list_active_workspace_series_jobs,
     require_no_active_series_jobs,
+    require_no_active_workspace_series_jobs,
 )
 
 
@@ -144,3 +146,79 @@ def test_episode_delete_propagates_structured_active_job_conflict_without_writin
     assert captured.value.status_code == 409
     assert captured.value.detail["activeJobs"][0]["jobId"] == "assembly-1"
     assert writes == []
+
+
+def test_workspace_scan_includes_every_series_and_kind(tmp_path):
+    _save_job(tmp_path, "planning", "running", job_id="canon", episode_id="")
+    _save_job(tmp_path, "produce", "queued", job_id="produce-1", episode_id="episode-1")
+    _save_job(tmp_path, "voice", "cancelling", job_id="voice-1", episode_id="episode-1")
+    other = SeriesJobStore(str(tmp_path), "assembly").save({
+        "jobId": "other-series",
+        "workspace": "default",
+        "seriesId": "series-2",
+        "episodeId": "episode-9",
+        "status": "running",
+    })
+
+    found = [job["jobId"] for job in list_active_workspace_series_jobs(str(tmp_path))]
+
+    assert found == ["other-series", "canon", "produce-1", "voice-1"]
+    assert other["seriesId"] == "series-2"
+
+
+def test_workspace_delete_refuses_an_active_series_job_and_keeps_the_folder(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.workspace_outputs import create_workspace_router
+
+    show = tmp_path / "show"
+    show.mkdir()
+    (show / "library.json").write_text("keep", encoding="utf-8")
+    _save_job(show, "planning", "running", job_id="plan-show")
+
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["show"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=lambda _base, name: str((tmp_path / name).resolve()) if name == "show" else None,
+        save_path=lambda: str(tmp_path),
+    ))
+    deleted = TestClient(app).delete("/api/v1/workspaces/show")
+
+    assert deleted.status_code == 409, deleted.text
+    assert deleted.json()["detail"]["code"] == "series_jobs_active"
+    assert deleted.json()["detail"]["activeJobs"][0]["jobId"] == "plan-show"
+    assert (show / "library.json").read_text(encoding="utf-8") == "keep"
+
+
+def test_workspace_delete_proceeds_when_series_jobs_are_terminal(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.workspace_outputs import create_workspace_router
+
+    show = tmp_path / "show"
+    show.mkdir()
+    (show / "library.json").write_text("gone", encoding="utf-8")
+    _save_job(show, "planning", "completed", job_id="plan-done")
+    require_no_active_workspace_series_jobs(str(show))
+
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["show"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=lambda _base, name: str((tmp_path / name).resolve()) if name == "show" else None,
+        save_path=lambda: str(tmp_path),
+    ))
+    deleted = TestClient(app).delete("/api/v1/workspaces/show")
+
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["dir_removed"] is True
+    assert not show.exists()

@@ -90,7 +90,8 @@ def create_workspace_router(
         Refused while anything is queued or generating: jobs capture their
         workspace at submit time and _workspace_dir() recreates folders on
         demand, so a mid-generation delete would silently resurrect the
-        workspace and scatter files into it.
+        workspace and scatter files into it. Series plan/render/produce jobs
+        are durable checkpoints in this folder, so they refuse the same way.
         """
         if name == "default":
             raise HTTPException(status_code=400, detail="The default workspace is the outputs folder itself and cannot be deleted.")
@@ -117,6 +118,13 @@ def create_workspace_router(
                 raise HTTPException(status_code=409, detail="A Director pipeline is running or paused. Stop it before deleting a workspace.")
         except ImportError:
             pass
+        # Series plan/render/produce live in .series-jobs-v1, not in jobs() —
+        # deleting mid-run wipes the library and the worker recreates the folder.
+        try:
+            from services.series_lifecycle import ActiveSeriesJobsError, require_no_active_workspace_series_jobs
+            require_no_active_workspace_series_jobs(ws_dir)
+        except ActiveSeriesJobsError as exc:
+            raise HTTPException(status_code=409, detail=exc.detail()) from exc
 
         # Deleting the active workspace switches to default first. Safe to write
         # wgp.save_path directly here: nothing is generating (guards above).

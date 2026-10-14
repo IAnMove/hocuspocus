@@ -1,8 +1,9 @@
 """Central lifecycle query used before deleting Series Lab entities.
 
-Jobs are durable checkpoints, so deletion guards must consult all three job
-stores instead of relying on process-local worker sets. Output media is never
-removed by this module.
+Jobs are durable checkpoints, so deletion guards must consult the on-disk job
+stores instead of relying on process-local worker sets. Workspace delete uses
+the same scan: a mid-run delete would wipe the library and let the worker
+recreate an empty folder. Output media is never removed by this module.
 """
 
 from __future__ import annotations
@@ -55,11 +56,7 @@ def list_active_series_jobs(
 ) -> list[dict[str, Any]]:
     """Return durable active jobs scoped to one Series or one episode."""
 
-    requested_kinds = tuple(dict.fromkeys(str(kind) for kind in kinds))
-    unsupported = [kind for kind in requested_kinds if kind not in KINDS]
-    if unsupported:
-        raise ValueError(f"Unsupported Series Lab job kind: {unsupported[0]}")
-
+    requested_kinds = _kinds(kinds)
     matches: dict[tuple[str, str], dict[str, Any]] = {}
     for kind in requested_kinds:
         for raw_job in SeriesJobStore(workspace_dir, kind).list():
@@ -69,17 +66,21 @@ def list_active_series_jobs(
                 continue
             if episode_id is not None and str(raw_job.get("episodeId") or "") != episode_id:
                 continue
-            status = str(raw_job.get("status") or "").strip().lower()
-            if status not in ACTIVE_SERIES_JOB_STATUSES:
-                continue
-            job_id = str(raw_job.get("jobId") or "").strip()
-            if not job_id:
-                continue
-            public_job = {key: copy.deepcopy(raw_job.get(key)) for key in PUBLIC_JOB_KEYS}
-            public_job["jobId"] = job_id
-            public_job["kind"] = kind
-            public_job["status"] = status
-            matches[(kind, job_id)] = public_job
+            public = _public_job(kind, raw_job)
+            if public:
+                matches[(kind, public["jobId"])] = public
+    return sorted(matches.values(), key=lambda job: (str(job["kind"]), str(job["jobId"])))
+
+
+def list_active_workspace_series_jobs(workspace_dir: str) -> list[dict[str, Any]]:
+    """Return every durable active job stored in this workspace folder."""
+
+    matches: dict[tuple[str, str], dict[str, Any]] = {}
+    for kind in sorted(KINDS):
+        for raw_job in SeriesJobStore(workspace_dir, kind).list():
+            public = _public_job(kind, raw_job)
+            if public:
+                matches[(kind, public["jobId"])] = public
     return sorted(matches.values(), key=lambda job: (str(job["kind"]), str(job["jobId"])))
 
 
@@ -98,3 +99,31 @@ def require_no_active_series_jobs(
     )
     if jobs:
         raise ActiveSeriesJobsError(jobs, episode_id=episode_id)
+
+
+def require_no_active_workspace_series_jobs(workspace_dir: str) -> None:
+    jobs = list_active_workspace_series_jobs(workspace_dir)
+    if jobs:
+        raise ActiveSeriesJobsError(jobs, episode_id=None)
+
+
+def _kinds(kinds: Iterable[str]) -> tuple[str, ...]:
+    requested = tuple(dict.fromkeys(str(kind) for kind in kinds))
+    unsupported = [kind for kind in requested if kind not in KINDS]
+    if unsupported:
+        raise ValueError(f"Unsupported Series Lab job kind: {unsupported[0]}")
+    return requested
+
+
+def _public_job(kind: str, raw_job: dict[str, Any]) -> dict[str, Any] | None:
+    status = str(raw_job.get("status") or "").strip().lower()
+    if status not in ACTIVE_SERIES_JOB_STATUSES:
+        return None
+    job_id = str(raw_job.get("jobId") or "").strip()
+    if not job_id:
+        return None
+    public_job = {key: copy.deepcopy(raw_job.get(key)) for key in PUBLIC_JOB_KEYS}
+    public_job["jobId"] = job_id
+    public_job["kind"] = kind
+    public_job["status"] = status
+    return public_job
