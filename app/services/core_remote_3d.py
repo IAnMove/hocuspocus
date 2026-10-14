@@ -126,6 +126,14 @@ def _draw_minimax_still(prompt: str, output_dir: str, job_id: str) -> str | None
 
 
 def _publish_asset_manifest(job_id: str, filename: str, provider: str) -> None:
+    """Best effort, like the full server's sidecar publish: the GLB is on disk and the provider call was paid for."""
+    try:
+        _write_asset_manifest(job_id, filename, provider)
+    except Exception as exc:
+        print(f"[core-3d] asset manifest failed for {filename}: {exc}")
+
+
+def _write_asset_manifest(job_id: str, filename: str, provider: str) -> None:
     from services.asset_manifest import publish_generation_job_sidecar
 
     with _LOCK:

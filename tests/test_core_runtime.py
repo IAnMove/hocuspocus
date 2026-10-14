@@ -262,6 +262,34 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(os.path.realpath(request["image_path"]), expected)
 
+    def test_meshy_job_stays_completed_when_the_asset_manifest_cannot_be_written(self):
+        """The GLB exists and the provider call was paid for: a manifest failure must not turn the job into a failure."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+
+            def fake_generate(**kwargs):
+                name = "meshy-paid.glb"
+                Path(kwargs["output_dir"], name).write_bytes(b"glb")
+                return {"filename": name}
+
+            with patch("services.meshy_3d_service.generate_model", side_effect=fake_generate), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_3d.threading.Thread", ImmediateThread), patch(
+                "services.asset_manifest.publish_generation_job_sidecar", side_effect=OSError("disk full"),
+            ):
+                started = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            job = self.client.get(f"/api/v1/model3d/status/{started.json()['job_id']}").json()
+            produced = Path("outputs", "meshy-paid.glb").is_file()
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(job["status"], "completed", job)
+        self.assertEqual(job["filename"], "meshy-paid.glb")
+        self.assertTrue(produced)
+
     def test_core_model3d_unload_cancels_the_queued_remote_jobs(self):
         """The shared Model3D router brings ``POST /api/v1/model3d/unload`` to core: it cancels the Meshy and Hi3D jobs."""
         folder, previous = self._in_temp_workspace()
