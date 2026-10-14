@@ -10946,6 +10946,1128 @@
     },
     "status": 200
   },
+  "recast shot generation, other paths: audio probe fails": {
+    "body": {
+      "assembly": [
+        {
+          "audio": null,
+          "audio_duration_sec": 1.0,
+          "clips": [
+            "<TIME>_seed42_shot_zero.mp4"
+          ]
+        }
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_recast_shot_aware.meta.json",
+        "<TIME>_seed42_recast_shot_aware.mp4",
+        "recast-source.mp4"
+      ],
+      "final_left": [
+        true
+      ],
+      "final_meta_left": [
+        true
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [
+        [
+          "audio",
+          "recast-source.mp4"
+        ],
+        [
+          "frames",
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": {},
+        "join_output_file": "<TIME>_seed42_recast_shot_aware.mp4",
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": true,
+      "shot_plan": [
+        {
+          "id": "s0"
+        }
+      ],
+      "sidecars": {
+        "<TIME>_seed42_recast_shot_aware.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "edit_recast_shot_aware": true,
+            "edit_recast_shot_plan": [
+              {
+                "id": "s0"
+              }
+            ],
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 8
+          },
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ],
+        "status": "completed"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "recast shot generation, other paths: cancelled after the join": {
+    "body": {
+      "assembly": [
+        {
+          "audio": "recast-source.mp4",
+          "audio_duration_sec": 1.0,
+          "clips": [
+            "<TIME>_seed42_shot_zero.mp4"
+          ]
+        }
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "recast-source.mp4"
+      ],
+      "final_left": [
+        false
+      ],
+      "final_meta_left": [
+        false
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [
+        [
+          "audio",
+          "recast-source.mp4"
+        ],
+        [
+          "frames",
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "cancel_requested": true,
+        "clip_output_files": [
+          "<TIME>_seed42_shot_zero.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": true,
+      "shot_plan": [
+        {
+          "id": "s0"
+        }
+      ],
+      "sidecars": {},
+      "status": {
+        "error": null,
+        "message": "Cancelled",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "cancelled",
+        "progress": 99,
+        "queue_position": null,
+        "status": "cancelled",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Cancelled",
+        "phase": "cancelled",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "cancelled"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "cancelled | phase 'cancelled' | 'Cancelled' | 99% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
+  "recast shot generation, other paths: frame probe fails": {
+    "body": {
+      "assembly": [
+        {
+          "audio": "recast-source.mp4",
+          "audio_duration_sec": 1.0,
+          "clips": [
+            "<TIME>_seed42_shot_zero.mp4"
+          ]
+        }
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "recast-source.mp4"
+      ],
+      "final_left": [
+        false
+      ],
+      "final_meta_left": [
+        false
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [
+        [
+          "audio",
+          "recast-source.mp4"
+        ],
+        [
+          "frames",
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_shot_zero.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": true,
+      "shot_plan": [
+        {
+          "id": "s0"
+        }
+      ],
+      "sidecars": {},
+      "status": {
+        "error": "decord is not here",
+        "message": "Recast assembly failed: decord is not here",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "Joining Recast segments",
+        "progress": 99,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "decord is not here",
+          "retryable": true
+        },
+        "message": "Recast assembly failed: decord is not here",
+        "phase": "Joining Recast segments",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "failed | phase 'Joining Recast segments' | 'Recast assembly failed: decord is not here' | 99% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
+  "recast shot generation, other paths: join fails": {
+    "body": {
+      "assembly": [
+        {
+          "audio": "recast-source.mp4",
+          "audio_duration_sec": 1.0,
+          "clips": [
+            "<TIME>_seed42_shot_zero.mp4"
+          ]
+        }
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "recast-source.mp4"
+      ],
+      "final_left": [
+        false
+      ],
+      "final_meta_left": [
+        false
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [
+        [
+          "audio",
+          "recast-source.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_shot_zero.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": true,
+      "shot_plan": [
+        {
+          "id": "s0"
+        }
+      ],
+      "sidecars": {},
+      "status": {
+        "error": "Recast cast-aware assembly failed.",
+        "message": "Recast assembly failed: Recast cast-aware assembly failed.",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "Joining Recast segments",
+        "progress": 99,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "Recast cast-aware assembly failed.",
+          "retryable": true
+        },
+        "message": "Recast assembly failed: Recast cast-aware assembly failed.",
+        "phase": "Joining Recast segments",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "failed | phase 'Joining Recast segments' | 'Recast assembly failed: Recast cast-aware assembly failed.' | 99% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
+  "recast shot generation, other paths: no segments": {
+    "body": {
+      "assembly": [],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [],
+              "resolved_seed": 42,
+              "shots": []
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "recast-source.mp4"
+      ],
+      "final_left": [],
+      "final_meta_left": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_shot_zero.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": null,
+      "shot_plan": null,
+      "sidecars": {},
+      "status": {
+        "error": "Recast shot assembly has no video segments.",
+        "message": "Recast assembly failed: Recast shot assembly has no video segments.",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "Joining Recast segments",
+        "progress": 99,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "Recast shot assembly has no video segments.",
+          "retryable": true
+        },
+        "message": "Recast assembly failed: Recast shot assembly has no video segments.",
+        "phase": "Joining Recast segments",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "failed | phase 'Joining Recast segments' | 'Recast assembly failed: Recast shot assembly has no video segments.' | 99% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
+  "recast shot generation, other paths: three shots in order": {
+    "body": {
+      "assembly": [
+        {
+          "audio": "recast-source.mp4",
+          "audio_duration_sec": 1.0,
+          "clips": [
+            "<TIME>_seed42_shot_zero.mp4",
+            "recast-source.mp4",
+            "<TIME>_seed42_shot_two.mp4"
+          ]
+        }
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 2,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot two",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                },
+                {
+                  "id": "s1"
+                },
+                {
+                  "id": "s2"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                },
+                {
+                  "mode": "passthrough",
+                  "passthrough_path": "<OUTPUTS>/recast-source.mp4",
+                  "shot_index": 1
+                },
+                {
+                  "mode": "generate",
+                  "shot_index": 2
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 2,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot two",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot two",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                },
+                {
+                  "id": "s1"
+                },
+                {
+                  "id": "s2"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                },
+                {
+                  "mode": "passthrough",
+                  "passthrough_path": "<OUTPUTS>/recast-source.mp4",
+                  "shot_index": 1
+                },
+                {
+                  "mode": "generate",
+                  "shot_index": 2
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 2,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_recast_shot_aware.meta.json",
+        "<TIME>_seed42_recast_shot_aware.mp4",
+        "recast-source.mp4"
+      ],
+      "final_left": [
+        true
+      ],
+      "final_meta_left": [
+        true
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [
+        [
+          "audio",
+          "recast-source.mp4"
+        ],
+        [
+          "frames",
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": {},
+        "join_output_file": "<TIME>_seed42_recast_shot_aware.mp4",
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": true,
+      "shot_plan": [
+        {
+          "id": "s0"
+        },
+        {
+          "id": "s1"
+        },
+        {
+          "id": "s2"
+        }
+      ],
+      "sidecars": {
+        "<TIME>_seed42_recast_shot_aware.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "edit_recast_shot_aware": true,
+            "edit_recast_shot_plan": [
+              {
+                "id": "s0"
+              },
+              {
+                "id": "s1"
+              },
+              {
+                "id": "s2"
+              }
+            ],
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 8
+          },
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ],
+        "status": "completed"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed",
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 1/2' | 'Shot 1/2' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 1/2: Sampling | 1/2' | 'Shot 1/2: Sampling | 1/2' | 25% | step 1/2 | outputs 0",
+        "running | phase 'Shot 1/2: Sampling | 2/2' | 'Shot 1/2: Sampling | 2/2' | 50% | step 2/2 | outputs 0",
+        "running | phase 'Shot 2/2' | 'Shot 2/2' | 50% | step 2/2 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 2/2: Sampling | 1/2' | 'Shot 2/2: Sampling | 1/2' | 75% | step 1/2 | outputs 0",
+        "running | phase 'Shot 2/2: Sampling | 2/2' | 'Shot 2/2: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Shot 2/2: Sampling | 2/2' | 'Shot 2/2: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
   "recast shot generation: cancelled during assembly": {
     "body": {
       "assembly": [

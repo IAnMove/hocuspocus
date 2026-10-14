@@ -2266,3 +2266,108 @@ def test_recast_shot_generation_joins_the_worker_clips(rig, golden, clip, monkey
         "shot_plan": kept.get("edit_recast_shot_plan"),
         "temp_removed": not temp.exists(),
     })
+
+
+# -- recast shot assembly: the paths the seven cases above do not take (C8a review) ---------------------------------
+@pytest.mark.parametrize("case", [
+    "three shots in order",
+    "no segments",
+    "audio probe fails",
+    "join fails",
+    "frame probe fails",
+    "cancelled after the join",
+])
+def test_recast_shot_generation_other_paths(rig, golden, clip, monkeypatch, case) -> None:
+    """More assembler paths, recorded while ``_run_recast_shot_generation`` still lived in launch (C7 head e393f5746).
+
+    Three shots join in timeline order, the passthrough between the two generated clips; an empty shot list, a failed
+    audio probe, a failed join and a failed frame count each end the job their own way; a cancel that lands after the
+    join leaves no final file and no sidecar behind.
+    """
+    _refuse_remote_network(monkeypatch)
+    launch = rig.launch
+    temp = rig.server.outputs / "maestro-recast-shots-golden"
+    temp.mkdir()
+    source = rig.server.outputs / "recast-source.mp4"
+    shutil.copyfile(clip, source)
+    manifest: Any = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+    shots: list = [{"shot_index": 0, "mode": "generate"}]
+    if case == "three shots in order":
+        manifest = [{"shot_index": 2, "params": {"prompt": "shot two", "video_length": 17}},
+                    {"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+        shots = [{"shot_index": 0, "mode": "generate"},
+                 {"shot_index": 1, "mode": "passthrough", "passthrough_path": str(source)},
+                 {"shot_index": 2, "mode": "generate"}]
+    elif case == "no segments":
+        shots = []
+    bundle = {
+        "shots": shots,
+        "published_shots": [{"id": f"s{shot['shot_index']}"} for shot in shots],
+        "frame_count": 8,
+        "fps": 8,
+        "resolved_seed": 42,
+    }
+    params = {
+        **BODY,
+        "_defer_output_publication": True,
+        "_recast_shot_manifest": manifest,
+        "_recast_shot_temp_dir": str(temp),
+        "_recast_final_out_dir": str(rig.server.outputs),
+        "_recast_shot_bundle": bundle,
+        "_recast_source_video": str(source),
+    }
+    job_id = rig.direct_job(params)
+    launch._jobs[job_id]["out_dir"] = str(temp)
+
+    probes: list = []
+    assembly: list = []
+    finals: list = []
+
+    def has_audio(path: str) -> bool:
+        probes.append(["audio", Path(path).name])
+        if case == "audio probe fails":
+            raise RuntimeError("ffprobe is not here")
+        return True
+
+    def frame_count(path: str) -> int:
+        probes.append(["frames", Path(path).name])
+        if case == "frame probe fails":
+            raise RuntimeError("decord is not here")
+        if case == "cancelled after the join":
+            launch._jobs[job_id]["cancel_requested"] = True
+        return 8
+
+    def concatenate(clip_paths, output_path, audio_path=None, audio_start_sec=0.0, abort_callback=None,
+                    pad_audio=False, audio_duration_sec=None):
+        assembly.append({
+            "clips": [Path(path).name for path in clip_paths],
+            "audio": None if audio_path is None else Path(audio_path).name,
+            "audio_duration_sec": audio_duration_sec,
+        })
+        finals.append(Path(output_path))
+        if case == "join fails":
+            return False
+        shutil.copyfile(clip_paths[0], output_path)
+        # The real join can leave a metadata sibling next to its output; cleanup must take it too.
+        Path(output_path).with_suffix(".meta.json").write_text("{}", encoding="utf-8")
+        return True
+
+    rig.patch("_recast_video_has_audio", has_audio)
+    rig.patch("_recast_video_frame_count", frame_count)
+    rig.set_wgp("concatenate_multi_clip_videos", concatenate)
+    _call_recast_shot_generation(rig, job_id)
+    kept = launch._jobs[job_id].get("params") or {}
+    rig.check(golden, f"recast shot generation, other paths: {case}", {
+        **rig.observe(job_id),
+        "assembly": assembly,
+        "probes": probes,
+        "final_left": [path.exists() for path in finals],
+        "final_meta_left": [path.with_suffix(".meta.json").exists() for path in finals],
+        "private_left": sorted(
+            key for key in kept
+            if key.startswith("_recast") or key == "_defer_output_publication"
+        ),
+        "shot_aware": kept.get("edit_recast_shot_aware"),
+        "shot_plan": kept.get("edit_recast_shot_plan"),
+        "temp_removed": not temp.exists(),
+    })
