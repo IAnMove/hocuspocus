@@ -512,6 +512,43 @@ class CoreRuntimeTests(unittest.TestCase):
         closed = self.client.post("/api/v1/wangp/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
         self.assertEqual(closed.status_code, 503)
 
+    def test_core_refuses_browser_mutations_from_another_origin(self):
+        """A foreign page can send a simple POST (text/plain) to a loopback port; core must refuse it like the full server."""
+        evil = {"Origin": "http://evil.example"}
+        folder, previous = self._in_temp_workspace()
+        try:
+            kept = self.client.post("/api/v1/workspaces", json={"name": "keep-me"})
+            simple_post = self.client.post(
+                "/api/v1/workspaces", content='{"name": "csrf-made"}', headers={**evil, "Content-Type": "text/plain"},
+            )
+            switched = self.client.put("/api/v1/workspaces/active", json={"name": "keep-me"}, headers=evil)
+            deleted = self.client.delete("/api/v1/workspaces/keep-me", headers=evil)
+            read = self.client.get("/api/v1/workspaces", headers=evil)
+            same_origin = self.client.post(
+                "/api/v1/workspaces", json={"name": "made-here"}, headers={"Origin": "http://testserver"},
+            )
+            pinokio_proxy = self.client.post(
+                "/api/v1/workspaces", json={"name": "made-by-proxy"}, headers={"Origin": "https://42003.localhost"},
+            )
+            outputs = Path("outputs")
+            created = sorted(item.name for item in outputs.iterdir())
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(kept.status_code, 200, kept.text)
+        for label, response in (("simple POST", simple_post), ("PUT", switched), ("DELETE", deleted)):
+            self.assertEqual(response.status_code, 403, f"{label}: {response.text}")
+            self.assertEqual(response.json(), {"detail": "Cross-origin API mutations are not allowed"})
+        self.assertEqual(read.status_code, 200, read.text)
+        self.assertEqual(same_origin.status_code, 200, same_origin.text)
+        self.assertEqual(pinokio_proxy.status_code, 200, pinokio_proxy.text)
+        self.assertEqual(created, ["keep-me", "made-by-proxy", "made-here"])
+
+    def test_core_stacks_the_browser_guards_like_the_full_server(self):
+        """Outermost first: the cross-origin check wraps CORS, which wraps the Host check."""
+        names = [getattr(item.kwargs.get("dispatch"), "__name__", item.cls.__name__) for item in api.user_middleware]
+        guards = ("protect_cross_origin_mutations", "CORSMiddleware", "guard_host")
+        self.assertEqual([name for name in names if name in guards], list(guards))
+
     def test_settings_token_gates_core_mcp_and_closes_when_disabled(self):
         folder = tempfile.TemporaryDirectory()
         original_path = core_runtime._mcp_access.path

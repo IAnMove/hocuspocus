@@ -6,7 +6,6 @@ import shutil
 import sys
 from contextlib import nullcontext
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from routers.assets import create_assets_router
@@ -65,14 +64,8 @@ from services.workspace_registry import WorkspaceRegistry
 
 api = FastAPI(title="HocusPocus core")
 api.add_middleware(ActorHeaderMiddleware)
-from services.host_guard import install_host_guard
-install_host_guard(api)
-api.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$",
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from services.request_guards import install_local_browser_guards
+install_local_browser_guards(api)
 api.include_router(create_lan_auth_router())
 api.include_router(create_system_capabilities_router())
 api.include_router(create_user_diagnostics_router(
