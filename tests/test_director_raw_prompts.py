@@ -127,7 +127,7 @@ def test_the_legacy_planner_sends_raw_plans_as_written():
 
 
 def _v2_plan_body() -> ast.FunctionDef:
-    source = (Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "app" / "services" / "director_v2_plan.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     return next(
         node for node in ast.walk(tree)
