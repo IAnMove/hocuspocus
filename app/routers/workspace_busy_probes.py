@@ -29,6 +29,7 @@ COMMON: tuple[tuple[str, str], ...] = (
     ("minimax-image", "routers.comics"),
     ("rig", "services.rig_service"),
     ("series-plan", "services.series_plan_jobs"),
+    ("music-production", "services.production_commands"),
 )
 # The full server (NVIDIA / WanGP) only.
 FULL_ONLY: tuple[tuple[str, str], ...] = (

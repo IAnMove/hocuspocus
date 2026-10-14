@@ -459,6 +459,37 @@ def _seed_series_assembly(tmp_path):
     return release
 
 
+def _live_thread():
+    """A started thread that stays alive until the returned ``stop`` is called."""
+    import threading
+
+    gate = threading.Event()
+    worker = threading.Thread(target=gate.wait, daemon=True)
+    worker.start()
+
+    def stop():
+        gate.set()
+        worker.join(2)
+
+    return worker, stop
+
+
+def _seed_music_production(_tmp_path):
+    """A production run in ``film``, held in the slot table the way ``production.run`` registers it."""
+    from services import music_production
+
+    worker, stop = _live_thread()
+    with music_production._lock:
+        music_production._threads["film/prod-aaaaaaaa"] = worker
+
+    def release():
+        stop()
+        with music_production._lock:
+            music_production._threads.pop("film/prod-aaaaaaaa", None)
+
+    return release
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
@@ -479,6 +510,8 @@ BUSY_FAMILIES = [
     pytest.param("series-voice", "full", _seed_series_worker("voice"), id="series-voice"),
     pytest.param("series-assembly", "full", _seed_series_assembly, id="series-assembly-full"),
     pytest.param("series-assembly", "core", _seed_series_assembly, id="series-assembly-core"),
+    pytest.param("music-production", "full", _seed_music_production, id="music-production-full"),
+    pytest.param("music-production", "core", _seed_music_production, id="music-production-core"),
 ]
 
 
@@ -643,10 +676,12 @@ def test_a_cancelled_job_whose_worker_process_is_still_unwinding_keeps_the_works
 
 
 FULL_BUSY_KINDS = {
-    "video-editor", "minimax-music", "minimax-image", "rig", "series-plan",
+    "video-editor", "minimax-music", "minimax-image", "rig", "series-plan", "music-production",
     "model3d", "story-plan", "comic-plan", "director-plan", "series-render",
 }
-CORE_BUSY_KINDS = {"video-editor", "minimax-music", "minimax-image", "rig", "series-plan", "core-3d", "core-image"}
+CORE_BUSY_KINDS = {
+    "video-editor", "minimax-music", "minimax-image", "rig", "series-plan", "music-production", "core-3d", "core-image",
+}
 ROUTER_BUSY_KINDS = {"game-produce", "series-produce", "series-native", "series-voice", "series-assembly"}
 
 
@@ -689,7 +724,7 @@ JOB_REGISTRIES = {
     ("services/director_pipeline.py", "_pipeline_threads"): "exempt: the delete route asks director_pipeline.any_pipeline_active()",
     ("services/model3d_service.py", "_jobs"): "model3d",
     ("services/model3d_service.py", "_processes"): "model3d",
-    ("services/music_production.py", "_threads"): NOT_YET_PROBED + "music production workers",
+    ("services/music_production.py", "_threads"): "music-production",
     ("services/rig_service.py", "_jobs"): "rig",
     ("services/rig_service.py", "_processes"): "rig",
     ("services/series_plan_jobs.py", "_series_plan_jobs"): "series-plan",
@@ -882,3 +917,47 @@ def test_series_voice_recordings_block_a_workspace_delete_though_series_delete_i
         worker.join(2)
     assert refused.status_code == 409
     assert [item["kind"] for item in refused.json()["blocking"]] == ["series-voice"]
+
+
+def test_a_music_production_shot_edit_blocks_and_a_finished_run_does_not(tmp_path):
+    """A shot/song edit holds the production slot from a request thread; a run whose thread ended is history."""
+    import threading
+
+    from services import music_production
+
+    client = _workspace_client(tmp_path, profile="full")
+    finished = threading.Thread(target=lambda: None)
+    finished.start()
+    finished.join()
+    edit, stop = _live_thread()
+    with music_production._lock:
+        music_production._threads["film/prod-done"] = finished
+        music_production._edits["film/prod-edit"] = edit
+    try:
+        refused = client.delete("/api/v1/workspaces/film")
+        with music_production._lock:
+            music_production._edits.pop("film/prod-edit", None)
+        allowed = client.delete("/api/v1/workspaces/film")
+    finally:
+        stop()
+        with music_production._lock:
+            music_production._threads.pop("film/prod-done", None)
+            music_production._edits.pop("film/prod-edit", None)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["blocking"] == [
+        {"kind": "music-production", "jobId": "prod-edit", "status": "running", "workspace": "film"},
+    ]
+    assert allowed.status_code == 200, allowed.text
+
+
+def test_the_music_production_probe_does_not_load_the_production_runner(monkeypatch):
+    """Core loads ``services.music_production`` (numpy and the whole production stack) only when a production runs.
+    Until then no slot can be held, so the probe answers without importing it."""
+    import sys
+
+    from services import production_commands
+
+    monkeypatch.delitem(sys.modules, "services.music_production", raising=False)
+
+    assert production_commands.busy_jobs("film", "/x/film") == []
+    assert "services.music_production" not in sys.modules

@@ -5,6 +5,7 @@ wrappers so that file does not grow a new hotspot.
 """
 from __future__ import annotations
 
+import sys
 import threading
 from contextlib import contextmanager
 from functools import wraps
@@ -75,6 +76,24 @@ def _slot_held(module: Any, key: str) -> bool:
     thread = module._threads.get(key)
     edit = module._edits.get(key)
     return bool(thread and thread.is_alive()) or bool(edit and edit.is_alive())
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Music productions whose run or shot/song edit still writes into its workspace (``services.workspace_busy`` probe).
+
+    The slots are ``music_production._threads`` / ``_edits`` (``<workspace>/<production id>`` -> thread); a thread
+    that ended is a finished run. No slot exists before that module is loaded, so the probe does not load it (core
+    imports the production stack only when a production runs).
+    """
+    module = sys.modules.get("services.music_production")
+    if module is None:
+        return []
+    with module._lock:
+        held = sorted(key for key in {*module._threads, *module._edits} if _slot_held(module, key))
+    return [
+        {"jobId": key.partition("/")[2], "status": "running", "workspace": key.partition("/")[0]}
+        for key in held
+    ]
 
 
 def _refuse_if_running(module: Any, workspace: str, production_id: str) -> None:
