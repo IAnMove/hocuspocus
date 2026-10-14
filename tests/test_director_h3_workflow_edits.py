@@ -243,6 +243,124 @@ def test_a_workspace_save_leaves_the_segments_of_a_non_h3_production_alone(tmp_p
     assert _saved_clip(tmp_path)["video_prompt"] == THREE_ACTIONS
 
 
+def _resume_h3_render(tmp_path: Path, saved: dict) -> list[dict]:
+    """Drive the H3 story render the way a Dashboard resume does: prompts from the saved
+    ``clip_plans``, segments from the saved clips (a stale one is not reused)."""
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"resumed_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    class FakeWgp:
+        @staticmethod
+        def concatenate_multi_clip_videos(paths, destination, audio_path, audio_start_sec=0.0):
+            Path(destination).write_bytes(b"joined")
+            return True
+
+    previous = director_pipeline._pipelines
+    director_pipeline._pipelines = {
+        "editable": {"_h3_segments": [list(clip.get("h3_segments") or []) for clip in saved["clips"]]},
+    }
+    try:
+        with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+                patch.object(director_pipeline, "_save_pipeline_state"), \
+                patch.object(director_pipeline, "_wgp", FakeWgp()), \
+                patch("app.services.video_editor.probe_media", return_value={"duration": 5.16}), \
+                patch("app.services.video_editor.extract_frame",
+                      side_effect=lambda _s, destination, _t: Path(destination).write_bytes(b"frame")):
+            director_pipeline._run_minimax_h3_story_video(
+                "editable", {}, saved["clip_plans"], [{"duration_sec": 15}],
+                [saved["clips"][0]["start_image_filename"]],
+                {"num_inference_steps": 20, "h3_reference_mode": "first_frame"}, "960x544", str(tmp_path),
+            )
+    finally:
+        director_pipeline._pipelines = previous
+    return submitted
+
+
+@pytest.mark.parametrize("authored", ["h3_segment_prompts", "window_prompts"])
+def test_a_resume_after_a_workspace_save_renders_the_saved_text(tmp_path: Path, authored: str):
+    """The save marks the shot's segments stale, so a resume renders them again from
+    ``clip_plans``. Those must carry the saved text, not the old optimised segment
+    prompts or planner windows (which take precedence over ``video_prompt``)."""
+    state = _saved_state(tmp_path)
+    # Frames on H3's lattice, so an untouched segment would be reused by the resume.
+    for record, frames in zip(state["clips"][0]["h3_segments"], director_pipeline._minimax_h3_frame_segments(15, 24)):
+        record["frames"] = frames
+    old = ["Old a.", "Old b.", "Old c."]
+    state["clips"][0][authored] = list(old)
+    state["clip_plans"][0][authored] = list(old)
+    _write_pipeline(tmp_path, state)
+
+    director_pipeline.update_clip_prompts(str(tmp_path), "editable", 0, video_prompt=THREE_ACTIONS)
+    saved = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
+    submitted = _resume_h3_render(tmp_path, saved)
+
+    prompts = [item["prompt"] for item in submitted]
+    assert len(prompts) == 3
+    assert not any("Old " in prompt for prompt in prompts)
+    for prompt, own in zip(prompts, THREE_ACTIONS.split(". ")):
+        assert own.rstrip(".") in prompt
+    assert saved["clip_plans"][0][authored] == [] and saved["clips"][0][authored] == []
+
+
+def test_a_workspace_save_cuts_the_same_slices_as_regenerate_with_a_new_shot_prompt(tmp_path: Path):
+    """One cut, two doors: Workspaces Save and "regenerate with a new prompt" (replace_shot_prompt)."""
+    saved_dir, rerun_dir = tmp_path / "save", tmp_path / "rerun"
+    for folder in (saved_dir, rerun_dir):
+        folder.mkdir()
+        _write_pipeline(folder, _saved_state(folder))
+
+    director_pipeline.update_clip_prompts(str(saved_dir), "editable", 0, video_prompt=THREE_ACTIONS)
+
+    def submit(_params, **_kwargs):
+        name = f"rerun_{len(list(rerun_dir.glob('rerun_*.mp4')))}.mp4"
+        (rerun_dir / name).write_bytes(b"new video")
+        return [name]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch("app.services.video_editor.probe_media", return_value={"duration": 5.16}), \
+            patch("app.services.video_editor.extract_frame",
+                  side_effect=lambda _s, destination, _t: Path(destination).write_bytes(b"frame")):
+        director_pipeline.rerun_h3_segment(
+            str(rerun_dir), "editable", 0, 0, prompt_override=THREE_ACTIONS, replace_shot_prompt=True,
+        )
+
+    assert [record["prompt"] for record in _saved_clip(saved_dir)["h3_segments"]] == [
+        record["prompt"] for record in _saved_clip(rerun_dir)["h3_segments"]
+    ]
+
+
+def test_a_workspace_save_marks_stale_only_from_the_first_segment_whose_slice_changed(tmp_path: Path):
+    """A segment continues from the one before it, so a changed slice makes it and every later
+    segment stale; the segments before it keep their take (rejoin and resume reuse them)."""
+    _write_pipeline(tmp_path, _saved_state(tmp_path))
+    director_pipeline.update_clip_prompts(str(tmp_path), "editable", 0, video_prompt=THREE_ACTIONS)
+    state = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
+    for record in state["clips"][0]["h3_segments"]:
+        record["stale"] = False  # as after the Repeat that rendered the saved text
+    _write_pipeline(tmp_path, state)
+
+    director_pipeline.update_clip_prompts(
+        str(tmp_path), "editable", 0, video_prompt="She walks to the door. She opens it. She waves goodbye.",
+    )
+    assert [record["stale"] for record in _saved_clip(tmp_path)["h3_segments"]] == [False, False, True]
+
+    # A save that leaves every slice as it is (here only the plan's copy differed) marks nothing.
+    state = director_pipeline.load_pipeline_state(str(tmp_path), "editable")
+    for record in state["clips"][0]["h3_segments"]:
+        record["stale"] = False
+    state["clip_plans"][0]["video_prompt"] = "An older plan wording."
+    _write_pipeline(tmp_path, state)
+    director_pipeline.update_clip_prompts(
+        str(tmp_path), "editable", 0, video_prompt="She walks to the door. She opens it. She waves goodbye.",
+    )
+    assert not any(record["stale"] for record in _saved_clip(tmp_path)["h3_segments"])
+
+
 def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Path):
     state = _saved_state(tmp_path)
     state["video_model"] = "minimax_h3_legacy"

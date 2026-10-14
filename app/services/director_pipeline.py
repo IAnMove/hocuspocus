@@ -88,7 +88,7 @@ from services.director.policies import (
     mark_typed_prompt_edits,
     no_visible_text_lock_applies,
 )
-from services.director.typed_prompts import typed_in_saved_state, write_workspace_prompt
+from services.director.typed_prompts import saved_shot, typed_in_saved_state, write_workspace_prompt
 from services.director.music_video_coverage import (
     treatment_chorus_set,
     treatment_coverage,
@@ -4174,12 +4174,23 @@ def _resync_h3_segment_prompts(state: dict, clip_index: int, text: str) -> None:
     ``h3_segments[*].prompt``; left as the previous take they discard the edit.
     The new text replaces the authored windows and segment prompts it was cut
     from, and the saved wording is the user's, so the no-text lock is not added.
-    The segments are stale until they are regenerated.
+    Those windows and segment prompts are dropped from ``clips`` and
+    ``clip_plans`` too: a resume renders from ``clip_plans``, where they take
+    precedence over ``video_prompt``, and a shot without segments yet is cut
+    from the clip later. The segments whose slice changed (and every one after
+    the first, which continues from it) are stale until they are regenerated.
     """
-    clips = state.get("clips") if isinstance(state.get("clips"), list) else []
-    clip = clips[clip_index] if 0 <= clip_index < len(clips) else None
-    segments = clip.get("h3_segments") if isinstance(clip, dict) else None
-    if not (isinstance(segments, list) and segments and _is_sequential_h3_model(state.get("video_model"))):
+    if not _is_sequential_h3_model(state.get("video_model")):
+        return
+    for key in ("clips", "clip_plans"):
+        item = saved_shot(state.get(key), clip_index)
+        if item is not None:
+            item["h3_segment_prompts"] = []
+            if item.get("window_prompts"):
+                item["window_prompts"] = []
+    clip = saved_shot(state.get("clips"), clip_index)
+    segments = clip.get("h3_segments") if clip is not None else None
+    if not (isinstance(segments, list) and segments):
         return
     segments = [record for record in segments if isinstance(record, dict)]
     video_params = state.get("video_params") if isinstance(state.get("video_params"), dict) else {}
@@ -4187,16 +4198,17 @@ def _resync_h3_segment_prompts(state: dict, clip_index: int, text: str) -> None:
     direct_video, master_prompt = _direct_video_settings({**state, **snapshot})
     base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
     image_refs = [] if direct_video else _h3_edit_references(state, clip_index)[0]
+    before = [record.get("prompt") for record in segments]
     _cut_shot_prompt_into_h3_segments(
         segments,
-        {**clip, "video_prompt": text, "h3_segment_prompts": [], "window_prompts": []},
+        {**clip, "video_prompt": text},
         video_params,
         master_prompt,
         identity_safe=base_mode == "first_frame" and bool(image_refs),
         allow_text=True,
     )
-    clip["h3_segment_prompts"] = []
-    for record in segments:
+    changed = [index for index, record in enumerate(segments) if record.get("prompt") != before[index]]
+    for record in segments[changed[0]:] if changed else ():
         record["stale"] = True
 
 
