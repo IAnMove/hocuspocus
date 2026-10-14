@@ -48,7 +48,9 @@ PROFILES: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 # kind -> the router module whose factory registers it with the object it was given.
-REGISTERED_BY_THE_ROUTER: dict[str, str] = {}
+REGISTERED_BY_THE_ROUTER: dict[str, str] = {
+    "game-produce": "routers.game_produce",
+}
 
 
 def register_profile(name: str) -> None:

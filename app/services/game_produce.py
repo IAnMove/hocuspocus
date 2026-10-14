@@ -178,12 +178,28 @@ class GameProduce:
             if asset is not None and asset.get("status") == "generating":
                 self._release(job, step)
 
+    def _alive(self, job_id: str) -> bool:
+        """Whether a worker thread of this service still owns the job (one that has not started yet counts)."""
+        thread = self._threads.get(job_id)
+        return thread is not None and (thread.ident is None or thread.is_alive())
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The jobs in this folder that a worker of this service is running (``services.workspace_busy`` probe).
+
+        Reads only. A checkpoint that says running without a thread was cut by a restart: it is not
+        busy, and ``jobs()`` turns it into ``interrupted`` the next time something reads it.
+        """
+        return [
+            {"jobId": job["jobId"], "status": job["status"], "workspace": job.get("workspace")}
+            for job in GameJobStore(workspace_dir).list()
+            if job.get("status") in ACTIVE and self._alive(str(job.get("jobId") or ""))
+        ]
+
     def _reconcile(self, workspace: str, job: dict) -> dict:
         """A job that says it is running without a live thread was cut by a restart."""
         if job.get("status") not in ACTIVE:
             return job
-        thread = self._threads.get(job["jobId"])
-        if thread is not None and (thread.ident is None or thread.is_alive()):
+        if self._alive(job["jobId"]):
             return job
         self._interrupt(workspace, job)
         return job

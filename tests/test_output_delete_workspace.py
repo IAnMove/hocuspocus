@@ -296,6 +296,45 @@ def _seed_director_plan(tmp_path):
     return _director_plan_claims(folder=tmp_path / "film")
 
 
+def _game_produce_service(tmp_path):
+    """A real GameProduce behind the real router factory, which is what registers the busy probe."""
+    from routers.game_produce import create_game_produce_router
+    from services.game_produce import GameProduce, ProduceDeps
+
+    deps = ProduceDeps(
+        call=lambda _tool, _args: {}, loopback=lambda _tool, _args: {},
+        workspace_dir=lambda name: str(tmp_path / name),
+        read_game=lambda _workspace, _game: {}, write_attempt=lambda *_args, **_kwargs: None,
+    )
+    service = GameProduce(deps)
+    create_game_produce_router(service, call=deps.call, bind_loop=lambda _loop: None, read_game=deps.read_game)
+    return service
+
+
+def _save_game_job(tmp_path, job_id="game-produce-aaaaaaaa", status="running"):
+    from services.game_jobs import GameJobStore
+
+    GameJobStore(str(tmp_path / "film")).save({"jobId": job_id, "workspace": "film", "gameId": "g", "status": status, "steps": []})
+
+
+def _seed_game_produce(tmp_path):
+    """A produce job whose worker thread is alive, as the service itself would register it."""
+    import threading
+
+    service = _game_produce_service(tmp_path)
+    _save_game_job(tmp_path)
+    stop = threading.Event()
+    worker = threading.Thread(target=stop.wait, daemon=True)
+    worker.start()
+    service._threads["game-produce-aaaaaaaa"] = worker
+
+    def release():
+        stop.set()
+        worker.join(2)
+
+    return release
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
@@ -307,6 +346,7 @@ BUSY_FAMILIES = [
     pytest.param("story-plan", "full", _seed_story_plan, id="story-plan"),
     pytest.param("comic-plan", "full", _seed_comic_plan, id="comic-plan"),
     pytest.param("director-plan", "full", _seed_director_plan, id="director-plan"),
+    pytest.param("game-produce", "full", _seed_game_produce, id="game-produce"),
 ]
 
 
@@ -543,3 +583,26 @@ def test_a_director_plan_checkpoint_without_a_claim_does_not_block(tmp_path):
     finally:
         release()
     assert deleted.status_code == 200, deleted.text
+
+
+def test_a_game_produce_checkpoint_a_restart_left_as_running_does_not_block(tmp_path):
+    """The record says running, no worker thread exists in this process: the restart cut it."""
+    client = _workspace_client(tmp_path, profile="full")
+    _game_produce_service(tmp_path)
+    _save_game_job(tmp_path, status="running")
+
+    deleted = client.delete("/api/v1/workspaces/film")
+
+    assert deleted.status_code == 200, deleted.text
+
+
+def test_game_produce_checkpoints_stay_untouched_when_the_busy_probe_reads_them(tmp_path):
+    from services.game_jobs import GameJobStore
+
+    service = _game_produce_service(tmp_path)
+    _save_game_job(tmp_path, status="running")
+
+    assert service.live_jobs(str(tmp_path / "film")) == []
+
+    assert GameJobStore(str(tmp_path / "film")).load("game-produce-aaaaaaaa")["status"] == "running"
+    assert service.jobs("film")[0]["status"] == "interrupted", "jobs() still reconciles, as before"
