@@ -600,3 +600,54 @@ def test_the_recovery_list_reports_a_stale_render_as_interrupted(monkeypatch, tm
     jobs = routes.list_series_render_recovery("default")["jobs"]
     assert [(job["jobId"], job["status"]) for job in jobs] == [("series-render-stale", "interrupted")]
 
+
+def _known_series_job(monkeypatch, tmp_path, *, apply=None):
+    """A queued known-series bootstrap with auto-apply, over a real library in ``tmp_path`` and a fake writer."""
+    import services.series_plan_jobs as plan_jobs
+    from services.series_library import create_series_project, read_series_library, write_series_library
+    from tests.test_series_planning import _colliding_bootstrap
+
+    root = str(tmp_path)
+    series = create_series_project("default")
+    write_series_library(root, {"seriesById": {series["id"]: series}, "seriesOrder": [series["id"]]}, "default")
+    job = {"jobId": "series-plan-known", "workspace": "default", "seriesId": series["id"], "status": "queued",
+           "jobType": "canon", "bootstrapKnownSeries": True, "autoApply": True,
+           "sourceSeriesRevision": series["revision"], "request": {"seriesSnapshot": series, "instruction": "A known show"}}
+    jobs = {job["jobId"]: job}
+
+    def update(job_id, **patch):
+        jobs[job_id].update(copy.deepcopy(patch))
+        return copy.deepcopy(jobs[job_id])
+
+    for name, value in {
+        "_series_plan_jobs": jobs, "_series_plan_update": update, "_workspace_dir": lambda _workspace=None: root,
+        "_list_workspaces": lambda: [{"name": "default"}], "_series_library_lock": threading.RLock(),
+        "_read_series_workspace": lambda workspace: read_series_library(root, workspace),
+        "_write_series_workspace": lambda workspace, library: write_series_library(root, library, workspace),
+        "_series_project_or_404": lambda library, series_id: library["seriesById"][series_id],
+        "_comic_writing_llm": lambda _request: None, "_ensure_llm_loaded": lambda: None,
+        "_generate_comic_director_json": lambda **_kw: _colliding_bootstrap(),
+    }.items():
+        monkeypatch.setattr(plan_jobs, name, value)
+    if apply is not None:
+        monkeypatch.setattr(plan_jobs, "_apply_series_canon_proposal", apply)
+    plan_jobs._run_series_canon_plan_job_inner("series-plan-known")
+    return jobs["series-plan-known"]
+
+
+def test_a_known_series_bootstrap_with_colliding_ids_is_applied_as_a_draft(monkeypatch, tmp_path):
+    job = _known_series_job(monkeypatch, tmp_path)
+    assert job["status"] == "completed" and job["autoApplied"] is True, job.get("error")
+
+
+def test_a_draft_the_library_refuses_completes_with_its_proposal_and_an_apply_error(monkeypatch, tmp_path):
+    """The ValueError of validate_series_ids is not an HTTPException: it failed a ten-minute job whose proposal was fine."""
+    def refuse(_job, _proposal):
+        raise ValueError("Series Lab contains duplicate id L_OOF at characters[2] and locations[0]")
+
+    job = _known_series_job(monkeypatch, tmp_path, apply=refuse)
+    assert job["status"] == "completed" and job["autoApplied"] is False, job.get("error")
+    assert "duplicate id L_OOF" in job["applyError"] and job["error"] is None
+    assert job["seriesResult"]["characters"], "the proposal stays reviewable"
+    assert "could not be applied" in job["message"]
+
