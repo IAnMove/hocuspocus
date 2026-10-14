@@ -1,7 +1,6 @@
 import ast
 import copy
 import json
-import math
 import sys
 import threading
 import time
@@ -321,8 +320,13 @@ def test_running_series_cancel_waits_for_child_and_runtime_release(monkeypatch):
 
 
 def test_running_series_plan_cancel_waits_for_llm_worker_boundary():
+    from unittest.mock import patch
+
+    import routers.series_plan as routes
+    import services.series_plan_jobs as plan_jobs
+
     job_id = "series-plan-safe-cancel"
-    jobs = {
+    stored = {
         job_id: {
             "jobId": job_id,
             "workspace": "default",
@@ -334,52 +338,39 @@ def test_running_series_plan_cancel_waits_for_llm_worker_boundary():
     active = {job_id}
 
     def load(plan_job_id):
-        return copy.deepcopy(jobs.get(plan_job_id))
+        return copy.deepcopy(stored.get(plan_job_id))
 
-    def update(plan_job_id, **patch):
-        current = jobs[plan_job_id]
+    def update(plan_job_id, **fields):
+        current = stored[plan_job_id]
         if (
             current.get("status") == "cancelling"
-            and patch.get("status") not in {"cancelling", "cancelled"}
+            and fields.get("status") not in {"cancelling", "cancelled"}
         ):
             return copy.deepcopy(current)
-        current.update(copy.deepcopy(patch))
+        current.update(copy.deepcopy(fields))
         return copy.deepcopy(current)
 
-    class HTTPException(Exception):
-        def __init__(self, status_code, detail):
-            super().__init__(detail)
-            self.status_code = status_code
+    with (
+        patch.object(routes, "_load_series_plan_job", load),
+        patch.object(routes, "_series_plan_update", update),
+        patch.object(routes, "_series_plan_active_jobs", active),
+        patch.object(plan_jobs, "_load_series_plan_job", load),
+        patch.object(plan_jobs, "_series_plan_update", update),
+        patch.object(plan_jobs, "_series_plan_active_jobs", active),
+        patch.object(plan_jobs, "_run_series_plan_job_inner", lambda _job_id: None),
+        patch.object(plan_jobs, "_run_series_canon_plan_job_inner", lambda _job_id: None),
+        patch.object(plan_jobs, "_publish_series_task", lambda _job, _adapter: None),
+        patch.object(plan_jobs, "_workspace_dir", lambda _workspace=None: "/unused"),
+    ):
+        response = routes.cancel_series_episode_plan(job_id)
+        assert response["status"] == "cancelling"
+        assert stored[job_id].get("finishedAt") is None
 
-    namespace = {
-        "HTTPException": HTTPException,
-        "copy": copy,
-        "time": time,
-        "_series_plan_jobs_lock": threading.RLock(),
-        "_series_plan_active_jobs": active,
-        "_load_series_plan_job": load,
-        "_series_plan_update": update,
-        "_publish_series_task": lambda _job, _adapter: None,
-        "_run_series_plan_job_inner": lambda _job_id: None,
-        "_run_series_canon_plan_job_inner": lambda _job_id: None,
-        "_workspace_dir": lambda _workspace=None: "/unused",
-    }
-    _load_launch_functions(
-        "_planning_cancel_message",
-        "cancel_series_episode_plan",
-        "_run_series_plan_job",
-        namespace=namespace,
-    )
-
-    response = namespace["cancel_series_episode_plan"](job_id)
-    assert response["status"] == "cancelling"
-    assert jobs[job_id]["finishedAt"] is None
-
-    active.clear()
-    namespace["_run_series_plan_job"](job_id)
-    assert jobs[job_id]["status"] == "cancelled"
-    assert jobs[job_id]["finishedAt"] is not None
-    assert "Completed stages remain recoverable" in jobs[job_id]["message"]
+        active.clear()
+        plan_jobs._run_series_plan_job(job_id)
+    assert stored[job_id]["status"] == "cancelled"
+    assert stored[job_id]["finishedAt"] is not None
+    assert "Completed stages remain recoverable" in stored[job_id]["message"]
 
 
 def _editable_episode_fixture():
@@ -420,8 +411,8 @@ def _editable_episode_fixture():
 
 
 def test_manual_episode_proposal_edits_preserve_protected_ids():
-    namespace = {"copy": copy, "math": math}
-    _load_launch_functions("_prepare_edited_series_episode_proposal", namespace=namespace)
+    from services.series_plan_jobs import _prepare_edited_series_episode_proposal
+
     stored = _editable_episode_fixture()
     edited = copy.deepcopy(stored)
     edited["outline"]["beats"][0] = "Edited beat"
@@ -433,7 +424,7 @@ def test_manual_episode_proposal_edits_preserve_protected_ids():
         "locations": [{"id": "location-1"}],
     }
 
-    result = namespace["_prepare_edited_series_episode_proposal"](stored, edited, series)
+    result = _prepare_edited_series_episode_proposal(stored, edited, series)
 
     assert result["outline"]["beats"] == ["Edited beat"]
     assert result["script"][0]["id"] == "scene-1"
@@ -445,14 +436,14 @@ def test_manual_episode_proposal_edits_preserve_protected_ids():
 
 
 def test_manual_episode_proposal_rejects_replaced_internal_ids():
-    namespace = {"copy": copy}
-    _load_launch_functions("_prepare_edited_series_episode_proposal", namespace=namespace)
+    from services.series_plan_jobs import _prepare_edited_series_episode_proposal
+
     stored = _editable_episode_fixture()
     edited = copy.deepcopy(stored)
     edited["shots"][0]["id"] = "replacement-shot"
 
     try:
-        namespace["_prepare_edited_series_episode_proposal"](
+        _prepare_edited_series_episode_proposal(
             stored, edited, {"characters": [{"id": "character-1"}], "locations": [{"id": "location-1"}]},
         )
     except ValueError as exc:

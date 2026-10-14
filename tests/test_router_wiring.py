@@ -6,6 +6,8 @@
 - No method and path is defined twice in a server.
 - The routes of the route table fixture and the routes of the core server
   (``app/core_runtime.py``) exist in the main server.
+- A server never reads a global name it does not define (a slice that moved a
+  function out must leave an import for every caller that stayed).
 
 Routes added at run time (``api.add_api_route`` in a loop) are not seen here.
 """
@@ -13,8 +15,10 @@ Routes added at run time (``api.add_api_route`` in a loop) are not seen here.
 from __future__ import annotations
 
 import ast
+import builtins
 import json
 import re
+import symtable
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,7 +36,6 @@ PENDING = "Pending owner decision (2026-10-13): neither wired nor deleted."
 CORE_SERVER_ONLY = {
     "core_labs:create_core_labs_router": "Core server only: the main server serves these Labs routes itself.",
     "core_remote:create_core_remote_router": "Core server only: remote generation routes without a local engine.",
-    "core_series_plan:create_core_series_plan_router": "Core server only: the main server plans Series itself.",
 }
 NOT_MOUNTED_IN_MAIN = {
     **CORE_SERVER_ONLY,
@@ -307,3 +310,40 @@ def test_core_server_routes_exist_in_the_main_server() -> None:
         if _route_key(route) not in main and route["source"] not in pending_sources
     )
     assert missing == [], "The UI calls the same paths on both servers; serve these in the main server too."
+
+
+def _undefined_global_names(path: Path) -> dict[str, list[str]]:
+    """Global names some function reads that the module never defines, with the functions that read them."""
+    top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+    bound = {item.get_name() for item in top.get_symbols() if item.is_assigned() or item.is_imported() or item.is_namespace()}
+
+    def declare(table: symtable.SymbolTable) -> None:
+        # ``global NAME`` followed by an assignment inside a function defines the module name.
+        bound.update(item.get_name() for item in table.get_symbols() if item.is_declared_global() and item.is_assigned())
+        for child in table.get_children():
+            declare(child)
+
+    declare(top)
+    missing: dict[str, list[str]] = {}
+
+    def walk(table: symtable.SymbolTable) -> None:
+        for item in table.get_symbols():
+            name = item.get_name()
+            if (
+                table is not top and item.is_global() and item.is_referenced()
+                and name not in bound and not hasattr(builtins, name) and not name.startswith("__")
+            ):
+                missing.setdefault(name, []).append(table.get_name())
+        for child in table.get_children():
+            walk(child)
+
+    walk(top)
+    return missing
+
+
+def test_a_server_never_reads_a_name_it_does_not_define() -> None:
+    # R4a moved the Series plan handlers out of launch and left two callers behind (the Activity
+    # cancel and resume of a Series plan task): a NameError on the first click, invisible to the
+    # route tables and to every test that extracts launch functions.
+    for server in (MAIN, CORE):
+        assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"

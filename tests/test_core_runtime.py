@@ -392,8 +392,9 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(episode_response.status_code, 200, episode_response.text)
             episode = episode_response.json()
             Path('uploads').mkdir(exist_ok=True)
-            Path('uploads/portrait.png').write_bytes(b'reference fixture')
-            imported = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'portrait.png',
+            portrait = Path('uploads/portrait.png')
+            portrait.write_bytes(b'reference fixture')
+            imported = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(portrait.resolve()),
                 'ownerType':'character', 'ownerId':'char_a', 'kind':'character', 'referenceRole':'primary_portrait',
                 'metadata':{'prompt':'Ada in a paper cutout style', 'jobId':'image-job'}})
             self.assertEqual(imported.status_code, 200, imported.text)
@@ -401,7 +402,7 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(result['series']['characters'][0]['referenceAssetIds'], [result['asset']['id']])
             self.assertEqual(result['asset']['metadata']['jobId'], 'image-job')
             self.assertEqual(result['series']['canon']['approval'], 'draft')
-            retry = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'portrait.png',
+            retry = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(portrait.resolve()),
                 'ownerType':'character', 'ownerId':'char_a', 'kind':'character', 'metadata':{'jobId':'image-job'}})
             self.assertEqual(retry.status_code, 200, retry.text)
             self.assertEqual(retry.json()['asset']['id'], result['asset']['id'])
@@ -424,14 +425,15 @@ class CoreRuntimeTests(unittest.TestCase):
             saved = self.client.put(path, json={'workspace':'default', 'series':series, 'baseRevision':series['revision']})
             self.assertEqual(saved.status_code, 200, saved.text)
             Path('uploads').mkdir(exist_ok=True)
-            Path('uploads/plate.png').write_bytes(b'plate fixture')
+            plate = Path('uploads/plate.png')
+            plate.write_bytes(b'plate fixture')
             scans = []
             with patch('services.series_plate_checks.detect_people', side_effect=lambda found: scans.append(found) or []):
-                clean = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'plate.png',
+                clean = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(plate.resolve()),
                     'ownerType':'location', 'ownerId':'loc_a', 'kind':'image', 'referenceRole':'environment'})
                 self.assertEqual(clean.status_code, 200, clean.text)
                 self.assertEqual(clean.json()['warnings'], [])
-                other = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':'plate.png',
+                other = self.client.post(path + '/assets/import', json={'workspace':'default', 'uploadPath':str(plate.resolve()),
                     'ownerType':'location', 'ownerId':'loc_a', 'kind':'image', 'referenceRole':'reference'})
                 self.assertEqual(other.status_code, 200, other.text)
                 self.assertNotIn('warnings', other.json())
@@ -1877,28 +1879,154 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(status.status_code, 200, status.text)
         self.assertEqual(status.json()["job_id"], job_id)
 
-    def test_series_plan_start_uses_the_remote_llm(self):
-        series = {
-            "id": "series_mac", "revision": 1, "provider": {},
-            "episodesById": {"ep1": {"id": "ep1", "premise": "A lantern wakes the harbour.", "updatedAt": "t"}},
-        }
-        library = {"seriesById": {"series_mac": series}}
+    def _plan_patches(self, *, generate=None, writing=None, patch_generator=True):
+        """Patch the Series plan owner this process actually runs.
 
+        Before the shared router, that owner is ``services.core_series_plan``.
+        After it, the same calls land on ``services.series_plan_jobs`` and
+        ``routers.series_plan``. One helper covers both so a gain test can
+        fail on the old server and pass after the move.
+        """
+        import importlib
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        if writing is None:
+            def writing(_request):
+                return None
+        if patch_generator and generate is None:
+            def generate(**_kwargs):
+                return {"outline": {"beats": ["The lantern wakes."]}}
+        if importlib.util.find_spec("services.core_series_plan") is not None:
+            import services.core_series_plan as old
+
+            if patch_generator and hasattr(old, "_generate_json"):
+                stack.enter_context(patch.object(old, "_generate_json", side_effect=generate))
+            stack.enter_context(patch.object(old, "_writing_override", side_effect=writing))
+            stack.enter_context(patch.object(old.threading, "Thread", ImmediateThread))
+        if importlib.util.find_spec("services.series_plan_jobs") is not None:
+            import services.series_plan_jobs as jobs
+
+            if patch_generator:
+                stack.enter_context(patch.object(jobs, "_generate_comic_director_json", side_effect=generate))
+            stack.enter_context(patch.object(jobs, "_comic_writing_llm", side_effect=writing))
+            stack.enter_context(patch.object(jobs, "_ensure_llm_loaded", return_value=None))
+        if importlib.util.find_spec("routers.series_plan") is not None:
+            import routers.series_plan as routes
+
+            stack.enter_context(patch.object(routes.threading, "Thread", ImmediateThread))
+            stack.enter_context(patch.object(routes, "_comic_writing_llm", side_effect=writing))
+        stack.enter_context(patch("services.core_production.ensure_llm_loaded", return_value=None))
+        return stack
+
+    def _series_ready_to_plan(self, premises=("A lantern wakes the harbour.",), *, setup=True):
+        from services import core_workspace as core
+        from services.series_library import create_series_episode, read_series_library, write_series_library
+
+        created = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Harbour Lights"})
+        self.assertEqual(created.status_code, 200, created.text)
+        project = created.json()
+        series_id = project["id"]
+        if setup:
+            saved = self.client.put(f"/api/v1/series/{series_id}", json={
+                "workspace": "default",
+                "baseRevision": project["revision"],
+                "series": {
+                    "premise": "A lantern wakes the harbour every dusk.",
+                    "visualStyle": "Wet cobbles, amber lamps",
+                },
+            })
+            self.assertEqual(saved.status_code, 200, saved.text)
+        root = core.workspace_dir("default")
+        library = read_series_library(root, "default")
+        series = library["seriesById"][series_id]
+        series["characters"] = [{"id": "character-1", "name": "Mara", "role": "keeper"}]
+        series["locations"] = [{"id": "location-1", "name": "Harbour"}]
+        episodes = []
+        for index, premise in enumerate(premises, start=1):
+            episode = create_series_episode(
+                series, premise=premise, title=f"Episode {index}",
+                logline=f"Logline {index}", outline={"beats": [f"Beat {index}"]},
+            )
+            series["episodesById"][episode["id"]] = episode
+            series["seasons"][0]["episodeOrder"].append(episode["id"])
+            episodes.append(episode["id"])
+        stored = write_series_library(root, library, "default")
+        saved_episodes = [
+            stored["seriesById"][series_id]["episodesById"][episode_id] for episode_id in episodes
+        ]
+        return series_id, saved_episodes
+
+    def _editable_plan_proposal(self, episode_id):
+        return {
+            "id": episode_id,
+            "outline": {"beats": ["Original beat"]},
+            "script": [{
+                "id": "scene-1", "order": 1, "locationId": "location-1", "time": "day",
+                "participatingCharacterIds": ["character-1"], "purpose": "Original purpose",
+                "entryState": "Before", "exitState": "After",
+                "beats": [{"id": "scene-beat-1", "kind": "action", "summary": "Original action"}],
+                "dialogue": [{
+                    "id": "dialogue-1", "characterId": "character-1", "text": "Original line",
+                    "emotion": "neutral", "delivery": "plain",
+                }],
+            }],
+            "shots": [{
+                "id": "shot-1", "sceneId": "scene-1", "order": 1, "durationSeconds": 10,
+                "framing": "medium", "camera": "static", "action": "Original shot",
+                "dialogueBeats": [{
+                    "id": "shot-dialogue-1", "characterId": "character-1", "text": "Original line",
+                    "emotion": "neutral", "delivery": "plain",
+                }],
+                "visibleCharacterIds": ["character-1"], "speakingCharacterIds": ["character-1"],
+                "primarySpeakerId": "character-1", "locationId": "location-1",
+                "continuityFromShotId": "", "prompt": "Original prompt", "negativePrompt": "",
+            }],
+            "continuityIssues": [],
+            "proposedCanonDelta": {
+                "baseRevision": 1, "sourceEpisodeId": episode_id,
+                "add": [{
+                    "id": "fact-1", "description": "Original fact", "status": "proposed",
+                    "decision": "pending",
+                }],
+                "change": [], "retire": [],
+            },
+        }
+
+    def _seed_plan_job(self, job):
+        from services import core_workspace as core
+        from services.series_jobs import SeriesJobStore
+
+        SeriesJobStore(core.workspace_dir(str(job["workspace"])), "planning").save(job)
+        try:
+            from services.core_series_plan import _JOBS
+            _JOBS[job["jobId"]] = job
+        except ImportError:
+            pass
+        try:
+            from services.series_plan_jobs import _series_plan_jobs
+            _series_plan_jobs[job["jobId"]] = job
+        except ImportError:
+            pass
+
+    def _stored_plan_job(self, job_id):
+        from services import core_workspace as core
+        from services.series_jobs import SeriesJobStore
+
+        return SeriesJobStore(core.workspace_dir("default"), "planning").load(job_id)
+
+    def test_series_plan_start_uses_the_remote_llm(self):
         folder, previous = self._in_temp_workspace()
         try:
             Path("outputs").mkdir()
-            with patch("services.core_series_plan._series_or_404", return_value=(series, library)), patch(
-                "services.core_series_plan._generate_json", return_value={"outline": {"beats": ["The lantern wakes."]}},
-            ), patch("services.core_series_plan._writing_override", return_value=None), patch(
-                "services.core_series_plan.threading.Thread", ImmediateThread,
-            ):
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches():
                 started = self.client.post(
-                    "/api/v1/series/series_mac/episodes/ep1/plan/start",
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
                     json={"workspace": "default", "scope": "outline"},
                 )
         finally:
-            os.chdir(previous)
-            folder.cleanup()
+            self._leave_temp_workspace(folder, previous)
         self.assertEqual(started.status_code, 200, started.text)
         self.assertTrue(str(started.json()["jobId"]).startswith("series-plan-"))
 
@@ -1931,9 +2059,11 @@ class CoreRuntimeTests(unittest.TestCase):
                 "relationships": [],
                 "props": [],
             }
-            with patch("services.core_series_plan._generate_json", return_value=raw), patch(
-                "services.core_series_plan._writing_override", return_value=None,
-            ), patch("services.core_series_plan.threading.Thread", ImmediateThread):
+
+            def generate(**_kwargs):
+                return raw
+
+            with self._plan_patches(generate=generate):
                 started = self.client.post(
                     f"/api/v1/series/{series_id}/canon/prepare/start",
                     json={
@@ -1993,12 +2123,7 @@ class CoreRuntimeTests(unittest.TestCase):
         folder, previous = self._in_temp_workspace()
         try:
             Path("outputs").mkdir()
-            created = self.client.post("/api/v1/series", json={
-                "workspace": "default",
-                "title": "Harbour Lights",
-            })
-            self.assertEqual(created.status_code, 200, created.text)
-            series_id = created.json()["id"]
+            series_id, _episodes = self._series_ready_to_plan(premises=())
             raw = {
                 "canon": {
                     "worldSummary": "A coastal town that bargains with the tide.",
@@ -2011,9 +2136,11 @@ class CoreRuntimeTests(unittest.TestCase):
                 "locations": [{"id": "harbour", "name": "Harbour"}],
                 "relationships": [],
             }
-            with patch("services.core_series_plan._generate_json", return_value=raw), patch(
-                "services.core_series_plan._writing_override", return_value=None,
-            ), patch("services.core_series_plan.threading.Thread", ImmediateThread):
+
+            def generate(**_kwargs):
+                return raw
+
+            with self._plan_patches(generate=generate):
                 started = self.client.post(
                     f"/api/v1/series/{series_id}/canon/prepare/start",
                     json={"workspace": "default", "instruction": "Tighten the bible"},
@@ -2031,6 +2158,453 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(applied.json()["characters"][0]["name"], "Mara")
         finally:
             self._leave_temp_workspace(folder, previous)
+
+    def test_core_plan_requires_series_setup_before_canon_preparation(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            created = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Harbour Lights"})
+            self.assertEqual(created.status_code, 200, created.text)
+            with self._plan_patches():
+                started = self.client.post(
+                    f"/api/v1/series/{created.json()['id']}/canon/prepare/start",
+                    json={"workspace": "default", "instruction": "Tighten the bible"},
+                )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 400, started.text)
+        self.assertIn("Complete Series setup before preparing canon", started.text)
+
+    def test_core_plan_repairs_a_stage_that_breaks_a_production_rule(self):
+        answers = [
+            {"outline": {"beats": []}},
+            {"outline": {"beats": ["The lantern wakes."]}},
+        ]
+
+        def generate(**_kwargs):
+            return answers.pop(0)
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(generate=generate):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{started.json()['jobId']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.status_code, 200, job.text)
+        self.assertEqual(job.json()["status"], "completed", job.text)
+        self.assertEqual(job.json()["episodeResult"]["outline"]["beats"], ["The lantern wakes."])
+        self.assertEqual(answers, [])
+
+    def test_core_plan_repairs_malformed_json(self):
+        def writing(_request):
+            return {"model": "deepseek-v4-flash", "base_url": "https://api.deepseek.com", "api_key": "key"}
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(writing=writing, patch_generator=False), patch(
+                "services.llm_service.generate_openai_compatible",
+                return_value='{"outline": {"beats": ["The lantern wakes.",]}}',
+            ):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{started.json()['jobId']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.json()["status"], "completed", job.text)
+        self.assertEqual(job.json()["episodeResult"]["outline"]["beats"], ["The lantern wakes."])
+
+    def test_core_plan_streams_the_writing_model(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(patch_generator=False), patch(
+                "services.llm_service.generate", side_effect=AssertionError("blocking generate"),
+            ) as blocking, patch(
+                "services.llm_service.generate_streaming",
+                return_value='{"outline": {"beats": ["The lantern wakes."]}}',
+            ) as streaming:
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{started.json()['jobId']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.json()["status"], "completed", job.text)
+        self.assertEqual(streaming.call_count, 1)
+        self.assertEqual(blocking.call_count, 0)
+
+    def test_core_plan_renormalises_a_completed_stage_on_resume(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            episode = episodes[0]
+            job_id = "series-plan-renorm"
+            self._seed_plan_job({
+                "jobId": job_id, "kind": "planning", "workspace": "default",
+                "seriesId": series_id, "episodeId": episode["id"],
+                "status": "failed", "stage": "outline", "current": 0, "total": 1,
+                "message": "stopped",
+                "request": {
+                    "scope": "outline", "instruction": "",
+                    "writingProvider": "maestro", "writingModel": "", "writingBaseUrl": "",
+                    "seriesSnapshot": {"id": series_id, "characters": [], "locations": [], "episodesById": {}},
+                    "episodeSnapshot": {"id": episode["id"], "number": episode["number"], "outline": {"beats": []}},
+                },
+                "sourceSeriesRevision": 1,
+                "sourceEpisodeUpdatedAt": episode["updatedAt"],
+                "completedStages": {"outline": {"outline": {"beats": ["  The lantern  ", ""]}}},
+                "episodeResult": None, "result": None, "error": "stopped",
+                "createdAt": 1, "updatedAt": 1,
+            })
+
+            def generate(**_kwargs):
+                raise AssertionError("a completed stage must be re-normalised, not generated again")
+
+            with self._plan_patches(generate=generate):
+                resumed = self.client.post(f"/api/v1/series/plan/jobs/{job_id}/resume", json={})
+            self.assertEqual(resumed.status_code, 200, resumed.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{job_id}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.status_code, 200, job.text)
+        self.assertEqual(job.json()["status"], "completed", job.text)
+        self.assertEqual(job.json()["episodeResult"]["outline"]["beats"], ["The lantern"])
+
+    def test_core_plan_sends_prior_episode_summaries(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan(("The harbour sleeps.", "The lantern wakes."))
+            with self._plan_patches():
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[1]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            stored = self._stored_plan_job(started.json()["jobId"])
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        snapshot = (stored.get("request") or {}).get("seriesSnapshot") or {}
+        summaries = snapshot.get("priorEpisodeSummaries")
+        self.assertEqual([item["id"] for item in summaries], [episodes[0]["id"]])
+        self.assertEqual(summaries[0]["outlineBeats"], ["Beat 1"])
+
+    def test_core_plan_cancel_is_not_overwritten_by_a_running_update(self):
+        def generate(**_kwargs):
+            registries = []
+            try:
+                from services.core_series_plan import _JOBS
+                registries.append(_JOBS)
+            except ImportError:
+                pass
+            try:
+                from services.series_plan_jobs import _series_plan_jobs
+                registries.append(_series_plan_jobs)
+            except ImportError:
+                pass
+            for jobs in registries:
+                for job in jobs.values():
+                    if job.get("status") == "running":
+                        job["status"] = "cancelling"
+            return {"outline": {"beats": ["The lantern wakes."]}}
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(generate=generate):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{started.json()['jobId']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.json()["status"], "cancelled", job.text)
+
+    def test_core_plan_refuses_a_second_worker(self):
+        folder, previous = self._in_temp_workspace()
+        calls = []
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            episode = episodes[0]
+            job_id = "series-plan-second-worker"
+            job = {
+                "jobId": job_id, "kind": "planning", "workspace": "default",
+                "seriesId": series_id, "episodeId": episode["id"],
+                "status": "running", "stage": "outline", "current": 0, "total": 1,
+                "message": "Generating Series Lab outline…",
+                "request": {
+                    "scope": "outline", "instruction": "",
+                    "seriesSnapshot": {"characters": [], "locations": []},
+                    "episodeSnapshot": {"id": episode["id"], "outline": {"beats": []}},
+                },
+                "completedStages": {}, "episodeResult": None,
+                "createdAt": 1, "updatedAt": 1,
+            }
+            self._seed_plan_job(job)
+
+            def generate(**_kwargs):
+                calls.append("generate")
+                return {"outline": {"beats": ["The lantern wakes."]}}
+
+            with self._plan_patches(generate=generate):
+                try:
+                    from services.core_series_plan import _ACTIVE, _run_episode
+                    _ACTIVE.add(job_id)
+                    _run_episode(job_id)
+                except ImportError:
+                    from services import series_plan_jobs
+                    series_plan_jobs._series_plan_active_jobs.add(job_id)
+                    series_plan_jobs._run_series_plan_job(job_id)
+                finally:
+                    try:
+                        from services.core_series_plan import _ACTIVE
+                        _ACTIVE.discard(job_id)
+                    except ImportError:
+                        from services import series_plan_jobs
+                        series_plan_jobs._series_plan_active_jobs.discard(job_id)
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(calls, [])
+
+    def test_core_plan_rejects_an_edited_proposal_that_replaces_ids(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            episode = episodes[0]
+            proposal = self._editable_plan_proposal(episode["id"])
+            job_id = "series-plan-edited"
+            self._seed_plan_job({
+                "jobId": job_id, "kind": "planning", "workspace": "default",
+                "seriesId": series_id, "episodeId": episode["id"],
+                "status": "completed", "stage": "completed",
+                "episodeResult": proposal,
+                "sourceEpisodeUpdatedAt": episode["updatedAt"],
+                "createdAt": 1, "updatedAt": 1, "message": "ready",
+            })
+            edited = json.loads(json.dumps(proposal))
+            edited["shots"][0]["id"] = "replacement-shot"
+            applied = self.client.post(
+                f"/api/v1/series/plan/jobs/{job_id}/apply",
+                json={"episodeResult": edited},
+            )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(applied.status_code, 400, applied.text)
+        self.assertIn("internal IDs", applied.text)
+
+    def test_core_plan_apply_keeps_the_canon_snapshot_and_routes_references(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            episode = episodes[0]
+            proposal = self._editable_plan_proposal(episode["id"])
+            proposal["shots"][0].pop("referenceManifest", None)
+            job_id = "series-plan-snapshot"
+            self._seed_plan_job({
+                "jobId": job_id, "kind": "planning", "workspace": "default",
+                "seriesId": series_id, "episodeId": episode["id"],
+                "status": "completed", "stage": "completed",
+                "episodeResult": proposal,
+                "sourceEpisodeUpdatedAt": episode["updatedAt"],
+                "createdAt": 1, "updatedAt": 1, "message": "ready",
+            })
+            applied = self.client.post(f"/api/v1/series/plan/jobs/{job_id}/apply", json={})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(applied.status_code, 200, applied.text)
+        saved = applied.json()
+        self.assertEqual(saved["canonSnapshot"], episode["canonSnapshot"])
+        self.assertEqual(saved["canonRevisionAtCreation"], episode["canonRevisionAtCreation"])
+        self.assertIn("referenceManifest", saved["shots"][0])
+        self.assertIsInstance(saved["shots"][0]["referenceManifest"], dict)
+
+    def test_core_plan_start_rechecks_the_series_under_the_library_lock(self):
+        import copy
+        import services.series_library as library_mod
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            calls = {"n": 0}
+            real = library_mod.read_series_library
+
+            def flaky(workspace_dir, workspace_id="default"):
+                calls["n"] += 1
+                library = real(workspace_dir, workspace_id)
+                if calls["n"] >= 2:
+                    library = copy.deepcopy(library)
+                    library.get("seriesById", {}).pop(series_id, None)
+                return library
+
+            targets = ["routers.core_labs.read_series_library"]
+            if __import__("importlib").util.find_spec("services.core_series_plan") is not None:
+                targets.append("services.core_series_plan.read_series_library")
+            with self._plan_patches():
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+                # The patches above are only the model. Re-issue under the flaky read.
+            with self._plan_patches(), patch(targets[0], flaky):
+                extra = [patch(target, flaky) for target in targets[1:]]
+                for item in extra:
+                    item.start()
+                try:
+                    started = self.client.post(
+                        f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                        json={"workspace": "default", "scope": "outline"},
+                    )
+                finally:
+                    for item in extra:
+                        item.stop()
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 404, started.text)
+        self.assertGreaterEqual(calls["n"], 2)
+
+    def test_core_plan_publishes_an_activity_task(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, _episodes = self._series_ready_to_plan(premises=())
+            with self._plan_patches():
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/canon/prepare/start",
+                    json={"workspace": "default", "instruction": "Tighten the bible"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        workflows = [item.get("workflow") for item in listed.json()["tasks"]]
+        self.assertIn("series-plan", workflows)
+
+    def test_core_plan_recovery_and_discard_routes(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            job_id = "series-plan-discard-me"
+            self._seed_plan_job({
+                "jobId": job_id, "kind": "planning", "workspace": "default",
+                "seriesId": "series_missing", "episodeId": "",
+                "status": "failed", "stage": "failed", "current": 0, "total": 1,
+                "message": "stopped", "error": "stopped",
+                "createdAt": 1, "updatedAt": 2,
+            })
+            listed = self.client.get("/api/v1/series/plan/recovery", params={"workspace": "default"})
+            self.assertEqual(listed.status_code, 200, listed.text)
+            self.assertIn(job_id, [item["jobId"] for item in listed.json()["jobs"]])
+            deleted = self.client.delete(f"/api/v1/series/plan/jobs/{job_id}")
+            self.assertEqual(deleted.status_code, 200, deleted.text)
+            self.assertEqual(deleted.json()["discarded"], True)
+            self.assertIsNone(self._stored_plan_job(job_id))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_core_plan_apply_uses_the_series_library_lock(self):
+        import threading
+        import time
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            episode = episodes[0]
+            job_id = "series-plan-lock"
+            self._seed_plan_job({
+                "jobId": job_id, "kind": "planning", "workspace": "default",
+                "seriesId": series_id, "episodeId": episode["id"],
+                "status": "completed", "stage": "completed",
+                "episodeResult": {"id": episode["id"], "title": "Planned while locked", "shots": []},
+                "sourceEpisodeUpdatedAt": episode["updatedAt"],
+                "createdAt": 1, "updatedAt": 1, "message": "ready",
+            })
+            from routers import core_labs
+
+            held = threading.Event()
+            write_now = threading.Event()
+            entered = threading.Event()
+            finished = threading.Event()
+            result = {}
+
+            def holder():
+                with core_labs._LOCK:
+                    held.set()
+                    if not write_now.wait(5):
+                        return
+                    library = core_labs._read_series("default")
+                    series = library["seriesById"][series_id]
+                    series["title"] = "Updated while locked"
+                    series["revision"] = int(series.get("revision") or 1) + 1
+                    core_labs._write_series("default", library)
+
+            def apply():
+                entered.set()
+                try:
+                    try:
+                        from services.core_series_plan import apply_episode
+                        result["value"] = apply_episode(job_id, None)
+                    except ImportError:
+                        from routers.series_plan import apply_series_episode_plan
+                        result["value"] = apply_series_episode_plan(job_id, None)
+                    result["error"] = None
+                except Exception as exc:
+                    result["error"] = exc
+                finally:
+                    finished.set()
+
+            owner = threading.Thread(target=holder)
+            applier = threading.Thread(target=apply)
+            owner.start()
+            self.assertTrue(held.wait(2))
+            applier.start()
+            self.assertTrue(entered.wait(2))
+            time.sleep(0.4)
+            blocked = not finished.is_set()
+            write_now.set()
+            self.assertTrue(finished.wait(5))
+            owner.join(5)
+            stored = self.client.get(f"/api/v1/series/{series_id}", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertTrue(blocked, "plan apply finished while the other thread still held the library lock")
+        self.assertIsNone(result.get("error"), result.get("error"))
+        self.assertEqual(stored.status_code, 200, stored.text)
+        project = stored.json()
+        self.assertEqual(project["title"], "Updated while locked")
+        self.assertEqual(project["episodesById"][episode["id"]]["title"], "Planned while locked")
+        try:
+            from services import series_plan_jobs
+            from routers import series_plan
+            self.assertIs(series_plan_jobs._series_library_lock, core_labs._LOCK)
+            self.assertIs(series_plan._series_library_lock, core_labs._LOCK)
+        except ImportError:
+            pass
+
 
     def test_local_llm_load_is_blocked(self):
         with patch("services.llm_service.load_model") as load:
@@ -2799,6 +3373,166 @@ class CoreRuntimeTests(unittest.TestCase):
             ("GET", "/api/v1/director/pipeline/{pid}"),
         })
         self.assertEqual(set(owners.values()), {shared})
+
+    def test_core_refuses_series_delete_while_a_job_is_active(self):
+        from services.core_workspace import workspace_dir
+        from services.series_jobs import SeriesJobStore
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Guarded"}).json()
+            SeriesJobStore(workspace_dir("default"), "planning").save({
+                "jobId": "plan-active",
+                "workspace": "default",
+                "seriesId": series["id"],
+                "episodeId": "",
+                "status": "running",
+            })
+            deleted = self.client.delete(f"/api/v1/series/{series['id']}", params={"workspace": "default"})
+            fetched = self.client.get(f"/api/v1/series/{series['id']}", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(deleted.status_code, 409, deleted.text)
+        self.assertEqual(deleted.json()["detail"]["code"], "series_jobs_active")
+        self.assertEqual(fetched.status_code, 200, fetched.text)
+
+    def test_core_refuses_episode_delete_while_a_job_is_active(self):
+        from services.core_workspace import workspace_dir
+        from services.series_jobs import SeriesJobStore
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Guarded episode"}).json()
+            series["canon"]["worldSummary"] = "A world"
+            series["characters"] = [{"id": "char_a", "name": "Ada"}]
+            series["locations"] = [{"id": "loc_a", "name": "Lab"}]
+            path = f"/api/v1/series/{series['id']}"
+            saved = self.client.put(path, json={"workspace": "default", "series": series, "baseRevision": series["revision"]})
+            series = saved.json()
+            approved = self.client.post(path + "/canon/approve", json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+            episode = self.client.post(path + "/episodes", json={"workspace": "default"})
+            episode_id = episode.json().get("id")
+            SeriesJobStore(workspace_dir("default"), "render").save({
+                "jobId": "render-active",
+                "workspace": "default",
+                "seriesId": series["id"],
+                "episodeId": episode_id,
+                "status": "queued",
+            })
+            deleted = self.client.delete(f"{path}/episodes/{episode_id}", params={"workspace": "default"})
+            fetched = self.client.get(f"{path}/episodes/{episode_id}", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(approved.status_code, 200, approved.text)
+        self.assertEqual(episode.status_code, 200, episode.text)
+        self.assertEqual(deleted.status_code, 409, deleted.text)
+        self.assertEqual(deleted.json()["detail"]["code"], "series_jobs_active")
+        self.assertEqual(fetched.status_code, 200, fetched.text)
+
+    def test_core_lists_an_episode_that_no_season_references(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Loose episode"}).json()
+            library = self.client.get("/api/v1/series/library", params={"workspace": "default"}).json()
+            loose = dict(series)
+            loose["episodesById"] = {"ep_orphan": {"id": "ep_orphan", "title": "Loose"}}
+            library["seriesById"][series["id"]] = loose
+            with patch("services.series_library.normalize_series_library", side_effect=lambda value, workspace_id="default": value):
+                saved = self.client.put("/api/v1/series/library", json={"workspace": "default", "library": library})
+                listed = self.client.get(f"/api/v1/series/{series['id']}/episodes", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertIn("ep_orphan", [item["id"] for item in listed.json()["episodes"]])
+
+    def test_core_canon_approval_uses_the_launch_guards(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Canon guards"}).json()
+            path = f"/api/v1/series/{series['id']}/canon/approve"
+            stale = self.client.post(path, json={"workspace": "default", "baseRevision": 99})
+            missing_world = self.client.post(path, json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+            series["canon"]["worldSummary"] = "A persistent world"
+            saved = self.client.put(f"/api/v1/series/{series['id']}", json={"workspace": "default", "series": series, "baseRevision": series["revision"]})
+            series = saved.json()
+            missing_cast = self.client.post(path, json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+            series["characters"] = [{"id": "char_a", "name": "Ada"}]
+            saved = self.client.put(f"/api/v1/series/{series['id']}", json={"workspace": "default", "series": series, "baseRevision": series["revision"]})
+            series = saved.json()
+            missing_place = self.client.post(path, json={"workspace": "default", "baseRevision": series["canon"]["revision"]})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(stale.status_code, 409, stale.text)
+        self.assertEqual(stale.json()["detail"], "Canon revision changed to 1; reload before approval")
+        self.assertEqual(missing_world.status_code, 400, missing_world.text)
+        self.assertEqual(missing_world.json()["detail"], "Complete the World summary before approving canon")
+        self.assertEqual(missing_cast.status_code, 400, missing_cast.text)
+        self.assertEqual(missing_cast.json()["detail"], "Add at least one principal character before approving canon")
+        self.assertEqual(missing_place.status_code, 400, missing_place.text)
+        self.assertEqual(missing_place.json()["detail"], "Add at least one canonical location before approving canon")
+
+    def test_core_asset_import_uses_the_launch_checks(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Import checks"}).json()
+            path = f"/api/v1/series/{series['id']}/assets/import"
+            Path("uploads").mkdir(exist_ok=True)
+            source = Path("uploads/ref.png")
+            source.write_bytes(b"png")
+            absolute = str(source.resolve())
+            long_key = "k" * 120
+            imported = self.client.post(path, json={
+                "workspace": "default", "uploadPath": absolute, "ownerType": "series", "kind": "nope",
+                "referenceRole": "reference",
+                "metadata": {"referenceRole": "hijack", "importedAt": "ancient", long_key: "kept", "name": "from-metadata"},
+            })
+            relative = self.client.post(path, json={
+                "workspace": "default", "uploadPath": "ref.png", "ownerType": "series", "kind": "image",
+            })
+            missing_owner = self.client.post(path, json={
+                "workspace": "default", "uploadPath": absolute, "ownerType": "character", "ownerId": "missing",
+                "kind": "image",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(imported.status_code, 200, imported.text)
+        asset = imported.json()["asset"]
+        self.assertEqual(asset["kind"], "other")
+        self.assertEqual(asset["metadata"]["referenceRole"], "reference")
+        self.assertNotEqual(asset["metadata"]["importedAt"], "ancient")
+        self.assertNotIn(long_key, asset["metadata"])
+        self.assertEqual(asset["metadata"]["k" * 100], "kept")
+        self.assertEqual(asset["metadata"]["name"], "from-metadata")
+        self.assertEqual(relative.status_code, 400, relative.text)
+        self.assertIn("HocusPocus Lab uploads", relative.json()["detail"])
+        self.assertEqual(missing_owner.status_code, 404, missing_owner.text)
+        self.assertEqual(missing_owner.json()["detail"], "Series character not found")
+
+    def test_core_serves_the_cpu_series_routes_the_ui_calls(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            missing = "/api/v1/series/missing-series"
+            commit = self.client.post(missing + "/episodes/ep/canon/commit", json={"workspace": "default"})
+            route = self.client.post(missing + "/episodes/ep/references/route", json={"workspace": "default"})
+            preview = self.client.post(missing + "/shots/duration/preview", json={"workspace": "default"})
+            approve = self.client.post(
+                missing + "/episodes/ep/shots/sh/attempts/at/approve", json={"workspace": "default"},
+            )
+            bulk = self.client.post(missing + "/episodes/ep/attempts/approve-bulk", json={"workspace": "default"})
+            reject = self.client.post(
+                missing + "/episodes/ep/shots/sh/attempts/at/reject", json={"workspace": "default"},
+            )
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(commit.status_code, 400, commit.text)
+        self.assertEqual(commit.json()["detail"], "baseRevision is required")
+        for response in (route, approve, bulk, reject):
+            self.assertEqual(response.status_code, 404, response.text)
+            self.assertEqual(response.json()["detail"], "Series Lab project not found")
+        self.assertEqual(preview.status_code, 400, preview.text)
+        self.assertEqual(preview.json()["detail"], "Series shot is required")
 
 
 def test_safe_join_copies_use_the_launch_containment_check():
