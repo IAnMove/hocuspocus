@@ -7,7 +7,8 @@
 - A character (``rig: "humanoid"``, the default for a cast id) is first redrawn in a T-pose from its portrait,
   because the humanoid rig needs one; a rigged model's clips follow the song's tempo.
 - ``rig`` is ``humanoid``, a procedural profile (prop, vehicle, quadruped, flying, serpentine) or ``none``.
-- ``glb`` is a model already in the workspace (a file name): it skips the picture and the mesh and is only rigged.
+- ``glb`` is a model already in the workspace (``ape.glb`` or ``pack/ape.glb``): it skips the picture and the
+  mesh and is only rigged. A path that climbs out of the workspace is refused.
   ``fallback`` is the procedural profile a humanoid rig falls back to when the body is not one it can rig
   (legs together, arms down, a tail).
 
@@ -145,6 +146,8 @@ def _check_origin_and_rig(name: str, entry: dict, cast: set) -> None:
     origins = [field for field in ("from", "prompt", "glb") if _text(entry.get(field))]
     if not origins or ("glb" in origins and len(origins) > 1):
         raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL), a prompt, or a glb in the workspace")
+    if "glb" in origins and workspace_rel(entry["glb"]) is None:
+        raise ModelError(f"models.{name}.glb is a file inside the workspace, not a path that climbs out")
     rig = rig_of(entry, cast)
     if rig not in RIGS:
         raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
@@ -158,6 +161,29 @@ def rig_of(entry: dict, cast: set) -> str:
 
 def _text(value: Any) -> bool:
     return isinstance(value, str) and 0 < len(value.strip()) <= 2000
+
+
+def workspace_rel(path: str) -> str | None:
+    """A relative file path inside the workspace (``pack/ape.glb``), or None if it climbs out or is absolute."""
+    text = str(path).replace("\\", "/").split("?", 1)[0]
+    if not text or text.startswith("/") or "\x00" in text:
+        return None
+    parts = [part for part in text.split("/") if part]
+    if not parts or any(part in (".", "..") for part in parts):
+        return None
+    return "/".join(parts)
+
+
+def _glb_file(root: Any, glb: str, name: str):
+    """The relative path and the file ``glb`` names, or ModelError if it is missing or climbs out."""
+    from pathlib import Path
+    relative = workspace_rel(glb)
+    if relative is None:
+        raise ModelError(f"models.{name}.glb is a file inside the workspace, not a path that climbs out")
+    path = Path(root) / relative
+    if not path.is_file():
+        raise ModelError(f"models.{name}.glb: no file {path.name} in the workspace")
+    return relative, path
 
 
 def _cast_ids(spec: dict) -> set:
@@ -322,7 +348,8 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
         # A model meshed straight from its picture before REFERENCE_STAGING is made again.
         restaged = {**entry, "staging": "isolated-2"} if source and rig != "humanoid" else entry
         if entry.get("glb"):
-            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name), "cleanup": GLB_CLEANUP,
+            _relative, path = _glb_file(production.root, entry["glb"], name)
+            restaged = {**entry, "glb_bytes": _size(path, name), "cleanup": GLB_CLEANUP,
                         **({"rig_version": RIG_VERSION} if rig == "humanoid" else {})}   # a new rig redoes the rig, not a profile
         fingerprint = _fingerprint(restaged, source, spec)
         kept = made.get(name) or {}
@@ -441,13 +468,13 @@ def _cleaned(production: Any, name: str, glb: str, *, standing: bool) -> str:
     changes the file name, so rigs and clips made from an earlier copy are not taken for this one."""
     from pathlib import PurePosixPath
     from services.glb_cleanup import clean_glb
-    source = production.root / glb
+    relative, source = _glb_file(production.root, glb, name)
     digest = _digest(f"{hashlib.sha256(source.read_bytes()).hexdigest()}:{GLB_CLEANUP}:{standing}")
-    target = str(PurePosixPath(glb).with_name(f"{PurePosixPath(glb).stem}.clean-{digest}.glb"))
+    target = str(PurePosixPath(relative).with_name(f"{PurePosixPath(relative).stem}.clean-{digest}.glb"))
     if fixes := clean_glb(source, production.root / target, standing=standing):
         production.log(f"model {name}: {'; '.join(fixes)}; rigging {target}")
         return target
-    return glb
+    return relative
 
 
 def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: int, sleep) -> None:

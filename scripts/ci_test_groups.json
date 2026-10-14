@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 4110,
+      "weight": 4111,
       "paths": [
         "tests/characterization/test_jobs_and_tasks.py",
         "tests/characterization/test_outpaint_blend.py",

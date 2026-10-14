@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a Production model can no longer point at a file outside its workspace.** `models[].glb` was joined to the workspace folder without a check, so a path such as `../x.glb` or an absolute path was read, and a cleaned copy was written next to it, outside the workspace. Such a path is now refused when the spec is validated and again when the models are made. A file in a sub-folder (`pack/x.glb`) still works.
+
 **Fixed: a Video 2D (scene2d) scene is exported again when the song's tempo changes.** The card takes the score's tempo, but a re-analysis of the song or a `production.song.use` that kept the shot windows left the old MP4 playing the old tempo. The scene record now keeps the tempo it was exported with, and a shot whose card takes the tempo (and that does not set its own `bpm`) exports again when the tempo, held to the card's range, changes. Scenes exported before this was recorded keep their file and learn the tempo on the next resume.
 
 **Fixed: a Video 2D (scene2d) shot is exported again when a set or a model it names was remade.** A scene2d shot whose background or cast slot names a set (`scene2d.background: "alley"`) or a model that the run made did not notice when that set or model was redrawn, so the old MP4 stayed. The re-export key now includes the named sets and models. A shot that names none keeps the key it had.
