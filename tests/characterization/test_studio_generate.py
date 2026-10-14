@@ -712,8 +712,14 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
     assert {"_RECAST_MASK_COLORS", "_resolve_recast_media", "_recast_reference_subject_mask",
             "_refine_recast_reference_cutout", "_recast_subject_crop_box", "_get_recast_u2net_session"} <= siblings
 
-    # A forwarder looks the launch name up when the mask builder calls it.
+    # The worker's bystander protection (services.generation_worker.finalize) calls two mask helpers by their launch
+    # names; launch hands it the same objects.
     masks = modules["services.recast_masks"]
+    finalize = importlib.import_module("services.generation_worker.finalize")
+    for name in ("_build_recast_adaptive_mask", "_render_recast_mask_locked_video"):
+        assert getattr(finalize, name) is getattr(masks, name) is getattr(launch, name), name
+
+    # A forwarder looks the launch name up when the mask builder calls it.
     for name in RECAST_FORWARDED:
         monkeypatch.setattr(launch, name, lambda *args, _name=name, **kwargs: (_name, args, kwargs))
         assert getattr(masks, name)("frames", fps=25.0) == (name, ("frames",), {"fps": 25.0})
