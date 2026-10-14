@@ -432,9 +432,10 @@ def test_director_comic_state_is_one_instance_and_the_bind_is_live(full_server, 
     )
     mounted = dict(zip(start.__code__.co_freevars, (cell.cell_contents for cell in start.__closure__)))
     assert mounted["run_comic_animatic"] is animatic._run_comic_animatic
-    # The Activity publisher and the resume reset are looked up in launch when called, because the real
-    # functions are defined further down.
-    monkeypatch.setattr(launch, "_publish_generic_legacy_task", lambda record, adapter: ("published", adapter))
+    # The Activity publisher is looked up on the publishers module when called. The resume reset
+    # still looks the launch name up; that function has not moved.
+    import services.canonical_task_publishers as task_publishers
+    monkeypatch.setattr(task_publishers, "_publish_generic_legacy_task", lambda record, adapter: ("published", adapter))
     assert plan_jobs._publish_generic_legacy_task({}, "comic-plan") == ("published", "comic-plan")
     assert plan_router._publish_generic_legacy_task({}, "comic-plan") == ("published", "comic-plan")
     monkeypatch.setattr(launch, "_reset_canonical_task_for_resume", lambda workspace, task_id: (workspace, task_id))
