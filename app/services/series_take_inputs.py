@@ -13,6 +13,10 @@ a location without layers keeps the digests it had. Hearing (``series_hearing``)
 depends only on a ``deaf`` one, which drops its lines and sounds, and on the room a ``muffled`` one skips, so a
 ``ringing`` shot or default renders nothing again. A 2D shot's finish (``series_finish``) counts only when it is not
 the paper default, so a series and a shot that never chose one keep their digests.
+The series frame (``provider.videoSettings.orientation``) counts only when it is portrait: a landscape series
+keeps the digest it had, and turning the series to portrait (or back) is a new picture.
+A take saved before an input joined the fingerprint (``renderInputsVersion`` below ``INPUTS_VERSION``) is compared
+with the digest of the version it was saved at, so adding an input never marks an existing production out of date.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
 """
 from __future__ import annotations
@@ -27,7 +31,7 @@ from services.series_hearing import hearing_of
 from services.series_layers import digest_location
 from services.series_shot_extras import pauses, timing_args
 from services.series_scene_inputs import scene_source_digest
-from services.series_shot_plan import FPS, kit_ref, plan_timing
+from services.series_shot_plan import FPS, frame_size, kit_ref, plan_timing
 from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
 
 # What a shot's picture and sound depend on, besides the render code itself.
@@ -37,7 +41,12 @@ _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId
 _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance", "revision")
 # Version 2 hashes the number of frames the planner will render for a silent shot.
 # Version 1 stored the raw ``durationSeconds``, which the render then rewrote, so the next pass looked stale.
-INPUTS_VERSION = 2
+# Version 3 adds the series frame when it is portrait. A take saved at version 2 or 1 has no frame to compare,
+# so it is read as made for the series it has: ``_legacy_inputs`` offers its older digests.
+INPUTS_VERSION = 3
+_PLANNED_LENGTH_VERSION = 2
+# The inputs below are hashed only from this version on; an older take never recorded them.
+_EXTRA_INPUTS_VERSION = 3
 # A version-1 take asked for a length on this step; the planner moves it by under one frame.
 _DURATION_STEP = 0.05
 
@@ -49,7 +58,8 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint.
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
-    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches."""
+    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches. A portrait
+    series frame is part of the digest from version 3 on; versions 1 and 2 never hashed it."""
     beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
              for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
@@ -66,7 +76,7 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
                  for kid in kit_ids.values() if kid},
         **({"foley": shot["foley"]} if shot.get("foley") else {}),
     }
-    payload.update(_extra_inputs(series, shot, root))
+    payload.update(_extra_inputs(series, shot, root, version))
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
@@ -79,9 +89,11 @@ def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
     return inputs
 
 
-def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
+def _extra_inputs(series: dict, shot: dict, root: str | None, version: int = INPUTS_VERSION) -> dict:
     """Omit absent additions so existing dry, unpaused 2D takes keep their fingerprints."""
     payload = {}
+    if version >= _EXTRA_INPUTS_VERSION and _portrait(series):
+        payload["orientation"] = "portrait"
     rooms = line_rooms(series, shot)
     if rooms:
         payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
@@ -98,6 +110,12 @@ def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
     if source is not None:
         payload["sceneSource"] = source
     return payload
+
+
+def _portrait(series: dict[str, Any]) -> bool:
+    """The series frame is vertical (``build_shot_spec`` plans 1080x1920 instead of 1920x1080)."""
+    width, height = frame_size(series)
+    return height > width
 
 
 def _people(shot: dict[str, Any], beats: list[list[Any]]) -> list[str]:
@@ -125,16 +143,18 @@ def _duration_input(shot: dict[str, Any], beats: list[list[Any]], version: int) 
     """Silent shots only. Lines already time themselves, so their duration is left out of the fingerprint."""
     if beats:
         return None
-    if version < INPUTS_VERSION:
+    if version < _PLANNED_LENGTH_VERSION:
         return shot.get("durationSeconds")
     planned = _planned_length(shot)
     return shot.get("durationSeconds") if planned is None else round(planned * FPS)
 
 
 def _legacy_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None) -> list[str]:
-    """Digests a version-1 take can carry: the raw length, or the length that was asked before the render wrote the
-    planner's length back. That asked length is the planned one snapped to 0.05 s."""
-    found = [render_inputs(series, shot, kits, root, version=1)]
+    """Digests an older take can carry: the raw length, or the length that was asked before the render wrote the
+    planner's length back (the planned one snapped to 0.05 s), both version 1; and the version-2 digest, which has
+    the planned frame count and never saw the series frame."""
+    found = [render_inputs(series, shot, kits, root, version=1),
+             render_inputs(series, shot, kits, root, version=_PLANNED_LENGTH_VERSION)]
     planned = _planned_length(shot)
     if planned is not None:
         found.append(render_inputs(series, {**shot, "durationSeconds": _snap_duration(planned)}, kits, root, version=1))
@@ -152,8 +172,9 @@ def _kept_take(shot: dict[str, Any], assets: dict[str, Any]) -> tuple[Any, Any]:
 
 def _fresh(kept: Any, version: Any, series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any],
            root: str | None) -> bool:
-    """A version-2 take matches the planned frame count. An older take still matches the raw length it was saved with,
-    and also the planned length snapped to 0.05 s, so the render's write-back of that length does not make it stale."""
+    """A current-version take matches the current digest. An older take still matches the digest of the version it was
+    saved with (version 2 never hashed the series frame; version 1 held the raw length, or the planned length snapped
+    to 0.05 s, so the render's write-back of that length does not make it stale)."""
     if not isinstance(kept, str):
         return False
     if kept == render_inputs(series, shot, kits, root):
@@ -194,7 +215,8 @@ def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str
 
 def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> list[str]:
     """Rendered shots of a (localized) episode with no approved take, or one made from other inputs. Takes from before
-    the inputs were kept count as out of date. A take saved before version 2 stays current."""
+    the inputs were kept count as out of date. A take saved at an older version stays current while it matches the
+    digest of that version."""
     assets = series.get("assets") or {}
     shots = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
     return [shot["id"] for shot in shots if series_shot3d.wants_render(shot)

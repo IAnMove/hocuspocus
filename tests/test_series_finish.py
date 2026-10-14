@@ -23,7 +23,7 @@ from services.series_script import EpisodeScript, ScriptError
 from services.series_shot_edit import ShotEditError
 from services.series_shot_instruction import SYSTEM
 from services.series_shot_plan import CAMERA_CONTINUES, CAMERA_POSES, CAMERAS, build_shot_spec, normalize_layout2d
-from services.series_take_inputs import render_inputs
+from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
 from services.video2d_preset_catalog import finish_presets
 from tests.test_series_script_produce import FILES, KITS as SCRIPT_KITS, SCRIPT, project
 from tests.test_series_shot_edit import edit, library
@@ -107,12 +107,15 @@ def planned_spec(value, shot):
 @pytest.mark.parametrize("name", list(OLD))
 def test_a_stored_shot_keeps_every_digest_and_its_paper_finish(name):
     _name, value, shot, (inputs, content, spec_digest, _document, camera) = next(case for case in stored_cases() if case[0] == name)
-    assert render_inputs(value, shot, KITS) == inputs
+    # These digests are what a take saved at version 2 carries: they never hashed the series frame.
+    assert render_inputs(value, shot, KITS, version=2) == inputs
+    if "portrait" not in name:
+        assert render_inputs(value, shot, KITS) == inputs, "a landscape series keeps the digest it had"
     assert content_digest(shot) == content
     spec = planned_spec(value, shot)
     assert digest(spec) == spec_digest and spec["camera"] == camera and spec["finish"] == PAPER
     # Choosing paper by name is the same picture: nothing renders again.
-    assert render_inputs(series(look={"finish": "paper"}, **(PORTRAIT if "portrait" in name else {})), shot, KITS) == inputs
+    assert render_inputs(series(look={"finish": "paper"}, **(PORTRAIT if "portrait" in name else {})), shot, KITS, version=2) == inputs
 
 
 def test_any_other_finish_is_a_new_picture_and_renders_again():
@@ -145,6 +148,58 @@ def test_a_shot_finish_wins_over_the_series_and_null_follows_it_again():
     assert normalize_layout2d({"framing": "two", "finish": None}) == {"framing": "two"}
     paper_shot = {**SHOTS["static"], "layout2d": {"framing": "two", "camera": "static", "finish": "paper"}}
     assert shot_finish(film, paper_shot) == PAPER and fingerprint(film, paper_shot) is None
+
+
+def _taken(value, shot, digest, version):
+    """The shot in an episode with one approved take that kept ``digest`` at ``version``."""
+    value["assets"] = {"take": {"metadata": {"renderInputs": digest, **({} if version is None else {"renderInputsVersion": version})}}}
+    return {"shots": [{**shot, "approvedAttemptId": "att", "attempts": [{"id": "att", "outputAssetIds": ["take"]}]}]}
+
+
+def test_turning_the_series_portrait_renders_2d_takes_again():
+    """A take rendered with the series frame in its fingerprint is stale once the series turns portrait, and back."""
+    shot = SHOTS["push"]
+    landscape = series()
+    kept = render_inputs(landscape, shot, KITS)
+    assert kept == OLD["push"][0], "landscape keeps the digest it had"
+    episode = _taken(landscape, shot, kept, INPUTS_VERSION)
+    assert stale_shot_ids(landscape, episode, KITS) == []
+    portrait = series(**PORTRAIT)
+    portrait["assets"] = landscape["assets"]
+    assert render_inputs(portrait, shot, KITS) != kept
+    assert stale_shot_ids(portrait, episode, KITS) == ["s2"]
+    again = _taken(portrait, shot, render_inputs(portrait, shot, KITS), INPUTS_VERSION)
+    assert stale_shot_ids(portrait, again, KITS) == []
+    flipped = series()
+    flipped["assets"] = portrait["assets"]
+    assert stale_shot_ids(flipped, again, KITS) == ["s2"]
+
+
+def test_takes_saved_before_the_frame_was_hashed_stay_current_on_a_portrait_series():
+    """A production that was always vertical must not be rendered again because the fingerprint learned the frame."""
+    portrait = series(**PORTRAIT)
+    for name in ("static", "push", "words", "layered", "card"):
+        shot = SHOTS[name]
+        for version in (2, 1):
+            saved = render_inputs(portrait, shot, KITS, version=version)
+            episode = _taken(portrait, shot, saved, version)
+            assert stale_shot_ids(portrait, episode, KITS) == [], (name, version)
+            assert accepted_inputs(portrait, episode["shots"][0], KITS) == saved, "the review compares with what the take kept"
+    # The pinned version-2 digest of a stored portrait take is still the one it carried.
+    assert OLD["push-portrait"][0] == render_inputs(portrait, SHOTS["push"], KITS, version=2)
+    assert render_inputs(portrait, SHOTS["push"], KITS) != OLD["push-portrait"][0]
+
+
+def test_a_take_saved_before_the_frame_was_hashed_is_not_checked_against_it():
+    """Stated cost of reading old takes as current: a flip after the upgrade is only seen once the take is rendered again."""
+    shot = SHOTS["static"]
+    landscape = series()
+    episode = _taken(landscape, shot, OLD["static"][0], 2)
+    assert stale_shot_ids(landscape, episode, KITS) == []
+    portrait = series(**PORTRAIT)
+    portrait["assets"] = landscape["assets"]
+    assert stale_shot_ids(portrait, episode, KITS) == []
+    assert stale_shot_ids(portrait, _taken(portrait, shot, OLD["static"][0], INPUTS_VERSION), KITS) == ["s1"]
 
 
 def test_only_2d_takes_see_the_series_finish():
