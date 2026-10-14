@@ -16274,6 +16274,7 @@
             "tool": "studio"
           },
           "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "output_resolution": "64x36",
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",

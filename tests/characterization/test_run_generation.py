@@ -1350,7 +1350,9 @@ def test_a_failed_job_runs_no_finishing_pass_on_the_outputs_it_keeps(rig, clip, 
 
     def media_tools(command, *args, **kwargs):
         if list(command)[0] in ("ffmpeg", "ffprobe"):
-            ran.append(list(command)[0])
+            # The sidecar's read-only size probe (media_dimensions.probe_video_size) is not a finishing pass.
+            if list(command)[0] != "ffprobe" or "stream=width,height" not in " ".join(map(str, command)):
+                ran.append(list(command)[0])
             return subprocess.CompletedProcess(command, 1, "", "the test runs no media tool")
         return real_run(command, *args, **kwargs)
 
