@@ -20,11 +20,21 @@ export type DirectorPipelineSlice = {
   pipelineStatus: import('../../../api/client').PipelineStatus | null
   activeDirectorPipelines: import('../../../api/client').ActiveDirectorPipeline[]
   pipelinePolling: boolean
+  /** True after directorReset: the footer may still list live jobs, but reconnect must not steal this editor. */
+  directorEditorDetached: boolean
   startDirectorPipeline: (useCurrentPlans?: boolean) => Promise<void>
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
   stopPipeline: (pipelineId?: string) => Promise<void>
   reconnectDirectorPipelines: () => Promise<void>
   pollPipelineStatus: () => void
+}
+
+/** Boot and Dashboard resume may bind the live primary job. A Reset/Story Lab handoff must not. */
+export function shouldAutoBindDirectorPipeline(
+  pipelineId: string | null | undefined,
+  editorDetached: boolean,
+): boolean {
+  return !pipelineId && !editorDetached
 }
 
 /** startDirectorPipeline, pollPipelineStatus, and reconnectDirectorPipelines read and write the director, gallery, and studio fields listed here. */
@@ -106,6 +116,7 @@ export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, Di
   pipelineStatus: null,
   activeDirectorPipelines: [],
   pipelinePolling: false,
+  directorEditorDetached: false,
 
   // ── Director Pipeline (server-side) ──────────────────────────────
   startDirectorPipeline: async (useCurrentPlans = false) => {
@@ -402,6 +413,7 @@ export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, Di
         pipelineId: pipeline_id,
         pipelineStatus: null,
         pipelinePolling: true,
+        directorEditorDetached: false,
         directorStep: 'plan',
         directorLoading: true,
         directorError: null,
@@ -474,7 +486,7 @@ export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, Di
         // can reconnect to the same run, while the footer displays every live
         // pipeline returned by the backend.
         const primary = data.pipelines[0]
-        if (primary && !get().pipelineId) {
+        if (primary && shouldAutoBindDirectorPipeline(get().pipelineId, get().directorEditorDetached)) {
           set({
             pipelineId: primary.id,
             pipelineStatus: primary as import('../../../api/client').PipelineStatus,
@@ -511,7 +523,7 @@ export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, Di
             }))
           set({ activeDirectorPipelines: active })
           const primary = active[0]
-          if (primary && !get().pipelineId) {
+          if (primary && shouldAutoBindDirectorPipeline(get().pipelineId, get().directorEditorDetached)) {
             set({
               pipelineId: primary.id,
               pipelineStatus: primary,
