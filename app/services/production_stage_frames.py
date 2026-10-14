@@ -11,6 +11,7 @@ from typing import Any
 from services.production_image_defaults import default_image_model, image_choice
 from services.production_seeds import default_seed, ensure_seed_base, window_seed
 from services.production_shot_sources import learn_window, recipe_parts, stale_reasons
+from services.production_song_switch import EDIT
 from services.production_takes import obsolete_clip
 
 
@@ -111,7 +112,7 @@ def forget_shots_using_cast(production: Any, windows: list[dict]) -> None:
         if frames.pop(key, None):
             production.log(f"frame {key}: the cast look changed, drawing it again")
         if isinstance(clips.get(key), dict):
-            clips[key]["obsolete"] = True
+            clips[key].update(obsolete=True, obsolete_by=EDIT)
             production.log(f"clip {key}: the cast look changed, shooting it again")
 
 
@@ -159,9 +160,10 @@ def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> No
         draw_why, shoot_why = stale_reasons(known, now, window, clips.get(key))
         if draw_why and frames.pop(key, None):
             production.log(f"frame {key}: {draw_why}, drawing it again")
-        if shoot_why and isinstance(clips.get(key), dict) and not obsolete_clip(clips[key]):
-            clips[key]["obsolete"] = True
-            production.log(f"clip {key}: {shoot_why}, shooting it again")
+        if shoot_why and isinstance(clips.get(key), dict):
+            if not obsolete_clip(clips[key]):
+                production.log(f"clip {key}: {shoot_why}, shooting it again")
+            clips[key].update(obsolete=True, obsolete_by=EDIT)
         sources[key] = now
         learn_window(clips.get(key), window)
 

@@ -215,6 +215,32 @@ def test_a_clip_made_before_its_window_was_recorded_learns_it_and_sees_later_mov
     assert run.sent == []
 
 
+def test_a_song_switch_that_does_not_move_the_window_keeps_an_edit_flag(tmp_path, monkeypatch):
+    """The resume that saw the edit already stored the new inputs, so the flag on the clip is the only trace of it:
+    ``production.song.use`` clears the flags of clips whose window it did not move, but not one an edit set."""
+    from services.production_song_switch import mark_moved_clips
+    run = _Run(tmp_path, monkeypatch)
+    spec, windows = _spec(), [_shot()]
+    run.stages(spec, windows)
+    edited = {**spec, "style": {**spec["style"], "video": "handheld documentary"}}
+    run.restart()
+    run.production.frames(edited, windows)          # the run stops here (a frame failed, a cancel) before the clips
+    assert run.production.state["clips"]["a"]["obsolete"] is True
+    assert mark_moved_clips(run.production.state, {"a": (1.0, 4.0)}, {"a": (1.1, 4.1)}) == []
+    run.restart()
+    run.stages(edited, windows)
+    assert len(run.calls("generate")) == 2, "the clip is shot with the new look"
+    state = run.production.state
+    from services.production_stage_frames import forget_shots_using_cast
+    state["cast_dirty"] = ["hero"]
+    forget_shots_using_cast(run.production, [_shot(cast=["hero"])])
+    mark_moved_clips(state, {"a": (1.0, 4.0)}, {"a": (1.0, 4.0)})
+    assert state["clips"]["a"]["obsolete"] is True, "nor one a cast redraw set"
+    state["clips"]["a"] = {**state["clips"]["a"], "obsolete": True, "obsolete_by": None}      # a song switch's flag
+    mark_moved_clips(state, {"a": (1.0, 4.0)}, {"a": (1.0, 4.0)})
+    assert "obsolete" not in state["clips"]["a"], "a song-switch flag is still cleared when the windows did not move"
+
+
 def test_a_scene2d_plate_follows_the_image_but_not_the_video_look(tmp_path, monkeypatch):
     run = _Run(tmp_path, monkeypatch)
     spec = _spec()

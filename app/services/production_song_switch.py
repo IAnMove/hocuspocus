@@ -5,6 +5,9 @@ import json
 from typing import Any
 
 WINDOW_MOVE = 0.3
+# ``clip["obsolete_by"]`` of a flag a spec edit set (production_stage_frames). The resume that saw the edit already
+# stored the new inputs, so that flag is the only trace of it: a song switch that does not move the window keeps it.
+EDIT = "edit"
 
 
 class SongSwitchError(ValueError):
@@ -56,7 +59,7 @@ def mark_moved_clips(state: dict, before: dict[str, tuple[float, float]], after:
         if moved:
             clip["obsolete"] = True
             obsolete.append(key)
-        else:
+        elif clip.get("obsolete_by") != EDIT:
             clip.pop("obsolete", None)
     return obsolete
 
