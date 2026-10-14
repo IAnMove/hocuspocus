@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 
 from typing import TYPE_CHECKING
 
@@ -87,7 +87,8 @@ def _split_clocks(payload) -> dict:
     return clocks
 
 
-def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None, steps=None, resolution=None) -> None:
+def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None, steps=None,
+          resolution=None, leftovers=None) -> None:
     listed = list(refs or [])
     row = {
         "tool": tool,
@@ -103,6 +104,8 @@ def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None
         row["num_inference_steps"] = int(steps)
     if resolution:
         row["resolution"] = str(resolution)
+    if leftovers:
+        row["leftovers"] = list(leftovers)
     row.update(_split_clocks(payload))
     ctx.steps.append(row)
 
@@ -228,10 +231,41 @@ def _source_name(ctx: GenContext, path) -> str:
     return text
 
 
-def _finish(ctx, *, tool, model, seed, prompt, refs, job_id, started, payload=None, steps=None, resolution=None) -> None:
+def root_file_name(value, root=None) -> str | None:
+    """The file name when ``value`` is a file directly in the workspace root: a bare name, a ``/api/v1/file/`` URL, or
+    (given ``root``) an absolute path in that folder. A file in a folder stays put, so it is not a leftover."""
+    text = str(value).split("?")[0].replace("\\", "/").rstrip("/")
+    if "/api/v1/file/" in text:
+        text = unquote(text.split("/api/v1/file/", 1)[1])
+    if text.startswith("/"):
+        return Path(text).name if root is not None and Path(text).parent == Path(root) else None
+    parts = [part for part in text.split("/") if part]
+    if len(parts) != 1 or parts[0] in {".", ".."}:
+        return None
+    return parts[0]
+
+
+def _leftover_names(root, *groups) -> list[str]:
+    names: list[str] = []
+    for group in groups:
+        for item in group or []:
+            name = root_file_name(item, root)
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def _finish(ctx, *, tool, model, seed, prompt, refs, job_id, started, payload=None, steps=None,
+            resolution=None, leftovers=None) -> None:
+    found = list(leftovers or [])
+    if payload:
+        found.extend(_files_of(payload))
+        if payload.get("filename") or payload.get("file"):
+            found.append(str(payload.get("filename") or payload.get("file")))
     _note(
         ctx, tool=tool, model=model, seed=seed, prompt=prompt, refs=refs, job_id=job_id,
         seconds=time.perf_counter() - started, payload=payload, steps=steps, resolution=resolution,
+        leftovers=_leftover_names(Path(ctx.workspace_dir(ctx.workspace)), found),
     )
     ctx.log(f"{tool} {job_id}")
 
@@ -290,7 +324,8 @@ def key(ctx, step, path, screen) -> str:
     name = payload.get("file") or _mapping(result.get("result")).get("file")
     if not name:
         raise GameToolError("key_failed", "studio.key returned no file")
-    _finish(ctx, tool="studio.key", model="screen", seed=None, prompt="", refs=[str(path)], job_id=str(name), started=started)
+    _finish(ctx, tool="studio.key", model="screen", seed=None, prompt="", refs=[str(path)], job_id=str(name),
+            started=started, leftovers=[str(name)])
     return str(name)
 
 

@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: producing a game asset no longer moves files that belong to something else.** After a successful produce, the files at the workspace root whose names started with the asset id were moved into the attempt's `raw/` folder, so producing `heroe` also moved a `heroe-portrait.png` made by another job. The tools now record the files they wrote, and only those are moved, together with their `.meta.json` and `.preview.png` sidecars. The leftovers of an attempt that failed stay at the root.
+
 **Fixed: a Production model can no longer point at a file outside its workspace.** `models[].glb` was joined to the workspace folder without a check, so a path such as `../x.glb` or an absolute path was read, and a cleaned copy was written next to it, outside the workspace. Such a path is now refused when the spec is validated and again when the models are made. A file in a sub-folder (`pack/x.glb`) still works.
 
 **Fixed: a Video 2D (scene2d) scene is exported again when the song's tempo changes.** The card takes the score's tempo, but a re-analysis of the song or a `production.song.use` that kept the shot windows left the old MP4 playing the old tempo. The scene record now keeps the tempo it was exported with, and a shot whose card takes the tempo (and that does not set its own `bpm`) exports again when the tempo, held to the card's range, changes. Scenes exported before this was recorded keep their file and learn the tempo on the next resume.
