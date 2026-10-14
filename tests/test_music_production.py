@@ -518,6 +518,37 @@ def test_a_changed_h3_shot_is_drawn_or_shot_again_and_an_unchanged_one_is_kept(t
     assert production.state["clips"]["a"]["obsolete"] and production.state["clips"]["b"]["obsolete"], "both are shot again"
 
 
+def test_a_changed_image_model_redraws_the_start_frame_and_reshoots_the_clip(tmp_path):
+    production, calls = _image_production(tmp_path, [("qwen.png", None), ("flux.png", None), ("steps.png", None)])
+    spec = {"style": {"image": "look", "image_model": "qwen_image_21", "image_steps": 40}, "cast": []}
+    shots = [{"key": "a", "kind": "h3", "frame": "wide shot", "action": "waves", "camera": "camera-dolly"}]
+    production.frames(spec, shots)
+    production.state["clips"] = {"a": {"file": "a.mp4"}}
+    production.frames(spec, shots)
+    assert len(calls) == 1 and production.state["frames"] == {"a": "qwen.png"} and "obsolete" not in production.state["clips"]["a"]
+    production.frames({**spec, "style": {**spec["style"], "image_model": "flux2_klein_9b", "image_steps": 4}}, shots)
+    assert production.state["frames"] == {"a": "flux.png"} and production.state["clips"]["a"]["obsolete"]
+    production.state["clips"]["a"] = {"file": "flux.mp4"}
+    production.frames({**spec, "style": {**spec["style"], "image_model": "flux2_klein_9b", "image_steps": 8}}, shots)
+    assert production.state["frames"] == {"a": "steps.png"} and production.state["clips"]["a"]["obsolete"]
+    assert calls[0]["input"]["params"]["model_type"] == "qwen_image_21"
+    assert calls[1]["input"]["params"]["model_type"] == "flux2_klein_9b"
+    assert calls[2]["input"]["params"]["model_type"] == "flux2_klein_9b"
+
+
+def test_a_per_shot_image_model_redraws_only_that_frame(tmp_path):
+    production, calls = _image_production(tmp_path, [("a1.png", None), ("b1.png", None), ("a2.png", None)])
+    spec = {"style": {"image": "look", "image_model": "qwen_image_21", "image_steps": 40}, "cast": []}
+    shots = [{"key": "a", "kind": "h3", "frame": "wide shot", "action": "waves", "camera": "camera-dolly"},
+             {"key": "b", "kind": "h3", "frame": "close shot", "action": "sings", "camera": "camera-push-in"}]
+    production.frames(spec, shots)
+    production.state["clips"] = {"a": {"file": "a.mp4"}, "b": {"file": "b.mp4"}}
+    production.frames(spec, [{**shots[0], "image_model": "flux2_klein_9b"}, shots[1]])
+    assert production.state["frames"] == {"a": "a2.png", "b": "b1.png"}
+    assert production.state["clips"]["a"]["obsolete"] and "obsolete" not in production.state["clips"]["b"]
+    assert calls[-1]["input"]["params"]["model_type"] == "flux2_klein_9b"
+
+
 def test_frames_made_before_their_source_was_recorded_are_kept(tmp_path):
     production, calls = _image_production(tmp_path, [])
     production.state.update(frames={"a": "old.png"}, clips={"a": {"file": "old.mp4"}})
