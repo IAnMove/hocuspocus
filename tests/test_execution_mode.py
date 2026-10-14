@@ -22,17 +22,16 @@ from services.asset_manifest import (
 )
 
 
-def _load_launch_function(name, namespace):
-    source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
-        encoding="utf-8",
-    )
-    tree = ast.parse(source, filename="app/_launch_runtime.py")
+def _load_launch_function(name, namespace, *, relative="app/_launch_runtime.py"):
+    path = Path(__file__).parents[1] / relative
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=relative)
     function = next(
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
     )
     exec(
-        compile(ast.Module(body=[function], type_ignores=[]), "app/_launch_runtime.py", "exec"),
+        compile(ast.Module(body=[function], type_ignores=[]), relative, "exec"),
         namespace,
     )
     return namespace[name]
@@ -282,7 +281,9 @@ def test_tool_sidecar_publishes_canonical_manifest_without_invented_actor(tmp_pa
         "time": time,
         "publish_generation_sidecar": publish_generation_sidecar,
     }
-    write = _load_launch_function("_write_tool_sidecar", namespace)
+    write = _load_launch_function(
+        "_write_tool_sidecar", namespace, relative="app/routers/tools.py",
+    )
     write(
         str(tmp_path),
         "clip.mp4",
@@ -533,27 +534,36 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
         ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
         ("async def blend_endpoint", "async def inpaint_endpoint", "_run_blend_generation"),
-        ("async def tools_upscale", "async def tools_revoice", "_run_tool_upscale"),
-        ("async def tools_revoice", "def _run_simulated_generation", "_run_tool_revoice"),
     )
     for start, end, real_worker in specialist_routes:
         route = source.split(start, 1)[1].split(end, 1)[0]
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
+    tools_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "tools.py"
+    ).read_text(encoding="utf-8")
+    tools_routes = (
+        ("async def tools_upscale", "async def tools_revoice", "_run_tool_upscale"),
+        ("async def tools_revoice", "create_tools_post_router.tools_upscale", "_run_tool_revoice"),
+    )
+    for start, end, real_worker in tools_routes:
+        route = tools_source.split(start, 1)[1].split(end, 1)[0]
+        assert "execution_mode.policy().simulated" in route
+        assert real_worker in route
+        assert "_run_generation" in route
     tree = ast.parse(source)
 
-    def function_source(name):
-        for node in ast.walk(tree):
+    def function_source(name, text=source, parsed=tree):
+        for node in ast.walk(parsed):
             if isinstance(node, ast.FunctionDef) and node.name == name:
-                return ast.get_source_segment(source, node)
+                return ast.get_source_segment(text, node)
         raise AssertionError(name)
 
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
         "_run_sfx_generation",
-        "_write_tool_sidecar",
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
@@ -572,6 +582,10 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     animatic_body = ast.get_source_segment(animatic_source, animatic_node)
     assert "publish_generation_sidecar" in animatic_body
     assert "json.dump" not in animatic_body
+    tools_tree = ast.parse(tools_source)
+    sidecar = function_source("_write_tool_sidecar", tools_source, tools_tree)
+    assert "publish_generation_sidecar" in sidecar
+    assert "json.dump" not in sidecar
     scene_save = (Path(__file__).parents[1] / "app" / "services" / "scene_save.py").read_text(encoding="utf-8")
     scene_tree = ast.parse(scene_save)
     scene_node = next(

@@ -277,6 +277,27 @@
     },
     "status": 400
   },
+  "storage usage": {
+    "body": {
+      "loras": [],
+      "models": [],
+      "models_total_bytes": 0,
+      "scanned_sidecars": 1,
+      "workspaces": [
+        {
+          "file_count": 1,
+          "name": "default",
+          "size_bytes": 97
+        },
+        {
+          "file_count": 1,
+          "name": "lab",
+          "size_bytes": 2
+        }
+      ]
+    },
+    "status": 200
+  },
   "wizard conversation empty": {
     "body": {
       "confirmations": [],

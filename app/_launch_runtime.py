@@ -1386,69 +1386,29 @@ _model_downloads_lock = threading.Lock()
 def _download_model_files(model_type: str):
     """Resolve and fetch every file load_models() would download.
 
-    Mirrors the file-resolution block at the top of wgp.load_models()
-    (wgp.py:4041-4143) — keep the two in sync.
+    The file list is ``services.engine.model_files.resolve_model_files``, the
+    mirror of the file-resolution block of ``wgp.load_models``. ``wgp.py`` is
+    vendored and is not edited. This name stays so the pre-download route
+    keeps calling it.
     """
-    if _is_legacy_h3_model(model_type):
-        minimax_h3_service.ensure_quality_assets(
-            lambda message: print(f"[H3 Legacy] {message}")
-        )
-        if not minimax_h3_service.is_model_downloaded():
-            raise RuntimeError(
-                "Legacy download finished but the exact ConvRot files are still missing."
-            )
-        return
+    from services.engine.model_files import download_model_files
 
-    model_def = wgp.get_model_def(model_type)
-    quantization = wgp.transformer_quantization
-    dtype_policy = wgp.transformer_dtype_policy
-    transformer_dtype = wgp.get_transformer_dtype(model_type, dtype_policy)
-
-    model_file_list = [wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy)]
-    source_type_list = [0]
-    submodel_no_list = [1]
-    if "URLs2" in model_def:
-        model_file_list.append(wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy, submodel_no=2))
-        source_type_list.append(0)
-        submodel_no_list.append(2)
-    modules = wgp.get_model_recursive_prop(model_type, "modules", return_list=True)
-    modules = [wgp.get_model_recursive_prop(module, "modules", sub_prop_name="_list", return_list=True) if isinstance(module, str) else module for module in modules]
-    for module_type in modules:
-        if isinstance(module_type, dict):
-            for urls_key, submodel_no in (("URLs", 1), ("URLs2", 2)):
-                urls = module_type.get(urls_key, None)
-                if urls is None:
-                    raise Exception(f"No {urls_key} defined for Module {module_type}")
-                model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, URLs=urls))
-                source_type_list.append(1)
-                submodel_no_list.append(submodel_no)
-        else:
-            model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, module_type=module_type))
-            source_type_list.append(1)
-            submodel_no_list.append(0)
-
-    fetched = False
-    for filename, source_type, submodel_no in zip(model_file_list, source_type_list, submodel_no_list):
-        if len(filename) == 0:
-            continue
-        wgp.download_models(filename, model_type, source_type, submodel_no)
-        fetched = True
-    if not fetched:
-        # No main file: the handler's own file list is the whole download (load_models does the same).
-        wgp.download_models("", model_type, 0, -1)
-
-    text_encoder_URLs = wgp.get_model_recursive_prop(model_type, "text_encoder_URLs", return_list=True)
-    if text_encoder_URLs is not None:
-        te_quant = (model_def.get("text_encoder_quantization", None) if model_def else None) or wgp.text_encoder_quantization
-        text_encoder_filename = wgp.get_model_filename(model_type=model_type, quantization=te_quant, dtype_policy=dtype_policy, URLs=text_encoder_URLs)
-        if text_encoder_filename is not None and len(text_encoder_filename):
-            text_encoder_folder = model_def.get("text_encoder_folder", None)
-            wgp.download_models(text_encoder_filename, model_type, 2, -1, force_path=text_encoder_folder)
-            if wgp.get_local_model_filename(text_encoder_filename, extra_paths=text_encoder_folder) is None:
-                raise Exception(f"Text encoder '{os.path.basename(text_encoder_filename)}' could not be located after download.")
-
-    if not _check_model_downloaded(model_type):
-        raise Exception("Download finished but the checkpoint could not be located — check disk space and earlier terminal output.")
+    download_model_files(
+        model_type,
+        is_legacy_h3_model=_is_legacy_h3_model,
+        ensure_quality_assets=minimax_h3_service.ensure_quality_assets,
+        is_h3_downloaded=minimax_h3_service.is_model_downloaded,
+        get_model_def=wgp.get_model_def,
+        transformer_quantization=wgp.transformer_quantization,
+        transformer_dtype_policy=wgp.transformer_dtype_policy,
+        get_transformer_dtype=wgp.get_transformer_dtype,
+        get_model_filename=wgp.get_model_filename,
+        get_model_recursive_prop=wgp.get_model_recursive_prop,
+        download_models=wgp.download_models,
+        get_local_model_filename=wgp.get_local_model_filename,
+        text_encoder_quantization=wgp.text_encoder_quantization,
+        check_model_downloaded=_check_model_downloaded,
+    )
 
 
 @api.post("/api/v1/models/{model_type}/download")
@@ -1503,10 +1463,8 @@ def get_defaults(model_type: str):
     return defaults
 
 
-@api.get("/api/v1/primary-settings")
-def get_primary_settings():
-    """Get the base primary_settings (all parameter defaults)."""
-    return wgp.primary_settings
+from routers.settings import create_primary_settings_router
+api.include_router(create_primary_settings_router(wgp=wgp))
 
 
 @api.get("/api/v1/loras/scan-status/{scan_id}")
@@ -6074,278 +6032,17 @@ def get_model_options(model_type: str):
     }
 
 
-# ── Generation Presets ───────────────────────────────────────────────────
+from services import settings_store
+from routers.settings import create_settings_config_router
+api.include_router(create_settings_config_router(
+    wgp=wgp,
+    _save_server_config=_save_server_config,
+    launch_file=__file__,
+    APP_VERSION=APP_VERSION,
+))
+_get_linked_model_folders = settings_store._get_linked_model_folders
+_nsfw_allowed = settings_store._nsfw_allowed
 
-_PRESETS_FILE = os.path.join(os.path.dirname(__file__), "presets.json")
-
-
-def _load_presets() -> list[dict]:
-    if os.path.isfile(_PRESETS_FILE):
-        try:
-            with open(_PRESETS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return []
-
-
-def _save_presets(presets: list[dict]):
-    with open(_PRESETS_FILE, "w", encoding="utf-8") as f:
-        json.dump(presets, f, indent=2)
-
-
-@api.get("/api/v1/presets")
-def list_presets():
-    """List all saved generation presets."""
-    return {"presets": _load_presets()}
-
-
-@api.post("/api/v1/presets")
-async def create_preset(request: Request):
-    """Save a new generation preset."""
-    body = await request.json()
-    name = body.get("name", "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="name is required")
-
-    preset = {
-        "id": uuid.uuid4().hex[:8],
-        "name": name,
-        "mode": body.get("mode", "video"),
-        "model_type": body.get("model_type", ""),
-        "prompt": body.get("prompt", ""),
-        "activated_loras": body.get("activated_loras", []),
-        "loras_multipliers": body.get("loras_multipliers", ""),
-        "lora_weights": body.get("lora_weights", {}),
-        "params": body.get("params", {}),
-        "created_at": time.time(),
-    }
-
-    presets = _load_presets()
-    presets.append(preset)
-    _save_presets(presets)
-    return preset
-
-
-@api.delete("/api/v1/presets/{preset_id}")
-def delete_preset(preset_id: str):
-    """Delete a preset by ID."""
-    presets = _load_presets()
-    new_presets = [p for p in presets if p.get("id") != preset_id]
-    if len(new_presets) == len(presets):
-        raise HTTPException(status_code=404, detail="Preset not found")
-    _save_presets(new_presets)
-    return {"deleted": preset_id}
-
-
-@api.get("/api/v1/system-config")
-def get_system_config():
-    """Return system-level settings for the UI System tab."""
-    cfg = wgp.server_config
-    return {
-        "app_version": APP_VERSION,
-        "attention_mode": cfg.get("attention_mode", "auto"),
-        "transformer_quantization": cfg.get("transformer_quantization", "int8"),
-        "vae_config": cfg.get("vae_config", 0),
-        "compile": cfg.get("compile", ""),
-        "video_profile": cfg.get("video_profile", 2),
-        "image_profile": cfg.get("image_profile", 2),
-        "audio_profile": cfg.get("audio_profile", 3.5),
-        "video_output_codec": cfg.get("video_output_codec", "libx264_8"),
-        "image_output_codec": cfg.get("image_output_codec", "jpeg_95"),
-        "enhancer_enabled": cfg.get("enhancer_enabled", 0),
-        "prompt_enhancer_quantization": cfg.get("prompt_enhancer_quantization", "quanto_int8"),
-        "attention_modes_available": list(wgp.attention_modes_supported),
-        # Read from server_config (persisted) rather than wgp.args, which
-        # only reflects the CLI default until wgp.py applies the saved
-        # value on startup. Either source returns the right value after
-        # the wgp.py override runs, but reading from server_config is
-        # consistent with all the other fields above and avoids depending
-        # on startup ordering.
-        "vram_safety_coefficient": cfg.get("vram_safety_coefficient", wgp.args.vram_safety_coefficient),
-        # Linked model folders: the external (absolute, outside-the-app)
-        # entries of checkpoints_paths. The app-owned entries ("ckpts", ".")
-        # are managed automatically and never shown to the user.
-        "model_folders": _get_linked_model_folders(),
-        # Boot-only acceptance policy. The UI may display this state but can
-        # never mutate it, so the Wizard cannot turn fake execution on.
-        "execution_mode": execution_mode.policy().mode,
-        "execution_workspace": execution_mode.policy().workspace,
-        "execution_allow_paid": execution_mode.policy().allow_paid,
-        "execution_simulation_step_delay": execution_mode.policy().step_delay,
-    }
-
-
-def _get_linked_model_folders():
-    from shared.utils.files_locator import is_external_root
-    paths = wgp.server_config.get("checkpoints_paths") or []
-    # Index 0 is the primary download root — even when it is an absolute
-    # user-chosen path (upstream supports e.g. D:/models first), it is NOT
-    # a linked folder and must never be demoted to read-only.
-    return [p for p in paths[1:] if isinstance(p, str) and is_external_root(p)]
-
-
-def _apply_linked_model_folders(folders):
-    """Validate and apply a list of linked model folders.
-
-    Rebuilds checkpoints_paths as [primary] + [linked] + ["."], preserving
-    whatever primary download root the config already had (default
-    "ckpts"). Applies live via the files locator — no restart needed for
-    lookups. Raises (400) BEFORE any state is mutated.
-    """
-    from shared.utils.files_locator import is_external_root
-    if not isinstance(folders, list):
-        raise HTTPException(status_code=400, detail="model_folders must be a list of folder paths")
-    existing = wgp.server_config.get("checkpoints_paths") or []
-    primary = existing[0] if existing and isinstance(existing[0], str) and existing[0].strip() else "ckpts"
-    primary_n = os.path.normcase(os.path.normpath(os.path.abspath(primary)))
-    normalized = []
-    seen = set()
-    for p in folders:
-        if not isinstance(p, str) or not p.strip():
-            raise HTTPException(status_code=400, detail=f"Invalid folder entry: {p!r}")
-        # Tolerate Windows Explorer "Copy as path" quoting.
-        cleaned = p.strip().strip('"').strip("'").strip()
-        ap = os.path.normpath(os.path.abspath(cleaned))
-        if not os.path.isdir(ap):
-            raise HTTPException(status_code=400, detail=f"Folder does not exist: {ap}")
-        if not is_external_root(ap):
-            raise HTTPException(status_code=400, detail=f"Folder is inside the HocusPocus Lab install (already searched): {ap}")
-        ap_n = os.path.normcase(ap)
-        if ap_n == primary_n:
-            raise HTTPException(status_code=400, detail=f"Folder is the primary download root: {ap}")
-        if ap_n not in seen:
-            seen.add(ap_n)
-            normalized.append(ap)
-    new_paths = [primary] + normalized + ["."]
-    wgp.server_config["checkpoints_paths"] = new_paths
-    wgp.fl.set_checkpoints_paths(new_paths)
-    return normalized
-
-
-def _validated_memory_profile_updates(body):
-    """Reject invalid profiles before any configuration changes are applied."""
-    profiles = {}
-    for key in ("video_profile", "image_profile", "audio_profile"):
-        if key not in body:
-            continue
-        value = body[key]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value not in (1, 2, 3, 3.5, 4, 4.5, 5):
-            raise HTTPException(status_code=400, detail=f"Invalid memory profile for {key}")
-        profiles[key] = value
-    return profiles
-
-
-@api.put("/api/v1/system-config")
-async def update_system_config(request: Request):
-    """Update system-level settings. Accepts partial JSON body."""
-    body = await request.json()
-    profile_updates = _validated_memory_profile_updates(body)
-
-    ALLOWED_KEYS = {
-        "attention_mode", "transformer_quantization", "vae_config",
-        "compile", "video_profile", "image_profile", "audio_profile",
-        "video_output_codec", "image_output_codec",
-        "enhancer_enabled", "prompt_enhancer_quantization",
-        "vram_safety_coefficient",
-    }
-
-    updated = {}
-    # Linked model folders map onto checkpoints_paths (validated + applied
-    # live); the raw key is deliberately NOT in ALLOWED_KEYS so clients
-    # can't bypass the validation and write-pinning invariants. Processed
-    # FIRST because its validation raises 400 before mutating anything —
-    # a mixed body must not leave other keys half-applied.
-    if "model_folders" in body:
-        updated["model_folders"] = _apply_linked_model_folders(body["model_folders"])
-
-    for key, value in body.items():
-        if key in ALLOWED_KEYS:
-            wgp.server_config[key] = value
-            updated[key] = value
-
-    if not updated:
-        raise HTTPException(status_code=400, detail="No valid fields to update")
-
-    # Persist to disk
-    _save_server_config()
-
-    # Apply runtime side effects where possible
-    if "attention_mode" in updated:
-        wgp.attention_mode = updated["attention_mode"]
-    if "vae_config" in updated:
-        wgp.vae_config = updated["vae_config"]
-    if "compile" in updated:
-        wgp.compile = updated["compile"]
-    if "vram_safety_coefficient" in updated:
-        wgp.args.vram_safety_coefficient = float(updated["vram_safety_coefficient"])
-    # WanGP selects these defaults when the next model is loaded. Updating
-    # server_config alone leaves its startup snapshots active indefinitely.
-    # The resident model's loaded_profile and offload object remain untouched.
-    for key, value in profile_updates.items():
-        setattr(wgp, f"default_profile_{key.removesuffix('_profile')}", value)
-    if "video_profile" in profile_updates:
-        wgp.default_profile = profile_updates["video_profile"]
-
-    return {"status": "ok", "updated": updated}
-
-
-@api.get("/api/v1/model-folders/scan")
-def scan_model_folders():
-    """Discover sibling Pinokio apps with a Wan2GP-style ckpts folder.
-
-    Maestro lives at <pinokio>/api/<name>/app, so sibling installs (e.g. an
-    existing Wan2GP) are <pinokio>/api/*/app/ckpts. Returns lightweight
-    candidates for the Settings -> Linked Model Folders UI; size stats are
-    top-level-files-only so scanning stays instant on multi-hundred-GB
-    folders.
-    """
-    from shared.utils.files_locator import is_external_root
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    own_ckpts = os.path.normpath(os.path.join(app_dir, "ckpts"))
-    api_root = os.path.dirname(os.path.dirname(app_dir))
-    linked = {os.path.normcase(os.path.normpath(p)) for p in _get_linked_model_folders()}
-
-    candidates = []
-    try:
-        entries = list(os.scandir(api_root))
-    except OSError:
-        entries = []
-    for entry in entries:
-        if not entry.is_dir():
-            continue
-        ckpts = os.path.normpath(os.path.join(entry.path, "app", "ckpts"))
-        if ckpts == own_ckpts or not os.path.isdir(ckpts):
-            continue
-        if not is_external_root(ckpts):
-            continue
-        file_count = 0
-        dir_count = 0
-        size_bytes = 0
-        try:
-            for f in os.scandir(ckpts):
-                if f.is_file():
-                    file_count += 1
-                    try:
-                        size_bytes += f.stat().st_size
-                    except OSError:
-                        pass
-                elif f.is_dir():
-                    dir_count += 1
-        except OSError:
-            continue
-        if file_count == 0 and dir_count == 0:
-            continue
-        candidates.append({
-            "app": entry.name,
-            "path": ckpts,
-            "files": file_count,
-            "folders": dir_count,
-            "size_gb": round(size_bytes / 1e9, 1),
-            "linked": os.path.normcase(ckpts) in linked,
-        })
-    candidates.sort(key=lambda c: c["size_gb"], reverse=True)
-    return {"candidates": candidates}
 
 
 # ============================================================================
@@ -6379,198 +6076,28 @@ def get_active_downloads():
     return {"downloads": _get()}
 
 
-@api.get("/api/v1/runtime-capabilities")
-def get_runtime_capabilities():
-    """Installation recipes and detected hardware, without loading AI models."""
-    from services.runtime_profiles import detect_profiles
-    return detect_profiles()
-
-
-@api.get("/api/v1/system-detect")
-def get_system_detect():
-    """Return current hardware + the auto-tune recommendation for it.
-
-    Always succeeds — on systems without CUDA, returns a
-    "no GPU detected" recommendation rather than erroring, so the UI
-    can show a meaningful message instead of a blank state.
-    """
-    from services.hardware_detect import detect_hardware
-    from services.perf_recommend import recommend_settings
-
-    hw = detect_hardware()
-    rec = recommend_settings(hw)
-    services = wgp.server_config.get("services", {})
-    return {
-        "hardware": hw,
-        "recommended": rec,
-        "auto_enabled": services.get("auto_performance", True),
-    }
-
-
-@api.post("/api/v1/system-detect/apply")
-async def apply_system_detect():
-    """Apply the current hardware's recommended settings to wgp_config.json.
-
-    Re-runs detection (cheap) and writes the recommended values into
-    both system-level config keys AND sets services.auto_performance=True.
-    Returns the applied values so the UI can update its state without
-    a separate GET round-trip.
-
-    Side effects:
-      - wgp_config.json is rewritten on disk
-      - In-memory wgp.server_config is updated
-      - Runtime overrides are applied where possible (attention_mode,
-        vae_config, compile, vram_safety_coefficient) — same as the
-        manual PUT /api/v1/system-config endpoint does.
-      - Profile changes (video_profile, image_profile, audio_profile)
-        only take effect on next model load; the response includes a
-        flag noting this so the UI can show the user.
-    """
-    from services.hardware_detect import detect_hardware
-    from services.perf_recommend import recommend_settings, applied_keys
-
-    hw = detect_hardware()
-    rec = recommend_settings(hw)
-
-    # Write only the actual config keys (skip _recommendation_label
-    # and _recommendation_reason which are display-only metadata).
-    profile_changed = False
-    for key in applied_keys():
-        if key in rec:
-            old_value = wgp.server_config.get(key)
-            new_value = rec[key]
-            if old_value != new_value:
-                wgp.server_config[key] = new_value
-                if key.endswith("_profile"):
-                    profile_changed = True
-
-    # Mark auto_performance ON so future PUTs to /system-config can
-    # detect "user manually changed something" and flip it OFF.
-    services = wgp.server_config.setdefault("services", {})
-    services["auto_performance"] = True
-    # Sentinel so the first-boot auto-tune (see startup) treats this as
-    # already-applied and never overwrites what the user just applied.
-    services["auto_performance_applied"] = True
-
-    # Persist to disk
-    _save_server_config()
-
-    # Apply runtime side effects where possible (matches update_system_config)
-    if "attention_mode" in rec:
-        wgp.attention_mode = rec["attention_mode"]
-    if "vae_config" in rec:
-        wgp.vae_config = rec["vae_config"]
-    if "compile" in rec:
-        wgp.compile = rec["compile"]
-    if "vram_safety_coefficient" in rec:
-        wgp.args.vram_safety_coefficient = float(rec["vram_safety_coefficient"])
-
-    return {
-        "status": "ok",
-        "hardware": hw,
-        "applied": {k: rec[k] for k in applied_keys() if k in rec},
-        "label": rec.get("_recommendation_label", ""),
-        "reason": rec.get("_recommendation_reason", ""),
-        # Tells UI to show "changes take effect on next model load" toast
-        "profile_changed": profile_changed,
-    }
-
-
-@api.get("/api/v1/system-stats")
-def get_system_stats_live():
-    """Live hardware telemetry for the status indicators.
-
-    Cheap enough (non-blocking psutil + a couple of NVML reads) to poll
-    every ~2s. Also reports the generation model currently resident in
-    VRAM so the UI can show "what's loaded right now".
-    """
-    # Currently-loaded generation model. WGP/mmgp keeps it resident
-    # between jobs. `transformer_type` tracks the live load (set at the
-    # end of load_models); `wan_model is not None` means it is actually
-    # in memory right now vs. just the last/selected type.
-    def current_model():
-        model_name = None
-        model_type = None
-        model_loaded = False
-        try:
-            model_type = getattr(wgp, "transformer_type", None)
-            model_loaded = getattr(wgp, "wan_model", None) is not None
-            if model_type:
-                try:
-                    md = wgp.get_model_def(model_type) or {}
-                    model_name = md.get("name") or model_type
-                except Exception:
-                    model_name = model_type
-        except Exception:
-            pass
-        return {
-            "name": model_name,
-            "model_type": model_type,
-            "loaded": model_loaded,
-        }
-
-    from services.live_stats import snapshot_system_stats
-    return snapshot_system_stats(
-        os.path.join(os.path.dirname(_app_dir), "ui", "dist"),
-        current_model,
-    )
-
-
-@api.post("/api/v1/system/release-model")
-def system_release_model():
-    """Manually unload resident models to free VRAM/RAM (issue #12).
-
-    Models deliberately stay loaded between generations so a retry with
-    the same model skips the load. This endpoint is the explicit opt-out
-    for users who want the memory back now — wgp reloads transparently
-    on the next job. Refuses while anything is generating.
-    """
-    for j in _jobs.values():
-        if j.get("status") in {
-            "queued", "waiting_resource", "running", "cancelling",
-        }:
-            raise HTTPException(status_code=409, detail="A generation is in progress — stop it or wait for it to finish first.")
-    try:
-        from services.director_pipeline import _pipelines
-        if any(p.get("status") == "running" for p in _pipelines.values()):
-            raise HTTPException(status_code=409, detail="A Director run is in progress — stop it first.")
-    except ImportError:
-        pass
-    if not _gen_lock.acquire(blocking=False):
-        raise HTTPException(status_code=409, detail="A generation is in progress — stop it or wait for it to finish first.")
-    try:
-        released = []
-        if minimax_h3_service.is_runtime_running():
-            print("[ReleaseModel] Stopping isolated H3 Legacy runtime (user request)")
-            minimax_h3_service.stop_runtime()
-            released.append("H3 Legacy runtime")
-        if getattr(wgp, "wan_model", None) is not None or getattr(wgp, "offloadobj", None) is not None:
-            print("[ReleaseModel] Unloading generation model (user request)")
-            wgp.release_model()
-            released.append("generation model")
-        try:
-            from services import llm_service
-            if llm_service.is_loaded():
-                print("[ReleaseModel] Unloading LLM (user request)")
-                llm_service.unload_model()
-                released.append("LLM")
-        except Exception as e:
-            print(f"[ReleaseModel] LLM unload skipped: {e}")
-        import gc
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        return {"released": released}
-    finally:
-        _gen_lock.release()
+from routers.system import (
+    create_system_diagnostics_router,
+    create_system_preflight_router,
+    create_system_resources_router,
+    create_system_runtime_router,
+)
+api.include_router(create_system_runtime_router(
+    wgp=wgp,
+    _save_server_config=_save_server_config,
+    _jobs=_jobs,
+    _gen_lock=_gen_lock,
+    _app_dir=_app_dir,
+    minimax_h3_service=minimax_h3_service,
+    torch=torch,
+))
 
 
 # ============================================================================
 # API Routes: Recipes (one-click Studio presets)
 # ============================================================================
 
-def _nsfw_allowed() -> bool:
-    return bool(wgp.server_config.get("services", {}).get("nsfw_mode", False))
+
 
 
 from routers.recipes import create_recipes_router
@@ -6582,321 +6109,33 @@ api.include_router(create_recipes_router(
 ))
 
 
-@api.get("/api/v1/system/preflight")
-def system_preflight():
-    """Environment sanity checks surfaced to the UI on startup.
-
-    Catches the three things that otherwise fail deep inside a
-    generation with a cryptic traceback: ffmpeg missing (every
-    video/audio mux needs it), no CUDA GPU (the pipeline is CUDA-only),
-    and low free disk on the output drive (a long Director run writes
-    gigabytes). Each check degrades to a warning the UI can show once,
-    not a hard failure — the user might genuinely be on a CPU box just
-    browsing.
-    """
-    import shutil as _shutil
-
-    checks = []
-
-    # ffmpeg — hard requirement for muxing/concat/audio.
-    ffmpeg_path = _shutil.which("ffmpeg")
-    if not ffmpeg_path:
-        checks.append({
-            "id": "ffmpeg",
-            "level": "error",
-            "message": "ffmpeg was not found on PATH. Video and audio "
-                       "export will fail. Install ffmpeg and restart HocusPocus Lab.",
-        })
-
-    # CUDA — the generation pipeline is NVIDIA-only.
-    try:
-        import torch as _torch
-        if not _torch.cuda.is_available():
-            checks.append({
-                "id": "cuda",
-                "level": "error",
-                "message": "No CUDA GPU detected. HocusPocus Lab's generation "
-                           "pipeline requires an NVIDIA GPU; generation will "
-                           "not work on this machine.",
-            })
-    except Exception:
-        checks.append({
-            "id": "torch",
-            "level": "error",
-            "message": "PyTorch failed to import — the install may be "
-                       "incomplete. Try Reset then Install in Pinokio.",
-        })
-
-    # Free disk on the output drive.
-    try:
-        save_path = wgp.server_config.get("save_path", "outputs")
-        probe_dir = save_path if os.path.isdir(save_path) else os.getcwd()
-        free_gb = _shutil.disk_usage(probe_dir).free / (1024 ** 3)
-        if free_gb < 5:
-            checks.append({
-                "id": "disk",
-                "level": "error",
-                "message": f"Only {free_gb:.1f} GB free on the output drive. "
-                           "Generation writes large files and will fail soon. "
-                           "Free up space.",
-            })
-        elif free_gb < 20:
-            checks.append({
-                "id": "disk",
-                "level": "warn",
-                "message": f"{free_gb:.0f} GB free on the output drive. Model "
-                           "downloads and long runs can exhaust this — keep an "
-                           "eye on free space.",
-            })
-    except Exception:
-        pass
-
-    return {"ok": not any(c["level"] == "error" for c in checks), "checks": checks}
+api.include_router(create_system_preflight_router(wgp=wgp))
 
 
 # ============================================================================
 # API Routes: Services config (API keys, LLM settings)
 # ============================================================================
 
-def _mask_key(key: str) -> str:
-    """Mask an API key for safe display: show first 4 and last 4 chars."""
-    if not key or len(key) < 10:
-        return "***" if key else ""
-    return key[:4] + "..." + key[-4:]
+from routers.settings import create_settings_services_router
+api.include_router(create_settings_services_router(
+    wgp=wgp,
+    _save_server_config=_save_server_config,
+    _effective_llm_routing=_effective_llm_routing,
+    _active_production_profile=_active_production_profile,
+    _normalize_production_profile=_normalize_production_profile,
+    _PRODUCTION_PROFILE_CONFIG_KEY=_PRODUCTION_PROFILE_CONFIG_KEY,
+))
+get_services_config = create_settings_services_router.get_services_config
+_PUBLIC_LLM_PROVIDERS = settings_store._PUBLIC_LLM_PROVIDERS
+_DEFAULT_LLM_REPO = settings_store._DEFAULT_LLM_REPO
+_llm_default_device = settings_store._llm_default_device
+_mask_key = settings_store._mask_key
 
 
-_PUBLIC_LLM_PROVIDERS = {"openai", "anthropic", "minimax", "grok", "deepseek"}
 
-
-def _llm_default_device() -> str:
-    """Default LLM device — CUDA when the system has it, else CPU.
-
-    This is the value returned for `services.llm_device` when the user
-    has never explicitly set it in Settings → Services. Previously
-    hardcoded to "cpu" which left CUDA-equipped users stuck on CPU
-    inference until they noticed the dropdown and flipped it. New
-    installs on a CUDA box now get GPU LLM out of the box.
-
-    User who already explicitly set "cpu" keeps "cpu" — the value is
-    persisted in wgp_config.json and overrides this default. Same for
-    explicit "cuda".
-    """
-    try:
-        if torch.cuda.is_available():
-            return "cuda"
-    except Exception:
-        pass
-    return "cpu"
-
-
-# Default LLM repo — kept in sync with DEFAULT_HF_REPO in
-# services/llm_service.py. Updated to Gemma 4 4B 2026-05-03.
-_DEFAULT_LLM_REPO = "Abhiray/gemma-4-E4B-it-heretic-GGUF"
-
-
-@api.get("/api/v1/services-config")
-def get_services_config():
-    """Return services settings with API keys masked."""
-    services = wgp.server_config.get("services", {})
-    provider, profile_model, profile_remote_url = _effective_llm_routing(services)
-    # Enforce: NSFW must be off when using a public provider
-    nsfw = services.get("nsfw_mode", False) and provider not in _PUBLIC_LLM_PROVIDERS
-    return {
-        "llm_model_id": profile_model or services.get("llm_model_id", _DEFAULT_LLM_REPO),
-        "llm_device": services.get("llm_device", _llm_default_device()),
-        "llm_provider": provider,
-        "llm_remote_url": profile_remote_url,
-        "enhance_llm_model_id": services.get("enhance_llm_model_id", ""),
-        "enhance_llm_device": services.get("enhance_llm_device", "cuda"),
-        "google_api_key": _mask_key(services.get("google_api_key", "")),
-        "google_api_key_set": bool(services.get("google_api_key", "")),
-        "openai_api_key": _mask_key(services.get("openai_api_key", "")),
-        "openai_api_key_set": bool(services.get("openai_api_key", "")),
-        "deepseek_api_key": _mask_key(services.get("deepseek_api_key", "")),
-        "deepseek_api_key_set": bool(services.get("deepseek_api_key", "")),
-        "compatible_api_key": _mask_key(services.get("compatible_api_key", "")),
-        "compatible_api_key_set": bool(services.get("compatible_api_key", "")),
-        "compatible_base_url": services.get("compatible_base_url", ""),
-        "anthropic_api_key": _mask_key(services.get("anthropic_api_key", "")),
-        "anthropic_api_key_set": bool(services.get("anthropic_api_key", "")),
-        "minimax_api_key": _mask_key(services.get("minimax_api_key", "")),
-        "minimax_api_key_set": bool(services.get("minimax_api_key", "")),
-        "minimax_llm_api_key": _mask_key(services.get("minimax_llm_api_key", "")),
-        "minimax_llm_api_key_set": bool(services.get("minimax_llm_api_key") or services.get("minimax_api_key")),
-        "minimax_image_api_key": _mask_key(services.get("minimax_image_api_key", "")),
-        "minimax_image_api_key_set": bool(services.get("minimax_image_api_key") or services.get("minimax_api_key")),
-        "minimax_music_api_key": _mask_key(services.get("minimax_music_api_key", "")),
-        "minimax_music_api_key_set": bool(services.get("minimax_music_api_key") or services.get("minimax_api_key")),
-        "grok_api_key": _mask_key(services.get("grok_api_key", "")),
-        "grok_api_key_set": bool(services.get("grok_api_key", "")),
-        "meshy_api_key": _mask_key(services.get("meshy_api_key", "")),
-        "meshy_api_key_set": bool(services.get("meshy_api_key", "")),
-        "hi3d_api_key": _mask_key(services.get("hi3d_api_key", "")),
-        "hi3d_api_key_set": bool(services.get("hi3d_api_key", "")),
-        # Director v2 (layered architecture: structured shot planning,
-        # mode-specific renderers, prompt validation) is now the default
-        # as of 2026-05-03 after weeks of real-world validation. v1 had
-        # a known polish-pass failure mode where smaller LLMs (Gemma 4
-        # 4B) would hallucinate dialogue into image_prompts. v2 doesn't
-        # exhibit that. Existing users who explicitly set use_director_v2
-        # to false (legacy v1) keep that choice; only fresh installs and
-        # users who never touched the toggle see the new default.
-        "use_director_v2": services.get("use_director_v2", True),
-        "nsfw_mode": nsfw,
-        "nsfw_accepted_at": services.get("nsfw_accepted_at", None),
-        # Off by default: Director prompts reach the models as the planner
-        # wrote them. The model-aware third pass is opt-in; native H3 video
-        # prompts bypass its creative rewriting.
-        "director_prompt_polish": services.get("director_prompt_polish", "off"),
-        # Raw prompts: the Director adds no style prefix, locks or polish.
-        "raw_prompts": services.get("raw_prompts") is True, "director_reference_anchor": services.get("director_reference_anchor", "always"), "director_lighting_continuity": services.get("director_lighting_continuity", "auto"), "director_keep_reference_wardrobe": services.get("director_keep_reference_wardrobe") is not False,
-        # Safe workflow overlap: every local GPU and remote server keeps
-        # capacity one; only genuinely different resources run together.
-        "workflow_parallelism_enabled": services.get("workflow_parallelism_enabled", True),
-        # Structured JSONL tracing of LLM calls and user actions.
-        "debug_trace_enabled": services.get("debug_trace_enabled", False),
-        "debug_trace_log_path": debug_trace.current_log_path(),
-        "civitai_api_key": _mask_key(services.get("civitai_api_key", "")),
-        "civitai_api_key_set": bool(services.get("civitai_api_key", "")),
-        # Voice Reference is a stable, user-facing capability now. Fresh
-        # installs expose its controls by default, while an explicitly saved
-        # False value remains respected.
-        "voice_reference_enabled": services.get("voice_reference_enabled", True),
-        "ltx_progressive_pipeline": services.get("ltx_progressive_pipeline", False),
-        # Master gate for experimental features. When False (default for
-        # fresh installs and a sane "ship-ready" baseline), the Services
-        # panel hides external API keys and the Studio prompt enhancer
-        # config; the Edit mode picker hides Inpaint. Voice Reference is
-        # intentionally independent of this gate.
-        "show_experimental": services.get("show_experimental", False),
-        # Storage Manager: opt-in gate for removing duplicate files FROM
-        # linked installs (the inverse of Reclaim). Default off — deleting
-        # from another install is informed-consent territory.
-        "storage_allow_linked_removal": services.get("storage_allow_linked_removal", False),
-        # Performance auto-tune master switch. When True (default), the
-        # Settings → System Performance section collapses to a single
-        # "Detected: <hardware> → <profile>" card with all underlying
-        # knobs hidden under "Show advanced settings". The auto-tune
-        # values are applied at first launch (see wgp._init_default_config)
-        # and reapplied if the user clicks "Re-detect". When False, the
-        # user has manually configured something — we stop overwriting
-        # their choices and show the full advanced UI by default.
-        "auto_performance": services.get("auto_performance", True),
-        # Multi-shot LoRA mode (Maque IC-LoRA and similar). When True,
-        # Pass 2 emits storyboard-format video_prompts for medium-length
-        # shots (20-30s), letting the LoRA cut between camera angles
-        # inside a single generation. Short reaction shots (≤15s) and
-        # long sustained shots (40s+ continuous action — sex acts,
-        # climactic confrontations) keep the regular single-camera
-        # video_prompt format because internal cuts would break either
-        # the punchy timing or the sustained-take feel.
-        #
-        # Off by default — power-user feature for now. User must have
-        # the matching IC-LoRA enabled in their video_loras selection
-        # for the storyboard format to actually produce internal cuts;
-        # without the LoRA, the storyboard text still renders but as
-        # a single-take with no cuts. Future direction: a LoRA
-        # capabilities catalog (see docs/project_lora_catalog.md) that
-        # auto-enables this mode when a multi-shot-capable LoRA is in
-        # the active set.
-        "director_multishot_lora_mode": services.get("director_multishot_lora_mode", False),
-        # FlashVSR (DiT super-resolution) spatial-upsampling settings.
-        # variant: 1=tiny (fast/low-VRAM), 2=full (best quality, uses full VAE),
-        # 3=tiny-long (tiny for long videos). topk_ratio 0..4 controls sparse-
-        # attention density (higher = more motion fidelity, slower). backend:
-        # auto / triton_sparse (bundled) / sparge (optional install, best motion).
-        "flashvsr_mode": services.get("flashvsr_mode", 1),
-        "flashvsr_topk_ratio": services.get("flashvsr_topk_ratio", 0.0),
-        "flashvsr_backend": services.get("flashvsr_backend", "auto"),
-    }
-
-
-@api.put("/api/v1/services-config")
-async def update_services_config(request: Request):
-    """Update services configuration. API keys are stored in full, returned masked."""
-    body = await request.json()
-
-    ALLOWED_KEYS = {
-        "llm_model_id", "llm_device", "llm_provider", "llm_remote_url",
-        "enhance_llm_model_id", "enhance_llm_device",
-        "google_api_key", "openai_api_key", "deepseek_api_key", "compatible_api_key",
-        "compatible_base_url", "anthropic_api_key", "minimax_api_key",
-        "minimax_llm_api_key", "minimax_image_api_key", "minimax_music_api_key",
-        "grok_api_key", "meshy_api_key", "hi3d_api_key",
-        "use_director_v2", "nsfw_mode", "nsfw_accepted_at", "director_prompt_polish",
-        "raw_prompts", "debug_trace_enabled", "workflow_parallelism_enabled",
-        "civitai_api_key", "voice_reference_enabled", "ltx_progressive_pipeline",
-        "show_experimental", "auto_performance", "storage_allow_linked_removal",
-        "director_multishot_lora_mode", "director_reference_anchor", "director_lighting_continuity", "director_keep_reference_wardrobe",
-        "flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend",
-    }
-
-    services = wgp.server_config.setdefault("services", {})
-    updated = {}
-
-    for key, value in body.items():
-        if key not in ALLOWED_KEYS:
-            continue
-        # Don't overwrite a real key with its masked version
-        if key.endswith("_api_key") and value and "..." in value:
-            continue
-        services[key] = value
-        updated[key] = _mask_key(value) if key.endswith("_api_key") else value
-        if key.endswith("_api_key"):
-            updated[f"{key}_set"] = bool(value)
-
-    # Enforce: cannot enable NSFW with a public LLM provider
-    provider = _effective_llm_routing(services)[0]
-    if services.get("nsfw_mode") and provider in _PUBLIC_LLM_PROVIDERS:
-        services["nsfw_mode"] = False
-        updated["nsfw_mode"] = False
-
-    # When switching TO a public provider, auto-disable NSFW
-    if "llm_provider" in body and body["llm_provider"] in _PUBLIC_LLM_PROVIDERS:
-        if services.get("nsfw_mode"):
-            services["nsfw_mode"] = False
-            updated["nsfw_mode"] = False
-
-    if not updated:
-        raise HTTPException(status_code=400, detail="No valid fields to update")
-
-    wgp.server_config["services"] = services
-
-    # Keep the global text profile and the legacy LLM controls coherent. API
-    # keys remain solely in services; only credential-free routing is mirrored.
-    if "llm_provider" in body or "llm_model_id" in body:
-        try:
-            profile = _active_production_profile()
-            profile["text"]["provider"] = str(
-                services.get("llm_provider") or profile["text"]["provider"]
-            )
-            profile["text"]["model"] = str(
-                services.get("llm_model_id") or profile["text"]["model"]
-            )
-            if services.get("llm_remote_url"):
-                profile["text"]["base_url"] = str(services.get("llm_remote_url") or "")
-            wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = _normalize_production_profile(profile)
-        except ValueError:
-            pass
-
-    _save_server_config()
-
-    return {"status": "ok", "updated": updated}
-
-
-@api.post("/api/v1/debug/user-action")
-async def record_debug_user_action(request: Request):
-    """Record non-API UI actions (buttons/navigation), never typed values."""
-    if not debug_trace.is_enabled():
-        return {"status": "disabled"}
-    body = await request.json()
-    debug_trace.trace_event(
-        "user_action", "ui_control",
-        control=str(body.get("control") or "")[:500],
-        control_type=str(body.get("control_type") or "")[:80],
-        view=str(body.get("view") or "")[:500],
-    )
-    return {"status": "ok"}
+api.include_router(create_system_diagnostics_router(wgp=wgp))
+# The MCP processor tool calls the same handler the HTTP route does.
+wangp_capabilities = create_system_diagnostics_router.wangp_capabilities
 
 
 # ============================================================================
@@ -6915,293 +6154,66 @@ def _resolve_model3d_input_path(value: str, workspace: str | None = None) -> str
     )
 
 
-@api.get("/api/v1/wangp/capabilities")
-async def wangp_capabilities():
-    from shared.wangp1272.processors import capabilities
-    processors = capabilities()
-    for multiplier in (2, 3, 4):
-        enabled = multiplier != 3 or wgp.server_config.get("rife_version", "v4") == "v4"
-        processors.append(dict(value=f"rife{multiplier}", label=f"RIFE ×{multiplier}", kind="temporal", media=["video"], enabled=enabled, reason="" if enabled else "RIFE ×3 requires version 4.26"))
-    return {"revision": "362c3467a70e1136ceb52eec95907205a8f88543", "processors": processors}
 
 
-@api.get("/api/v1/model3d/capabilities")
-def model3d_capabilities():
-    from services import model3d_service
-    return model3d_service.capabilities()
+class _LaunchCollectionLookup:
+    """The collections registry is created later in this module; look it up per request."""
+
+    def get(self, key):
+        return globals()["_workspace_collection_registry"].get(key)
 
 
-@api.post("/api/v1/model3d/generate")
-async def generate_model3d(request: Request):
-    from services import model3d_service
-    from services.generation_provenance import normalize_submission_provenance
-
-    body = await request.json()
-    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
-    collection_id = body["provenance"].get("workspace_id")
-    if collection_id and not _workspace_collection_registry.get(collection_id):
-        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    try:
-        execution_mode.validate_generation(workspace)
-    except execution_mode.ExecutionModeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raw_images = body.get("images") or {}
-    if not isinstance(raw_images, dict):
-        raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
-    # Backward-compatible single-image input becomes the front view.
-    if body.get("image_path") and not raw_images.get("front"):
-        raw_images["front"] = body["image_path"]
-    image_paths = {}
-    for view, value in raw_images.items():
-        if view not in {"front", "left", "right", "back"} or not value:
-            continue
-        resolved = _resolve_model3d_input_path(str(value), workspace)
-        if not resolved or not os.path.isfile(resolved):
-            raise HTTPException(status_code=400, detail=f"3D {view} image not found")
-        image_paths[view] = resolved
-    source_mesh_path = None
-    if str(body.get("operation") or "generate").lower() == "retexture":
-        source_mesh_path = _resolve_model3d_input_path(
-            str(body.get("source_model") or ""), workspace,
-        )
-        if not source_mesh_path or not os.path.isfile(source_mesh_path):
-            raise HTTPException(status_code=400, detail="Source GLB not found")
-    try:
-        job = model3d_service.start_job(
-            body=body,
-            image_paths=image_paths,
-            output_dir=_workspace_dir(workspace),
-            source_mesh_path=source_mesh_path,
-            workspace=workspace,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "model3d")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/model3d/status/{job_id}")
-def model3d_job_status(job_id: str):
-    from services import model3d_service
-    job = model3d_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
+def _publish_moved_studio_task(record, adapter):
+    """Activity publish stays the launch function, which is defined further down."""
     publisher = globals().get("_publish_generic_legacy_task")
     if callable(publisher):
-        publisher(job, "model3d")
-    return job
+        publisher(record, adapter)
 
 
-@api.post("/api/v1/model3d/jobs/{job_id}/cancel")
-def cancel_model3d_job(job_id: str):
+def _launch_model3d_engine():
     from services import model3d_service
-    job = model3d_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "model3d")
-    return job
+    return model3d_service
 
 
-@api.post("/api/v1/model3d/unload")
-def unload_model3d():
-    """Stop active workers. Completed jobs already release all Hunyuan VRAM."""
-    from services import model3d_service
-    cancelled = model3d_service.cancel_all_jobs()
-    return {"status": "ok", "cancelled_jobs": cancelled, "model_loaded": False}
+from routers.model3d import create_model3d_router
+from routers.rig import create_rig_router
 
-
-# ============================================================================
-# API Routes: Rig & Animate (procedural skeletons for 3D outputs)
-# ============================================================================
-
-@api.get("/api/v1/rig/capabilities")
-def rig_capabilities():
-    from services import rig_service
-    return rig_service.capabilities()
-
-
-@api.post("/api/v1/rig/generate")
-async def generate_rig(request: Request):
-    from services import rig_service
-    from services.generation_provenance import normalize_submission_provenance
-    body = await request.json()
-    raw_provenance, trusted = body.pop("provenance", None), getattr(request, "trusted_tool", None)
-    # A UI rig keeps its historical "rig" origin; an agent or Wizard request carries who asked.
-    provenance = normalize_submission_provenance(raw_provenance, trusted_tool=trusted) if raw_provenance or trusted else None
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    source_name = str(body.get("source") or "").strip()
-    if not source_name:
-        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
-    if not source_name.lower().endswith(".glb"):
-        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = _safe_join(_workspace_dir(workspace), source_name)
-    if not source_path or not os.path.isfile(source_path):
-        # Also accept absolute/upload paths through the shared 3D resolver.
-        source_path = _resolve_model3d_input_path(source_name, workspace)
-    if not source_path or not os.path.isfile(source_path):
-        raise HTTPException(status_code=400, detail="Source 3D model not found")
-    try:
-        job = rig_service.start_job(
-            body=body,
-            source_path=source_path,
-            output_dir=_workspace_dir(workspace),
-            workspace=workspace,
-            provenance=provenance,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "rig")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/rig/status/{job_id}")
-def rig_job_status(job_id: str):
-    from services import rig_service
-    job = rig_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
-
-
-@api.post("/api/v1/rig/jobs/{job_id}/cancel")
-def cancel_rig_job(job_id: str):
-    from services import rig_service
-    job = rig_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
+api.include_router(create_model3d_router(
+    engine=_launch_model3d_engine,
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    validate_generation=lambda workspace: execution_mode.validate_generation(workspace),
+    collection_registry=_LaunchCollectionLookup(),
+    publish_task=_publish_moved_studio_task,
+))
+from routers.model3d import cancel_model3d_job, generate_model3d, model3d_job_status
+api.include_router(create_rig_router(
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    safe_join=_safe_join,
+    publish_task=_publish_moved_studio_task,
+))
+from routers.rig import cancel_rig_job, generate_rig, rig_job_status
 
 
 # ============================================================================
 # API Routes: Workspaces
 # ============================================================================
 
-@api.get("/api/v1/workspaces")
-def list_workspaces_endpoint():
-    """List all workspaces and the active one."""
-    return {
-        "workspaces": _list_workspaces(),
-        "active": _get_active_workspace(),
-    }
+from routers.workspace_outputs import create_workspace_router
 
-
-@api.put("/api/v1/workspaces/active")
-async def set_active_workspace(request: Request):
-    """Switch to a different workspace."""
-    body = await request.json()
-    name = body.get("name", "default")
-
-    # Validate name (alphanumeric, hyphens, underscores)
-    import re
-    if name != "default" and not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name. Use letters, numbers, hyphens, underscores.")
-
-    # Persist the switch; only touch wgp.save_path when idle. If a job is
-    # in progress it has locked wgp.save_path to its target workspace —
-    # overwriting mid-generation scatters clips across workspaces. The
-    # config is saved either way, so the next job or restart picks it up.
-    idle = not _active_gen_states
-    ws_dir = _persist_active_workspace(name, apply_save_paths=idle)
-    if idle:
-        print(f"[Workspace] Switched to: {name} ({ws_dir})")
-    else:
-        print(f"[Workspace] Config switched to: {name} (save_path deferred — generation in progress)")
-    return {"status": "ok", "active": name, "path": ws_dir}
-
-
-@api.post("/api/v1/workspaces")
-async def create_workspace(request: Request):
-    """Create a new workspace."""
-    body = await request.json()
-    name = body.get("name", "").strip()
-
-    if not name:
-        raise HTTPException(status_code=400, detail="Workspace name is required")
-
-    import re
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name. Use letters, numbers, hyphens, underscores.")
-
-    ws_dir = _workspace_dir(name)
-    os.makedirs(ws_dir, exist_ok=True)
-
-    return {"status": "ok", "name": name, "path": ws_dir}
-
-
-@api.delete("/api/v1/workspaces/{name}")
-def delete_workspace(name: str):
-    """Delete a workspace folder and every asset inside it.
-
-    Refused while anything is queued or generating: jobs capture their
-    workspace at submit time and _workspace_dir() recreates folders on
-    demand, so a mid-generation delete would silently resurrect the
-    workspace and scatter files into it.
-    """
-    import re
-    if name == "default":
-        raise HTTPException(status_code=400, detail="The default workspace is the outputs folder itself and cannot be deleted.")
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name.")
-    base = os.path.abspath(wgp.server_config.get("save_path", "outputs"))
-    # _safe_join resolves symlinks/junctions before the containment check —
-    # the regex blocks traversal but not a junction inside outputs/.
-    ws_dir = _safe_join(base, name)
-    if ws_dir is None:
-        raise HTTPException(status_code=400, detail="Invalid workspace path.")
-    if not os.path.isdir(ws_dir):
-        raise HTTPException(status_code=404, detail=f"Workspace not found: {name}")
-
-    busy = any(j.get("status") in ("queued", "running") for j in _jobs.values())
-    if busy or _active_gen_states:
-        raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
-    # Director pipelines are alive between their generation jobs (LLM
-    # planning, review pauses) with no _jobs entry — but their next step
-    # would resurrect the folder via _workspace_dir().
-    try:
-        from services.director_pipeline import any_pipeline_active
-        if any_pipeline_active():
-            raise HTTPException(status_code=409, detail="A Director pipeline is running or paused. Stop it before deleting a workspace.")
-    except ImportError:
-        pass
-
-    # Deleting the active workspace switches to default first. Safe to write
-    # wgp.save_path directly here: nothing is generating (guards above).
-    switched = False
-    if _get_active_workspace() == name:
-        _persist_active_workspace("default")
-        switched = True
-        print(f"[Workspace] Active workspace deleted — switched to default")
-
-    from services.win_safe_files import safe_delete_dir
-    result = safe_delete_dir(ws_dir)
-    print(f"[Workspace] Deleted '{name}': {result['files_deleted']} files removed, "
-          f"{result['files_deferred']} deferred, dir_removed={result['removed']}")
-    return {
-        "status": "ok", "name": name,
-        "files_deleted": result["files_deleted"], "files_deferred": result["files_deferred"],
-        "dir_removed": result["removed"], "switched_to_default": switched, "errors": result["errors"],
-    }
+api.include_router(create_workspace_router(
+    list_workspaces=_list_workspaces,
+    get_active_workspace=_get_active_workspace,
+    persist_active=_persist_active_workspace,
+    workspace_dir=_workspace_dir,
+    generation_idle=lambda: not _active_gen_states,
+    jobs=lambda: _jobs.values(),
+    safe_join=_safe_join,
+    save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+))
 
 
 # ============================================================================
@@ -7464,182 +6476,35 @@ async def storage_remove_linked(request: Request):
     return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
 
 
-@api.get("/api/v1/storage/usage")
-def storage_usage():
-    """Usage analytics backfilled from generation sidecars: every job ever
-    run left a .meta.json with model_type, activated_loras, and created_at.
-    Joined with on-disk sizes so 'largest, least used' is one sort away."""
-    base = wgp.server_config.get("save_path", "outputs")
-    scan_dirs = [w["path"] for w in _list_workspaces()]
-    model_usage: dict = {}
-    lora_usage: dict = {}
-    sidecars = 0
-    for d in scan_dirs:
-        try:
-            entries = os.listdir(d)
-        except OSError:
-            continue
-        for n in entries:
-            if not n.endswith(".meta.json"):
-                continue
-            try:
-                with open(os.path.join(d, n), "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            except Exception:
-                continue
-            sidecars += 1
-            params = meta.get("params") or {}
-            created = meta.get("created_at") or 0
-            mt = params.get("model_type")
-            if mt:
-                agg = model_usage.setdefault(mt, {"count": 0, "last_used": 0})
-                agg["count"] += 1
-                agg["last_used"] = max(agg["last_used"], created)
-            for lora in params.get("activated_loras") or []:
-                if isinstance(lora, str) and lora:
-                    agg = lora_usage.setdefault(lora, {"count": 0, "last_used": 0})
-                    agg["count"] += 1
-                    agg["last_used"] = max(agg["last_used"], created)
+from services.storage_usage import configure as _configure_storage_usage
+from routers.workspace_outputs import create_storage_usage_router
 
-    models = []
-    # Shared weights (pointer-resolved base transformers, common text
-    # encoders) appear in MANY models' groups — per-model sizes overlap by
-    # design, so the dashboard's total comes from this global dedupe, not
-    # from summing rows.
-    global_seen = set()
-    models_total_bytes = 0
-    for mt in wgp.displayed_model_types:
-        md = wgp.get_model_def(mt)
-        if md is None:
-            continue
-        total = 0
-        primary_bytes = 0
-        seen_paths = set()
-        try:
-            for group in _model_weight_groups(mt):
-                for fname in _variant_group_filenames(group):
-                    p = wgp.fl.locate_file(fname, error_if_none=False)
-                    if not p:
-                        continue
-                    key = os.path.normcase(os.path.abspath(p))
-                    if key in seen_paths:
-                        continue
-                    seen_paths.add(key)
-                    try:
-                        size = os.path.getsize(p)
-                    except OSError:
-                        continue
-                    total += size
-                    if key not in global_seen:
-                        global_seen.add(key)
-                        models_total_bytes += size
-            # What the row's Delete actually frees: DELETE /models/{mt}
-            # removes owned files only (a finetune's alias never deletes
-            # the shared base) — mirror that here or the button lies.
-            for group in _model_weight_groups(mt, owned_only=True):
-                for fname in _variant_group_filenames(group):
-                    p = wgp.fl.locate_file(fname, error_if_none=False)
-                    if p and not wgp.fl.is_protected_path(p):
-                        try:
-                            primary_bytes += os.path.getsize(p)
-                        except OSError:
-                            pass
-        except Exception:
-            pass
-        usage = model_usage.get(mt, {})
-        # Rows without deletable bytes need to say WHY: a finetune whose
-        # def aliases another model's weights frees nothing when deleted
-        # (delete the base row instead), and weights living only in
-        # linked installs are read-only here.
-        _raw_urls = md.get("URLs")
-        _alias_of = None
-        if isinstance(_raw_urls, str):
-            _alias_md = wgp.get_model_def(_raw_urls)
-            _alias_of = (_alias_md or {}).get("name", _raw_urls)
-        models.append({
-            "model_type": mt, "name": md.get("name", mt),
-            "size_bytes": total, "primary_bytes": primary_bytes,
-            "alias_of": _alias_of,
-            "use_count": usage.get("count", 0),
-            "last_used": usage.get("last_used") or None,
-        })
-
-    loras = []
-    lora_root = _resolve_lora_root()
-    walk_roots = ([(lora_root, False)] if lora_root else []) + [(r, True) for r in _linked_lora_roots()]
-    seen_keys = set()
-    for root, linked in walk_roots:
-        for dirpath, _dn, fns in os.walk(root):
-            for f in fns:
-                if not f.endswith((".safetensors", ".sft")):
-                    continue
-                rel_dir = os.path.relpath(dirpath, root)
-                key = os.path.normcase(os.path.normpath(os.path.join(rel_dir, f)))
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                try:
-                    size = os.path.getsize(os.path.join(dirpath, f))
-                except OSError:
-                    size = 0
-                usage = lora_usage.get(f, {})
-                loras.append({
-                    "filename": f, "directory": rel_dir, "linked": linked, "size_bytes": size,
-                    "use_count": usage.get("count", 0),
-                    "last_used": usage.get("last_used") or None,
-                })
-
-    workspaces = []
-    for w in _list_workspaces():
-        ws_bytes = 0
-        try:
-            with os.scandir(w["path"]) as it:
-                for e in it:
-                    if e.is_file() and not e.name.startswith("."):
-                        try:
-                            ws_bytes += e.stat().st_size
-                        except OSError:
-                            pass
-        except OSError:
-            pass
-        workspaces.append({"name": w["name"], "file_count": w.get("file_count", 0), "size_bytes": ws_bytes})
-
-    return {
-        "models": sorted(models, key=lambda m: -m["size_bytes"]),
-        "models_total_bytes": models_total_bytes,
-        "loras": sorted(loras, key=lambda l: -l["size_bytes"]),
-        "workspaces": workspaces,
-        "scanned_sidecars": sidecars,
-    }
+_configure_storage_usage(
+    engine=wgp,
+    list_workspaces=_list_workspaces,
+    model_weight_groups=_model_weight_groups,
+    variant_group_filenames=_variant_group_filenames,
+    resolve_lora_root=_resolve_lora_root,
+    linked_lora_roots=_linked_lora_roots,
+)
+api.include_router(create_storage_usage_router())
 
 
 # ============================================================================
 # API Routes: LLM service
 # ============================================================================
 
-def _ensure_llm_loaded():
-    """Auto-load LLM if not already loaded. Reloads if configured model changed."""
-    from services import llm_routing
+import routers.llm_director as llm_director
+from routers.llm_director import (
+    create_character_describe_router,
+    create_director_music_router,
+)
 
-    services = wgp.server_config.get("services", {})
-    desired_provider, profile_model, desired_remote_url = _effective_llm_routing(services)
-    llm_routing._ensure_llm_loaded(
-        services=services,
-        provider=desired_provider,
-        model=profile_model,
-        remote_url=desired_remote_url,
-        device=services.get("llm_device", _llm_default_device()),
-        default_model=_DEFAULT_LLM_REPO,
-    )
-
+_ensure_llm_loaded = llm_director._ensure_llm_loaded
 
 from routers.llm import (
     create_llm_router,
     create_llm_prompt_router,
-    _parse_song_output,
-    _SONG_WRITER_FALLBACK,
-    _SONG_WRITER_FALLBACK_INSTRUMENTAL,
-    _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3,
 )
 
 api.include_router(create_llm_router(
@@ -7654,260 +6519,19 @@ api.include_router(create_llm_router(
 ))
 
 
-def _resolve_wangp_visual_media(value, workspace):
-    from services.wangp_submission import resolve_wangp_media
-    workspace = workspace or _get_active_workspace()
-    return resolve_wangp_media(value, workspace, uploads_dir=os.path.join(os.getcwd(), 'uploads'), workspace_dir=_workspace_dir(workspace))
+_resolve_wangp_visual_media = llm_director._resolve_wangp_visual_media
 
+api.include_router(create_director_music_router(
+    wgp=wgp,
+    _get_active_workspace=_get_active_workspace,
+    _workspace_dir=_workspace_dir,
+    _init_pipeline=_init_pipeline,
+    _effective_llm_routing=_effective_llm_routing,
+    _llm_default_device=_llm_default_device,
+    _DEFAULT_LLM_REPO=_DEFAULT_LLM_REPO,
+))
 
-def _build_music_gen_params(model_type: str, lyrics: str, style: str, duration_seconds, seed) -> dict:
-    """Build an ACE-Step generation params dict by seeding from the model's
-    OWN default settings — the exact same source the Studio Music UI starts
-    from (served via /api/v1/models/{model_type} → wgp.get_default_settings).
-    This guarantees parity: every model-specific field the ACE-Step pipeline
-    needs (LM sampling temperature/top_k/top_p, audio_scale, scheduler_type,
-    shift, num_inference_steps, etc.) is present. A hand-built subset omitted
-    the LM sampling fields, which made the XL "Strong Think" LM path fail with
-    'NoneType object does not support item assignment'. We override only the
-    song content, duration, and seed, then force audio-only generation."""
-    try:
-        params = dict(wgp.get_default_settings(model_type) or {})
-    except Exception as e:
-        print(f"[generate-music] get_default_settings failed for {model_type}: {e}")
-        params = {}
-    params["model_type"] = model_type
-    params["prompt"] = lyrics or "[Instrumental]"
-    params["alt_prompt"] = style or ""
-    params.setdefault("negative_prompt", "")
-    if duration_seconds:
-        try:
-            params["duration_seconds"] = float(duration_seconds)
-        except (TypeError, ValueError):
-            pass
-    try:
-        params["seed"] = int(seed)
-    except (TypeError, ValueError):
-        params["seed"] = -1
-    # Force audio-only, single-prompt generation (no video output).
-    params["video_length"] = 0
-    params["image_mode"] = 0
-    params["multi_prompts_gen_type"] = 2
-    params["generation_mode"] = "audio"
-    return params
-
-
-def _music3_writer_duration_instruction(duration_seconds) -> str:
-    """Keep local MiniMax-Music3 song writing proportional to its target runtime."""
-    try:
-        duration = min(300.0, max(5.0, float(duration_seconds or 120)))
-    except (TypeError, ValueError):
-        duration = 120.0
-    label = f"{duration:g}"
-    return (
-        "TARGET RUNTIME CONTRACT:\n"
-        f"- The generated track is {label} seconds long.\n"
-        "- Scale sections, lyric density, repetitions, transitions and instrumental "
-        "space to this runtime; do not write a full song that will be cut off.\n"
-        f"- In ### Arrangement, plan material from 0:00 to approximately {label} seconds."
-    )
-
-
-@api.post("/api/v1/director/generate-music")
-async def director_generate_music(request: Request):
-    """Generate a music track for Director Music Video mode. Dual-mode:
-      - If `style`/`lyrics` are supplied, render them directly.
-      - Else if `description` is supplied, write the song first (optionally
-        informed by a reference image via the vision LLM), then render.
-    Blocks until the track is rendered (consistent with the awaited
-    upload→analyze→plan-structure chain) and returns the ABSOLUTE
-    {audio_path} so the frontend can feed it straight into /audio/analyze.
-    Returns {audio_path, filename, style, lyrics}."""
-    import asyncio
-    from services.generation_provenance import normalize_submission_provenance
-    body = await request.json()
-    provenance = normalize_submission_provenance(body.pop("provenance", None))
-    description = (body.get("description") or "").strip()
-    style = (body.get("style") or "").strip()
-    lyrics = (body.get("lyrics") or "").strip()
-    instrumental = bool(body.get("instrumental"))
-    model_type = body.get("model_type") or "ace_step_v1_5_xl_sft_lm_4b"
-    duration_seconds = body.get("duration_seconds")
-    seed = body.get("seed")
-    # ``workspace`` is the physical output-folder name. A Workspace
-    # collection is an optional, explicit provenance reference and must never
-    # be inferred from this folder.
-    workspace = body.get("workspace") or _get_active_workspace()
-    collection_id = provenance.get("workspace_id")
-    if collection_id and not _workspace_collection_registry.get(collection_id):
-        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
-    try:
-        execution_mode.validate_generation(workspace)
-    except execution_mode.ExecutionModeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    selected_model = wgp.get_model_def(model_type)
-    if selected_model is None:
-        raise HTTPException(status_code=400, detail=f"Unknown model: {model_type}")
-    is_minimax_music3 = str(selected_model.get("architecture") or model_type) == "minimax_music3"
-
-    image_paths = body.get("image_paths") or []
-    if not image_paths and body.get("reference_image_path"):
-        image_paths = [body["reference_image_path"]]
-    image_paths = [p for p in image_paths if p and os.path.isfile(p)]
-
-    if instrumental:
-        lyrics = "[Instrumental]"
-
-    # Write the song from the description when we don't already have content.
-    if (not style or not lyrics) and description:
-        from services import llm_service
-        from services.guide_loader import load_guide
-        _ensure_llm_loaded()
-        if is_minimax_music3 and instrumental:
-            system_prompt = load_guide("music", "song_writer_minimax_music3_instrumental") or _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3
-        elif is_minimax_music3:
-            system_prompt = load_guide("music", "song_writer_minimax_music3") or _SONG_WRITER_FALLBACK_MINIMAX_MUSIC3
-        elif instrumental:
-            system_prompt = load_guide("music", "song_writer_instrumental") or _SONG_WRITER_FALLBACK_INSTRUMENTAL
-        else:
-            system_prompt = load_guide("music", "song_writer") or _SONG_WRITER_FALLBACK
-        if is_minimax_music3:
-            system_prompt = f"{system_prompt.rstrip()}\n\n{_music3_writer_duration_instruction(duration_seconds)}"
-        try:
-            raw = await asyncio.to_thread(
-                llm_service.generate,
-                prompt=description,
-                system_prompt=system_prompt,
-                max_new_tokens=body.get("max_new_tokens", 1536 if is_minimax_music3 else 1024),
-                temperature=body.get("temperature", 0.85),
-                top_p=body.get("top_p", 0.9),
-                seed=body.get("seed"),
-                image_paths=image_paths or None,
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Song writing failed: {e}")
-        w_style, w_lyrics = _parse_song_output(raw, instrumental)
-        style = style or w_style
-        lyrics = lyrics or w_lyrics
-
-    if not lyrics:
-        raise HTTPException(status_code=400, detail="Provide a description, or style + lyrics")
-
-    gen_params = _build_music_gen_params(model_type, lyrics, style, duration_seconds, seed)
-    gen_params["_initiator"] = str(body.get("initiator") or "Director · Music video")[:200]
-
-    out_dir = _workspace_dir(workspace)
-    os.makedirs(out_dir, exist_ok=True)
-
-    # Wire director_pipeline's shared refs (_jobs / _run_generation / _gen_lock)
-    # before using _submit_and_wait — without this they're None and the first
-    # line `_jobs[job_id] = job` raises "'NoneType' object does not support
-    # item assignment". Every other _submit_and_wait caller calls this first.
-    _init_pipeline()
-    from services.director_pipeline import _submit_and_wait
-    try:
-        output_files = await asyncio.to_thread(
-            _submit_and_wait,
-            gen_params,
-            # Music3 can decode several minutes of stereo audio on a single
-            # consumer GPU; keep the HTTP worker alive long enough for the
-            # local job while retaining the shorter guard for ACE-Step.
-            timeout_s=3600 if is_minimax_music3 else 1800,
-            workspace=workspace,
-            out_dir=out_dir,
-            provenance=provenance,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Music generation failed: {e}")
-    if not output_files:
-        raise HTTPException(status_code=500, detail="Music generation produced no output")
-
-    filename = output_files[0]
-    audio_path = os.path.join(out_dir, filename)
-    return {
-        "audio_path": audio_path,
-        "filename": filename,
-        "style": style,
-        "lyrics": lyrics,
-        "job_id": getattr(output_files, "job_id", None),
-        "task_id": getattr(output_files, "task_id", None),
-        "root_task_id": getattr(output_files, "root_task_id", None),
-    }
-
-
-async def _enhance_with_wangp(prompt: str, mode: str, enhancer_enabled: int, image_paths: list = None):
-    """Run the Wan2GP prompt enhancer using wgp's built-in offload system."""
-    import secrets
-    from PIL import Image
-    from shared.prompt_enhancer.prompt_enhance_utils import generate_cinematic_prompt
-    from mmgp import offload
-
-    # Setup enhancer with proper GPU offload (same as Wan2GP does internally)
-    if wgp.enhancer_offloadobj is None:
-        print(f"[Enhance] Loading Wan2GP enhancer (mode {enhancer_enabled}) with GPU offload...")
-        pipe = {}
-        kwargs = {}
-        wgp.download_models()
-        wgp.setup_prompt_enhancer(pipe, kwargs)
-        profile = wgp.compute_profile(-1, "video")
-        mmgp_profile = wgp.init_pipe(pipe, kwargs, profile)
-        wgp.enhancer_offloadobj = offload.profile(pipe, profile_no=mmgp_profile, **kwargs)
-
-    if wgp.prompt_enhancer_llm_model is None:
-        raise RuntimeError("Prompt enhancer model failed to load")
-
-    is_video = mode in ("video", "avatar")
-    temperature = wgp.server_config.get("prompt_enhancer_temperature", 0.6)
-    top_p = wgp.server_config.get("prompt_enhancer_top_p", 0.9)
-    seed = secrets.randbits(32) if wgp.server_config.get("prompt_enhancer_randomize_seed", True) else 0
-
-    # Load images if provided
-    prompt_images = None
-    if image_paths:
-        loaded = []
-        for img_path in image_paths:
-            if img_path and os.path.isfile(img_path):
-                try:
-                    loaded.append(Image.open(img_path))
-                    print(f"[Enhance] Including image: {os.path.basename(img_path)}")
-                except Exception as e:
-                    print(f"[Enhance] Failed to load image {img_path}: {e}")
-        if loaded:
-            prompt_images = loaded
-
-    post_image_caption_hook = None
-    if prompt_images and wgp.enhancer_offloadobj is not None:
-        if hasattr(wgp.prompt_enhancer_image_caption_model, "vision_tower_model") and hasattr(wgp.prompt_enhancer_llm_model, "generate_messages"):
-            post_image_caption_hook = wgp.enhancer_offloadobj.unload_all
-
-    def _run():
-        return generate_cinematic_prompt(
-            wgp.prompt_enhancer_image_caption_model,
-            wgp.prompt_enhancer_image_caption_processor,
-            wgp.prompt_enhancer_llm_model,
-            wgp.prompt_enhancer_llm_tokenizer,
-            [prompt],
-            prompt_images,
-            video_prompt=is_video,
-            text_prompt=False,
-            max_new_tokens=512,
-            do_sample=True,
-            temperature=temperature,
-            top_p=top_p,
-            seed=seed,
-            post_image_caption_hook=post_image_caption_hook,
-        )
-
-    result = await asyncio.get_event_loop().run_in_executor(None, _run)
-
-    # Unload from GPU to free VRAM
-    if wgp.enhancer_offloadobj is not None:
-        wgp.enhancer_offloadobj.unload_all()
-
-    enhanced = result[0] if isinstance(result, list) and result else (result or prompt)
-    print(f"[Enhance] Wan2GP enhanced: {len(enhanced)} chars")
-    return {"original": prompt, "enhanced": enhanced}
-
+_enhance_with_wangp = llm_director._enhance_with_wangp
 
 # Prompt tools sit after Director generate-music so ordinals 88-91 stay put.
 api.include_router(create_llm_prompt_router(
@@ -7923,72 +6547,9 @@ api.include_router(create_llm_prompt_router(
 ))
 
 
-@api.post("/api/v1/characters/describe-refs")
-async def describe_character_refs(request: Request):
-    """Build an A Prompt with MiniMax vision or the configured internal LLM."""
-    from services import llm_service
-    from services.character_sheet import DESCRIBE_SCHEMA, describe_character_sheet
-
-    body = await request.json()
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    raw_paths = body.get("image_paths") or []
-    if not isinstance(raw_paths, list) or not raw_paths:
-        raise HTTPException(status_code=400, detail="image_paths is required")
-    image_paths = []
-    for value in raw_paths:
-        resolved = _resolve_model3d_input_path(str(value or ""), workspace)
-        if not resolved or not os.path.isfile(resolved):
-            raise HTTPException(status_code=400, detail="Character reference image not found")
-        image_paths.append(resolved)
-
-    services = wgp.server_config.get("services", {})
-    from services.provider_profile import character_describe_backend, resolve_minimax_key
-
-    backend = character_describe_backend(_effective_llm_routing(services)[0])
-    if backend == "unavailable":
-        raise HTTPException(
-            status_code=400,
-            detail="Auto-describe only works with MiniMax or the internal LLM. Type an A Prompt, or switch Settings → LLM.",
-        )
-
-    def complete(system_prompt: str, user_prompt: str, paths: list[str]) -> str:
-        if backend == "minimax":
-            api_key = resolve_minimax_key(services, "llm")
-            if not api_key:
-                raise ValueError("Configure the MiniMax LLM API key in Settings → Services first")
-            return llm_service.generate_openai_compatible(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                model_id="MiniMax-M3",
-                base_url="https://api.minimax.io/v1",
-                api_key=api_key,
-                max_new_tokens=1200,
-                temperature=0.2,
-                json_schema=DESCRIBE_SCHEMA,
-                image_paths=paths,
-            )
-        _ensure_llm_loaded()
-        return llm_service.generate(
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_new_tokens=1200,
-            temperature=0.2,
-            json_schema=DESCRIBE_SCHEMA,
-            image_paths=paths,
-        )
-
-    try:
-        a_prompt = describe_character_sheet(
-            kind=body.get("kind") or "character",
-            image_paths=image_paths,
-            roles=body.get("roles") or None,
-            complete=complete,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"a_prompt": a_prompt, "kind": body.get("kind") or "character"}
+api.include_router(create_character_describe_router(
+    _resolve_model3d_input_path=_resolve_model3d_input_path,
+))
 
 
 # ============================================================================
@@ -22186,687 +20747,46 @@ def _apply_spatial_upsampling_to_file(video_path: str, method: str, job: dict = 
 # ============================================================================
 
 
-# Compatibility aliases keep the existing HTTP validation contract stable while
-# the implementation lives in the standalone Tools service.
-_TOOL_UPSCALE_METHODS = tools_upscale_service.TOOL_UPSCALE_METHODS
-_TOOL_SOURCE_EXTENSIONS = tools_upscale_service.TOOL_SOURCE_EXTENSIONS
+from routers.tools import (
+    create_tools_post_router,
+    _resolve_tool_clip_path,
+    _resolve_tool_source,
+    _run_tool_revoice,
+    _run_tool_upscale,
+    _tool_asset_roots,
+    _tool_source_kind_from_name,
+    _upscale_tool_image,
+    _write_tool_sidecar,
+)
+api.include_router(create_tools_post_router(
+    wgp=wgp,
+    _jobs=_jobs,
+    _active_gen_states=_active_gen_states,
+    _list_workspaces=_list_workspaces,
+    _workspace_dir=_workspace_dir,
+    _get_active_workspace=_get_active_workspace,
+    _coordinated_generation_slot=_coordinated_generation_slot,
+    try_start=try_start,
+    register_abort_state=register_abort_state,
+    unregister_abort_state=unregister_abort_state,
+    is_cancel_requested=is_cancel_requested,
+    update_job=update_job,
+    finish_job=finish_job,
+    acknowledge_cancel=acknowledge_cancel,
+    record_job_outputs=record_job_outputs,
+    _chunked_flashvsr_upscale=_chunked_flashvsr_upscale,
+    _register_manual_generation_job=_register_manual_generation_job,
+    _generation_job_acceptance=_generation_job_acceptance,
+    # The real worker is defined just below this mount. The lambda looks it up
+    # when a simulated upscale or revoice actually runs.
+    _run_generation=lambda job_id, *, finalize=True: _run_generation(job_id, finalize=finalize),
+    _resolve_request_media_path=_resolve_request_media_path,
+))
+# MCP and the image-command runtime call these same objects.
+tools_upscale = create_tools_post_router.tools_upscale
+tools_revoice = create_tools_post_router.tools_revoice
 
 
-def _tool_asset_roots() -> list[dict[str, str]]:
-    """Return every explicit root that the Tools asset catalog can own."""
-    roots: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for item in _list_workspaces():
-        if not isinstance(item, dict):
-            continue
-        workspace = str(item.get("name") or "").strip()
-        if not workspace or workspace in seen:
-            continue
-        try:
-            directory = _workspace_dir(workspace)
-        except Exception:
-            continue
-        roots.append({"workspace_id": workspace, "path": directory})
-        seen.add(workspace)
-    uploads = os.path.realpath(os.path.abspath(os.path.join(os.getcwd(), "uploads")))
-    if uploads not in {os.path.realpath(os.path.abspath(item["path"])) for item in roots}:
-        roots.append({"workspace_id": "__uploads__", "path": uploads})
-    return roots
-
-
-def _tool_source_kind_from_name(value: str) -> str | None:
-    from urllib.parse import unquote, urlsplit
-
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    parsed = urlsplit(raw)
-    candidate = unquote(
-        parsed.path
-        if parsed.scheme or raw.startswith("/api/v1/")
-        else raw.split("?", 1)[0].split("#", 1)[0]
-    )
-    extension = os.path.splitext(os.path.basename(candidate))[1].casefold()
-    for kind, extensions in _TOOL_SOURCE_EXTENSIONS.items():
-        if extension in extensions:
-            return kind
-    return None
-
-
-def _resolve_tool_source(
-    body: dict,
-    *,
-    expected_kinds: tuple[str, ...] = ("image", "video"),
-) -> tuple[str, str, str, str, str, str, str]:
-    """Resolve one exact Tools source and its destination context.
-
-    Source resolution is shared with the background-removal boundary so
-    canonical asset IDs, workspace-qualified file URLs, uploads, symlinks and
-    traversal attempts receive the same confinement rules.  The return tuple
-    is ``path, filename, source_workspace, kind, asset_id, destination,
-    output_dir``.
-    """
-    from shared.tools.background_removal_request import (
-        RemoveBackgroundRequest,
-        UPSCALE_IMAGE_EXTENSIONS,
-        UPSCALE_VIDEO_EXTENSIONS,
-        destination_context,
-        resolve_source,
-    )
-    from services.asset_catalog import find_asset
-
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Request body must be an object")
-
-    for field, limit in (
-        ("source", 1200), ("source_path", 1200), ("video_path", 1200),
-        ("source_workspace", 160), ("workspace", 160),
-    ):
-        value = body.get(field)
-        if value is not None and (
-            not isinstance(value, str)
-            or len(value) > limit
-            or "\x00" in value
-        ):
-            raise HTTPException(status_code=400, detail=f"Invalid {field}")
-
-    source_values = [
-        body.get(key) for key in ("source", "source_path", "video_path")
-        if body.get(key) not in (None, "")
-    ]
-    if len(source_values) > 1 and any(str(value) != str(source_values[0]) for value in source_values[1:]):
-        raise HTTPException(status_code=409, detail="Conflicting source paths")
-    source_value = str(source_values[0]).strip() if source_values else None
-
-    asset_id = body.get("asset_id")
-    if asset_id is not None:
-        if (
-            not isinstance(asset_id, str)
-            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,179}", asset_id)
-        ):
-            raise HTTPException(status_code=400, detail="Invalid asset ID")
-
-    requested_kind = body.get("source_kind")
-    if requested_kind is not None:
-        if not isinstance(requested_kind, str) or requested_kind.casefold() not in _TOOL_SOURCE_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Source kind must be image or video")
-        requested_kind = requested_kind.casefold()
-
-    asset = None
-    if asset_id:
-        asset = find_asset(_tool_asset_roots(), asset_id)
-        if asset is None:
-            raise HTTPException(status_code=404, detail="Source asset not found")
-        asset_kind = str(asset.get("kind") or "").casefold()
-        if asset_kind not in _TOOL_SOURCE_EXTENSIONS:
-            raise HTTPException(status_code=400, detail="Source asset must be an image or video")
-        if requested_kind and requested_kind != asset_kind:
-            raise HTTPException(status_code=400, detail="Source kind does not match asset")
-        source_kind = requested_kind or asset_kind
-    else:
-        source_kind = requested_kind or _tool_source_kind_from_name(source_value or "")
-        if source_kind is None:
-            raise HTTPException(status_code=400, detail="Source format is not supported")
-
-    if source_kind not in expected_kinds:
-        expected = " or ".join(expected_kinds)
-        raise HTTPException(status_code=400, detail=f"Source must be {expected}")
-    allowed_extensions = (
-        UPSCALE_IMAGE_EXTENSIONS
-        if source_kind == "image" else UPSCALE_VIDEO_EXTENSIONS
-    )
-    if source_value and _tool_source_kind_from_name(source_value) != source_kind:
-        raise HTTPException(status_code=400, detail="Source kind does not match file format")
-
-    payload = RemoveBackgroundRequest(
-        asset_id=asset_id,
-        source=source_value,
-        source_workspace=body.get("source_workspace"),
-        workspace=body.get("workspace"),
-        provenance=body.get("provenance") if isinstance(body.get("provenance"), dict) else {},
-    )
-    destination_workspace, output_dir = destination_context(
-        payload,
-        get_active_workspace=_get_active_workspace,
-        list_workspaces=_list_workspaces,
-        workspace_dir=_workspace_dir,
-    )
-    source_path, source_filename, source_workspace = resolve_source(
-        payload,
-        destination_workspace=destination_workspace,
-        workspace_dir=_workspace_dir,
-        uploads_dir=lambda: os.path.join(os.getcwd(), "uploads"),
-        asset_finder=lambda value: find_asset(_tool_asset_roots(), value),
-        expected_kind=source_kind,
-        allowed_extensions=allowed_extensions,
-        source_label=source_kind,
-    )
-    source_asset_id = asset_id or (
-        "asset_unmanaged_"
-        + uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            f"hocuspocus:unmanaged:{source_workspace}:{source_filename}",
-        ).hex
-    )
-    return (
-        source_path,
-        source_filename,
-        source_workspace,
-        source_kind,
-        source_asset_id,
-        destination_workspace,
-        output_dir,
-    )
-
-
-def _resolve_tool_clip_path(raw_path, workspace=None):
-    """Resolve a Tools input path. Accepts an absolute path, a filename in the
-    active workspace output dir, or a name/relative path under uploads/.
-    Returns an absolute path, or None if nothing matches."""
-    if not raw_path:
-        return None
-    if os.path.isabs(raw_path) and os.path.isfile(raw_path):
-        return raw_path
-    base = os.path.basename(raw_path)
-    for candidate in (
-        os.path.join(_workspace_dir(workspace), raw_path),
-        os.path.join(_workspace_dir(workspace), base),
-        os.path.join(os.getcwd(), "uploads", raw_path),
-        os.path.join(os.getcwd(), "uploads", base),
-    ):
-        if os.path.isfile(candidate):
-            return candidate
-    return raw_path if os.path.isfile(raw_path) else None
-
-
-def _upscale_tool_image(
-    source_path: str,
-    output_path: str,
-    method: str,
-    *,
-    seed: int = -1,
-    abort_callback=None,
-    progress_callback=None,
-) -> tuple[int, int]:
-    """Compatibility facade for callers that used the old launch symbol."""
-    return tools_upscale_service.upscale_image(
-        source_path,
-        output_path,
-        method,
-        wgp=wgp,
-        seed=seed,
-        abort_callback=abort_callback,
-        progress_callback=progress_callback,
-    )
-
-
-def _write_tool_sidecar(
-    out_dir,
-    filename,
-    *,
-    source_name,
-    tool,
-    params,
-    elapsed,
-    job_id,
-    task_id=None,
-    root_task_id=None,
-    workspace=None,
-    generation_mode="video",
-    source_asset_id=None,
-    source_kind=None,
-    provenance=None,
-    inputs=None,
-    parents=None,
-    transformations=None,
-    technical=None,
-):
-    """Write a .meta.json sidecar so a Tools output shows up in the gallery
-    with the right mode + edit_sub_mode tag (mirrors _run_sfx_generation)."""
-    public_params = {
-        key: value
-        for key, value in (params or {}).items()
-        if not str(key).startswith("_")
-        and key not in {"source_path", "video_path", "voice_ref_paths"}
-    }
-    if source_asset_id:
-        public_params.setdefault("source_asset_id", source_asset_id)
-    if source_kind:
-        public_params.setdefault("source_kind", source_kind)
-    public_params.setdefault("source_filename", source_name)
-    provenance = provenance if isinstance(provenance, dict) else {}
-    capability = provenance.get("capability") or tool
-    sidecar = {
-        "params": {**public_params, "edit_sub_mode": tool},
-        "generation_mode": generation_mode,
-        "tool": tool,
-        "capability": capability,
-        "tool_source": source_name,
-        "source_asset_id": source_asset_id,
-        "source_kind": source_kind,
-        "job_id": job_id,
-        "task_id": task_id,
-        "root_task_id": root_task_id or task_id,
-        "generation_time": round(elapsed),
-        "created_at": time.time(),
-    }
-    if inputs:
-        sidecar["inputs"] = list(inputs)
-    if parents:
-        sidecar["parents"] = list(parents)
-    if transformations:
-        sidecar["transformations"] = list(transformations)
-    if technical:
-        sidecar["technical"] = dict(technical)
-    try:
-        publish_generation_sidecar(
-            os.path.join(out_dir, filename),
-            sidecar,
-            workspace_id=provenance.get("workspace_id") or workspace,
-            output_folder=workspace,
-            tool=provenance.get("tool") or tool,
-            actor=provenance.get("actor"),
-            capability=capability,
-        )
-    except Exception:
-        pass
-
-
-def _run_tool_upscale(job_id: str):
-    """Compatibility facade for the standalone Tools upscale service."""
-    return tools_upscale_service.run_tool_upscale(
-        job_id,
-        runtime={
-            "jobs": _jobs,
-            "active_gen_states": _active_gen_states,
-            "wgp": wgp,
-            "coordinated_generation_slot": _coordinated_generation_slot,
-            "try_start": try_start,
-            "register_abort_state": register_abort_state,
-            "unregister_abort_state": unregister_abort_state,
-            "is_cancel_requested": is_cancel_requested,
-            "update_job": update_job,
-            "finish_job": finish_job,
-            "acknowledge_cancel": acknowledge_cancel,
-            "record_job_outputs": record_job_outputs,
-            "chunked_flashvsr_upscale": _chunked_flashvsr_upscale,
-            "resolve_tool_clip_path": _resolve_tool_clip_path,
-            "write_tool_sidecar": _write_tool_sidecar,
-        },
-    )
-
-def _run_tool_revoice(job_id: str):
-    """Background worker: replace the voice(s) in an existing clip via SeedVC.
-    Always writes a NEW file (copy first, convert the copy) — the source clip
-    is never mutated."""
-    import shutil
-    job = _jobs[job_id]
-    start_time = None
-    abort_state = {"abort": False}
-    final_path = None
-    with _coordinated_generation_slot(
-        job, description="HocusPocus Lab GPU tool · revoice",
-    ) as acquired:
-        if not acquired:
-            return False
-        try:
-            if not try_start(
-                job, message="Preparing revoice...", phase="Preparing",
-            ):
-                return False
-            start_time = float(job.get("started_at") or time.time())
-            if not register_abort_state(
-                job, job_id, _active_gen_states, abort_state,
-            ):
-                return False
-
-            params = job["params"]
-            workspace = job.get("workspace")
-            out_dir = job.get("out_dir") or wgp.save_path
-            os.makedirs(out_dir, exist_ok=True)
-
-            video_source = _resolve_tool_clip_path(params.get("video_path"), workspace)
-            if not video_source:
-                finish_job(
-                    job, "failed", error="Input clip not found",
-                    message="Error: input clip not found",
-                )
-                return False
-            if str(params.get("source_kind") or "video").casefold() != "video":
-                raise ValueError("Revoice only supports video sources")
-            if os.path.splitext(video_source)[1].casefold() not in _TOOL_SOURCE_EXTENSIONS["video"]:
-                raise ValueError("Revoice source format is not supported")
-            source_filename = str(
-                params.get("source_filename") or os.path.basename(video_source)
-            )
-
-            mode = params.get("mode", "single")
-            voice_refs = []
-            for ref in (params.get("voice_ref_paths") or []):
-                resolved = _resolve_tool_clip_path(ref, workspace)
-                if resolved:
-                    voice_refs.append(resolved)
-            if not voice_refs:
-                finish_job(
-                    job, "failed", error="No voice reference found",
-                    message="Error: no voice reference found",
-                )
-                return False
-
-            # Copy source -> new output, then revoice the copy in place so the
-            # original gallery clip is never modified.
-            src_ext = os.path.splitext(video_source)[1] or ".mp4"
-            final_path = wgp.get_available_filename(out_dir, os.path.basename(video_source), "_revoiced", force_extension=src_ext)
-            if is_cancel_requested(job):
-                return False
-            shutil.copyfile(video_source, final_path)
-            if is_cancel_requested(job):
-                try:
-                    os.remove(final_path)
-                except OSError:
-                    pass
-                return False
-
-            if not update_job(
-                job,
-                message="Replacing voice (SeedVC)...",
-                phase="Voice Conversion",
-                progress=10,
-            ):
-                try:
-                    os.remove(final_path)
-                except OSError:
-                    pass
-                return False
-
-            from postprocessing.voice_clone import apply_voice_clone_to_file
-            ok = apply_voice_clone_to_file(
-                final_path, voice_refs, mode=mode,
-                diffusion_steps=int(params.get("diffusion_steps", 25)),
-                cfg_rate=float(params.get("cfg_rate", 0.5)),
-            )
-            if is_cancel_requested(job):
-                try:
-                    os.remove(final_path)
-                except OSError:
-                    pass
-                return False
-            if not ok:
-                try:
-                    os.remove(final_path)
-                except OSError:
-                    pass
-                finish_job(
-                    job,
-                    "failed",
-                    error="Voice replacement failed (clip has no audio, or SeedVC is unavailable)",
-                    message="Error: voice replacement failed",
-                )
-                return False
-
-            fname = os.path.basename(final_path)
-            if not update_job(job, output_files=[fname]):
-                try:
-                    os.remove(final_path)
-                except OSError:
-                    pass
-                return False
-            _write_tool_sidecar(
-                out_dir,
-                fname,
-                source_name=source_filename,
-                tool="revoice",
-                params={
-                    "mode": mode,
-                    "model_type": "post_processing",
-                    "source_asset_id": params.get("source_asset_id"),
-                    "source_kind": "video",
-                    "source_filename": source_filename,
-                },
-                elapsed=time.time() - start_time,
-                job_id=job_id,
-                task_id=job.get("task_id"),
-                root_task_id=job.get("root_task_id"),
-                workspace=job.get("workspace"),
-                generation_mode="video",
-                source_asset_id=params.get("source_asset_id"),
-                source_kind="video",
-                provenance=job.get("provenance"),
-                inputs=[{
-                    "id": params.get("source_asset_id"),
-                    "kind": "video",
-                    "uri": source_filename,
-                    "role": "source",
-                }],
-                parents=[{
-                    "id": params.get("source_asset_id"),
-                    "kind": "video",
-                    "uri": source_filename,
-                    "role": "source",
-                }],
-                transformations=[{
-                    "type": "revoice",
-                    "backend": "seedvc",
-                    "mode": mode,
-                }],
-            )
-
-            completed = finish_job(
-                job,
-                "completed",
-                progress=100,
-                phase="",
-                message="Done",
-            )
-            print(f"[Tools/revoice] {os.path.basename(video_source)} -> {fname} ({wgp.format_time(time.time() - start_time)})")
-            return completed
-        except Exception as e:
-            traceback.print_exc()
-            finish_job(job, "failed", error=str(e), message=f"Error: {e}")
-            return False
-        finally:
-            unregister_abort_state(job_id, _active_gen_states, abort_state)
-
-
-@api.post("/api/v1/tools/upscale")
-async def tools_upscale(request: Request):
-    """Upscale one image or video through the shared Tools action.
-
-    Images use ``source``/``source_kind=image`` and produce a PNG.  Videos may
-    continue sending the legacy ``video_path`` field and retain the existing
-    audio-preserving pipeline.
-    """
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Request body must be an object")
-    method = body.get("method") or "flashvsr2"
-    if not isinstance(method, str) or method not in _TOOL_UPSCALE_METHODS:
-        raise HTTPException(status_code=400, detail="Unsupported upscale method")
-    (
-        resolved,
-        source_filename,
-        source_workspace,
-        source_kind,
-        source_asset_id,
-        workspace,
-        output_dir,
-    ) = _resolve_tool_source(body, expected_kinds=("image", "video"))
-    from shared.wangp1272.processors import validate_selection, validated_settings
-    from services.tools_upscale import processor_backend
-    error = validate_selection("" if method.startswith(("rife", "dlssg")) else method, method if method.startswith(("rife", "dlssg")) else "", source_kind == "image")
-    if error:
-        raise HTTPException(status_code=400, detail=error)
-    try:
-        body["wangp_processor_settings"] = validated_settings(method, body.get("wangp_processor_settings"))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    from services.generation_provenance import normalize_submission_provenance
-
-    provenance = normalize_submission_provenance({
-        **(body.get("provenance") if isinstance(body.get("provenance"), dict) else {}),
-        "capability": "upscale",
-        # Workspace identity is runtime-owned, not browser-authored.
-        "workspace_id": workspace,
-    }, trusted_tool=getattr(request, "trusted_tool", None))
-    source_ref = {
-        "id": source_asset_id,
-        "kind": source_kind,
-        "uri": source_filename,
-        "role": "source",
-    }
-    transformation = {
-        "type": "upscale",
-        "backend": processor_backend(method),
-        "method": method,
-    }
-    try:
-        raw_seed = body.get("seed", -1)
-        if isinstance(raw_seed, bool):
-            raise ValueError
-        seed = int(raw_seed)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Seed must be an integer") from None
-
-    job_id = uuid.uuid4().hex[:8]
-    job = {
-        "id": job_id, "status": "queued", "progress": 0, "step": 0, "total_steps": 0,
-        "phase": "", "message": "Queued (upscale)", "created_at": time.time(),
-        "params": {
-            # Keep the physical source private to the in-memory worker. The
-            # sidecar writer deliberately strips it before publishing.
-            "source_path": resolved if source_kind == "image" else None,
-            "video_path": resolved if source_kind == "video" else None,
-            "source": source_filename,
-            "source_filename": source_filename,
-            "source_workspace": source_workspace,
-            "source_asset_id": source_asset_id,
-            "source_kind": source_kind,
-            "method": method,
-            "wangp_processor_settings": body.get("wangp_processor_settings") or {},
-            "seed": seed,
-            "model_type": "post_processing",
-            "generation_mode": source_kind,
-            "provider": "local",
-            "capability": "upscale",
-            "inputs": [source_ref],
-            "parents": [source_ref],
-            "transformations": [transformation],
-            "_non_durable_tool": "upscale",
-        },
-        "output_files": [], "error": None,
-        "workspace": workspace, "out_dir": output_dir,
-        "provenance": provenance,
-    }
-    admit_command = getattr(request, "admit_generation_command", None)
-    if callable(admit_command):
-        # Only the typed in-process command adapter can transfer admission.
-        # Preserve the existing tool's resolved inputs and native worker;
-        # canonical task/receipt persistence now owns its queue lifecycle.
-        job["params"].pop("_non_durable_tool", None)
-        provenance["capability"] = "tools.upscale"
-        command_collection = (body.get("provenance") or {}).get("workspace_id")
-        if command_collection is not None:
-            provenance["workspace_id"] = command_collection
-        return admit_command(job["params"], workspace, provenance)
-    _register_manual_generation_job(job)
-    worker = _run_generation if execution_mode.policy().simulated else _run_tool_upscale
-    threading.Thread(target=worker, args=(job_id,), daemon=False).start()
-    return {
-        "job_id": job_id,
-        "status": "queued",
-        **_generation_job_acceptance(job),
-    }
-
-
-@api.post("/api/v1/tools/revoice")
-async def tools_revoice(request: Request):
-    """Replace the voice(s) in an existing clip via SeedVC. Returns a job_id.
-
-    Body: { video_path: str, voice_ref_paths: [str, ...],
-            mode?: "single"|"two", diffusion_steps?: int, cfg_rate?: float,
-            workspace?: str }
-    """
-    body = await request.json()
-    (
-        resolved,
-        source_filename,
-        source_workspace,
-        _source_kind,
-        source_asset_id,
-        workspace,
-        output_dir,
-    ) = _resolve_tool_source(body, expected_kinds=("video",))
-    from services.generation_provenance import normalize_submission_provenance
-
-    provenance = normalize_submission_provenance({
-        **(body.get("provenance") if isinstance(body.get("provenance"), dict) else {}),
-        "capability": "revoice",
-        "workspace_id": workspace,
-    })
-
-    voice_refs = body.get("voice_ref_paths")
-    if not voice_refs and body.get("voice_ref_path"):
-        voice_refs = [body.get("voice_ref_path")]
-    if not voice_refs:
-        raise HTTPException(status_code=400, detail="At least one voice_ref_path is required")
-    if (
-        not isinstance(voice_refs, list)
-        or len(voice_refs) > 2
-        or any(
-            not isinstance(value, str)
-            or not value.strip()
-            or len(value) > 1200
-            or "\x00" in value
-            for value in voice_refs
-        )
-    ):
-        raise HTTPException(status_code=400, detail="Invalid voice reference paths")
-    resolved_voice_refs = []
-    for value in voice_refs:
-        resolved_voice_refs.append(
-            _resolve_request_media_path(
-                value,
-                workspace=workspace,
-                kinds=("audio", "video"),
-            )
-        )
-
-    mode = body.get("mode", "single")
-    if mode not in ("single", "two"):
-        mode = "single"
-
-    job_id = uuid.uuid4().hex[:8]
-    job = {
-        "id": job_id, "status": "queued", "progress": 0, "step": 0, "total_steps": 0,
-        "phase": "", "message": "Queued (revoice)", "created_at": time.time(),
-        "params": {
-            "video_path": resolved,
-            "source": source_filename,
-            "source_filename": source_filename,
-            "source_workspace": source_workspace,
-            "source_asset_id": source_asset_id,
-            "source_kind": "video",
-            "voice_ref_paths": resolved_voice_refs,
-            "mode": mode,
-            "diffusion_steps": body.get("diffusion_steps", 25),
-            "cfg_rate": body.get("cfg_rate", 0.5),
-            "model_type": "post_processing",
-            "generation_mode": "video",
-            "capability": "revoice",
-            "_non_durable_tool": "revoice",
-        },
-        "output_files": [], "error": None,
-        "workspace": workspace, "out_dir": output_dir,
-        "provenance": provenance,
-    }
-    _register_manual_generation_job(job)
-    worker = _run_generation if execution_mode.policy().simulated else _run_tool_revoice
-    threading.Thread(target=worker, args=(job_id,), daemon=False).start()
-    return {
-        "job_id": job_id,
-        "status": "queued",
-        **_generation_job_acceptance(job),
-    }
 
 
 def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
@@ -26008,9 +23928,8 @@ from services.series_plan_jobs import (
     _series_plan_jobs_lock,
 )
 from routers.series_plan import (
-    _bind_series_plan_runtime,
-    create_series_plan_apply_router,
-    create_series_plan_router,
+    _bind_series_plan_runtime, cancel_series_episode_plan, create_series_plan_apply_router,
+    create_series_plan_router, resume_series_episode_plan,
 )
 
 
@@ -26303,9 +24222,20 @@ bind_director_comic_runtime(
 api.include_router(create_director_comic_router())
 
 
-_output_scan_cache_lock = threading.Lock()
-_output_scan_cache: dict[str, dict] = {}
-_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+from services.output_listing import (
+    _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS,
+    _output_scan_cache,
+    _output_scan_cache_lock,
+    _resolve_output_file,
+    configure as _configure_output_listing,
+    serve_file,
+)
+_configure_output_listing(
+    workspace_dir=_workspace_dir,
+    load_favorites=_load_favorites,
+    safe_join=_safe_join,
+    engine=wgp,
+)
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
@@ -26313,375 +24243,9 @@ from services.media_dimensions import configure as _configure_media_facts, note_
 
 _configure_media_facts(_MEDIA_THUMBNAIL_CACHE_DIR)
 
+from routers.workspace_outputs import create_list_outputs_router
 
-def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
-    """Resolve one output only inside its explicit or active workspace."""
-    root = _workspace_dir(workspace)
-    candidate = _safe_join(root, filename)
-    return candidate if candidate and os.path.isfile(candidate) else None
-
-
-@api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = "", origin: str = ""):
-    """List generated output files (newest first) from the active workspace.
-
-    Each row carries ``origin`` ({actor: agent | wizard, capability}) when an agent or the Wizard asked for the file,
-    and ``origin=agent`` keeps only those (``mcp`` or ``wizard`` one of them; services/output_origin.py).
-
-    Supports pagination via limit/offset query params.
-    Returns {outputs, total} where total is the full count before pagination.
-    When limit=0 (default), returns all items (backwards compatible).
-
-    workspace="__uploads__" lists the uploads folder instead (the gallery's
-    virtual "Uploads" view) so user-supplied media can be previewed and
-    reused. Browse-only: the server-side active workspace is untouched and
-    generations never save here. Uploads have no sidecars, so the metadata
-    passes below fall through naturally.
-    """
-    response.headers["Cache-Control"] = "no-store"
-    if workspace == "__uploads__":
-        out_dir = os.path.join(os.getcwd(), "uploads")
-    else:
-        out_dir = _workspace_dir(workspace or None)
-    workspace_suffix = (
-        f"?workspace={quote(workspace, safe='')}" if workspace else ""
-    )
-    workspace_extra = (
-        f"&workspace={quote(workspace, safe='')}" if workspace else ""
-    )
-    if not os.path.isdir(out_dir):
-        return {"outputs": [], "total": 0}
-
-    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
-    video_exts = {".mp4", ".webm", ".gif"}
-    audio_exts = {".wav", ".mp3"}
-    model3d_exts = {".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
-
-    def model3d_thumbnail_url(name: str, params: dict) -> str | None:
-        """Return a cheap static image preview for a 3D output card.
-
-        The gallery must never instantiate a second ``model-viewer`` for its
-        80px history cards: parsing many GLB files there is surprisingly
-        expensive.  The Hunyuan3D worker saves the normalized front view as a
-        ``<output>.preview.png`` sibling (for text-only jobs that is the
-        generated conditioning image), so prefer it.  Older outputs fall back
-        to the input views recorded in the sidecar; when neither exists the
-        client renders a lightweight 3D icon instead.
-        """
-        preview_name = os.path.splitext(name)[0] + ".preview.png"
-        if os.path.isfile(os.path.join(out_dir, preview_name)):
-            return f"/api/v1/file/{preview_name}{workspace_suffix}"
-        images = params.get("images")
-        if not isinstance(images, dict):
-            return None
-        front = images.get("front")
-        if not isinstance(front, str) or not front:
-            return None
-        try:
-            source = os.path.realpath(front)
-            if not os.path.isfile(source):
-                return None
-            uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
-            outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
-            filename = os.path.basename(source)
-            if source.startswith(uploads_root + os.sep):
-                return f"/api/v1/uploads/{filename}"
-            if source.startswith(outputs_root + os.sep):
-                return f"/api/v1/file/{filename}{workspace_suffix}"
-        except OSError:
-            pass
-        return None
-
-    favs = _load_favorites()
-
-    # Building the gallery index requires stat'ing every media file and
-    # parsing every metadata sidecar. The UI polls while a generation is
-    # active, so doing that work on each heartbeat caused unnecessary disk
-    # load and visible layout churn. Reuse a workspace snapshot while the
-    # directory is unchanged, with a short TTL as a safety net for in-place
-    # metadata edits that do not update the directory mtime.
-    try:
-        directory_signature = os.stat(out_dir).st_mtime_ns
-    except OSError:
-        return {"outputs": [], "total": 0}
-    now = time.monotonic()
-    with _output_scan_cache_lock:
-        cached_snapshot = _output_scan_cache.get(out_dir)
-        cache_is_fresh = (
-            cached_snapshot is not None
-            and cached_snapshot.get("signature") == directory_signature
-            and now - float(cached_snapshot.get("created_at", 0)) < _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS
-        )
-
-    if cache_is_fresh:
-        raw_entries = cached_snapshot["raw_entries"]
-        sidecar_cache = cached_snapshot["sidecar_cache"]
-        clip_groups = cached_snapshot["clip_groups"]
-    else:
-        raw_entries = []
-        for name in os.listdir(out_dir):
-            # Director's historical H3 builds wrote soundtrack slices beside
-            # user assets. They are private model inputs, not generated songs.
-            # New runs use the hidden .director-tmp directory; retain these
-            # prefix guards so scratch files left by an interrupted old run do
-            # not displace the real soundtrack in the media library.
-            if name.startswith((
-                ".trash_",
-                ".",
-                "_director_h3_audio_",
-                "_rerun_audio_",
-            )):
-                continue
-            # 3D preview sidecars are served as card thumbnails, not gallery items.
-            if name.endswith(".preview.png"):
-                continue
-            # Atomic image writes keep a media extension for PIL. They are
-            # incomplete until renamed and must never become gallery tiles.
-            if re.search(r"\.tmp_[0-9a-f]{8}\.[^.]+$", name):
-                continue
-            filepath = os.path.join(out_dir, name)
-            if not os.path.isfile(filepath):
-                continue
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in media_exts and not name.endswith(".scene.json") and not name.endswith(".comic.json"):
-                continue
-            try:
-                raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
-            except OSError:
-                continue
-
-        # Sort by creation time (newest first) before any filtering.
-        raw_entries.sort(key=lambda e: e[3], reverse=True)
-
-        # Read each sidecar once per snapshot and retain only the fields used
-        # by the gallery. Favorites remain outside the cache so toggles are
-        # reflected immediately.
-        sidecar_cache: dict[str, dict] = {}
-        clip_groups: dict[str, dict] = {}
-        try:
-            from services.output_result_kind import classify_output_result_kind, production_cuts, production_result_kind
-            cuts = production_cuts(out_dir)
-        except Exception:
-            def classify_output_result_kind(name, params=None, metadata=None):
-                return None
-            def production_result_kind(name, params, cuts):
-                return None
-            cuts = {}
-        from services.output_origin import output_origin
-        for name, filepath, ext, mtime in raw_entries:
-            meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
-            if not os.path.isfile(meta_path):
-                continue
-            try:
-                with open(meta_path, "r", encoding="utf-8") as mf:
-                    meta = json.load(mf)
-            except Exception:
-                continue
-            params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-            sidecar_cache[name] = {
-                "origin": output_origin(meta),
-                "mode": meta.get("generation_mode"),
-                "edit_sub_mode": params.get("edit_sub_mode"),
-                "multi_clip_info": params.get("multi_clip_info"),
-                "resolution": params.get("resolution"),
-                "result_kind": classify_output_result_kind(name, params, meta) or production_result_kind(name, params, cuts),
-                "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
-                # Output sidecars are written only after the generated asset
-                # has been published.  Their historical ``created_at`` field
-                # therefore represents completion time, despite the old name.
-                # Prefer an explicit completion field when newer producers
-                # provide one and retain mtime as the legacy/import fallback.
-                "completed_at": next((
-                    float(meta[key])
-                    for key in ("completed_at", "finished_at", "created_at")
-                    if isinstance(meta.get(key), (int, float)) and float(meta[key]) > 0
-                ), None),
-            }
-            mci = sidecar_cache[name]["multi_clip_info"]
-            if mci and mci.get("group_id"):
-                gid = mci["group_id"]
-                if gid not in clip_groups:
-                    clip_groups[gid] = {"total": mci.get("total", 0), "highest_index": -1, "has_final": False}
-                clip_groups[gid]["highest_index"] = max(clip_groups[gid]["highest_index"], mci.get("index", 0))
-
-        for info in clip_groups.values():
-            if info["highest_index"] >= info["total"] - 1:
-                info["has_final"] = True
-
-        with _output_scan_cache_lock:
-            if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
-                oldest = min(
-                    _output_scan_cache,
-                    key=lambda key: float(_output_scan_cache[key].get("created_at", 0)),
-                )
-                _output_scan_cache.pop(oldest, None)
-            _output_scan_cache[out_dir] = {
-                "signature": directory_signature,
-                "created_at": now,
-                "raw_entries": raw_entries,
-                "sidecar_cache": sidecar_cache,
-                "clip_groups": clip_groups,
-            }
-
-    # Second pass: build the file list using the cached sidecar data.
-    from services.media_dimensions import listing_fields as media_listing_fields
-    files = []
-    for name, filepath, ext, mtime in raw_entries:
-        is_scene = name.endswith(".scene.json")
-        is_comic = name.endswith(".comic.json")
-        ftype = "comic" if is_comic else ("scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))))
-        cached = sidecar_cache.get(name) or {}
-        mode = cached.get("mode")
-        edit_sub_mode = cached.get("edit_sub_mode")
-        metadata_completed_at = cached.get("completed_at")
-        mci = cached.get("multi_clip_info")
-        is_intermediate_clip = False
-        if mci and mci.get("group_id"):
-            gid = mci["group_id"]
-            group = clip_groups.get(gid, {})
-            if group.get("has_final"):
-                is_intermediate_clip = True
-            elif mci.get("index", 0) < group.get("highest_index", 0):
-                is_intermediate_clip = True
-
-        if is_intermediate_clip:
-            continue
-        # The file may vanish between os.scandir() and here (temp files renamed
-        # mid-generation, etc.). Skip the entry rather than crashing the endpoint.
-        try:
-            size = os.path.getsize(filepath)
-        except (FileNotFoundError, OSError):
-            continue
-        files.append({
-            "name": name,
-            "type": ftype,
-            "mode": mode,
-            # Surface edit_sub_mode so the gallery's Edits filter can
-            # identify retake/inpaint/outpaint/restyle/edit_anything outputs.
-            "edit_sub_mode": edit_sub_mode,
-            "result_kind": cached.get("result_kind"),
-            "origin": cached.get("origin"),
-            "favorite": name in favs,
-            "size": size,
-            "created_at": mtime,
-            "completed_at": metadata_completed_at or mtime,
-            "completion_time_source": "metadata" if metadata_completed_at else "file",
-            "url": f"/api/v1/file/{name}{workspace_suffix}",
-            "thumbnail_url": (
-                f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
-                if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
-                else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png{workspace_suffix}"
-                      if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
-                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}{workspace_extra}"
-                            if ftype in {"image", "video"}
-                            else cached.get("thumbnail_url")))
-            ),
-        })
-
-    def listed_result(selected, total):
-        # Read image headers and schedule colour/size work only for this page,
-        # not the entire workspace on every gallery heartbeat.
-        for item in selected:
-            item.update(media_listing_fields(
-                item["type"], os.path.join(out_dir, item["name"]),
-                item["size"], item["created_at"],
-                (sidecar_cache.get(item["name"]) or {}).get("resolution"),
-            ))
-        return {"outputs": selected, "total": total}
-
-    if media_type:
-        files = [item for item in files if item["type"] == media_type]
-    from services.output_origin import filter_by_origin
-    files = filter_by_origin(files, origin)
-    # Ordered before paging so every page follows the gallery's chosen order.
-    if order == "oldest":
-        files.reverse()
-    elif order == "favorites":
-        files.sort(key=lambda item: not item["favorite"])
-
-    wanted_kind = str(result_kind or "").strip()
-    if wanted_kind:
-        try:
-            from services.output_result_kind import result_kind_matches_filter
-        except Exception:
-            def result_kind_matches_filter(kind, wanted):
-                return str(kind or "") == str(wanted or "")
-        files = [
-            item for item in files
-            if item.get("type") == "video"
-            and result_kind_matches_filter(item.get("result_kind"), wanted_kind)
-        ]
-        return listed_result(files, len(files))
-
-    # Special filters: return ALL matches, bypass pagination
-    if edits_only:
-        files = [
-            item for item in files
-            if item.get("edit_sub_mode") or item.get("mode") == "avatar"
-        ]
-        return listed_result(files, len(files))
-    if favorites_only:
-        files = [f for f in files if f["favorite"]]
-        return listed_result(files, len(files))
-    if multiclip_only:
-        # 1. Explicit multiclip files
-        multiclips = [f for f in files if "multiclip" in f["name"].lower() and f["type"] == "video"]
-        multiclip_names = {f["name"] for f in multiclips}
-
-        # 2. Sliding window final outputs: group videos by seed+prompt, keep only the largest
-        # Filename pattern: datetime_seedNNNN_prompt_text.mp4
-        import re as _re_mc
-        seed_pattern = _re_mc.compile(r'^\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m\d{2}s_(seed\d+_.+)\.(mp4|webm|mkv)$', _re_mc.IGNORECASE)
-        groups: dict[str, list[dict]] = {}
-        for f in files:
-            if f["type"] != "video" or f["name"] in multiclip_names:
-                continue
-            # Skip tmp files
-            if "_tmp." in f["name"]:
-                continue
-            m = seed_pattern.match(f["name"])
-            if m:
-                group_key = m.group(1)  # seed123_prompt text
-                groups.setdefault(group_key, []).append(f)
-
-        # From groups with multiple files (sliding window), keep only the largest
-        sw_finals = []
-        print(f"[Multiclip] Found {len(groups)} seed+prompt groups from {len(files)} total files")
-        for group_key, group_files in groups.items():
-            if len(group_files) > 1:
-                # Verify files are close in time (within 2 hours)
-                times = [f["created_at"] for f in group_files]
-                time_span = max(times) - min(times)
-                if time_span < 7200:
-                    largest = max(group_files, key=lambda f: f["size"])
-                    print(f"[Multiclip] SW group '{group_key[:60]}': {len(group_files)} files, span={time_span:.0f}s, largest={largest['name'][:60]}")
-                    sw_finals.append(largest)
-                else:
-                    print(f"[Multiclip] SW group '{group_key[:60]}': {len(group_files)} files, SKIPPED (time span {time_span:.0f}s > 7200)")
-
-        combined = multiclips + sw_finals
-        combined.sort(key=lambda f: f["created_at"], reverse=True)
-        print(f"[Multiclip] Result: {len(multiclips)} multiclips + {len(sw_finals)} sliding window finals = {len(combined)} total")
-        return listed_result(combined, len(combined))
-    if search:
-        from services.search_index import get_search_index
-        idx = get_search_index()
-        matching_names = idx.search(search, out_dir)
-        # Combine index results with filename fallback (in case index missed
-        # a file that was created between index builds)
-        query_lower = search.lower()
-        # The index is keyed by sidecar stem ("clip" for clip.mp4 and
-        # clip.meta.json); comparing full names never matched a prompt.
-        files = [
-            f for f in files
-            if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
-        ]
-        return listed_result(files, len(files))
-
-    total = len(files)
-    if limit > 0:
-        files = files[offset:offset + limit]
-    return listed_result(files, total)
+api.include_router(create_list_outputs_router())
 
 
 def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
@@ -26727,29 +24291,9 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None, size: st
     )
 
 
-@api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
-    """Serve an output file from the explicit or active workspace.
+from routers.workspace_outputs import create_serve_file_router
 
-    Uses share_delete_file_response so that on Windows the file can be
-    deleted/renamed by the gallery delete button even while the browser
-    is actively streaming it (e.g. mid-video playback). Without share-
-    delete, Python's default open() locks the file for delete and the
-    user has to close the entire app to clean up.
-    """
-    from services.win_safe_files import share_delete_file_response
-    filepath = _resolve_output_file(filename, workspace)
-    if filepath:
-        return share_delete_file_response(filepath, expected_sha256=sha256)
-    # Uploads folder — the gallery's virtual "Uploads" view lists these
-    #    files with the same /api/v1/file/ URLs every other gallery flow
-    #    builds (thumbnails, playback, send-to-input). Upload names are
-    #    hash-uniquified at upload time, and outputs are checked first, so
-    #    an output name can never be shadowed by an upload.
-    filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
-    if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath, expected_sha256=sha256)
-    raise HTTPException(status_code=404, detail="File not found")
+api.include_router(create_serve_file_router())
 
 
 @api.get("/api/v1/outputs/{name}/metadata")
@@ -28391,10 +25935,7 @@ def _sync_canonical_tasks(workspace: str) -> None:
         pass
 
 
-@api.get("/api/v1/resources")
-def list_resource_lanes():
-    """Expose the coordinator's real active and waiting leases for the UI."""
-    return {"lanes": resource_scheduler.coordinator.snapshot()}
+api.include_router(create_system_resources_router())
 
 
 def _control_canonical_task(task: dict, action: str):
@@ -28546,6 +26087,7 @@ from services.workspace_registry import WorkspaceRegistry
 _workspace_collection_registry = WorkspaceRegistry(os.path.join(
     wgp.server_config.get("save_path", "outputs"), "_hocuspocus", "workspaces-v1.json",
 ))
+llm_director._workspace_collection_registry = _workspace_collection_registry
 api.include_router(create_workspace_collections_router(
     registry=lambda: _workspace_collection_registry,
 ))

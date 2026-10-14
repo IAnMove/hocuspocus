@@ -132,6 +132,232 @@ class CoreRuntimeTests(unittest.TestCase):
         finally:
             self._leave_temp_workspace(folder, previous)
 
+    def _copy_rig_fixture(self, destination: Path) -> None:
+        import shutil
+        fixture = Path(__file__).resolve().parents[1] / "ui" / "tests" / "fixtures" / "tv-head-humanoid.glb"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(fixture, destination)
+
+    def test_rig_keeps_the_submission_provenance(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            self._copy_rig_fixture(core_runtime.core.outputs_root() / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={
+                "source": "prop.glb",
+                "animations": ["idle"],
+                "provenance": {"actor": "wizard", "capability": "rig"},
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(started.json().get("provenance", {}).get("actor"), "wizard")
+
+    def test_rig_accepts_an_uploaded_glb(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            self._copy_rig_fixture(Path("uploads") / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={
+                "source": "/api/v1/uploads/prop.glb",
+                "animations": ["idle"],
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+
+    def test_rig_publishes_an_activity_task(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            self._copy_rig_fixture(core_runtime.core.outputs_root() / "prop.glb")
+            started = self.client.post("/api/v1/rig/generate", json={
+                "source": "prop.glb", "animations": ["idle"],
+            })
+            self.assertEqual(started.status_code, 200, started.text)
+            tasks = self.client.get("/api/v1/tasks", params={"status": "all", "workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(tasks.status_code, 200, tasks.text)
+        workflows = [item.get("workflow") for item in tasks.json()["tasks"]]
+        self.assertIn("rig", workflows)
+
+    def test_meshy_completion_writes_an_asset_manifest(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+
+            def fake_generate(**kwargs):
+                name = "meshy-manifest.glb"
+                path = Path(kwargs["output_dir"]) / name
+                path.write_bytes(b"glb")
+                return {"filename": name, "path": str(path), "provider": "meshy"}
+
+            with patch("services.meshy_3d_service.generate_model", side_effect=fake_generate), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_3d.threading.Thread", ImmediateThread):
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            sidecar = core_runtime.core.outputs_root() / "meshy-manifest.meta.json"
+            published = sidecar.is_file() and json.loads(sidecar.read_text(encoding="utf-8"))["technical"]["published_on_generate"]
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(published)
+
+    def test_model3d_job_publishes_an_activity_task(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.meshy_3d_service.generate_model", return_value={"filename": "meshy-test.glb"}), patch(
+                "services.execution_mode.validate_remote_provider",
+            ):
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            tasks = self.client.get("/api/v1/tasks", params={"status": "all", "workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        workflows = [item.get("workflow") for item in tasks.json()["tasks"]]
+        self.assertIn("model3d", workflows)
+
+    def _meshy_job_request(self, images):
+        """POST a Meshy job with the worker thread stubbed; return the response and the job's stored request."""
+        from services import core_remote_3d
+
+        with patch("services.core_remote_3d.threading.Thread"), patch("services.execution_mode.validate_remote_provider"):
+            response = self.client.post("/api/v1/model3d/generate", json={
+                "provider": "meshy", "images": images, "workspace": "default",
+            })
+        job = core_remote_3d._JOBS.get(response.json().get("job_id")) if response.status_code == 200 else {}
+        return response, (job or {}).get("_request", {})
+
+    def test_core_model3d_keeps_a_nested_reference_the_router_accepted(self):
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            nested = Path("outputs", "refs", "deep", "front.png")
+            nested.parent.mkdir(parents=True)
+            Image.new("RGB", (4, 4), (1, 2, 3)).save(nested)
+            response, request = self._meshy_job_request({"front": "refs/deep/front.png"})
+            expected = os.path.realpath(nested)
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(os.path.realpath(request["image_path"]), expected)
+
+    def test_core_model3d_uses_the_upload_the_router_picked_over_a_workspace_file_of_the_same_name(self):
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("uploads").mkdir()
+            Image.new("RGB", (4, 4), (200, 0, 0)).save(Path("outputs", "front.png"))
+            Image.new("RGB", (4, 4), (0, 0, 200)).save(Path("uploads", "front.png"))
+            response, request = self._meshy_job_request({"front": "/api/v1/uploads/front.png"})
+            expected = os.path.realpath(Path("uploads", "front.png"))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(os.path.realpath(request["image_path"]), expected)
+
+    def test_meshy_job_stays_completed_when_the_asset_manifest_cannot_be_written(self):
+        """The GLB exists and the provider call was paid for: a manifest failure must not turn the job into a failure."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+
+            def fake_generate(**kwargs):
+                name = "meshy-paid.glb"
+                Path(kwargs["output_dir"], name).write_bytes(b"glb")
+                return {"filename": name}
+
+            with patch("services.meshy_3d_service.generate_model", side_effect=fake_generate), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_3d.threading.Thread", ImmediateThread), patch(
+                "services.asset_manifest.publish_generation_job_sidecar", side_effect=OSError("disk full"),
+            ):
+                started = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            job = self.client.get(f"/api/v1/model3d/status/{started.json()['job_id']}").json()
+            produced = Path("outputs", "meshy-paid.glb").is_file()
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(job["status"], "completed", job)
+        self.assertEqual(job["filename"], "meshy-paid.glb")
+        self.assertTrue(produced)
+
+    def test_core_model3d_unload_cancels_the_queued_remote_jobs(self):
+        """The shared Model3D router brings ``POST /api/v1/model3d/unload`` to core: it cancels the Meshy and Hi3D jobs."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.core_remote_3d.threading.Thread"), patch(
+                "services.execution_mode.validate_remote_provider",
+            ):
+                started = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            unloaded = self.client.post("/api/v1/model3d/unload")
+            after = self.client.get(f"/api/v1/model3d/status/{started.json()['job_id']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(started.json()["status"], "queued")
+        self.assertEqual(unloaded.status_code, 200, unloaded.text)
+        self.assertGreaterEqual(unloaded.json()["cancelled_jobs"], 1)
+        self.assertIs(unloaded.json()["model_loaded"], False)
+        self.assertEqual(after.json()["status"], "cancelled")
+
+    def test_hi3d_text_prompt_uses_a_minimax_still(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            core_runtime.core.save_config({"services": {
+                "active_workspace": "default",
+                "minimax_image_api_key": "test-key",
+                "hi3d_api_key": "hi-key",
+            }})
+            seen = {}
+
+            def fake_still(**kwargs):
+                path = Path(kwargs["output_dir"]) / "still.png"
+                path.write_bytes(b"png")
+                return {"path": str(path)}
+
+            def fake_hi3d(**kwargs):
+                seen["image"] = kwargs.get("image_path")
+                name = "hi3d-out.glb"
+                Path(kwargs["output_dir"], name).write_bytes(b"glb")
+                return {"filename": name}
+
+            with patch("services.minimax_image_service.generate_image", side_effect=fake_still), patch(
+                "services.hi3d_service.generate_model", side_effect=fake_hi3d,
+            ), patch("services.execution_mode.validate_remote_provider"), patch(
+                "services.core_remote_3d.threading.Thread", ImmediateThread,
+            ):
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "hi3d", "prompt": "a clay robot", "workspace": "default",
+                })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(str(seen.get("image") or "").endswith("still.png"))
+
+    def test_model3d_execution_mode_refusal_is_409(self):
+        from services.execution_mode import ExecutionModeError
+        with patch(
+            "services.execution_mode.validate_generation",
+            side_effect=ExecutionModeError("plan mode stops before queue submission"),
+        ):
+            response = self.client.post("/api/v1/model3d/generate", json={
+                "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+            })
+        self.assertEqual(response.status_code, 409, response.text)
+
     def test_diagnostics_snapshot_and_report_on_the_core_profile(self):
         snapshot = self.client.get("/api/v1/diagnostics")
         self.assertEqual(snapshot.status_code, 200, snapshot.text)
@@ -1416,6 +1642,136 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(models.json()["total"], 1)
         self.assertEqual(models.json()["outputs"][0]["type"], "model3d")
 
+    def test_core_outputs_filter_by_search_and_oldest_order(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            older = Path("outputs", "older-blue.png")
+            newer = Path("outputs", "newer-red.png")
+            older.write_bytes(b"png")
+            newer.write_bytes(b"png")
+            os.utime(older, (10, 10))
+            os.utime(newer, (20, 20))
+            searched = self.client.get("/api/v1/outputs", params={"search": "blue"})
+            ordered = self.client.get("/api/v1/outputs", params={"order": "oldest"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(searched.status_code, 200, searched.text)
+        self.assertEqual([item["name"] for item in searched.json()["outputs"]], ["older-blue.png"])
+        self.assertEqual(
+            [item["name"] for item in ordered.json()["outputs"]],
+            ["older-blue.png", "newer-red.png"],
+        )
+
+    def test_core_outputs_include_image_dimensions(self):
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Image.new("RGB", (8, 6), (1, 2, 3)).save(Path("outputs", "card.png"))
+            listed = self.client.get("/api/v1/outputs")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        row = listed.json()["outputs"][0]
+        self.assertEqual((row.get("width"), row.get("height")), (8, 6))
+
+    def test_a_new_scene_recording_is_listed_at_once_on_core(self):
+        """Core lists through the shared 5-second scan cache; a recording has to drop that cache, not another dict."""
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Image.new("RGB", (4, 4), (1, 2, 3)).save(Path("outputs", "first.png"))
+            before = self.client.get("/api/v1/outputs")
+            stamp = Path("outputs").stat().st_mtime_ns
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            scene = {"version": 1, "name": "Harbour Shot", "width": 64, "height": 64, "fps": 30, "duration": 2, "layers": []}
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                saved = self.client.post(
+                    "/api/v1/scenes/recordings",
+                    files={"file": ("rec.webm", b"webm", "video/webm")},
+                    data={"metadata": json.dumps({"workspace": "default", "scene": scene})},
+                )
+            # A coarse file-system clock can leave the folder's mtime as it was.
+            os.utime("outputs", ns=(stamp, stamp))
+            after = self.client.get("/api/v1/outputs")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual([row["name"] for row in before.json()["outputs"]], ["first.png"])
+        self.assertIn(saved.json()["name"], [row["name"] for row in after.json()["outputs"]])
+
+    def test_core_still_serves_the_uploads_view_files(self):
+        """The gallery's Uploads view lists ``/api/v1/file/<name>?workspace=__uploads__``; core served it before the share."""
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("uploads").mkdir()
+            Image.new("RGB", (8, 6), (1, 2, 3)).save(Path("uploads", "pick.png"))
+            listed = self.client.get("/api/v1/outputs", params={"workspace": "__uploads__"})
+            served = self.client.get("/api/v1/file/pick.png", params={"workspace": "__uploads__"})
+            missing = self.client.get("/api/v1/file/nope.png", params={"workspace": "__uploads__"})
+            expected = Path("uploads", "pick.png").read_bytes()
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["outputs"][0]["url"], "/api/v1/file/pick.png?workspace=__uploads__")
+        self.assertEqual(served.status_code, 200, served.text)
+        self.assertEqual(served.content, expected)
+        self.assertEqual(served.headers["content-type"], "image/png")
+        self.assertEqual(missing.status_code, 404, missing.text)
+
+    def test_core_outputs_filter_by_origin_and_result_kind(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("outputs", "harbour_multiclip.mp4").write_bytes(b"mp4")
+            Path("outputs", "harbour_multiclip.meta.json").write_text(json.dumps({
+                "origin": {"actor": "wizard", "tool": "wizard", "capability": "generation.video"},
+                "params": {},
+            }), encoding="utf-8")
+            Path("outputs", "plain.mp4").write_bytes(b"mp4")
+            origin = self.client.get("/api/v1/outputs", params={"origin": "wizard"})
+            kind = self.client.get("/api/v1/outputs", params={"result_kind": "chapter"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(origin.status_code, 200, origin.text)
+        self.assertEqual([item["name"] for item in origin.json()["outputs"]], ["harbour_multiclip.mp4"])
+        self.assertEqual(origin.json()["outputs"][0]["origin"]["actor"], "wizard")
+        self.assertEqual(kind.status_code, 200, kind.text)
+        self.assertEqual([item["name"] for item in kind.json()["outputs"]], ["harbour_multiclip.mp4"])
+        self.assertEqual(kind.json()["outputs"][0]["result_kind"], "chapter")
+
+    def test_core_config_save_is_private_and_atomic(self):
+        import stat
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            switched = self.client.put("/api/v1/workspaces/active", json={"name": "saved-lab"})
+            settings = Path("app", "settings")
+            path = settings / "core_config.json"
+            mode = stat.S_IMODE(path.stat().st_mode) if path.is_file() else None
+            leftovers = [item.name for item in settings.iterdir() if item.name != "core_config.json"]
+            text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(switched.status_code, 200, switched.text)
+        self.assertEqual(mode, 0o600)
+        self.assertEqual(leftovers, [])
+        self.assertIn('"active_workspace": "saved-lab"', text)
+        # indent=2: services is one level down, the workspace name two levels down.
+        self.assertIn("\n  \"services\"", text)
+        self.assertIn("\n    \"active_workspace\"", text)
+
     def test_wizard_image_executor_fails_when_minimax_job_fails(self):
         from services import core_generation_commands
 
@@ -1732,6 +2088,34 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(project["title"], "Harbour Lights")
             self.assertEqual(project["characters"][0]["name"], "Mara")
             self.assertEqual(project["characters"][0]["approval"], "draft")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+
+    def test_a_series_put_with_a_few_fields_keeps_the_rest_of_the_project(self):
+        """An agent sent only allowedProductionMethods and the PUT emptied the series' episodes, characters and assets."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            created = self.client.post("/api/v1/series", json={"workspace": "default", "title": "Harbour Lights"}).json()
+            full = dict(created, characters=[{"id": "mara", "name": "Mara", "role": "keeper"}], locations=[{"id": "harbour", "name": "Harbour"}])
+            saved = self.client.put(f"/api/v1/series/{created['id']}", json={"workspace": "default", "series": full,
+                                                                              "baseRevision": created["revision"]})
+            self.assertEqual(saved.status_code, 200, saved.text)
+            current = self.client.get(f"/api/v1/series/{created['id']}", params={"workspace": "default"}).json()
+            self.assertEqual(len(current["characters"]), 1)
+            partial = self.client.put(f"/api/v1/series/{created['id']}", json={
+                "workspace": "default", "series": {"allowedProductionMethods": ["animation_2d", "imported_video"]},
+                "baseRevision": current["revision"]})
+            self.assertEqual(partial.status_code, 200, partial.text)
+            stored = partial.json()
+            self.assertEqual(stored["allowedProductionMethods"], ["animation_2d", "imported_video"])
+            self.assertEqual([item["id"] for item in stored["characters"]], ["mara"])
+            self.assertEqual([item["id"] for item in stored["locations"]], ["harbour"])
+            self.assertEqual(stored["episodesById"], current["episodesById"])
+            self.assertEqual(stored["title"], "Harbour Lights")
+            cleared = self.client.put(f"/api/v1/series/{created['id']}", json={
+                "workspace": "default", "series": {"locations": []}, "baseRevision": stored["revision"]}).json()
+            self.assertEqual(cleared["locations"], [], "an explicit empty list still clears")
         finally:
             self._leave_temp_workspace(folder, previous)
 
