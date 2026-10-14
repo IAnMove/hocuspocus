@@ -17,6 +17,8 @@ import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from tests.support.fake_wgp import APP_DIR, FakeEngine, catalog_attributes, generation_attributes, make_fake_wgp
 
 WGP = APP_DIR / "wgp.py"
@@ -196,12 +198,35 @@ def test_the_fake_engine_parses_a_manifest_and_records_what_it_is_asked_to_gener
     assert [task["id"] for task in queue] == [1] and queue[0]["params"]["state"] is state
     assert fake.task_id == 2
     sent = []
-    assert fake.generate_video(queue[0], lambda command, data: sent.append(command), plugin_data={}) is True
+    # The worker passes the validated params WanGP declares as keyword arguments, the generation state among them.
+    kwargs = {"state": state, "prompt": "a lake", "seed": 5, "model_type": "fake_t2v"}
+    assert fake.generate_video(queue[0], lambda command, data: sent.append(command), plugin_data={}, **kwargs) is True
     gen = state["gen"]
     assert sent == ["status", "progress", "progress", "info"]
     assert [Path(path).name for path in gen["file_list"]] == ["2026-01-02-03h04m05s_seed5_a_lake.mp4"]
     assert engine.calls[0]["task_id"] == 1 and "state" not in engine.calls[0]["params"]
+    assert engine.calls[0]["kwargs"] == {"plugin_data": {}, "prompt": "a lake", "seed": 5, "model_type": "fake_t2v"}
+    assert engine.calls[0]["state_is_the_task_state"] is True
+    # WanGP refuses a keyword it does not declare, and cannot run without the generation state.
+    with pytest.raises(TypeError, match="generation_mode"):
+        fake.generate_video(queue[0], lambda command, data: None, generation_mode="video", **kwargs)
+    with pytest.raises(TypeError, match="state"):
+        fake.generate_video(queue[0], lambda command, data: None, prompt="a lake")
     # A call made after the job was aborted does nothing, as in WanGP.
     gen["abort"] = True
-    assert fake.generate_video(queue[0], lambda command, data: None) is False
+    assert fake.generate_video(queue[0], lambda command, data: None, **kwargs) is False
     assert len(gen["file_list"]) == 1
+
+
+def test_the_fake_engine_declares_the_parameters_the_worker_hands_wgp() -> None:
+    """The worker filters its params by ``inspect.signature(wgp.generate_video)``. The fake reads that signature
+    from app/wgp.py, so the drift check above cannot fail for it; this pins that it still holds the names the
+    worker's manifest builder writes and the engine must receive."""
+    parameters = inspect.signature(generation_attributes(FakeEngine(), SimpleNamespace())["generate_video"]).parameters
+    assert list(parameters)[:2] == ["task", "send_cmd"]
+    worker_names = {"state", "plugin_data", "prompt", "negative_prompt", "seed", "model_type", "mode", "video_length",
+                    "repeat_generation", "image_start", "image_end", "image_prompt_type", "image_refs",
+                    "frames_positions", "video_prompt_type", "multi_prompts_gen_type", "multi_clip_info",
+                    "trim_tail_frames", "audio_frame_offset", "minimax_h3_references", "activated_loras"}
+    assert worker_names - set(parameters) == set()
+    assert "generation_mode" not in parameters  # so the fake picks the kind of media from the task's params

@@ -80,6 +80,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -91,6 +100,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -259,6 +269,15 @@
           {
             "audio_save_path": "<OUTPUTS>",
             "image_save_path": "<OUTPUTS>",
+            "kwargs": {
+              "mode": "",
+              "model_type": "fake_t2v",
+              "plugin_data": {},
+              "prompt": "a calm lake",
+              "resolution": "1280x720",
+              "seed": 42,
+              "video_length": 241
+            },
             "params": {
               "_execution_mode": "real",
               "generation_mode": "video",
@@ -270,6 +289,7 @@
             },
             "prompt": "a calm lake",
             "save_path": "<OUTPUTS>",
+            "state_is_the_task_state": true,
             "task_id": 1,
             "vram_safety_coefficient": 0.7164236111111111
           }
@@ -629,6 +649,29 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "plugin_data": {},
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 0,
@@ -654,6 +697,7 @@
           },
           "prompt": "first shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -781,6 +825,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -792,6 +845,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1069,6 +1123,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -1080,6 +1143,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1150,6 +1214,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -1161,6 +1234,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1246,6 +1320,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -1257,6 +1340,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1311,6 +1395,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "audio",
@@ -1324,6 +1417,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1440,6 +1534,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -1451,6 +1554,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1636,6 +1740,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -1647,6 +1760,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1744,6 +1858,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -1755,6 +1878,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -1861,6 +1985,16 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "film_grain_intensity": 0.3,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a red barn",
+            "resolution": "64x64",
+            "seed": -1,
+            "video_length": 1
+          },
           "params": {
             "_execution_mode": "real",
             "film_grain_intensity": 0.3,
@@ -1873,6 +2007,7 @@
           },
           "prompt": "a red barn",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -2449,6 +2584,29 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "plugin_data": {},
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 0,
@@ -2474,12 +2632,37 @@
           },
           "prompt": "first shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 17,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_1.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "plugin_data": {},
+            "prompt": "second shot",
+            "resolution": "64x64",
+            "seed": 12,
+            "trim_tail_frames": 0,
+            "video_length": 25
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 17,
@@ -2506,12 +2689,37 @@
           },
           "prompt": "second shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 42,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_2.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "noise",
+            "plugin_data": {},
+            "prompt": "third shot",
+            "resolution": "64x64",
+            "seed": 13,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 42,
@@ -2538,6 +2746,7 @@
           },
           "prompt": "third shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 3,
           "vram_safety_coefficient": 0.8
         }
@@ -2757,6 +2966,29 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "plugin_data": {},
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 0,
@@ -2782,12 +3014,37 @@
           },
           "prompt": "first shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 17,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_1.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "plugin_data": {},
+            "prompt": "second shot",
+            "resolution": "64x64",
+            "seed": 12,
+            "trim_tail_frames": 0,
+            "video_length": 25
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 17,
@@ -2814,6 +3071,7 @@
           },
           "prompt": "second shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         }
@@ -2936,6 +3194,29 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "plugin_data": {},
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 0,
@@ -2961,12 +3242,37 @@
           },
           "prompt": "first shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 17,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_1.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "",
+            "plugin_data": {},
+            "prompt": "second shot",
+            "resolution": "64x64",
+            "seed": 12,
+            "trim_tail_frames": 0,
+            "video_length": 25
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 17,
@@ -2993,12 +3299,36 @@
           },
           "prompt": "second shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 42,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "noise",
+            "plugin_data": {},
+            "prompt": "third shot",
+            "resolution": "64x64",
+            "seed": 13,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_continuation": true,
             "_execution_mode": "real",
@@ -3025,6 +3355,7 @@
           },
           "prompt": "third shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 3,
           "vram_safety_coefficient": 0.8
         }
@@ -3192,6 +3523,29 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "blur",
+            "plugin_data": {},
+            "prompt": "first shot",
+            "resolution": "64x64",
+            "seed": 11,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 0,
@@ -3217,12 +3571,36 @@
           },
           "prompt": "first shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 42,
+            "image_end": null,
+            "image_start": null,
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "negative_prompt": "noise",
+            "plugin_data": {},
+            "prompt": "third shot",
+            "resolution": "64x64",
+            "seed": 13,
+            "trim_tail_frames": 0,
+            "video_length": 17
+          },
           "params": {
             "_continuation": true,
             "_execution_mode": "real",
@@ -3249,6 +3627,7 @@
           },
           "prompt": "third shot",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 3,
           "vram_safety_coefficient": 0.8
         }
@@ -3418,6 +3797,29 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 24,
+            "image_end": "end-a.png",
+            "image_prompt_type": "SE",
+            "image_start": "start-a.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 1.5,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "left",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 4,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 24,
@@ -3443,12 +3845,36 @@
           },
           "prompt": "left",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 37,
+            "image_end": "end-b.png",
+            "image_prompt_type": "SE",
+            "image_start": "start-b.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 1.5,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "right",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 4,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 37,
@@ -3474,12 +3900,36 @@
           },
           "prompt": "right",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 50,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "end-b.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 1.5,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "right",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 0,
+            "video_length": 5
+          },
           "params": {
             "_execution_mode": "real",
             "audio_frame_offset": 50,
@@ -3505,6 +3955,7 @@
           },
           "prompt": "right",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 3,
           "vram_safety_coefficient": 0.8
         }
@@ -3743,6 +4194,15 @@
         {
           "audio_save_path": "<OUTPUTS>/golden-ws",
           "image_save_path": "<OUTPUTS>/golden-ws",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -3754,6 +4214,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>/golden-ws",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -3980,6 +4441,16 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -3992,6 +4463,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -4417,6 +4889,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -4428,6 +4909,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -4526,6 +5008,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -4537,6 +5028,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -4639,6 +5131,16 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -4651,6 +5153,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -4773,6 +5276,23 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "outpaint_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "_outpaint_lock_source_pixels": false,
@@ -4796,12 +5316,30 @@
           },
           "prompt": "shot zero",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "outpaint_shots_golden-direct",
+              "index": 1,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot one",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 25
+          },
           "params": {
             "_execution_mode": "real",
             "_outpaint_lock_source_pixels": false,
@@ -4825,6 +5363,7 @@
           },
           "prompt": "shot one",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         }
@@ -4916,6 +5455,23 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -4935,12 +5491,30 @@
           },
           "prompt": "shot zero",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 1,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot one",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 25
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -4960,6 +5534,7 @@
           },
           "prompt": "shot one",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         }
@@ -5051,6 +5626,23 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "repaint_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -5070,12 +5662,30 @@
           },
           "prompt": "shot zero",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         },
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "repaint_shots_golden-direct",
+              "index": 1,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot one",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 25
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -5095,6 +5705,7 @@
           },
           "prompt": "shot one",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 2,
           "vram_safety_coefficient": 0.8
         }
@@ -5575,6 +6186,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -5586,6 +6206,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -5679,6 +6300,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_director_pipeline_id": "pipeline-golden",
             "_execution_mode": "real",
@@ -5691,6 +6321,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -5929,6 +6560,15 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -5940,6 +6580,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1,
           "vram_safety_coefficient": 0.8
         }
@@ -6258,6 +6899,16 @@
         {
           "audio_save_path": "<OUTPUTS>",
           "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "activated_loras": [],
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "1280x720",
+            "seed": 42,
+            "video_length": 241
+          },
           "params": {
             "_execution_mode": "real",
             "activated_loras": [],
@@ -6270,6 +6921,7 @@
           },
           "prompt": "a calm lake",
           "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
           "task_id": 1
         }
       ],

@@ -22,7 +22,10 @@ so a WanGP update that renames or reshapes one of them fails there first.
 """
 from __future__ import annotations
 
+import ast
 import copy
+import functools
+import inspect
 import json
 import os
 import re
@@ -194,15 +197,46 @@ def format_time(seconds):
         return f"{seconds:.1f}s"
 
 
-class EngineCall:
-    """One ``generate_video`` call, as a script step sees it."""
+@functools.lru_cache(maxsize=1)
+def engine_signature() -> inspect.Signature:
+    """The parameters of WanGP's ``generate_video``, read from ``app/wgp.py`` (importing it needs the GPU stack).
 
-    def __init__(self, engine: "FakeEngine", index: int, task: dict, send_cmd: Callable[[str, Any], None]) -> None:
+    The worker hands the engine only the params whose names are in ``inspect.signature(wgp.generate_video)``, as
+    keyword arguments. The fake declares the real names, so the worker filters and passes exactly what it would
+    pass to WanGP, and a WanGP rename shows up in the goldens' ``engine_calls[].kwargs``.
+    """
+    tree = ast.parse((APP_DIR / "wgp.py").read_text(encoding="utf-8"))
+    real = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "generate_video")
+    names = [argument.arg for argument in (*real.args.posonlyargs, *real.args.args)]
+    defaults = dict(zip(names[len(names) - len(real.args.defaults):], real.args.defaults))
+    parameters = []
+    for name in names:
+        default: Any = inspect.Parameter.empty
+        if name in defaults:
+            try:
+                default = ast.literal_eval(defaults[name])
+            except ValueError:
+                default = None
+        parameters.append(inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default))
+    return inspect.Signature(parameters)
+
+
+class EngineCall:
+    """One ``generate_video`` call, as a script step sees it.
+
+    ``kwargs`` are the keyword arguments the worker passed, which is all WanGP reads: the seed and prompt that name
+    the file and the generation state (``state``) come from there. ``params`` are the task's params, where the
+    fake reads ``generation_mode`` to pick the kind of media (WanGP decides that from the model).
+    """
+
+    def __init__(self, engine: "FakeEngine", index: int, task: dict, send_cmd: Callable[[str, Any], None],
+                 kwargs: dict[str, Any]) -> None:
         self.engine = engine
         self.index = index
         self.task = task
         self.params = task["params"]
-        self.gen = get_gen_info(self.params["state"])
+        self.kwargs = kwargs
+        self.gen = get_gen_info(kwargs["state"])
         self.send_cmd = send_cmd
 
     @property
@@ -217,9 +251,9 @@ class EngineCall:
         """Write one output where WanGP does: into ``wgp.save_path``, and tell the generation state about it
         (``register=False`` leaves the file for the worker to find by looking at the folder)."""
         kind = kind or self.kind
-        seed = self.params.get("seed", -1)
+        seed = self.kwargs.get("seed", -1)
         seed = seed if isinstance(seed, int) and seed >= 0 else self.engine.default_seed
-        slug = re.sub(r"[^a-z0-9]+", "_", str(self.params.get("prompt") or "").lower()).strip("_")[:24] or "clip"
+        slug = re.sub(r"[^a-z0-9]+", "_", str(self.kwargs.get("prompt") or "").lower()).strip("_")[:24] or "clip"
         source = f"{GENERATED_STAMP}_seed{seed}_{slug}{suffix}{_EXTENSIONS[kind]}"
         path = get_available_filename(self.engine.module.save_path, source)
         self.engine.write_media(path, kind)
@@ -248,7 +282,7 @@ def default_script(call: EngineCall) -> None:
     call.send("progress", [(1, 2), "Sampling | 1/2"])
     call.send("progress", [(2, 2), "Sampling | 2/2"])
     call.send("info", "Saving")
-    for _ in range(max(1, int(call.params.get("repeat_generation") or 1))):
+    for _ in range(max(1, int(call.kwargs.get("repeat_generation") or 1))):
         call.save()
 
 
@@ -256,7 +290,8 @@ class FakeEngine:
     """What the fake ``wgp.generate_video`` does. ``script`` runs once per call, in the engine's worker thread.
 
     ``scripts`` are one-shot overrides, used in call order before ``script``.
-    ``calls`` records the parameters every call received (without the generation state).
+    ``calls`` records every call: the task's params and the keyword arguments it received (both without the
+    generation state).
     """
 
     def __init__(self, write_media: Callable[[str, str], None] = placeholder_media) -> None:
@@ -268,14 +303,19 @@ class FakeEngine:
         self.entered = threading.Event()
         self.module: Any = None  # the fake wgp, set by generation_attributes
 
-    def generate(self, task: dict, send_cmd: Callable[[str, Any], None]) -> bool:
-        call = EngineCall(self, len(self.calls), task, send_cmd)
+    def generate(self, task: dict, send_cmd: Callable[[str, Any], None], kwargs: dict[str, Any]) -> bool:
+        if "state" not in kwargs:  # WanGP's generate_video takes it as a required parameter
+            raise TypeError("generate_video() missing 1 required positional argument: 'state'")
+        call = EngineCall(self, len(self.calls), task, send_cmd, kwargs)
         params = {key: value for key, value in task["params"].items() if key != "state"}
+        received = {key: value for key, value in kwargs.items() if key != "state"}
         module = self.module
         self.calls.append({
             "task_id": task.get("id"),
             "prompt": task.get("prompt"),
             "params": json.loads(json.dumps(copy.deepcopy(params), default=str)),
+            "kwargs": json.loads(json.dumps(copy.deepcopy(received), default=str)),
+            "state_is_the_task_state": kwargs["state"] is task["params"].get("state"),
             # What the worker had pointed the engine at when it made the call.
             "save_path": module.save_path,
             "image_save_path": module.image_save_path,
@@ -295,7 +335,11 @@ def generation_attributes(engine: FakeEngine, module: Any) -> dict[str, Any]:
     every task dict with a known model becomes a runtime task that carries the
     generation state in its params. WanGP's settings merge, attachment loading
     and preview images are not reproduced, and neither is its ``task_id`` rule
-    beyond "the counter moves past the largest id".
+    beyond "the counter moves past the largest id". ``validate_task`` does not
+    merge WanGP's default settings either, so the engine receives fewer keyword
+    arguments than WanGP would. ``generate_video`` declares WanGP's real
+    parameters (:func:`engine_signature`), so the worker's own filter decides
+    which params reach it, and an unknown keyword is refused as WanGP would.
     """
     engine.module = module
 
@@ -333,8 +377,12 @@ def generation_attributes(engine: FakeEngine, module: Any) -> dict[str, Any]:
         inputs.setdefault("mode", "")
         return inputs
 
-    def generate_video(task, send_cmd, *_args, **_kwargs):
-        return engine.generate(task, send_cmd)
+    def generate_video(task, send_cmd, *_args, **kwargs):
+        engine_signature().bind_partial(task, send_cmd, **kwargs)  # TypeError on a keyword WanGP does not take
+        return engine.generate(task, send_cmd, kwargs)
+
+    # The worker filters its params by this signature (see engine_signature).
+    generate_video.__signature__ = engine_signature()
 
     def get_model_min_frames_and_step(model_type):
         model_def = module.get_model_def(model_type)
