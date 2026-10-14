@@ -527,7 +527,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     )
     ast.parse(source)
     assert "@api.exception_handler(execution_mode.ExecutionModeError)" in source
-    worker = source.split("def _run_generation(job_id:", 1)[1]
+    worker = generation_source()
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
@@ -608,6 +608,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         body = ast.get_source_segment(editor_source, node)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
-    h3_slice = source.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
+    h3_slice = worker.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
     assert "publish_generation_sidecar" in h3_slice
     assert "json.dump" not in h3_slice
