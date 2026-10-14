@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.series_line_voice import SeriesLineVoice
 from services.series_native_render import NativeRenderError
 from services.series_shot3d_editor import Scene3DEditorError, editor_scene, from_editor
@@ -65,6 +66,7 @@ def create_series_shot_inspector_router(*, voices: SeriesLineVoice, read_library
                                         workspace_dir: Callable[[str], str], call: Callable[[str, dict], dict],
                                         bind_loop: Callable[[asyncio.AbstractEventLoop], None]) -> APIRouter:
     router = APIRouter()
+    workspace_busy.register("series-voice", lambda _workspace, folder: voices.live_jobs(folder))
 
     def shot_of(workspace: str, series_id: str, episode_id: str, ref: str) -> tuple[dict, dict, dict]:
         series = (read_library(workspace).get("seriesById") or {}).get(series_id)

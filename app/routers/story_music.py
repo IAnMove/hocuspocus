@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from services import execution_mode
+from services import execution_mode, task_controls
 
 
 _get_active_workspace: Callable[[], str]
@@ -255,6 +255,15 @@ def start_story_music_candidates_job(body: dict):
     return _public_minimax_music_job(job)
 
 
+def _cancel_music_task(task: dict):
+    return cancel_story_music_candidates_job(task_controls.job_id(task))
+
+
+def _cancel_music_candidate_task(task: dict):
+    """A candidate row cancels the job it belongs to; its root task id is ``task-minimax-music-<job id>``."""
+    return cancel_story_music_candidates_job(str(task.get("root_id") or "").removeprefix("task-minimax-music-"))
+
+
 def get_story_music_candidates_job(job_id: str):
     job = _load_minimax_music_job(job_id)
     if not job:
@@ -371,6 +380,8 @@ def create_story_music_router(
         resolve_workspace=resolve_workspace,
     )
     router = APIRouter()
+    task_controls.register("minimax-music", "cancel", _cancel_music_task)
+    task_controls.register("minimax-music-candidate", "cancel", _cancel_music_candidate_task)
 
     @router.post("/api/v1/stories/music-candidates/jobs", status_code=202)
     def start_story_music_candidates_job(body: dict):

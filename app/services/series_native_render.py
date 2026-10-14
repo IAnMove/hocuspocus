@@ -42,7 +42,7 @@ from services.audio_mix import track_source
 from services.character_speech_definition import is_reference_voice
 from services.production_control import Cancelled
 from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_review import episode_mode
 from services.series_review_gate import actionable_shots, assembly_blockers, render_passes, video_promotion
@@ -248,6 +248,10 @@ class SeriesNativeRender:
 
     def _store(self, workspace: str) -> SeriesJobStore:
         return SeriesJobStore(self.deps.workspace_dir(workspace), KIND)
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The renders in this folder a thread of this service is running (``services.workspace_busy`` probe)."""
+        return live_checkpoints(workspace_dir, KIND, ACTIVE, lambda job_id: worker_alive(self._threads.get(job_id)))
 
     def _episode(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> tuple[dict, dict]:
         series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id)

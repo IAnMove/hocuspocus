@@ -18,6 +18,8 @@ import traceback
 
 from fastapi import HTTPException
 
+from services import workspace_busy
+
 # Injected by bind_director_comic_runtime. None until the full server binds them.
 wgp = None
 _effective_llm_routing = None
@@ -34,6 +36,12 @@ _publish_generic_legacy_task = None
 _comic_plan_jobs: dict[str, dict] = {}
 _comic_plan_jobs_lock = threading.Lock()
 _comic_plan_active_jobs: set[str] = set()
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Comic planners that are running now (``services.workspace_busy`` probe); the claim set is the proof of life."""
+    with _comic_plan_jobs_lock:
+        return workspace_busy.claimed(_comic_plan_active_jobs, _comic_plan_jobs)
 
 
 def _comic_plan_checkpoint_dir(workspace: str | None = None) -> str:

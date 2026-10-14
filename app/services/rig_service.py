@@ -272,6 +272,24 @@ def has_active_jobs(engine: str | None = None) -> bool:
     return False
 
 
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Rig jobs that can still write into their workspace (``services.workspace_busy`` probe).
+
+    A registered subprocess keeps its job active while a cancellation unwinds, even when the
+    public status already says ``cancelled``; that job is reported as ``cancelling``.
+    """
+    with _lock:
+        return [
+            {
+                "jobId": job_id,
+                "status": job["status"] if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES else "cancelling",
+                "workspace": job.get("workspace"),
+            }
+            for job_id, job in _jobs.items()
+            if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES or job_id in _processes
+        ]
+
+
 def has_active_unirig_jobs() -> bool:
     """Return whether deleting the shared UniRig weights would be unsafe."""
     return has_active_jobs("unirig")

@@ -10,6 +10,7 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.world3d_export import (
     CANCEL_OPERATION,
     OPERATION,
@@ -22,6 +23,7 @@ from services.world3d_export import (
 
 def create_world3d_export_router(service) -> APIRouter:
     router = APIRouter()
+    workspace_busy.register("world3d-export", lambda _workspace, _folder: service.live_jobs())
 
     @router.get("/api/v1/scenes/world3d/export/commands")
     def commands():

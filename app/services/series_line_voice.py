@@ -28,7 +28,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_kit_pins import kits_for_episode
 from services.series_language_versions import LANGUAGES, localized_view
 from services.series_native_render import ACTIVE, NativeRenderError, SeriesNativeRender
@@ -123,6 +123,10 @@ class SeriesLineVoice:
 
     def _store(self, workspace: str) -> SeriesJobStore:
         return SeriesJobStore(self.render.deps.workspace_dir(workspace), KIND)
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The line recordings in this folder a thread of this service is running (``services.workspace_busy`` probe)."""
+        return live_checkpoints(workspace_dir, KIND, ACTIVE, lambda job_id: worker_alive(self._threads.get(job_id)))
 
     def _shot(self, workspace: str, series_id: str, episode_id: str, shot_ref: Any, language: str | None) -> tuple[dict, dict, dict, str]:
         """The series, episode and shot in ``language`` (the series' own by default), and that language."""

@@ -268,6 +268,31 @@ def test_get_and_cancel_do_not_cross_workspace_boundaries(monkeypatch):
     assert job["_cancel_requested"] is True
 
 
+def test_get_and_cancel_by_id_follow_the_job_when_workspace_is_omitted(monkeypatch):
+    """Director adopts a song from another project, then polls and cancels by id.
+
+    The job keeps ``song-origin``. The UI poll and ``POST /api/v1/cancel/{id}``
+    send no workspace, so the active workspace (``currently-open``) must not
+    hide the job or leave Whisper running.
+    """
+    job = _job(workspace="song-origin")
+    _bind(monkeypatch, {job["id"]: job}, threading.RLock())
+    monkeypatch.setattr(audio_routes, "_get_active_workspace", lambda: "currently-open")
+    monkeypatch.setattr(
+        audio_routes,
+        "_workspace_dir",
+        lambda workspace=None: str(workspace or "currently-open"),
+    )
+
+    status = audio_routes.get_audio_analysis_job(job["id"])
+    assert status["job_id"] == job["id"]
+    assert status["status"] == "queued"
+
+    result = audio_routes.cancel_audio_analysis_job(job["id"])
+    assert result["status"] == "cancelled"
+    assert job["_cancel_requested"] is True
+
+
 def test_legacy_reconnect_and_cancel_cover_all_audio_active_states():
     source = (ROOT / "app" / "services" / "generation_jobs.py").read_text(encoding="utf-8")
     cancel = source.split("def cancel_job", 1)[1].split("def list_jobs", 1)[0]

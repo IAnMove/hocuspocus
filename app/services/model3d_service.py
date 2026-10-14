@@ -362,6 +362,24 @@ def has_active_jobs(model_id: str | None = None) -> bool:
     return False
 
 
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Hunyuan3D, Meshy and Hi3D jobs that can still write into their workspace (``services.workspace_busy`` probe).
+
+    A registered subprocess keeps its job active while a cancellation unwinds, even when the
+    public status already says ``cancelled``; that job is reported as ``cancelling``.
+    """
+    with _lock:
+        return [
+            {
+                "jobId": job_id,
+                "status": job["status"] if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES else "cancelling",
+                "workspace": job.get("workspace"),
+            }
+            for job_id, job in _jobs.items()
+            if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES or job_id in _processes
+        ]
+
+
 def delete_model_cache(model_id: str) -> list[str]:
     """Remove the upstream repository cache used by a Hunyuan3D variant.
 

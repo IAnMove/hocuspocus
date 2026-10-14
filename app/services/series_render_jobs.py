@@ -16,11 +16,22 @@ import threading
 import time
 import uuid
 
+from services import workspace_busy
 from services.job_lifecycle import snapshot_job
 
 _series_render_jobs: dict[str, dict] = {}
 _series_render_jobs_lock = threading.RLock()
 _series_render_active_jobs: set[str] = set()
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Series render coordinators that are running now (``services.workspace_busy`` probe).
+
+    The claim set is the proof of life; the child generation jobs are also in the queue, but the
+    coordinator is alive between them.
+    """
+    with _series_render_jobs_lock:
+        return workspace_busy.claimed(_series_render_active_jobs, _series_render_jobs)
 
 # Injected by _bind_series_render_runtime. None until the full server binds them.
 _workspace_dir = None
