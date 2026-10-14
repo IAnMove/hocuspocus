@@ -1,4 +1,265 @@
 {
+  "blend clip A must exist": {
+    "body": {
+      "detail": "Clip A not found: no-such-a.png"
+    },
+    "status": 400
+  },
+  "blend clip B must exist": {
+    "body": {
+      "detail": "Clip B not found: no-such-b.png"
+    },
+    "status": 400
+  },
+  "blend hands the worker the job": {
+    "body": {
+      "job": {
+        "accepted": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "Fake Text to Video",
+            "model_type": "fake_t2v",
+            "prompt": "the lake becomes a field",
+            "resolution": "64x64",
+            "seed": 7,
+            "simulated": false,
+            "steps": 15
+          },
+          "job_id": "<JOB>",
+          "overlap_sec": 0.7083333333333334,
+          "root_task_id": "task-generation-<JOB>",
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "engine_calls": [
+          {
+            "audio_save_path": "<OUTPUTS>",
+            "image_save_path": "<OUTPUTS>",
+            "kwargs": {
+              "activated_loras": [],
+              "guidance_scale": 1.0,
+              "image_end": "<TEMP>/b_overlap_end.png",
+              "image_mode": 0,
+              "image_prompt_type": "SE",
+              "image_start": "<TEMP>/a_overlap_start.png",
+              "input_video_strength": 1.0,
+              "loras_multipliers": "",
+              "mode": "",
+              "model_type": "fake_t2v",
+              "negative_prompt": "crossfade, dissolve, fade, double exposure, ghosting, static, still, abrupt cut, jump cut",
+              "num_inference_steps": 15,
+              "plugin_data": {},
+              "prompt": "the lake becomes a field",
+              "resolution": "64x64",
+              "seed": 7,
+              "sliding_window_size": 27,
+              "trim_tail_frames": 4,
+              "video_length": 17
+            },
+            "params": {
+              "_blend_clip_a": "<STATE>/blend-a.png",
+              "_blend_clip_b": "<STATE>/blend-b.png",
+              "_blend_concat_h": 64,
+              "_blend_concat_w": 64,
+              "_blend_fps": 24.0,
+              "_blend_mode": "overlap",
+              "_blend_out_h": 64,
+              "_blend_out_w": 64,
+              "_blend_overlap_sec": 0.7083333333333334,
+              "_blend_temp_dir": "<TEMP>",
+              "_execution_mode": "real",
+              "activated_loras": [],
+              "generation_mode": "video",
+              "guidance_scale": 1.0,
+              "image_end": "<TEMP>/b_overlap_end.png",
+              "image_mode": 0,
+              "image_prompt_type": "SE",
+              "image_start": "<TEMP>/a_overlap_start.png",
+              "input_video_strength": 1.0,
+              "loras_multipliers": "",
+              "model_type": "fake_t2v",
+              "negative_prompt": "crossfade, dissolve, fade, double exposure, ghosting, static, still, abrupt cut, jump cut",
+              "num_inference_steps": 15,
+              "prompt": "the lake becomes a field",
+              "resolution": "64x64",
+              "seed": 7,
+              "settings_version": 2.52,
+              "sliding_window_size": 27,
+              "trim_tail_frames": 4,
+              "video_length": 17
+            },
+            "prompt": "the lake becomes a field",
+            "save_path": "<OUTPUTS>",
+            "state_is_the_task_state": true,
+            "task_id": 1,
+            "vram_safety_coefficient": 0.8
+          }
+        ],
+        "files": [
+          "<TIME>_seed7_the_lake_becomes_a_field.meta.json",
+          "<TIME>_seed7_the_lake_becomes_a_field.mp4"
+        ],
+        "left_behind": {
+          "abort_states": [],
+          "audio_save_path": "<OUTPUTS>",
+          "durable_queue": [],
+          "gpu_lock_free": true,
+          "image_save_path": "<OUTPUTS>",
+          "save_path": "<OUTPUTS>",
+          "vram_coefficient": 0.8
+        },
+        "listed": [],
+        "params": {
+          "_blend_clip_a": "<STATE>/blend-a.png",
+          "_blend_clip_b": "<STATE>/blend-b.png",
+          "_blend_concat_h": 64,
+          "_blend_concat_w": 64,
+          "_blend_fps": 24.0,
+          "_blend_mode": "overlap",
+          "_blend_out_h": 64,
+          "_blend_out_w": 64,
+          "_blend_overlap_sec": 0.7083333333333334,
+          "_blend_temp_dir": "<TEMP>",
+          "_execution_mode": "real",
+          "activated_loras": [],
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_end": "<TEMP>/b_overlap_end.png",
+          "image_mode": 0,
+          "image_prompt_type": "SE",
+          "image_start": "<TEMP>/a_overlap_start.png",
+          "input_video_strength": 1.0,
+          "loras_multipliers": "",
+          "model_type": "fake_t2v",
+          "negative_prompt": "crossfade, dissolve, fade, double exposure, ghosting, static, still, abrupt cut, jump cut",
+          "num_inference_steps": 15,
+          "prompt": "the lake becomes a field",
+          "resolution": "64x64",
+          "seed": 7,
+          "settings_version": 2.52,
+          "sliding_window_size": 27,
+          "video_length": 17
+        },
+        "record": {
+          "acquired_resources": [
+            "local_gpu:0"
+          ],
+          "clip_output_files": [
+            "<TIME>_seed7_the_lake_becomes_a_field.mp4"
+          ]
+        },
+        "returned": true,
+        "sidecars": {
+          "<TIME>_seed7_the_lake_becomes_a_field.meta.json": {
+            "created_at": "<TIME>",
+            "generation_mode": "video",
+            "generation_time": "<MASKED>",
+            "job_id": "<JOB>",
+            "output_filename": "<TIME>_seed7_the_lake_becomes_a_field.mp4",
+            "params": {
+              "_blend_clip_a": "<STATE>/blend-a.png",
+              "_blend_clip_b": "<STATE>/blend-b.png",
+              "_blend_concat_h": 64,
+              "_blend_concat_w": 64,
+              "_blend_fps": 24.0,
+              "_blend_mode": "overlap",
+              "_blend_out_h": 64,
+              "_blend_out_w": 64,
+              "_blend_overlap_sec": 0.7083333333333334,
+              "_blend_temp_dir": "<TEMP>",
+              "_execution_mode": "real",
+              "activated_loras": [],
+              "generation_mode": "video",
+              "guidance_scale": 1.0,
+              "image_end": "<TEMP>/b_overlap_end.png",
+              "image_mode": 0,
+              "image_prompt_type": "SE",
+              "image_start": "<TEMP>/a_overlap_start.png",
+              "input_video_strength": 1.0,
+              "loras_multipliers": "",
+              "model_type": "fake_t2v",
+              "negative_prompt": "crossfade, dissolve, fade, double exposure, ghosting, static, still, abrupt cut, jump cut",
+              "num_inference_steps": 15,
+              "prompt": "the lake becomes a field",
+              "provider": "local",
+              "resolution": "64x64",
+              "seed": 7,
+              "settings_version": 2.52,
+              "sliding_window_size": 27,
+              "video_length": 17
+            },
+            "root_task_id": "task-generation-<JOB>",
+            "task_id": "task-generation-<JOB>",
+            "upload_filenames": {
+              "image_end": "b_overlap_end.png",
+              "image_start": "a_overlap_start.png"
+            }
+          }
+        },
+        "status": {
+          "error": null,
+          "message": "Done",
+          "oom_info": null,
+          "output_files": [
+            "<TIME>_seed7_the_lake_becomes_a_field.mp4"
+          ],
+          "phase": "",
+          "progress": 100,
+          "queue_position": null,
+          "status": "completed",
+          "step": 0,
+          "total_steps": 0
+        },
+        "task": {
+          "acquired_resources": [],
+          "cancelable": false,
+          "error": null,
+          "message": "Done",
+          "phase": "completed",
+          "progress": 1.0,
+          "result_refs": [
+            "<TIME>_seed7_the_lake_becomes_a_field.mp4"
+          ],
+          "status": "completed"
+        },
+        "timers": [
+          "completed"
+        ],
+        "transitions": [
+          "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+          "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+          "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+          "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 1",
+          "running | phase 'Assembling blend' | 'Assembling blend...' | 99% | step 0/0 | outputs 1",
+          "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+        ]
+      },
+      "reached engine": true,
+      "worker threads": [
+        "(_run_blend_generation)"
+      ]
+    },
+    "status": 200
+  },
+  "blend requires a model": {
+    "body": {
+      "detail": "model_type is required"
+    },
+    "status": 400
+  },
+  "blend requires both clips": {
+    "body": {
+      "detail": "Both clip_a_path and clip_b_path are required"
+    },
+    "status": 400
+  },
   "edit routes in plan mode": {
     "body": {
       "edit anything": {
@@ -2844,6 +3105,339 @@
     },
     "status": 400
   },
+  "official outpaint one shot": {
+    "body": {
+      "job": {
+        "accepted": {
+          "generation_details": {
+            "execution_mode": "real",
+            "frames": 24,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "Fake LTX Dev",
+            "model_type": "fake_ltx",
+            "prompt": "extend the lake",
+            "resolution": "128x64",
+            "seed": 7,
+            "simulated": false,
+            "steps": 8
+          },
+          "job_id": "<JOB>",
+          "outpainting_dims": "0 0 0 100",
+          "output_size": "128x64",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_count": 1,
+          "sliding_window_size": 241,
+          "source_size": "64x64",
+          "status": "queued",
+          "task_id": "task-generation-<JOB>",
+          "total_frames": 24
+        },
+        "engine_calls": [
+          {
+            "audio_save_path": "<OUTPUTS>",
+            "image_save_path": "<OUTPUTS>",
+            "kwargs": {
+              "activated_loras": [],
+              "denoising_strength": 1.0,
+              "force_fps": "control",
+              "guidance_scale": 1.0,
+              "input_video_strength": 1.0,
+              "loras_multipliers": "",
+              "mode": "",
+              "model_type": "fake_ltx",
+              "negative_prompt": "",
+              "num_inference_steps": 8,
+              "outpaint_full_resolution_refine": true,
+              "outpaint_lora_strength": 1.0,
+              "outpaint_mask_preserve": true,
+              "outpaint_official_stack": true,
+              "plugin_data": {},
+              "prompt": "extend the lake",
+              "resolution": "128x64",
+              "seed": 7,
+              "single_stage_pipeline": false,
+              "sliding_window_discard_last_frames": 8,
+              "sliding_window_overlap": 9,
+              "sliding_window_size": 34,
+              "video_guide": "<STATE>/official.mp4",
+              "video_guide_outpainting": "0 0 0 100",
+              "video_length": 24,
+              "video_prompt_type": "VG"
+            },
+            "params": {
+              "_execution_mode": "real",
+              "_outpaint_canvas_h": 64,
+              "_outpaint_canvas_w": 128,
+              "_outpaint_generation_fps": 8.0,
+              "_outpaint_lock_source_pixels": false,
+              "_outpaint_overlay_h": 64,
+              "_outpaint_overlay_w": 64,
+              "_outpaint_overlay_x": 0,
+              "_outpaint_overlay_y": 0,
+              "_outpaint_preserve_audio": false,
+              "_outpaint_smear_boundary_frame": 233,
+              "_outpaint_smear_count": 9,
+              "_outpaint_source_frame_count": 24,
+              "_outpaint_trim_smear": false,
+              "activated_loras": [],
+              "denoising_strength": 1.0,
+              "edit_outpaint_detected_shot_ranges": [
+                [
+                  0,
+                  24
+                ]
+              ],
+              "edit_outpaint_raw_prompt": "extend the lake",
+              "edit_sub_mode": "outpaint",
+              "edit_video_path": "<STATE>/official.mp4",
+              "force_fps": "control",
+              "generation_mode": "video",
+              "guidance_scale": 1.0,
+              "input_video_strength": 1.0,
+              "loras_multipliers": "",
+              "model_type": "fake_ltx",
+              "negative_prompt": "",
+              "num_inference_steps": 8,
+              "outpaint_full_resolution_refine": true,
+              "outpaint_lora_strength": 1.0,
+              "outpaint_lora_strength_ui": 1.0,
+              "outpaint_mask_preserve": true,
+              "outpaint_mask_preserving": true,
+              "outpaint_official_stack": true,
+              "outpaint_pad_bottom": 0,
+              "outpaint_pad_left": 0,
+              "outpaint_pad_right": 64,
+              "outpaint_pad_top": 0,
+              "outpaint_requested_model_type": "fake_ltx",
+              "outpaint_resolution_preset": "auto",
+              "outpaint_source_preservation": 1.0,
+              "prompt": "extend the lake",
+              "resolution": "128x64",
+              "seed": 7,
+              "settings_version": 2.53,
+              "single_stage_pipeline": false,
+              "sliding_window_discard_last_frames": 8,
+              "sliding_window_overlap": 9,
+              "sliding_window_size": 34,
+              "video_guide": "<STATE>/official.mp4",
+              "video_guide_outpainting": "0 0 0 100",
+              "video_length": 24,
+              "video_prompt_type": "VG"
+            },
+            "prompt": "extend the lake",
+            "save_path": "<OUTPUTS>",
+            "state_is_the_task_state": true,
+            "task_id": 1,
+            "vram_safety_coefficient": 0.8
+          }
+        ],
+        "files": [
+          "<TIME>_seed7_extend_the_lake.meta.json",
+          "<TIME>_seed7_extend_the_lake.mp4"
+        ],
+        "left_behind": {
+          "abort_states": [],
+          "audio_save_path": "<OUTPUTS>",
+          "durable_queue": [],
+          "gpu_lock_free": true,
+          "image_save_path": "<OUTPUTS>",
+          "save_path": "<OUTPUTS>",
+          "vram_coefficient": 0.8
+        },
+        "listed": [],
+        "params": {
+          "_execution_mode": "real",
+          "_outpaint_canvas_h": 64,
+          "_outpaint_canvas_w": 128,
+          "_outpaint_generation_fps": 8.0,
+          "_outpaint_lock_source_pixels": false,
+          "_outpaint_overlay_h": 64,
+          "_outpaint_overlay_w": 64,
+          "_outpaint_overlay_x": 0,
+          "_outpaint_overlay_y": 0,
+          "_outpaint_preserve_audio": false,
+          "_outpaint_smear_boundary_frame": 233,
+          "_outpaint_smear_count": 9,
+          "_outpaint_source_frame_count": 24,
+          "_outpaint_trim_smear": false,
+          "activated_loras": [],
+          "denoising_strength": 1.0,
+          "edit_outpaint_detected_shot_ranges": [
+            [
+              0,
+              24
+            ]
+          ],
+          "edit_outpaint_raw_prompt": "extend the lake",
+          "edit_sub_mode": "outpaint",
+          "edit_video_path": "<STATE>/official.mp4",
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "input_video_strength": 1.0,
+          "loras_multipliers": "",
+          "model_type": "fake_ltx",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "outpaint_full_resolution_refine": true,
+          "outpaint_lora_strength": 1.0,
+          "outpaint_lora_strength_ui": 1.0,
+          "outpaint_mask_preserve": true,
+          "outpaint_mask_preserving": true,
+          "outpaint_official_stack": true,
+          "outpaint_pad_bottom": 0,
+          "outpaint_pad_left": 0,
+          "outpaint_pad_right": 64,
+          "outpaint_pad_top": 0,
+          "outpaint_requested_model_type": "fake_ltx",
+          "outpaint_resolution_preset": "auto",
+          "outpaint_source_preservation": 1.0,
+          "prompt": "extend the lake",
+          "resolution": "128x64",
+          "seed": 7,
+          "settings_version": 2.53,
+          "single_stage_pipeline": false,
+          "sliding_window_discard_last_frames": 8,
+          "sliding_window_overlap": 9,
+          "sliding_window_size": 34,
+          "video_guide": "<STATE>/official.mp4",
+          "video_guide_outpainting": "0 0 0 100",
+          "video_length": 24,
+          "video_prompt_type": "VG"
+        },
+        "record": {
+          "acquired_resources": [
+            "local_gpu:0"
+          ],
+          "clip_output_files": [
+            "<TIME>_seed7_extend_the_lake.mp4"
+          ]
+        },
+        "returned": true,
+        "sidecars": {
+          "<TIME>_seed7_extend_the_lake.meta.json": {
+            "created_at": "<TIME>",
+            "generation_mode": "video",
+            "generation_time": "<MASKED>",
+            "job_id": "<JOB>",
+            "output_filename": "<TIME>_seed7_extend_the_lake.mp4",
+            "params": {
+              "_execution_mode": "real",
+              "_outpaint_canvas_h": 64,
+              "_outpaint_canvas_w": 128,
+              "_outpaint_generation_fps": 8.0,
+              "_outpaint_lock_source_pixels": false,
+              "_outpaint_overlay_h": 64,
+              "_outpaint_overlay_w": 64,
+              "_outpaint_overlay_x": 0,
+              "_outpaint_overlay_y": 0,
+              "_outpaint_preserve_audio": false,
+              "_outpaint_smear_boundary_frame": 233,
+              "_outpaint_smear_count": 9,
+              "_outpaint_source_frame_count": 24,
+              "_outpaint_trim_smear": false,
+              "activated_loras": [],
+              "denoising_strength": 1.0,
+              "edit_outpaint_detected_shot_ranges": [
+                [
+                  0,
+                  24
+                ]
+              ],
+              "edit_outpaint_raw_prompt": "extend the lake",
+              "edit_sub_mode": "outpaint",
+              "edit_video_path": "<STATE>/official.mp4",
+              "force_fps": "control",
+              "generation_mode": "video",
+              "guidance_scale": 1.0,
+              "input_video_strength": 1.0,
+              "loras_multipliers": "",
+              "model_type": "fake_ltx",
+              "negative_prompt": "",
+              "num_inference_steps": 8,
+              "outpaint_full_resolution_refine": true,
+              "outpaint_lora_strength": 1.0,
+              "outpaint_lora_strength_ui": 1.0,
+              "outpaint_mask_preserve": true,
+              "outpaint_mask_preserving": true,
+              "outpaint_official_stack": true,
+              "outpaint_pad_bottom": 0,
+              "outpaint_pad_left": 0,
+              "outpaint_pad_right": 64,
+              "outpaint_pad_top": 0,
+              "outpaint_requested_model_type": "fake_ltx",
+              "outpaint_resolution_preset": "auto",
+              "outpaint_source_preservation": 1.0,
+              "prompt": "extend the lake",
+              "provider": "local",
+              "resolution": "128x64",
+              "seed": 7,
+              "settings_version": 2.53,
+              "single_stage_pipeline": false,
+              "sliding_window_discard_last_frames": 8,
+              "sliding_window_overlap": 9,
+              "sliding_window_size": 34,
+              "video_guide": "<STATE>/official.mp4",
+              "video_guide_outpainting": "0 0 0 100",
+              "video_length": 24,
+              "video_prompt_type": "VG"
+            },
+            "root_task_id": "task-generation-<JOB>",
+            "task_id": "task-generation-<JOB>",
+            "upload_filenames": {
+              "video_guide": "official.mp4"
+            }
+          }
+        },
+        "status": {
+          "error": null,
+          "message": "Done",
+          "oom_info": null,
+          "output_files": [
+            "<TIME>_seed7_extend_the_lake.mp4"
+          ],
+          "phase": "",
+          "progress": 100,
+          "queue_position": null,
+          "status": "completed",
+          "step": 0,
+          "total_steps": 0
+        },
+        "task": {
+          "acquired_resources": [],
+          "cancelable": false,
+          "error": null,
+          "message": "Done",
+          "phase": "completed",
+          "progress": 1.0,
+          "result_refs": [
+            "<TIME>_seed7_extend_the_lake.mp4"
+          ],
+          "status": "completed"
+        },
+        "timers": [
+          "completed"
+        ],
+        "transitions": [
+          "running | phase 'Detecting camera shots' | 'Detecting camera cuts for Outpaint...' | 0% | step 0/0 | outputs 0",
+          "queued | phase '' | 'Queued (outpaint)' | 0% | step 0/0 | outputs 0",
+          "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+          "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+          "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+          "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+          "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+        ]
+      },
+      "reached engine": true,
+      "worker threads": [
+        "(_prepare_and_run_outpaint)"
+      ]
+    },
+    "status": 200
+  },
   "openapi": {
     "body": {
       "GET /api/v1/sam/status": {
@@ -2890,6 +3484,774 @@
       }
     },
     "status": 200
+  },
+  "outpaint and blend openapi": {
+    "body": {
+      "POST /api/v1/blend": {
+        "description": "Blend two clips with an AI-generated transition (Sora-1 style overlap).\n\nFor `overlap` mode: the last `overlap_sec` of Clip A blends with the\nfirst `overlap_sec` of Clip B during a shared window. Total output\nduration = len(A) + len(B) - overlap_sec.\n\nPipeline: sparse keyframe injection — A's last N frames anchored at\nblend positions 1..N, B's first N frames anchored at blend positions\n(transition-N+1)..transition. Middle is free for the model to invent.\nUses `video_prompt_type=\"FI\"` (image_refs + frames_positions), the same\nmechanism Continue/Extend and the Director/music-video flows use for\nmotion-preserving keyframe anchoring.\n\nBody: {\n    clip_a_path: str, clip_b_path: str,\n    prompt?: str — describe the *transition itself*, not just \"smooth blend\".\n    model_type: str,\n    blend_mode?: 'insert'|'overlap', overlap_sec?: float (default 3),\n    motion_prefix_sec?: float (default 1.0) — seconds of A's overlap-zone\n        start used as `video_source`, switching the pipeline from SE to\n        VE mode. Gives the model real motion history to extrapolate so\n        rotation/pan direction continues from A. Set to 0 for pure SE\n        (single still-frame anchor). Capped at 80% of overlap_sec.\n    motion_suffix_sec?: float (default 1.0) — symmetric counterpart to\n        motion_prefix_sec. Feeds B's overlap-zone end as `video_end`\n        via a keyframe-injection path in ltx2.py, giving the model B's\n        actual motion trajectory leading into the landing frame. Without\n        this, the joggers (for ex.) tend to \"slow-mo\" into the anchor\n        then hard-cut to real-speed B_post. Capped at 80% of overlap_sec.\n    anchor_frames?: int (default 0) — optional weak keyframes near the\n        edges for extra motion-context. Usually leave 0 with VE mode.\n    injection_strength?: float (default 0.4) — strength for those.\n    num_inference_steps?: int, guidance_scale?: float, negative_prompt?: str,\n    seed?: int, activated_loras?: list, loras_multipliers?: str,\n    workspace?: str,\n    base_params?: dict — UI passes state.params here so the blend\n        inherits progressive_pipeline, stage2_steps, etc. Blend-specific\n        fields (image_start/end, resolution, video_length, ...) override.\n}",
+        "operationId": "blend_endpoint_api_v1_blend_post",
+        "parameters": [],
+        "summary": "Blend Endpoint"
+      },
+      "POST /api/v1/outpaint": {
+        "description": "Submit an outpaint job: extend video/image canvas using IC-LoRA.\n\nBody: {\n    video_path: str, prompt: str, model_type: str,\n    pad_top?: int, pad_bottom?: int, pad_left?: int, pad_right?: int,\n    gamma_correct?: bool, seed?: int,\n    num_inference_steps?: int, guidance_scale?: float,\n    negative_prompt?: str,\n    activated_loras?: list, loras_multipliers?: str, workspace?: str,\n}",
+        "operationId": "outpaint_endpoint_api_v1_outpaint_post",
+        "parameters": [],
+        "summary": "Outpaint Endpoint"
+      }
+    },
+    "status": 200
+  },
+  "outpaint hands the worker the job": {
+    "body": {
+      "image": {
+        "job": {
+          "accepted": {
+            "generation_details": {
+              "execution_mode": "real",
+              "frames": 1,
+              "generation_mode": "image",
+              "guidance": 1.0,
+              "lora_count": 0,
+              "model_name": "Fake Text to Video",
+              "model_type": "fake_t2v",
+              "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+              "resolution": "128x64",
+              "seed": 7,
+              "simulated": false,
+              "steps": 8
+            },
+            "job_id": "<JOB>",
+            "outpainting_dims": "0 0 0 100",
+            "output_size": "128x64",
+            "root_task_id": "task-generation-<JOB>",
+            "sliding_window_count": 1,
+            "sliding_window_size": 241,
+            "source_size": "64x64",
+            "status": "queued",
+            "task_id": "task-generation-<JOB>",
+            "total_frames": 1
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "force_fps": "auto",
+                "guidance_scale": 1.0,
+                "image_start": "<STATE>/canvas.png",
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_official_stack": false,
+                "plugin_data": {},
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "resolution": "128x64",
+                "seed": 7,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 17,
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 1,
+                "video_prompt_type": "G"
+              },
+              "params": {
+                "_execution_mode": "real",
+                "_outpaint_canvas_h": 64,
+                "_outpaint_canvas_w": 128,
+                "_outpaint_lock_source_pixels": false,
+                "_outpaint_overlay_h": 64,
+                "_outpaint_overlay_w": 64,
+                "_outpaint_overlay_x": 0,
+                "_outpaint_overlay_y": 0,
+                "_outpaint_preserve_audio": false,
+                "_outpaint_smear_boundary_frame": 233,
+                "_outpaint_smear_count": 9,
+                "_outpaint_trim_smear": false,
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "edit_outpaint_raw_prompt": "extend the lake",
+                "edit_sub_mode": "outpaint",
+                "edit_video_path": "<STATE>/canvas.png",
+                "force_fps": "auto",
+                "generation_mode": "image",
+                "guidance_scale": 1.0,
+                "image_start": "<STATE>/canvas.png",
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_lora_strength_ui": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_mask_preserving": false,
+                "outpaint_official_stack": false,
+                "outpaint_pad_bottom": 0,
+                "outpaint_pad_left": 0,
+                "outpaint_pad_right": 64,
+                "outpaint_pad_top": 0,
+                "outpaint_requested_model_type": "fake_t2v",
+                "outpaint_resolution_preset": "auto",
+                "outpaint_source_preservation": 1.0,
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "resolution": "128x64",
+                "seed": 7,
+                "settings_version": 2.53,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 17,
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 1,
+                "video_prompt_type": "G"
+              },
+              "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 1,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed7_extend_the_lake_seamless.meta.json",
+            "<TIME>_seed7_extend_the_lake_seamless.png"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 64,
+            "_outpaint_canvas_w": 128,
+            "_outpaint_lock_source_pixels": false,
+            "_outpaint_overlay_h": 64,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_overlay_x": 0,
+            "_outpaint_overlay_y": 0,
+            "_outpaint_preserve_audio": false,
+            "_outpaint_smear_boundary_frame": 233,
+            "_outpaint_smear_count": 9,
+            "_outpaint_trim_smear": false,
+            "activated_loras": [],
+            "denoising_strength": 1.0,
+            "edit_outpaint_raw_prompt": "extend the lake",
+            "edit_sub_mode": "outpaint",
+            "edit_video_path": "<STATE>/canvas.png",
+            "force_fps": "auto",
+            "generation_mode": "image",
+            "guidance_scale": 1.0,
+            "image_start": "<STATE>/canvas.png",
+            "input_video_strength": 1.0,
+            "loras_multipliers": "",
+            "model_type": "fake_t2v",
+            "negative_prompt": "",
+            "num_inference_steps": 8,
+            "outpaint_full_resolution_refine": false,
+            "outpaint_lora_strength": 1.0,
+            "outpaint_lora_strength_ui": 1.0,
+            "outpaint_mask_preserve": false,
+            "outpaint_mask_preserving": false,
+            "outpaint_official_stack": false,
+            "outpaint_pad_bottom": 0,
+            "outpaint_pad_left": 0,
+            "outpaint_pad_right": 64,
+            "outpaint_pad_top": 0,
+            "outpaint_requested_model_type": "fake_t2v",
+            "outpaint_resolution_preset": "auto",
+            "outpaint_source_preservation": 1.0,
+            "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+            "resolution": "128x64",
+            "seed": 7,
+            "settings_version": 2.53,
+            "single_stage_pipeline": false,
+            "sliding_window_discard_last_frames": 8,
+            "sliding_window_overlap": 9,
+            "sliding_window_size": 17,
+            "video_guide_outpainting": "0 0 0 100",
+            "video_length": 1,
+            "video_prompt_type": "G"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              null
+            ]
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed7_extend_the_lake_seamless.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "image",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed7_extend_the_lake_seamless.png",
+              "params": {
+                "_execution_mode": "real",
+                "_outpaint_canvas_h": 64,
+                "_outpaint_canvas_w": 128,
+                "_outpaint_lock_source_pixels": false,
+                "_outpaint_overlay_h": 64,
+                "_outpaint_overlay_w": 64,
+                "_outpaint_overlay_x": 0,
+                "_outpaint_overlay_y": 0,
+                "_outpaint_preserve_audio": false,
+                "_outpaint_smear_boundary_frame": 233,
+                "_outpaint_smear_count": 9,
+                "_outpaint_trim_smear": false,
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "edit_outpaint_raw_prompt": "extend the lake",
+                "edit_sub_mode": "outpaint",
+                "edit_video_path": "<STATE>/canvas.png",
+                "force_fps": "auto",
+                "generation_mode": "image",
+                "guidance_scale": 1.0,
+                "image_start": "<STATE>/canvas.png",
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_lora_strength_ui": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_mask_preserving": false,
+                "outpaint_official_stack": false,
+                "outpaint_pad_bottom": 0,
+                "outpaint_pad_left": 0,
+                "outpaint_pad_right": 64,
+                "outpaint_pad_top": 0,
+                "outpaint_requested_model_type": "fake_t2v",
+                "outpaint_resolution_preset": "auto",
+                "outpaint_source_preservation": 1.0,
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "provider": "local",
+                "resolution": "128x64",
+                "seed": 7,
+                "settings_version": 2.53,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 17,
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 1,
+                "video_prompt_type": "G"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "canvas.png"
+              }
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed7_extend_the_lake_seamless.png"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed7_extend_the_lake_seamless.png"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "reached engine": true,
+        "worker threads": [
+          "(run_generation)"
+        ]
+      },
+      "video": {
+        "job": {
+          "accepted": {
+            "generation_details": {
+              "execution_mode": "real",
+              "frames": 24,
+              "generation_mode": "video",
+              "guidance": 1.0,
+              "lora_count": 0,
+              "model_name": "Fake Text to Video",
+              "model_type": "fake_t2v",
+              "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+              "resolution": "128x64",
+              "seed": 7,
+              "simulated": false,
+              "steps": 8
+            },
+            "job_id": "<JOB>",
+            "outpainting_dims": "0 0 0 100",
+            "output_size": "128x64",
+            "root_task_id": "task-generation-<JOB>",
+            "sliding_window_count": 1,
+            "sliding_window_size": 241,
+            "source_size": "64x64",
+            "status": "queued",
+            "task_id": "task-generation-<JOB>",
+            "total_frames": 24
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "force_fps": "auto",
+                "guidance_scale": 1.0,
+                "image_start": "<STATE>/canvas.png",
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_official_stack": false,
+                "plugin_data": {},
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "resolution": "128x64",
+                "seed": 7,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 17,
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 1,
+                "video_prompt_type": "G"
+              },
+              "params": {
+                "_execution_mode": "real",
+                "_outpaint_canvas_h": 64,
+                "_outpaint_canvas_w": 128,
+                "_outpaint_lock_source_pixels": false,
+                "_outpaint_overlay_h": 64,
+                "_outpaint_overlay_w": 64,
+                "_outpaint_overlay_x": 0,
+                "_outpaint_overlay_y": 0,
+                "_outpaint_preserve_audio": false,
+                "_outpaint_smear_boundary_frame": 233,
+                "_outpaint_smear_count": 9,
+                "_outpaint_trim_smear": false,
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "edit_outpaint_raw_prompt": "extend the lake",
+                "edit_sub_mode": "outpaint",
+                "edit_video_path": "<STATE>/canvas.png",
+                "force_fps": "auto",
+                "generation_mode": "image",
+                "guidance_scale": 1.0,
+                "image_start": "<STATE>/canvas.png",
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_lora_strength_ui": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_mask_preserving": false,
+                "outpaint_official_stack": false,
+                "outpaint_pad_bottom": 0,
+                "outpaint_pad_left": 0,
+                "outpaint_pad_right": 64,
+                "outpaint_pad_top": 0,
+                "outpaint_requested_model_type": "fake_t2v",
+                "outpaint_resolution_preset": "auto",
+                "outpaint_source_preservation": 1.0,
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "resolution": "128x64",
+                "seed": 7,
+                "settings_version": 2.53,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 17,
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 1,
+                "video_prompt_type": "G"
+              },
+              "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 1,
+              "vram_safety_coefficient": 0.8
+            },
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "force_fps": "control",
+                "guidance_scale": 1.0,
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_official_stack": false,
+                "plugin_data": {},
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "resolution": "128x64",
+                "seed": 7,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 34,
+                "video_guide": "<STATE>/canvas.mp4",
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 24,
+                "video_prompt_type": "VG"
+              },
+              "params": {
+                "_execution_mode": "real",
+                "_outpaint_canvas_h": 64,
+                "_outpaint_canvas_w": 128,
+                "_outpaint_generation_fps": 8.0,
+                "_outpaint_lock_source_pixels": false,
+                "_outpaint_overlay_h": 64,
+                "_outpaint_overlay_w": 64,
+                "_outpaint_overlay_x": 0,
+                "_outpaint_overlay_y": 0,
+                "_outpaint_preserve_audio": false,
+                "_outpaint_smear_boundary_frame": 233,
+                "_outpaint_smear_count": 9,
+                "_outpaint_source_frame_count": 24,
+                "_outpaint_trim_smear": false,
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "edit_outpaint_raw_prompt": "extend the lake",
+                "edit_sub_mode": "outpaint",
+                "edit_video_path": "<STATE>/canvas.mp4",
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_lora_strength_ui": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_mask_preserving": false,
+                "outpaint_official_stack": false,
+                "outpaint_pad_bottom": 0,
+                "outpaint_pad_left": 0,
+                "outpaint_pad_right": 64,
+                "outpaint_pad_top": 0,
+                "outpaint_requested_model_type": "fake_t2v",
+                "outpaint_resolution_preset": "auto",
+                "outpaint_source_preservation": 1.0,
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "resolution": "128x64",
+                "seed": 7,
+                "settings_version": 2.53,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 34,
+                "video_guide": "<STATE>/canvas.mp4",
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 24,
+                "video_prompt_type": "VG"
+              },
+              "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 3,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed7_extend_the_lake_seamless.meta.json",
+            "<TIME>_seed7_extend_the_lake_seamless.mp4",
+            "<TIME>_seed7_extend_the_lake_seamless.png"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 64,
+            "_outpaint_canvas_w": 128,
+            "_outpaint_generation_fps": 8.0,
+            "_outpaint_lock_source_pixels": false,
+            "_outpaint_overlay_h": 64,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_overlay_x": 0,
+            "_outpaint_overlay_y": 0,
+            "_outpaint_preserve_audio": false,
+            "_outpaint_smear_boundary_frame": 233,
+            "_outpaint_smear_count": 9,
+            "_outpaint_source_frame_count": 24,
+            "_outpaint_trim_smear": false,
+            "activated_loras": [],
+            "denoising_strength": 1.0,
+            "edit_outpaint_raw_prompt": "extend the lake",
+            "edit_sub_mode": "outpaint",
+            "edit_video_path": "<STATE>/canvas.mp4",
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 1.0,
+            "input_video_strength": 1.0,
+            "loras_multipliers": "",
+            "model_type": "fake_t2v",
+            "negative_prompt": "",
+            "num_inference_steps": 8,
+            "outpaint_full_resolution_refine": false,
+            "outpaint_lora_strength": 1.0,
+            "outpaint_lora_strength_ui": 1.0,
+            "outpaint_mask_preserve": false,
+            "outpaint_mask_preserving": false,
+            "outpaint_official_stack": false,
+            "outpaint_pad_bottom": 0,
+            "outpaint_pad_left": 0,
+            "outpaint_pad_right": 64,
+            "outpaint_pad_top": 0,
+            "outpaint_requested_model_type": "fake_t2v",
+            "outpaint_resolution_preset": "auto",
+            "outpaint_source_preservation": 1.0,
+            "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+            "resolution": "128x64",
+            "seed": 7,
+            "settings_version": 2.53,
+            "single_stage_pipeline": false,
+            "sliding_window_discard_last_frames": 8,
+            "sliding_window_overlap": 9,
+            "sliding_window_size": 34,
+            "video_guide": "<STATE>/canvas.mp4",
+            "video_guide_outpainting": "0 0 0 100",
+            "video_length": 24,
+            "video_prompt_type": "VG"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed7_extend_the_lake_seamless.mp4"
+            ]
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed7_extend_the_lake_seamless.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed7_extend_the_lake_seamless.mp4",
+              "params": {
+                "_execution_mode": "real",
+                "_outpaint_canvas_h": 64,
+                "_outpaint_canvas_w": 128,
+                "_outpaint_generation_fps": 8.0,
+                "_outpaint_lock_source_pixels": false,
+                "_outpaint_overlay_h": 64,
+                "_outpaint_overlay_w": 64,
+                "_outpaint_overlay_x": 0,
+                "_outpaint_overlay_y": 0,
+                "_outpaint_preserve_audio": false,
+                "_outpaint_smear_boundary_frame": 233,
+                "_outpaint_smear_count": 9,
+                "_outpaint_source_frame_count": 24,
+                "_outpaint_trim_smear": false,
+                "activated_loras": [],
+                "denoising_strength": 1.0,
+                "edit_outpaint_raw_prompt": "extend the lake",
+                "edit_sub_mode": "outpaint",
+                "edit_video_path": "<STATE>/canvas.mp4",
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "input_video_strength": 1.0,
+                "loras_multipliers": "",
+                "model_type": "fake_t2v",
+                "negative_prompt": "",
+                "num_inference_steps": 8,
+                "outpaint_full_resolution_refine": false,
+                "outpaint_lora_strength": 1.0,
+                "outpaint_lora_strength_ui": 1.0,
+                "outpaint_mask_preserve": false,
+                "outpaint_mask_preserving": false,
+                "outpaint_official_stack": false,
+                "outpaint_pad_bottom": 0,
+                "outpaint_pad_left": 0,
+                "outpaint_pad_right": 64,
+                "outpaint_pad_top": 0,
+                "outpaint_requested_model_type": "fake_t2v",
+                "outpaint_resolution_preset": "auto",
+                "outpaint_source_preservation": 1.0,
+                "prompt": "extend the lake; seamlessly extend the scene into the empty margins, matching the existing content.",
+                "provider": "local",
+                "resolution": "128x64",
+                "seed": 7,
+                "settings_version": 2.53,
+                "single_stage_pipeline": false,
+                "sliding_window_discard_last_frames": 8,
+                "sliding_window_overlap": 9,
+                "sliding_window_size": 34,
+                "video_guide": "<STATE>/canvas.mp4",
+                "video_guide_outpainting": "0 0 0 100",
+                "video_length": 24,
+                "video_prompt_type": "VG"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "video_guide": "canvas.mp4"
+              }
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed7_extend_the_lake_seamless.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed7_extend_the_lake_seamless.mp4"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "reached engine": true,
+        "worker threads": [
+          "(run_generation)"
+        ]
+      }
+    },
+    "status": 200
+  },
+  "outpaint rejects a non-numeric step count": {
+    "body": {
+      "detail": "Inference Steps and Guidance Scale must be numeric."
+    },
+    "status": 400
+  },
+  "outpaint rejects a short 13B schedule": {
+    "body": {
+      "detail": "LTX Video 13B requires at least 20 inference steps."
+    },
+    "status": 400
+  },
+  "outpaint rejects zero steps": {
+    "body": {
+      "detail": "Inference Steps must be greater than zero."
+    },
+    "status": 400
+  },
+  "outpaint requires a model": {
+    "body": {
+      "detail": "model_type is required"
+    },
+    "status": 400
+  },
+  "outpaint requires a video path": {
+    "body": {
+      "detail": "video_path is required"
+    },
+    "status": 400
+  },
+  "outpaint requires padding": {
+    "body": {
+      "detail": "At least one padding direction must be > 0"
+    },
+    "status": 400
+  },
+  "outpaint source must exist": {
+    "body": {
+      "detail": "Source file not found: no-such-frame.png"
+    },
+    "status": 400
   },
   "preview allows at most five mappings": {
     "body": {
