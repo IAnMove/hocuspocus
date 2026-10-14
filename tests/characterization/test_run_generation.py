@@ -599,10 +599,10 @@ def test_a_cancel_between_two_clips_stops_before_the_next_task(rig, golden, monk
     rig.check(golden, "cancel between clips", rig.observe(job_id))
 
 
-def test_oddity_a_cancel_between_start_and_abort_registration_leaves_the_job_cancelling(rig, golden) -> None:
-    """The job is cancelled after it started but before it registered its abort state. The worker returns, and
-    nothing ever settles the job, because the ``finally`` block only acknowledges a job that never created its
-    abort state."""
+def test_a_cancel_between_start_and_abort_registration_settles_the_job(rig, golden) -> None:
+    """A cancel that lands after ``try_start`` and before ``register_abort_state`` is
+    acknowledged in ``finally``: the worker never owned the abort dict, so it
+    calls ``acknowledge_cancel`` instead of unregistering a no-op."""
     launch = rig.launch
     job_id = rig.direct_job(BODY)
 
@@ -611,7 +611,9 @@ def test_oddity_a_cancel_between_start_and_abort_registration_leaves_the_job_can
 
     rig.patch("_apply_per_job_coefficient", cancel_during_preparation)
     rig.call_worker(job_id)
-    rig.check(golden, "cancel before abort registration", rig.observe(job_id))
+    observed = rig.observe(job_id)
+    assert observed["status"]["status"] == "cancelled"
+    rig.check(golden, "cancel before abort registration", observed)
 
 
 def test_a_job_cancelled_after_taking_the_slot_never_starts(rig, golden) -> None:
