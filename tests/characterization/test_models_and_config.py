@@ -1,6 +1,7 @@
 """Model catalog over a fake WanGP catalog, and the configuration reads the Settings screen makes."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -384,3 +385,247 @@ def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
     server.check(golden, "mcp alias post disabled", "POST", "/api/v1/wangp/mcp", json=message)
     server.check(golden, "mcp get", "GET", "/api/v1/mcp")
     server.check(golden, "mcp alias get", "GET", "/api/v1/wangp/mcp")
+
+
+def _write_lora_library(root: Path) -> Path:
+    """One weight file, so the unsorted installed walk cannot change order."""
+    wan = root / "wan"
+    wan.mkdir(parents=True)
+    (root / "flux").mkdir()
+    hidden = root / ".hidden"
+    hidden.mkdir()
+    (hidden / "note.txt").write_text("skip\n", encoding="utf-8")
+    (root / "readme.txt").write_text("ignore\n", encoding="utf-8")
+    (wan / "style.safetensors").write_bytes(b"lora-weight")
+    (wan / "style.civitai.json").write_text(
+        json.dumps(
+            {
+                "modelId": 12345,
+                "versionId": 99,
+                "name": "Style LoRA",
+                "baseModel": "Wan Video",
+                "trainedWords": ["styleword"],
+                "nsfw": False,
+                "downloadedAt": "2020-01-02T03:04:05Z",
+                "publishedAt": "2020-01-01T00:00:00Z",
+                "tags": ["cinematic"],
+                "description": "A calm style.",
+                "images": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (wan / "style.guide.md").write_text(
+        "Use the trigger word styleword for a calm look.\n",
+        encoding="utf-8",
+    )
+    return wan
+
+
+@pytest.fixture
+def lora_library(catalog, monkeypatch, tmp_path):
+    """A temp LoRA tree on an absolute root, with the WanGP lookups the list routes need."""
+    root = tmp_path / "lora-root"
+    wan = _write_lora_library(root)
+    config = catalog.wgp.server_config
+    monkeypatch.setitem(config, "loras_root", str(root))
+    monkeypatch.setitem(config, "checkpoints_paths", [str(tmp_path / "primary-ckpts")])
+
+    def get_lora_dir(model_type):
+        if model_type == "not_a_model":
+            raise RuntimeError("unknown model type")
+        return str(wan)
+
+    monkeypatch.setattr(catalog.wgp, "get_lora_dir", get_lora_dir, raising=False)
+    monkeypatch.setattr(catalog.wgp, "get_lora_search_dirs", lambda _model_type: [str(wan)], raising=False)
+    monkeypatch.setattr(
+        catalog.wgp,
+        "resolve_lora_path",
+        lambda _model_type, filename: str(wan / filename),
+        raising=False,
+    )
+    catalog.lora_root = root
+    catalog.lora_wan = wan
+    return catalog
+
+
+def test_lora_library_reads(lora_library, golden) -> None:
+    """Directories, the installed list, and one model's list and details, on a temp tree."""
+    lora_library.check(golden, "lora directories", "GET", "/api/v1/loras/directories")
+    lora_library.check(golden, "loras installed", "GET", "/api/v1/loras/installed")
+    lora_library.check(golden, "loras for model", "GET", "/api/v1/loras/fake_t2v")
+    lora_library.check(golden, "lora details for model", "GET", "/api/v1/loras/fake_t2v/details")
+    lora_library.check(golden, "loras for legacy h3", "GET", "/api/v1/loras/minimax_h3_legacy")
+    lora_library.check(golden, "lora details for legacy h3", "GET", "/api/v1/loras/minimax_h3_legacy/details")
+    lora_library.check(golden, "loras for 3d model", "GET", "/api/v1/loras/hunyuan3d-2mv")
+    lora_library.check(golden, "lora details for 3d model", "GET", "/api/v1/loras/hunyuan3d-2mv/details")
+    lora_library.check(golden, "loras unknown model", "GET", "/api/v1/loras/not_a_real_model")
+    lora_library.check(golden, "lora details unknown model", "GET", "/api/v1/loras/not_a_real_model/details")
+    lora_library.check(golden, "lora update manifest empty", "GET", "/api/v1/loras/update-manifest")
+    lora_library.check(golden, "lora preview invalid name", "GET", "/api/v1/loras/preview/.secret.png")
+    lora_library.check(golden, "lora preview missing", "GET", "/api/v1/loras/preview/no-such.png")
+
+
+def test_lora_delete_validation(lora_library, golden, monkeypatch, tmp_path) -> None:
+    """Delete refuses a bad name, a missing file, a linked copy, and a bundled LoRA."""
+    server = lora_library
+    config = server.wgp.server_config
+    missing_root = str(tmp_path / "no-such-loras")
+    monkeypatch.setitem(config, "loras_root", missing_root)
+    server.check(
+        golden,
+        "lora delete no root",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "style.safetensors"},
+    )
+    monkeypatch.setitem(config, "loras_root", str(server.lora_root))
+    server.check(golden, "lora delete missing params", "DELETE", "/api/v1/loras/file")
+    server.check(
+        golden,
+        "lora delete bad extension",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "readme.txt"},
+    )
+    server.check(
+        golden,
+        "lora delete traversal name",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "../x.safetensors"},
+    )
+    server.check(
+        golden,
+        "lora delete invalid directory",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "..", "filename": "style.safetensors"},
+    )
+    server.check(
+        golden,
+        "lora delete missing file",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "missing.safetensors"},
+    )
+
+    linked = tmp_path / "other-install"
+    linked_wan = linked / "loras" / "wan"
+    linked_wan.mkdir(parents=True)
+    (linked / "ckpts").mkdir()
+    (linked_wan / "linked_only.safetensors").write_bytes(b"linked-weight")
+    monkeypatch.setitem(
+        config,
+        "checkpoints_paths",
+        [str(tmp_path / "primary-ckpts"), str(linked / "ckpts")],
+    )
+    server.check(
+        golden,
+        "lora delete linked copy",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "linked_only.safetensors"},
+    )
+
+    def bundled(model_type, prop="URLs", sub_prop_name=None, return_list=True, stack=()):
+        if prop == "loras":
+            return ["https://example.invalid/weights/style.safetensors"]
+        return []
+
+    monkeypatch.setattr(server.wgp, "get_model_recursive_prop", bundled, raising=False)
+    server.check(
+        golden,
+        "lora delete bundled",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "style.safetensors"},
+    )
+
+    wan = server.lora_wan
+    (wan / "gone.safetensors").write_bytes(b"gone-weight")
+    (wan / "gone.civitai.json").write_text("{}\n", encoding="utf-8")
+    (wan / "gone.guide.md").write_text("gone\n", encoding="utf-8")
+    (wan / "gone_preview1.png").write_bytes(b"png")
+    server.check(
+        golden,
+        "lora delete file",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "gone.safetensors"},
+    )
+
+
+def test_lora_nsfw_override_validation(lora_library, golden, monkeypatch, tmp_path) -> None:
+    """Override refuses a bad body, then writes and clears the flag on one file."""
+    server = lora_library
+    config = server.wgp.server_config
+    monkeypatch.setitem(config, "loras_root", str(tmp_path / "no-such-loras"))
+    server.check(
+        golden,
+        "lora nsfw override no root",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": True},
+    )
+    monkeypatch.setitem(config, "loras_root", str(server.lora_root))
+    server.check(golden, "lora nsfw override missing filename", "POST", "/api/v1/loras/nsfw-override", json={})
+    server.check(
+        golden,
+        "lora nsfw override bad flag",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": "yes"},
+    )
+    server.check(
+        golden,
+        "lora nsfw override traversal",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "../x.safetensors", "nsfw": True},
+    )
+    server.check(
+        golden,
+        "lora nsfw override missing file",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "missing.safetensors", "nsfw": True},
+    )
+    (server.lora_wan / "plain.safetensors").write_bytes(b"plain-weight")
+    server.check(
+        golden,
+        "lora nsfw override set",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": True},
+    )
+    server.check(
+        golden,
+        "lora nsfw override clear",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": None},
+    )
+
+
+def test_lora_guide_reads(lora_library, golden) -> None:
+    """A missing scan, a missing guide, and a guide that is already on disk."""
+    lora_library.check(golden, "lora scan missing", "GET", "/api/v1/loras/scan-status/missing-scan")
+    lora_library.check(
+        golden,
+        "lora guide missing",
+        "GET",
+        "/api/v1/loras/fake_t2v/absent.safetensors/guide",
+    )
+    lora_library.check(
+        golden,
+        "lora guide unknown model",
+        "GET",
+        "/api/v1/loras/not_a_model/style.safetensors/guide",
+    )
+    lora_library.check(
+        golden,
+        "lora guide present",
+        "GET",
+        "/api/v1/loras/fake_t2v/style.safetensors/guide",
+    )

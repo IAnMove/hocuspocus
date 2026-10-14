@@ -105,6 +105,295 @@
     },
     "status": 200
   },
+  "lora delete bad extension": {
+    "body": {
+      "detail": "Not a LoRA file."
+    },
+    "status": 400
+  },
+  "lora delete bundled": {
+    "body": {
+      "detail": "This LoRA is bundled with a model (a distill/accelerator) and would just re-download on next use. Delete the model instead."
+    },
+    "status": 409
+  },
+  "lora delete file": {
+    "body": {
+      "deferred": false,
+      "deleted": "gone.safetensors",
+      "extras_removed": [
+        "gone.civitai.json",
+        "gone.guide.md",
+        "gone_preview1.png"
+      ],
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "lora delete invalid directory": {
+    "body": {
+      "detail": "Invalid path."
+    },
+    "status": 400
+  },
+  "lora delete linked copy": {
+    "body": {
+      "detail": "This LoRA lives in a linked model folder, which is read-only. Delete it from that install instead."
+    },
+    "status": 403
+  },
+  "lora delete missing file": {
+    "body": {
+      "detail": "LoRA not found: missing.safetensors"
+    },
+    "status": 404
+  },
+  "lora delete missing params": {
+    "body": {
+      "detail": [
+        {
+          "input": null,
+          "loc": [
+            "query",
+            "directory"
+          ],
+          "msg": "Field required",
+          "type": "missing"
+        },
+        {
+          "input": null,
+          "loc": [
+            "query",
+            "filename"
+          ],
+          "msg": "Field required",
+          "type": "missing"
+        }
+      ]
+    },
+    "status": 422
+  },
+  "lora delete no root": {
+    "body": {
+      "detail": "LoRA folder not found."
+    },
+    "status": 500
+  },
+  "lora delete traversal name": {
+    "body": {
+      "detail": "Not a LoRA file."
+    },
+    "status": 400
+  },
+  "lora details for 3d model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "lora details for legacy h3": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "lora details for model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": [
+        {
+          "civitai_model_id": 12345,
+          "current_version_id": 99,
+          "downloaded_at": "<TIME>",
+          "filename": "style.safetensors",
+          "guide": "Use the trigger word styleword for a calm look.",
+          "has_guide": true,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "lora_id": "civitai:12345",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": "<TIME>",
+          "trained_words": [
+            "styleword"
+          ],
+          "update_status": "unknown"
+        }
+      ],
+      "manifest_last_check_at": null
+    },
+    "status": 200
+  },
+  "lora details unknown model": {
+    "body": {
+      "detail": "Unknown model: not_a_real_model"
+    },
+    "status": 404
+  },
+  "lora directories": {
+    "body": {
+      "directories": [
+        "flux",
+        "wan"
+      ]
+    },
+    "status": 200
+  },
+  "lora guide missing": {
+    "body": {
+      "guide": null
+    },
+    "status": 200
+  },
+  "lora guide present": {
+    "body": {
+      "guide": "Use the trigger word styleword for a calm look.\n"
+    },
+    "status": 200
+  },
+  "lora guide unknown model": {
+    "body": {
+      "detail": "Unknown model type"
+    },
+    "status": 404
+  },
+  "lora nsfw override bad flag": {
+    "body": {
+      "detail": "nsfw must be true, false, or null"
+    },
+    "status": 400
+  },
+  "lora nsfw override clear": {
+    "body": {
+      "filename": "plain.safetensors",
+      "nsfw": false,
+      "nsfw_overridden": false
+    },
+    "status": 200
+  },
+  "lora nsfw override missing file": {
+    "body": {
+      "detail": "LoRA not found: missing.safetensors"
+    },
+    "status": 404
+  },
+  "lora nsfw override missing filename": {
+    "body": {
+      "detail": "filename is required"
+    },
+    "status": 400
+  },
+  "lora nsfw override no root": {
+    "body": {
+      "detail": "LoRA root not found"
+    },
+    "status": 500
+  },
+  "lora nsfw override set": {
+    "body": {
+      "filename": "plain.safetensors",
+      "nsfw": true,
+      "nsfw_overridden": true
+    },
+    "status": 200
+  },
+  "lora nsfw override traversal": {
+    "body": {
+      "detail": "filename must be a basename, not a path"
+    },
+    "status": 400
+  },
+  "lora preview invalid name": {
+    "body": {
+      "detail": "Invalid filename"
+    },
+    "status": 400
+  },
+  "lora preview missing": {
+    "body": {
+      "error": "Preview not found"
+    },
+    "status": 404
+  },
+  "lora scan missing": {
+    "body": {
+      "detail": "Scan not found"
+    },
+    "status": 404
+  },
+  "lora update manifest empty": {
+    "body": {
+      "detail": "Unknown model: update-manifest"
+    },
+    "status": 404
+  },
+  "loras for 3d model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "loras for legacy h3": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "loras for model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": [
+        "style.safetensors"
+      ]
+    },
+    "status": 200
+  },
+  "loras installed": {
+    "body": {
+      "loras": [
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 12345,
+          "current_version_id": 99,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "style.safetensors",
+          "has_guide": true,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "linked": false,
+          "lora_id": "civitai:12345",
+          "name": "Style LoRA",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": "<TIME>",
+          "size_bytes": 11,
+          "trained_words": [
+            "styleword"
+          ],
+          "update_status": "unknown"
+        }
+      ],
+      "manifest_last_check_at": null
+    },
+    "status": 200
+  },
+  "loras unknown model": {
+    "body": {
+      "detail": "Unknown model: not_a_real_model"
+    },
+    "status": 404
+  },
   "mcp alias get": {
     "body": {
       "<text>": ""
