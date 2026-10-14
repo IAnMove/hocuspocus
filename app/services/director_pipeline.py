@@ -4167,6 +4167,23 @@ def _cut_shot_prompt_into_h3_segments(
         )
 
 
+def _slice_unsegmented_h3_clip(clip: dict, text: str) -> None:
+    """A clip saved without segment records (a legacy production): store the new text's slices.
+
+    A later Repeat groups the clip's outputs into segments
+    (``_ensure_h3_segment_state``) and takes each segment's prompt from
+    ``h3_segment_prompts``, else the whole shot text: without the slices every
+    segment would replay the whole shot. Same count and cut as that backfill
+    and a resume use.
+    """
+    planned = clip.get("planned_clip") if isinstance(clip.get("planned_clip"), dict) else {}
+    duration = planned.get("duration_sec") or (
+        float(planned.get("end", 0) or 0) - float(planned.get("start", 0) or 0)
+    )
+    count = len(_minimax_h3_frame_segments(duration if duration > 0 else 5.0, 24))
+    clip["h3_segment_prompts"] = _h3_sentence_windows(text, count)
+
+
 def _resync_h3_segment_prompts(state: dict, clip_index: int, text: str) -> None:
     """A Workspaces save changed an H3 shot's prompt: re-cut its segments from the new text.
 
@@ -4191,6 +4208,8 @@ def _resync_h3_segment_prompts(state: dict, clip_index: int, text: str) -> None:
     clip = saved_shot(state.get("clips"), clip_index)
     segments = clip.get("h3_segments") if clip is not None else None
     if not (isinstance(segments, list) and segments):
+        if clip is not None:
+            _slice_unsegmented_h3_clip(clip, text)
         return
     segments = [record for record in segments if isinstance(record, dict)]
     video_params = state.get("video_params") if isinstance(state.get("video_params"), dict) else {}

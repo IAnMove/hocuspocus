@@ -307,6 +307,35 @@ def test_a_resume_after_a_workspace_save_renders_the_saved_text(tmp_path: Path, 
     assert saved["clip_plans"][0][authored] == [] and saved["clips"][0][authored] == []
 
 
+def test_a_workspace_save_on_a_legacy_shot_without_segment_records_is_sliced_on_repeat(tmp_path: Path):
+    """A production saved before segment records: Repeat groups the outputs into segments and takes their
+    prompts from the clip's h3_segment_prompts. After a save they must be the new text's slices, not the
+    old optimised ones (edit ignored) nor the whole shot in every segment."""
+    outputs = [f"segment_{index}.mp4" for index in range(3)]
+    for name in outputs:
+        (tmp_path / name).write_bytes(b"video")
+    old = ["old a", "old b", "old c"]
+    _write_pipeline(tmp_path, {
+        "pipeline_id": "legacy",
+        "video_model": "minimax_h3",
+        "video_params": {"h3_reference_mode": "first_frame"},
+        "clips": [{"index": 0, "planned_clip": {"duration_sec": 15}, "seed": 10,
+                   "video_prompt": "Old shot.", "h3_segment_prompts": list(old)}],
+        "clip_plans": [{"video_prompt": "Old shot.", "h3_segment_prompts": list(old)}],
+        "output_files": outputs,
+    })
+
+    director_pipeline.update_clip_prompts(str(tmp_path), "legacy", 0, video_prompt=THREE_ACTIONS)
+
+    loaded = director_pipeline.load_pipeline_state(str(tmp_path), "legacy")
+    prompts = [record["prompt"] for record in loaded["clips"][0]["h3_segments"]]
+    assert len(prompts) == 3
+    for prompt, own in zip(prompts, ("She walks to the door.", "She opens it.", "She steps outside.")):
+        assert own in prompt
+        assert not any(other in prompt for other in THREE_ACTIONS.split(". ") if other.rstrip(".") not in own)
+    assert not any(prompt in old for prompt in prompts)
+
+
 def test_a_workspace_save_cuts_the_same_slices_as_regenerate_with_a_new_shot_prompt(tmp_path: Path):
     """One cut, two doors: Workspaces Save and "regenerate with a new prompt" (replace_shot_prompt)."""
     saved_dir, rerun_dir = tmp_path / "save", tmp_path / "rerun"
