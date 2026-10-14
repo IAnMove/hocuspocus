@@ -92,6 +92,22 @@ def worker_module():
     return sys.modules["_launch_runtime"]
 
 
+# The Recast helper modules (C7). The worker's bystander protection calls two of their functions by their launch
+# names, and the helpers call each other through each module's own globals.
+RECAST_MODULES = (
+    "services.recast_masks",
+    "services.recast_matte",
+    "services.recast_reference_compose",
+    "services.recast_reference_prepare",
+)
+
+
+def worker_modules() -> list:
+    """The modules whose globals the worker and the helpers it calls read: the full server module, and each module the
+    helpers moved to once it exists. A name they read is an attribute of every module that reads it."""
+    return [worker_module(), *[sys.modules[name] for name in RECAST_MODULES if name in sys.modules]]
+
+
 @dataclass
 class Rig:
     """One test's server, scripted engine and the lifecycle events of its jobs."""
@@ -110,7 +126,10 @@ class Rig:
         return worker_module()
 
     def patch(self, name: str, value: Any) -> None:
-        self.monkeypatch.setattr(worker_module(), name, value)
+        holders = [module for module in worker_modules() if hasattr(module, name)]
+        assert holders, f"no worker module has a global named {name!r}"
+        for module in holders:
+            self.monkeypatch.setattr(module, name, value)
 
     def event(self) -> threading.Event:
         """An event the engine script waits on; the fixture sets it at teardown so a failed test never hangs."""

@@ -554,65 +554,128 @@ def test_video_frame_count_is_the_decoded_length(monkeypatch):
     assert count("shot.mp4") == 7
 
 
+RECAST_SERVICES = ("recast_masks", "recast_matte", "recast_reference_compose", "recast_reference_prepare")
+
+
 def test_each_recast_service_binds_exactly_its_free_launch_names():
-    """The bind list is derived from the module. A hand-written name would fail."""
+    """The bind lists come from the modules, not from a hand-written list.
+
+    A slot is a module global set to None that :func:`bind` fills. The slots of
+    a module are exactly the names its functions read that nothing in the slice
+    defines and the module does not import; ``bind`` takes one keyword per slot
+    and writes it there; launch calls each ``bind`` once, passing the launch
+    name itself or a forwarder that calls that launch name.
+    """
+    import builtins
+
     services = ROOT / "app" / "services"
-    modules = sorted(services.glob("recast_*.py"))
-    assert modules, "the recast services have not been created"
-    defined: dict[str, Path] = {}
-    for path in modules:
-        if path.name == "recast_launch_binding.py":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    assert sorted(path.stem for path in services.glob("recast_*.py")) == sorted(RECAST_SERVICES)
+    trees = {
+        stem: ast.parse((services / f"{stem}.py").read_text(encoding="utf-8"), filename=f"{stem}.py")
+        for stem in RECAST_SERVICES
+    }
+    defined: dict[str, str] = {}
+    slots: dict[str, set[str]] = {stem: set() for stem in RECAST_SERVICES}
+    for stem, tree in trees.items():
         for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                defined[node.name] = path
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name != "bind":
+                assert node.name not in defined, f"{node.name} is defined twice in the slice"
+                defined[node.name] = stem
             elif isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if isinstance(target, ast.Name) and not _is_bindable_assign(node):
-                        defined[target.id] = path
-    launch = LAUNCH.read_text(encoding="utf-8")
-    assert launch.count("bind_recast_helpers(") == 1
+                    assert isinstance(target, ast.Name)
+                    if isinstance(node.value, ast.Constant) and node.value.value is None:
+                        slots[stem].add(target.id)
+                    else:
+                        assert target.id not in defined, f"{target.id} is defined twice in the slice"
+                        defined[target.id] = stem
 
-    for path in modules:
-        if path.name == "recast_launch_binding.py":
-            continue
-        source = path.read_text(encoding="utf-8")
-        assert _undefined_globals(source, str(path)) == set()
-        tree = ast.parse(source, filename=str(path))
-        bindables = []
-        kept = []
-        for node in tree.body:
-            if _is_bindable_assign(node):
-                bindables.append(node.value.args[0].value)
-                assert node.value.args[0].value not in defined
-            else:
-                kept.append(node)
-            if isinstance(node, ast.ImportFrom) and node.module in {
-                "services.recast_masks",
-                "services.recast_matte",
-                "services.recast_reference_compose",
-                "services.recast_reference_prepare",
-            }:
-                home = services / (node.module.rsplit(".", 1)[-1] + ".py")
+    launch_tree = ast.parse(LAUNCH.read_text(encoding="utf-8"))
+    launch_names: set[str] = set()
+    launch_functions: dict[str, ast.FunctionDef] = {}
+    bind_aliases: dict[str, str] = {}
+    for node in launch_tree.body:
+        if isinstance(node, ast.FunctionDef):
+            launch_functions[node.name] = node
+            launch_names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            launch_names.update(target.id for target in node.targets if isinstance(target, ast.Name))
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            launch_names.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("services.recast_"):
                 for alias in node.names:
-                    assert defined.get(alias.name) == home, alias.name
-        stripped = ast.unparse(ast.Module(body=kept, type_ignores=[]))
-        assert _undefined_globals(stripped, str(path)) == set(bindables)
+                    if alias.name == "bind":
+                        bind_aliases[alias.asname or alias.name] = node.module.rsplit(".", 1)[-1]
+    bind_calls: dict[str, list[ast.Call]] = {}
+    for node in ast.walk(launch_tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in bind_aliases:
+            bind_calls.setdefault(bind_aliases[node.func.id], []).append(node)
+
+    for stem, tree in trees.items():
+        source = (services / f"{stem}.py").read_text(encoding="utf-8")
+        assert _undefined_globals(source, f"{stem}.py") == set(), stem
+        imported: set[str] = set()
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("services.recast_"):
+                home = node.module.rsplit(".", 1)[-1]
+                for alias in node.names:
+                    if alias.name != "bind":
+                        assert defined.get(alias.name) == home, f"{stem} imports {alias.name} from {home}"
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                imported.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+        free = {
+            name for name in _global_reads(source, f"{stem}.py", skip={"bind"})
+            if name not in defined and name not in imported and not hasattr(builtins, name)
+        }
+        assert free == slots[stem], stem
+
+        bind = next((node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "bind"), None)
+        if not slots[stem]:
+            assert bind is None and stem not in bind_calls, f"{stem} has nothing to bind"
+            continue
+        assert bind is not None and not bind.args.args and not bind.args.vararg and not bind.args.kwarg
+        params = [arg.arg for arg in bind.args.kwonlyargs]
+        assert {"_" + param for param in params} == slots[stem], stem
+        update = bind.body[-1].value
+        assert isinstance(update, ast.Call) and ast.unparse(update.func) == "globals().update"
+        assert {keyword.arg: ast.unparse(keyword.value) for keyword in update.keywords} == {
+            "_" + param: param for param in params
+        }, stem
+
+        assert len(bind_calls.get(stem, [])) == 1, f"launch must bind {stem} exactly once"
+        call = bind_calls[stem][0]
+        assert not call.args and {keyword.arg for keyword in call.keywords} == set(params), stem
+        for keyword in call.keywords:
+            slot = "_" + keyword.arg
+            assert slot in launch_names, f"launch has no {slot} to hand to {stem}"
+            assert isinstance(keyword.value, ast.Name), stem
+            if keyword.value.id == slot:
+                continue
+            forwarder = launch_functions[keyword.value.id]
+            body = [node for node in forwarder.body if not isinstance(node, ast.Expr)]
+            assert len(body) == 1 and isinstance(body[0], ast.Return), forwarder.name
+            assert ast.unparse(body[0].value) == f"{slot}(*args, **kwargs)", forwarder.name
+            assert ast.unparse(forwarder.args) == "*args, **kwargs", forwarder.name
+    assert set(bind_calls) <= {stem for stem in RECAST_SERVICES if slots[stem]}
 
 
-def _is_bindable_assign(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Name)
-        and node.value.func.id == "bindable"
-        and len(node.value.args) == 1
-        and isinstance(node.value.args[0], ast.Constant)
-        and node.value.args[0].value == node.targets[0].id
-    )
+def _global_reads(source: str, filename: str, skip: set[str]) -> set[str]:
+    """Global names read inside the module's functions and classes, except the scopes named in ``skip``."""
+    import symtable
+
+    names: set[str] = set()
+
+    def walk(table: symtable.SymbolTable) -> None:
+        names.update(
+            item.get_name() for item in table.get_symbols() if item.is_global() and item.is_referenced()
+        )
+        for child in table.get_children():
+            walk(child)
+
+    for child in symtable.symtable(source, filename, "exec").get_children():
+        if child.get_name() not in skip:
+            walk(child)
+    return names
 
 
 def _undefined_globals(source: str, filename: str) -> set[str]:
