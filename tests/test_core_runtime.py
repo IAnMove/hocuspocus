@@ -2685,6 +2685,54 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(status, "running")
         self.assertIs(registry, shared)
 
+    def test_core_interrupts_a_dead_process_tasks_once_and_never_its_own(self):
+        """Startup recovery stays: the rows a previous process left active are interrupted once, by the first registry
+        of the folder. Every later accessor (Activity, Series plan/LLM, music reservation, 3D, remote image, a workspace
+        switch) returns that same registry and leaves this process's own tasks alone."""
+        from services import core_generation_commands, core_workspace as core, task_manager
+        from services.music_submission import submit_music_generation
+
+        orphans = ("orphan-running", "orphan-queued")
+        folder, previous = self._in_temp_workspace()
+        try:
+            workspace_dir = core.workspace_dir("default")
+            left_on_disk = task_manager.TaskRegistry(workspace_dir, interrupt_stale=False)  # the dead process's rows
+            for task_id, state in zip(orphans, ("running", "queued")):
+                left_on_disk.create(id=task_id, root_id=task_id, workspace="default", kind="series-plan",
+                                    workflow="series", title=task_id, status=state, phase=state)
+            registry = core_generation_commands.registry_for("default")
+            recovered = {task_id: registry.get(task_id)["status"] for task_id in orphans}
+            registry.create(id="live-plan", root_id="live-plan", workspace="default", kind="series-plan",
+                            workflow="series", title="Plan", status="running", phase="running")
+            song = submit_music_generation(workspace_dir=workspace_dir, request={
+                "prompt": "dream pop", "lyrics": "[Verse]\nLa", "model": "music-3.0", "count": 1,
+                "output_folder": "default", "idempotency_key": "recovery-once",
+            })
+            model = core_canonical_tasks.publish_studio_activity(
+                {"task_id": "live-3d", "status": "running", "workspace": "default"}, "model3d",
+            )
+            touched = [
+                self.client.get("/api/v1/tasks", params={"workspace": "default"}).status_code,
+                self.client.put("/api/v1/workspaces/active", json={"name": "default"}).status_code,
+            ]
+            accessors = {
+                id(task_manager.get_task_registry(workspace_dir)),  # Series plan LLM calls, assembly, quick video
+                id(core_generation_commands._registry("default")),  # remote and MiniMax image commands
+                id(core_generation_commands.registry_for("default")),  # Activity, uploads, 3D, music publish
+            }
+            live = {task_id: registry.get(task_id)["status"] for task_id in ("live-plan", song["task_id"], model["id"])}
+            interrupted_events = {
+                task_id: [event["type"] for event in registry.events(task_id)].count("task.interrupted")
+                for task_id in orphans
+            }
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(recovered, {"orphan-running": "interrupted", "orphan-queued": "interrupted"})
+        self.assertEqual(interrupted_events, {"orphan-running": 1, "orphan-queued": 1})
+        self.assertEqual(live, {"live-plan": "running", song["task_id"]: "queued", "live-3d": "running"})
+        self.assertEqual(accessors, {id(registry)})
+        self.assertEqual(touched, [200, 200])
+
     def test_core_plan_reports_the_provider_error_not_a_cancelled_task(self):
         """The first plan job of a workspace used to be cancelled at birth by the registry the LLM call opened."""
         import requests
