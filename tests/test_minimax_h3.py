@@ -30,6 +30,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_LORA_LIBRARY_PATH = _APP / "services" / "lora_library.py"
 _DOWNLOADS_PATH = _APP / "services" / "model_downloads.py"
 _OPTIONS_PATH = _APP / "services" / "model_options.py"
 _SYSTEM_ROUTER_PATH = _APP / "routers" / "system.py"
@@ -1252,9 +1253,9 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("install_native_lora_forwards", main)
         self.assertIn('hasattr(wan_model, "validate_loras")', wgp)
         self.assertIn('hasattr(wan_model, "finalize_loras")', wgp)
-        launch = _read(_LAUNCH_PATH)
-        self.assertIn("def _lora_is_compatible_with_model", launch)
-        self.assertIn("lora_compatible", launch)
+        library = _read(_LORA_LIBRARY_PATH)
+        self.assertIn("def _lora_is_compatible_with_model", library)
+        self.assertIn("lora_compatible", library)
 
     def test_turbo_metadata_detection_and_evaluation_count(self):
         turbo = _load_turbo_helpers()
@@ -1363,7 +1364,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
         self.assertIn("def _minimax_h3_turbo_option", launch)
-        self.assertIn('names.update(item["filename"]', launch)
+        self.assertIn('names.update(item["filename"]', _read(_LORA_LIBRARY_PATH))
         self.assertIn("MINIMAX_H3_TURBO_LORA_FILENAME: {", launch)
         self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', options)
         self.assertIn('"minimax_h3_runtime_advisory":', options)
