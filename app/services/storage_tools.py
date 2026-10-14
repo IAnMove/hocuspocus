@@ -274,4 +274,3 @@ async def storage_remove_linked(request: Request):
         raise HTTPException(status_code=423, detail="Could not move the file to the Recycle Bin (it may be locked, or too large for the Bin). Nothing was deleted.")
     print(f"[Storage] Removed linked duplicate to Recycle Bin: {target} ({psize} bytes; HocusPocus Lab's copy: {surviving})")
     return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
-
