@@ -1,6 +1,5 @@
 """Ownership exists before a worker runs; replays keep the producer's identity."""
 import asyncio
-import ast
 import copy
 import json
 from types import SimpleNamespace
@@ -392,11 +391,10 @@ def test_leftover_pending_stub_with_newer_timestamp_stays_completed(tmp_path):
 
 def test_series_render_worker_observes_episode_production_ids_on_disk(tmp_path, monkeypatch):
     import threading
-    import time
-    import uuid
     from datetime import datetime, timezone
     from services.series_library import read_series_library
     import services.series_reference_router as references
+    import routers.series_render as routes
     series = create_series_project("film", title="Show")
     episode = create_series_episode(series)
     episode["script"] = [{"id": "scene1", "locationId": ""}]
@@ -416,27 +414,18 @@ def test_series_render_worker_observes_episode_production_ids_on_disk(tmp_path, 
             assert not read_story_library(str(tmp_path))["projects"]
             seen.append(saved)
     monkeypatch.setattr(references, "route_shot_references", lambda *_args: {"errors": [], "strategy": "first_frame", "selected": []})
-    namespace = {
-        "copy": copy, "time": time, "uuid": uuid, "HTTPException": HTTPException,
-        "threading": SimpleNamespace(Thread=Worker),
-        "_series_library_lock": threading.RLock(), "_series_render_jobs_lock": threading.RLock(),
-        "_series_render_jobs": jobs, "_series_library_workspace": lambda _value: "film",
-        "_workspace_dir": lambda _ws: str(tmp_path),
-        "_read_series_workspace": lambda _ws: read_series_library(str(tmp_path), "film"),
-        "_write_series_workspace": lambda _ws, library: write_series_library(str(tmp_path), library, "film"),
-        "_series_project_or_404": lambda library, identifier: library["seriesById"][identifier],
-        "_active_series_render_for_episode": lambda *_args: None,
-        "_series_iso_now": lambda: datetime.now(timezone.utc).isoformat(),
-        "_series_render_store": lambda _ws: SimpleNamespace(save=lambda job: None),
-        "_run_series_render_job": lambda _id: None,
-    }
-    source = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
-    tree = ast.parse(source.read_text())
-    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
-                 and node.name in {"_series_render_candidates", "start_series_episode_render"}]
-    for function in functions:
-        function.decorator_list = []
-    module = ast.fix_missing_locations(ast.Module(body=functions, type_ignores=[]))
-    exec(compile(module, str(source), "exec"), namespace)
-    result = namespace["start_series_episode_render"](series["id"], episode["id"], {"workspace": "film"})
+    monkeypatch.setattr(routes, "threading", SimpleNamespace(Thread=Worker))
+    monkeypatch.setattr(routes, "_series_library_lock", threading.RLock())
+    monkeypatch.setattr(routes, "_series_render_jobs_lock", threading.RLock())
+    monkeypatch.setattr(routes, "_series_render_jobs", jobs)
+    monkeypatch.setattr(routes, "_series_library_workspace", lambda _value: "film")
+    monkeypatch.setattr(routes, "_workspace_dir", lambda _ws: str(tmp_path))
+    monkeypatch.setattr(routes, "_read_series_workspace", lambda _ws: read_series_library(str(tmp_path), "film"))
+    monkeypatch.setattr(routes, "_write_series_workspace", lambda _ws, library: write_series_library(str(tmp_path), library, "film"))
+    monkeypatch.setattr(routes, "_series_project_or_404", lambda library, identifier: library["seriesById"][identifier])
+    monkeypatch.setattr(routes, "_active_series_render_for_episode", lambda *_args: None)
+    monkeypatch.setattr(routes, "_series_iso_now", lambda: datetime.now(timezone.utc).isoformat())
+    monkeypatch.setattr(routes, "_series_render_store", lambda _ws: SimpleNamespace(save=lambda job: None))
+    monkeypatch.setattr(routes, "_run_series_render_job", lambda _id: None)
+    result = routes.start_series_episode_render(series["id"], episode["id"], {"workspace": "film"})
     assert seen and jobs[result["jobId"]]["productionId"] == f"series-{episode['id']}"

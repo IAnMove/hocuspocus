@@ -421,6 +421,6 @@ def test_fused_reference_strategy_queues_fused_ref2va():
 
 def test_series_render_start_applies_fused_settings_before_queue():
     source = (
-        Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+        Path(__file__).resolve().parents[1] / "app" / "routers" / "series_render.py"
     ).read_text(encoding="utf-8")
     assert "shot_settings = apply_series_h3_model_settings(model, {" in source
