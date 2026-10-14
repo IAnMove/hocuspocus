@@ -236,7 +236,7 @@ def test_summary_anchor_and_unmapped_shots_on_small_timelines():
     with pytest.raises(ValueError, match="different lengths"):
         select([_presence(3, {}), _presence(4, {})])
     shared = select([_presence(6, {1: 5, 2: 9, 4: 20}), _presence(6, {2: 4, 3: 30, 4: 1})])
-    # Frames 2 and 4 hold both; 2 has the larger total (13 against 21? no: 9 + 4 = 13, 20 + 1 = 21), so 4.
+    # Frames 2 and 4 hold both mappings; 4 has the larger total (20 + 1 against 9 + 4), so it is the shared anchor.
     assert shared == (4, 4)
     apart = select([_presence(6, {0: 5}), _presence(6, {5: 7})])
     assert apart == (None, 5)
@@ -280,6 +280,16 @@ def test_shot_detection_keeps_only_local_peaks_far_enough_from_the_edges():
     # Two cuts closer than the minimum: only the first one counts.
     assert detect(clip([5, 7], 14)) == [(0, 5), (5, 14)]
     assert detect(clip([5, 7], 14), min_shot_frames=2) == [(0, 5), (5, 7), (7, 14)]
+
+
+def test_a_two_frame_dissolve_cuts_where_the_change_peaks():
+    """Both frames of a short dissolve change more than the cut threshold; the cut is the larger change, not the
+    first frame over the threshold."""
+    detect = _shot_code()["_detect_recast_shot_ranges"]
+    frames = np.zeros((14, 36, 64, 3), dtype=np.uint8)
+    frames[6] = 76  # 30% of the way to white
+    frames[7:] = 255
+    assert detect(frames) == [(0, 7), (7, 14)]
 
 
 def test_the_bystander_probe_is_conservative_on_a_bad_frame_or_a_failed_segmentation(monkeypatch):
@@ -450,6 +460,10 @@ def test_timeline_resampling_refuses_bad_counts_and_keeps_every_shot():
     assert masks[0][:, 0, 0].tolist() == [0, 2, 4, 6, 8]
     # Every shot keeps at least one frame, even the one-frame shot.
     assert ranges == [(0, 2), (2, 3), (3, 5)]
+    # Frames are taken by flooring the source position: 10 -> 4 reads 0, 2.5, 5, 7.5 as 0, 2, 5, 7.
+    source, _masks, ranges = resample(frames, [], [(0, 10)], 4)
+    assert source[:, 0, 0, 0].tolist() == [0, 2, 5, 7]
+    assert ranges == [(0, 4)]
     # More shots than frames: the extra shots are dropped.
     _source, _masks, ranges = resample(frames, [], [(0, 2), (2, 4), (4, 6), (6, 10)], 3)
     assert ranges == [(0, 1), (1, 2), (2, 3)]
@@ -753,3 +767,94 @@ def test_the_shot_manifest_writes_guides_masks_and_references_for_each_camera_sh
         assert published[0]["active_mapping_indices"] == [0, 1]
         assert len(task["image_refs"]) == 1
         assert tasks[1]["params"]["video_prompt_type"] == "V01AI"
+
+
+def test_a_late_entrant_gets_a_latent_aligned_pre_roll_from_its_shot_and_the_first_mapping_keeps_overlaps():
+    """The second camera shot starts at frame 4 and its second character enters at frame 10. The hidden identity
+    pre-roll is the requested 8 frames rounded up to the 3-frame latent grid, anchored on the shot's own timeline.
+    Where two tracked mappings cover the same pixel, the first mapping keeps it."""
+    from services.recast_masks import _RECAST_MASK_COLORS as colors
+
+    captured: list = []
+    written: list = []
+    guides: list = []
+
+    def references(prepared, active, frame, mask, output_dir, job_id, shot_index, *, cooccurring, reference_canvas):
+        captured.append({"active": list(active), "mask": mask.copy(), "shot": shot_index, "cooccurring": cooccurring})
+        return {"image_refs": [f"ref{shot_index}.png"], "primary_mask": f"ref{shot_index}_mask.png",
+                "additional_masks": [], "expected_colors": [None], "clip_identity_ref": "clip.png",
+                "source_scene_reference": {"image": "scene.png", "mask": "scene_mask.png"}, "primary_mode": "stub"}
+
+    def write(path, frames, fps, *, semantic=False):
+        written.append((os.path.basename(path), len(frames), semantic))
+        if not semantic:
+            guides.append([int(frame[0, 0, 0]) for frame in frames])
+        return path
+
+    code = _shot_code()
+    # The loaded functions share one namespace: replacing two of its names after loading reaches the manifest.
+    code.update(_build_recast_shot_reference_conditioning=references, _write_recast_shot_video=write)
+    build = code["_build_recast_shot_manifest"]
+    frames = (np.arange(16, dtype=np.uint8) * 10).reshape(16, 1, 1, 1).repeat(8, 1).repeat(8, 2).repeat(3, 3)
+    first = np.zeros((16, 8, 8), dtype=np.uint8)
+    second = np.zeros((16, 8, 8), dtype=np.uint8)
+    first[:, :, :5] = 1  # 40 pixels in every frame
+    second[10:, :, 3:] = 1  # 40 pixels from frame 10, overlapping the first in columns 3 and 4
+    second[12, :, 2:] = 1  # its largest frame
+    manifest = build(
+        {"prompt": "", "custom_settings": {"scail2_recast_warmup_frames": 8}},
+        {"source_frames": frames, "mapping_masks": [first, second], "shot_ranges": [(0, 4), (4, 16)]},
+        {}, "unused", "w", reference_canvas=(8, 8), target_frame_count=16, generation_fps=16,
+        minimum_frames=1, latent_size=3,
+    )
+    late = manifest["published_shots"][1]
+    assert (late["start_frame"], late["end_frame"], late["active_mapping_indices"]) == (4, 16, [0, 1])
+    assert (late["anchor_frame_index"], late["first_all_active_frame_index"]) == (12, 10)
+    assert late["identity_warmup_frames"] == 9
+    assert late["identity_warmup_anchor_frame_index"] == 12
+    settings = manifest["tasks"][1]["params"]["custom_settings"]
+    assert settings["scail2_recast_warmup_frames"] == 9
+    assert settings["scail2_recast_warmup_anchor_offset"] == 8
+    assert "identity_warmup_frames" not in manifest["published_shots"][0]
+    # The anchor mask of shot 2: the overlap (columns 3-4) is the first mapping's, the rest of the second's is its own.
+    anchor = captured[1]["mask"]
+    assert captured[1]["active"] == [0, 1] and captured[1]["cooccurring"] is True
+    assert tuple(int(v) for v in anchor[0, 3]) == tuple(colors[0])
+    assert tuple(int(v) for v in anchor[0, 6]) == tuple(colors[1])
+    assert tuple(int(v) for v in anchor[0, 1]) == tuple(colors[0])
+    assert [item for item in written if item[2]] == [("recast_w_shot_1_mask.mp4", 4, True),
+                                                   ("recast_w_shot_2_mask.mp4", 13, True)]
+    # Shot 1's anchor mask is black where nobody is mapped. Shot 2 (12 frames) is padded to 13 with its last frame.
+    assert tuple(int(v) for v in captured[0]["mask"][0, 7]) == (0, 0, 0)
+    assert guides == [[0, 10, 20, 30], [40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 150]]
+
+
+def test_shot_videos_are_written_with_their_codec_settings(tmp_path, monkeypatch):
+    """Guides are libx264 at quality 9 in yuv420p; semantic masks use the magic-mask codec settings."""
+    import imageio.v2 as imageio
+    from shared import magic_mask
+
+    opened: list = []
+
+    class Writer:
+        def __init__(self, path, **kwargs):
+            opened.append([os.path.basename(path), kwargs, 0])
+
+        def append_data(self, frame):
+            opened[-1][2] += 1
+
+        def close(self):
+            opened[-1].append("closed")
+
+    monkeypatch.setattr(imageio, "get_writer", Writer)
+    monkeypatch.setattr(magic_mask, "_magic_mask_video_codec_params", lambda: {"codec": "semantic-codec"})
+    write = _shot_code()["_write_recast_shot_video"]
+    frames = np.zeros((3, 4, 4, 3), dtype=np.uint8)
+    assert write(str(tmp_path / "a" / "guide.mp4"), frames, 12) == str(tmp_path / "a" / "guide.mp4")
+    write(str(tmp_path / "mask.mp4"), frames, "8", semantic=True)
+    assert opened == [
+        ["guide.mp4", {"fps": 12.0, "ffmpeg_log_level": "error", "codec": "libx264", "quality": 9,
+                       "pixelformat": "yuv420p", "macro_block_size": 1}, 3, "closed"],
+        ["mask.mp4", {"fps": 8.0, "ffmpeg_log_level": "error", "codec": "semantic-codec"}, 3, "closed"],
+    ]
+    assert (tmp_path / "a").is_dir()

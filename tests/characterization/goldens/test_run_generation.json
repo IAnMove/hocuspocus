@@ -11631,6 +11631,172 @@
     },
     "status": 200
   },
+  "recast shot generation, other paths: join longer than the timeline": {
+    "body": {
+      "assembly": [
+        {
+          "audio": "recast-source.mp4",
+          "audio_duration_sec": 1.0,
+          "clips": [
+            "<TIME>_seed42_shot_zero.mp4"
+          ]
+        }
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "image_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "fps": 8,
+              "frame_count": 8,
+              "published_shots": [
+                {
+                  "id": "s0"
+                }
+              ],
+              "resolved_seed": 42,
+              "shots": [
+                {
+                  "mode": "generate",
+                  "shot_index": 0
+                }
+              ]
+            },
+            "_recast_shot_temp_dir": "<OUTPUTS>/maestro-recast-shots-golden",
+            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "recast_shots_golden-direct",
+              "index": 0,
+              "progress_label": "Shot",
+              "total": 1
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot zero",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot zero",
+          "save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "recast-source.mp4"
+      ],
+      "final_left": [
+        false
+      ],
+      "final_meta_left": [
+        false
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/maestro-recast-shots-golden",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "private_left": [
+        "_recast_source_video"
+      ],
+      "probes": [
+        [
+          "audio",
+          "recast-source.mp4"
+        ],
+        [
+          "frames",
+          "<TIME>_seed42_recast_shot_aware.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_shot_zero.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "shot_aware": true,
+      "shot_plan": [
+        {
+          "id": "s0"
+        }
+      ],
+      "sidecars": {},
+      "status": {
+        "error": "Recast cast-aware assembly changed the timeline length (9/8 frames).",
+        "message": "Recast assembly failed: Recast cast-aware assembly changed the timeline length (9/8 frames).",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "Joining Recast segments",
+        "progress": 99,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "Recast cast-aware assembly changed the timeline length (9/8 frames).",
+          "retryable": true
+        },
+        "message": "Recast assembly failed: Recast cast-aware assembly changed the timeline length (9/8 frames).",
+        "phase": "Joining Recast segments",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "temp_removed": true,
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0",
+        "running | phase 'Joining Recast segments' | 'Joining cast-aware segments and restoring source audio...' | 99% | step 0/0 | outputs 0",
+        "failed | phase 'Joining Recast segments' | 'Recast assembly failed: Recast cast-aware assembly changed the timeline length (9/8 frames).' | 99% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
   "recast shot generation, other paths: no segments": {
     "body": {
       "assembly": [],

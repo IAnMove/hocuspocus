@@ -2276,13 +2276,15 @@ def test_recast_shot_generation_joins_the_worker_clips(rig, golden, clip, monkey
     "join fails",
     "frame probe fails",
     "cancelled after the join",
+    "join longer than the timeline",
 ])
 def test_recast_shot_generation_other_paths(rig, golden, clip, monkeypatch, case) -> None:
     """More assembler paths, recorded while ``_run_recast_shot_generation`` still lived in launch (C7 head e393f5746).
 
     Three shots join in timeline order, the passthrough between the two generated clips; an empty shot list, a failed
     audio probe, a failed join and a failed frame count each end the job their own way; a cancel that lands after the
-    join leaves no final file and no sidecar behind.
+    join leaves no final file and no sidecar behind; a join one frame longer than the timeline fails like a shorter
+    one.
     """
     _refuse_remote_network(monkeypatch)
     launch = rig.launch
@@ -2335,7 +2337,7 @@ def test_recast_shot_generation_other_paths(rig, golden, clip, monkeypatch, case
             raise RuntimeError("decord is not here")
         if case == "cancelled after the join":
             launch._jobs[job_id]["cancel_requested"] = True
-        return 8
+        return 9 if case == "join longer than the timeline" else 8
 
     def concatenate(clip_paths, output_path, audio_path=None, audio_start_sec=0.0, abort_callback=None,
                     pad_audio=False, audio_duration_sec=None):
@@ -2371,3 +2373,18 @@ def test_recast_shot_generation_other_paths(rig, golden, clip, monkeypatch, case
         "shot_plan": kept.get("edit_recast_shot_plan"),
         "temp_removed": not temp.exists(),
     })
+
+
+def test_a_rig_patch_reaches_every_recast_module(full_server) -> None:
+    """``Rig.patch`` writes a name on every module of ``worker_modules()`` that holds it. Each Recast service module
+    reads its collaborators through its own globals, so each one must be in that list, or a stub would miss the
+    module that calls it (C8a review: dropping a shot module from the list left every golden green)."""
+    import importlib
+
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    stems = sorted(path.stem for path in services.glob("recast_*.py"))
+    assert "recast_masks" in stems
+    for stem in stems:
+        importlib.import_module(f"services.{stem}")
+    held = {module.__name__ for module in worker_modules()}
+    assert {f"services.{stem}" for stem in stems} <= held
