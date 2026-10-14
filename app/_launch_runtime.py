@@ -708,175 +708,31 @@ def _missing_image_model_files(model_type: str) -> list[str]:
     return list(dict.fromkeys(name for name in missing if name))
 
 
-def _folder_model_ready(model_def: dict) -> bool:
-    """A model with no main URL, whose handler downloads a whole folder (VoxCPM2),
-    is ready when every asset it declares is on disk."""
-    assets = model_def.get("required_model_assets") or []
-    return bool(assets) and all(wgp.fl.locate_file(path, error_if_none=False) is not None for path in assets)
+# The catalog, the download check and the pre-download map. These names are
+# the same objects the service holds: generation and the profile still call
+# them, and the download map is the one instance.
+from services.model_downloads import (  # noqa: E402
+    _check_model_downloaded,
+    _download_model_files,
+    _folder_model_ready,
+    _model_downloads,
+    _model_downloads_lock,
+    list_models,
+    configure as _configure_model_downloads,
+)
+_configure_model_downloads(
+    engine=wgp,
+    model_weight_groups=_model_weight_groups,
+    variant_group_downloaded=_variant_group_downloaded,
+    variant_group_filenames=_variant_group_filenames,
+    is_legacy_h3_model=_is_legacy_h3_model,
+    jobs=_jobs,
+    active_gen_states=_active_gen_states,
+)
 
+from routers.model_catalog import create_model_list_router  # noqa: E402
 
-def _check_model_downloaded(model_type: str) -> bool:
-    """Check if a model's checkpoint files are downloaded.
-
-    Models often list multiple URLs (e.g. full bf16 + quantized int8) per
-    weight group; ONE variant per group is enough. Every group (main
-    transformer + each weight module) must be present.
-    """
-    # Keep this first branch self-contained: the readiness function is also
-    # used in isolated model-definition checks where launcher-only helpers are
-    # intentionally not imported.
-    if str(model_type or "").strip() == "minimax_h3_legacy":
-        return minimax_h3_service.is_model_downloaded()
-    try:
-        model_def = wgp.get_model_def(model_type)
-        if model_def is None:
-            return False
-        groups = _model_weight_groups(model_type)
-        if not groups:
-            return _folder_model_ready(model_def)
-        if not all(_variant_group_downloaded(g) for g in groups):
-            return False
-        # Component-folder models can expose a tiny manifest as their primary
-        # URL while the family handler downloads the actual assets separately.
-        # Do not mark a partial install as ready merely because that manifest
-        # arrived first (MiniMax-Music3 is the first such local audio model).
-        for relative_path in model_def.get("required_model_assets", []):
-            if wgp.fl.locate_file(relative_path, error_if_none=False) is None:
-                return False
-        # Some edit pipelines split required conditioning weights out of the
-        # main transformer/text-encoder groups. Krea 2 Edit cannot run without
-        # its Qwen3-VL vision tower, so do not report it as ready until that
-        # preloaded companion file is actually discoverable (including through
-        # linked checkpoint roots).
-        vision_encoder_filename = model_def.get("vision_encoder_filename")
-        if (
-            vision_encoder_filename
-            and wgp.fl.locate_file(vision_encoder_filename, error_if_none=False) is None
-        ):
-            return False
-        # Def-bundled accelerator loras (e.g. SCAIL-2 Fast's lightx2v
-        # distill) are loaded unconditionally at generation time, so they
-        # count toward readiness too. resolve_lora_path searches linked
-        # read-only roots like the generation path does.
-        for url in wgp.get_model_recursive_prop(model_type, "loras", return_list=True):
-            if not os.path.isfile(wgp.resolve_lora_path(model_type, url.split("/")[-1])):
-                return False
-        return True
-    except Exception:
-        return False
-
-
-@api.get("/api/v1/models")
-def list_models(detail: bool = True):
-    """List available model families and model types.
-
-    HTTP defaults to the full catalog so the Studio UI keeps working.
-    Pass detail=false for the short MCP summary.
-    """
-    from services.director_model_compat import assess_director_model
-
-    # Families
-    families = []
-    for fid, (order, label) in wgp.families_infos.items():
-        if fid == "unknown":
-            continue
-        families.append({"id": fid, "label": label, "order": order})
-    families.append({"id": "hunyuan3d", "label": "Hunyuan3D", "order": 350})
-    families.sort(key=lambda f: f["order"])
-
-    # Models
-    models = []
-    for mt in wgp.displayed_model_types:
-        md = wgp.get_model_def(mt)
-        if md is None:
-            continue
-        family = wgp.get_model_family(mt, for_ui=True)
-        architecture = wgp.get_base_model_type(mt)
-        director_compat = assess_director_model(
-            mt,
-            md,
-            family=family,
-            architecture=architecture,
-        )
-        models.append({
-            "model_type": mt,
-            "name": md.get("name", mt),
-            "description": md.get("description", ""),
-            "selector_help": md.get("selector_help", ""),
-            "lora_compatibility_note": md.get("lora_compatibility_note", ""),
-            "family": family,
-            "architecture": architecture,
-            "resource_requirements": md.get("resource_requirements"),
-            "is_i2v": wgp.test_class_i2v(mt),
-            "is_t2v": wgp.test_class_t2v(mt),
-            "guidance_max_phases": md.get("guidance_max_phases", 1),
-            "fps": md.get("fps", 16),
-            "supports_end_frame": "E" in md.get("image_prompt_types_allowed", ""),
-            "supports_audio": bool(md.get("any_audio_prompt", False) or md.get("returns_audio", False)),
-            "supports_audio_input": bool(
-                md.get("any_audio_prompt", False)
-                or md.get("supports_reference_audio", False)
-            ),
-            "generates_audio": bool(md.get("returns_audio", False)),
-            "supports_ref_images": bool(md.get("image_ref_choices") or md.get("omni_reference")),
-            "director": director_compat,
-            "is_downloaded": _check_model_downloaded(mt),
-            # When True, the UI hides this model unless Mature Mode is
-            # enabled. Set in the model JSON's "model" block (e.g.
-            # defaults/ltx2_22B_10eros.json). The backend ALWAYS returns
-            # the entry — visibility gating happens client-side so a single
-            # nsfw_mode toggle can show/hide without reloading models.
-            "nsfw_only": bool(md.get("nsfw_only", False)),
-        })
-
-    for model in model3d_service.MODELS:
-        models.append({
-            "model_type": model["id"],
-            "name": model["label"],
-            "family": "hunyuan3d",
-            "architecture": "hunyuan3d",
-            # Multi-view variants are image-only; the rest accept a prompt.
-            "is_i2v": not model["supports_text"],
-            "is_t2v": model["supports_text"],
-            "guidance_max_phases": 1,
-            "fps": 0,
-            "supports_end_frame": False,
-            "supports_audio": False,
-            "supports_ref_images": True,
-            "is_downloaded": model3d_service.is_model_downloaded(model["id"]),
-            "nsfw_only": False,
-            # Variants sharing one HF repo lose their weights together when
-            # the cache is deleted; the UI warns using this list.
-            "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
-        })
-
-    # UniRig is a generative ML model too (autoregressive skeleton + learned
-    # skinning), so its weights are managed from the same catalog. tool_only
-    # keeps it out of the generation model selectors: it rigs existing
-    # meshes from the Animate tab instead of generating new ones.
-    from services import rig_service
-    models.append({
-        "model_type": "unirig",
-        "name": "UniRig (AI Rigging)",
-        "family": "hunyuan3d",
-        "architecture": "unirig",
-        "is_i2v": False,
-        "is_t2v": False,
-        "guidance_max_phases": 1,
-        "fps": 0,
-        "supports_end_frame": False,
-        "supports_audio": False,
-        "supports_ref_images": False,
-        "is_downloaded": rig_service.is_unirig_downloaded(),
-        "nsfw_only": False,
-        "tool_only": True,
-    })
-
-    payload = {"families": families, "models": models}
-    if detail:
-        return payload
-    from services.mcp_compact import summarize_model_catalog
-    return summarize_model_catalog(payload)
+api.include_router(create_model_list_router())
 
 
 def mcp_model_list(args):
@@ -889,185 +745,31 @@ def mcp_model_list(args):
     return list_models(detail=args.get("detail") is True)
 
 
-_MODEL_VISIBILITY_CONFIG_KEY = "maestro_model_visibility"
-_MODEL_VISIBILITY_WRITE_LOCK = threading.RLock()
-
-
-def _normalize_model_visibility_ids(values):
-    """Return a stable, de-duplicated list of persisted model identifiers."""
-    if not isinstance(values, list):
-        raise ValueError("Model visibility must be a list.")
-    normalized = []
-    seen = set()
-    for value in values:
-        if not isinstance(value, str):
-            raise ValueError("Model visibility entries must be strings.")
-        model_type = value.strip()
-        if not model_type or model_type in seen:
-            continue
-        if len(model_type) > 200:
-            raise ValueError("A model identifier is too long.")
-        seen.add(model_type)
-        normalized.append(model_type)
-    if len(normalized) > 5000:
-        raise ValueError("Too many model visibility entries.")
-    return normalized
-
-
-def _model_visibility_response():
-    raw = wgp.server_config.get(_MODEL_VISIBILITY_CONFIG_KEY)
-    configured = isinstance(raw, dict) and isinstance(
-        raw.get("enabled_models"), list,
-    )
-    if not configured:
-        return {
-            "configured": False,
-            "enabled_models": [],
-            "initialized_mature_models": [],
-            "defaults_version": 0,
-        }
-    try:
-        enabled_models = _normalize_model_visibility_ids(
-            raw.get("enabled_models", []),
-        )
-        initialized_mature_models = _normalize_model_visibility_ids(
-            raw.get("initialized_mature_models", []),
-        )
-    except ValueError:
-        return {
-            "configured": False,
-            "enabled_models": [],
-            "initialized_mature_models": [],
-            "defaults_version": 0,
-        }
-    try:
-        defaults_version = max(0, int(raw.get("defaults_version", 0)))
-    except (TypeError, ValueError):
-        defaults_version = 0
-    return {
-        "configured": True,
-        "enabled_models": enabled_models,
-        "initialized_mature_models": initialized_mature_models,
-        "defaults_version": defaults_version,
-    }
-
-
-def _persist_model_visibility_config():
-    """Atomically persist visibility across Pinokio's changing UI ports."""
-    config_path = os.path.abspath(wgp.server_config_filename)
-    temp_path = (
-        f"{config_path}.{os.getpid()}.{threading.get_ident()}.tmp"
-    )
-    with _MODEL_VISIBILITY_WRITE_LOCK:
-        try:
-            with open(temp_path, "w", encoding="utf-8") as handle:
-                json.dump(wgp.server_config, handle, indent=4)
-            os.replace(temp_path, config_path)
-        finally:
-            if os.path.isfile(temp_path):
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
-
-
-@api.get("/api/v1/model-visibility")
-def get_model_visibility():
-    """Return the server-persisted model selector whitelist."""
-    return _model_visibility_response()
-
-
-@api.put("/api/v1/model-visibility")
-async def update_model_visibility(request: Request):
-    """Persist model visibility independently of the browser's origin."""
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(
-            status_code=400,
-            detail="Model visibility payload must be an object.",
-        )
-    try:
-        enabled_models = _normalize_model_visibility_ids(
-            body.get("enabled_models"),
-        )
-        initialized_mature_models = _normalize_model_visibility_ids(
-            body.get("initialized_mature_models", []),
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    try:
-        defaults_version = max(0, int(body.get("defaults_version", 0)))
-    except (TypeError, ValueError) as error:
-        raise HTTPException(
-            status_code=400,
-            detail="defaults_version must be an integer.",
-        ) from error
-
-    with _MODEL_VISIBILITY_WRITE_LOCK:
-        wgp.server_config[_MODEL_VISIBILITY_CONFIG_KEY] = {
-            "enabled_models": enabled_models,
-            "initialized_mature_models": initialized_mature_models,
-            "defaults_version": defaults_version,
-        }
-        _persist_model_visibility_config()
-        return _model_visibility_response()
-
-
-_MODEL_SELECTION_CONFIG_KEY = "maestro_model_selections"
-_MODEL_SELECTION_MODES = frozenset({
-    "image", "video", "audio", "model3d", "avatar",
-})
-
-_PRODUCTION_PROFILE_CONFIG_KEY = "maestro_production_profile"
-from services.production_profile import (
-    _PRODUCTION_PROFILE_VERSION,
+# Model visibility, selections and the production profile. These names are the
+# same objects the service holds: code that has not moved keeps calling them,
+# and the write lock is the one instance.
+from services.model_visibility import (  # noqa: E402
+    _MODEL_SELECTION_CONFIG_KEY,
+    _MODEL_VISIBILITY_CONFIG_KEY,
+    _MODEL_VISIBILITY_WRITE_LOCK,
+    _PRODUCTION_PROFILE_CONFIG_KEY,
+    _active_production_profile,
+    _default_production_profile,
+    _model_selections_response,
+    _model_visibility_response,
+    _normalize_model_selections,
+    _normalize_model_visibility_ids,
     _normalize_production_profile,
+    _persist_model_visibility_config,
+    _production_profile_response,
+    _profile_image_model_type,
+    configure as _configure_model_visibility,
 )
-_DEFAULT_PRODUCTION_PROFILE = {
-    "version": _PRODUCTION_PROFILE_VERSION,
-    "text": {"provider": "minimax", "model": "MiniMax-M3", "base_url": "https://api.minimax.io"},
-    "image": {"provider": "minimax", "model": "image-01"},
-    "music": {"provider": "local", "model": "ace_step_v1_5_xl_sft_lm_4b"},
-    "video": {
-        "provider": "local",
-        "model": "minimax_h3_legacy",
-        "settings": {
-            "profile": "quality",
-            "steps": 20,
-            "flowShift": 12.0,
-            "audioShift": 3.0,
-            "turbo": False,
-            "cache": False,
-            "loras": [],
-            "resolution": "540p",
-            "aspectRatio": "16:9",
-        },
-    },
-    "model3d": {"provider": "local", "model": "hunyuan3d-2mini-turbo"},
-}
+_configure_model_visibility(engine=wgp, check_model_downloaded=_check_model_downloaded)
 
+from routers.model_preferences import create_model_preferences_router  # noqa: E402
 
-def _default_production_profile() -> dict:
-    """The unsaved profile: local Qwen Image 2.1 when installed, else the static default."""
-    from services import production_profile_defaults
-
-    return production_profile_defaults.default_profile(_DEFAULT_PRODUCTION_PROFILE, _check_model_downloaded)
-
-
-_warned_invalid_profiles: set[str] = set()
-
-
-def _active_production_profile() -> dict:
-    raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
-    try:
-        return _normalize_production_profile(raw)
-    except ValueError as error:
-        # The defaults stand in, but never silently: say so once per reason,
-        # and /production-profile reports it so the UI can show it.
-        if raw is not None and str(error) not in _warned_invalid_profiles:
-            _warned_invalid_profiles.add(str(error))
-            print(f"[Production profile] The saved profile is invalid ({error}); using the defaults until it is saved again.")
-        return _default_production_profile()
+api.include_router(create_model_preferences_router())
 
 
 def _effective_llm_routing(services: dict | None = None) -> tuple[str, str, str]:
@@ -1092,356 +794,10 @@ def _llm_provider_credentials(provider: str, services: dict, remote_url: str = "
     return llm_routing._llm_provider_credentials(provider, services, remote_url)
 
 
-def _production_profile_response() -> dict:
-    raw = wgp.server_config.get(_PRODUCTION_PROFILE_CONFIG_KEY)
-    invalid_reason = ""
-    try:
-        profile = _normalize_production_profile(raw)
-        configured = True
-    except ValueError as error:
-        profile = _default_production_profile()
-        configured = False
-        invalid_reason = str(error) if raw is not None else ""
-    return {"configured": configured, "profile": profile, "invalid_reason": invalid_reason}
 
+from routers.model_catalog import create_model_files_router  # noqa: E402
 
-def _profile_image_model_type(profile: dict | None = None) -> str:
-    image = (profile or _active_production_profile()).get("image", {})
-    provider = str(image.get("provider") or "").lower()
-    model = str(image.get("model") or "").strip()
-    if provider == "minimax" and not model.startswith("minimax:"):
-        return f"minimax:{model or 'image-01'}"
-    return model
-
-
-@api.get("/api/v1/production-profile")
-def get_production_profile():
-    """Return credential-free defaults shared by Studio and every Lab."""
-    return _production_profile_response()
-
-
-@api.put("/api/v1/production-profile")
-async def update_production_profile(request: Request):
-    body = await request.json()
-    try:
-        profile = _normalize_production_profile(
-            body.get("profile") if isinstance(body, dict) else None,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    with _MODEL_VISIBILITY_WRITE_LOCK:
-        wgp.server_config[_PRODUCTION_PROFILE_CONFIG_KEY] = profile
-        # Generic tools (Director, prompt enhancement, planning) consume the
-        # text section of this same profile. Mirror only provider/model/base
-        # URL into the legacy services keys; credentials stay independent.
-        services = wgp.server_config.setdefault("services", {})
-        services["llm_provider"] = profile["text"]["provider"]
-        services["llm_model_id"] = profile["text"]["model"]
-        if profile["text"].get("base_url"):
-            services["llm_remote_url"] = profile["text"]["base_url"]
-        elif profile["text"]["provider"] == "minimax":
-            services["llm_remote_url"] = "https://api.minimax.io"
-        elif profile["text"]["provider"] == "grok":
-            services["llm_remote_url"] = "https://api.x.ai"
-        elif profile["text"]["provider"] == "ollama" and not services.get("llm_remote_url"):
-            services["llm_remote_url"] = "http://127.0.0.1:11434"
-        # Saving the global profile is an explicit request to make Studio and
-        # Director inherit it. Later manual model choices are persisted again
-        # as ordinary per-mode overrides.
-        selections = wgp.server_config.get(_MODEL_SELECTION_CONFIG_KEY)
-        if isinstance(selections, dict):
-            selections.pop("image", None)
-            selections.pop("video", None)
-        _persist_model_visibility_config()
-    return {"configured": True, "profile": profile}
-
-
-def _normalize_model_selections(values):
-    """Validate the small per-mode model preference map persisted by the UI."""
-    if not isinstance(values, dict):
-        raise ValueError("Model selections must be an object.")
-    if len(values) > len(_MODEL_SELECTION_MODES):
-        raise ValueError("Too many model selection entries.")
-    normalized = {}
-    for raw_mode, raw_model in values.items():
-        mode = str(raw_mode or "").strip()
-        if mode not in _MODEL_SELECTION_MODES:
-            raise ValueError(f"Unknown generation mode: {mode or '(empty)'}.")
-        if not isinstance(raw_model, str):
-            raise ValueError("Every model selection must be a string.")
-        model_type = raw_model.strip()
-        if not model_type:
-            continue
-        if len(model_type) > 200:
-            raise ValueError("A model identifier is too long.")
-        normalized[mode] = model_type
-    return normalized
-
-
-def _model_selections_response():
-    raw = wgp.server_config.get(_MODEL_SELECTION_CONFIG_KEY)
-    profile = _active_production_profile()
-    profile_defaults = {
-        "image": _profile_image_model_type(profile),
-        "video": str(profile.get("video", {}).get("model") or "").strip(),
-    }
-    try:
-        explicit_models = _normalize_model_selections(raw)
-    except ValueError:
-        explicit_models = {}
-    selected_models = {
-        **{key: value for key, value in profile_defaults.items() if value},
-        **explicit_models,
-    }
-    return {
-        "configured": isinstance(raw, dict),
-        "selected_models": selected_models,
-        "sources": {
-            key: "override" if key in explicit_models else "global"
-            for key in selected_models
-        },
-    }
-
-
-@api.get("/api/v1/model-selections")
-def get_model_selections():
-    """Return model choices independently of Pinokio's changing UI port."""
-    return _model_selections_response()
-
-
-@api.put("/api/v1/model-selections")
-async def update_model_selections(request: Request):
-    """Persist the user's last model for each generation mode."""
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(
-            status_code=400,
-            detail="Model selection payload must be an object.",
-        )
-    try:
-        selected_models = _normalize_model_selections(
-            body.get("selected_models"),
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-    with _MODEL_VISIBILITY_WRITE_LOCK:
-        wgp.server_config[_MODEL_SELECTION_CONFIG_KEY] = selected_models
-        _persist_model_visibility_config()
-        return _model_selections_response()
-
-
-@api.get("/api/v1/models/{model_type}/debug")
-def debug_model(model_type: str):
-    """Debug: show raw model definition and download check."""
-    if _is_legacy_h3_model(model_type):
-        return {
-            "model_type": model_type,
-            "runtime_installed": minimax_h3_service.is_runtime_installed(),
-            "is_downloaded": minimax_h3_service.is_model_downloaded(),
-            "runtime_dir": str(minimax_h3_service.COMFY_DIR),
-        }
-    if model_type in model3d_service.MODEL_BY_ID:
-        model = model3d_service.MODEL_BY_ID[model_type]
-        return {
-            "model_type": model_type,
-            "keys": model,
-            "is_downloaded": model3d_service.is_model_downloaded(model_type),
-            "ckpts_dir": str(model3d_service.HF_CACHE_DIR),
-        }
-    md = wgp.get_model_def(model_type)
-    if not md:
-        return {"error": "Model not found"}
-    # Collect keys and sample values (avoid huge nested objects)
-    keys_info = {}
-    for k, v in md.items():
-        if isinstance(v, (str, int, float, bool)):
-            keys_info[k] = v
-        elif isinstance(v, list):
-            keys_info[k] = f"[list len={len(v)}] {str(v[:2])[:200]}"
-        elif isinstance(v, dict):
-            keys_info[k] = f"[dict keys={list(v.keys())[:10]}]"
-        else:
-            keys_info[k] = f"[{type(v).__name__}]"
-    return {
-        "model_type": model_type,
-        "keys": keys_info,
-        "is_downloaded": _check_model_downloaded(model_type),
-        "ckpts_dir": wgp.fl.get_download_location() if hasattr(wgp.fl, 'get_download_location') else "unknown",
-    }
-
-
-@api.delete("/api/v1/models/{model_type}")
-def delete_model(model_type: str):
-    """Delete a model's checkpoint files from disk."""
-    active_generation_ids = [
-        str(job_id)
-        for job_id, job in list(_jobs.items())
-        if (
-            str(job.get("status") or "").lower()
-            in {"created", "queued", "waiting_resource", "running", "cancelling"}
-            or job_id in _active_gen_states
-        )
-        and str((job.get("params") or {}).get("model_type") or "") == model_type
-    ]
-    if active_generation_ids:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot delete {model_type} while generation job(s) "
-                f"{', '.join(active_generation_ids[:5])} are active or queued. "
-                "Cancel them and wait for shutdown first."
-            ),
-        )
-    if _is_legacy_h3_model(model_type):
-        deleted = minimax_h3_service.delete_model_cache()
-        return {"deleted": deleted, "model_type": model_type}
-    if model_type == "unirig":
-        from services import rig_service
-        if rig_service.has_active_unirig_jobs():
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot delete UniRig while an AI rig job is active, "
-                    "queued, or still shutting down."
-                ),
-            )
-        deleted = rig_service.delete_unirig_cache()
-        return {"deleted": deleted, "model_type": model_type, "affected_models": []}
-    if model_type in model3d_service.MODEL_BY_ID:
-        if model3d_service.has_active_jobs(model_type):
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"Cannot delete {model_type} while a 3D job using its "
-                    "shared model cache is active, queued, or shutting down."
-                ),
-            )
-        affected = [item["id"] for item in model3d_service.models_sharing_repo(model_type)]
-        deleted = model3d_service.delete_model_cache(model_type)
-        return {"deleted": deleted, "model_type": model_type, "affected_models": affected if deleted else []}
-    md = wgp.get_model_def(model_type)
-    if not md:
-        return JSONResponse({"error": "Model not found"}, status_code=404)
-
-    # Same group resolution as _check_model_downloaded, restricted to files
-    # this entry owns — a finetune's delete removes its modules but leaves a
-    # shared base transformer for the base model's own delete button.
-    filenames = []
-    for group in _model_weight_groups(model_type, owned_only=True):
-        filenames.extend(_variant_group_filenames(group))
-    deleted = []
-    skipped_linked = []
-    errors = []
-    for filename in filenames:
-        filepath = wgp.fl.locate_file(filename, error_if_none=False)
-        if filepath and os.path.isfile(filepath):
-            # locate_file also finds checkpoints in linked (read-only) model
-            # folders — deleting those would break the OTHER install. Skip
-            # them and tell the UI why the model still shows as available.
-            if wgp.fl.is_protected_path(filepath):
-                skipped_linked.append(filename)
-                print(f"[Models] Skipped delete of linked checkpoint: {filepath}")
-                continue
-            try:
-                os.remove(filepath)
-                deleted.append(filename)
-                print(f"[Models] Deleted checkpoint: {filepath}")
-            except Exception as e:
-                errors.append(f"{filename}: {e}")
-    if errors:
-        return JSONResponse({"deleted": deleted, "skipped_linked": skipped_linked, "errors": errors}, status_code=207)
-    return {"deleted": deleted, "skipped_linked": skipped_linked, "model_type": model_type}
-
-
-# ── Model pre-download ──────────────────────────────────────────────────
-# Backs the click-to-download icon in Settings → System → Enabled Models.
-# Fetches everything a generation would need (transformer + second-stage +
-# modules + shared assets + text encoder) without occupying the GPU, so
-# the first generation starts instantly. Progress reaches the UI through
-# the existing /api/v1/downloads/active feed (safe_download's tqdm hook).
-_model_downloads: dict = {}
-_model_downloads_lock = threading.Lock()
-
-
-def _download_model_files(model_type: str):
-    """Resolve and fetch every file load_models() would download.
-
-    The file list is ``services.engine.model_files.resolve_model_files``, the
-    mirror of the file-resolution block of ``wgp.load_models``. ``wgp.py`` is
-    vendored and is not edited. This name stays so the pre-download route
-    keeps calling it.
-    """
-    from services.engine.model_files import download_model_files
-
-    download_model_files(
-        model_type,
-        is_legacy_h3_model=_is_legacy_h3_model,
-        ensure_quality_assets=minimax_h3_service.ensure_quality_assets,
-        is_h3_downloaded=minimax_h3_service.is_model_downloaded,
-        get_model_def=wgp.get_model_def,
-        transformer_quantization=wgp.transformer_quantization,
-        transformer_dtype_policy=wgp.transformer_dtype_policy,
-        get_transformer_dtype=wgp.get_transformer_dtype,
-        get_model_filename=wgp.get_model_filename,
-        get_model_recursive_prop=wgp.get_model_recursive_prop,
-        download_models=wgp.download_models,
-        get_local_model_filename=wgp.get_local_model_filename,
-        text_encoder_quantization=wgp.text_encoder_quantization,
-        check_model_downloaded=_check_model_downloaded,
-    )
-
-
-@api.post("/api/v1/models/{model_type}/download")
-def download_model(model_type: str):
-    """Start downloading a model's files in the background."""
-    md = wgp.get_model_def(model_type)
-    if not md:
-        return JSONResponse({"error": "Model not found"}, status_code=404)
-    with _model_downloads_lock:
-        entry = _model_downloads.get(model_type)
-        if entry and entry["status"] == "downloading":
-            return {"status": "downloading", "model_type": model_type}
-        _model_downloads[model_type] = {"status": "downloading", "error": None, "started": time.time()}
-
-    def _worker():
-        try:
-            _download_model_files(model_type)
-            _model_downloads[model_type] = {"status": "completed", "error": None, "started": _model_downloads[model_type]["started"]}
-            print(f"[Models] Pre-download complete: {model_type}")
-        except Exception as e:
-            traceback.print_exc()
-            _model_downloads[model_type] = {"status": "failed", "error": str(e), "started": _model_downloads[model_type]["started"]}
-            print(f"[Models] Pre-download FAILED for {model_type}: {e}")
-
-    threading.Thread(target=_worker, daemon=True, name=f"model-dl-{model_type}").start()
-    return {"status": "downloading", "model_type": model_type}
-
-
-@api.get("/api/v1/models/downloads/status")
-def model_downloads_status():
-    """Status of model pre-downloads started via POST .../download."""
-    return {"downloads": {mt: {"status": e["status"], "error": e["error"]} for mt, e in _model_downloads.items()}}
-
-
-@api.get("/api/v1/resolutions")
-def list_resolutions():
-    """List available resolution choices."""
-    choices, _ = wgp.get_resolution_choices("")
-    return {
-        "resolutions": [{"label": label, "value": value} for label, value in choices]
-    }
-
-
-@api.get("/api/v1/defaults/{model_type}")
-def get_defaults(model_type: str):
-    """Get default settings for a model type."""
-    if _is_legacy_h3_model(model_type):
-        return dict(minimax_h3_service.DEFAULTS)
-    if wgp.get_model_def(model_type) is None:
-        raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
-    defaults = wgp.get_default_settings(model_type)
-    return defaults
+api.include_router(create_model_files_router())
 
 
 from routers.settings import create_primary_settings_router
@@ -3712,21 +3068,9 @@ def civitai_checkpoint_architectures(base_model: str = ""):
     return {"architectures": architectures, "suggested_architecture": guess}
 
 
-@api.post("/api/v1/models/reload")
-def reload_model_definitions():
-    """Re-scan defaults/ + finetunes/ so a newly-imported checkpoint (or any
-    hand-added finetune) appears in the model list without restarting the
-    server. Returns the new model count and any model_types that appeared."""
-    try:
-        before = set(wgp.displayed_model_types)
-        wgp.load_model_definitions()
-        after = set(wgp.displayed_model_types)
-        added = sorted(after - before)
-        print(f"[Models] Reloaded model definitions: {len(after)} models"
-              + (f", added {added}" if added else ""))
-        return {"status": "ok", "model_count": len(after), "added": added}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Model reload failed: {e}")
+from routers.model_catalog import create_model_reload_router  # noqa: E402
+
+api.include_router(create_model_reload_router())
 
 
 @api.get("/api/v1/checkpoints/installed")
@@ -5774,243 +5118,21 @@ def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
         return None
 
 
-@api.get("/api/v1/model-options/{model_type}")
-def get_model_options(model_type: str):
-    """Return UI-relevant model options for dynamic rendering."""
-    from services.image_edit_workflow import image_edit_capabilities
-    from services.model_selectors import selector_catalog
-    if _is_legacy_h3_model(model_type):
-        return dict(minimax_h3_service.MODEL_OPTIONS)
-    if model_type in model3d_service.MODEL_BY_ID:
-        return {
-            "model_type": model_type,
-            "architecture": "hunyuan3d",
-            "guidance_max_phases": 1,
-            "lock_guidance_phases": False,
-            "sliding_window": False,
-            "motion_amplitude": False,
-            "flow_shift": False,
-            "tea_cache": False,
-            "returns_audio": False,
-            "any_audio_prompt": False,
-            "audio_scale_name": "",
-            "lock_inference_steps": False,
-            "lock_guidance_scale": False,
-            "no_negative_prompt": True,
-            "i2v_class": False,
-            "fps": 0,
-        }
-    md = wgp.get_model_def(model_type)
-    if md is None:
-        raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
+from services.model_options import (  # noqa: E402
+    configure as _configure_model_options,
+    get_model_options,
+)
+_configure_model_options(
+    engine=wgp,
+    is_legacy_h3_model=_is_legacy_h3_model,
+    recommended_minimax_h3_encoder=_recommended_minimax_h3_encoder,
+    minimax_h3_turbo_option=_minimax_h3_turbo_option,
+    minimax_h3_runtime_advisory=_minimax_h3_runtime_advisory,
+)
 
-    # Get ui_defaults for fallback values (model handlers set these for their UIs)
-    try:
-        _ui_defaults = wgp.get_default_settings(model_type) or {}
-    except Exception:
-        _ui_defaults = {}
+from routers.model_catalog import create_model_options_router  # noqa: E402
 
-    # Helper to safely extract choice configs (dict or None)
-    # Human-readable labels for guide_preprocessing codes
-    _GUIDE_LABELS = {
-        "": "None",
-        "UV": "Keep Unchanged",
-        "PV": "Transfer Pose",
-        "DV": "Transfer Depth",
-        "EV": "Transfer Canny Edges",
-        "SV": "Transfer Shapes",
-        "LV": "Transfer Flow",
-        "CV": "Recolorize",
-        "MV": "Inpainting",
-        "V": "Raw Format",
-        "PDV": "Transfer Pose + Depth",
-        "PSV": "Transfer Pose + Shapes",
-        "PLV": "Transfer Pose + Flow",
-    }
-
-    def extract_choice(key):
-        val = md.get(key)
-        if not isinstance(val, dict):
-            return None
-        result = {}
-        for k in ("selection", "choices", "labels", "default", "label", "show_label", "letters_filter"):
-            if k in val:
-                result[k] = val[k]
-        # Auto-inject labels for guide_preprocessing if not provided by model
-        if key == "guide_preprocessing" and "labels" not in result and "selection" in result:
-            result["labels"] = {code: _GUIDE_LABELS.get(code, code) for code in result["selection"]}
-        return result if result else None
-
-    # Extract sample_solvers as list of [label, value] tuples
-    solvers = md.get("sample_solvers")
-    if isinstance(solvers, list) and len(solvers) > 0:
-        # WanGP stores them as list of (label, value) tuples
-        solvers = [[s[0], s[1]] if isinstance(s, (list, tuple)) else [str(s), str(s)] for s in solvers]
-    else:
-        solvers = None
-
-    _h3_encoder_variants = md.get("minimax_h3_text_encoder_variants") or {}
-    _h3_encoder_default = (
-        _recommended_minimax_h3_encoder(model_type, md)
-        if _h3_encoder_variants
-        else None
-    )
-
-    return {
-        "model_type": model_type,
-        "architecture": md.get("architecture", model_type),
-        "guidance_max_phases": md.get("guidance_max_phases", 1),
-        "lock_guidance_phases": md.get("lock_guidance_phases", False),
-
-        # Boolean flags
-        "sliding_window": md.get("sliding_window", False),
-        "video_continuation": md.get("video_continuation", False),
-        "motion_amplitude": md.get("motion_amplitude", False),
-        "flow_shift": bool(md.get("flow_shift", False)),
-        "tea_cache": md.get("tea_cache", False),
-        "first_block_cache": md.get("first_block_cache", False),
-        "skip_steps_multiplier_choices": [
-            [str(choice[0]), float(choice[1])]
-            for choice in md.get("skip_steps_multiplier_choices", [])
-            if isinstance(choice, (list, tuple)) and len(choice) >= 2
-        ] or None,
-        "skip_steps_multiplier_label": md.get(
-            "skip_steps_multiplier_label",
-            "Cache Strength",
-        ),
-        "default_skip_steps_multiplier": _ui_defaults.get(
-            "skip_steps_multiplier",
-            0.08,
-        ),
-        "default_skip_steps_start_step_perc": _ui_defaults.get(
-            "skip_steps_start_step_perc",
-            25,
-        ),
-        "returns_audio": md.get("returns_audio", False),
-        "any_audio_prompt": md.get("any_audio_prompt", False),
-        "audio_scale_name": md.get("audio_scale_name", ""),
-        "lock_inference_steps": md.get("lock_inference_steps", False),
-        "inference_steps_min": md.get("inference_steps_min", 1),
-        "inference_steps_max": md.get("inference_steps_max", 50),
-        "lock_guidance_scale": md.get("lock_guidance_scale", False),
-        "no_negative_prompt": md.get("no_negative_prompt", False),
-        "i2v_class": md.get("i2v_class", False),
-        "t2v_class": md.get("t2v_class", False),
-        "image_outputs": md.get("image_outputs", False),
-        "supports_end_frame": "E" in md.get("image_prompt_types_allowed", ""),
-        # Raw conditioning letters let Studio expose only compatible sub-modes.
-        "image_prompt_types_allowed": md.get("image_prompt_types_allowed", ""),
-        "minimax_h3_semantic_bridge": md.get("minimax_h3_semantic_bridge", False),
-        "wangp_1272": md.get("wangp_1272", False),
-        "wangp_1272_capabilities": md.get("wangp_1272_capabilities", {}),
-        "minimax_h3_fused_turbo": md.get("minimax_h3_fused_turbo", False),
-        "omni_reference": md.get("omni_reference", False),
-        "omni_reference_limits": md.get("omni_reference_limits"),
-        "omni_reference_detail_choices": md.get("omni_reference_detail_choices"),
-        "omni_reference_detail_default": md.get("omni_reference_detail_default", "match"),
-        "minimax_h3_text_encoder_choices": [
-            {
-                "value": key,
-                "label": (
-                    f"{value.get('name', key)} (Recommended)"
-                    if key == _h3_encoder_default
-                    else value.get("name", key)
-                ),
-                "size_hint": value.get("size_hint", ""),
-                "recommended": key == _h3_encoder_default,
-            }
-            for key, value in _h3_encoder_variants.items()
-        ] or None,
-        "minimax_h3_text_encoder_default": _h3_encoder_default,
-        "minimax_h3_turbo": _minimax_h3_turbo_option(md),
-        "minimax_h3_runtime_advisory": _minimax_h3_runtime_advisory(md),
-        "resolution_presets": md.get("resolution_presets"),
-        "resolution_preset_order": md.get("resolution_preset_order"),
-        "supports_auto_aspect": md.get("supports_auto_aspect", False),
-
-        # Choice configs
-        "guide_preprocessing": extract_choice("guide_preprocessing"),
-        "guide_custom_choices": extract_choice("guide_custom_choices"),
-        # What the guide video *is* to this model. A control video and a reference clip are different
-        # things and the handler names it; without this the UI calls every one of them a Control Video.
-        "video_guide_label": md.get("video_guide_label"),
-        "image_ref_choices": extract_choice("image_ref_choices"),
-        "audio_prompt_type_sources": extract_choice("audio_prompt_type_sources"),
-
-        # Image reference options
-        "background_removal_label": md.get("background_removal_label"),
-        "max_image_refs": md.get("max_image_refs"),
-        "inpaint_support": bool(md.get("inpaint_support", False)),
-        "image_ref_inpaint": bool(md.get("image_ref_inpaint", False)),
-        **image_edit_capabilities(md),
-        "model_name": md.get("name") or model_type,
-        "native_rgba": bool(md.get("native_rgba", False)),
-        "sample_solvers": solvers,
-
-        # Self refiner
-        "self_refiner": md.get("self_refiner", False),
-        "self_refiner_max_plans": md.get("self_refiner_max_plans", 1),
-
-        # LTX-2 Dev pipeline capabilities (for guidance controls in Advanced Settings)
-        "perturbation": md.get("perturbation", False),
-        "reference_pipeline": md.get("reference_pipeline", False),
-        "cfg_star": md.get("cfg_star", False),
-        "adaptive_projected_guidance": md.get("adaptive_projected_guidance", False),
-        "audio_guidance": md.get("audio_guidance", False),
-
-        # Sliding window
-        "sliding_window_defaults": md.get("sliding_window_defaults"),
-        "sliding_window_memory_policy": md.get(
-            "sliding_window_memory_policy"
-        ),
-        "director_memory_policy": md.get("director_memory_policy"),
-        "sliding_window_auto_prompt_pacing": md.get(
-            "sliding_window_auto_prompt_pacing", False
-        ),
-
-        # Timing
-        "fps": md.get("fps", 16),
-        "frames_minimum": md.get("frames_minimum", 5),
-        "frames_steps": md.get("frames_steps", 4),
-        "frames_maximum": md.get("frames_maximum"),
-
-        # Model defaults (sent to frontend so UI can apply them on model selection)
-        # Check model def first, then fall back to ui_defaults from the handler
-        "default_num_inference_steps": md.get("num_inference_steps") or _ui_defaults.get("num_inference_steps"),
-        "default_guidance_scale": md.get("guidance_scale") or _ui_defaults.get("guidance_scale"),
-        # Read ONLY from ui_defaults: model_def's "flow_shift" is a boolean
-        # capability flag (whether to show the control), not a value.
-        "default_flow_shift": _ui_defaults.get("flow_shift"),
-        # The model's declared temporal grid, so the UI can mirror
-        # align_model_frame_count instead of guessing. Absent (modulus 0) for
-        # models that declare none, and the UI then leaves frame counts alone.
-        "frame_alignment_modulus": int(md.get("frame_alignment_modulus", 0) or 0),
-        "frame_alignment_remainder": int(md.get("frame_alignment_remainder", 1)),
-        "frame_alignment_mode": str(md.get("frame_alignment_mode", "floor")).lower(),
-        "frames_maximum": md.get("frames_maximum"),
-        "hide_resolution_presets": md.get("hide_resolution_presets", False),
-
-        # Image/video conditioning strength
-        "input_video_strength_label": md.get("input_video_strength", ""),
-
-        # Post-processing capabilities
-        "vae_upsampler_modes": md.get("vae_upsampler", []),
-
-        # TTS-specific
-        "audio_only": md.get("audio_only", False),
-        "duration_slider": md.get("duration_slider"),
-        "pause_between_sentences": md.get("pause_between_sentences", False),
-        "temperature_enabled": md.get("temperature", False),
-        "custom_settings_def": md.get("custom_settings"),
-        # Voice-count-driven audio mode (KugelAudio + Scenema): the UI hides
-        # the manual Audio Mode ChoiceControl when this is True, since the
-        # voice-slot buttons are the sole source of truth for audio_prompt_type.
-        "audio_mode_from_voice_count": md.get("audio_mode_from_voice_count", False),
-        # Max voice slots the model accepts. UI caps the "Add Voice" button
-        # at this number. Defaults to 6 (Kugel); Scenema sets 2.
-        "max_voice_count": md.get("max_voice_count"),
-        "selectors": selector_catalog(md),
-    }
+api.include_router(create_model_options_router())
 
 
 from services import settings_store
@@ -6038,23 +5160,9 @@ _nsfw_allowed = settings_store._nsfw_allowed
 # imports). Both are lazy-imported so they don't slow startup or
 # break on AMD/CPU systems where torch.cuda probes might warn.
 
-@api.get("/api/v1/downloads/active")
-def get_active_downloads():
-    """Return a snapshot of in-progress model file downloads.
+from routers.model_catalog import create_active_downloads_router  # noqa: E402
 
-    UI polls this during long generation prep phases to surface
-    download progress and stall warnings. Each entry includes
-    `seconds_since_progress` so the UI can render "stalled — waiting
-    for retry" badges without doing time math itself.
-
-    Empty list when nothing is downloading. Best-effort tracking —
-    if a download path bypasses `huggingface_hub`'s tqdm progress
-    bar (some upstream Wan2GP code does this for misc files), it
-    won't appear here even though the safe_download timeout
-    protections still apply.
-    """
-    from services.safe_download import get_active_downloads as _get
-    return {"downloads": _get()}
+api.include_router(create_active_downloads_router())
 
 
 from routers.system import (

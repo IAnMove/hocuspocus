@@ -1906,6 +1906,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             "DirectorLoraSelector.tsx",
         )
         launch_path = os.path.join(_APP_DIR, "_launch_runtime.py")
+        options_path = os.path.join(_APP_DIR, "services", "model_options.py")
         pipeline_path = os.path.join(_APP_DIR, "services", "director_pipeline.py")
         client = api_client_source()
         with open(store_path, encoding="utf-8") as handle:
@@ -1920,6 +1921,8 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             lora_selector = handle.read()
         with open(launch_path, encoding="utf-8") as handle:
             launch = handle.read()
+        with open(options_path, encoding="utf-8") as handle:
+            options = handle.read()
         with open(pipeline_path, encoding="utf-8") as handle:
             pipeline_source = handle.read()
 
@@ -1945,7 +1948,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         self.assertIn("SHOT_IMAGE_PROMPT_ONLY", pipeline_source)
         self.assertIn("_director_video_execution_profile", pipeline_source)
         self.assertIn("sliding_window_memory_override", pipeline_source)
-        self.assertIn('"director_memory_policy": md.get', launch)
+        self.assertIn('"director_memory_policy": md.get', options)
         self.assertIn("per_clip_continue_from_previous", launch)
         self.assertIn('"_continuation_tail_skip", 8', launch)
 
