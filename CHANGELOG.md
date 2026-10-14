@@ -6,6 +6,23 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**The Character Creator keeps your work, and its options are easier to judge.**
+Leaving the tab (or the page) used to cancel the three options that were being
+drawn and forget the name and description. The creator's work now belongs to a
+session that goes on while you look at something else, and is saved in the
+browser per workspace: coming back shows the name, the options and the pick, and
+a reloaded page follows the image jobs that were still drawing. *Start over*
+begins a new character. You can ask for 1, 2 or 3 options (3 by default; the
+same count is used for a new pose). All the pictures are drawn first and the
+backgrounds are removed afterwards, one at a time, so the keying no longer
+interrupts the image model between pictures; as soon as you pick one, only that
+one has its background removed (a drawn option you pick later is keyed then).
+The options sit in a full-width row, and each opens large when the mouse rests
+on it, when it is pressed and held on a touch screen, or when it has the
+keyboard focus. Code: `characterCandidates.ts`, `characterCreatorSession.ts`,
+`CandidateGrid.tsx`; the style prompts no longer leave `{screen}` unreplaced
+(`replaceAll`), which made every graphic-novel run fail.
+
 **Six Video 2D cards for a figure that walks into a shot (candidates, for the
 owner's review).** A cut-out figure that slides in with a bob shows legs that
 never move. These cards hide the legs, or move them, instead of faking them:
