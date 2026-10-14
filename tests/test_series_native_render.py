@@ -597,6 +597,46 @@ def test_a_dictionary_entry_added_after_the_recording_records_that_line_again(tm
     assert after["s03_d1"]["key"] == before["s03_d1"]["key"] and after["s03_d1"]["reused"]
 
 
+def test_a_pronunciation_dictionary_added_after_the_take_makes_the_shot_stale():
+    """Produce skips shots whose ``renderInputs`` still match. The dictionary is not in the written line,
+    so a take recorded before one existed stayed current and the cut kept the old speech."""
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series = {
+        "spokenLanguage": "Español de España",
+        "characters": [
+            {"id": "gary", "voiceProfile": {"characterKitRef": {"id": "kit-gary"}}},
+            {"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}},
+        ],
+        "locations": [],
+        "assets": {},
+    }
+    shot = {
+        "id": "s1", "order": 0, "productionMethod": "animation_2d",
+        "visibleCharacterIds": ["gary", "ana"],
+        "dialogueBeats": [{"id": "s1_d0", "characterId": "gary", "text": "El Peugeot espera."}],
+        "layout2d": {},
+    }
+    digest = render_inputs(series, shot, {})
+    empty = {**series, "characters": [
+        {**series["characters"][0], "voiceProfile": {**series["characters"][0]["voiceProfile"],
+                                                     "pronunciationDictionary": {}}},
+        series["characters"][1],
+    ]}
+    assert render_inputs(empty, shot, {}) == digest, "an empty dictionary keeps takes rendered before it existed"
+    other = {**series, "characters": [
+        series["characters"][0],
+        {**series["characters"][1], "voiceProfile": {**series["characters"][1]["voiceProfile"],
+                                                     "pronunciationDictionary": {"Peugeot": "Pejó"}}},
+    ]}
+    assert render_inputs(other, shot, {}) == digest, "a mute extra's dictionary does not remake the shot"
+    _approve(series, shot, digest, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+
+
 def test_a_spanish_short_line_may_miss_one_word_but_a_one_word_line_may_not(tmp_path):
     tools, compiled = Tools(tmp_path), []
     project = library()

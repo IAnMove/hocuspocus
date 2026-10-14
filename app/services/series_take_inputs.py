@@ -1,10 +1,11 @@
 """What a Series shot's render depends on, kept on its take, so a production renders again only what changed.
 
 ``render_inputs`` fingerprints a shot in one language: its layout and lines, the location, the sound design, the
-kits of the people seen or heard and, for a shot with lines in a room (``series_voice_rooms``), the room each line is
-heard in and the version of the rooms' processing. A series without rooms, or a shot whose lines are all dry, keeps
-the digest it had. ``series_native_render`` stores it in the take's metadata (``renderInputs``)
-and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
+kits of the people seen or heard, the pronunciation dictionary of anyone who speaks in the shot, and, for a shot
+with lines in a room (``series_voice_rooms``), the room each line is heard in and the version of the rooms' processing.
+A series without rooms, or a shot whose lines are all dry, keeps the digest it had. A series without a dictionary,
+or a shot whose speakers have none, keeps the digest it had. ``series_native_render`` stores it in the take's
+metadata (``renderInputs``) and ``series.episode.produce`` renders only ``stale_shot_ids``. Ambience the episode assembly lays
 (``soundDesign.ambienceMode: "episode"``, ``ambienceDuckDb``) and the episode's score (``episode.score``) are not
 part of a shot, so changing them renders nothing again. A shot's ``foley`` is, so a new prompt or volume renders
 that shot again; a shot without one keeps the digest it had before foley existed. A location's ``layout2d.layers``
@@ -29,6 +30,7 @@ from services.series_shot_extras import pauses, timing_args
 from services.series_scene_inputs import scene_source_digest
 from services.series_shot_plan import FPS, kit_ref, plan_timing
 from services.series_voice_rooms import VERSION as ROOM_VERSION, line_rooms
+from services.speech_text_es import dictionary_map
 
 # What a shot's picture and sound depend on, besides the render code itself.
 _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId", "visibleCharacterIds", "scene3d")
@@ -49,7 +51,8 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint.
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
-    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches."""
+    ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches.
+    A speaker's pronunciation dictionary changes the spoken line, so it is hashed only when one is present."""
     beats = [[beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
              for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
@@ -70,6 +73,21 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
+def _spoken_voices(series: dict[str, Any], shot: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Pronunciation that changes what is spoken. A mute extra, or an empty dictionary, is omitted."""
+    characters = {item.get("id"): item for item in series.get("characters") or []}
+    speakers = sorted({
+        beat.get("characterId") for beat in shot.get("dialogueBeats") or []
+        if isinstance(beat, dict) and str(beat.get("text") or "").strip() and beat.get("characterId")
+    } - {None, ""})
+    voices = {}
+    for cid in speakers:
+        dictionary = dictionary_map(((characters.get(cid) or {}).get("voiceProfile") or {}).get("pronunciationDictionary"))
+        if dictionary:
+            voices[cid] = dictionary
+    return voices
+
+
 def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
     """The shot's fields its render reads, without ``layout2d.hearing`` (assembly-only but for ``deaf``)."""
     inputs = {key: shot.get(key) for key in _SHOT_INPUTS}
@@ -82,6 +100,9 @@ def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
 def _extra_inputs(series: dict, shot: dict, root: str | None) -> dict:
     """Omit absent additions so existing dry, unpaused 2D takes keep their fingerprints."""
     payload = {}
+    voices = _spoken_voices(series, shot)
+    if voices:
+        payload["voices"] = voices
     rooms = line_rooms(series, shot)
     if rooms:
         payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
