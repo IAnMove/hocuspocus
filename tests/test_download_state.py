@@ -897,8 +897,6 @@ class TestCivitaiWorker(unittest.TestCase):
             self.assertEqual(reservations, {})
 
 
-_LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
-_MANAGED_LORAS_PATH = os.path.join(_ROOT, "app", "services", "managed_loras.py")
 _APP_DIR = os.path.join(_ROOT, "app")
 _LORA_PAYLOAD = b"lora-bytes" * 30_000  # 300,000 bytes: the fake stream yields 40,000-byte chunks
 _LORA_SHA256 = __import__("hashlib").sha256(_LORA_PAYLOAD).hexdigest()
@@ -907,13 +905,15 @@ _LORA_SHA256 = __import__("hashlib").sha256(_LORA_PAYLOAD).hexdigest()
 class TestManagedLoraDownload(unittest.TestCase):
     """``_ensure_managed_loras_present``: the one-time download of a managed LoRA, with the network faked.
 
-    The function runs from the module that holds it (``services.managed_loras``; the full server before the
-    C9c move), with the engine, the download registry, the managed table, ``requests`` and ``time`` replaced.
+    The function runs from ``services.managed_loras`` with the engine, the download registry, the managed table,
+    ``requests`` and ``time`` replaced. These cases passed on the full server before the C9c move too.
     """
 
     def setUp(self):
         from types import SimpleNamespace
         from unittest import mock
+
+        from services import managed_loras as module
 
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -939,20 +939,11 @@ class TestManagedLoraDownload(unittest.TestCase):
             "requests": SimpleNamespace(get=self._get),
             "time": SimpleNamespace(sleep=self._sleep),
         }
-        if os.path.isfile(_MANAGED_LORAS_PATH):
-            from services import managed_loras as module
-
-            for name, value in objects.items():
-                patcher = mock.patch.object(module, name, value)
-                patcher.start()
-                self.addCleanup(patcher.stop)
-            self.ensure = module._ensure_managed_loras_present
-        else:
-            tree, _source = _parse_source(_LAUNCH_PATH, "app/_launch_runtime.py")
-            module = ast.Module(body=[_function(tree, "_ensure_managed_loras_present")], type_ignores=[])
-            namespace = {"os": os, "uuid": uuid, "__file__": _LAUNCH_PATH, **objects}
-            exec(compile(module, "app/_launch_runtime.py", "exec"), namespace)
-            self.ensure = namespace["_ensure_managed_loras_present"]
+        for name, value in objects.items():
+            patcher = mock.patch.object(module, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.ensure = module._ensure_managed_loras_present
 
     def _get(self, url, stream=False, timeout=None):
         self.gets.append((url, stream, timeout))
