@@ -3355,6 +3355,68 @@
     },
     "status": 200
   },
+  "flashvsr edge: full sizes its chunks for uint8": {
+    "body": {
+      "caller_progress": [],
+      "commands": [],
+      "error": null,
+      "job_updates": [],
+      "leftovers": [],
+      "persistence_after": 1,
+      "reads": [
+        {
+          "count": 666,
+          "fps": 8.9,
+          "start": 0
+        }
+      ],
+      "released": 1,
+      "returned": "long.mp4.upseg000.mp4",
+      "saves": [
+        {
+          "codec_type": null,
+          "container": "mp4",
+          "dtype": "torch.uint8",
+          "file": "long.mp4.upseg000.mp4",
+          "fps": 9,
+          "normalize": false,
+          "nrow": 1,
+          "shape": [
+            1,
+            3,
+            400,
+            2,
+            2
+          ],
+          "value_range": null
+        }
+      ],
+      "upscales": [
+        {
+          "continue_cache": false,
+          "frames": 400,
+          "in_dtype": "torch.uint8",
+          "in_shape": [
+            3,
+            400,
+            2,
+            2
+          ],
+          "init_pipe": "init-pipe",
+          "method": "flashvsr2",
+          "process_files": "process-files",
+          "profile": 4,
+          "return_continue_cache": false,
+          "seed": -1,
+          "still_image": false,
+          "vae_config": {
+            "tile": 0
+          }
+        }
+      ]
+    },
+    "status": 200
+  },
   "flashvsr edge: full variant keeps uint8": {
     "body": {
       "caller_progress": [],
@@ -3982,6 +4044,71 @@
           "in_shape": [
             3,
             13,
+            2,
+            2
+          ],
+          "init_pipe": "init-pipe",
+          "method": "flashvsr2",
+          "process_files": "process-files",
+          "profile": 4,
+          "return_continue_cache": false,
+          "seed": -1,
+          "still_image": false,
+          "vae_config": {
+            "tile": 0
+          }
+        }
+      ]
+    },
+    "status": 200
+  },
+  "flashvsr edge: tiny-long sizes its chunks for uint8": {
+    "body": {
+      "caller_progress": [],
+      "commands": [],
+      "error": null,
+      "job_updates": [],
+      "leftovers": [],
+      "persistence_after": 1,
+      "reads": [
+        {
+          "count": 666,
+          "fps": 8.9,
+          "start": 0
+        }
+      ],
+      "released": 1,
+      "returned": "long.mp4.upseg000.mp4",
+      "saves": [
+        {
+          "codec_type": null,
+          "container": "mp4",
+          "dtype": "torch.float32",
+          "file": "long.mp4.upseg000.mp4",
+          "fps": 9,
+          "normalize": true,
+          "nrow": 1,
+          "shape": [
+            1,
+            3,
+            400,
+            2,
+            2
+          ],
+          "value_range": [
+            -1,
+            1
+          ]
+        }
+      ],
+      "upscales": [
+        {
+          "continue_cache": false,
+          "frames": 400,
+          "in_dtype": "torch.uint8",
+          "in_shape": [
+            3,
+            400,
             2,
             2
           ],
@@ -14127,6 +14254,38 @@
       ],
       "reload_needed": false,
       "restored": 0.85,
+      "returned": null
+    },
+    "status": 200
+  },
+  "vram coefficient value: h3 at the base value still applies and reloads": {
+    "body": {
+      "adjustment": {
+        "base_coef": 0.45,
+        "ceilinged": false,
+        "compute_penalty": 0.0,
+        "compute_ratio": 1.0,
+        "effective_coef": 0.45,
+        "floored": false,
+        "h3_activation_reserve_gb": 7.0,
+        "h3_runtime_workspace_gb": 0.0,
+        "h3_scaled_runtime_workspace_gb": 0.0,
+        "h3_weight_budget_gb": 17.0,
+        "lora_penalty": 0.0,
+        "lora_total_gb": 0.0,
+        "pass_penalty": 0.0,
+        "reasons": [
+          "- resident H3 profile will reload with packed-sequence headroom"
+        ],
+        "stage_count": 1
+      },
+      "applied": 0.45,
+      "printed": [
+        "[VRAM] Job coefficient-job: coefficient 0.45 → 0.450 (cap 10.8GB → 10.8GB)",
+        "[VRAM]   - resident H3 profile will reload with packed-sequence headroom"
+      ],
+      "reload_needed": true,
+      "restored": 0.45,
       "returned": null
     },
     "status": 200

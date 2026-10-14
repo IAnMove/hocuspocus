@@ -1758,6 +1758,9 @@ _COEFFICIENT_CASES = {
                                   "model_def": {"architecture": "minimax_h3_fake"}, "loaded": 0.05},
     "h3 with no model loaded": {"params": {**_VIDEO, "resolution": "640x352", "video_length": 49},
                                 "model_def": {"architecture": "minimax_h3_fake"}},
+    # No size, no LoRA, one stage, a base under the H3 cap: the value equals the base and is still written for H3.
+    "h3 at the base value still applies and reloads": {"params": {"model_type": "fake_t2v"}, "base": 0.45,
+                                                       "model_def": {"architecture": "minimax_h3_fake"}, "loaded": 0.6},
     "sound effect": {"params": {**_VIDEO, "sfx_mode": True}},
     "no gpu": {"params": _VIDEO, "vram": 0.0},
     "unreadable probe": {"params": _VIDEO, "vram": "unknown"},
@@ -1883,7 +1886,7 @@ def test_sound_effect_paths_through_the_worker(rig, golden, tmp_path, monkeypatc
 
 # -- FlashVSR progress and failures (C4 review) --------------------------------------------------------------------
 _FLASH_EDGE_CASES = ["progress reaches the job", "progress goes to the caller", "no frames back", "concat fails",
-                     "full variant keeps uint8"]
+                     "full variant keeps uint8", "tiny-long sizes its chunks for uint8", "full sizes its chunks for uint8"]
 
 
 @pytest.mark.parametrize("case", _FLASH_EDGE_CASES)
@@ -1899,10 +1902,13 @@ def test_chunked_flashvsr_upscale_forwards_progress_and_cleans_up_a_failure(rig,
     source = folder / "long.mp4"
     source.write_bytes(b"SOURCE")
     config = rig.server.wgp.server_config
+    # A 1000-pixel 400-frame clip is one tiny-long or full chunk (uint8 output) but three plain tiny chunks (float32).
+    sized = case.endswith("sizes its chunks for uint8")
     notes = _prepare_flashvsr(
-        rig, monkeypatch, fps=8.9, width=4000, height=4000, frames=100,
-        variant="full" if case == "full variant keeps uint8" else "tiny",
-        expect_ffmpeg=case != "no frames back", stop_at=None,
+        rig, monkeypatch, fps=8.9, width=1000 if sized else 4000, height=1000 if sized else 4000,
+        frames=400 if sized else 100,
+        variant=case.split()[0] if sized else "full" if case == "full variant keeps uint8" else "tiny",
+        expect_ffmpeg=not sized and case != "no frames back", stop_at=None,
     )
     flash = rig.server.wgp.flashvsr
     model = flash.upscale
@@ -1923,7 +1929,7 @@ def test_chunked_flashvsr_upscale_forwards_progress_and_cleans_up_a_failure(rig,
         if case == "no frames back":
             return None, None
         out, cache = model(seg, method, **kwargs)
-        if case == "full variant keeps uint8":
+        if case.startswith("full"):
             out = out.to(torch.uint8)
         return out, cache
 
