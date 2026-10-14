@@ -128,6 +128,7 @@ def test_the_package_binds_every_worker_module() -> None:
 BOUND_SERVICES = (
     (ROOT / "app" / "services" / "generation_jobs.py", "bind_generation_jobs"),
     (ROOT / "app" / "services" / "generation_recovery.py", "bind_generation_recovery"),
+    (ROOT / "app" / "services" / "generation_preparation.py", "bind_generation_preparation"),
 )
 
 

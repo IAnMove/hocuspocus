@@ -34,6 +34,7 @@ LAUNCH = ROOT / "app" / "_launch_runtime.py"
 GENERATE = ROOT / "app" / "services" / "studio_generate.py"
 JOBS = ROOT / "app" / "services" / "generation_jobs.py"
 RECOVERY = ROOT / "app" / "services" / "generation_recovery.py"
+PREPARATION = ROOT / "app" / "services" / "generation_preparation.py"
 
 
 class _HTTPException(Exception):
@@ -348,7 +349,7 @@ def _harness(
         cancel_legacy_h3=lambda: None,
         task_publisher=lambda: namespace["_publish_generation_task"],
     ).new_job
-    _load("_run_generation_with_preparation", namespace=namespace)
+    _load("_run_generation_with_preparation", namespace=namespace, path=PREPARATION)
     _load("generate", namespace=namespace, path=GENERATE)
 
     before = time.monotonic()
