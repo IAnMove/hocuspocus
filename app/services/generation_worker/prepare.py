@@ -234,7 +234,11 @@ def _run_generation_start(st):
 
         # Register the exact state before any model work. Legacy owns a
         # Comfy prompt interrupt; native models use WGP's interrupt flag.
-        abort_state = state["gen"]
+        # Keep abort_state None until registration succeeds: the finally of
+        # _run_generation treats a non-None value as owned, and unregistering
+        # a dict that was never registered does not acknowledge a cancel that
+        # landed after try_start (the job would stay "Cancelling" forever).
+        pending_abort = state["gen"]
         if legacy_h3_job:
             interrupt_model = minimax_h3_service.cancel
         else:
@@ -245,10 +249,11 @@ def _run_generation_start(st):
             job,
             job_id,
             _active_gen_states,
-            abort_state,
+            pending_abort,
             interrupt_model=interrupt_model,
         ):
             return False
+        abort_state = pending_abort
     finally:
         st.abort_state = abort_state
     st.legacy_h3_job, st.raw_params, st.start_time = legacy_h3_job, raw_params, start_time

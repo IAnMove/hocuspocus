@@ -398,6 +398,36 @@ class TestJobLifecycleWiring(unittest.TestCase):
             check_at = source.rfind("abort_check()", 0, replace_at)
             self.assertGreaterEqual(check_at, 0)
 
+    def test_generation_owns_abort_state_only_after_registration(self):
+        """A cancel that lands after try_start and before register_abort_state must settle.
+
+        `_run_generation`'s finally unregisters a non-None abort state and
+        acknowledges the cancel otherwise. Unregistering a dict that never
+        entered the active states is a no-op, so the worker keeps the dict in
+        `pending_abort` and owns it (`abort_state`) only once registered.
+        """
+        start = _function(generation_module(), "_run_generation_start")
+        owned = [
+            node for node in ast.walk(start)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "abort_state" for target in node.targets)
+        ]
+        self.assertEqual(len(owned), 1)
+        self.assertIsInstance(owned[0].value, ast.Name)
+        self.assertEqual(owned[0].value.id, "pending_abort")
+        registration = next(
+            node for node in ast.walk(start)
+            if isinstance(node, ast.If) and isinstance(node.test, ast.UnaryOp)
+            and isinstance(node.test.operand, ast.Call)
+            and getattr(node.test.operand.func, "id", "") == "register_abort_state"
+        )
+        self.assertEqual(
+            [getattr(arg, "id", None) for arg in registration.test.operand.args],
+            ["job", "job_id", "_active_gen_states", "pending_abort"],
+        )
+        self.assertIsInstance(registration.body[-1], ast.Return)
+        self.assertGreater(owned[0].lineno, registration.end_lineno)
+
     def test_generation_stamps_partial_outputs_before_cancel_return(self):
         source = generation_source()
         self.assertIsNotNone(source)

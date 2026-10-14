@@ -204,9 +204,7 @@
         "save_path": "<OUTPUTS>",
         "vram_coefficient": 0.8
       },
-      "listed": [
-        "golden-direct"
-      ],
+      "listed": [],
       "record": {
         "acquired_resources": [
           "local_gpu:0"
@@ -218,32 +216,31 @@
       "sidecars": {},
       "status": {
         "error": null,
-        "message": "Cancelling…",
+        "message": "Cancelled",
         "oom_info": null,
         "output_files": [],
-        "phase": "cancelling",
+        "phase": "cancelled",
         "progress": 0,
         "queue_position": null,
-        "status": "cancelling",
+        "status": "cancelled",
         "step": 0,
         "total_steps": 0
       },
       "task": {
-        "acquired_resources": [
-          "local_gpu:0"
-        ],
+        "acquired_resources": [],
         "cancelable": false,
         "error": null,
-        "message": "Cancelling…",
-        "phase": "cancelling",
+        "message": "Cancelled",
+        "phase": "cancelled",
         "progress": 0.0,
         "result_refs": [],
-        "status": "running"
+        "status": "cancelled"
       },
       "timers": [],
       "transitions": [
         "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
-        "cancelling | phase 'cancelling' | 'Cancelling…' | 0% | step 0/0 | outputs 0"
+        "cancelling | phase 'cancelling' | 'Cancelling…' | 0% | step 0/0 | outputs 0",
+        "cancelled | phase 'cancelled' | 'Cancelled' | 0% | step 0/0 | outputs 0"
       ]
     },
     "status": 200
