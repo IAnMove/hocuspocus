@@ -20974,117 +20974,9 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 interrupt_model=interrupt_model,
             ):
                 return False
-
-            # The quality route is the proven previous-Maestro implementation:
-            # fixed INT8 ConvRot pair, isolated ComfyUI, 20 steps, no Turbo/cache.
-            if legacy_h3_job:
-                if raw_params.get("video_source"):
-                    if not update_job(
-                        job,
-                        message="Capturing the source video's final frame…",
-                        phase="Preparing",
-                    ):
-                        return False
-                    source_path = _resolve_video_editor_source(
-                        raw_params["video_source"]
-                    )
-                    anchor = minimax_h3_service.prepare_extend_anchor(
-                        raw_params,
-                        job_id,
-                        source_path,
-                        os.path.join(os.getcwd(), "uploads"),
-                    )
-                    job["params"] = raw_params.copy()
-                    ignored = anchor["ignored_references"]
-                    ignored_note = (
-                        f"; ignored {ignored} other reference(s)"
-                        if ignored else ""
-                    )
-                    print(
-                        f"[H3 Legacy] Extend anchor at {anchor['time']:.3f}s "
-                        f"({anchor['path']}){ignored_note}."
-                    )
-
-                # The coordinator hand-off already released any WGP-owned
-                # runtime before entering this branch. Do not repeat native
-                # model/cache teardown here: H3 itself runs in an isolated
-                # sidecar and only needs the now-exclusive GPU lease.
-                minimax_h3_service.cancel_idle_shutdown()
-
-                def _legacy_h3_progress(
-                    message: str,
-                    value: int,
-                    step: int = 0,
-                    total: int = 0,
-                ) -> None:
-                    update_job(
-                        job,
-                        message=message,
-                        progress=max(0, min(100, int(value))),
-                        step=max(0, int(step)),
-                        total_steps=max(0, int(total)),
-                        phase="H3 Legacy sampling" if total > 0 else "",
-                    )
-
-                with safe_download.cancellable_downloads(
-                    lambda: is_cancel_requested(job),
-                ):
-                    generated = minimax_h3_service.generate(
-                        raw_params,
-                        job_id,
-                        job["out_dir"],
-                        _legacy_h3_progress,
-                        lambda: is_cancel_requested(job),
-                        keep_runtime=True,
-                    )
-                if is_cancel_requested(job):
-                    return False
-
-                output_names = [os.path.basename(path) for path in generated]
-                record_job_outputs(job, output_names)
-                upload_filenames = {}
-                for key in ("image_start", "image_end", "video_source"):
-                    value = raw_params.get(key)
-                    if isinstance(value, str) and value:
-                        upload_filenames[key] = os.path.basename(value)
-                sidecar = {
-                    "params": raw_params,
-                    "upload_filenames": upload_filenames,
-                    "generation_mode": "video",
-                    "job_id": job_id,
-                    "task_id": job.get("task_id"),
-                    "root_task_id": job.get("root_task_id") or job.get("task_id"),
-                    "generation_time": round(time.time() - start_time),
-                    "created_at": time.time(),
-                }
-                director_pipeline_id = raw_params.get("_director_pipeline_id")
-                if director_pipeline_id:
-                    sidecar["director_pipeline_id"] = director_pipeline_id
-                for path in generated:
-                    file_sidecar = dict(sidecar)
-                    file_sidecar["output_filename"] = os.path.basename(path)
-                    _publish_generation_sidecar_for_studio_job(job, path, file_sidecar)
-
-                if not finalize:
-                    return update_job(
-                        job,
-                        progress=99,
-                        step=0,
-                        total_steps=0,
-                        phase="Finalizing",
-                        message="Finalizing...",
-                    )
-                return finish_job(
-                    job,
-                    "completed",
-                    progress=100,
-                    step=0,
-                    total_steps=0,
-                    phase="",
-                    message="Done",
-                )
-            st.raw_params, st.start_time, st.state = raw_params, start_time, state
-            return _run_generation_configure(st)
+            st.legacy_h3_job, st.raw_params, st.start_time = legacy_h3_job, raw_params, start_time
+            st.state = state
+            return _run_generation_legacy_h3(st)
 
         except Exception as e:
             active_task_timer = st.active_task_timer
@@ -21142,6 +21034,121 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_legacy_h3(st):
+    """Run a legacy H3 job through its isolated Comfy runtime."""
+    finalize, job, job_id, legacy_h3_job = st.finalize, st.job, st.job_id, st.legacy_h3_job
+    raw_params, start_time = st.raw_params, st.start_time
+    # The quality route is the proven previous-Maestro implementation:
+    # fixed INT8 ConvRot pair, isolated ComfyUI, 20 steps, no Turbo/cache.
+    if legacy_h3_job:
+        if raw_params.get("video_source"):
+            if not update_job(
+                job,
+                message="Capturing the source video's final frame…",
+                phase="Preparing",
+            ):
+                return False
+            source_path = _resolve_video_editor_source(
+                raw_params["video_source"]
+            )
+            anchor = minimax_h3_service.prepare_extend_anchor(
+                raw_params,
+                job_id,
+                source_path,
+                os.path.join(os.getcwd(), "uploads"),
+            )
+            job["params"] = raw_params.copy()
+            ignored = anchor["ignored_references"]
+            ignored_note = (
+                f"; ignored {ignored} other reference(s)"
+                if ignored else ""
+            )
+            print(
+                f"[H3 Legacy] Extend anchor at {anchor['time']:.3f}s "
+                f"({anchor['path']}){ignored_note}."
+            )
+
+        # The coordinator hand-off already released any WGP-owned
+        # runtime before entering this branch. Do not repeat native
+        # model/cache teardown here: H3 itself runs in an isolated
+        # sidecar and only needs the now-exclusive GPU lease.
+        minimax_h3_service.cancel_idle_shutdown()
+
+        def _legacy_h3_progress(
+            message: str,
+            value: int,
+            step: int = 0,
+            total: int = 0,
+        ) -> None:
+            update_job(
+                job,
+                message=message,
+                progress=max(0, min(100, int(value))),
+                step=max(0, int(step)),
+                total_steps=max(0, int(total)),
+                phase="H3 Legacy sampling" if total > 0 else "",
+            )
+
+        with safe_download.cancellable_downloads(
+            lambda: is_cancel_requested(job),
+        ):
+            generated = minimax_h3_service.generate(
+                raw_params,
+                job_id,
+                job["out_dir"],
+                _legacy_h3_progress,
+                lambda: is_cancel_requested(job),
+                keep_runtime=True,
+            )
+        if is_cancel_requested(job):
+            return False
+
+        output_names = [os.path.basename(path) for path in generated]
+        record_job_outputs(job, output_names)
+        upload_filenames = {}
+        for key in ("image_start", "image_end", "video_source"):
+            value = raw_params.get(key)
+            if isinstance(value, str) and value:
+                upload_filenames[key] = os.path.basename(value)
+        sidecar = {
+            "params": raw_params,
+            "upload_filenames": upload_filenames,
+            "generation_mode": "video",
+            "job_id": job_id,
+            "task_id": job.get("task_id"),
+            "root_task_id": job.get("root_task_id") or job.get("task_id"),
+            "generation_time": round(time.time() - start_time),
+            "created_at": time.time(),
+        }
+        director_pipeline_id = raw_params.get("_director_pipeline_id")
+        if director_pipeline_id:
+            sidecar["director_pipeline_id"] = director_pipeline_id
+        for path in generated:
+            file_sidecar = dict(sidecar)
+            file_sidecar["output_filename"] = os.path.basename(path)
+            _publish_generation_sidecar_for_studio_job(job, path, file_sidecar)
+
+        if not finalize:
+            return update_job(
+                job,
+                progress=99,
+                step=0,
+                total_steps=0,
+                phase="Finalizing",
+                message="Finalizing...",
+            )
+        return finish_job(
+            job,
+            "completed",
+            progress=100,
+            step=0,
+            total_steps=0,
+            phase="",
+            message="Done",
+        )
+    return _run_generation_configure(st)
 
 
 def _run_generation_configure(st):
