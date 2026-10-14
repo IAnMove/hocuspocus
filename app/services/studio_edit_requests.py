@@ -427,12 +427,18 @@ async def inpaint_endpoint(request: Request):
     if not model_type:
         raise HTTPException(status_code=400, detail="model_type is required")
 
-    # Resolve path
+    # Studio's gallery picker sends a workspace filename (and workspace),
+    # the same shape retake and edit-anything already resolve. Look there
+    # first; uploads/ is only the fallback for a dropped local file.
     if not os.path.isabs(video_path):
-        uploads_dir = os.path.join(os.getcwd(), "uploads")
-        candidate = os.path.join(uploads_dir, os.path.basename(video_path))
+        workspace_dir = _workspace_dir(body.get("workspace"))
+        candidate = os.path.join(workspace_dir, video_path)
         if os.path.isfile(candidate):
             video_path = candidate
+        if not os.path.isfile(video_path):
+            uploads_candidate = os.path.join(os.getcwd(), "uploads", os.path.basename(video_path))
+            if os.path.isfile(uploads_candidate):
+                video_path = uploads_candidate
 
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")

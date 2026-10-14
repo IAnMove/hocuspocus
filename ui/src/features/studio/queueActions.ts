@@ -155,6 +155,7 @@ export async function resumeCanonicalQueueTask(taskId: string, confirm: boolean)
       pipelineId,
       pipelineStatus: null,
       pipelinePolling: true,
+      directorEditorDetached: false,
       directorLoading: true,
       directorError: null,
     })

@@ -1,13 +1,24 @@
 """SAM status and segment preview.
 
-The handlers are the launch functions, moved verbatim. They call the inpaint
-service, which already loads SAM. The full server keeps these names.
+The handlers are the launch functions. They call the inpaint service, which
+already loads SAM. The full server keeps these names. The preview looks up a
+gallery filename in the request's workspace first (the same order inpaint,
+retake and edit-anything use), so it reads two launch objects through bind().
 """
 
 import os
 import traceback
 
 from fastapi import HTTPException, Request
+
+# Bound by bind(); None until the full server mounts the routes.
+_get_active_workspace = None
+_workspace_dir = None
+
+
+def bind(*, get_active_workspace, workspace_dir):
+    """Take the launch objects this module reads. The router factory calls this once, with launch's own."""
+    globals().update(_get_active_workspace=get_active_workspace, _workspace_dir=workspace_dir)
 
 
 async def sam_status_endpoint():
@@ -32,12 +43,17 @@ async def segment_preview_endpoint(request: Request):
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
 
-    # Resolve path
+    # Same order as inpaint / edit-anything: gallery filename in the
+    # request workspace (or the active one), then uploads/.
     if not os.path.isabs(video_path):
-        uploads_dir = os.path.join(os.getcwd(), "uploads")
-        candidate = os.path.join(uploads_dir, os.path.basename(video_path))
+        workspace_dir = _workspace_dir(body.get("workspace") or _get_active_workspace())
+        candidate = os.path.join(workspace_dir, video_path)
         if os.path.isfile(candidate):
             video_path = candidate
+        if not os.path.isfile(video_path):
+            uploads_candidate = os.path.join(os.getcwd(), "uploads", os.path.basename(video_path))
+            if os.path.isfile(uploads_candidate):
+                video_path = uploads_candidate
 
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")

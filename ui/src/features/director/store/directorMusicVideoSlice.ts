@@ -128,7 +128,7 @@ export type DirectorMusicVideoSliceHost = DirectorMusicVideoSlice & ActivitySlic
   | 'shortFilmPreserveVisualStyle'
   | 'shortFilmTargetDuration'
   | 'shortFilmVisualStyle'
-> & Pick<DirectorPipelineSlice, 'pipelineId' | 'pipelineStatus' | 'pipelinePolling' | 'startDirectorPipeline'> & Pick<GallerySlice, 'activeWorkspace'> & Pick<LlmSlice, 'llmStatus'> & Pick<LorasSlice, 'loraIdByFilename'> & Pick<ModelOptionsSlice, 'loadModelOptions' | 'modelOptions'> & Pick<ModelsSlice, 'models'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & {
+> & Pick<DirectorPipelineSlice, 'pipelineId' | 'pipelineStatus' | 'pipelinePolling' | 'directorEditorDetached' | 'startDirectorPipeline'> & Pick<GallerySlice, 'activeWorkspace'> & Pick<LlmSlice, 'llmStatus'> & Pick<LorasSlice, 'loraIdByFilename'> & Pick<ModelOptionsSlice, 'loadModelOptions' | 'modelOptions'> & Pick<ModelsSlice, 'models'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & {
   params: GenerateParams
   setParam: <K extends keyof GenerateParams>(key: K, value: GenerateParams[K]) => void
   generationMode: GenerationMode
@@ -1004,6 +1004,10 @@ export const createDirectorMusicVideoSlice: SliceCreator<DirectorMusicVideoSlice
       slidingWindowSeconds: maxClipFrames / fps,
       audioGuideFilename: directorAudioName,
       sidebarMode: 'studio' as const,
+      // startGeneration reads generationMode, not Director intent. Leave Edit
+      // or Mixer in place and Generate becomes a retake, a silent no-op, or
+      // "audio is not generative" after the clips were staged.
+      generationMode: 'video' as const,
     }))
   },
 
@@ -1101,6 +1105,9 @@ export const createDirectorMusicVideoSlice: SliceCreator<DirectorMusicVideoSlice
       spatialUpsampling: get().directorVideoSpatialUpsampling,
       filmGrainIntensity: get().directorVideoFilmGrainIntensity,
       filmGrainSaturation: get().directorVideoFilmGrainSaturation,
+      // startGeneration branches on generationMode (image, audio, Edit)
+      // before it reads these clips; a previous Edit mode must not win.
+      generationMode: 'video' as const,
     }))
 
     setTimeout(() => get().startGeneration(), 200)
@@ -1181,10 +1188,12 @@ export const createDirectorMusicVideoSlice: SliceCreator<DirectorMusicVideoSlice
       directorSpokenLanguage: contentLanguageForUi().spokenLanguage,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
-      // but its poller must not overwrite the next story loaded into Director.
+      // but its poller and the boot reconnect timer must not overwrite the
+      // next story loaded into Director.
       pipelineId: null,
       pipelineStatus: null,
       pipelinePolling: false,
+      directorEditorDetached: true,
     })
   },
 })

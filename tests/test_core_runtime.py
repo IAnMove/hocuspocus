@@ -231,6 +231,32 @@ class CoreRuntimeTests(unittest.TestCase):
         job = core_remote_3d._JOBS.get(response.json().get("job_id")) if response.status_code == 200 else {}
         return response, (job or {}).get("_request", {})
 
+    def test_core_model3d_refuses_retexture_instead_of_generating(self):
+        """The shared router accepts operation=retexture; Meshy must not silently generate a new mesh."""
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("outputs", "hero.glb").write_bytes(b"glb")
+            Image.new("RGB", (4, 4), (1, 2, 3)).save(Path("outputs", "tex.png"))
+            with patch("services.meshy_3d_service.generate_model") as generate, patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_3d.threading.Thread") as worker:
+                response = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy",
+                    "operation": "retexture",
+                    "source_model": "hero.glb",
+                    "images": {"front": "tex.png"},
+                    "workspace": "default",
+                })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("Retexture a GLB", str(response.json().get("detail") or ""))
+        generate.assert_not_called()
+        worker.assert_not_called()
+
     def test_core_model3d_keeps_a_nested_reference_the_router_accepted(self):
         from PIL import Image
 

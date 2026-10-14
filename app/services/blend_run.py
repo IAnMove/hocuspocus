@@ -255,11 +255,9 @@ def _run_blend_generation(job_id: str):
 
         filter_complex = ";".join(filter_parts)
 
-        # Write the filter to a file and use `-/filter_complex <file>`. This
-        # sidesteps any shell/argv escaping issues with long filter strings
-        # containing `:` `[` `]` `(` `)` on Windows. The `-/option file`
-        # syntax is ffmpeg 7+'s replacement for the deprecated
-        # `-filter_complex_script`.
+        # Write the filter to a file. `-filter_complex_script` works on
+        # ffmpeg 4.x–8.x (CI and Ubuntu 24.04 ship 6.1.1). `-/filter_complex`
+        # is ffmpeg 7+ only and makes every real concat fail on 6.x.
         filter_script_path = os.path.join(temp_dir, "concat_filter.txt")
         with open(filter_script_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(filter_complex)
@@ -267,7 +265,7 @@ def _run_blend_generation(job_id: str):
         cmd = [
             "ffmpeg", "-y",
             *inputs,
-            "-/filter_complex", filter_script_path,
+            "-filter_complex_script", filter_script_path,
             "-map", "[outv]", "-map", "[outa]",
             "-c:v", "libx264", "-crf", "18", "-preset", "fast",
             "-c:a", "aac", "-b:a", "192k",

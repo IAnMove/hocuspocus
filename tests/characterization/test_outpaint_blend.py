@@ -739,8 +739,8 @@ def _blend_tools(monkeypatch, *, audio_in: tuple[str, ...], concat_ok: bool) -> 
             commands.append(["ffprobe", Path(target).name])
             has_audio = any(Path(target).name.startswith(prefix) for prefix in audio_in)
             return subprocess.CompletedProcess(command, 0, "audio\n" if has_audio else "", "")
-        if command[0] == "ffmpeg" and "-/filter_complex" in command:
-            script = Path(command[command.index("-/filter_complex") + 1]).read_text(encoding="utf-8")
+        if command[0] == "ffmpeg" and "-filter_complex_script" in command:
+            script = Path(command[command.index("-filter_complex_script") + 1]).read_text(encoding="utf-8")
             commands.append(["ffmpeg", command, script, kwargs.get("timeout")])
             if not concat_ok:
                 return subprocess.CompletedProcess(command, 1, "", "fake ffmpeg: concat refused")
