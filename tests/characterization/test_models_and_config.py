@@ -98,6 +98,58 @@ def test_settings_reads(server, golden) -> None:
     server.check(golden, "lan auth status", "GET", "/api/v1/auth/lan/status")
 
 
+def test_system_reads_and_release(server, golden) -> None:
+    """Cheap system routes before they leave the launch module.
+
+    Hardware, free disk and the live gauges depend on the machine, so those
+    fields are masked or asserted only by shape. Applying a detected profile
+    writes the real recommendation and is left for a GPU check.
+    """
+    import sys
+
+    server.check(
+        golden,
+        "system detect",
+        "GET",
+        "/api/v1/system-detect",
+        mask=("hardware", "recommended"),
+    )
+    server.check(
+        golden,
+        "system stats",
+        "GET",
+        "/api/v1/system-stats",
+        mask=("cpu", "ram", "gpu", "runtime"),
+    )
+    server.check(golden, "debug user action", "POST", "/api/v1/debug/user-action", json={})
+    server.check(golden, "release model idle", "POST", "/api/v1/system/release-model")
+
+    launch = sys.modules["_launch_runtime"]
+    launch._jobs["golden-running"] = {"id": "golden-running", "status": "running"}
+    try:
+        server.check(golden, "release model busy", "POST", "/api/v1/system/release-model")
+    finally:
+        launch._jobs.pop("golden-running", None)
+
+    preflight = server.client.get("/api/v1/system/preflight")
+    assert preflight.status_code == 200
+    body = preflight.json()
+    assert isinstance(body.get("ok"), bool)
+    assert isinstance(body.get("checks"), list)
+
+    capabilities = server.client.get("/api/v1/runtime-capabilities")
+    assert capabilities.status_code == 200
+    detected = capabilities.json()
+    assert isinstance(detected.get("engines"), dict)
+    assert isinstance(detected.get("platform"), str)
+
+    wangp = server.client.get("/api/v1/wangp/capabilities")
+    assert wangp.status_code == 200
+    processors = wangp.json()
+    assert processors["revision"] == "362c3467a70e1136ceb52eec95907205a8f88543"
+    assert {"rife2", "rife4"} <= {item["value"] for item in processors["processors"]}
+
+
 def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
     """The full server's MCP routes before this step's router edit. Access is off, so POST never reaches a tool."""
     message = {"jsonrpc": "2.0", "id": 1, "method": "ping"}

@@ -1,4 +1,10 @@
 {
+  "debug user action": {
+    "body": {
+      "status": "disabled"
+    },
+    "status": 200
+  },
   "lan auth status": {
     "body": {
       "authenticated": true,
@@ -692,6 +698,18 @@
     },
     "status": 200
   },
+  "release model busy": {
+    "body": {
+      "detail": "A generation is in progress — stop it or wait for it to finish first."
+    },
+    "status": 409
+  },
+  "release model idle": {
+    "body": {
+      "released": []
+    },
+    "status": 200
+  },
   "services config": {
     "body": {
       "anthropic_api_key": "",
@@ -747,6 +765,28 @@
       "use_director_v2": true,
       "voice_reference_enabled": true,
       "workflow_parallelism_enabled": true
+    },
+    "status": 200
+  },
+  "system detect": {
+    "body": {
+      "auto_enabled": false,
+      "hardware": "<MASKED>",
+      "recommended": "<MASKED>"
+    },
+    "status": 200
+  },
+  "system stats": {
+    "body": {
+      "cpu": "<MASKED>",
+      "gpu": "<MASKED>",
+      "model": {
+        "loaded": false,
+        "model_type": null,
+        "name": null
+      },
+      "ram": "<MASKED>",
+      "runtime": "<MASKED>"
     },
     "status": 200
   }
