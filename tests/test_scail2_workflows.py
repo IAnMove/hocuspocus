@@ -3813,9 +3813,12 @@ class TestMultiPersonRecast(unittest.TestCase):
             "def _build_recast_shot_manifest(",
             manifest,
         )
+        shot_run = _read(os.path.join(
+            _ROOT, "app", "services", "recast_shot_run.py",
+        ))
         self.assertIn(
             "def _run_recast_shot_generation(",
-            launch,
+            shot_run,
         )
         self.assertIn(
             '"_recast_shot_manifest"',

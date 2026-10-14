@@ -745,15 +745,18 @@ def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypa
                 f"{module_name}.{name} is not launch.{name} and is not a forwarder"
             )
             sentinel = object()
+            original = launch_names[name]
 
             def patched(*_args, _sentinel=sentinel, **_kwargs):
                 return _sentinel
 
             monkeypatch.setattr(launch, name, patched)
             assert value() is sentinel, f"patching launch.{name} did not change {module_name}.{name}"
-            monkeypatch.setattr(launch, name, launch_names[name])
+            monkeypatch.setattr(launch, name, original)
             forwarded.add(name)
     assert "_RECAST_MASK_COLORS" in compared
     assert "_normalize_recast_person_count" in compared
-    # Planning imports its collaborators. The run module's _run_generation forwarder joins later.
-    assert forwarded <= {"_run_generation"}
+    if "recast_shot_run" in stems:
+        assert forwarded == {"_run_generation"}
+    else:
+        assert forwarded == set()

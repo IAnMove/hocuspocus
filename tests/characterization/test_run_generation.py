@@ -92,6 +92,20 @@ def worker_module():
     return sys.modules["_launch_runtime"]
 
 
+# Recast shot modules the assembler reads (C8a). A name patched on launch is patched on each of
+# these too, once the server has imported it, so a stub reaches the moved function.
+SHOT_MODULES = (
+    "services.recast_shot_planning",
+    "services.recast_shot_manifest",
+    "services.recast_shot_run",
+)
+
+
+def worker_modules() -> list:
+    """Launch, plus each shot module already imported. The assembler reads its own globals."""
+    return [worker_module(), *[sys.modules[name] for name in SHOT_MODULES if name in sys.modules]]
+
+
 @dataclass
 class Rig:
     """One test's server, scripted engine and the lifecycle events of its jobs."""
@@ -110,7 +124,10 @@ class Rig:
         return worker_module()
 
     def patch(self, name: str, value: Any) -> None:
-        self.monkeypatch.setattr(worker_module(), name, value)
+        holders = [module for module in worker_modules() if hasattr(module, name)]
+        assert holders, f"no worker module has a global named {name!r}"
+        for module in holders:
+            self.monkeypatch.setattr(module, name, value)
 
     def event(self) -> threading.Event:
         """An event the engine script waits on; the fixture sets it at teardown so a failed test never hangs."""

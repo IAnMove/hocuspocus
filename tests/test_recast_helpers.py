@@ -572,8 +572,12 @@ def test_each_recast_service_binds_exactly_its_free_launch_names():
                 defined[node.name] = path
             elif isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if isinstance(target, ast.Name) and not _is_bindable_assign(node):
-                        defined[target.id] = path
+                    if not isinstance(target, ast.Name) or _is_bindable_assign(node):
+                        continue
+                    # A bind() slot starts as None. It is not where the name is defined.
+                    if isinstance(node.value, ast.Constant) and node.value.value is None:
+                        continue
+                    defined[target.id] = path
     launch = LAUNCH.read_text(encoding="utf-8")
     launch_tree = ast.parse(launch, filename=str(LAUNCH))
     assert launch.count("bind_recast_helpers(") == 1
