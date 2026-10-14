@@ -1369,6 +1369,15 @@ def _prepare_flashvsr(rig, monkeypatch, *, fps: float, width: int, height: int, 
     import torch
     from shared.utils import utils as video_utils
 
+    try:
+        import postprocessing.flashvsr.runtime  # noqa: F401
+    except ModuleNotFoundError:
+        # The CI core install has no easydict, which the real runtime imports through models.wan. The function
+        # under test reads one constant from that module (the overlap), so a stand-in with the same value is enough.
+        monkeypatch.setitem(
+            sys.modules, "postprocessing.flashvsr.runtime", SimpleNamespace(FLASHVSR_CONTINUE_CACHE_FRAMES=11)
+        )
+
     notes: dict = {"reads": [], "saves": [], "upscales": [], "messages": [], "commands": [], "releases": 0,
                    "persistence_during": []}
 
