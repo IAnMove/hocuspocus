@@ -124,6 +124,13 @@ def _recast_endpoint_text() -> str:
     return _read(os.path.join(_ROOT, "app", "services", "recast_endpoint.py"))
 
 
+def _recast_routes_text() -> str:
+    """Both Recast handlers (C8b). A text launch must not hold must not come back in them either."""
+    return _recast_endpoint_text() + "\n\n" + _read(
+        os.path.join(_ROOT, "app", "services", "recast_preview.py"),
+    )
+
+
 def _function_defs(path: str) -> dict[str, ast.FunctionDef]:
     tree = ast.parse(_read(path), filename=os.path.relpath(path, _ROOT))
     return {
@@ -3771,6 +3778,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('"video_prompt_type": f"V0{person_count}AI"', handler)
         self.assertIn('"image_prompt_type": ""', handler)
         self.assertNotIn('"image_start": ref_image_path', source)
+        self.assertNotIn('"image_start": ref_image_path', _recast_routes_text())
         self.assertIn('"num_inference_steps": inference_steps', handler)
         self.assertIn(
             'body.get("num_inference_steps"),\n        8 if recast_fast else 40',
@@ -3793,6 +3801,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn('colorkey=0xFFFFFF', masks)
         self.assertNotIn('"_recast_mask_background"', launch)
+        self.assertNotIn('"_recast_mask_background"', _recast_routes_text())
         self.assertNotIn('"_recast_mask_background"', masks)
         self.assertIn("_build_recast_adaptive_mask(", launch)
         self.assertIn('wgp.release_model()', launch)
@@ -3837,6 +3846,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn("native_people['conditioning_count']", handler)
         self.assertNotIn("recast_bystanders_matted_ref_", launch)
+        self.assertNotIn("recast_bystanders_matted_ref_", _recast_routes_text())
         self.assertNotIn("recast_bystanders_matted_ref_", compose)
         self.assertNotIn("recast_bystanders_matted_ref_", shot_manifest)
         self.assertIn("_build_recast_source_scene_reference(", shot_manifest)
@@ -4175,11 +4185,13 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn('"num_inference_steps": inference_steps', handler)
         self.assertNotIn('"num_inference_steps": 8 if recast_fast else', launch)
+        self.assertNotIn('"num_inference_steps": 8 if recast_fast else', _recast_routes_text())
         self.assertIn(
             '"edit_recast_resolution_profile": resolution_profile',
             handler,
         )
         self.assertNotIn('if resolution_profile == "512p"', launch)
+        self.assertNotIn('if resolution_profile == "512p"', _recast_routes_text())
         self.assertNotIn('if resolution_profile == "512p"', prepare)
         self.assertIn("editRecastResolutionProfile: '480p'", edit_store)
         self.assertIn(
