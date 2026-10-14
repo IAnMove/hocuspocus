@@ -465,7 +465,9 @@ def test_the_vram_coefficient_is_tightened_for_the_job_and_restored(rig, golden,
 
 def test_a_native_job_starts_up_in_a_fixed_order_before_its_abort_handle_is_registered(rig, monkeypatch) -> None:
     """Between taking the slot and reaching the engine, a native (WanGP) job cancels a pending H3 idle release, stops
-    the isolated H3 runtime, tightens its VRAM coefficient and only then registers its abort handle."""
+    the isolated H3 runtime, tightens its VRAM coefficient and only then registers its abort handle. The first two
+    recorded steps belong to the GPU slot's hand-off (``_coordinated_generation_slot``), not to the worker: a change
+    to that hand-off moves them."""
     from services import minimax_h3_service
 
     launch = rig.launch
