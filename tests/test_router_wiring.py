@@ -236,6 +236,34 @@ def test_gallery_routes_keep_the_service_docstring_as_their_openapi_description(
         assert paths[path]["get"].get("description") == inspect.cleandoc(function.__doc__), path
 
 
+def test_director_music_and_character_description_keep_their_docstring_as_openapi_description(monkeypatch) -> None:
+    """The route wrappers in llm_director.py carry no text; the module-level handlers do."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers import llm_director
+
+    # The factories assign the launch objects onto the module; give them placeholders and let monkeypatch undo it.
+    for name in (
+        "wgp", "_get_active_workspace", "_workspace_dir", "_init_pipeline", "_effective_llm_routing",
+        "_llm_default_device", "_DEFAULT_LLM_REPO", "_resolve_model3d_input_path",
+    ):
+        monkeypatch.setattr(llm_director, name, None, raising=False)
+    app = FastAPI()
+    app.include_router(llm_director.create_director_music_router(
+        wgp=None, _get_active_workspace=None, _workspace_dir=None, _init_pipeline=None,
+        _effective_llm_routing=None, _llm_default_device=None, _DEFAULT_LLM_REPO=None,
+    ))
+    app.include_router(llm_director.create_character_describe_router(_resolve_model3d_input_path=None))
+    paths = app.openapi()["paths"]
+    for path, function in (
+        ("/api/v1/director/generate-music", llm_director.director_generate_music),
+        ("/api/v1/characters/describe-refs", llm_director.describe_character_refs),
+    ):
+        assert paths[path]["post"].get("description") == inspect.cleandoc(function.__doc__), path
+
+
 def test_core_mcp_returns_the_shared_wangp_router() -> None:
     tree = _parse(ROUTERS / "core_mcp.py")
     factory = next(

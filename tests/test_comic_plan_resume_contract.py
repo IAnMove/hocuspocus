@@ -149,15 +149,35 @@ def _writer_namespace(prompts: list[str], **extra) -> dict:
 
 def _story_writer_prompt(project: dict, body: dict | None = None) -> str:
     prompts: list[str] = []
-    write = _load("_generate_story_lab_stage", _writer_namespace(
-        prompts,
-        _story_project_prompt_context=lambda _project, _scope: "",
-        _story_lab_schema=lambda _scope, _project_type: {},
-    ))
+    import services.story_lab_jobs as jobs
+
+    def capture(*, prompt: str, **_kwargs):
+        prompts.append(prompt)
+        raise _PromptCaptured("prompt captured")
+
+    originals = {
+        "_comic_writing_llm": jobs._comic_writing_llm,
+        "_ensure_llm_loaded": jobs._ensure_llm_loaded,
+        "_generate_comic_director_json": jobs._generate_comic_director_json,
+        "_story_project_prompt_context": jobs._story_project_prompt_context,
+        "_story_lab_schema": jobs._story_lab_schema,
+    }
+    jobs._comic_writing_llm = lambda _body: {"provider": "stub"}
+    jobs._ensure_llm_loaded = lambda: None
+    jobs._generate_comic_director_json = capture
+    jobs._story_project_prompt_context = lambda _project, _scope: ""
+    jobs._story_lab_schema = lambda _scope, _project_type: {}
     try:
-        write({"premise": "A lighthouse keeper hears the sea", "project": project, **(body or {})}, "overview")
-    except Exception:
-        pass  # the fake provider call ends the run; only the prompt matters
+        try:
+            jobs._generate_story_lab_stage(
+                {"premise": "A lighthouse keeper hears the sea", "project": project, **(body or {})},
+                "overview",
+            )
+        except Exception:
+            pass  # the fake provider call ends the run; only the prompt matters
+    finally:
+        for name, value in originals.items():
+            setattr(jobs, name, value)
     assert len(prompts) == 1
     return prompts[0]
 

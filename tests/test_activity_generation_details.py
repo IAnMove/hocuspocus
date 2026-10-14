@@ -7,6 +7,7 @@ from tests.api_client_source import api_client_source
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
+DIRECTOR = ROOT / "app" / "routers" / "llm_director.py"
 JOBS = ROOT / "app" / "services" / "kernel" / "jobs.py"
 STORE = ROOT / "ui" / "src" / "stores" / "jobsSlice.ts"
 TOOLS = ROOT / "ui" / "src" / "features" / "studio" / "store" / "toolsSlice.ts"
@@ -36,7 +37,7 @@ def test_backend_status_and_reconnect_publish_frozen_generation_details():
     assert "patch.generationDetails = status.generation_details" in TOOLS.read_text(encoding="utf-8")
     assert 'details["prompt"]' in jobs
     assert 'details["initiator"]' in jobs
-    assert 'gen_params["_initiator"]' in launch
+    assert 'gen_params["_initiator"]' in DIRECTOR.read_text(encoding="utf-8")
 
 
 def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():

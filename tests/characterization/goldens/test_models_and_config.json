@@ -1,4 +1,22 @@
 {
+  "debug user action": {
+    "body": {
+      "status": "disabled"
+    },
+    "status": 200
+  },
+  "describe refs missing images": {
+    "body": {
+      "detail": "image_paths is required"
+    },
+    "status": 400
+  },
+  "generate music empty": {
+    "body": {
+      "detail": "Unknown model: ace_step_v1_5_xl_sft_lm_4b"
+    },
+    "status": 400
+  },
   "lan auth status": {
     "body": {
       "authenticated": true,
@@ -692,6 +710,24 @@
     },
     "status": 200
   },
+  "release model busy": {
+    "body": {
+      "detail": "A generation is in progress — stop it or wait for it to finish first."
+    },
+    "status": 409
+  },
+  "release model idle": {
+    "body": {
+      "released": []
+    },
+    "status": 200
+  },
+  "revoice missing source": {
+    "body": {
+      "detail": "Source format is not supported"
+    },
+    "status": 400
+  },
   "services config": {
     "body": {
       "anthropic_api_key": "",
@@ -749,5 +785,51 @@
       "workflow_parallelism_enabled": true
     },
     "status": 200
+  },
+  "services config empty update": {
+    "body": {
+      "detail": "No valid fields to update"
+    },
+    "status": 400
+  },
+  "system config empty update": {
+    "body": {
+      "detail": "No valid fields to update"
+    },
+    "status": 400
+  },
+  "system detect": {
+    "body": {
+      "auto_enabled": false,
+      "hardware": "<MASKED>",
+      "recommended": "<MASKED>"
+    },
+    "status": 200
+  },
+  "system stats": {
+    "body": {
+      "cpu": "<MASKED>",
+      "gpu": "<MASKED>",
+      "model": {
+        "loaded": false,
+        "model_type": null,
+        "name": null
+      },
+      "ram": "<MASKED>",
+      "runtime": "<MASKED>"
+    },
+    "status": 200
+  },
+  "upscale missing source": {
+    "body": {
+      "detail": "Source format is not supported"
+    },
+    "status": 400
+  },
+  "upscale unsupported method": {
+    "body": {
+      "detail": "Unsupported upscale method"
+    },
+    "status": 400
   }
 }
