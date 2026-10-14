@@ -22,6 +22,7 @@ _requires_torch = unittest.skipUnless(
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
     _ROOT, "app", "models", "wan", "wan_handler.py",
@@ -4105,7 +4106,12 @@ class TestMultiPersonRecast(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         self.assertIn('"-map_metadata", "2"', launch)
         self.assertIn('file_sidecar["params"]["seed"] = resolved_seed', launch)
-        self.assertIn("resolved_seed = _extract_output_seed(name)", launch)
+        # The filename-seed read moved with get_output_metadata. The two
+        # lines above still write that seed during post-processing.
+        self.assertIn(
+            "resolved_seed = _extract_output_seed(name)",
+            _read(_OUTPUT_OPS_PATH),
+        )
 
     def test_aligned_reference_reuses_the_exact_target_mask(self):
         launch = _read(_LAUNCH_PATH)
