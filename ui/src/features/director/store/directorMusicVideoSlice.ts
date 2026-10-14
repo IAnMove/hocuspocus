@@ -128,7 +128,7 @@ export type DirectorMusicVideoSliceHost = DirectorMusicVideoSlice & ActivitySlic
   | 'shortFilmPreserveVisualStyle'
   | 'shortFilmTargetDuration'
   | 'shortFilmVisualStyle'
-> & Pick<DirectorPipelineSlice, 'pipelineId' | 'pipelineStatus' | 'pipelinePolling' | 'startDirectorPipeline'> & Pick<GallerySlice, 'activeWorkspace'> & Pick<LlmSlice, 'llmStatus'> & Pick<LorasSlice, 'loraIdByFilename'> & Pick<ModelOptionsSlice, 'loadModelOptions' | 'modelOptions'> & Pick<ModelsSlice, 'models'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & {
+> & Pick<DirectorPipelineSlice, 'pipelineId' | 'pipelineStatus' | 'pipelinePolling' | 'directorEditorDetached' | 'startDirectorPipeline'> & Pick<GallerySlice, 'activeWorkspace'> & Pick<LlmSlice, 'llmStatus'> & Pick<LorasSlice, 'loraIdByFilename'> & Pick<ModelOptionsSlice, 'loadModelOptions' | 'modelOptions'> & Pick<ModelsSlice, 'models'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & {
   params: GenerateParams
   setParam: <K extends keyof GenerateParams>(key: K, value: GenerateParams[K]) => void
   generationMode: GenerationMode
@@ -1188,10 +1188,12 @@ export const createDirectorMusicVideoSlice: SliceCreator<DirectorMusicVideoSlice
       directorSpokenLanguage: contentLanguageForUi().spokenLanguage,
       // Detach this editor session from any prior recoverable pipeline. The
       // backend job is intentionally not cancelled and remains in Dashboard,
-      // but its poller must not overwrite the next story loaded into Director.
+      // but its poller and the boot reconnect timer must not overwrite the
+      // next story loaded into Director.
       pipelineId: null,
       pipelineStatus: null,
       pipelinePolling: false,
+      directorEditorDetached: true,
     })
   },
 })

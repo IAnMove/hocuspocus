@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the Director no longer re-attaches the previous run after Start over.** Pressing Start over (or arriving from Story Lab) cleared the Director editor, but a timer that re-checks live jobs every two seconds saw no run attached and bound the old live run into the cleared editor again, refilling its plans. The editor now remembers it was reset and ignores live jobs until you start or resume a run; they stay listed in the footer and in Dashboard.
+
 **Fixed: Director Generate and Apply to clips no longer turn into an Edit job.** If Studio had been left on Edit (Retake, Inpaint) or on audio, pressing Generate or Apply to clips in the Music Video Director ran that mode instead of a normal clip batch (a retake, a silent no-op, or "audio is not generative"). Both now put Studio on video first.
 
 **Fixed: Repeat on an H3 shot uses the prompt you saved in Workspaces.** Saving a new prompt for a MiniMax H3 shot only changed the shot text; its 5-second segments kept the old prompts, so Repeat regenerated the old shot. Saving now cuts the new text into one slice per segment (each segment performs only its part, as when you regenerate with a new prompt), replaces the old planner windows it came from, and marks the segments for regeneration. Saving the same text again changes nothing.

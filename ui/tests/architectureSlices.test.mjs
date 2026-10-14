@@ -544,3 +544,55 @@ test('useStore keeps Director actions available through its existing public faca
   useStore.getState().setDirectorVideoInferenceSteps('characterization-model', 7.4)
   assert.equal(useStore.getState().directorVideoInferenceStepsByModel['characterization-model'], 7)
 })
+
+test('Director reconnect binds a live pipeline only when the editor did not Reset', async () => {
+  const { shouldAutoBindDirectorPipeline } = await import('../src/features/director/store/directorPipelineSlice.ts')
+  assert.equal(shouldAutoBindDirectorPipeline(null, false), true)
+  assert.equal(shouldAutoBindDirectorPipeline('old-run', false), false)
+  assert.equal(shouldAutoBindDirectorPipeline(null, true), false)
+  assert.equal(shouldAutoBindDirectorPipeline('old-run', true), false)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({
+    pipelineId: 'old-run',
+    pipelineStatus: { id: 'old-run' },
+    pipelinePolling: true,
+    directorEditorDetached: false,
+    directorStep: 'review',
+    directorClipPlans: [{ video_prompt: 'old shot', image_prompt: 'old still' }],
+  })
+  useStore.getState().directorReset()
+  const afterReset = useStore.getState()
+  assert.equal(afterReset.pipelineId, null)
+  assert.equal(afterReset.pipelinePolling, false)
+  assert.equal(afterReset.directorEditorDetached, true)
+  assert.equal(afterReset.directorClipPlans.length, 0)
+  assert.equal(
+    shouldAutoBindDirectorPipeline(afterReset.pipelineId, afterReset.directorEditorDetached),
+    false,
+    'boot reconnect must not re-attach the leftover run after Start over or a Story Lab handoff',
+  )
+})
+
+test('the boot reconnect timer leaves a Director editor alone after Reset, with a live job running', async () => {
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const realFetch = globalThis.fetch
+  let activeJobs = [{ id: 'live-run', status: 'running', pipeline_type: 'music_video', created_at: 0, updated_at: 0 }]
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ pipelines: activeJobs }) })
+  try {
+    useStore.setState({ pipelineId: 'old-run', pipelinePolling: true, directorEditorDetached: false })
+    useStore.getState().directorReset()
+    await useStore.getState().reconnectDirectorPipelines()
+    const afterReconnect = useStore.getState()
+    assert.deepEqual(afterReconnect.activeDirectorPipelines.map(job => job.id), ['live-run'], 'the footer still lists the live job')
+    assert.equal(afterReconnect.pipelineId, null, 'the cleared editor must not be bound to it')
+    assert.equal(afterReconnect.pipelinePolling, false)
+  } finally {
+    // Stop any poller a failed run started, then let an empty answer clear the
+    // 2 s re-arm timer, so the test process can exit.
+    useStore.setState({ pipelinePolling: false, pipelineId: null })
+    activeJobs = []
+    await useStore.getState().reconnectDirectorPipelines()
+    globalThis.fetch = realFetch
+  }
+})
