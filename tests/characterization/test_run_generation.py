@@ -125,10 +125,13 @@ RECAST_MODULES = (
 # Repaint (C6): the modules that took their launch objects, which they read under the launch names.
 REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
 
-# Collaborators that left the server file and still read names these tests replace.
+# Collaborators that left the server file and still read names these tests replace. Recovery and the job routes
+# hold ``_cancel_h3_idle_release`` and ``time``, which a rig patch reached in launch before the move.
 COLLABORATOR_MODULES = (
     "services.generation_preparation",
     "services.generation_h3_release",
+    "services.generation_recovery",
+    "services.generation_jobs",
 )
 
 
