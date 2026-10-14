@@ -65,6 +65,57 @@
     },
     "status": 400
   },
+  "analyze a missing file": {
+    "body": {
+      "detail": "Media file not found"
+    },
+    "status": 404
+  },
+  "analyze a tiny wav": {
+    "body": {
+      "beats": "<MASKED>",
+      "bpm": "<MASKED>",
+      "downbeats": "<MASKED>",
+      "duration": 1.2,
+      "lyric_timeline": null,
+      "lyric_timing": null,
+      "lyrics": null,
+      "lyrics_srt": null,
+      "onset_envelope": "<MASKED>",
+      "sample_rate": 8000,
+      "sections": "<MASKED>",
+      "transcript": null,
+      "visual_events": null,
+      "vocals_path": null,
+      "warnings": []
+    },
+    "status": 200
+  },
+  "analyze a traversal": {
+    "body": {
+      "detail": "Media path is not allowed"
+    },
+    "status": 400
+  },
+  "analyze an invalid workspace": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
+    },
+    "status": 400
+  },
+  "audio analyze status idle": {
+    "body": {
+      "detail": "",
+      "step": ""
+    },
+    "status": 200
+  },
+  "cancel an unknown analysis job": {
+    "body": {
+      "detail": "Audio analysis job not found"
+    },
+    "status": 404
+  },
   "create": {
     "body": {
       "name": "golden-a",
@@ -249,11 +300,91 @@
     },
     "status": 200
   },
+  "mix a path that is not allowed": {
+    "body": {
+      "detail": "Track 2: path not allowed: /etc/passwd"
+    },
+    "status": 400
+  },
+  "mix fewer than two tracks": {
+    "body": {
+      "detail": "At least 2 tracks required (base + overlay)"
+    },
+    "status": 400
+  },
+  "mix two workspace tracks": {
+    "body": {
+      "filename": "mix_<ID>.wav",
+      "path": "<OUTPUTS>/mix_<ID>.wav"
+    },
+    "status": 200
+  },
   "outputs of an invalid workspace": {
     "body": {
       "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
     },
     "status": 400
+  },
+  "plan structure from a stored analysis": {
+    "body": {
+      "clips": [
+        {
+          "beat_count": 10,
+          "dominant_speaker": null,
+          "duration_frames": 77,
+          "end": 5.0,
+          "energy": 0.4,
+          "lyric_cues": [],
+          "section_label": "verse",
+          "start": 0.0,
+          "suggested_prompt_hint": "verse, moderate energy",
+          "visual_events": []
+        },
+        {
+          "beat_count": 10,
+          "dominant_speaker": null,
+          "duration_frames": 77,
+          "end": 10.0,
+          "energy": 0.4,
+          "lyric_cues": [],
+          "section_label": "verse",
+          "start": 5.0,
+          "suggested_prompt_hint": "verse, moderate energy",
+          "visual_events": []
+        }
+      ]
+    },
+    "status": 200
+  },
+  "plan structure without analysis": {
+    "body": {
+      "detail": "analysis is required"
+    },
+    "status": 400
+  },
+  "queue analysis of a missing file": {
+    "body": {
+      "detail": "Media file not found"
+    },
+    "status": 404
+  },
+  "queue analysis with an invalid task id": {
+    "body": {
+      "detail": "Invalid task_id"
+    },
+    "status": 400
+  },
+  "read an unknown analysis job": {
+    "body": {
+      "detail": "Audio analysis job not found"
+    },
+    "status": 404
+  },
+  "serve a missing audio upload": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
   },
   "set active": {
     "body": {
@@ -297,6 +428,83 @@
       ]
     },
     "status": 200
+  },
+  "suggest clips from a stored analysis": {
+    "body": {
+      "clips": [
+        {
+          "end": 5.0,
+          "energy": 0.4,
+          "section_label": "verse",
+          "start": 0.0,
+          "suggested_prompt_hint": "verse, moderate energy"
+        },
+        {
+          "end": 10.0,
+          "energy": 0.4,
+          "section_label": "verse",
+          "start": 5.0,
+          "suggested_prompt_hint": "verse, moderate energy"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "suggest clips without analysis": {
+    "body": {
+      "detail": "analysis is required"
+    },
+    "status": 400
+  },
+  "trim a missing file": {
+    "body": {
+      "detail": "Media file not found"
+    },
+    "status": 404
+  },
+  "trim an excerpt": {
+    "body": {
+      "duration": 1.0,
+      "end": 1.0,
+      "filename": "<ID>-excerpt.wav",
+      "path": "<STATE>/uploads/audio/<ID>-excerpt.wav",
+      "start": 0.0,
+      "url": "/api/v1/uploads/audio/<ID>-excerpt.wav"
+    },
+    "status": 200
+  },
+  "trim an invalid workspace": {
+    "body": {
+      "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores, without spaces or path separators."
+    },
+    "status": 400
+  },
+  "trim bad times": {
+    "body": {
+      "detail": "start and end must be seconds"
+    },
+    "status": 400
+  },
+  "trim too short": {
+    "body": {
+      "detail": "The selected trailer excerpt must be at least one second"
+    },
+    "status": 400
+  },
+  "upload a wav": {
+    "body": {
+      "duration_seconds": 0.5,
+      "filename": "<ID>.wav",
+      "path": "<STATE>/uploads/audio/<ID>.wav",
+      "url": "/api/v1/uploads/audio/<ID>.wav"
+    },
+    "status": 200
+  },
+  "upload an unsupported audio file": {
+    "body": {
+      "detail": "Unsupported format: .txt. Allowed audio: .aac, .flac, .m4a, .mp3, .ogg, .wav. Allowed video (audio will be extracted): .avi, .m4v, .mkv, .mov, .mp4, .webm."
+    },
+    "status": 400
   },
   "wizard conversation empty": {
     "body": {
