@@ -5,11 +5,23 @@
     },
     "status": 200
   },
+  "checkpoint guide not imported": {
+    "body": {
+      "detail": "Not a CivitAI-imported checkpoint (no provenance block)"
+    },
+    "status": 400
+  },
   "checkpoint guide unknown": {
     "body": {
       "detail": "Unknown checkpoint model type"
     },
     "status": 404
+  },
+  "checkpoint guide unreadable": {
+    "body": {
+      "detail": "Failed to read finetune def: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+    },
+    "status": 500
   },
   "checkpoints check updates empty": {
     "body": {
@@ -18,6 +30,165 @@
       "last_full_check_at": "<TIME>",
       "skipped": false,
       "updates_available": 0
+    },
+    "status": 200
+  },
+  "checkpoints installed after the check": {
+    "body": {
+      "checkpoints": [
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 11,
+          "current_version_id": 1,
+          "filename": "",
+          "latest_changelog": "Better faces",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 2,
+          "model_type": "z_slug_for_alpha",
+          "name": "Alpha Checkpoint",
+          "preview_url": null,
+          "update_status": "available"
+        },
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 33,
+          "current_version_id": 1,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_type": "m_slug_for_gone",
+          "name": "Gone Checkpoint",
+          "preview_url": null,
+          "update_status": "removed"
+        },
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 22,
+          "current_version_id": 5,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 5,
+          "model_type": "a_slug_for_zeta",
+          "name": "Zeta Checkpoint",
+          "preview_url": null,
+          "update_status": "current"
+        }
+      ],
+      "manifest_last_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "checkpoints installed after the offline check": {
+    "body": {
+      "checkpoints": [
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 11,
+          "current_version_id": 1,
+          "filename": "",
+          "latest_changelog": "Better faces",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 2,
+          "model_type": "z_slug_for_alpha",
+          "name": "Alpha Checkpoint",
+          "preview_url": null,
+          "update_status": "available"
+        },
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 33,
+          "current_version_id": 1,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_type": "m_slug_for_gone",
+          "name": "Gone Checkpoint",
+          "preview_url": null,
+          "update_status": "removed"
+        },
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 22,
+          "current_version_id": 5,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 5,
+          "model_type": "a_slug_for_zeta",
+          "name": "Zeta Checkpoint",
+          "preview_url": null,
+          "update_status": "current"
+        }
+      ],
+      "manifest_last_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "checkpoints installed before the check": {
+    "body": {
+      "checkpoints": [
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 11,
+          "current_version_id": 1,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_type": "z_slug_for_alpha",
+          "name": "Alpha Checkpoint",
+          "preview_url": null,
+          "update_status": "unknown"
+        },
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 33,
+          "current_version_id": 1,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_type": "m_slug_for_gone",
+          "name": "Gone Checkpoint",
+          "preview_url": null,
+          "update_status": "unknown"
+        },
+        {
+          "architecture": "ltx2",
+          "auto_quantize": false,
+          "base_model": "LTXV2",
+          "civitai_model_id": 22,
+          "current_version_id": 5,
+          "filename": "",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_type": "a_slug_for_zeta",
+          "name": "Zeta Checkpoint",
+          "preview_url": null,
+          "update_status": "unknown"
+        }
+      ],
+      "manifest_last_check_at": null
     },
     "status": 200
   },
@@ -49,6 +220,105 @@
       ],
       "manifest_last_check_at": "<TIME>"
     },
+    "status": 200
+  },
+  "checkpoints update check": {
+    "body": {
+      "checked": 3,
+      "errors": 0,
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 1
+    },
+    "status": 200
+  },
+  "checkpoints update check forced": {
+    "body": {
+      "checked": 3,
+      "errors": 0,
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 1
+    },
+    "status": 200
+  },
+  "checkpoints update check offline": {
+    "body": {
+      "checked": 0,
+      "errors": 0,
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 0
+    },
+    "status": 200
+  },
+  "checkpoints update check skipped": {
+    "body": {
+      "checked": 0,
+      "errors": 0,
+      "last_full_check_at": "<TIME>",
+      "skipped": true,
+      "updates_available": 1
+    },
+    "status": 200
+  },
+  "checkpoints update manifest file": {
+    "body": {
+      "_version": 1,
+      "entries": {
+        "civitai:11": {
+          "civitai_model_type": "Checkpoint",
+          "current_version_id": 1,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": "Better faces",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 2,
+          "model_id": 11,
+          "status": "available"
+        },
+        "civitai:22": {
+          "civitai_model_type": "Checkpoint",
+          "current_version_id": 5,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 5,
+          "model_id": 22,
+          "status": "current"
+        },
+        "civitai:33": {
+          "civitai_model_type": null,
+          "current_version_id": 1,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_id": 33,
+          "status": "removed"
+        }
+      },
+      "last_full_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "checkpoints update requests": {
+    "body": [
+      "models/11",
+      "models/22",
+      "models/33"
+    ],
+    "status": 200
+  },
+  "checkpoints update requests forced": {
+    "body": [
+      "models/11",
+      "models/22",
+      "models/33"
+    ],
+    "status": 200
+  },
+  "checkpoints update requests when skipped": {
+    "body": [],
     "status": 200
   },
   "civitai base models": {
@@ -181,6 +451,54 @@
         }
       ]
     },
+    "status": 200
+  },
+  "civitai cache after fill 0": {
+    "body": [
+      "fill0"
+    ],
+    "status": 200
+  },
+  "civitai cache after fill 1": {
+    "body": [
+      "fill0",
+      "fill1"
+    ],
+    "status": 200
+  },
+  "civitai cache after fill 2": {
+    "body": [
+      "fill0",
+      "fill1",
+      "fill2"
+    ],
+    "status": 200
+  },
+  "civitai cache after fill 3": {
+    "body": [
+      "fill0",
+      "fill1",
+      "fill2",
+      "fill3"
+    ],
+    "status": 200
+  },
+  "civitai cache after fill 4": {
+    "body": [
+      "fill1",
+      "fill2",
+      "fill3",
+      "fill4"
+    ],
+    "status": 200
+  },
+  "civitai cache after fill 5": {
+    "body": [
+      "fill2",
+      "fill3",
+      "fill4",
+      "fill5"
+    ],
     "status": 200
   },
   "civitai checkpoint architectures": {
@@ -1585,6 +1903,36 @@
     },
     "status": 400
   },
+  "civitai download refuses another bucket of the CDN": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
+  "civitai download refuses ftp scheme": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
+  "civitai download refuses host that ends with the name": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
+  "civitai download refuses name as a sub-domain of another host": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
+  "civitai download refuses name in the user part": {
+    "body": {
+      "detail": "download_url must point to civitai.com"
+    },
+    "status": 400
+  },
   "civitai download rejected host": {
     "body": {
       "detail": "download_url must point to civitai.com"
@@ -1597,11 +1945,195 @@
     },
     "status": 400
   },
+  "civitai downloads after the refusals": {
+    "body": {
+      "downloads": []
+    },
+    "status": 200
+  },
   "civitai downloads empty": {
     "body": {
       "downloads": []
     },
     "status": 200
+  },
+  "civitai downloads still empty": {
+    "body": {
+      "downloads": []
+    },
+    "status": 200
+  },
+  "civitai fill 0": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "fill0"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai fill 1": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "fill1"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai fill 2": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "fill2"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai fill 3": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "fill3"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai fill 4": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "fill4"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai fill 5": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "fill5"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai import connection error": {
+    "body": {
+      "error": "CivitAI request failed: down"
+    },
+    "status": 502
+  },
+  "civitai import device file name": {
+    "body": {
+      "error": "CivitAI returned an invalid filename"
+    },
+    "status": 502
+  },
+  "civitai import directory leaves the folder": {
+    "body": {
+      "error": "Invalid target_dir"
+    },
+    "status": 400
+  },
+  "civitai import model not found": {
+    "body": {
+      "error": "CivitAI model 206 not found"
+    },
+    "status": 404
+  },
+  "civitai import no download url": {
+    "body": {
+      "error": "CivitAI file has no downloadUrl"
+    },
+    "status": 502
+  },
+  "civitai import no files": {
+    "body": {
+      "error": "CivitAI version has no files (may be a draft or missing upload)"
+    },
+    "status": 400
+  },
+  "civitai import no versions": {
+    "body": {
+      "error": "CivitAI model has no published versions"
+    },
+    "status": 400
+  },
+  "civitai import not a lora": {
+    "body": {
+      "error": "CivitAI model 201 is type 'Checkpoint', not LORA"
+    },
+    "status": 400
+  },
+  "civitai import not a model link": {
+    "body": {
+      "error": "Unrecognized CivitAI URL. Expected /models/<id> or /api/download/models/<versionId>."
+    },
+    "status": 400
+  },
+  "civitai import requests": {
+    "body": [
+      "models/201",
+      "models/202",
+      "models/203",
+      "models/204",
+      "models/205",
+      "models/206",
+      "models/207",
+      "model-versions/301",
+      "model-versions/302",
+      "models/208",
+      "models/209"
+    ],
+    "status": 200
+  },
+  "civitai import timeout": {
+    "body": {
+      "error": "CivitAI request timed out"
+    },
+    "status": 504
+  },
+  "civitai import version link with an error": {
+    "body": {
+      "error": "CivitAI: gone"
+    },
+    "status": 404
+  },
+  "civitai import version link without a model": {
+    "body": {
+      "error": "CivitAI version response missing modelId"
+    },
+    "status": 502
+  },
+  "civitai import version not on the model": {
+    "body": {
+      "error": "Version 999 not found on model 207. Try removing the modelVersionId from the URL to use the latest."
+    },
+    "status": 404
   },
   "civitai model detail": {
     "body": {
@@ -1669,6 +2201,14 @@
     },
     "status": 200
   },
+  "civitai search cache keys": {
+    "body": [
+      "('flaky', 'Highest Rated', 'AllTime', False)",
+      "('mature', 'Highest Rated', 'AllTime', False)",
+      "('mature', 'Highest Rated', 'AllTime', True)"
+    ],
+    "status": 200
+  },
   "civitai search cached": {
     "body": {
       "items": [
@@ -1692,6 +2232,118 @@
       "metadata": {
         "nextCursor": ""
       }
+    },
+    "status": 200
+  },
+  "civitai search flaky first": {
+    "body": {
+      "detail": "CivitAI request failed: 500"
+    },
+    "status": 502
+  },
+  "civitai search flaky second": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "second try"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai search flaky third": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "second try"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai search maintenance": {
+    "body": {
+      "detail": "CivitAI is currently in scheduled maintenance. Try again in a few minutes."
+    },
+    "status": 503
+  },
+  "civitai search mature": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "mature results"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai search other 503": {
+    "body": {
+      "detail": "CivitAI request failed: 503"
+    },
+    "status": 502
+  },
+  "civitai search requests": {
+    "body": [
+      [
+        "mature",
+        "false"
+      ],
+      [
+        "mature",
+        "true"
+      ],
+      [
+        "flaky",
+        "false"
+      ],
+      [
+        "flaky",
+        "false"
+      ],
+      [
+        "down",
+        "false"
+      ],
+      [
+        "slow",
+        "false"
+      ]
+    ],
+    "status": 200
+  },
+  "civitai search safe": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "safe results"
+        }
+      ],
+      "metadata": {}
+    },
+    "status": 200
+  },
+  "civitai search safe again": {
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "modelVersions": [],
+          "name": "safe results"
+        }
+      ],
+      "metadata": {}
     },
     "status": 200
   },

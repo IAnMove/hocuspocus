@@ -610,6 +610,354 @@ class TestDownloadState(unittest.TestCase):
         )
         self.assertIn('dl_id = f"hf_{uuid.uuid4().hex}"', hf_import_source)
 
+    def test_safetensors_gate_rejects_small_files_and_impossible_headers(self):
+        helpers = _load_helpers(self.downloads_tree, ("_validate_safetensors_payload",))
+        validate = helpers["_validate_safetensors_payload"]
+
+        def write(directory, name, raw_header_length, size):
+            path = os.path.join(directory, name)
+            with open(path, "wb") as handle:
+                handle.write(struct.pack("<Q", raw_header_length))
+                handle.write(b"\0" * (size - 8))
+            return path
+
+        with tempfile.TemporaryDirectory() as directory:
+            validate(write(directory, "ok.safetensors", 2, 150 * 1024))
+            with self.assertRaisesRegex(ValueError, "too small to be a real LoRA"):
+                validate(write(directory, "small.safetensors", 2, 50 * 1024))
+            with self.assertRaisesRegex(ValueError, "out of range"):
+                validate(write(directory, "zero.safetensors", 0, 150 * 1024))
+            with self.assertRaisesRegex(ValueError, "out of range"):
+                validate(write(directory, "huge.safetensors", 300 * 1024 * 1024, 150 * 1024))
+            with self.assertRaisesRegex(ValueError, "claims .* bytes but file is only"):
+                validate(write(directory, "overrun.safetensors", 150 * 1024, 150 * 1024))
+
+    def test_archive_refuses_a_member_over_its_own_path_and_a_busy_target(self):
+        helpers = _load_helpers(
+            self.downloads_tree,
+            (
+                "_is_safe_path_component",
+                "_normalize_download_target",
+                "_reserve_download_target",
+                "_release_download_target",
+                "_validate_safetensors_payload",
+                "_zip_member_target",
+                "_copy_zip_member_to_partial",
+                "_extract_civitai_archive",
+            ),
+        )
+        reserve = helpers["_reserve_download_target"]
+        release = helpers["_release_download_target"]
+        extract = helpers["_extract_civitai_archive"]
+        valid_payload = struct.pack("<Q", 2) + b"{}" + b"\0" * (100 * 1024)
+
+        def run(directory, archive, download_id):
+            reserved_targets = {reserve(download_id, archive)}
+            partial_paths = set()
+            try:
+                return extract(archive, directory, download_id, reserved_targets, partial_paths)
+            finally:
+                for partial_path in tuple(partial_paths):
+                    if os.path.isfile(partial_path):
+                        os.remove(partial_path)
+                for target in tuple(reserved_targets):
+                    release(download_id, target)
+
+        with tempfile.TemporaryDirectory() as directory:
+            collide = os.path.join(directory, "collide.zip")
+            with zipfile.ZipFile(collide, "w") as handle:
+                handle.writestr("collide.zip", b"payload")
+            with self.assertRaisesRegex(ValueError, "collides with its archive path"):
+                run(directory, collide, "collide")
+            self.assertEqual(open(collide, "rb").read()[:2], b"PK")
+
+            busy = os.path.join(directory, "busy.zip")
+            with zipfile.ZipFile(busy, "w") as handle:
+                handle.writestr("deep/model.safetensors", valid_payload)
+            target = os.path.join(directory, "model.safetensors")
+            self.assertIsNotNone(reserve("other-download", target))
+            try:
+                with self.assertRaisesRegex(RuntimeError, "Another download is already writing model.safetensors"):
+                    run(directory, busy, "busy")
+            finally:
+                release("other-download", target)
+            self.assertFalse(os.path.exists(target))
+
+            mixed = os.path.join(directory, "mixed.zip")
+            with zipfile.ZipFile(mixed, "w") as handle:
+                handle.writestr("README.txt", b"read me")
+                handle.writestr("weights/lora.safetensors", valid_payload)
+            extracted = run(directory, mixed, "mixed")
+            self.assertEqual([os.path.basename(path) for path in extracted], ["lora.safetensors"])
+            self.assertFalse(os.path.exists(os.path.join(directory, "README.txt")))
+
+    def test_archive_weights_with_windows_separators_are_flattened(self):
+        helpers = _load_helpers(
+            self.downloads_tree,
+            (
+                "_is_safe_path_component",
+                "_normalize_download_target",
+                "_reserve_download_target",
+                "_release_download_target",
+                "_validate_safetensors_payload",
+                "_zip_member_target",
+                "_copy_zip_member_to_partial",
+                "_extract_civitai_archive",
+            ),
+        )
+        valid_payload = struct.pack("<Q", 2) + b"{}" + b"\0" * (100 * 1024)
+        with tempfile.TemporaryDirectory() as directory:
+            archive = os.path.join(directory, "windows.zip")
+            with zipfile.ZipFile(archive, "w") as handle:
+                handle.writestr("weights\\sub\\lora.safetensors", valid_payload)
+            reserved_targets = {helpers["_reserve_download_target"]("windows", archive)}
+            partial_paths = set()
+            try:
+                extracted = helpers["_extract_civitai_archive"](
+                    archive, directory, "windows", reserved_targets, partial_paths,
+                )
+            finally:
+                for target in tuple(reserved_targets):
+                    helpers["_release_download_target"]("windows", target)
+            self.assertEqual([os.path.basename(path) for path in extracted], ["lora.safetensors"])
+            self.assertEqual(os.path.realpath(os.path.dirname(extracted[0])), os.path.realpath(directory))
+
+    def test_updating_a_record_that_is_gone_is_a_no_op(self):
+        helpers = _load_helpers(
+            self.downloads_tree,
+            ("_update_download_record", "_complete_download_record", "_fail_download_record"),
+        )
+        self.assertIsNone(helpers["_update_download_record"]("gone", status="x"))
+        helpers["_complete_download_record"]("gone")
+        helpers["_fail_download_record"]("gone", ValueError("late"))
+        self.assertEqual(helpers["_civitai_downloads"], {})
+
+
+class TestCivitaiUrlGuard(unittest.TestCase):
+    def test_only_http_civitai_hosts_and_its_cdn_bucket_are_accepted(self):
+        from services.civitai import _is_safe_civitai_url
+
+        for url in (
+            "https://civitai.com/api/download/models/1",
+            "http://www.civitai.com/x",
+            "https://image.civitai.com/x",
+            "https://CIVITAI.COM/x",
+            "https://civitai-delivery-worker-prod.5ac0637cfd0766c97916cefa3764fbdf"
+            ".r2.cloudflarestorage.com/model",
+        ):
+            with self.subTest(url=url):
+                self.assertTrue(_is_safe_civitai_url(url))
+        for url in (
+            "https://evilcivitai.com/x",
+            "https://civitai.com.evil.example/x",
+            "https://civitai.com@evil.example/x",
+            "https://evil.example/?next=civitai.com",
+            "https://other-bucket.r2.cloudflarestorage.com/model",
+            "ftp://civitai.com/x",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "//civitai.com/x",
+            "civitai.com/x",
+            "http://127.0.0.1/x",
+            "",
+            None,
+            12,
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(_is_safe_civitai_url(url))
+
+
+class _FakeStream:
+    """What ``requests.get(..., stream=True)`` returns for a download."""
+
+    def __init__(self, payload, headers=None, status=200):
+        self.status_code = status
+        self.headers = {"content-length": str(len(payload))} if headers is None else headers
+        self.text = ""
+        self._payload = payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise IOError(f"HTTP {self.status_code}")
+
+    def iter_content(self, chunk_size=1):
+        for start in range(0, len(self._payload), 40_000):
+            yield self._payload[start:start + 40_000]
+
+
+class TestCivitaiWorker(unittest.TestCase):
+    """The background download worker, end to end, with the network faked."""
+
+    def _download(self, directory, filename, payload, **stream):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from services import civitai_downloads as worker
+
+        download_id = "w" + uuid.uuid4().hex[:7]
+        record = worker._new_download_record(download_id, filename)
+        record.update({
+            "target_dir": directory,
+            "_url": "https://civitai.com/api/download/models/1",
+            "_model_id": 1, "_version_id": 2, "_model_name": "Model",
+            "_trained_words": [], "_images": [], "_kind": "lora",
+        })
+        with worker._civitai_download_lock:
+            worker._civitai_downloads[download_id] = record
+        try:
+            with mock.patch.object(worker, "wgp", SimpleNamespace(server_config={"services": {}})), \
+                    mock.patch.object(worker, "_safe_join", PathPolicy().safe_join), \
+                    mock.patch.object(worker, "_ensure_llm_loaded", lambda: None), \
+                    mock.patch.object(worker, "_generate_and_save_lora_guide", lambda *args, **kwargs: None), \
+                    mock.patch.object(worker.requests, "get", lambda url, **kwargs: _FakeStream(payload, **stream)):
+                worker._run_civitai_download(download_id)
+            result = dict(worker._civitai_downloads[download_id])
+            reservations = dict(worker._download_target_reservations)
+        finally:
+            with worker._civitai_download_lock:
+                worker._civitai_downloads.pop(download_id, None)
+        self.assertEqual(
+            [name for name in os.listdir(directory) if name.endswith(".part")], [],
+        )
+        return result, reservations
+
+    def test_a_valid_file_is_published_and_the_target_released(self):
+        valid = struct.pack("<Q", 2) + b"{}" + b"\0" * (150 * 1024)
+        with tempfile.TemporaryDirectory() as directory:
+            record, reservations = self._download(directory, "ok.safetensors", valid)
+            self.assertEqual(
+                (record["status"], record["progress"], record["error"]),
+                ("completed", 100, None),
+            )
+            self.assertEqual(os.path.getsize(os.path.join(directory, "ok.safetensors")), len(valid))
+            self.assertTrue(os.path.isfile(os.path.join(directory, "ok.civitai.json")))
+            self.assertEqual(reservations, {})
+
+    def test_an_error_page_saved_as_a_model_is_refused_and_not_published(self):
+        with tempfile.TemporaryDirectory() as directory:
+            record, reservations = self._download(
+                directory, "bogus.safetensors", b"<html>denied</html>" * 200,
+            )
+            self.assertEqual(record["status"], "failed")
+            self.assertIn("invalid LoRA payload", record["error"])
+            self.assertEqual(os.listdir(directory), [])
+            self.assertEqual(reservations, {})
+
+    def test_a_short_stream_fails_and_leaves_nothing_behind(self):
+        valid = struct.pack("<Q", 2) + b"{}" + b"\0" * (150 * 1024)
+        with tempfile.TemporaryDirectory() as directory:
+            record, _ = self._download(
+                directory, "short.safetensors", valid[:100_000],
+                headers={"content-length": str(len(valid))},
+            )
+            self.assertEqual(record["status"], "failed")
+            self.assertIn("Incomplete download", record["error"])
+            self.assertEqual(os.listdir(directory), [])
+
+    def test_the_server_file_name_is_used_only_when_it_is_one_safe_component(self):
+        valid = struct.pack("<Q", 2) + b"{}" + b"\0" * (150 * 1024)
+        for disposition, expected in (
+            ('attachment; filename="renamed.safetensors"', "renamed.safetensors"),
+            ('attachment; filename="../../up.safetensors"', "up.safetensors"),
+            ('attachment; filename="..\\..\\win.safetensors"', "win.safetensors"),
+            ('attachment; filename="CON.safetensors"', "asked.safetensors"),
+            ("inline", "asked.safetensors"),
+        ):
+            with self.subTest(disposition=disposition), tempfile.TemporaryDirectory() as parent:
+                directory = os.path.join(parent, "loras")
+                os.makedirs(directory)
+                record, _ = self._download(
+                    directory, "asked.safetensors", valid,
+                    headers={
+                        "content-length": str(len(valid)),
+                        "content-disposition": disposition,
+                    },
+                )
+                self.assertEqual((record["status"], record["filename"]), ("completed", expected))
+                self.assertEqual(
+                    sorted(os.listdir(directory)),
+                    [os.path.splitext(expected)[0] + ".civitai.json", expected],
+                )
+                self.assertEqual(os.listdir(parent), ["loras"])
+
+    def test_a_zip_is_unpacked_to_its_weights_and_the_archive_removed(self):
+        valid = struct.pack("<Q", 2) + b"{}" + b"\0" * (150 * 1024)
+        buffer = tempfile.SpooledTemporaryFile()
+        with zipfile.ZipFile(buffer, "w") as handle:
+            handle.writestr("notes.txt", b"hello")
+            handle.writestr("inner/one.safetensors", valid)
+        buffer.seek(0)
+        archive = buffer.read()
+        with tempfile.TemporaryDirectory() as directory:
+            record, reservations = self._download(directory, "pack.zip", archive)
+            self.assertEqual((record["status"], record["filename"]), ("completed", "one.safetensors"))
+            self.assertEqual(
+                sorted(os.listdir(directory)), ["one.civitai.json", "one.safetensors"],
+            )
+            self.assertEqual(reservations, {})
+
+
+class TestCheckpointRegistration(unittest.TestCase):
+    """Registering a downloaded checkpoint as a finetune of a supported architecture."""
+
+    def _register(self, sidecar, architecture, **options):
+        from unittest import mock
+
+        from services import checkpoints
+
+        with tempfile.TemporaryDirectory() as directory:
+            defaults = os.path.join(directory, "defaults")
+            finetunes = os.path.join(directory, "finetunes")
+            os.makedirs(defaults)
+            with open(os.path.join(defaults, "base_model.json"), "w", encoding="utf-8") as handle:
+                json.dump({
+                    "model": {
+                        "name": "Base", "architecture": "base_arch",
+                        "source": "https://example.invalid/base", "source2": "https://example.invalid/base2",
+                        "URLs2": ["companion.safetensors"],
+                    },
+                    "prompt": "template prompt", "num_inference_steps": 20,
+                }, handle)
+            with mock.patch.object(checkpoints, "_DEFAULTS_DIR", defaults), \
+                    mock.patch.object(checkpoints, "_FINETUNES_DIR", finetunes):
+                result = checkpoints._register_checkpoint_finetune(
+                    os.path.join(directory, "ckpts", "My Model.safetensors"), sidecar, architecture, **options,
+                )
+                written = {}
+                for name in os.listdir(finetunes):
+                    with open(os.path.join(finetunes, name), "r", encoding="utf-8") as handle:
+                        written[name] = json.load(handle)
+        return result, written
+
+    def test_a_checkpoint_becomes_a_finetune_that_keeps_the_architecture_settings(self):
+        sidecar = {
+            "name": "My Model", "modelId": 9, "versionId": 10, "baseModel": "Base",
+            "description": "  A long enough description.  ",
+        }
+        (slug, path), written = self._register(sidecar, "base_arch", auto_quantize=True)
+        self.assertEqual(slug, "civitai_9_My_Model")
+        self.assertEqual(os.path.basename(path), "civitai_9_My_Model.json")
+        self.assertEqual(list(written), ["civitai_9_My_Model.json"])
+        finetune = written["civitai_9_My_Model.json"]
+        model = finetune["model"]
+        self.assertEqual(model["name"], "My Model (Civitai)")
+        self.assertEqual(model["architecture"], "base_arch")
+        self.assertEqual(model["URLs"], ["My Model.safetensors"])
+        self.assertEqual(model["URLs2"], ["companion.safetensors"])
+        self.assertNotIn("source", model)
+        self.assertNotIn("source2", model)
+        self.assertEqual(model["description"], "A long enough description.")
+        self.assertTrue(model["auto_quantize"])
+        self.assertEqual(model["civitai"], {
+            "modelId": 9, "versionId": 10, "modelType": "Checkpoint",
+            "baseModel": "Base", "filename": "My Model.safetensors",
+        })
+        self.assertEqual((finetune["prompt"], finetune["num_inference_steps"]), ("template prompt", 20))
+
+    def test_an_architecture_without_a_template_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "Unsupported target architecture 'no_such_arch'"):
+            self._register({"name": "X", "modelId": 1}, "no_such_arch")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

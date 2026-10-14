@@ -1165,3 +1165,245 @@ def test_lora_guide_generation(lora_library, golden, monkeypatch) -> None:
     asked.clear()
     scan("lora scan again", {})
     scan("lora scan forced", {"force": True})
+
+
+class _TextReply(_CivitaiReply):
+    """A CivitAI reply that also has a body text, for the maintenance page."""
+
+    def __init__(self, status: int, payload=None, text: str = "") -> None:
+        super().__init__(status, payload)
+        self.text = text
+
+
+def test_civitai_download_refuses_look_alike_hosts(server, golden) -> None:
+    """The allow-list is exact: other schemes, host names that only end in the name, and a user part are refused."""
+    for case, url in (
+        ("ftp scheme", "ftp://civitai.com/model.safetensors"),
+        ("host that ends with the name", "https://evilcivitai.com/model.safetensors"),
+        ("name as a sub-domain of another host", "https://civitai.com.evil.example/model.safetensors"),
+        ("name in the user part", "https://civitai.com@evil.example/model.safetensors"),
+        ("another bucket of the CDN", "https://other-bucket.r2.cloudflarestorage.com/model.safetensors"),
+    ):
+        server.check(
+            golden,
+            f"civitai download refuses {case}",
+            "POST",
+            "/api/v1/civitai/download",
+            json={"download_url": url, "filename": "model.safetensors"},
+        )
+    server.check(golden, "civitai downloads still empty", "GET", "/api/v1/civitai/downloads")
+
+
+def test_civitai_search_cache_key_errors_and_maintenance(server, golden, monkeypatch) -> None:
+    """The mature flag is part of the cache key, an error is never cached, and a maintenance page is told apart."""
+    import requests
+    import sys
+
+    launch = sys.modules["_launch_runtime"]
+    launch._CIVITAI_CACHE.clear()
+    asked: list[tuple] = []
+    queues: dict[tuple, list] = {}
+
+    def page(name: str) -> dict:
+        return {"items": [{"id": 1, "name": name, "modelVersions": []}], "metadata": {}}
+
+    def fake_get(url, params=None, **_kwargs):
+        key = (params.get("query"), params.get("nsfw"))
+        asked.append(key)
+        queue = queues[key]
+        return queue.pop(0) if len(queue) > 1 else queue[0]
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    queues[("mature", "false")] = [_TextReply(200, page("safe results"))]
+    queues[("mature", "true")] = [_TextReply(200, page("mature results"))]
+    queues[("flaky", "false")] = [_TextReply(500, text="boom"), _TextReply(200, page("second try"))]
+    queues[("down", "false")] = [_TextReply(503, text="We'll be right back")]
+    queues[("slow", "false")] = [_TextReply(503, text="plain outage")]
+
+    for case, query, nsfw in (
+        ("safe", "mature", "false"),
+        ("mature", "mature", "true"),
+        ("safe again", "mature", "false"),
+        ("flaky first", "flaky", "false"),
+        ("flaky second", "flaky", "false"),
+        ("flaky third", "flaky", "false"),
+        ("maintenance", "down", "false"),
+        ("other 503", "slow", "false"),
+    ):
+        server.check(
+            golden,
+            f"civitai search {case}",
+            "GET",
+            "/api/v1/civitai/search",
+            params={"query": query, "nsfw": nsfw},
+        )
+    golden.check("civitai search requests", 200, [list(item) for item in asked])
+    golden.check("civitai search cache keys", 200, sorted(repr(key[1:5]) for key in launch._CIVITAI_CACHE))
+    launch._CIVITAI_CACHE.clear()
+
+
+def test_civitai_cache_drops_the_oldest_quarter_when_full(server, golden, monkeypatch) -> None:
+    """With room for four entries, the fifth search drops the oldest one and the sixth the next."""
+    import requests
+    import sys
+
+    import services.civitai as civitai
+
+    launch = sys.modules["_launch_runtime"]
+    launch._CIVITAI_CACHE.clear()
+    monkeypatch.setattr(civitai, "_CIVITAI_CACHE_MAX", 4)
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda url, params=None, **_kwargs: _TextReply(
+            200, {"items": [{"id": 1, "name": params["query"], "modelVersions": []}], "metadata": {}},
+        ),
+    )
+    for index in range(6):
+        server.check(
+            golden,
+            f"civitai fill {index}",
+            "GET",
+            "/api/v1/civitai/search",
+            params={"query": f"fill{index}"},
+        )
+        remaining = sorted(key[1] for key in launch._CIVITAI_CACHE)
+        golden.check(f"civitai cache after fill {index}", 200, remaining)
+    launch._CIVITAI_CACHE.clear()
+
+
+def _write_checkpoint(finetunes: Path, slug: str, name: str, model_id: int, version_id: int) -> None:
+    (finetunes / f"{slug}.json").write_text(
+        json.dumps({
+            "model": {
+                "name": name,
+                "architecture": "ltx2",
+                "civitai": {"modelId": model_id, "versionId": version_id, "baseModel": "LTXV2", "filename": ""},
+            },
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_checkpoint_update_check_keeps_what_the_network_cannot_answer(server, golden, monkeypatch, tmp_path) -> None:
+    """Three imported checkpoints, the 24 hour skip, a forced check, and an offline forced check."""
+    import requests
+    import services.checkpoints as checkpoints
+
+    finetunes = tmp_path / "finetunes"
+    finetunes.mkdir()
+    monkeypatch.setattr(checkpoints, "_FINETUNES_DIR", str(finetunes))
+    # The file names sort the other way round from the display names.
+    _write_checkpoint(finetunes, "a_slug_for_zeta", "Zeta Checkpoint", 22, 5)
+    _write_checkpoint(finetunes, "m_slug_for_gone", "Gone Checkpoint", 33, 1)
+    _write_checkpoint(finetunes, "z_slug_for_alpha", "Alpha Checkpoint", 11, 1)
+    asked: list[str] = []
+    models = {
+        11: _CivitaiReply(200, {"type": "Checkpoint", "modelVersions": [
+            {"id": 2, "publishedAt": "2026-01-02T00:00:00Z", "description": "<p>Better <b>faces</b></p>"},
+        ]}),
+        22: _CivitaiReply(200, {"type": "Checkpoint", "modelVersions": [{"id": 5, "publishedAt": "2026-01-01T00:00:00Z"}]}),
+        33: _CivitaiReply(404),
+    }
+
+    def fake_get(url, headers=None, timeout=None, **_kwargs):
+        asked.append(url.rsplit("/api/v1/", 1)[-1])
+        return models[int(url.rsplit("/", 1)[-1])]
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    server.check(golden, "checkpoints installed before the check", "GET", "/api/v1/checkpoints/installed")
+    server.check(golden, "checkpoints update check", "POST", "/api/v1/checkpoints/check-updates")
+    golden.check("checkpoints update requests", 200, sorted(asked))
+    asked.clear()
+    server.check(golden, "checkpoints update check skipped", "POST", "/api/v1/checkpoints/check-updates")
+    golden.check("checkpoints update requests when skipped", 200, sorted(asked))
+    server.check(golden, "checkpoints installed after the check", "GET", "/api/v1/checkpoints/installed")
+    server.check(
+        golden, "checkpoints update check forced", "POST", "/api/v1/checkpoints/check-updates", params={"force": "true"},
+    )
+    golden.check("checkpoints update requests forced", 200, sorted(asked))
+
+    def offline(*_args, **_kwargs):
+        raise requests.ConnectionError("offline")
+
+    monkeypatch.setattr(requests, "get", offline)
+    server.check(
+        golden, "checkpoints update check offline", "POST", "/api/v1/checkpoints/check-updates", params={"force": "true"},
+    )
+    server.check(golden, "checkpoints installed after the offline check", "GET", "/api/v1/checkpoints/installed")
+    manifest = json.loads((finetunes / ".checkpoint_update_manifest.json").read_text(encoding="utf-8"))
+    golden.check("checkpoints update manifest file", 200, server.normalise(manifest))
+
+
+def test_checkpoint_guide_needs_a_civitai_provenance_block(server, golden, monkeypatch, tmp_path) -> None:
+    """A finetune that was not imported from CivitAI, and one that cannot be read, are refused before any model loads."""
+    import services.checkpoints as checkpoints
+    from services import llm_routing
+
+    finetunes = tmp_path / "finetunes"
+    finetunes.mkdir()
+    monkeypatch.setattr(checkpoints, "_FINETUNES_DIR", str(finetunes))
+    monkeypatch.setattr(llm_routing, "_ensure_llm_loaded", lambda *_args, **_kwargs: None)
+    (finetunes / "plain.json").write_text(json.dumps({"model": {"name": "Plain", "architecture": "ltx2"}}), encoding="utf-8")
+    (finetunes / "broken.json").write_text("{not json", encoding="utf-8")
+    server.check(golden, "checkpoint guide not imported", "POST", "/api/v1/checkpoints/plain/generate-guide", json={})
+    server.check(golden, "checkpoint guide unreadable", "POST", "/api/v1/checkpoints/broken/generate-guide", json={})
+
+
+def test_civitai_url_import_refusals(server, golden, monkeypatch) -> None:
+    """A pasted CivitAI link that cannot become a download answers before any thread or file."""
+    import requests
+
+    def model(model_id: int, kind: str = "LORA", versions=None) -> dict:
+        return {"id": model_id, "name": f"Model {model_id}", "type": kind, "modelVersions": versions if versions is not None else []}
+
+    def one_file(**file) -> list:
+        return [{"id": 1, "baseModel": "LTXV2", "files": [file]}]
+
+    replies = {
+        "models/201": _CivitaiReply(200, model(201, "Checkpoint")),
+        "models/202": _CivitaiReply(200, model(202)),
+        "models/203": _CivitaiReply(200, model(203, versions=[{"id": 1, "files": []}])),
+        "models/204": _CivitaiReply(200, model(204, versions=one_file(name="CON.safetensors", downloadUrl="https://civitai.com/d"))),
+        "models/205": _CivitaiReply(200, model(205, versions=one_file(name="a.safetensors"))),
+        "models/206": _CivitaiReply(404),
+        "models/207": _CivitaiReply(200, model(207, versions=one_file(name="a.safetensors", downloadUrl="https://civitai.com/d"))),
+        "model-versions/301": _CivitaiReply(200, {"error": "gone"}),
+        "model-versions/302": _CivitaiReply(200, {}),
+    }
+    asked: list[str] = []
+
+    def fake_get(url, headers=None, timeout=None, **_kwargs):
+        key = url.rsplit("/api/v1/", 1)[-1]
+        asked.append(key)
+        if key == "models/208":
+            raise requests.Timeout("slow")
+        if key == "models/209":
+            raise requests.ConnectionError("down")
+        return replies[key]
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    for case, url, extra in (
+        ("not a lora", "https://civitai.com/models/201", {}),
+        ("no versions", "https://civitai.com/models/202", {}),
+        ("no files", "https://civitai.com/models/203", {}),
+        ("device file name", "https://civitai.com/models/204", {}),
+        ("no download url", "https://civitai.com/models/205", {}),
+        ("model not found", "https://civitai.com/models/206", {}),
+        ("version not on the model", "https://civitai.com/models/207?modelVersionId=999", {}),
+        ("version link with an error", "https://civitai.com/api/download/models/301", {}),
+        ("version link without a model", "https://civitai.com/api/download/models/302", {}),
+        ("timeout", "https://civitai.com/models/208", {}),
+        ("connection error", "https://civitai.com/models/209", {}),
+        ("not a model link", "https://civitai.com/user/someone", {}),
+        ("directory leaves the folder", "https://civitai.com/models/207", {"target_dir": "../elsewhere"}),
+    ):
+        server.check(
+            golden,
+            f"civitai import {case}",
+            "POST",
+            "/api/v1/huggingface/import-lora",
+            json={"url": url, **extra},
+        )
+    golden.check("civitai import requests", 200, asked)
+    server.check(golden, "civitai downloads after the refusals", "GET", "/api/v1/civitai/downloads")
