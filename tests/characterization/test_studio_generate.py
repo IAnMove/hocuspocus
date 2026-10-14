@@ -8,6 +8,7 @@ preview and a retake that reads frames need a GPU and are not here.
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shutil
@@ -620,3 +621,57 @@ def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monke
     assert studio_generate._get_cached_hardware() == {"gpu_vram_gb": 7.0}
     monkeypatch.setattr(launch, "_workspace_collection_registry", SimpleNamespace(get=lambda key: ("found", key)))
     assert studio_generate._workspace_collection_registry.get("c-1") == ("found", "c-1")
+
+
+def test_recast_helper_slots_are_the_launch_objects(full_server, monkeypatch) -> None:
+    """Every recast slot is the launch object, or a forwarder that reads it on use."""
+    import importlib
+    import os
+
+    from services.recast_launch_binding import _LaunchName
+
+    launch = worker_module()
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    module_names = [
+        "services." + path.stem
+        for path in sorted(services.glob("recast_*.py"))
+        if path.stem != "recast_launch_binding"
+    ]
+    assert module_names
+    launch_source = Path(launch.__file__).read_text(encoding="utf-8")
+    assert launch_source.count("bind_recast_helpers(") == 1
+    tree = ast.parse(launch_source)
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or not (node.module or "").startswith("services.recast_"):
+            continue
+        module = importlib.import_module(node.module)
+        for alias in node.names:
+            exported = alias.asname or alias.name
+            assert getattr(launch, exported) is getattr(module, alias.name), exported
+    holder = getattr(launch, "_recast_u2net", None)
+    if holder is not None:
+        assert launch._recast_u2net_session_lock is holder.session_lock
+        assert launch._recast_u2net_run_lock is holder.run_lock
+        assert launch._recast_u2net_cache_lock is holder.cache_lock
+        assert launch._recast_u2net_cache is holder.cache
+    forwarded = []
+    for module_name in module_names:
+        module = importlib.import_module(module_name)
+        for attr, value in vars(module).items():
+            if not isinstance(value, _LaunchName):
+                continue
+            target = object.__getattribute__(value, "_name")
+            assert target == attr
+            original = getattr(launch, target)
+            assert value._value() is original
+            if callable(original):
+                monkeypatch.setattr(
+                    launch, target,
+                    lambda *args, _name=target, **_kwargs: ("called", _name, args),
+                )
+                assert value("x") == ("called", target, ("x",))
+            else:
+                monkeypatch.setattr(launch, target, "slot-path")
+                assert os.fspath(value) == "slot-path"
+            forwarded.append(target)
+    assert forwarded, "the recast services have no launch forwarders"

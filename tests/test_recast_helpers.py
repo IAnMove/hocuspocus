@@ -547,6 +547,109 @@ def test_video_frame_count_is_the_decoded_length(monkeypatch):
     assert count("shot.mp4") == 7
 
 
+def test_each_recast_service_binds_exactly_its_free_launch_names():
+    """The bind list is derived from the module. A hand-written name would fail."""
+    services = ROOT / "app" / "services"
+    modules = sorted(services.glob("recast_*.py"))
+    assert modules, "the recast services have not been created"
+    defined: dict[str, Path] = {}
+    for path in modules:
+        if path.name == "recast_launch_binding.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                defined[node.name] = path
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and not _is_bindable_assign(node):
+                        defined[target.id] = path
+    launch = LAUNCH.read_text(encoding="utf-8")
+    assert launch.count("bind_recast_helpers(") == 1
+
+    for path in modules:
+        if path.name == "recast_launch_binding.py":
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert _undefined_globals(source, str(path)) == set()
+        tree = ast.parse(source, filename=str(path))
+        bindables = []
+        kept = []
+        for node in tree.body:
+            if _is_bindable_assign(node):
+                bindables.append(node.value.args[0].value)
+                assert node.value.args[0].value not in defined
+            else:
+                kept.append(node)
+            if isinstance(node, ast.ImportFrom) and node.module in {
+                "services.recast_masks",
+                "services.recast_matte",
+                "services.recast_reference_compose",
+                "services.recast_reference_prepare",
+            }:
+                home = services / (node.module.rsplit(".", 1)[-1] + ".py")
+                for alias in node.names:
+                    assert defined.get(alias.name) == home, alias.name
+        stripped = ast.unparse(ast.Module(body=kept, type_ignores=[]))
+        assert _undefined_globals(stripped, str(path)) == set(bindables)
+
+
+def _is_bindable_assign(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "bindable"
+        and len(node.value.args) == 1
+        and isinstance(node.value.args[0], ast.Constant)
+        and node.value.args[0].value == node.targets[0].id
+    )
+
+
+def _undefined_globals(source: str, filename: str) -> set[str]:
+    import builtins
+    import symtable
+
+    top = symtable.symtable(source, filename, "exec")
+    bound = {
+        item.get_name()
+        for item in top.get_symbols()
+        if item.is_assigned() or item.is_imported() or item.is_namespace()
+    }
+
+    def declare(table: symtable.SymbolTable) -> None:
+        bound.update(
+            item.get_name()
+            for item in table.get_symbols()
+            if item.is_declared_global() and item.is_assigned()
+        )
+        for child in table.get_children():
+            declare(child)
+
+    declare(top)
+    missing: set[str] = set()
+
+    def walk(table: symtable.SymbolTable) -> None:
+        for item in table.get_symbols():
+            name = item.get_name()
+            if (
+                table is not top
+                and item.is_global()
+                and item.is_referenced()
+                and name not in bound
+                and not hasattr(builtins, name)
+                and not name.startswith("__")
+            ):
+                missing.add(name)
+        for child in table.get_children():
+            walk(child)
+
+    walk(top)
+    return missing
+
+
 def test_video_has_audio_follows_the_ffprobe_answer(monkeypatch):
     import subprocess
 

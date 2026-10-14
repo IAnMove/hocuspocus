@@ -22,6 +22,12 @@ _requires_torch = unittest.skipUnless(
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_RECAST_SERVICE_PATHS = (
+    os.path.join(_ROOT, "app", "services", "recast_masks.py"),
+    os.path.join(_ROOT, "app", "services", "recast_matte.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"),
+)
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
@@ -105,20 +111,41 @@ def _read(path: str) -> str:
         return handle.read()
 
 
+def _function_defs(path: str) -> dict[str, ast.FunctionDef]:
+    tree = ast.parse(_read(path), filename=os.path.relpath(path, _ROOT))
+    return {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+
+
 def _load_functions(path: str, names: tuple[str, ...], namespace=None) -> dict:
-    source = _read(path)
-    tree = ast.parse(source, filename=os.path.relpath(path, _ROOT))
-    selected = [
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    if len(selected) != len(names):
-        found = {node.name for node in selected}
-        raise AssertionError(f"Missing functions: {set(names) - found}")
-    module = ast.Module(body=selected, type_ignores=[])
-    ast.fix_missing_locations(module)
+    """Exec ``names`` from ``path``, or from the recast service that now defines them.
+
+    A moved helper and the launch functions it calls are executed into one
+    namespace, so the assertions keep supplying the same stubs.
+    """
+    pools = [path]
+    for service in _RECAST_SERVICE_PATHS:
+        if service not in pools and os.path.isfile(service):
+            pools.append(service)
+    parsed = {item: _function_defs(item) for item in pools}
+    grouped: dict[str, list[ast.FunctionDef]] = {}
+    missing = []
+    for name in names:
+        home = next((item for item in pools if name in parsed[item]), None)
+        if home is None:
+            missing.append(name)
+            continue
+        grouped.setdefault(home, []).append(parsed[home][name])
+    if missing:
+        raise AssertionError(f"Missing functions: {set(missing)}")
     loaded = dict(namespace or {})
-    exec(compile(module, os.path.relpath(path, _ROOT), "exec"), loaded)
+    for home, nodes in grouped.items():
+        module = ast.Module(body=nodes, type_ignores=[])
+        ast.fix_missing_locations(module)
+        exec(compile(module, os.path.relpath(home, _ROOT), "exec"), loaded)
     return loaded
 
 
@@ -3632,7 +3659,8 @@ class TestMultiPersonRecast(unittest.TestCase):
         controls = _read(_RECAST_CONTROLS_PATH)
         self.assertIn('body.get("protect_bystanders") is True', launch)
         self.assertIn('"_recast_protect_bystanders": protect_bystanders', launch)
-        self.assertIn('colorkey=0xFFFFFF', launch)
+        masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
+        self.assertIn('colorkey=0xFFFFFF', masks)
         self.assertNotIn('"_recast_mask_background"', launch)
         self.assertIn("_build_recast_adaptive_mask(", launch)
         self.assertIn('wgp.release_model()', launch)
@@ -3729,9 +3757,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("def _detect_recast_shot_ranges(", launch)
         self.assertIn("tracking_segments=shot_ranges", launch)
         self.assertIn("def _recover_recast_unmapped_shots(", launch)
+        masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn(
             "running generic-person appearance recovery",
-            launch,
+            masks,
         )
         self.assertIn("anywhere in the selected video", launch)
         self.assertIn('"edit_recast_timeline_anchors"', launch)
@@ -4110,7 +4139,8 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_postprocess_preserves_and_recovers_resolved_seed(self):
         launch = _read(_LAUNCH_PATH)
-        self.assertIn('"-map_metadata", "2"', launch)
+        masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
+        self.assertIn('"-map_metadata", "2"', masks)
         self.assertIn('file_sidecar["params"]["seed"] = resolved_seed', launch)
         # The post-processing read of the filename seed is the launch line
         # below. The `name` form is the metadata reader, which moved out of
