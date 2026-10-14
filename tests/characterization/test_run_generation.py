@@ -1306,3 +1306,132 @@ def test_oddity_the_sound_effect_sidecar_reads_a_job_id_key_jobs_do_not_have(rig
     assert [item["job_id"] for item in handed] == [""]
     (sidecar,) = rig.sidecars().values()
     assert sidecar["job_id"] == job_id
+
+
+# -- recast shot assembly (recorded before the helpers leave launch) --------------------------------
+def _refuse_remote_network(monkeypatch) -> None:
+    """The shot assembler must not download a model. Localhost stays open for the test client."""
+    import socket
+
+    real = socket.create_connection
+
+    def refuse(address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        if host in {"127.0.0.1", "localhost", "::1"}:
+            return real(address, *args, **kwargs)
+        raise AssertionError(f"this test must not open a network connection to {address!r}")
+
+    monkeypatch.setattr(socket, "create_connection", refuse)
+
+
+def _call_recast_shot_generation(rig, job_id: str) -> None:
+    """Run the assembler on a daemon thread, the same deadline ``Rig.call_worker`` gives the worker."""
+    outcome: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            outcome["done"] = rig.launch._run_recast_shot_generation(job_id)
+        except BaseException as error:  # handed to the test thread below
+            outcome["error"] = error
+
+    thread = threading.Thread(target=run, name=f"golden-recast-shots {job_id}", daemon=True)
+    thread.start()
+    thread.join(60)
+    assert not thread.is_alive(), "_run_recast_shot_generation did not return within 60s"
+    if "error" in outcome:
+        raise outcome["error"]
+
+
+@pytest.mark.parametrize("case", [
+    "source audio",
+    "video only",
+    "passthrough segment",
+    "generation fails",
+    "missing segment",
+    "timeline length changed",
+    "cancelled during assembly",
+])
+def test_recast_shot_generation_joins_the_worker_clips(rig, golden, clip, monkeypatch, case) -> None:
+    """The assembler runs the worker with ``finalize=False``, then joins the clips and publishes one file.
+
+    Recorded while ``_run_recast_shot_generation`` still lives in launch. Concatenation, the audio probe and the
+    decoded frame count are the real callables' neighbours; the fake engine still runs the worker.
+    """
+    _refuse_remote_network(monkeypatch)
+    launch = rig.launch
+    temp = rig.server.outputs / "maestro-recast-shots-golden"
+    temp.mkdir()
+    source = None
+    if case in {"source audio", "passthrough segment"}:
+        source = rig.server.outputs / "recast-source.mp4"
+        shutil.copyfile(clip, source)
+    manifest: Any = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+    if case == "generation fails":
+        manifest = "not a list"
+    shot_index = 4 if case == "missing segment" else 0
+    shot: dict[str, Any] = {"shot_index": shot_index, "mode": "generate"}
+    if case == "passthrough segment":
+        shot = {"shot_index": 0, "mode": "passthrough", "passthrough_path": str(source)}
+    bundle = {
+        "shots": [shot],
+        "published_shots": [{"id": "s0"}],
+        "frame_count": 8,
+        "fps": 8,
+        "resolved_seed": 42,
+    }
+    params = {
+        **BODY,
+        "_defer_output_publication": True,
+        "_recast_shot_manifest": manifest,
+        "_recast_shot_temp_dir": str(temp),
+        "_recast_final_out_dir": str(rig.server.outputs),
+        "_recast_shot_bundle": bundle,
+    }
+    if source is not None:
+        params["_recast_source_video"] = str(source)
+    job_id = rig.direct_job(params)
+    launch._jobs[job_id]["out_dir"] = str(temp)
+
+    probes: list = []
+    assembly: list = []
+
+    def has_audio(path: str) -> bool:
+        probes.append(["audio", Path(path).name])
+        return case == "source audio"
+
+    def frame_count(path: str) -> int:
+        probes.append(["frames", Path(path).name])
+        return 3 if case == "timeline length changed" else 8
+
+    def concatenate(clip_paths, output_path, audio_path=None, audio_start_sec=0.0, abort_callback=None,
+                    pad_audio=False, audio_duration_sec=None):
+        assembly.append({
+            "clips": [Path(path).name for path in clip_paths],
+            "audio": None if audio_path is None else Path(audio_path).name,
+            "audio_start_sec": audio_start_sec,
+            "pad_audio": pad_audio,
+            "audio_duration_sec": audio_duration_sec,
+            "already_cancelled": bool(abort_callback and abort_callback()),
+        })
+        shutil.copyfile(clip_paths[0], output_path)
+        if case == "cancelled during assembly":
+            launch._jobs[job_id]["cancel_requested"] = True
+        return True
+
+    rig.patch("_recast_video_has_audio", has_audio)
+    rig.patch("_recast_video_frame_count", frame_count)
+    rig.set_wgp("concatenate_multi_clip_videos", concatenate)
+    _call_recast_shot_generation(rig, job_id)
+    kept = launch._jobs[job_id].get("params") or {}
+    rig.check(golden, f"recast shot generation: {case}", {
+        **rig.observe(job_id),
+        "assembly": assembly,
+        "probes": probes,
+        "private_left": sorted(
+            key for key in kept
+            if key.startswith("_recast") or key == "_defer_output_publication"
+        ),
+        "shot_aware": kept.get("edit_recast_shot_aware"),
+        "shot_plan": kept.get("edit_recast_shot_plan"),
+        "temp_removed": not temp.exists(),
+    })

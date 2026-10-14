@@ -657,6 +657,99 @@ def _undefined_globals(source: str, filename: str) -> set[str]:
     return missing
 
 
+def test_timeline_preview_blends_the_anchor_and_returns_the_first_frame_when_nothing_is_found():
+    """The preview card is the anchor frame, the mask tint and a character label."""
+    import numpy as np
+    from PIL import Image
+
+    preview = _load(("_compose_recast_timeline_preview",))["_compose_recast_timeline_preview"]
+    frames = np.full((2, 10, 20, 3), 100, dtype=np.uint8)
+    frames[0, :, :, 1] = 20
+    mask = np.zeros_like(frames)
+    mask[1, 2:6, 4:9] = (0, 0, 200)
+    found = {
+        "found": True,
+        "anchor_sample_index": 1,
+        "anchor_time_seconds": 1.5,
+        "mapping_index": 0,
+        "color": (0, 0, 255),
+    }
+
+    with pytest.raises(ValueError, match="T/H/W/RGB"):
+        preview(frames[0], [mask], [found])
+
+    untouched = preview(frames, [mask], [{"found": False}])
+    assert isinstance(untouched, Image.Image)
+    assert untouched.size == (20, 10)
+    assert untouched.getpixel((0, 0)) == (100, 20, 100)
+
+    card = preview(frames, [mask], [found])
+    assert card.size == (20, 34)
+    assert card.getpixel((0, 0)) == (22, 24, 29)
+    assert card.getpixel((10, 10)) == (0, 0, 255)
+    assert card.getpixel((6, 6)) == (235, 235, 235)
+    # 100 * 0.45 + 200 * 0.55 = 155 on the blue channel of the painted mask.
+    assert card.getpixel((4, 24 + 2)) == (45, 45, 155)
+    assert card.getpixel((0, 24)) == (100, 100, 100)
+
+    second = dict(found, mapping_index=1, color=(255, 0, 0), anchor_sample_index=0)
+    sheet = preview(frames, [mask, mask], [found, second], max_tile_width=8)
+    assert sheet.size == (16, 28)
+
+
+def test_shot_frames_resize_to_the_canvas_and_refuse_a_bad_shape():
+    import numpy as np
+
+    resize = _load(("_resize_recast_shot_frames",))["_resize_recast_shot_frames"]
+    frames = np.zeros((1, 2, 2, 3), dtype=np.uint8)
+    frames[0, 0, 0] = (255, 0, 0)
+    frames[0, 0, 1] = (0, 255, 0)
+    frames[0, 1, 0] = (0, 0, 255)
+    frames[0, 1, 1] = (255, 255, 0)
+
+    with pytest.raises(ValueError, match="T/H/W/RGB"):
+        resize(frames[0], (4, 4))
+    with pytest.raises(ValueError, match="positive"):
+        resize(frames, (0, 4))
+
+    same = resize(frames, (2, 2))
+    assert same.shape == (1, 2, 2, 3)
+    assert same is not frames
+    assert np.array_equal(same, frames)
+
+    nearest = resize(frames, (4, 4), semantic=True)
+    assert nearest.shape == (1, 4, 4, 3)
+    assert tuple(nearest[0, 0, 0]) == (255, 0, 0)
+    assert tuple(nearest[0, 0, 1]) == (255, 0, 0)
+    assert tuple(nearest[0, 1, 0]) == (255, 0, 0)
+    assert tuple(nearest[0, 3, 3]) == (255, 255, 0)
+
+    solid = np.full((2, 3, 5, 3), 40, dtype=np.uint8)
+    scaled = resize(solid, (6, 4))
+    assert scaled.shape == (2, 4, 6, 3)
+    assert int(scaled.max()) == 40 and int(scaled.min()) == 40
+
+
+def test_shot_video_refuses_an_empty_clip_and_writes_a_silent_file(tmp_path, monkeypatch):
+    import numpy as np
+
+    _block_network(monkeypatch)
+    write = _load(("_write_recast_shot_video",), {"os": os})["_write_recast_shot_video"]
+    frames = np.zeros((2, 8, 8, 3), dtype=np.uint8)
+    frames[:, :, :, 2] = 255
+    with pytest.raises(ValueError, match="empty or malformed"):
+        write(str(tmp_path / "empty.mp4"), frames[:0], 8)
+    with pytest.raises(ValueError, match="empty or malformed"):
+        write(str(tmp_path / "flat.mp4"), frames[0], 8)
+
+    path = tmp_path / "nested" / "shot.mp4"
+    assert write(str(path), frames, 8) == str(path)
+    assert path.is_file() and path.stat().st_size > 0
+    mask_path = tmp_path / "mask.mp4"
+    assert write(str(mask_path), frames, 8, semantic=True) == str(mask_path)
+    assert mask_path.is_file() and mask_path.stat().st_size > 0
+
+
 def test_video_has_audio_follows_the_ffprobe_answer(monkeypatch):
     import subprocess
 
