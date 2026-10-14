@@ -86,7 +86,7 @@ class _WGP:
         return []
 
 
-def _runtime(tmp_path, observed):
+def _runtime(tmp_path, observed, monkeypatch):
     definition = {
         "audio_only": True,
         "image_outputs": False,
@@ -140,7 +140,6 @@ def _runtime(tmp_path, observed):
         "_durable_generation_queue": queue,
         "_run_generation_with_preparation": lambda _job_id: started.set(),
         "_jobs": jobs,
-        "register_generation_job": lambda _lock, job: dispatched.append(("registered", deepcopy(job))),
         "_gen_lock": object(),
         "_cancel_h3_idle_release": lambda: None,
         "_active_gen_states": {},
@@ -155,13 +154,16 @@ def _runtime(tmp_path, observed):
         "_list_workspaces": lambda: [{"name": "runtime-speech"}],
         "_lora_is_compatible_with_model": lambda _definition, _path: True,
     }
+    # ``dispatch`` imports the shared FIFO registration; it is not a key of the runtime dict.
+    monkeypatch.setattr("services.image_generation_runtime.register_generation_job",
+                        lambda _lock, job: dispatched.append(("registered", deepcopy(job))))
     service = create_image_generation_commands(runtime)
     return service, registry, queue, dispatched, started
 
 
-def test_runtime_factory_speech_adapter_reaches_native_boundary_once(tmp_path):
+def test_runtime_factory_speech_adapter_reaches_native_boundary_once(tmp_path, monkeypatch):
     observed = {}
-    service, registry, queue, dispatched, started = _runtime(tmp_path, observed)
+    service, registry, queue, dispatched, started = _runtime(tmp_path, observed, monkeypatch)
 
     adapter = service.operations["generation.speech"]
     assert isinstance(adapter, NativeGenerationOperation)

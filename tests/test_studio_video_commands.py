@@ -40,7 +40,6 @@ def test_runtime_factory_publishes_generation_video(tmp_path):
         "_durable_generation_queue": SimpleNamespace(upsert=lambda _job: None),
         "_run_generation_with_preparation": lambda _job_id: None,
         "_jobs": {},
-        "register_generation_job": lambda *_args: None,
         "_gen_lock": object(),
         "_cancel_h3_idle_release": lambda: None,
         "_active_gen_states": {},
