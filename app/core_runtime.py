@@ -306,7 +306,7 @@ def _core_workspace_jobs():
 
 from types import SimpleNamespace
 
-from services.output_listing import configure as _configure_output_listing, serve_file
+from services.output_listing import _output_scan_cache, _output_scan_cache_lock, configure as _configure_output_listing, serve_file
 from routers.workspace_outputs import (
     create_list_outputs_router,
     create_serve_file_router,
@@ -488,7 +488,7 @@ api.include_router(create_rig_router(
 @api.post("/api/v1/scenes/recordings")
 async def save_scene_recording(request: Request):
     try:
-        return await scene_save.publish_from_form(await request.form())
+        return await scene_save.publish_from_form(await request.form(), scan_cache=_output_scan_cache, scan_cache_lock=_output_scan_cache_lock)
     except HTTPException:
         raise
     except Exception as error:

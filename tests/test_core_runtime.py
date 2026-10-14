@@ -1605,6 +1605,38 @@ class CoreRuntimeTests(unittest.TestCase):
         row = listed.json()["outputs"][0]
         self.assertEqual((row.get("width"), row.get("height")), (8, 6))
 
+    def test_a_new_scene_recording_is_listed_at_once_on_core(self):
+        """Core lists through the shared 5-second scan cache; a recording has to drop that cache, not another dict."""
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Image.new("RGB", (4, 4), (1, 2, 3)).save(Path("outputs", "first.png"))
+            before = self.client.get("/api/v1/outputs")
+            stamp = Path("outputs").stat().st_mtime_ns
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+
+            scene = {"version": 1, "name": "Harbour Shot", "width": 64, "height": 64, "fps": 30, "duration": 2, "layers": []}
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ):
+                saved = self.client.post(
+                    "/api/v1/scenes/recordings",
+                    files={"file": ("rec.webm", b"webm", "video/webm")},
+                    data={"metadata": json.dumps({"workspace": "default", "scene": scene})},
+                )
+            # A coarse file-system clock can leave the folder's mtime as it was.
+            os.utime("outputs", ns=(stamp, stamp))
+            after = self.client.get("/api/v1/outputs")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual([row["name"] for row in before.json()["outputs"]], ["first.png"])
+        self.assertIn(saved.json()["name"], [row["name"] for row in after.json()["outputs"]])
+
     def test_core_still_serves_the_uploads_view_files(self):
         """The gallery's Uploads view lists ``/api/v1/file/<name>?workspace=__uploads__``; core served it before the share."""
         from PIL import Image
