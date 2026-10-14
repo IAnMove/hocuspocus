@@ -26355,9 +26355,8 @@ from services.series_plan_jobs import (
     _series_plan_jobs_lock,
 )
 from routers.series_plan import (
-    _bind_series_plan_runtime,
-    create_series_plan_apply_router,
-    create_series_plan_router,
+    _bind_series_plan_runtime, cancel_series_episode_plan, create_series_plan_apply_router,
+    create_series_plan_router, resume_series_episode_plan,
 )
 
 

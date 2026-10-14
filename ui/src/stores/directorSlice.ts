@@ -126,6 +126,24 @@ export type DirectorSlice = {
   shortFilmPreserveVisualStyle: boolean
   directorCharacterVisualStyle: string
   directorAllowClipText: boolean
+
+  // Director-mode post-processing (separate image/video)
+  directorImageSpatialUpsampling: string
+  setDirectorImageSpatialUpsampling: (v: string) => void
+  directorImageFilmGrainIntensity: number
+  setDirectorImageFilmGrainIntensity: (v: number) => void
+  directorImageFilmGrainSaturation: number
+  setDirectorImageFilmGrainSaturation: (v: number) => void
+  directorVideoSpatialUpsampling: string
+  setDirectorVideoSpatialUpsampling: (v: string) => void
+  directorVideoFilmGrainIntensity: number
+  setDirectorVideoFilmGrainIntensity: (v: number) => void
+  directorVideoFilmGrainSaturation: number
+  setDirectorVideoFilmGrainSaturation: (v: number) => void
+  directorVideoSelfRefiner: number
+  setDirectorVideoSelfRefiner: (v: number) => void
+  directorAudioScale: number
+  setDirectorAudioScale: (v: number) => void
 }
 
 const defaultTreatment = (): MusicVideoTreatment => ({
@@ -252,5 +270,23 @@ export const createDirectorSlice: SliceCreator<DirectorSlice> = set => {
     shortFilmPreserveVisualStyle: true,
     directorCharacterVisualStyle: '',
     directorAllowClipText: false,
+
+    // Director-mode post-processing (separate image/video)
+    directorImageSpatialUpsampling: '',
+    setDirectorImageSpatialUpsampling: (v) => set({ directorImageSpatialUpsampling: v }),
+    directorImageFilmGrainIntensity: 0,
+    setDirectorImageFilmGrainIntensity: (v) => set({ directorImageFilmGrainIntensity: v }),
+    directorImageFilmGrainSaturation: 0.5,
+    setDirectorImageFilmGrainSaturation: (v) => set({ directorImageFilmGrainSaturation: v }),
+    directorVideoSpatialUpsampling: '',
+    setDirectorVideoSpatialUpsampling: (v) => set({ directorVideoSpatialUpsampling: v }),
+    directorVideoFilmGrainIntensity: 0,
+    setDirectorVideoFilmGrainIntensity: (v) => set({ directorVideoFilmGrainIntensity: v }),
+    directorVideoFilmGrainSaturation: 0.5,
+    setDirectorVideoFilmGrainSaturation: (v) => set({ directorVideoFilmGrainSaturation: v }),
+    directorVideoSelfRefiner: 0,
+    setDirectorVideoSelfRefiner: (v) => set({ directorVideoSelfRefiner: v }),
+    directorAudioScale: 1.0,
+    setDirectorAudioScale: (v) => set({ directorAudioScale: v }),
   }
 }

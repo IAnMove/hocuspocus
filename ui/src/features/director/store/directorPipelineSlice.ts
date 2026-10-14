@@ -1,4 +1,5 @@
 import * as api from '../../../api/client'
+import { mapDirectorClipImages } from '../../../lib/directorClipImages'
 import { productionImageModelType } from '../../../lib/productionProfile'
 import { resolveResolution } from '../../../stores/resolution'
 import { storyDirectorSubmissionProvenance } from '../../stories/provenance'
@@ -22,9 +23,11 @@ export type DirectorPipelineSlice = {
   startDirectorPipeline: (useCurrentPlans?: boolean) => Promise<void>
   continuePipeline: (updates?: { clip_plans?: Array<{ video_prompt: string; image_prompt: string }> }) => Promise<void>
   stopPipeline: (pipelineId?: string) => Promise<void>
+  reconnectDirectorPipelines: () => Promise<void>
+  pollPipelineStatus: () => void
 }
 
-/** startDirectorPipeline reads and writes the director, gallery, and studio fields listed here. pollPipelineStatus stays on the store. */
+/** startDirectorPipeline, pollPipelineStatus, and reconnectDirectorPipelines read and write the director, gallery, and studio fields listed here. */
 export type DirectorPipelineSliceHost = DirectorPipelineSlice & Pick<DirectorSlice,
   | 'directorMusicVideoTreatment'
   | 'directorPlannedClips'
@@ -64,6 +67,8 @@ export type DirectorPipelineSliceHost = DirectorPipelineSlice & Pick<DirectorSli
   | 'directorCharacterRefLabels'
   | 'directorLocationRefLabels'
   | 'directorClipPlans'
+  | 'directorClipImages'
+  | 'directorImageGenProgress'
   | 'directorWritingProvider'
   | 'directorWritingModel'
   | 'directorWritingBaseUrl'
@@ -71,7 +76,7 @@ export type DirectorPipelineSliceHost = DirectorPipelineSlice & Pick<DirectorSli
   | 'directorLoading'
   | 'directorError'
   | 'directorStep'
-> & Pick<ModelOptionsSlice, 'modelOptions'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & Pick<ModelsSlice, 'models'> & Pick<LlmSlice, 'llmStatus'> & Pick<GallerySlice, 'activeWorkspace'> & Pick<DirectorDashboardSlice, 'loadPipelineList'> & {
+> & Pick<ModelOptionsSlice, 'modelOptions'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & Pick<ModelsSlice, 'models'> & Pick<LlmSlice, 'llmStatus'> & Pick<GallerySlice, 'activeWorkspace' | 'refreshOutputs' | 'maybeRefreshGallery'> & Pick<DirectorDashboardSlice, 'loadPipelineList'> & {
   selectedModelPerMode: Partial<Record<GenerationMode, string>>
   savedLoraPerMode: Partial<Record<GenerationMode, { activated_loras: string[]; loras_multipliers: string; loraWeights: Record<string, number[]>; availableLoras: string[] }>>
   savedParamsPerMode: Partial<Record<GenerationMode, SavedModeParams>>
@@ -90,8 +95,11 @@ export type DirectorPipelineSliceHost = DirectorPipelineSlice & Pick<DirectorSli
     cueId?: string
     candidateId?: string
   } | null
-  pollPipelineStatus: () => void
+  llmStreamDone: boolean
 }
+
+let directorReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let directorReconnectInFlight = false
 
 export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, DirectorPipelineSliceHost> = (set, get) => ({
   pipelineId: null,
@@ -451,5 +459,226 @@ export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, Di
       console.error('Failed to stop pipeline:', e)
       throw e
     }
+  },
+
+  reconnectDirectorPipelines: async () => {
+    if (directorReconnectTimer) clearTimeout(directorReconnectTimer)
+    const refresh = async () => {
+      if (directorReconnectInFlight) return
+      directorReconnectInFlight = true
+      try {
+        const data = await api.fetchActiveDirectorPipelines()
+        set({ activeDirectorPipelines: data.pipelines })
+
+        // Restore the primary pipeline state so Director's existing inspector
+        // can reconnect to the same run, while the footer displays every live
+        // pipeline returned by the backend.
+        const primary = data.pipelines[0]
+        if (primary && !get().pipelineId) {
+          set({
+            pipelineId: primary.id,
+            pipelineStatus: primary as import('../../../api/client').PipelineStatus,
+            pipelinePolling: true,
+            directorLoading: primary.status === 'running' || primary.status === 'queued',
+          })
+          get().pollPipelineStatus()
+        }
+        directorReconnectTimer = data.pipelines.length > 0
+          ? setTimeout(refresh, 2000)
+          : null
+      } catch {
+        // Older backends do not expose the in-memory endpoint. Story Lab
+        // productions still persist their pipeline id, so recover those runs
+        // directly and keep the footer useful during a rolling backend update.
+        try {
+          const library = await api.fetchStoryLibrary(get().activeWorkspace)
+          const pipelineIds = Object.values(library.projects)
+            .flatMap(project => project.productions || [])
+            .map(production => production.targetSnapshot?.pipelineId)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+          const uniqueIds = [...new Set(pipelineIds)]
+          const statuses = await Promise.allSettled(uniqueIds.map(id => api.fetchPipelineStatus(id)))
+          const active = statuses
+            .filter((result): result is PromiseFulfilledResult<import('../../../api/client').PipelineStatus> => result.status === 'fulfilled')
+            .map(result => result.value)
+            .filter((status): status is import('../../../api/client').PipelineStatus & { status: 'running' | 'paused' } =>
+              status.status === 'running' || status.status === 'paused')
+            .map(status => ({
+              ...status,
+              pipeline_type: 'music_video',
+              created_at: 0,
+              updated_at: Date.now(),
+            }))
+          set({ activeDirectorPipelines: active })
+          const primary = active[0]
+          if (primary && !get().pipelineId) {
+            set({
+              pipelineId: primary.id,
+              pipelineStatus: primary,
+              pipelinePolling: true,
+              directorLoading: true,
+            })
+            get().pollPipelineStatus()
+          }
+          directorReconnectTimer = active.length > 0 ? setTimeout(refresh, 2000) : null
+        } catch {
+          directorReconnectTimer = null
+        }
+      } finally {
+        directorReconnectInFlight = false
+      }
+    }
+    await refresh()
+  },
+
+  pollPipelineStatus: () => {
+    const pid = get().pipelineId
+    if (!pid) return
+
+    // The output gallery used to be reloaded on every two-second pipeline
+    // heartbeat. Besides rescanning the whole workspace on the backend, that
+    // replaced the gallery array even when no file had changed and caused a
+    // visible editor blink. Refresh only when the pipeline reports a new
+    // completed image/video checkpoint.
+    let lastOutputRefreshSignature = ''
+    const refreshOutputsWhenChanged = (signature: string) => {
+      if (signature === lastOutputRefreshSignature) return
+      lastOutputRefreshSignature = signature
+      get().refreshOutputs()
+    }
+
+    const poll = async () => {
+      if (!get().pipelinePolling || get().pipelineId !== pid) return
+
+      try {
+        const status = await api.fetchPipelineStatus(pid)
+        set({ pipelineStatus: status })
+
+        // Sync pipeline state to director UI state
+        if (status.clip_plans?.length && !get().directorClipPlans.length) {
+          set({
+            directorClipPlans: status.clip_plans,
+            directorStep: status.generation_mode === 'direct_video' ? 'review_video' : 'review',
+          })
+        }
+
+        if (status.clip_images?.length) {
+          // Strip empty filenames — those are failed-shot sentinels from the
+          // pipeline (clip_images.append("") on exception). If we keep them,
+          // downstream <img src={getFileUrl("")} /> hits /api/v1/file/ which
+          // can resolve to a stale cached file rather than nothing, producing
+          // the "same unrelated image over and over" symptom users see when
+          // image gen fails (e.g. incompatible LoRA architecture).
+          // clipIndex is captured BEFORE filtering so it stays aligned to
+          // the original clip plan position even when failed shots drop out.
+          const images = mapDirectorClipImages(
+            status.clip_images,
+            status.clip_plans || [],
+          )
+          set({ directorClipImages: images })
+        }
+
+        // Handle phase transitions
+        if (status.phase === 'polishing_prompts') {
+          set({
+            directorImageGenProgress: {
+              current: status.progress.current,
+              total: status.progress.total,
+              currentClipLabel: status.progress.message || 'Polishing prompts (3rd pass)...',
+              status: 'generating',
+            },
+          })
+        } else if (status.phase === 'preparing_direct_video') {
+          set({ directorStep: 'review_video', directorClipImages: [], directorImageGenProgress: null })
+        } else if (status.phase === 'generating_images') {
+          set({
+            directorStep: 'generate_images',
+            directorImageGenProgress: {
+              current: status.progress.current,
+              total: status.progress.total,
+              currentClipLabel: status.progress.message,
+              status: 'generating',
+            },
+          })
+          const completedImages = (status.clip_images || []).filter(Boolean)
+          refreshOutputsWhenChanged(`images:${completedImages.join('|')}`)
+        } else if (status.phase === 'preparing_video') {
+          // H3 prompt-only/direct-reference projects intentionally skip the
+          // image review stage and proceed straight to video rendering.
+          set({
+            directorStep: 'review_video',
+            directorImageGenProgress: null,
+          })
+        } else if (status.phase === 'generating_video') {
+          set({ directorStep: 'review_video' })
+          refreshOutputsWhenChanged(
+            `video:${status.progress.current}:${(status.output_files || []).join('|')}`,
+          )
+        }
+
+        // Handle LLM streaming
+        if (status.llm_streaming) {
+          set({ llmStreamDone: false })
+        }
+
+        // Handle pause
+        if (status.status === 'paused') {
+          set({ directorLoading: false })
+          if (status.pause_reason === 'review_prompts') {
+            set({ directorStep: 'review' })
+          } else if (status.pause_reason === 'review_video_prompts') {
+            set({ directorStep: 'review_video' })
+          } else if (status.pause_reason === 'review_images') {
+            set({ directorStep: 'review_video' })
+          }
+        }
+
+        // Comic PRE is a deliberate terminal checkpoint: prompts and I2V
+        // canvases are ready, but no video generation should start until the
+        // user approves all clips or chooses one card in the comic editor.
+        if (status.status === 'preview_ready') {
+          set({
+            pipelinePolling: false,
+            directorLoading: false,
+          })
+          return
+        }
+
+        // Handle completion
+        if (status.status === 'completed') {
+          set({
+            pipelinePolling: false,
+            directorLoading: false,
+            directorStep: 'review_video',
+          })
+          void get().maybeRefreshGallery({ message: 'Production finished' })
+          return  // Stop polling
+        }
+
+        // Handle failure
+        if (status.status === 'failed' || status.status === 'cancelled') {
+          const imageProgress = get().directorImageGenProgress
+          set({
+            pipelinePolling: false,
+            directorLoading: false,
+            directorError: status.error || 'Pipeline stopped',
+            directorImageGenProgress: imageProgress
+              ? { ...imageProgress, status: 'error' }
+              : null,
+          })
+          return  // Stop polling
+        }
+
+      } catch (e) {
+        console.error('Pipeline poll error:', e)
+      }
+
+      // Continue polling
+      if (get().pipelinePolling) {
+        setTimeout(poll, 2000)
+      }
+    }
+
+    setTimeout(poll, 1000)
   },
 })
