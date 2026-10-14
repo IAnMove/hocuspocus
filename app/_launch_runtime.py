@@ -7710,18 +7710,11 @@ def _run_outpaint_shot_generation(job_id):
                 shutil.rmtree(resolved_temp, ignore_errors=True)
 
 
+# bind_generation_jobs runs once, below, after _job_leftovers exists (no request arrives during import).
 from services.generation_jobs import bind as bind_generation_jobs
 from services.generation_jobs import cancel_job, get_status, list_jobs
 from routers.generation_jobs import create_generation_jobs_router
 
-bind_generation_jobs(
-    _active_gen_states=_active_gen_states,
-    _gen_lock=_gen_lock,
-    _jobs=_jobs,
-    _public_generation_details=_public_generation_details,
-    _remove_persisted_generation_job=_remove_persisted_generation_job,
-    cancel_audio_analysis_job=cancel_audio_analysis_job,
-)
 api.include_router(create_generation_jobs_router())
 
 
@@ -9398,11 +9391,18 @@ _job_leftovers = JobLeftovers(
     ),
 )
 _image_generation_commands.leftover_receipt_lookup = _job_leftovers.receipt_for
-# generate() and get_status() read _job_leftovers from their own module globals.
+# generate() reads _job_leftovers from its own module globals.
 import services.studio_generate as _studio_generate
 _studio_generate._job_leftovers = _job_leftovers
-import services.generation_jobs as _generation_jobs
-_generation_jobs._job_leftovers = _job_leftovers
+bind_generation_jobs(
+    _active_gen_states=_active_gen_states,
+    _gen_lock=_gen_lock,
+    _job_leftovers=_job_leftovers,
+    _jobs=_jobs,
+    _public_generation_details=_public_generation_details,
+    _remove_persisted_generation_job=_remove_persisted_generation_job,
+    cancel_audio_analysis_job=cancel_audio_analysis_job,
+)
 
 
 bind_generation_recovery(

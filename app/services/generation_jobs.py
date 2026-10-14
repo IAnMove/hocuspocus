@@ -1,10 +1,10 @@
 """Generation job status, cancel and list.
 
 The three handlers moved out of ``app/_launch_runtime.py`` without a body edit.
-The full server calls ``bind`` once, after its registries exist, and passes the
-objects these handlers read. ``_job_leftovers`` is assigned later, on this
-module, because that object is built further down in the server; ``get_status``
-still looks it up with ``globals().get``.
+The full server calls ``bind`` once, after ``_job_leftovers`` exists (it is
+built near the end of the server module), and passes the objects these handlers
+read. ``get_status`` still looks ``_job_leftovers`` up with ``globals().get``;
+before the bind that slot is None, as the name was absent before.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from services.job_lifecycle import generation_queue_position, request_cancel, sn
 # Injected by bind(); None until the full server binds them.
 _active_gen_states = None
 _gen_lock = None
+_job_leftovers = None
 _jobs = None
 _public_generation_details = None
 _remove_persisted_generation_job = None
@@ -25,10 +26,11 @@ cancel_audio_analysis_job = None
 
 def bind(**names):
     """Take the full server's objects these handlers use."""
-    global _active_gen_states, _gen_lock, _jobs, _public_generation_details
+    global _active_gen_states, _gen_lock, _job_leftovers, _jobs, _public_generation_details
     global _remove_persisted_generation_job, cancel_audio_analysis_job
     _active_gen_states = names["_active_gen_states"]
     _gen_lock = names["_gen_lock"]
+    _job_leftovers = names["_job_leftovers"]
     _jobs = names["_jobs"]
     _public_generation_details = names["_public_generation_details"]
     _remove_persisted_generation_job = names["_remove_persisted_generation_job"]
