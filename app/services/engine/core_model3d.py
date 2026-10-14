@@ -26,13 +26,14 @@ def start_job(
     workspace: str = "default",
 ) -> dict[str, Any]:
     merged = dict(body)
-    if image_paths:
-        images = dict(merged.get("images") or {}) if isinstance(merged.get("images"), dict) else {}
-        images.update({view: path for view, path in image_paths.items() if path})
-        merged["images"] = images
     if source_mesh_path:
         merged["source_model"] = source_mesh_path
-    return _engine().start_job(merged, workspace=str(workspace or "default"), output_dir=output_dir)
+    # The router already resolved each reference to one real file. It travels as an argument, not inside
+    # the request body, so the engine uses it as is and a client cannot supply it.
+    return _engine().start_job(
+        merged, workspace=str(workspace or "default"), output_dir=output_dir,
+        resolved_images={view: path for view, path in image_paths.items() if path},
+    )
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
