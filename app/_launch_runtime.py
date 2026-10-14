@@ -21565,157 +21565,15 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     "params": raw_params,
                     "plugin_data": {},
                 }]
-
-            queue, error = wgp._parse_task_manifest(manifest, state, os.getcwd())
-
-            if error:
-                finish_job(
-                    job, "failed", error=error,
-                    message=f"Validation error: {error}",
-                )
-                return False
-
-            if not queue:
-                finish_job(
-                    job, "failed", error="Task validation failed",
-                    message="Task validation failed",
-                )
-                return False
-
-            state["gen"]["queue"] = queue
-
-            prompt_windows = schedule_ltx_prompt_windows(queue)
-            if prompt_windows:
-                print(
-                    f"[LTX2][queue-prefetch] scheduled {len(prompt_windows)} "
-                    f"prompt windows: {prompt_windows}"
-                )
-
-            # Track existing outputs to detect new files
-            # Use workspace captured at submission time, not current global save_path
-            out_dir = job.get("out_dir") or wgp.save_path
-            # Point wgp.save_path to this job's target directory.
-            # No save/restore — the workspace switch endpoint is the sole
-            # controller of wgp.save_path outside of generation.
-            wgp.save_path = out_dir
-            wgp.image_save_path = out_dir
-            wgp.audio_save_path = out_dir
-            print(f"[Gen {job_id}] save_path locked to: {out_dir}")
-            before = set()
-            if os.path.isdir(out_dir):
-                before = set(os.listdir(out_dir))
-
-            # Process tasks with live progress (inline from process_tasks_cli)
-            gen = wgp.get_gen_info(state)
-            total_tasks = len(queue)
-            completed = 0
-            skipped = 0
-            job["task_timings"] = []
-            job["clip_output_files"] = [None] * total_tasks
-            job["last_progress_at"] = time.time()
-            cancelled = False
-            clip_output_files: dict[int, str] = {}
-            join_output_file = None
-
-            def _write_output_sidecars(file_names):
-                """Stamp every produced media file, including abort leftovers.
-
-                Director only exposes the final sliding-window file for each
-                clip, but pipeline deletion also needs ownership metadata on
-                superseded window saves.  Write these sidecars as soon as the
-                files are discovered so a later cancellation cannot strand
-                unowned intermediates.
-                """
-                if not file_names:
-                    return
-                upload_filenames = {}
-                for key in [
-                    "image_start", "image_end", "video_guide", "audio_guide",
-                    "audio_guide2", "audio_guide3", "audio_guide4",
-                    "audio_guide5", "audio_guide6",
-                ]:
-                    val = job["params"].get(key)
-                    if val and isinstance(val, str):
-                        upload_filenames[key] = os.path.basename(val)
-                    elif val and isinstance(val, list):
-                        upload_filenames[key] = [
-                            os.path.basename(v)
-                            if isinstance(v, str) and v else ""
-                            for v in val
-                        ]
-                sidecar_params = job["params"].copy()
-                # These settings are stripped before generation and applied
-                # afterward, so retain them for pencil-restore metadata.
-                if pp_film_grain_intensity > 0:
-                    sidecar_params["film_grain_intensity"] = (
-                        pp_film_grain_intensity
-                    )
-                    sidecar_params["film_grain_saturation"] = (
-                        pp_film_grain_saturation
-                    )
-                if pp_spatial_upsampling:
-                    sidecar_params["spatial_upsampling"] = (
-                        pp_spatial_upsampling
-                    )
-                sidecar = {
-                    "params": sidecar_params,
-                    "upload_filenames": upload_filenames,
-                    "generation_mode": job["params"].get("generation_mode"),
-                    "job_id": job_id,
-                    "task_id": job.get("task_id"),
-                    "root_task_id": job.get("root_task_id") or job.get("task_id"),
-                    "generation_time": round(time.time() - start_time),
-                    "created_at": time.time(),
-                }
-                dpid = job["params"].get("_director_pipeline_id")
-                if dpid:
-                    sidecar["director_pipeline_id"] = dpid
-                if isinstance(gen.get("model_prompts"), dict):
-                    # The prompt a model handler rewrote (an H3 window's
-                    # timing contract): what the model really received.
-                    sidecar["model_prompts"] = dict(gen["model_prompts"])
-                clip_index_by_filename = {
-                    filename: index
-                    for index, filename in clip_output_files.items()
-                }
-                for fname in file_names:
-                    ext = os.path.splitext(fname)[1].lower()
-                    if ext not in GENERATED_MEDIA_EXTENSIONS:
-                        continue
-                    file_sidecar = dict(sidecar)
-                    file_sidecar["params"] = sidecar_params.copy()
-                    resolved_seed = _extract_output_seed(fname)
-                    if resolved_seed is not None:
-                        # A request seed of -1 means "choose randomly".  The
-                        # filename carries the seed that was actually used;
-                        # store it so Load Settings reproduces a good result,
-                        # including after ffmpeg post-processing.
-                        file_sidecar["params"]["seed"] = resolved_seed
-                    if fname in clip_index_by_filename:
-                        file_sidecar["director_clip_index"] = (
-                            clip_index_by_filename[fname]
-                        )
-                    else:
-                        file_sidecar.pop("director_clip_index", None)
-                    file_sidecar["output_filename"] = fname
-                    _publish_generation_sidecar_for_studio_job(
-                        job, os.path.join(out_dir, fname), file_sidecar,
-                    )
-
-            is_multiclip = total_tasks > 1 and any(t.get('params', {}).get('multi_clip_info') for t in queue)
-            st._write_output_sidecars, st.before = _write_output_sidecars, before
-            st.cancelled, st.clip_output_files = cancelled, clip_output_files
-            st.completed, st.defer_output_publication = completed, defer_output_publication
-            st.gen, st.is_multiclip, st.join_output_file = gen, is_multiclip, join_output_file
-            st.out_dir, st.pp_film_grain_intensity = out_dir, pp_film_grain_intensity
+            st.defer_output_publication, st.manifest = defer_output_publication, manifest
+            st.pp_film_grain_intensity = pp_film_grain_intensity
             st.pp_film_grain_saturation = pp_film_grain_saturation
             st.pp_spatial_upsampling = pp_spatial_upsampling
             st.pp_voice_clone_enabled = pp_voice_clone_enabled
             st.pp_voice_clone_mode = pp_voice_clone_mode
-            st.pp_voice_clone_refs, st.queue, st.raw_params = pp_voice_clone_refs, queue, raw_params
-            st.skipped, st.start_time, st.state = skipped, start_time, state
-            st.total_tasks = total_tasks
-            return _run_generation_tasks(st)
+            st.pp_voice_clone_refs, st.raw_params = pp_voice_clone_refs, raw_params
+            st.start_time, st.state = start_time, state
+            return _run_generation_queue(st)
 
         except Exception as e:
             active_task_timer = st.active_task_timer
@@ -21773,6 +21631,156 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_queue(st):
+    """Parse the manifest into the task queue and prepare the output folder."""
+    job, job_id, manifest = st.job, st.job_id, st.manifest
+    pp_film_grain_intensity = st.pp_film_grain_intensity
+    pp_film_grain_saturation = st.pp_film_grain_saturation
+    pp_spatial_upsampling, start_time, state = st.pp_spatial_upsampling, st.start_time, st.state
+    queue, error = wgp._parse_task_manifest(manifest, state, os.getcwd())
+
+    if error:
+        finish_job(
+            job, "failed", error=error,
+            message=f"Validation error: {error}",
+        )
+        return False
+
+    if not queue:
+        finish_job(
+            job, "failed", error="Task validation failed",
+            message="Task validation failed",
+        )
+        return False
+
+    state["gen"]["queue"] = queue
+
+    prompt_windows = schedule_ltx_prompt_windows(queue)
+    if prompt_windows:
+        print(
+            f"[LTX2][queue-prefetch] scheduled {len(prompt_windows)} "
+            f"prompt windows: {prompt_windows}"
+        )
+
+    # Track existing outputs to detect new files
+    # Use workspace captured at submission time, not current global save_path
+    out_dir = job.get("out_dir") or wgp.save_path
+    # Point wgp.save_path to this job's target directory.
+    # No save/restore — the workspace switch endpoint is the sole
+    # controller of wgp.save_path outside of generation.
+    wgp.save_path = out_dir
+    wgp.image_save_path = out_dir
+    wgp.audio_save_path = out_dir
+    print(f"[Gen {job_id}] save_path locked to: {out_dir}")
+    before = set()
+    if os.path.isdir(out_dir):
+        before = set(os.listdir(out_dir))
+
+    # Process tasks with live progress (inline from process_tasks_cli)
+    gen = wgp.get_gen_info(state)
+    total_tasks = len(queue)
+    completed = 0
+    skipped = 0
+    job["task_timings"] = []
+    job["clip_output_files"] = [None] * total_tasks
+    job["last_progress_at"] = time.time()
+    cancelled = False
+    clip_output_files: dict[int, str] = {}
+    join_output_file = None
+
+    def _write_output_sidecars(file_names):
+        """Stamp every produced media file, including abort leftovers.
+
+        Director only exposes the final sliding-window file for each
+        clip, but pipeline deletion also needs ownership metadata on
+        superseded window saves.  Write these sidecars as soon as the
+        files are discovered so a later cancellation cannot strand
+        unowned intermediates.
+        """
+        if not file_names:
+            return
+        upload_filenames = {}
+        for key in [
+            "image_start", "image_end", "video_guide", "audio_guide",
+            "audio_guide2", "audio_guide3", "audio_guide4",
+            "audio_guide5", "audio_guide6",
+        ]:
+            val = job["params"].get(key)
+            if val and isinstance(val, str):
+                upload_filenames[key] = os.path.basename(val)
+            elif val and isinstance(val, list):
+                upload_filenames[key] = [
+                    os.path.basename(v)
+                    if isinstance(v, str) and v else ""
+                    for v in val
+                ]
+        sidecar_params = job["params"].copy()
+        # These settings are stripped before generation and applied
+        # afterward, so retain them for pencil-restore metadata.
+        if pp_film_grain_intensity > 0:
+            sidecar_params["film_grain_intensity"] = (
+                pp_film_grain_intensity
+            )
+            sidecar_params["film_grain_saturation"] = (
+                pp_film_grain_saturation
+            )
+        if pp_spatial_upsampling:
+            sidecar_params["spatial_upsampling"] = (
+                pp_spatial_upsampling
+            )
+        sidecar = {
+            "params": sidecar_params,
+            "upload_filenames": upload_filenames,
+            "generation_mode": job["params"].get("generation_mode"),
+            "job_id": job_id,
+            "task_id": job.get("task_id"),
+            "root_task_id": job.get("root_task_id") or job.get("task_id"),
+            "generation_time": round(time.time() - start_time),
+            "created_at": time.time(),
+        }
+        dpid = job["params"].get("_director_pipeline_id")
+        if dpid:
+            sidecar["director_pipeline_id"] = dpid
+        if isinstance(gen.get("model_prompts"), dict):
+            # The prompt a model handler rewrote (an H3 window's
+            # timing contract): what the model really received.
+            sidecar["model_prompts"] = dict(gen["model_prompts"])
+        clip_index_by_filename = {
+            filename: index
+            for index, filename in clip_output_files.items()
+        }
+        for fname in file_names:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in GENERATED_MEDIA_EXTENSIONS:
+                continue
+            file_sidecar = dict(sidecar)
+            file_sidecar["params"] = sidecar_params.copy()
+            resolved_seed = _extract_output_seed(fname)
+            if resolved_seed is not None:
+                # A request seed of -1 means "choose randomly".  The
+                # filename carries the seed that was actually used;
+                # store it so Load Settings reproduces a good result,
+                # including after ffmpeg post-processing.
+                file_sidecar["params"]["seed"] = resolved_seed
+            if fname in clip_index_by_filename:
+                file_sidecar["director_clip_index"] = (
+                    clip_index_by_filename[fname]
+                )
+            else:
+                file_sidecar.pop("director_clip_index", None)
+            file_sidecar["output_filename"] = fname
+            _publish_generation_sidecar_for_studio_job(
+                job, os.path.join(out_dir, fname), file_sidecar,
+            )
+
+    is_multiclip = total_tasks > 1 and any(t.get('params', {}).get('multi_clip_info') for t in queue)
+    st._write_output_sidecars, st.before, st.cancelled = _write_output_sidecars, before, cancelled
+    st.clip_output_files, st.completed, st.gen = clip_output_files, completed, gen
+    st.is_multiclip, st.join_output_file, st.out_dir = is_multiclip, join_output_file, out_dir
+    st.queue, st.skipped, st.total_tasks = queue, skipped, total_tasks
+    return _run_generation_tasks(st)
 
 
 def _run_generation_tasks(st):
