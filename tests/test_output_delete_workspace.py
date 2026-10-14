@@ -16,11 +16,11 @@ from services.kernel.paths import PathPolicy
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
+SOURCE = ROOT / "app" / "services" / "output_ops.py"
 
 
 def load_functions(names: list[str], namespace: dict) -> None:
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    tree = ast.parse(SOURCE.read_text(encoding="utf-8"), filename=str(SOURCE))
     selected = []
     for name in names:
         node = copy.deepcopy(next(
@@ -33,7 +33,7 @@ def load_functions(names: list[str], namespace: dict) -> None:
         selected.append(node)
     module = ast.Module(body=selected, type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(SOURCE), "exec"), namespace)
 
 
 def delete_namespace(active: Path, film: Path) -> dict:
