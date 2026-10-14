@@ -305,6 +305,19 @@ def test_launch_installs_auth_middleware_router_and_startup_notice() -> None:
         and node.value.func.func.attr == "middleware"
     )
     assert middleware_call.lineno > trace_registration.end_lineno
+    # The cross-origin check is registered before the trace, so the trace runs outside it and records refusals.
+    origin_registration = next(
+        node for node in tree.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and node.value.args
+        and isinstance(node.value.args[0], ast.Name)
+        and node.value.args[0].id == "protect_cross_origin_mutations"
+        and isinstance(node.value.func, ast.Call)
+        and isinstance(node.value.func.func, ast.Attribute)
+        and node.value.func.func.attr == "middleware"
+    )
+    assert origin_registration.end_lineno < trace_registration.lineno
     assert any(
         isinstance(call.func, ast.Name)
         and call.func.id == "create_lan_auth_router"
