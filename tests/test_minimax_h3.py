@@ -301,7 +301,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_series_and_manual_release_drop_the_isolated_h3_runtime(self):
         launch = _read(_LAUNCH_PATH)
-        series_worker = launch.split(
+        series_worker = _read(_APP / "services" / "series_render_jobs.py").split(
             "def _run_series_render_job(job_id: str) -> None:", 1,
         )[1].split("def _series_render_candidates", 1)[0]
         manual_release = launch.split(
